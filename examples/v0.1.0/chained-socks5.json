@@ -1,13 +1,13 @@
 {
   "inbounds": [
     {
-      "tag": "socks-in",
+      "tag": "mixed-in",
       "listen": {
         "address": "127.0.0.1",
-        "port": 1080
+        "port": 7890
       },
       "protocol": {
-        "type": "socks5"
+        "type": "mixed"
       }
     }
   ],

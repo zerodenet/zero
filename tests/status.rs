@@ -25,7 +25,8 @@ fn status_command_emits_json_export() {
         serde_json::from_slice(&output.stdout).expect("parse status json");
 
     assert_eq!(json["config"]["rule_count"], 3);
-    assert_eq!(json["config"]["inbounds"][0]["tag"], "socks-in");
+    assert_eq!(json["config"]["inbounds"][0]["tag"], "mixed-in");
+    assert_eq!(json["config"]["inbounds"][0]["protocol"], "mixed");
     assert_eq!(json["config"]["outbounds"][0]["tag"], "direct");
     assert_eq!(json["runtime"]["stats"]["active_sessions"], 0);
 }

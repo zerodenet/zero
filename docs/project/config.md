@@ -20,7 +20,7 @@
 ```json
 {
   "tag": "mixed-in",
-  "listen": { "address": "127.0.0.1", "port": 1080 },
+  "listen": { "address": "127.0.0.1", "port": 7890 },
   "protocol": { "type": "mixed" }
 }
 ```
