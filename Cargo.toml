@@ -1,0 +1,45 @@
+[package]
+name = "zero"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[workspace]
+members = [
+    "crates/traits",
+    "crates/core",
+    "crates/config",
+    "crates/router",
+    "crates/platform/tokio",
+    "protocols/socks5",
+    "protocols/http-connect",
+    "crates/engine",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Zero Contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/zerodenet/zero"
+homepage = "https://zerodenet.org"
+
+[workspace.dependencies]
+ipnet = { version = "2.11", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[dependencies]
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+zero-engine = { path = "crates/engine" }

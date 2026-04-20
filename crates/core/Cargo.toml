@@ -1,0 +1,11 @@
+[package]
+name = "zero-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+zero-traits = { path = "../traits" }

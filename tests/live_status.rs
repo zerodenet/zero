@@ -1,0 +1,140 @@
+mod support;
+
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
+use support::{free_port, http_get, remove_temp_file, wait_for_port, write_temp_config};
+
+#[test]
+fn local_status_listener_exposes_live_runtime_view() {
+    let socks_port = free_port();
+    let status_port = free_port();
+    let echo_port = free_port();
+
+    let config = format!(
+        r#"{{
+            "inbounds": [
+                {{
+                    "tag": "socks-in",
+                    "listen": {{ "address": "127.0.0.1", "port": {socks_port} }},
+                    "protocol": {{ "type": "socks5" }}
+                }}
+            ],
+            "outbounds": [],
+            "route": {{
+                "rules": [],
+                "final": {{ "type": "direct" }}
+            }}
+        }}"#
+    );
+    let config_path = write_temp_config(&config, "live-status");
+
+    let (accepted_tx, accepted_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let echo_thread = thread::spawn(move || {
+        let listener = TcpListener::bind(("127.0.0.1", echo_port)).expect("bind echo");
+        let (mut stream, _) = listener.accept().expect("accept echo");
+        accepted_tx.send(()).expect("notify echo accepted");
+        let _ = release_rx.recv();
+        let mut buf = [0_u8; 4];
+        stream.read_exact(&mut buf).expect("read echo");
+        stream.write_all(&buf).expect("write echo");
+    });
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_zero"))
+        .args([
+            "run",
+            "--status-listen",
+            &format!("127.0.0.1:{status_port}"),
+            config_path.to_str().expect("utf-8 config path"),
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn zero run");
+
+    wait_for_port(status_port);
+    wait_for_port(socks_port);
+
+    let mut client = TcpStream::connect(("127.0.0.1", socks_port)).expect("connect socks5");
+    client
+        .write_all(&[0x05, 0x01, 0x00])
+        .expect("write socks auth");
+
+    let mut auth = [0_u8; 2];
+    client.read_exact(&mut auth).expect("read socks auth");
+    assert_eq!(auth, [0x05, 0x00]);
+
+    let request = [
+        0x05,
+        0x01,
+        0x00,
+        0x01,
+        127,
+        0,
+        0,
+        1,
+        ((echo_port >> 8) & 0xff) as u8,
+        (echo_port & 0xff) as u8,
+    ];
+    client.write_all(&request).expect("write socks request");
+
+    let mut response = [0_u8; 10];
+    client
+        .read_exact(&mut response)
+        .expect("read socks response");
+    assert_eq!(response[1], 0x00);
+
+    accepted_rx.recv().expect("wait for echo accept");
+
+    let runtime_response = http_get(status_port, "/runtime");
+    let runtime_body = runtime_response
+        .split("\r\n\r\n")
+        .nth(1)
+        .expect("http body");
+    let runtime: serde_json::Value =
+        serde_json::from_str(runtime_body).expect("parse runtime json");
+    assert_eq!(runtime["stats"]["active_sessions"], 1);
+    assert_eq!(runtime["active_sessions"][0]["inbound_tag"], "socks-in");
+    assert_eq!(runtime["active_sessions"][0]["outbound_tag"], "direct");
+
+    let config_response = http_get(status_port, "/config");
+    let config_body = config_response.split("\r\n\r\n").nth(1).expect("http body");
+    let config_json: serde_json::Value =
+        serde_json::from_str(config_body).expect("parse config json");
+    assert_eq!(config_json["rule_count"], 0);
+    assert_eq!(config_json["inbounds"][0]["listen_port"], socks_port);
+
+    let status_response = http_get(status_port, "/status");
+    let status_body = status_response.split("\r\n\r\n").nth(1).expect("http body");
+    let status_json: serde_json::Value =
+        serde_json::from_str(status_body).expect("parse status json");
+    assert_eq!(status_json["runtime"]["stats"]["active_sessions"], 1);
+
+    release_tx.send(()).expect("release echo");
+    client.write_all(b"ping").expect("write echo payload");
+    let mut echoed = [0_u8; 4];
+    client.read_exact(&mut echoed).expect("read echo payload");
+    assert_eq!(&echoed, b"ping");
+    drop(client);
+
+    thread::sleep(Duration::from_millis(100));
+
+    let runtime_after_response = http_get(status_port, "/runtime");
+    let runtime_after_body = runtime_after_response
+        .split("\r\n\r\n")
+        .nth(1)
+        .expect("http body");
+    let runtime_after: serde_json::Value =
+        serde_json::from_str(runtime_after_body).expect("parse runtime json");
+    assert_eq!(runtime_after["stats"]["active_sessions"], 0);
+
+    child.kill().expect("kill zero process");
+    let _ = child.wait();
+    let _ = echo_thread.join();
+    remove_temp_file(&config_path);
+}

@@ -1,0 +1,290 @@
+use std::time::Instant;
+
+use tokio::sync::watch;
+use tokio::task::JoinSet;
+use tracing::{error, info};
+use zero_core::Error as CoreError;
+use zero_platform_tokio::{relay_bidirectional, TokioSocket};
+use zero_protocol_http_connect::HttpConnectResponse;
+use zero_traits::AsyncSocket;
+
+use super::error::EngineError;
+use super::logging::{
+    log_listener_connection_error, log_session_accepted, log_session_blocked, log_session_failed,
+    log_session_relayed,
+};
+use super::resolve::ResolvedOutbound;
+use super::runtime::{bind_listener, Engine};
+use super::stats::SessionOutcome;
+use super::stream::ClientStream;
+
+impl Engine {
+    pub(crate) async fn run_http_connect_listener(
+        &self,
+        inbound: zero_config::InboundConfig,
+        mut shutdown: watch::Receiver<bool>,
+    ) -> Result<(), EngineError> {
+        let listener = bind_listener(&inbound).await?;
+        let local_addr = listener.local_addr()?;
+        let mut connections = JoinSet::new();
+
+        info!(
+            inbound_tag = %inbound.tag,
+            protocol = "http-connect",
+            listen = %local_addr,
+            "inbound listener ready"
+        );
+
+        loop {
+            tokio::select! {
+                changed = shutdown.changed() => {
+                    match changed {
+                        Ok(()) if *shutdown.borrow() => break,
+                        Ok(()) => {}
+                        Err(_) => break,
+                    }
+                }
+                accept_result = listener.accept() => {
+                    let (stream, remote_addr) = accept_result?;
+                    let engine = self.clone();
+                    let inbound_tag = inbound.tag.clone();
+
+                    connections.spawn(async move {
+                        if let Err(error) = engine
+                            .handle_http_connect_connection(stream, inbound_tag.as_str())
+                            .await
+                        {
+                            log_listener_connection_error(
+                                "http-connect",
+                                inbound_tag.as_str(),
+                                &remote_addr,
+                                &error,
+                            );
+                        }
+                    });
+                }
+                result = connections.join_next(), if !connections.is_empty() => {
+                    if let Some(Err(error)) = result {
+                        if !error.is_cancelled() {
+                            error!(error = %error, "http-connect connection task panicked");
+                        }
+                    }
+                }
+            }
+        }
+
+        connections.abort_all();
+        while let Some(result) = connections.join_next().await {
+            if let Err(error) = result {
+                if !error.is_cancelled() {
+                    error!(error = %error, "http-connect connection task panicked during shutdown");
+                }
+            }
+        }
+
+        info!(
+            inbound_tag = %inbound.tag,
+            protocol = "http-connect",
+            listen = %local_addr,
+            "inbound listener stopped"
+        );
+
+        Ok(())
+    }
+
+    pub(crate) async fn handle_http_connect_connection(
+        &self,
+        client: TokioSocket,
+        inbound_tag: &str,
+    ) -> Result<(), EngineError> {
+        self.handle_http_connect_client(client, inbound_tag).await
+    }
+
+    pub(crate) async fn handle_http_connect_client<S>(
+        &self,
+        mut client: S,
+        inbound_tag: &str,
+    ) -> Result<(), EngineError>
+    where
+        S: ClientStream,
+    {
+        let mut session = match self
+            .protocols
+            .http_connect_inbound
+            .accept_request(&mut client)
+            .await
+        {
+            Ok(session) => session,
+            Err(CoreError::Unsupported(_)) => {
+                self.reply_and_close_http(&mut client, HttpConnectResponse::MethodNotAllowed)
+                    .await;
+                return Ok(());
+            }
+            Err(CoreError::Protocol(_)) => {
+                self.reply_and_close_http(&mut client, HttpConnectResponse::BadRequest)
+                    .await;
+                return Ok(());
+            }
+            Err(error) => return Err(error.into()),
+        };
+        self.prepare_session(&mut session, inbound_tag);
+        let mut session_handle = self.track_session(session.id);
+        let started_at = Instant::now();
+
+        let action = self.route_for(&session.target);
+        let resolved = match self.resolve_outbound(&action) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                log_session_failed(
+                    &session,
+                    "resolve_outbound",
+                    started_at.elapsed(),
+                    &error,
+                    None,
+                );
+                return Err(error);
+            }
+        };
+        log_session_accepted(&session, &action);
+
+        match resolved {
+            ResolvedOutbound::Direct { tag } => {
+                session.outbound_tag = Some(tag.unwrap_or("direct").to_owned());
+                self.set_session_outbound(&session);
+                match self
+                    .protocols
+                    .direct_outbound
+                    .connect(&session, &self.resolver)
+                    .await
+                {
+                    Ok(upstream) => {
+                        self.protocols
+                            .http_connect_inbound
+                            .send_response(&mut client, HttpConnectResponse::ConnectionEstablished)
+                            .await?;
+                        let client = client.into_tokio_socket();
+
+                        match relay_bidirectional(client, upstream).await {
+                            Ok((bytes_from_client, bytes_to_client)) => {
+                                session_handle.finish(SessionOutcome::DirectRelayed);
+                                log_session_relayed(
+                                    &session,
+                                    started_at.elapsed(),
+                                    bytes_from_client,
+                                    bytes_to_client,
+                                    None,
+                                );
+                            }
+                            Err(error) => {
+                                log_session_failed(
+                                    &session,
+                                    "relay",
+                                    started_at.elapsed(),
+                                    &error,
+                                    None,
+                                );
+                                return Err(error.into());
+                            }
+                        }
+
+                        Ok(())
+                    }
+                    Err(error) => {
+                        self.reply_and_close_http(&mut client, HttpConnectResponse::BadGateway)
+                            .await;
+                        log_session_failed(
+                            &session,
+                            "connect_direct",
+                            started_at.elapsed(),
+                            &error,
+                            None,
+                        );
+                        Err(error.into())
+                    }
+                }
+            }
+            ResolvedOutbound::Block { tag } => {
+                session.outbound_tag = Some(tag.unwrap_or("block").to_owned());
+                self.set_session_outbound(&session);
+                self.reply_and_close_http(&mut client, HttpConnectResponse::Forbidden)
+                    .await;
+                session_handle.finish(SessionOutcome::Blocked);
+                log_session_blocked(&session, started_at.elapsed());
+
+                Ok(())
+            }
+            ResolvedOutbound::Socks5 { tag, server, port } => {
+                session.outbound_tag = Some(tag.to_owned());
+                self.set_session_outbound(&session);
+                match self
+                    .connect_via_socks5_upstream(&session, server, port)
+                    .await
+                {
+                    Ok(upstream) => {
+                        self.protocols
+                            .http_connect_inbound
+                            .send_response(&mut client, HttpConnectResponse::ConnectionEstablished)
+                            .await?;
+                        let client = client.into_tokio_socket();
+
+                        match relay_bidirectional(client, upstream).await {
+                            Ok((bytes_from_client, bytes_to_client)) => {
+                                session_handle.finish(SessionOutcome::ChainedRelayed);
+                                log_session_relayed(
+                                    &session,
+                                    started_at.elapsed(),
+                                    bytes_from_client,
+                                    bytes_to_client,
+                                    Some((server, port)),
+                                );
+                            }
+                            Err(error) => {
+                                log_session_failed(
+                                    &session,
+                                    "relay",
+                                    started_at.elapsed(),
+                                    &error,
+                                    Some((server, port)),
+                                );
+                                return Err(error.into());
+                            }
+                        }
+
+                        Ok(())
+                    }
+                    Err(error) => {
+                        self.reply_and_close_http(&mut client, HttpConnectResponse::BadGateway)
+                            .await;
+                        log_session_failed(
+                            &session,
+                            "connect_upstream_socks5",
+                            started_at.elapsed(),
+                            &error,
+                            Some((server, port)),
+                        );
+                        Err(error)
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) async fn reply_and_close_http(
+        &self,
+        client: &mut impl AsyncSocket<Error = std::io::Error>,
+        response: HttpConnectResponse,
+    ) {
+        if let Err(error) = self
+            .protocols
+            .http_connect_inbound
+            .send_response(client, response)
+            .await
+        {
+            error!(error = %error, "failed to write http-connect response");
+        }
+
+        if let Err(error) = client.shutdown().await {
+            error!(error = %error, "failed to shutdown client socket");
+        }
+    }
+}

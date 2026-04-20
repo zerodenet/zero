@@ -1,0 +1,31 @@
+{
+  "inbounds": [
+    {
+      "tag": "socks-in",
+      "listen": {
+        "address": "127.0.0.1",
+        "port": 1080
+      },
+      "protocol": {
+        "type": "socks5"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "chain",
+      "protocol": {
+        "type": "socks5",
+        "server": "127.0.0.1",
+        "port": 2080
+      }
+    }
+  ],
+  "route": {
+    "rules": [],
+    "final": {
+      "type": "route",
+      "outbound": "chain"
+    }
+  }
+}
