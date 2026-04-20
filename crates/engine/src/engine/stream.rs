@@ -1,16 +1,22 @@
 use std::cmp;
 use std::io;
+use std::net::SocketAddr;
 
 use zero_platform_tokio::TokioSocket;
 use zero_traits::AsyncSocket;
 
 pub(crate) trait ClientStream: AsyncSocket<Error = io::Error> + Send + Sync + Unpin {
     fn into_tokio_socket(self) -> TokioSocket;
+    fn local_addr(&self) -> io::Result<SocketAddr>;
 }
 
 impl ClientStream for TokioSocket {
     fn into_tokio_socket(self) -> TokioSocket {
         self
+    }
+
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.local_addr()
     }
 }
 
@@ -34,6 +40,10 @@ impl PrefixedSocket {
 impl ClientStream for PrefixedSocket {
     fn into_tokio_socket(self) -> TokioSocket {
         self.inner
+    }
+
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.inner.local_addr()
     }
 }
 

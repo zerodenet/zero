@@ -1,6 +1,6 @@
 use zero_config::{
-    InboundProtocolConfig, OutboundProtocolConfig, RouteActionConfig, RuleConditionConfig,
-    RuntimeConfig,
+    InboundProtocolConfig, ModeConfig, OutboundGroupKind, OutboundProtocolConfig,
+    RouteActionConfig, RuleConditionConfig, RuntimeConfig,
 };
 
 #[test]
@@ -33,6 +33,21 @@ fn parses_config_into_adts() {
                     "protocol": { "type": "socks5", "server": "127.0.0.1", "port": 2080 }
                 }
             ],
+            "outbound_groups": [
+                {
+                    "tag": "proxy",
+                    "type": "selector",
+                    "outbounds": ["chain", "direct"],
+                    "selected": "chain"
+                }
+            ],
+            "runtime": {
+                "udp_upstream_idle_timeout_seconds": 12
+            },
+            "mode": {
+                "type": "global",
+                "outbound": "proxy"
+            },
             "route": {
                 "rules": [
                     {
@@ -73,6 +88,12 @@ fn parses_config_into_adts() {
         OutboundProtocolConfig::Socks5 { .. }
     ));
     assert!(matches!(
+        config.outbound_groups[0].group,
+        OutboundGroupKind::Selector { .. }
+    ));
+    assert_eq!(config.runtime.udp_upstream_idle_timeout_seconds, 12);
+    assert!(matches!(config.mode, ModeConfig::Global { .. }));
+    assert!(matches!(
         config.route.final_action,
         RouteActionConfig::Direct
     ));
@@ -80,6 +101,40 @@ fn parses_config_into_adts() {
         config.route.rules[0].condition,
         RuleConditionConfig::Or { .. }
     ));
+}
+
+#[test]
+fn runtime_idle_timeout_defaults_to_thirty_seconds() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert_eq!(config.runtime.udp_upstream_idle_timeout_seconds, 30);
+}
+
+#[test]
+fn rejects_zero_udp_upstream_idle_timeout() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "runtime": {
+                "udp_upstream_idle_timeout_seconds": 0
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidRuntime(_)));
 }
 
 #[test]
@@ -97,7 +152,7 @@ fn rejects_undefined_outbound_reference() {
 
     assert!(matches!(
         error,
-        zero_config::ConfigError::UndefinedOutboundTag { .. }
+        zero_config::ConfigError::UndefinedRouteTargetTag { .. }
     ));
 }
 
@@ -197,4 +252,67 @@ fn parses_utf8_bom_prefixed_json() {
         config.route.final_action,
         RouteActionConfig::Direct
     ));
+}
+
+#[test]
+fn selector_group_requires_defined_member_outbounds() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "direct",
+                    "protocol": { "type": "direct" }
+                }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "proxy",
+                    "type": "selector",
+                    "outbounds": ["missing"]
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(
+        error,
+        zero_config::ConfigError::InvalidOutboundGroup(_)
+    ));
+}
+
+#[test]
+fn global_mode_accepts_selector_group_target() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "direct",
+                    "protocol": { "type": "direct" }
+                }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "proxy",
+                    "type": "selector",
+                    "outbounds": ["direct"]
+                }
+            ],
+            "mode": {
+                "type": "global",
+                "outbound": "proxy"
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert!(matches!(config.mode, ModeConfig::Global { .. }));
 }

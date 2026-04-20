@@ -54,7 +54,7 @@ impl RouteActionConfig {
         }
     }
 
-    pub(crate) fn outbound_ref(&self) -> Option<&str> {
+    pub(crate) fn target_ref(&self) -> Option<&str> {
         match self {
             Self::Route { outbound } => Some(outbound),
             Self::Direct | Self::Reject => None,

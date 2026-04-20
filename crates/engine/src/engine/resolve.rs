@@ -1,4 +1,4 @@
-use zero_config::{OutboundConfig, OutboundProtocolConfig};
+use zero_config::{OutboundConfig, OutboundGroupConfig, OutboundGroupKind, OutboundProtocolConfig};
 
 pub(crate) enum ResolvedOutbound<'a> {
     Direct {
@@ -27,5 +27,19 @@ pub(crate) fn resolve_named_outbound(outbound: &OutboundConfig) -> ResolvedOutbo
             server,
             port,
         },
+    }
+}
+
+pub(crate) fn resolve_selector_group<'a>(
+    group: &'a OutboundGroupConfig,
+    outbounds: &'a [OutboundConfig],
+) -> Option<ResolvedOutbound<'a>> {
+    let selected = group.active_outbound()?;
+
+    match &group.group {
+        OutboundGroupKind::Selector { .. } => outbounds
+            .iter()
+            .find(|outbound| outbound.tag() == selected)
+            .map(resolve_named_outbound),
     }
 }

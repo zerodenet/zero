@@ -5,6 +5,7 @@ mod validate;
 
 pub use error::ConfigError;
 pub use model::{
-    InboundConfig, InboundProtocolConfig, ListenConfig, OutboundConfig, OutboundProtocolConfig,
-    RouteActionConfig, RouteConfig, RouteRuleConfig, RuleConditionConfig, RuntimeConfig,
+    InboundConfig, InboundProtocolConfig, ListenConfig, ModeConfig, OutboundConfig,
+    OutboundGroupConfig, OutboundGroupKind, OutboundProtocolConfig, RouteActionConfig, RouteConfig,
+    RouteRuleConfig, RuleConditionConfig, RuntimeConfig, RuntimeOptionsConfig,
 };

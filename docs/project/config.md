@@ -1,11 +1,16 @@
 # 配置
 
-`v0.1.0` 用 JSON。顶层只有三段：
+`v0.0.1` 使用 JSON。当前顶层固定这几段：
 
 ```json
 {
   "inbounds": [],
   "outbounds": [],
+  "outbound_groups": [],
+  "runtime": {
+    "udp_upstream_idle_timeout_seconds": 30
+  },
+  "mode": { "type": "rule" },
   "route": {
     "rules": [],
     "final": { "type": "direct" }
@@ -13,9 +18,27 @@
 }
 ```
 
+这份文档只写当前已经实现的配置。模式和节点组的长期设计见 [modes-and-groups.md](/C:/Users/Administrator/develop/rs/zero-new/docs/project/modes-and-groups.md)。
+
+## runtime
+
+`runtime.udp_upstream_idle_timeout_seconds` 控制上游 `SOCKS5` UDP association 的空闲超时。
+
+- 默认值：`30`
+- 单位：秒
+- 约束：必须大于 `0`
+
+```json
+{
+  "runtime": {
+    "udp_upstream_idle_timeout_seconds": 15
+  }
+}
+```
+
 ## 入站
 
-每个入站都要写 `tag`、`listen`、`protocol`。
+每个入站都要写 `tag`、`listen`、`protocol`：
 
 ```json
 {
@@ -25,12 +48,16 @@
 }
 ```
 
-支持的入站类型：
+当前支持的入站类型：
 
 - `socks5`
 - `http-connect`
 - `http`，兼容别名
 - `mixed`，同端口识别 `socks5` 和 `http-connect`
+
+这里的 `mixed` 不是独立外部协议，而是“同端口多协议入站”的配置入口。
+
+`UDP` 当前不需要额外字段。只要入站是 `socks5` 或 `mixed`，客户端走 `SOCKS5 UDP ASSOCIATE` 即可。
 
 ## 出站
 
@@ -45,11 +72,49 @@
 }
 ```
 
-支持的出站：
+当前支持的出站：
 
 - `direct`
 - `block`
 - `socks5`
+
+当前 UDP 只支持：
+
+- `direct`
+- `block`
+- 上游 `socks5`
+
+## 出站组
+
+`v0.0.1` 当前只实现了一类：
+
+```json
+{
+  "tag": "proxy",
+  "type": "selector",
+  "outbounds": ["node-a", "node-b"],
+  "selected": "node-a"
+}
+```
+
+- `selector`
+
+## 模式
+
+当前支持：
+
+- `rule`
+- `global`
+- `direct`
+
+`global` 需要指定一个出站或出站组：
+
+```json
+{
+  "type": "global",
+  "outbound": "proxy"
+}
+```
 
 ## 路由
 
@@ -76,21 +141,44 @@
 - `block`，兼容别名
 - `route`
 
+## 状态字段口径
+
+`status --json` 当前和会话观测相关的字段口径是：
+
+- `bytes_up` / `bytes_down`
+  - 累计字节
+- `throughput_up_bps` / `throughput_down_bps`
+  - 1 秒采样吞吐
+- `recent_completed_sessions`
+  - 最近完成会话的结算记录
+
+完成会话只保留结算值，不保留平均速率字段。
+
 ## 约束
 
 - `tag` 不能为空
 - 同类对象里的 `tag` 不能重复
 - 同一个 `address:port` 只能有一个入站
 - 同端口同时接 `socks5` 和 `http-connect` 时，用 `mixed`
-- `route` 引用的 `outbound` 必须存在
+- `route` 和 `global mode` 引用的目标必须存在
+- `selector` 组里的成员必须是已定义的出站
+- `runtime.udp_upstream_idle_timeout_seconds` 必须大于 `0`
 - 规则按顺序匹配，没命中就走 `final`
+
+## 最小场景
+
+- 本地用户侧：[basic.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/basic.json)，默认监听 `127.0.0.1:7890`
+- 云端节点侧：[server-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/server-socks5.json)，默认监听 `0.0.0.0:7890`
 
 ## 示例
 
-- [basic.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.1.0/basic.json)
-- [mixed.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.1.0/mixed.json)
-- [blocked-route.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.1.0/blocked-route.json)
-- [chained-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.1.0/chained-socks5.json)
+- [basic.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/basic.json)
+- [mixed.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/mixed.json)
+- [blocked-route.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/blocked-route.json)
+- [chained-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/chained-socks5.json)
+- [global-selector.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/global-selector.json)
+- [server-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/server-socks5.json)
+- [udp-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/udp-socks5.json)
 
 ## 命令
 

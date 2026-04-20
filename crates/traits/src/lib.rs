@@ -28,6 +28,9 @@ pub trait TcpListener: Send + Sync {
 
 pub trait DatagramSocket: Send + Sync + Unpin {
     type Error;
+
+    async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, IpAddress, u16), Self::Error>;
+    async fn send_to(&self, buf: &[u8], addr: IpAddress, port: u16) -> Result<(), Self::Error>;
 }
 
 pub trait DnsResolver: Send + Sync {

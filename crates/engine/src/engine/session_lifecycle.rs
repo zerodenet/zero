@@ -1,3 +1,4 @@
+use super::completed_sessions::CompletedSessionRecord;
 use super::runtime::Engine;
 use super::stats::SessionOutcome;
 
@@ -17,20 +18,22 @@ impl SessionHandle {
         }
     }
 
-    pub fn finish(&mut self, outcome: SessionOutcome) {
+    pub fn finish(&mut self, outcome: SessionOutcome) -> Option<CompletedSessionRecord> {
         if self.finished {
-            return;
+            return None;
         }
 
-        self.engine.finish_session(self.session_id, outcome);
+        let record = self.engine.finish_session(self.session_id, outcome);
         self.finished = true;
+        record
     }
 }
 
 impl Drop for SessionHandle {
     fn drop(&mut self) {
         if !self.finished {
-            self.engine
+            let _ = self
+                .engine
                 .finish_session(self.session_id, SessionOutcome::Failed);
         }
     }

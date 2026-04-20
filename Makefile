@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 CARGO ?= cargo
-CONFIG ?= examples/v0.1.0/basic.json
+CONFIG ?= examples/v0.0.1/basic.json
 STATUS_LISTEN ?= 127.0.0.1:9090
 
 .PHONY: help fmt check test clippy build release clean run run-status status status-json

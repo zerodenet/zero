@@ -5,7 +5,7 @@ use zero_core::{Address, Error, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::shared::{
-    read_exact, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, CMD_CONNECT, METHOD_NO_AUTH,
+    read_address, read_exact, write_address, CMD_CONNECT, CMD_UDP_ASSOCIATE, METHOD_NO_AUTH,
     REP_ADDRESS_TYPE_NOT_SUPPORTED, REP_COMMAND_NOT_SUPPORTED, REP_CONNECTION_NOT_ALLOWED,
     REP_GENERAL_FAILURE, REP_HOST_UNREACHABLE, REP_SUCCEEDED, SOCKS5_VERSION,
 };
@@ -26,21 +26,7 @@ impl Socks5Outbound {
             return Err(Error::Config("target port is required"));
         }
 
-        stream
-            .write_all(&[SOCKS5_VERSION, 0x01, METHOD_NO_AUTH])
-            .await
-            .map_err(|_| Error::Io("failed to write SOCKS5 outbound auth negotiation"))?;
-
-        let mut auth = [0_u8; 2];
-        read_exact(stream, &mut auth).await?;
-        if auth[0] != SOCKS5_VERSION {
-            return Err(Error::Protocol("invalid SOCKS5 outbound auth version"));
-        }
-        if auth[1] != METHOD_NO_AUTH {
-            return Err(Error::Unsupported(
-                "SOCKS5 upstream auth method is not supported",
-            ));
-        }
+        negotiate_no_auth(stream).await?;
 
         let request = build_connect_request(session)?;
         stream
@@ -48,43 +34,73 @@ impl Socks5Outbound {
             .await
             .map_err(|_| Error::Io("failed to write SOCKS5 outbound connect request"))?;
 
-        read_connect_response(stream).await
+        let _ = read_response(stream).await?;
+        Ok(())
+    }
+
+    pub async fn establish_udp_association<S>(
+        &self,
+        stream: &mut S,
+    ) -> Result<(Address, u16), Error>
+    where
+        S: AsyncSocket,
+    {
+        negotiate_no_auth(stream).await?;
+
+        let request = vec![
+            SOCKS5_VERSION,
+            CMD_UDP_ASSOCIATE,
+            0x00,
+            0x01,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ];
+        stream
+            .write_all(&request)
+            .await
+            .map_err(|_| Error::Io("failed to write SOCKS5 outbound udp associate request"))?;
+
+        read_response(stream).await
     }
 }
 
 fn build_connect_request(session: &Session) -> Result<Vec<u8>, Error> {
     let mut request = vec![SOCKS5_VERSION, CMD_CONNECT, 0x00];
-
-    match &session.target {
-        Address::Ipv4(bytes) => {
-            request.push(ATYP_IPV4);
-            request.extend_from_slice(bytes);
-        }
-        Address::Ipv6(bytes) => {
-            request.push(ATYP_IPV6);
-            request.extend_from_slice(bytes);
-        }
-        Address::Domain(domain) => {
-            let bytes = domain.as_bytes();
-            if bytes.is_empty() {
-                return Err(Error::Protocol("SOCKS5 outbound domain must not be empty"));
-            }
-            if bytes.len() > u8::MAX as usize {
-                return Err(Error::Unsupported("SOCKS5 outbound domain is too long"));
-            }
-
-            request.push(ATYP_DOMAIN);
-            request.push(bytes.len() as u8);
-            request.extend_from_slice(bytes);
-        }
-    }
+    write_address(&mut request, &session.target)?;
 
     request.extend_from_slice(&session.port.to_be_bytes());
 
     Ok(request)
 }
 
-async fn read_connect_response<S>(stream: &mut S) -> Result<(), Error>
+async fn negotiate_no_auth<S>(stream: &mut S) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    stream
+        .write_all(&[SOCKS5_VERSION, 0x01, METHOD_NO_AUTH])
+        .await
+        .map_err(|_| Error::Io("failed to write SOCKS5 outbound auth negotiation"))?;
+
+    let mut auth = [0_u8; 2];
+    read_exact(stream, &mut auth).await?;
+    if auth[0] != SOCKS5_VERSION {
+        return Err(Error::Protocol("invalid SOCKS5 outbound auth version"));
+    }
+    if auth[1] != METHOD_NO_AUTH {
+        return Err(Error::Unsupported(
+            "SOCKS5 upstream auth method is not supported",
+        ));
+    }
+
+    Ok(())
+}
+
+async fn read_response<S>(stream: &mut S) -> Result<(Address, u16), Error>
 where
     S: AsyncSocket,
 {
@@ -110,23 +126,10 @@ where
         });
     }
 
-    let address_len = match header[3] {
-        ATYP_IPV4 => 4,
-        ATYP_IPV6 => 16,
-        ATYP_DOMAIN => {
-            let mut len = [0_u8; 1];
-            read_exact(stream, &mut len).await?;
-            len[0] as usize
-        }
-        _ => {
-            return Err(Error::Protocol(
-                "invalid SOCKS5 outbound response address type",
-            ))
-        }
-    };
+    let address = read_address(stream, header[3]).await?;
 
-    let mut discard = vec![0_u8; address_len + 2];
-    read_exact(stream, &mut discard).await?;
+    let mut port = [0_u8; 2];
+    read_exact(stream, &mut port).await?;
 
-    Ok(())
+    Ok((address, u16::from_be_bytes(port)))
 }

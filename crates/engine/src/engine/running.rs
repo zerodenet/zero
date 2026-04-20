@@ -1,6 +1,7 @@
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
+use super::completed_sessions::CompletedSessionRecord;
 use super::error::EngineError;
 use super::export::{EngineConfigExport, EngineRuntimeExport, EngineStatusExport};
 use super::runtime::Engine;
@@ -45,6 +46,10 @@ impl RunningEngine {
 
     pub fn active_sessions(&self) -> Vec<ActiveSession> {
         self.engine.active_sessions()
+    }
+
+    pub fn completed_sessions(&self) -> Vec<CompletedSessionRecord> {
+        self.engine.completed_sessions()
     }
 
     pub async fn shutdown(mut self) -> Result<(), EngineError> {

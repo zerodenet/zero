@@ -22,6 +22,14 @@ pub enum ConfigError {
     InvalidRuleCondition(String),
     #[error("invalid route action: {0}")]
     InvalidRouteAction(String),
-    #[error("route references undefined outbound tag `{tag}`")]
-    UndefinedOutboundTag { tag: String },
+    #[error("invalid outbound group: {0}")]
+    InvalidOutboundGroup(String),
+    #[error("invalid runtime config: {0}")]
+    InvalidRuntime(String),
+    #[error("invalid mode config: {0}")]
+    InvalidMode(String),
+    #[error("duplicate route target tag `{tag}` across outbounds and outbound groups")]
+    DuplicateRouteTargetTag { tag: String },
+    #[error("route or mode references undefined target tag `{tag}`")]
+    UndefinedRouteTargetTag { tag: String },
 }

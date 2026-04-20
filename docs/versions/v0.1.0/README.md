@@ -1,19 +1,12 @@
 # v0.1.0
 
-这版就是一个能跑起来的最小 TCP 代理，不是完整产品。
+这个版本号保留给首次正式发布版。
 
-先看这些：
+在达到正式发布条件之前，不继续推进这条线，当前只维护 `v0.0.x`。
 
-- `requirements/mvp-scope.md`
-- `requirements/acceptance.md`
-- `requirements/protocol-support-matrix.md`
-- `targets/implementation-constraints.md`
-- `release-notes.md`
-- `known-limitations.md`
+等下面这些条件基本成立后，再正式展开 `v0.1.0`：
 
-目录分工：
-
-- `requirements/`：做什么，不做什么，怎么验收
-- `planning/`：开发顺序
-- `targets/`：代码边界
-- `release-*.md`：发布相关记录
+- 本地使用方式稳定
+- 云端节点使用方式稳定
+- 日志、错误和配置边界收紧
+- 版本范围不再频繁变动

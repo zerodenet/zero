@@ -2,16 +2,19 @@ use std::io;
 use std::time::Duration;
 
 use tracing::{debug, info, warn};
-use zero_core::{ProtocolType, Session};
+use zero_core::{Network, ProtocolType, Session};
 use zero_router::RouteAction;
 
+use super::completed_sessions::CompletedSessionRecord;
 use super::error::EngineError;
 
-pub(crate) fn log_session_accepted(session: &Session, route_action: &RouteAction) {
+pub(crate) fn log_session_accepted(session: &Session, route_action: &RouteAction, mode: &str) {
     info!(
         session_id = session.id,
         inbound_tag = session.inbound_tag.as_deref().unwrap_or("-"),
         protocol = protocol_name(session.protocol),
+        network = network_name(session.network),
+        mode = mode,
         target = ?session.target,
         port = session.port,
         route_action = ?route_action,
@@ -19,76 +22,91 @@ pub(crate) fn log_session_accepted(session: &Session, route_action: &RouteAction
     );
 }
 
-pub(crate) fn log_session_relayed(
-    session: &Session,
-    duration: Duration,
-    bytes_from_client: u64,
-    bytes_to_client: u64,
-    upstream: Option<(&str, u16)>,
-) {
+pub(crate) fn log_session_finished(record: &CompletedSessionRecord, upstream: Option<(&str, u16)>) {
     match upstream {
         Some((server, port)) => info!(
-            session_id = session.id,
-            inbound_tag = session.inbound_tag.as_deref().unwrap_or("-"),
-            outbound_tag = session.outbound_tag.as_deref().unwrap_or("-"),
-            protocol = protocol_name(session.protocol),
-            target = ?session.target,
-            port = session.port,
+            session_id = record.id,
+            inbound_tag = record.inbound_tag.as_deref().unwrap_or("-"),
+            outbound_tag = record.outbound_tag.as_deref().unwrap_or("-"),
+            protocol = protocol_name(record.protocol),
+            network = network_name(record.network),
+            mode = record.mode.as_str(),
+            target = ?record.target,
+            port = record.port,
             upstream_server = server,
             upstream_port = port,
-            duration_ms = duration.as_millis() as u64,
-            bytes_from_client,
-            bytes_to_client,
-            "session relayed"
+            outcome = record.outcome.kind(),
+            duration_ms = record.duration_ms,
+            bytes_up = record.bytes_up,
+            bytes_down = record.bytes_down,
+            inbound_rx_bytes = record.inbound_rx_bytes,
+            inbound_tx_bytes = record.inbound_tx_bytes,
+            outbound_rx_bytes = record.outbound_rx_bytes,
+            outbound_tx_bytes = record.outbound_tx_bytes,
+            "session finished"
         ),
         None => info!(
-            session_id = session.id,
-            inbound_tag = session.inbound_tag.as_deref().unwrap_or("-"),
-            outbound_tag = session.outbound_tag.as_deref().unwrap_or("-"),
-            protocol = protocol_name(session.protocol),
-            target = ?session.target,
-            port = session.port,
-            duration_ms = duration.as_millis() as u64,
-            bytes_from_client,
-            bytes_to_client,
-            "session relayed"
+            session_id = record.id,
+            inbound_tag = record.inbound_tag.as_deref().unwrap_or("-"),
+            outbound_tag = record.outbound_tag.as_deref().unwrap_or("-"),
+            protocol = protocol_name(record.protocol),
+            network = network_name(record.network),
+            mode = record.mode.as_str(),
+            target = ?record.target,
+            port = record.port,
+            outcome = record.outcome.kind(),
+            duration_ms = record.duration_ms,
+            bytes_up = record.bytes_up,
+            bytes_down = record.bytes_down,
+            inbound_rx_bytes = record.inbound_rx_bytes,
+            inbound_tx_bytes = record.inbound_tx_bytes,
+            outbound_rx_bytes = record.outbound_rx_bytes,
+            outbound_tx_bytes = record.outbound_tx_bytes,
+            "session finished"
         ),
     }
 }
 
-pub(crate) fn log_session_blocked(session: &Session, duration: Duration) {
-    info!(
-        session_id = session.id,
-        inbound_tag = session.inbound_tag.as_deref().unwrap_or("-"),
-        outbound_tag = session.outbound_tag.as_deref().unwrap_or("-"),
-        protocol = protocol_name(session.protocol),
-        target = ?session.target,
-        port = session.port,
-        duration_ms = duration.as_millis() as u64,
-        "session blocked"
-    );
-}
-
 pub(crate) fn log_session_failed(
     session: &Session,
+    record: Option<&CompletedSessionRecord>,
     stage: &'static str,
     duration: Duration,
     error: &impl std::fmt::Display,
     upstream: Option<(&str, u16)>,
 ) {
+    let mode = record.map(|item| item.mode.as_str()).unwrap_or("-");
+    let duration_ms = record
+        .map(|item| item.duration_ms)
+        .unwrap_or(duration.as_millis() as u64);
+    let bytes_up = record.map(|item| item.bytes_up).unwrap_or(0);
+    let bytes_down = record.map(|item| item.bytes_down).unwrap_or(0);
+    let inbound_rx_bytes = record.map(|item| item.inbound_rx_bytes).unwrap_or(0);
+    let inbound_tx_bytes = record.map(|item| item.inbound_tx_bytes).unwrap_or(0);
+    let outbound_rx_bytes = record.map(|item| item.outbound_rx_bytes).unwrap_or(0);
+    let outbound_tx_bytes = record.map(|item| item.outbound_tx_bytes).unwrap_or(0);
+
     match upstream {
         Some((server, port)) => warn!(
             session_id = session.id,
             inbound_tag = session.inbound_tag.as_deref().unwrap_or("-"),
             outbound_tag = session.outbound_tag.as_deref().unwrap_or("-"),
             protocol = protocol_name(session.protocol),
+            network = network_name(session.network),
+            mode = mode,
             target = ?session.target,
             port = session.port,
             stage = stage,
             error = %error,
             upstream_server = server,
             upstream_port = port,
-            duration_ms = duration.as_millis() as u64,
+            duration_ms = duration_ms,
+            bytes_up = bytes_up,
+            bytes_down = bytes_down,
+            inbound_rx_bytes = inbound_rx_bytes,
+            inbound_tx_bytes = inbound_tx_bytes,
+            outbound_rx_bytes = outbound_rx_bytes,
+            outbound_tx_bytes = outbound_tx_bytes,
             "session failed"
         ),
         None => warn!(
@@ -96,11 +114,19 @@ pub(crate) fn log_session_failed(
             inbound_tag = session.inbound_tag.as_deref().unwrap_or("-"),
             outbound_tag = session.outbound_tag.as_deref().unwrap_or("-"),
             protocol = protocol_name(session.protocol),
+            network = network_name(session.network),
+            mode = mode,
             target = ?session.target,
             port = session.port,
             stage = stage,
             error = %error,
-            duration_ms = duration.as_millis() as u64,
+            duration_ms = duration_ms,
+            bytes_up = bytes_up,
+            bytes_down = bytes_down,
+            inbound_rx_bytes = inbound_rx_bytes,
+            inbound_tx_bytes = inbound_tx_bytes,
+            outbound_rx_bytes = outbound_rx_bytes,
+            outbound_tx_bytes = outbound_tx_bytes,
             "session failed"
         ),
     }
@@ -112,6 +138,83 @@ fn protocol_name(protocol: ProtocolType) -> &'static str {
         ProtocolType::HttpConnect => "http-connect",
         ProtocolType::Unknown => "unknown",
     }
+}
+
+fn network_name(network: Network) -> &'static str {
+    match network {
+        Network::Tcp => "tcp",
+        Network::Udp => "udp",
+    }
+}
+
+pub(crate) fn log_udp_upstream_association_created(
+    inbound_tag: &str,
+    outbound_tag: &str,
+    server: &str,
+    port: u16,
+    idle_timeout: Duration,
+) {
+    info!(
+        inbound_tag = inbound_tag,
+        outbound_tag = outbound_tag,
+        protocol = "socks5-udp",
+        upstream_server = server,
+        upstream_port = port,
+        idle_timeout_seconds = idle_timeout.as_secs(),
+        "created upstream UDP association"
+    );
+}
+
+pub(crate) fn log_udp_upstream_association_reused(
+    inbound_tag: &str,
+    outbound_tag: &str,
+    server: &str,
+    port: u16,
+) {
+    debug!(
+        inbound_tag = inbound_tag,
+        outbound_tag = outbound_tag,
+        protocol = "socks5-udp",
+        upstream_server = server,
+        upstream_port = port,
+        "reused upstream UDP association"
+    );
+}
+
+pub(crate) fn log_udp_upstream_association_idle_timeout(
+    inbound_tag: &str,
+    outbound_tag: &str,
+    server: &str,
+    port: u16,
+    idle_timeout: Duration,
+) {
+    info!(
+        inbound_tag = inbound_tag,
+        outbound_tag = outbound_tag,
+        protocol = "socks5-udp",
+        upstream_server = server,
+        upstream_port = port,
+        idle_timeout_seconds = idle_timeout.as_secs(),
+        "closed idle upstream UDP association"
+    );
+}
+
+pub(crate) fn log_udp_upstream_association_dropped(
+    inbound_tag: &str,
+    outbound_tag: &str,
+    server: &str,
+    port: u16,
+    error: &impl std::fmt::Display,
+) {
+    warn!(
+        inbound_tag = inbound_tag,
+        outbound_tag = outbound_tag,
+        protocol = "socks5-udp",
+        upstream_server = server,
+        upstream_port = port,
+        error = %error,
+        "dropped upstream UDP association"
+    );
 }
 
 pub(crate) fn log_listener_connection_error(

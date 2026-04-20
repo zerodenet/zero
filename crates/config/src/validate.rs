@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use crate::{ConfigError, RouteActionConfig, RouteConfig, RouteRuleConfig, RuntimeConfig};
+use crate::{
+    ConfigError, ModeConfig, OutboundGroupConfig, OutboundGroupKind, RouteActionConfig,
+    RouteConfig, RouteRuleConfig, RuntimeConfig, RuntimeOptionsConfig,
+};
 
 impl RuntimeConfig {
     pub fn validate(&self) -> Result<(), ConfigError> {
@@ -16,11 +19,22 @@ impl RuntimeConfig {
         }
 
         let mut outbound_tags = HashSet::new();
+        let mut route_target_tags = HashSet::new();
         for outbound in &self.outbounds {
             validate_tag("outbound", &outbound.tag, &mut outbound_tags)?;
+            validate_route_target_tag(outbound.tag(), &mut route_target_tags)?;
         }
 
-        self.route.validate(&outbound_tags)?;
+        let mut outbound_group_tags = HashSet::new();
+        for group in &self.outbound_groups {
+            validate_tag("outbound group", &group.tag, &mut outbound_group_tags)?;
+            validate_route_target_tag(group.tag(), &mut route_target_tags)?;
+            group.validate(&outbound_tags)?;
+        }
+
+        self.route.validate(&route_target_tags)?;
+        validate_runtime(&self.runtime)?;
+        validate_mode(&self.mode, &route_target_tags)?;
         let _ = self.route.compile()?;
 
         Ok(())
@@ -28,32 +42,64 @@ impl RuntimeConfig {
 }
 
 impl RouteConfig {
-    pub(crate) fn validate(&self, outbound_tags: &HashSet<&str>) -> Result<(), ConfigError> {
+    pub(crate) fn validate(&self, route_target_tags: &HashSet<String>) -> Result<(), ConfigError> {
         for rule in &self.rules {
-            rule.validate(outbound_tags)?;
+            rule.validate(route_target_tags)?;
         }
 
-        validate_route_action(&self.final_action, outbound_tags)
+        validate_route_action(&self.final_action, route_target_tags)
     }
 }
 
 impl RouteRuleConfig {
-    pub(crate) fn validate(&self, outbound_tags: &HashSet<&str>) -> Result<(), ConfigError> {
+    pub(crate) fn validate(&self, route_target_tags: &HashSet<String>) -> Result<(), ConfigError> {
         let _ = self.condition.compile()?;
-        validate_route_action(&self.action, outbound_tags)
+        validate_route_action(&self.action, route_target_tags)
     }
 }
 
-fn validate_tag<'a>(
+impl OutboundGroupConfig {
+    fn validate(&self, outbound_tags: &HashSet<String>) -> Result<(), ConfigError> {
+        match &self.group {
+            OutboundGroupKind::Selector {
+                outbounds,
+                default,
+                selected,
+            } => {
+                if outbounds.is_empty() {
+                    return Err(ConfigError::InvalidOutboundGroup(
+                        "`selector` group requires at least one outbound".to_owned(),
+                    ));
+                }
+
+                for outbound in outbounds {
+                    validate_group_member_tag(outbound, outbound_tags)?;
+                }
+
+                if let Some(default) = default {
+                    validate_selector_choice("default", default, outbounds)?;
+                }
+
+                if let Some(selected) = selected {
+                    validate_selector_choice("selected", selected, outbounds)?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
+fn validate_tag(
     scope: &'static str,
-    tag: &'a str,
-    seen: &mut HashSet<&'a str>,
+    tag: &str,
+    seen: &mut HashSet<String>,
 ) -> Result<(), ConfigError> {
     if tag.trim().is_empty() {
         return Err(ConfigError::EmptyTag { scope });
     }
 
-    if !seen.insert(tag) {
+    if !seen.insert(tag.to_owned()) {
         return Err(ConfigError::DuplicateTag {
             scope,
             tag: tag.to_owned(),
@@ -65,9 +111,9 @@ fn validate_tag<'a>(
 
 fn validate_route_action(
     action: &RouteActionConfig,
-    outbound_tags: &HashSet<&str>,
+    route_target_tags: &HashSet<String>,
 ) -> Result<(), ConfigError> {
-    let Some(outbound) = action.outbound_ref() else {
+    let Some(outbound) = action.target_ref() else {
         return Ok(());
     };
 
@@ -77,10 +123,93 @@ fn validate_route_action(
         ));
     }
 
-    if !outbound_tags.contains(outbound) {
-        return Err(ConfigError::UndefinedOutboundTag {
+    if !route_target_tags.contains(outbound) {
+        return Err(ConfigError::UndefinedRouteTargetTag {
             tag: outbound.to_owned(),
         });
+    }
+
+    Ok(())
+}
+
+fn validate_mode(
+    mode: &ModeConfig,
+    route_target_tags: &HashSet<String>,
+) -> Result<(), ConfigError> {
+    match mode {
+        ModeConfig::Rule | ModeConfig::Direct => Ok(()),
+        ModeConfig::Global { outbound } => {
+            if outbound.trim().is_empty() {
+                return Err(ConfigError::InvalidMode(
+                    "`global` mode requires a non-empty outbound target".to_owned(),
+                ));
+            }
+
+            if !route_target_tags.contains(outbound) {
+                return Err(ConfigError::UndefinedRouteTargetTag {
+                    tag: outbound.to_owned(),
+                });
+            }
+
+            Ok(())
+        }
+    }
+}
+
+fn validate_runtime(runtime: &RuntimeOptionsConfig) -> Result<(), ConfigError> {
+    if runtime.udp_upstream_idle_timeout_seconds == 0 {
+        return Err(ConfigError::InvalidRuntime(
+            "`runtime.udp_upstream_idle_timeout_seconds` must be greater than 0".to_owned(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_route_target_tag(tag: &str, seen: &mut HashSet<String>) -> Result<(), ConfigError> {
+    if !seen.insert(tag.to_owned()) {
+        return Err(ConfigError::DuplicateRouteTargetTag {
+            tag: tag.to_owned(),
+        });
+    }
+
+    Ok(())
+}
+
+fn validate_group_member_tag(
+    tag: &str,
+    outbound_tags: &HashSet<String>,
+) -> Result<(), ConfigError> {
+    if tag.trim().is_empty() {
+        return Err(ConfigError::InvalidOutboundGroup(
+            "`selector` group does not allow empty outbound tags".to_owned(),
+        ));
+    }
+
+    if !outbound_tags.contains(tag) {
+        return Err(ConfigError::InvalidOutboundGroup(format!(
+            "`selector` group references undefined outbound `{tag}`"
+        )));
+    }
+
+    Ok(())
+}
+
+fn validate_selector_choice(
+    field: &'static str,
+    value: &str,
+    outbounds: &[String],
+) -> Result<(), ConfigError> {
+    if value.trim().is_empty() {
+        return Err(ConfigError::InvalidOutboundGroup(format!(
+            "`selector` group `{field}` must not be empty"
+        )));
+    }
+
+    if !outbounds.iter().any(|outbound| outbound == value) {
+        return Err(ConfigError::InvalidOutboundGroup(format!(
+            "`selector` group `{field}` must reference one of its `outbounds`"
+        )));
     }
 
     Ok(())

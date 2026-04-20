@@ -14,8 +14,8 @@ pub enum EngineError {
     Core(#[from] CoreError),
     #[error("no inbound listeners are configured")]
     NoInbounds,
-    #[error("route references outbound tag `{tag}` but no such outbound exists")]
-    MissingOutbound { tag: String },
+    #[error("route or mode references target tag `{tag}` but no such outbound or group exists")]
+    MissingRouteTarget { tag: String },
     #[error("inbound task exited unexpectedly")]
     InboundTaskExited,
 }

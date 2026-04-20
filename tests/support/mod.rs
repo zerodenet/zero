@@ -9,7 +9,7 @@ use std::thread;
 use std::time::Duration;
 
 pub fn config_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/v0.1.0/basic.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/v0.0.1/basic.json")
 }
 
 pub fn free_port() -> u16 {

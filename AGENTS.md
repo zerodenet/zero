@@ -2,7 +2,7 @@
 
 ## Structure
 
-Root `src/main.rs` builds the `zero` binary. Reusable crates live under `crates/`: `core`, `traits`, `config`, `router`, `engine`, and `platform/tokio`. External protocol implementations live under `protocols/`. Versioned docs and release notes live under `docs/versions/v0.1.0/`. Long-term project notes live under `docs/project/`. Example configs live under `examples/v0.1.0/`.
+Root `src/main.rs` builds the `zero` binary. Reusable crates live under `crates/`: `core`, `traits`, `config`, `router`, `engine`, and `platform/tokio`. External protocol implementations live under `protocols/`. Versioned docs and release notes live under `docs/versions/v0.0.1/`. Long-term project notes live under `docs/project/`. Example configs live under `examples/v0.0.1/`.
 
 ## Commands
 
@@ -10,8 +10,8 @@ Root `src/main.rs` builds the `zero` binary. Reusable crates live under `crates/
 - `cargo check --workspace`
 - `cargo test --workspace`
 - `cargo clippy --workspace --all-targets`
-- `cargo run -- run examples/v0.1.0/basic.json`
-- `cargo run -- status --json examples/v0.1.0/basic.json`
+- `cargo run -- run examples/v0.0.1/basic.json`
+- `cargo run -- status --json examples/v0.0.1/basic.json`
 
 Use workspace commands by default. If you change protocol behavior, config parsing, routing, or runtime wiring, run the full test suite.
 
@@ -29,4 +29,4 @@ Do not move protocol parsing into the root binary. Keep config ADTs in `crates/c
 
 ## Docs
 
-When changing config, protocol scope, or release boundaries, update the matching docs in the same change. `docs/project/` is for long-term rules. `docs/versions/v0.1.0/` is for what this version actually ships.
+When changing config, protocol scope, or release boundaries, update the matching docs in the same change. `docs/project/` is for long-term rules. `docs/versions/v0.0.1/` is for what this version actually ships.

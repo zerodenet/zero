@@ -1,7 +1,9 @@
 use std::collections::VecDeque;
 
 use zero_core::{Address, Error, Network, ProtocolType, Session};
-use zero_protocol_socks5::{Socks5Inbound, Socks5Outbound};
+use zero_protocol_socks5::{
+    build_udp_packet, parse_udp_packet, Socks5Inbound, Socks5Outbound, Socks5Request,
+};
 use zero_traits::AsyncSocket;
 
 #[derive(Debug, Default)]
@@ -133,6 +135,30 @@ async fn rejects_unsupported_command() {
 }
 
 #[tokio::test]
+async fn parses_udp_associate_request() {
+    let mut socket = MockSocket::new(&[
+        0x05, 0x01, 0x00, // method negotiation
+        0x05, 0x03, 0x00, 0x01, // udp associate + ipv4
+        0, 0, 0, 0, 0x00, 0x00,
+    ]);
+
+    let request = Socks5Inbound
+        .accept_command(&mut socket)
+        .await
+        .expect("request");
+
+    match request {
+        Socks5Request::UdpAssociate(request) => {
+            assert_eq!(request.client_hint, Address::Ipv4([0, 0, 0, 0]));
+            assert_eq!(request.client_port, 0);
+        }
+        Socks5Request::Connect(_) => panic!("expected udp associate"),
+    }
+
+    assert_eq!(socket.writes, vec![0x05, 0x00]);
+}
+
+#[tokio::test]
 async fn outbound_establishes_tunnel_for_domain_target() {
     let mut socket = MockSocket::new(&[
         0x05, 0x00, // auth accepted
@@ -183,4 +209,39 @@ async fn outbound_rejects_upstream_failure_reply() {
         .expect_err("fail");
 
     assert_eq!(error, Error::Route("SOCKS5 upstream host unreachable"));
+}
+
+#[tokio::test]
+async fn outbound_establishes_udp_association() {
+    let mut socket = MockSocket::new(&[
+        0x05, 0x00, // auth accepted
+        0x05, 0x00, 0x00, 0x01, // udp associate success + ipv4
+        127, 0, 0, 1, 0x20, 0x00,
+    ]);
+
+    let (address, port) = Socks5Outbound
+        .establish_udp_association(&mut socket)
+        .await
+        .expect("udp association");
+
+    assert_eq!(address, Address::Ipv4([127, 0, 0, 1]));
+    assert_eq!(port, 0x2000);
+    assert_eq!(
+        socket.writes,
+        vec![
+            0x05, 0x01, 0x00, // auth negotiation
+            0x05, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0 // udp associate
+        ]
+    );
+}
+
+#[test]
+fn builds_and_parses_udp_packet() {
+    let packet = build_udp_packet(&Address::Domain("example.com".into()), 5353, b"ping")
+        .expect("build packet");
+    let parsed = parse_udp_packet(&packet).expect("parse packet");
+
+    assert_eq!(parsed.target, Address::Domain("example.com".into()));
+    assert_eq!(parsed.port, 5353);
+    assert_eq!(parsed.payload, b"ping");
 }

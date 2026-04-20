@@ -3,19 +3,19 @@ use std::time::Instant;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
-use zero_platform_tokio::{relay_bidirectional, TokioSocket};
-use zero_protocol_socks5::Socks5Reply;
+use zero_platform_tokio::TokioSocket;
+use zero_protocol_socks5::{Socks5Reply, Socks5Request};
 use zero_traits::AsyncSocket;
 
 use super::error::EngineError;
 use super::logging::{
-    log_listener_connection_error, log_session_accepted, log_session_blocked, log_session_failed,
-    log_session_relayed,
+    log_listener_connection_error, log_session_accepted, log_session_failed, log_session_finished,
 };
 use super::resolve::ResolvedOutbound;
 use super::runtime::{bind_listener, Engine};
 use super::stats::SessionOutcome;
 use super::stream::ClientStream;
+use super::tcp_relay::relay_bidirectional_metered;
 
 impl Engine {
     pub(crate) async fn run_socks5_listener(
@@ -107,11 +107,32 @@ impl Engine {
     where
         S: ClientStream,
     {
-        let mut session = self
+        match self
             .protocols
             .socks5_inbound
-            .accept_request(&mut client)
-            .await?;
+            .accept_command(&mut client)
+            .await?
+        {
+            Socks5Request::Connect(session) => {
+                self.handle_socks5_connect(client, inbound_tag, session)
+                    .await
+            }
+            Socks5Request::UdpAssociate(request) => {
+                self.handle_socks5_udp_associate(client, inbound_tag, request)
+                    .await
+            }
+        }
+    }
+
+    async fn handle_socks5_connect<S>(
+        &self,
+        mut client: S,
+        inbound_tag: &str,
+        mut session: zero_core::Session,
+    ) -> Result<(), EngineError>
+    where
+        S: ClientStream,
+    {
         self.prepare_session(&mut session, inbound_tag);
         let mut session_handle = self.track_session(session.id);
         let started_at = Instant::now();
@@ -120,8 +141,10 @@ impl Engine {
         let resolved = match self.resolve_outbound(&action) {
             Ok(resolved) => resolved,
             Err(error) => {
+                let record = session_handle.finish(SessionOutcome::Failed);
                 log_session_failed(
                     &session,
+                    record.as_ref(),
                     "resolve_outbound",
                     started_at.elapsed(),
                     &error,
@@ -130,7 +153,7 @@ impl Engine {
                 return Err(error);
             }
         };
-        log_session_accepted(&session, &action);
+        log_session_accepted(&session, &action, self.config.mode.kind());
 
         match resolved {
             ResolvedOutbound::Direct { tag } => {
@@ -148,21 +171,30 @@ impl Engine {
                             .send_response(&mut client, Socks5Reply::Succeeded)
                             .await?;
                         let client = client.into_tokio_socket();
+                        let upload_engine = self.clone();
+                        let download_engine = self.clone();
+                        let session_id = session.id;
 
-                        match relay_bidirectional(client, upstream).await {
-                            Ok((bytes_from_client, bytes_to_client)) => {
-                                session_handle.finish(SessionOutcome::DirectRelayed);
-                                log_session_relayed(
-                                    &session,
-                                    started_at.elapsed(),
-                                    bytes_from_client,
-                                    bytes_to_client,
-                                    None,
-                                );
+                        match relay_bidirectional_metered(
+                            client,
+                            upstream,
+                            move |bytes| upload_engine.record_session_upload(session_id, bytes),
+                            move |bytes| download_engine.record_session_download(session_id, bytes),
+                        )
+                        .await
+                        {
+                            Ok(_) => {
+                                if let Some(record) =
+                                    session_handle.finish(SessionOutcome::DirectRelayed)
+                                {
+                                    log_session_finished(&record, None);
+                                }
                             }
                             Err(error) => {
+                                let record = session_handle.finish(SessionOutcome::Failed);
                                 log_session_failed(
                                     &session,
+                                    record.as_ref(),
                                     "relay",
                                     started_at.elapsed(),
                                     &error,
@@ -177,8 +209,10 @@ impl Engine {
                     Err(error) => {
                         self.reply_and_close_socks5(&mut client, Socks5Reply::HostUnreachable)
                             .await;
+                        let record = session_handle.finish(SessionOutcome::Failed);
                         log_session_failed(
                             &session,
+                            record.as_ref(),
                             "connect_direct",
                             started_at.elapsed(),
                             &error,
@@ -193,8 +227,9 @@ impl Engine {
                 self.set_session_outbound(&session);
                 self.reply_and_close_socks5(&mut client, Socks5Reply::ConnectionNotAllowed)
                     .await;
-                session_handle.finish(SessionOutcome::Blocked);
-                log_session_blocked(&session, started_at.elapsed());
+                if let Some(record) = session_handle.finish(SessionOutcome::Blocked) {
+                    log_session_finished(&record, None);
+                }
 
                 Ok(())
             }
@@ -211,21 +246,30 @@ impl Engine {
                             .send_response(&mut client, Socks5Reply::Succeeded)
                             .await?;
                         let client = client.into_tokio_socket();
+                        let upload_engine = self.clone();
+                        let download_engine = self.clone();
+                        let session_id = session.id;
 
-                        match relay_bidirectional(client, upstream).await {
-                            Ok((bytes_from_client, bytes_to_client)) => {
-                                session_handle.finish(SessionOutcome::ChainedRelayed);
-                                log_session_relayed(
-                                    &session,
-                                    started_at.elapsed(),
-                                    bytes_from_client,
-                                    bytes_to_client,
-                                    Some((server, port)),
-                                );
+                        match relay_bidirectional_metered(
+                            client,
+                            upstream,
+                            move |bytes| upload_engine.record_session_upload(session_id, bytes),
+                            move |bytes| download_engine.record_session_download(session_id, bytes),
+                        )
+                        .await
+                        {
+                            Ok(_) => {
+                                if let Some(record) =
+                                    session_handle.finish(SessionOutcome::ChainedRelayed)
+                                {
+                                    log_session_finished(&record, Some((server, port)));
+                                }
                             }
                             Err(error) => {
+                                let record = session_handle.finish(SessionOutcome::Failed);
                                 log_session_failed(
                                     &session,
+                                    record.as_ref(),
                                     "relay",
                                     started_at.elapsed(),
                                     &error,
@@ -240,8 +284,10 @@ impl Engine {
                     Err(error) => {
                         self.reply_and_close_socks5(&mut client, Socks5Reply::HostUnreachable)
                             .await;
+                        let record = session_handle.finish(SessionOutcome::Failed);
                         log_session_failed(
                             &session,
+                            record.as_ref(),
                             "connect_upstream_socks5",
                             started_at.elapsed(),
                             &error,

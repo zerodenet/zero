@@ -21,29 +21,27 @@ impl DirectOutbound {
         session: &Session,
         resolver: &TokioResolver,
     ) -> Result<TokioSocket, Error> {
-        self.validate(session)?;
-
-        let addr = match &session.target {
-            Address::Domain(domain) => {
-                resolve_host(
-                    domain,
-                    session.port,
-                    resolver,
-                    "failed to resolve direct target",
-                )
-                .await?
-            }
-            Address::Ipv4(bytes) => {
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::from(*bytes)), session.port)
-            }
-            Address::Ipv6(bytes) => {
-                SocketAddr::new(IpAddr::V6(Ipv6Addr::from(*bytes)), session.port)
-            }
-        };
+        let addr = self.resolve_target_addr(session, resolver).await?;
 
         TokioSocket::connect_addr(addr)
             .await
             .map_err(|_| Error::Io("failed to connect direct target"))
+    }
+
+    pub async fn resolve_target_addr(
+        &self,
+        session: &Session,
+        resolver: &TokioResolver,
+    ) -> Result<SocketAddr, Error> {
+        self.validate(session)?;
+
+        self.resolve_address(
+            &session.target,
+            session.port,
+            resolver,
+            "failed to resolve direct target",
+        )
+        .await
     }
 
     pub async fn connect_host(
@@ -61,6 +59,20 @@ impl DirectOutbound {
         TokioSocket::connect_addr(addr)
             .await
             .map_err(|_| Error::Io("failed to connect upstream target"))
+    }
+
+    pub async fn resolve_address(
+        &self,
+        address: &Address,
+        port: u16,
+        resolver: &TokioResolver,
+        error_message: &'static str,
+    ) -> Result<SocketAddr, Error> {
+        match address {
+            Address::Domain(domain) => resolve_host(domain, port, resolver, error_message).await,
+            Address::Ipv4(bytes) => Ok(SocketAddr::new(IpAddr::V4(Ipv4Addr::from(*bytes)), port)),
+            Address::Ipv6(bytes) => Ok(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(*bytes)), port)),
+        }
     }
 }
 

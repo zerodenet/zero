@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-pub const DEFAULT_CONFIG_PATH: &str = "examples/v0.1.0/basic.json";
+pub const DEFAULT_CONFIG_PATH: &str = "examples/v0.0.1/basic.json";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -83,9 +83,9 @@ pub fn usage() -> &'static str {
 
 Examples:
   zero
-  zero examples/v0.1.0/basic.json
-  zero run --status-listen 127.0.0.1:9090 examples/v0.1.0/basic.json
-  zero status --json examples/v0.1.0/basic.json"
+  zero examples/v0.0.1/basic.json
+  zero run --status-listen 127.0.0.1:9090 examples/v0.0.1/basic.json
+  zero status --json examples/v0.0.1/basic.json"
 }
 
 fn parse_run(args: Vec<String>) -> Result<Command, CliError> {

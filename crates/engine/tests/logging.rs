@@ -106,10 +106,10 @@ async fn emits_session_logs_for_successful_proxy_traffic() {
         String::from_utf8(buffer.lock().expect("log buffer lock").clone()).expect("utf-8 logs");
     assert!(logs.contains("zero-engine started"), "{logs}");
     assert!(logs.contains("session accepted"), "{logs}");
-    assert!(logs.contains("session relayed"), "{logs}");
+    assert!(logs.contains("session finished"), "{logs}");
     assert!(logs.contains("duration_ms="), "{logs}");
-    assert!(logs.contains("bytes_from_client="), "{logs}");
-    assert!(logs.contains("bytes_to_client="), "{logs}");
+    assert!(logs.contains("bytes_up="), "{logs}");
+    assert!(logs.contains("bytes_down="), "{logs}");
 }
 
 fn init_test_tracing() -> Arc<Mutex<Vec<u8>>> {

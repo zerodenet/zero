@@ -1,16 +1,27 @@
-use alloc::string::String;
 use alloc::vec;
 
 use zero_core::{Address, Error, InboundHandler, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::shared::{
-    read_exact, write_reply, Socks5Reply, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, CMD_CONNECT,
-    METHOD_NOT_ACCEPTABLE, METHOD_NO_AUTH, SOCKS5_VERSION,
+    read_address, read_exact, write_reply, write_reply_with_address, Socks5Reply, CMD_CONNECT,
+    CMD_UDP_ASSOCIATE, METHOD_NOT_ACCEPTABLE, METHOD_NO_AUTH, SOCKS5_VERSION,
 };
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Socks5Inbound;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Socks5Request {
+    Connect(Session),
+    UdpAssociate(Socks5UdpAssociateRequest),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpAssociateRequest {
+    pub client_hint: Address,
+    pub client_port: u16,
+}
 
 impl Socks5Inbound {
     pub fn protocol(&self) -> ProtocolType {
@@ -21,16 +32,21 @@ impl Socks5Inbound {
     where
         S: AsyncSocket,
     {
-        negotiate_method(stream).await?;
-        let (target, port) = read_connect_request(stream).await?;
+        match self.accept_command(stream).await? {
+            Socks5Request::Connect(session) => Ok(session),
+            Socks5Request::UdpAssociate(_) => {
+                write_reply(stream, Socks5Reply::CommandNotSupported).await?;
+                Err(Error::Unsupported("SOCKS5 command is not supported"))
+            }
+        }
+    }
 
-        Ok(Session::new(
-            0,
-            target,
-            port,
-            Network::Tcp,
-            ProtocolType::Socks5,
-        ))
+    pub async fn accept_command<S>(&self, stream: &mut S) -> Result<Socks5Request, Error>
+    where
+        S: AsyncSocket,
+    {
+        negotiate_method(stream).await?;
+        read_request(stream).await
     }
 
     pub async fn send_response<S>(&self, stream: &mut S, reply: Socks5Reply) -> Result<(), Error>
@@ -38,6 +54,19 @@ impl Socks5Inbound {
         S: AsyncSocket,
     {
         write_reply(stream, reply).await
+    }
+
+    pub async fn send_response_with_bound<S>(
+        &self,
+        stream: &mut S,
+        reply: Socks5Reply,
+        address: &Address,
+        port: u16,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        write_reply_with_address(stream, reply, address, port).await
     }
 
     pub async fn handshake<S>(&self, stream: &mut S) -> Result<Session, Error>
@@ -95,7 +124,7 @@ where
     Ok(())
 }
 
-async fn read_connect_request<S>(stream: &mut S) -> Result<(Address, u16), Error>
+async fn read_request<S>(stream: &mut S) -> Result<Socks5Request, Error>
 where
     S: AsyncSocket,
 {
@@ -106,46 +135,35 @@ where
         return Err(Error::Protocol("invalid SOCKS5 request version"));
     }
 
-    if header[1] != CMD_CONNECT {
-        write_reply(stream, Socks5Reply::CommandNotSupported).await?;
-        return Err(Error::Unsupported("SOCKS5 command is not supported"));
-    }
-
-    let address = match header[3] {
-        ATYP_IPV4 => {
-            let mut bytes = [0_u8; 4];
-            read_exact(stream, &mut bytes).await?;
-            Address::Ipv4(bytes)
-        }
-        ATYP_DOMAIN => {
-            let mut length = [0_u8; 1];
-            read_exact(stream, &mut length).await?;
-
-            let domain_length = length[0] as usize;
-            if domain_length == 0 {
-                return Err(Error::Protocol("SOCKS5 domain must not be empty"));
-            }
-
-            let mut domain = vec![0_u8; domain_length];
-            read_exact(stream, &mut domain).await?;
-
-            let domain = String::from_utf8(domain)
-                .map_err(|_| Error::Protocol("SOCKS5 domain is not valid UTF-8"))?;
-            Address::Domain(domain)
-        }
-        ATYP_IPV6 => {
-            let mut bytes = [0_u8; 16];
-            read_exact(stream, &mut bytes).await?;
-            Address::Ipv6(bytes)
-        }
-        _ => {
+    let address = match read_address(stream, header[3]).await {
+        Ok(address) => address,
+        Err(Error::Unsupported(_)) => {
             write_reply(stream, Socks5Reply::AddressTypeNotSupported).await?;
             return Err(Error::Unsupported("SOCKS5 address type is not supported"));
         }
+        Err(error) => return Err(error),
     };
 
     let mut port = [0_u8; 2];
     read_exact(stream, &mut port).await?;
 
-    Ok((address, u16::from_be_bytes(port)))
+    let port = u16::from_be_bytes(port);
+
+    match header[1] {
+        CMD_CONNECT => Ok(Socks5Request::Connect(Session::new(
+            0,
+            address,
+            port,
+            Network::Tcp,
+            ProtocolType::Socks5,
+        ))),
+        CMD_UDP_ASSOCIATE => Ok(Socks5Request::UdpAssociate(Socks5UdpAssociateRequest {
+            client_hint: address,
+            client_port: port,
+        })),
+        _ => {
+            write_reply(stream, Socks5Reply::CommandNotSupported).await?;
+            Err(Error::Unsupported("SOCKS5 command is not supported"))
+        }
+    }
 }

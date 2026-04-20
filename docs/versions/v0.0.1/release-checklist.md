@@ -18,6 +18,8 @@
 
 手工再看一遍：
 
+- 本地 `basic.json` 是否能直接给用户侧客户端使用
+- 云端 `server-socks5.json` 是否能作为远端 `SOCKS5` 节点被接入
 - `zero status --json`
 - `run --status-listen`
 - `curl` 经 `SOCKS5`

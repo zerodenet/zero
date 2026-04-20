@@ -87,6 +87,7 @@ async fn exports_serializable_engine_status_view() {
     assert_eq!(response[1], 0x00);
 
     let exported = handle.export_status();
+    assert_eq!(exported.config.mode.kind, "rule");
     assert_eq!(exported.config.rule_count, 0);
     assert_eq!(exported.config.inbounds.len(), 1);
     assert_eq!(exported.config.inbounds[0].tag, "socks-in");
@@ -94,13 +95,22 @@ async fn exports_serializable_engine_status_view() {
     assert_eq!(exported.config.outbounds.len(), 1);
     assert_eq!(exported.config.outbounds[0].tag, "chain");
     assert_eq!(exported.config.outbounds[0].protocol, "socks5");
+    assert!(exported.config.outbound_groups.is_empty());
+    assert_eq!(exported.runtime.udp_upstream_idle_timeout_seconds, 30);
     assert_eq!(exported.runtime.active_sessions.len(), 1);
     assert_eq!(exported.runtime.active_sessions[0].target.family, "ipv4");
     assert_eq!(exported.runtime.active_sessions[0].protocol, "socks5");
+    assert_eq!(exported.runtime.active_sessions[0].network, "tcp");
+    assert_eq!(exported.runtime.active_sessions[0].mode, "rule");
+    assert!(exported.runtime.recent_completed_sessions.is_empty());
 
     let json = serde_json::to_value(&exported).expect("serialize export");
+    assert_eq!(json["config"]["mode"]["kind"], "rule");
     assert_eq!(json["config"]["inbounds"][0]["tag"], "socks-in");
     assert_eq!(json["config"]["outbounds"][0]["server"], "127.0.0.1");
+    assert_eq!(json["runtime"]["udp_upstream_idle_timeout_seconds"], 30);
+    assert_eq!(json["runtime"]["active_sessions"][0]["network"], "tcp");
+    assert_eq!(json["runtime"]["active_sessions"][0]["mode"], "rule");
     assert_eq!(
         json["runtime"]["active_sessions"][0]["target"]["family"],
         "ipv4"
@@ -109,4 +119,25 @@ async fn exports_serializable_engine_status_view() {
     drop(client);
     handle.shutdown().await.expect("shutdown engine");
     let _ = echo_task.await;
+}
+
+#[test]
+fn exports_custom_udp_upstream_idle_timeout_from_config() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "runtime": {
+                "udp_upstream_idle_timeout_seconds": 9
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("parse config");
+
+    let engine = Engine::new(config).expect("build engine");
+    let exported = engine.export_runtime();
+
+    assert_eq!(exported.udp_upstream_idle_timeout_seconds, 9);
 }

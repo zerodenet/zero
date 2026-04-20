@@ -16,6 +16,8 @@
 
 `zero-config` 只管配置模型和解析。`zero-engine` 只管执行、编排、统计和内建动作。`zero-router` 只管规则匹配。
 
+像 `direct / global / rule` 这种模式语义、`selector / urltest / fallback` 这种出站组语义，也属于这层，不属于客户端。
+
 ## 协议层
 
 - `zero-core`

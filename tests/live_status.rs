@@ -101,6 +101,8 @@ fn local_status_listener_exposes_live_runtime_view() {
     assert_eq!(runtime["stats"]["active_sessions"], 1);
     assert_eq!(runtime["active_sessions"][0]["inbound_tag"], "socks-in");
     assert_eq!(runtime["active_sessions"][0]["outbound_tag"], "direct");
+    assert_eq!(runtime["active_sessions"][0]["network"], "tcp");
+    assert_eq!(runtime["active_sessions"][0]["mode"], "rule");
 
     let config_response = http_get(status_port, "/config");
     let config_body = config_response.split("\r\n\r\n").nth(1).expect("http body");

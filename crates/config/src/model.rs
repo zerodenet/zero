@@ -13,6 +13,12 @@ pub struct RuntimeConfig {
     pub inbounds: Vec<InboundConfig>,
     #[serde(default)]
     pub outbounds: Vec<OutboundConfig>,
+    #[serde(default)]
+    pub outbound_groups: Vec<OutboundGroupConfig>,
+    #[serde(default)]
+    pub runtime: RuntimeOptionsConfig,
+    #[serde(default)]
+    pub mode: ModeConfig,
     pub route: RouteConfig,
 }
 
@@ -34,6 +40,25 @@ impl RuntimeConfig {
 
         Self::parse(&raw)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeOptionsConfig {
+    #[serde(default = "default_udp_upstream_idle_timeout_seconds")]
+    pub udp_upstream_idle_timeout_seconds: u64,
+}
+
+impl Default for RuntimeOptionsConfig {
+    fn default() -> Self {
+        Self {
+            udp_upstream_idle_timeout_seconds: default_udp_upstream_idle_timeout_seconds(),
+        }
+    }
+}
+
+const fn default_udp_upstream_idle_timeout_seconds() -> u64 {
+    30
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +109,74 @@ pub enum OutboundProtocolConfig {
     Block,
     #[serde(rename = "socks5")]
     Socks5 { server: String, port: u16 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutboundGroupConfig {
+    pub tag: String,
+    #[serde(flatten)]
+    pub group: OutboundGroupKind,
+}
+
+impl OutboundGroupConfig {
+    pub fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    pub fn active_outbound(&self) -> Option<&str> {
+        match &self.group {
+            OutboundGroupKind::Selector {
+                outbounds,
+                selected,
+                default,
+            } => selected
+                .as_deref()
+                .or(default.as_deref())
+                .or_else(|| outbounds.first().map(String::as_str)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum OutboundGroupKind {
+    #[serde(rename = "selector")]
+    Selector {
+        outbounds: Vec<String>,
+        #[serde(default)]
+        default: Option<String>,
+        #[serde(default)]
+        selected: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "type")]
+pub enum ModeConfig {
+    #[default]
+    #[serde(rename = "rule")]
+    Rule,
+    #[serde(rename = "global")]
+    Global { outbound: String },
+    #[serde(rename = "direct")]
+    Direct,
+}
+
+impl ModeConfig {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Rule => "rule",
+            Self::Global { .. } => "global",
+            Self::Direct => "direct",
+        }
+    }
+
+    pub fn outbound(&self) -> Option<&str> {
+        match self {
+            Self::Global { outbound } => Some(outbound),
+            Self::Rule | Self::Direct => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
