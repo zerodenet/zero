@@ -12,6 +12,7 @@
   },
   "mode": { "type": "rule" },
   "route": {
+    "rule_sets": [],
     "rules": [],
     "final": { "type": "direct" }
   }
@@ -131,6 +132,7 @@
 
 - `domain`
 - `ip`
+- `rule-set`
 - `and`
 - `or`
 
@@ -140,6 +142,59 @@
 - `reject`
 - `block`，兼容别名
 - `route`
+
+### 外置规则集
+
+`v0.0.1` 支持把匹配数据放到本地文件里，再在主配置里通过 `tag` 引用。
+
+当前只支持：
+
+- `type = file`
+- `format = domain-list`
+- `format = cidr-list`
+
+配置形态：
+
+```json
+{
+  "route": {
+    "rule_sets": [
+      {
+        "tag": "ads",
+        "type": "file",
+        "path": "rules/ads.txt",
+        "format": "domain-list"
+      },
+      {
+        "tag": "lan",
+        "type": "file",
+        "path": "rules/lan.txt",
+        "format": "cidr-list"
+      }
+    ],
+    "rules": [
+      {
+        "condition": { "type": "rule-set", "tag": "ads" },
+        "action": { "type": "reject" }
+      },
+      {
+        "condition": { "type": "rule-set", "tag": "lan" },
+        "action": { "type": "route", "outbound": "direct" }
+      }
+    ],
+    "final": { "type": "route", "outbound": "proxy" }
+  }
+}
+```
+
+说明：
+
+- `path` 支持相对路径，默认相对配置文件所在目录解析
+- `domain-list` 按域名列表加载
+- `cidr-list` 按 CIDR 列表加载
+- 空行会忽略
+- 以 `#` 或 `//` 开头的行会忽略
+- 规则文件只负责匹配数据，不负责动作
 
 ## 状态字段口径
 
@@ -163,6 +218,9 @@
 - `route` 和 `global mode` 引用的目标必须存在
 - `selector` 组里的成员必须是已定义的出站
 - `runtime.udp_upstream_idle_timeout_seconds` 必须大于 `0`
+- `rule_sets[*].tag` 不能为空且不能重复
+- `rule-set` 条件引用的 `tag` 必须存在
+- `rule_sets` 当前只支持本地文件
 - 规则按顺序匹配，没命中就走 `final`
 
 ## 最小场景
@@ -177,6 +235,7 @@
 - [blocked-route.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/blocked-route.json)
 - [chained-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/chained-socks5.json)
 - [global-selector.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/global-selector.json)
+- [rule-set-files.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/rule-set-files.json)
 - [server-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/server-socks5.json)
 - [udp-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/udp-socks5.json)
 

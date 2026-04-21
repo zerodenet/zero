@@ -1,3 +1,7 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use zero_config::{
     InboundProtocolConfig, ModeConfig, OutboundGroupKind, OutboundProtocolConfig,
     RouteActionConfig, RuleConditionConfig, RuntimeConfig,
@@ -315,4 +319,125 @@ fn global_mode_accepts_selector_group_target() {
     .expect("config should parse");
 
     assert!(matches!(config.mode, ModeConfig::Global { .. }));
+}
+
+#[test]
+fn loads_rule_set_from_relative_file_path() {
+    let project_dir = temp_test_dir("config-rule-set-relative");
+    let rules_dir = project_dir.join("rules");
+    fs::create_dir_all(&rules_dir).expect("create rules dir");
+    fs::write(rules_dir.join("ads.txt"), "blocked.example\n.ads.local\n").expect("write rules");
+
+    let config_path = project_dir.join("config.json");
+    fs::write(
+        &config_path,
+        r#"{
+            "outbounds": [
+                { "tag": "block", "protocol": { "type": "block" } }
+            ],
+            "route": {
+                "rule_sets": [
+                    {
+                        "tag": "ads",
+                        "type": "file",
+                        "path": "rules/ads.txt",
+                        "format": "domain-list"
+                    }
+                ],
+                "rules": [
+                    {
+                        "condition": { "type": "rule-set", "tag": "ads" },
+                        "action": { "type": "route", "outbound": "block" }
+                    }
+                ],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("write config");
+
+    let config = RuntimeConfig::load_from_path(&config_path).expect("load config");
+
+    assert_eq!(config.source_dir(), Some(project_dir.as_path()));
+    assert!(matches!(
+        config.route.rules[0].condition,
+        RuleConditionConfig::RuleSet { .. }
+    ));
+
+    cleanup_temp_dir(&project_dir);
+}
+
+#[test]
+fn rejects_undefined_rule_set_reference() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "route": {
+                "rules": [
+                    {
+                        "condition": { "type": "rule-set", "tag": "ads" },
+                        "action": { "type": "direct" }
+                    }
+                ],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(
+        error,
+        zero_config::ConfigError::UndefinedRuleSetTag { .. }
+    ));
+}
+
+#[test]
+fn rejects_invalid_cidr_rule_set_entry() {
+    let project_dir = temp_test_dir("config-rule-set-invalid-cidr");
+    let rules_dir = project_dir.join("rules");
+    fs::create_dir_all(&rules_dir).expect("create rules dir");
+    fs::write(rules_dir.join("lan.txt"), "10.0.0.0/8\nnot-a-cidr\n").expect("write rules");
+
+    let config_path = project_dir.join("config.json");
+    fs::write(
+        &config_path,
+        r#"{
+            "route": {
+                "rule_sets": [
+                    {
+                        "tag": "lan",
+                        "type": "file",
+                        "path": "rules/lan.txt",
+                        "format": "cidr-list"
+                    }
+                ],
+                "rules": [
+                    {
+                        "condition": { "type": "rule-set", "tag": "lan" },
+                        "action": { "type": "direct" }
+                    }
+                ],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("write config");
+
+    let error = RuntimeConfig::load_from_path(&config_path).expect_err("config should fail");
+    assert!(matches!(error, zero_config::ConfigError::InvalidRuleSet(_)));
+
+    cleanup_temp_dir(&project_dir);
+}
+
+fn temp_test_dir(prefix: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time after epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("{prefix}-{nonce}"));
+    fs::create_dir_all(&dir).expect("create temp test dir");
+    dir
+}
+
+fn cleanup_temp_dir(path: &Path) {
+    let _ = fs::remove_dir_all(path);
 }

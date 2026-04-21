@@ -1,13 +1,18 @@
+use std::collections::HashMap;
+use std::path::Path;
+
 use zero_router::{RouteAction, Rule, RuleCondition, RuleSet};
 
+use crate::rule_sets::compile_rule_sets;
 use crate::{ConfigError, RouteActionConfig, RouteConfig, RouteRuleConfig, RuleConditionConfig};
 
 impl RouteConfig {
-    pub fn compile(&self) -> Result<RuleSet, ConfigError> {
+    pub fn compile(&self, base_dir: Option<&Path>) -> Result<RuleSet, ConfigError> {
+        let compiled_rule_sets = compile_rule_sets(&self.rule_sets, base_dir)?;
         let mut rules = Vec::with_capacity(self.rules.len());
 
         for rule in &self.rules {
-            rules.push(rule.compile()?);
+            rules.push(rule.compile(&compiled_rule_sets)?);
         }
 
         Ok(RuleSet::new(rules, self.final_action.compile()))
@@ -15,16 +20,22 @@ impl RouteConfig {
 }
 
 impl RouteRuleConfig {
-    pub(crate) fn compile(&self) -> Result<Rule, ConfigError> {
+    pub(crate) fn compile(
+        &self,
+        compiled_rule_sets: &HashMap<String, RuleCondition>,
+    ) -> Result<Rule, ConfigError> {
         Ok(Rule {
-            condition: self.condition.compile()?,
+            condition: self.condition.compile(compiled_rule_sets)?,
             action: self.action.compile(),
         })
     }
 }
 
 impl RuleConditionConfig {
-    pub(crate) fn compile(&self) -> Result<RuleCondition, ConfigError> {
+    pub(crate) fn compile(
+        &self,
+        compiled_rule_sets: &HashMap<String, RuleCondition>,
+    ) -> Result<RuleCondition, ConfigError> {
         match self {
             Self::Domain { values } => {
                 validate_domain_values(values)?;
@@ -39,8 +50,16 @@ impl RuleConditionConfig {
 
                 Ok(RuleCondition::Ip(values.clone()))
             }
-            Self::And { items } => compile_nested_condition("and", items, RuleCondition::And),
-            Self::Or { items } => compile_nested_condition("or", items, RuleCondition::Or),
+            Self::RuleSet { tag } => compiled_rule_sets
+                .get(tag)
+                .cloned()
+                .ok_or_else(|| ConfigError::UndefinedRuleSetTag { tag: tag.clone() }),
+            Self::And { items } => {
+                compile_nested_condition("and", items, compiled_rule_sets, RuleCondition::And)
+            }
+            Self::Or { items } => {
+                compile_nested_condition("or", items, compiled_rule_sets, RuleCondition::Or)
+            }
         }
     }
 }
@@ -81,6 +100,7 @@ fn validate_domain_values(values: &[String]) -> Result<(), ConfigError> {
 fn compile_nested_condition<F>(
     kind: &'static str,
     items: &[RuleConditionConfig],
+    compiled_rule_sets: &HashMap<String, RuleCondition>,
     wrap: F,
 ) -> Result<RuleCondition, ConfigError>
 where
@@ -94,7 +114,7 @@ where
 
     let mut compiled = Vec::with_capacity(items.len());
     for item in items {
-        compiled.push(item.compile()?);
+        compiled.push(item.compile(compiled_rule_sets)?);
     }
 
     Ok(wrap(compiled))

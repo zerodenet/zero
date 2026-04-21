@@ -8,6 +8,12 @@ pub enum ConfigError {
         #[source]
         source: std::io::Error,
     },
+    #[error("failed to read rule set `{path}`: {source}")]
+    ReadRuleSet {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("failed to parse config: {0}")]
     ParseConfig(#[from] serde_json::Error),
     #[error("`{scope}` tag must not be empty")]
@@ -20,6 +26,8 @@ pub enum ConfigError {
     DuplicateInboundListen { address: String, port: u16 },
     #[error("invalid rule condition: {0}")]
     InvalidRuleCondition(String),
+    #[error("invalid rule set: {0}")]
+    InvalidRuleSet(String),
     #[error("invalid route action: {0}")]
     InvalidRouteAction(String),
     #[error("invalid outbound group: {0}")]
@@ -32,4 +40,6 @@ pub enum ConfigError {
     DuplicateRouteTargetTag { tag: String },
     #[error("route or mode references undefined target tag `{tag}`")]
     UndefinedRouteTargetTag { tag: String },
+    #[error("route references undefined rule set tag `{tag}`")]
+    UndefinedRuleSetTag { tag: String },
 }

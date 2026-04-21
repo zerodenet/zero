@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
@@ -20,15 +20,13 @@ pub struct RuntimeConfig {
     #[serde(default)]
     pub mode: ModeConfig,
     pub route: RouteConfig,
+    #[serde(skip)]
+    pub source_dir: Option<PathBuf>,
 }
 
 impl RuntimeConfig {
     pub fn parse(raw: &str) -> Result<Self, ConfigError> {
-        let raw = raw.strip_prefix('\u{feff}').unwrap_or(raw);
-        let config = serde_json::from_str::<Self>(raw)?;
-        config.validate()?;
-
-        Ok(config)
+        Self::parse_with_source_dir(raw, None)
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
@@ -38,7 +36,20 @@ impl RuntimeConfig {
             source,
         })?;
 
-        Self::parse(&raw)
+        Self::parse_with_source_dir(&raw, path.parent().map(Path::to_path_buf))
+    }
+
+    pub fn source_dir(&self) -> Option<&Path> {
+        self.source_dir.as_deref()
+    }
+
+    fn parse_with_source_dir(raw: &str, source_dir: Option<PathBuf>) -> Result<Self, ConfigError> {
+        let raw = raw.strip_prefix('\u{feff}').unwrap_or(raw);
+        let mut config = serde_json::from_str::<Self>(raw)?;
+        config.source_dir = source_dir;
+        config.validate()?;
+
+        Ok(config)
     }
 }
 
@@ -183,9 +194,41 @@ impl ModeConfig {
 #[serde(deny_unknown_fields)]
 pub struct RouteConfig {
     #[serde(default)]
+    pub rule_sets: Vec<RouteRuleSetConfig>,
+    #[serde(default)]
     pub rules: Vec<RouteRuleConfig>,
     #[serde(rename = "final")]
     pub final_action: RouteActionConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RouteRuleSetConfig {
+    pub tag: String,
+    #[serde(rename = "type")]
+    pub source_type: RuleSetSourceType,
+    pub path: String,
+    pub format: RuleSetFormatConfig,
+}
+
+impl RouteRuleSetConfig {
+    pub fn source_path(&self) -> &str {
+        &self.path
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RuleSetSourceType {
+    #[serde(rename = "file")]
+    File,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RuleSetFormatConfig {
+    #[serde(rename = "domain-list")]
+    DomainList,
+    #[serde(rename = "cidr-list")]
+    CidrList,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -202,6 +245,8 @@ pub enum RuleConditionConfig {
     Domain { values: Vec<String> },
     #[serde(rename = "ip")]
     Ip { values: Vec<IpNet> },
+    #[serde(rename = "rule-set")]
+    RuleSet { tag: String },
     #[serde(rename = "and")]
     And { items: Vec<RuleConditionConfig> },
     #[serde(rename = "or")]

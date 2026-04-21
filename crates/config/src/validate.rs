@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use crate::{
     ConfigError, ModeConfig, OutboundGroupConfig, OutboundGroupKind, RouteActionConfig,
-    RouteConfig, RouteRuleConfig, RuntimeConfig, RuntimeOptionsConfig,
+    RouteConfig, RouteRuleConfig, RouteRuleSetConfig, RuleConditionConfig, RuleSetSourceType,
+    RuntimeConfig, RuntimeOptionsConfig,
 };
 
 impl RuntimeConfig {
@@ -32,29 +33,107 @@ impl RuntimeConfig {
             group.validate(&outbound_tags)?;
         }
 
-        self.route.validate(&route_target_tags)?;
+        self.route.validate(&route_target_tags, self.source_dir())?;
         validate_runtime(&self.runtime)?;
         validate_mode(&self.mode, &route_target_tags)?;
-        let _ = self.route.compile()?;
 
         Ok(())
     }
 }
 
 impl RouteConfig {
-    pub(crate) fn validate(&self, route_target_tags: &HashSet<String>) -> Result<(), ConfigError> {
-        for rule in &self.rules {
-            rule.validate(route_target_tags)?;
+    pub(crate) fn validate(
+        &self,
+        route_target_tags: &HashSet<String>,
+        base_dir: Option<&std::path::Path>,
+    ) -> Result<(), ConfigError> {
+        let mut rule_set_tags = HashSet::new();
+        for rule_set in &self.rule_sets {
+            validate_tag("rule set", &rule_set.tag, &mut rule_set_tags)?;
+            rule_set.validate()?;
         }
 
-        validate_route_action(&self.final_action, route_target_tags)
+        for rule in &self.rules {
+            rule.validate(route_target_tags, &rule_set_tags)?;
+        }
+
+        validate_route_action(&self.final_action, route_target_tags)?;
+        let _ = self.compile(base_dir)?;
+
+        Ok(())
+    }
+}
+
+impl RouteRuleSetConfig {
+    fn validate(&self) -> Result<(), ConfigError> {
+        match self.source_type {
+            RuleSetSourceType::File => {
+                if self.path.trim().is_empty() {
+                    return Err(ConfigError::InvalidRuleSet(
+                        "`file` rule set requires a non-empty `path`".to_owned(),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
 impl RouteRuleConfig {
-    pub(crate) fn validate(&self, route_target_tags: &HashSet<String>) -> Result<(), ConfigError> {
-        let _ = self.condition.compile()?;
+    pub(crate) fn validate(
+        &self,
+        route_target_tags: &HashSet<String>,
+        rule_set_tags: &HashSet<String>,
+    ) -> Result<(), ConfigError> {
+        self.condition.validate(rule_set_tags)?;
         validate_route_action(&self.action, route_target_tags)
+    }
+}
+
+impl RuleConditionConfig {
+    fn validate(&self, rule_set_tags: &HashSet<String>) -> Result<(), ConfigError> {
+        match self {
+            Self::Domain { values } => {
+                if values.is_empty() {
+                    return Err(ConfigError::InvalidRuleCondition(
+                        "`domain` condition requires at least one value".to_owned(),
+                    ));
+                }
+
+                if values.iter().any(|value| value.trim().is_empty()) {
+                    return Err(ConfigError::InvalidRuleCondition(
+                        "`domain` condition does not allow empty values".to_owned(),
+                    ));
+                }
+
+                Ok(())
+            }
+            Self::Ip { values } => {
+                if values.is_empty() {
+                    return Err(ConfigError::InvalidRuleCondition(
+                        "`ip` condition requires at least one CIDR".to_owned(),
+                    ));
+                }
+
+                Ok(())
+            }
+            Self::RuleSet { tag } => {
+                if tag.trim().is_empty() {
+                    return Err(ConfigError::InvalidRuleCondition(
+                        "`rule-set` condition requires a non-empty `tag`".to_owned(),
+                    ));
+                }
+
+                if !rule_set_tags.contains(tag) {
+                    return Err(ConfigError::UndefinedRuleSetTag { tag: tag.clone() });
+                }
+
+                Ok(())
+            }
+            Self::And { items } => validate_nested_condition("and", items, rule_set_tags),
+            Self::Or { items } => validate_nested_condition("or", items, rule_set_tags),
+        }
     }
 }
 
@@ -227,6 +306,24 @@ fn validate_inbound_listen(
             address: key.0,
             port: key.1,
         });
+    }
+
+    Ok(())
+}
+
+fn validate_nested_condition(
+    kind: &'static str,
+    items: &[RuleConditionConfig],
+    rule_set_tags: &HashSet<String>,
+) -> Result<(), ConfigError> {
+    if items.is_empty() {
+        return Err(ConfigError::InvalidRuleCondition(format!(
+            "`{kind}` condition requires at least one nested condition"
+        )));
+    }
+
+    for item in items {
+        item.validate(rule_set_tags)?;
     }
 
     Ok(())

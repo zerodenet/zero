@@ -37,7 +37,7 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(config: RuntimeConfig) -> Result<Self, EngineError> {
-        let router = config.route.compile()?;
+        let router = config.route.compile(config.source_dir())?;
         let udp_upstream_idle_timeout =
             Duration::from_secs(config.runtime.udp_upstream_idle_timeout_seconds);
 

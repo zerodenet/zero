@@ -16,6 +16,7 @@ Zero 是一个用 Rust 编写的网络代理项目。
 - `mode = rule | global | direct`
 - `selector` 出站组
 - 基于域名和 CIDR 的静态路由
+- 外置 `rule_sets` 文件规则
 - 结构化日志
 - 本地只读状态导出
 
@@ -92,6 +93,7 @@ make test
 - `examples/v0.0.1/blocked-route.json`
 - `examples/v0.0.1/chained-socks5.json`
 - `examples/v0.0.1/global-selector.json`
+- `examples/v0.0.1/rule-set-files.json`
 - `examples/v0.0.1/server-socks5.json`
 - `examples/v0.0.1/udp-socks5.json`
 
