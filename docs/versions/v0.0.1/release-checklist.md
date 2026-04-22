@@ -14,6 +14,7 @@
 - `HTTP CONNECT -> direct`
 - `mixed` 同端口入站
 - `SOCKS5` 链式出站
+- `rule_sets` 文件规则
 - 配置错误输出
 
 手工再看一遍：
@@ -25,3 +26,4 @@
 - `curl` 经 `SOCKS5`
 - `curl` 经 `HTTP CONNECT`
 - 阻断规则是否真的生效
+- `rule-set-files.json` 是否能正确走域名阻断和 CIDR 直连

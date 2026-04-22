@@ -11,6 +11,7 @@
 - 跑 `mixed` 同端口多协议入站
 - 跑 `SOCKS5 UDP ASSOCIATE`
 - 按规则走 `direct`、`block` 或上游 `SOCKS5`
+- 从本地文件加载 `rule_sets`
 - 通过 `selector` 组做最小手动选节点
 - 导出本地只读状态
 
@@ -70,6 +71,7 @@ target\release\zero.exe status --json examples\v0.0.1\basic.json
 - [blocked-route.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/blocked-route.json)
 - [chained-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/chained-socks5.json)
 - [global-selector.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/global-selector.json)
+- [rule-set-files.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/rule-set-files.json)
 - [server-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/server-socks5.json)
 - [udp-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/udp-socks5.json)
 

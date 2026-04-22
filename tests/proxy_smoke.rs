@@ -1,12 +1,13 @@
 mod support;
 
+use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread;
 
 use support::{
-    free_port, http_connect_tunnel, remove_temp_file, socks5_connect, spawn_zero, stop_child,
-    wait_for_port, write_temp_config,
+    create_temp_dir, free_port, http_connect_tunnel, remove_temp_dir, remove_temp_file,
+    socks5_connect, socks5_connect_ipv4, spawn_zero, stop_child, wait_for_port, write_temp_config,
 };
 
 #[test]
@@ -37,7 +38,7 @@ fn zero_binary_relays_tcp_through_socks5_direct() {
 
     wait_for_port(proxy_port);
 
-    let mut stream = socks5_connect(proxy_port, "127.0.0.1", echo_port);
+    let mut stream = socks5_connect_ipv4(proxy_port, [127, 0, 0, 1], echo_port);
     stream.write_all(b"ping").expect("write payload");
 
     let mut echoed = [0_u8; 4];
@@ -165,6 +166,110 @@ fn zero_binary_relays_tcp_through_chained_socks5_outbound() {
     let _ = echo_thread.join();
     remove_temp_file(&outer_config_path);
     remove_temp_file(&upstream_config_path);
+}
+
+#[test]
+fn zero_binary_applies_file_backed_rule_sets() {
+    let project_dir = create_temp_dir("proxy-smoke-rule-sets");
+    let rules_dir = project_dir.join("rules");
+    fs::create_dir_all(&rules_dir).expect("create rules dir");
+    fs::write(rules_dir.join("ads.txt"), "blocked.example\n.ads.local\n")
+        .expect("write domain rules");
+    fs::write(rules_dir.join("lan.txt"), "127.0.0.0/8\n").expect("write cidr rules");
+
+    let proxy_port = free_port();
+    let echo_port = free_port();
+    let config_path = project_dir.join("config.json");
+    let config = format!(
+        r#"{{
+            "inbounds": [
+                {{
+                    "tag": "mixed-in",
+                    "listen": {{ "address": "127.0.0.1", "port": {proxy_port} }},
+                    "protocol": {{ "type": "mixed" }}
+                }}
+            ],
+            "outbounds": [
+                {{
+                    "tag": "direct",
+                    "protocol": {{ "type": "direct" }}
+                }},
+                {{
+                    "tag": "block",
+                    "protocol": {{ "type": "block" }}
+                }}
+            ],
+            "route": {{
+                "rule_sets": [
+                    {{
+                        "tag": "ads",
+                        "type": "file",
+                        "path": "rules/ads.txt",
+                        "format": "domain-list"
+                    }},
+                    {{
+                        "tag": "lan",
+                        "type": "file",
+                        "path": "rules/lan.txt",
+                        "format": "cidr-list"
+                    }}
+                ],
+                "rules": [
+                    {{
+                        "condition": {{ "type": "rule-set", "tag": "ads" }},
+                        "action": {{ "type": "reject" }}
+                    }},
+                    {{
+                        "condition": {{ "type": "rule-set", "tag": "lan" }},
+                        "action": {{ "type": "route", "outbound": "direct" }}
+                    }}
+                ],
+                "final": {{ "type": "route", "outbound": "block" }}
+            }}
+        }}"#
+    );
+    fs::write(&config_path, config).expect("write config");
+
+    let echo_thread = spawn_echo_server(echo_port);
+    let mut child = spawn_zero(&["run", config_path.to_str().expect("utf-8 config path")]);
+
+    wait_for_port(proxy_port);
+
+    let mut blocked =
+        std::net::TcpStream::connect(("127.0.0.1", proxy_port)).expect("connect proxy");
+    blocked
+        .write_all(&[0x05, 0x01, 0x00])
+        .expect("write socks auth");
+    let mut auth = [0_u8; 2];
+    blocked.read_exact(&mut auth).expect("read socks auth");
+    assert_eq!(auth, [0x05, 0x00]);
+
+    let mut blocked_request = vec![0x05, 0x01, 0x00, 0x03, 0x0f];
+    blocked_request.extend_from_slice(b"blocked.example");
+    blocked_request.extend_from_slice(&443_u16.to_be_bytes());
+    blocked
+        .write_all(&blocked_request)
+        .expect("write blocked request");
+
+    let mut blocked_response = [0_u8; 10];
+    blocked
+        .read_exact(&mut blocked_response)
+        .expect("read blocked response");
+    assert_eq!(
+        blocked_response[1], 0x02,
+        "unexpected socks5 blocked reply: {:?}",
+        blocked_response
+    );
+
+    let mut stream = socks5_connect_ipv4(proxy_port, [127, 0, 0, 1], echo_port);
+    stream.write_all(b"rule").expect("write payload");
+    let mut echoed = [0_u8; 4];
+    stream.read_exact(&mut echoed).expect("read payload");
+    assert_eq!(&echoed, b"rule");
+
+    stop_child(&mut child);
+    let _ = echo_thread.join();
+    remove_temp_dir(&project_dir);
 }
 
 fn spawn_echo_server(port: u16) -> thread::JoinHandle<()> {

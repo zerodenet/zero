@@ -56,8 +56,22 @@ pub fn write_temp_config(contents: &str, suffix: &str) -> PathBuf {
     path
 }
 
+pub fn create_temp_dir(suffix: &str) -> PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "zero-test-{}-{}-{suffix}",
+        std::process::id(),
+        free_port()
+    ));
+    fs::create_dir_all(&path).expect("create temp dir");
+    path
+}
+
 pub fn remove_temp_file(path: &Path) {
     let _ = fs::remove_file(path);
+}
+
+pub fn remove_temp_dir(path: &Path) {
+    let _ = fs::remove_dir_all(path);
 }
 
 pub fn spawn_zero(args: &[&str]) -> Child {
@@ -87,6 +101,30 @@ pub fn socks5_connect(port: u16, host: &str, target_port: u16) -> TcpStream {
     let host_bytes = host.as_bytes();
     let mut request = vec![0x05, 0x01, 0x00, 0x03, host_bytes.len() as u8];
     request.extend_from_slice(host_bytes);
+    request.extend_from_slice(&target_port.to_be_bytes());
+    stream.write_all(&request).expect("write socks request");
+
+    let mut response = vec![0_u8; 10];
+    stream
+        .read_exact(&mut response)
+        .expect("read socks response");
+    assert_eq!(response[1], 0x00, "unexpected socks5 reply: {:?}", response);
+
+    stream
+}
+
+pub fn socks5_connect_ipv4(port: u16, addr: [u8; 4], target_port: u16) -> TcpStream {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect socks5 proxy");
+    stream
+        .write_all(&[0x05, 0x01, 0x00])
+        .expect("write socks auth");
+
+    let mut auth = [0_u8; 2];
+    stream.read_exact(&mut auth).expect("read socks auth");
+    assert_eq!(auth, [0x05, 0x00]);
+
+    let mut request = vec![0x05, 0x01, 0x00, 0x01];
+    request.extend_from_slice(&addr);
     request.extend_from_slice(&target_port.to_be_bytes());
     stream.write_all(&request).expect("write socks request");
 
