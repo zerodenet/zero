@@ -145,15 +145,7 @@ impl OutboundGroupConfig {
                 default,
                 selected,
             } => {
-                if outbounds.is_empty() {
-                    return Err(ConfigError::InvalidOutboundGroup(
-                        "`selector` group requires at least one outbound".to_owned(),
-                    ));
-                }
-
-                for outbound in outbounds {
-                    validate_group_member_tag(outbound, outbound_tags)?;
-                }
+                validate_group_outbounds("selector", outbounds, outbound_tags)?;
 
                 if let Some(default) = default {
                     validate_selector_choice("default", default, outbounds)?;
@@ -161,6 +153,36 @@ impl OutboundGroupConfig {
 
                 if let Some(selected) = selected {
                     validate_selector_choice("selected", selected, outbounds)?;
+                }
+
+                Ok(())
+            }
+            OutboundGroupKind::Fallback { outbounds } => {
+                validate_group_outbounds("fallback", outbounds, outbound_tags)
+            }
+            OutboundGroupKind::UrlTest {
+                outbounds,
+                url,
+                interval_seconds,
+            } => {
+                validate_group_outbounds("urltest", outbounds, outbound_tags)?;
+
+                if url.trim().is_empty() {
+                    return Err(ConfigError::InvalidOutboundGroup(
+                        "`urltest` group requires a non-empty `url`".to_owned(),
+                    ));
+                }
+
+                if !url.starts_with("http://") {
+                    return Err(ConfigError::InvalidOutboundGroup(
+                        "`urltest` group currently only supports `http://` probe urls".to_owned(),
+                    ));
+                }
+
+                if *interval_seconds == 0 {
+                    return Err(ConfigError::InvalidOutboundGroup(
+                        "`urltest` group `interval_seconds` must be greater than 0".to_owned(),
+                    ));
                 }
 
                 Ok(())
@@ -255,19 +277,38 @@ fn validate_route_target_tag(tag: &str, seen: &mut HashSet<String>) -> Result<()
     Ok(())
 }
 
+fn validate_group_outbounds(
+    kind: &'static str,
+    outbounds: &[String],
+    outbound_tags: &HashSet<String>,
+) -> Result<(), ConfigError> {
+    if outbounds.is_empty() {
+        return Err(ConfigError::InvalidOutboundGroup(format!(
+            "`{kind}` group requires at least one outbound"
+        )));
+    }
+
+    for outbound in outbounds {
+        validate_group_member_tag(kind, outbound, outbound_tags)?;
+    }
+
+    Ok(())
+}
+
 fn validate_group_member_tag(
+    kind: &'static str,
     tag: &str,
     outbound_tags: &HashSet<String>,
 ) -> Result<(), ConfigError> {
     if tag.trim().is_empty() {
-        return Err(ConfigError::InvalidOutboundGroup(
-            "`selector` group does not allow empty outbound tags".to_owned(),
-        ));
+        return Err(ConfigError::InvalidOutboundGroup(format!(
+            "`{kind}` group does not allow empty outbound tags"
+        )));
     }
 
     if !outbound_tags.contains(tag) {
         return Err(ConfigError::InvalidOutboundGroup(format!(
-            "`selector` group references undefined outbound `{tag}`"
+            "`{kind}` group references undefined outbound `{tag}`"
         )));
     }
 

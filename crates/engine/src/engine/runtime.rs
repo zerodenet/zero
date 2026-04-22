@@ -17,7 +17,10 @@ use crate::ProtocolInventory;
 
 use super::completed_sessions::{CompletedSessionHistory, CompletedSessionRecord};
 use super::error::EngineError;
-use super::resolve::{resolve_named_outbound, resolve_selector_group, ResolvedOutbound};
+use super::outbound_group_state::OutboundGroupStateStore;
+use super::resolve::{
+    resolve_group, resolve_named_outbound, ResolvedLeafOutbound, ResolvedOutbound,
+};
 use super::session_lifecycle::SessionHandle;
 use super::session_registry::{ActiveSession, SessionRegistry};
 use super::stats::{EngineStats, EngineStatsSnapshot, SessionOutcome};
@@ -32,6 +35,7 @@ pub struct Engine {
     pub(crate) session_registry: Arc<SessionRegistry>,
     pub(crate) completed_sessions: Arc<CompletedSessionHistory>,
     pub(crate) stats: Arc<EngineStats>,
+    pub(crate) outbound_group_state: Arc<OutboundGroupStateStore>,
     pub(crate) udp_upstream_idle_timeout: Duration,
 }
 
@@ -40,6 +44,23 @@ impl Engine {
         let router = config.route.compile(config.source_dir())?;
         let udp_upstream_idle_timeout =
             Duration::from_secs(config.runtime.udp_upstream_idle_timeout_seconds);
+        let outbound_group_state = OutboundGroupStateStore::shared();
+
+        for group in &config.outbound_groups {
+            match &group.group {
+                zero_config::OutboundGroupKind::Selector { .. } => {
+                    if let Some(selected) = group.active_outbound() {
+                        outbound_group_state.initialize_selector(group.tag(), selected);
+                    }
+                }
+                zero_config::OutboundGroupKind::UrlTest { outbounds, .. } => {
+                    if let Some(selected) = outbounds.first() {
+                        outbound_group_state.initialize_urltest(group.tag(), selected);
+                    }
+                }
+                zero_config::OutboundGroupKind::Fallback { .. } => {}
+            }
+        }
 
         Ok(Self {
             config,
@@ -50,6 +71,7 @@ impl Engine {
             session_registry: SessionRegistry::shared(),
             completed_sessions: CompletedSessionHistory::shared(),
             stats: EngineStats::shared(),
+            outbound_group_state,
             udp_upstream_idle_timeout,
         })
     }
@@ -96,6 +118,38 @@ impl Engine {
         self.completed_sessions.snapshot()
     }
 
+    pub fn set_selector_outbound(
+        &self,
+        group_tag: &str,
+        outbound_tag: &str,
+    ) -> Result<(), EngineError> {
+        let group = self
+            .config
+            .outbound_groups
+            .iter()
+            .find(|group| group.tag() == group_tag)
+            .ok_or_else(|| EngineError::SelectorGroupNotFound {
+                tag: group_tag.to_owned(),
+            })?;
+
+        let zero_config::OutboundGroupKind::Selector { outbounds, .. } = &group.group else {
+            return Err(EngineError::SelectorGroupTypeMismatch {
+                tag: group_tag.to_owned(),
+            });
+        };
+
+        if !outbounds.iter().any(|outbound| outbound == outbound_tag) {
+            return Err(EngineError::SelectorOutboundNotFound {
+                group_tag: group_tag.to_owned(),
+                outbound_tag: outbound_tag.to_owned(),
+            });
+        }
+
+        self.outbound_group_state
+            .update_selector(group_tag, outbound_tag);
+        Ok(())
+    }
+
     pub async fn run(&self) -> Result<(), EngineError> {
         self.run_until(async {
             match tokio::signal::ctrl_c().await {
@@ -116,6 +170,7 @@ impl Engine {
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         let mut listeners = JoinSet::new();
+        let mut urltests = JoinSet::new();
 
         for inbound in &self.config.inbounds {
             match inbound.protocol {
@@ -144,6 +199,15 @@ impl Engine {
             }
         }
 
+        for group in &self.config.outbound_groups {
+            if matches!(group.group, zero_config::OutboundGroupKind::UrlTest { .. }) {
+                let engine = self.clone();
+                let group = group.clone();
+                let shutdown = shutdown_rx.clone();
+                urltests.spawn(async move { engine.run_urltest_group(group, shutdown).await });
+            }
+        }
+
         info!(
             inbound_count = self.config.inbounds.len(),
             outbound_count = self.config.outbounds.len(),
@@ -160,7 +224,7 @@ impl Engine {
         let mut shutting_down = false;
 
         loop {
-            if shutting_down && listeners.is_empty() {
+            if shutting_down && listeners.is_empty() && urltests.is_empty() {
                 let stats = self.stats_snapshot();
                 info!(
                     total_started = stats.total_started,
@@ -184,7 +248,7 @@ impl Engine {
                 _ = &mut shutdown, if !shutting_down => {
                     shutting_down = true;
                     let _ = shutdown_tx.send(true);
-                    info!("propagated engine shutdown to inbound listeners");
+                    info!("propagated engine shutdown to background tasks");
                 }
                 result = listeners.join_next(), if !listeners.is_empty() => {
                     match result {
@@ -196,6 +260,16 @@ impl Engine {
                         None => return Err(EngineError::InboundTaskExited),
                     }
                 }
+                result = urltests.join_next(), if !urltests.is_empty() => {
+                    match result {
+                        Some(Ok(Ok(()))) if shutting_down => {}
+                        Some(Ok(Ok(()))) => return Err(EngineError::UrlTestTaskExited),
+                        Some(Ok(Err(error))) => return Err(error),
+                        Some(Err(error)) => return Err(io::Error::other(error).into()),
+                        None if shutting_down => {}
+                        None => return Err(EngineError::UrlTestTaskExited),
+                    }
+                }
             }
         }
     }
@@ -205,8 +279,12 @@ impl Engine {
         action: &'a RouteAction,
     ) -> Result<ResolvedOutbound<'a>, EngineError> {
         match action {
-            RouteAction::Direct => Ok(ResolvedOutbound::Direct { tag: None }),
-            RouteAction::Reject => Ok(ResolvedOutbound::Block { tag: None }),
+            RouteAction::Direct => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Direct {
+                tag: None,
+            })),
+            RouteAction::Reject => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Block {
+                tag: None,
+            })),
             RouteAction::Route(tag) => self.resolve_target(tag),
         }
     }
@@ -218,7 +296,7 @@ impl Engine {
             .iter()
             .find(|outbound| outbound.tag() == tag)
         {
-            return Ok(resolve_named_outbound(outbound));
+            return Ok(ResolvedOutbound::Single(resolve_named_outbound(outbound)));
         }
 
         if let Some(group) = self
@@ -227,11 +305,10 @@ impl Engine {
             .iter()
             .find(|group| group.tag() == tag)
         {
-            return resolve_selector_group(group, &self.config.outbounds).ok_or_else(|| {
-                EngineError::MissingRouteTarget {
+            return resolve_group(group, &self.config.outbounds, &self.outbound_group_state)
+                .ok_or_else(|| EngineError::MissingRouteTarget {
                     tag: tag.to_owned(),
-                }
-            });
+                });
         }
 
         Err(EngineError::MissingRouteTarget {

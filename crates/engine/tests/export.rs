@@ -141,3 +141,51 @@ fn exports_custom_udp_upstream_idle_timeout_from_config() {
 
     assert_eq!(exported.udp_upstream_idle_timeout_seconds, 9);
 }
+
+#[test]
+fn selector_group_update_is_reflected_in_exported_config() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                { "tag": "direct", "protocol": { "type": "direct" } },
+                { "tag": "block", "protocol": { "type": "block" } }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "proxy",
+                    "type": "selector",
+                    "outbounds": ["block", "direct"],
+                    "selected": "block"
+                }
+            ],
+            "mode": {
+                "type": "global",
+                "outbound": "proxy"
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "reject" }
+            }
+        }"#,
+    )
+    .expect("parse config");
+
+    let engine = Engine::new(config).expect("build engine");
+    assert_eq!(
+        engine.export_config().outbound_groups[0]
+            .selected
+            .as_deref(),
+        Some("block")
+    );
+
+    engine
+        .set_selector_outbound("proxy", "direct")
+        .expect("update selector");
+
+    assert_eq!(
+        engine.export_config().outbound_groups[0]
+            .selected
+            .as_deref(),
+        Some("direct")
+    );
+}

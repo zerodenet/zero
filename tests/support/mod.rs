@@ -46,6 +46,22 @@ pub fn http_get(port: u16, path: &str) -> String {
     response
 }
 
+pub fn http_post(port: u16, path: &str) -> String {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect status port");
+    let request = format!(
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .expect("write http request");
+
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .expect("read http response");
+    response
+}
+
 pub fn write_temp_config(contents: &str, suffix: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!(
         "zero-test-{}-{}-{suffix}.json",

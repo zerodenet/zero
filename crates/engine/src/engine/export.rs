@@ -6,6 +6,7 @@ use zero_config::{
 use zero_core::{Address, Network, ProtocolType};
 
 use super::completed_sessions::CompletedSessionRecord;
+use super::outbound_group_state::OutboundGroupStateStore;
 use super::runtime::Engine;
 use super::session_registry::ActiveSession;
 use super::stats::{EngineStatsSnapshot, SessionOutcome};
@@ -61,6 +62,8 @@ pub struct OutboundGroupExport {
     pub kind: String,
     pub outbounds: Vec<String>,
     pub selected: Option<String>,
+    pub latency_ms: Option<u64>,
+    pub last_checked_unix_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -139,7 +142,7 @@ impl Engine {
                 .config
                 .outbound_groups
                 .iter()
-                .map(OutboundGroupExport::from)
+                .map(|group| OutboundGroupExport::new(group, &self.outbound_group_state))
                 .collect(),
         }
     }
@@ -214,15 +217,43 @@ impl From<&ModeConfig> for ModeExport {
     }
 }
 
-impl From<&OutboundGroupConfig> for OutboundGroupExport {
-    fn from(group: &OutboundGroupConfig) -> Self {
+impl OutboundGroupExport {
+    fn new(group: &OutboundGroupConfig, state: &OutboundGroupStateStore) -> Self {
         match &group.group {
             OutboundGroupKind::Selector { outbounds, .. } => Self {
                 tag: group.tag.clone(),
                 kind: "selector".to_owned(),
                 outbounds: outbounds.clone(),
-                selected: group.active_outbound().map(str::to_owned),
+                selected: state
+                    .selector_selected_outbound(group.tag())
+                    .or_else(|| group.active_outbound().map(str::to_owned)),
+                latency_ms: None,
+                last_checked_unix_ms: None,
             },
+            OutboundGroupKind::Fallback { outbounds } => Self {
+                tag: group.tag.clone(),
+                kind: "fallback".to_owned(),
+                outbounds: outbounds.clone(),
+                selected: group.active_outbound().map(str::to_owned),
+                latency_ms: None,
+                last_checked_unix_ms: None,
+            },
+            OutboundGroupKind::UrlTest { outbounds, .. } => {
+                let runtime = state.urltest_state(group.tag());
+                Self {
+                    tag: group.tag.clone(),
+                    kind: "urltest".to_owned(),
+                    outbounds: outbounds.clone(),
+                    selected: runtime
+                        .as_ref()
+                        .map(|current| current.selected.clone())
+                        .or_else(|| group.active_outbound().map(str::to_owned)),
+                    latency_ms: runtime.as_ref().and_then(|current| current.latency_ms),
+                    last_checked_unix_ms: runtime
+                        .as_ref()
+                        .and_then(|current| current.last_checked_unix_ms),
+                }
+            }
         }
     }
 }

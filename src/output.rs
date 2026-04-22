@@ -71,15 +71,30 @@ pub fn render_status(status: &EngineStatusExport) -> String {
     if !status.config.outbound_groups.is_empty() {
         output.push_str("outbound_groups:\n");
         for group in &status.config.outbound_groups {
-            match &group.selected {
-                Some(selected) => output.push_str(&format!(
+            match (
+                &group.selected,
+                group.latency_ms,
+                group.last_checked_unix_ms,
+            ) {
+                (Some(selected), Some(latency_ms), Some(last_checked_unix_ms)) => {
+                    output.push_str(&format!(
+                        "  - {} {} selected={} latency={}ms checked_at={} members={}\n",
+                        group.tag,
+                        group.kind,
+                        selected,
+                        latency_ms,
+                        last_checked_unix_ms,
+                        group.outbounds.join(",")
+                    ))
+                }
+                (Some(selected), _, _) => output.push_str(&format!(
                     "  - {} {} selected={} members={}\n",
                     group.tag,
                     group.kind,
                     selected,
                     group.outbounds.join(",")
                 )),
-                None => output.push_str(&format!(
+                (None, _, _) => output.push_str(&format!(
                     "  - {} {} members={}\n",
                     group.tag,
                     group.kind,

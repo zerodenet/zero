@@ -11,10 +11,10 @@ use super::error::EngineError;
 use super::logging::{
     log_listener_connection_error, log_session_accepted, log_session_failed, log_session_finished,
 };
-use super::resolve::ResolvedOutbound;
 use super::runtime::{bind_listener, Engine};
 use super::stats::SessionOutcome;
 use super::stream::ClientStream;
+use super::tcp_outbound::EstablishedTcpOutbound;
 use super::tcp_relay::relay_bidirectional_metered;
 
 impl Engine {
@@ -155,75 +155,50 @@ impl Engine {
         };
         log_session_accepted(&session, &action, self.config.mode.kind());
 
-        match resolved {
-            ResolvedOutbound::Direct { tag } => {
-                session.outbound_tag = Some(tag.unwrap_or("direct").to_owned());
+        match self.establish_tcp_outbound(&session, resolved).await {
+            Ok(EstablishedTcpOutbound::Direct { tag, upstream }) => {
+                session.outbound_tag = Some(tag);
                 self.set_session_outbound(&session);
-                match self
-                    .protocols
-                    .direct_outbound
-                    .connect(&session, &self.resolver)
-                    .await
+                self.protocols
+                    .socks5_inbound
+                    .send_response(&mut client, Socks5Reply::Succeeded)
+                    .await?;
+                let client = client.into_tokio_socket();
+                let upload_engine = self.clone();
+                let download_engine = self.clone();
+                let session_id = session.id;
+
+                match relay_bidirectional_metered(
+                    client,
+                    upstream,
+                    move |bytes| upload_engine.record_session_upload(session_id, bytes),
+                    move |bytes| download_engine.record_session_download(session_id, bytes),
+                )
+                .await
                 {
-                    Ok(upstream) => {
-                        self.protocols
-                            .socks5_inbound
-                            .send_response(&mut client, Socks5Reply::Succeeded)
-                            .await?;
-                        let client = client.into_tokio_socket();
-                        let upload_engine = self.clone();
-                        let download_engine = self.clone();
-                        let session_id = session.id;
-
-                        match relay_bidirectional_metered(
-                            client,
-                            upstream,
-                            move |bytes| upload_engine.record_session_upload(session_id, bytes),
-                            move |bytes| download_engine.record_session_download(session_id, bytes),
-                        )
-                        .await
-                        {
-                            Ok(_) => {
-                                if let Some(record) =
-                                    session_handle.finish(SessionOutcome::DirectRelayed)
-                                {
-                                    log_session_finished(&record, None);
-                                }
-                            }
-                            Err(error) => {
-                                let record = session_handle.finish(SessionOutcome::Failed);
-                                log_session_failed(
-                                    &session,
-                                    record.as_ref(),
-                                    "relay",
-                                    started_at.elapsed(),
-                                    &error,
-                                    None,
-                                );
-                                return Err(error.into());
-                            }
+                    Ok(_) => {
+                        if let Some(record) = session_handle.finish(SessionOutcome::DirectRelayed) {
+                            log_session_finished(&record, None);
                         }
-
-                        Ok(())
                     }
                     Err(error) => {
-                        self.reply_and_close_socks5(&mut client, Socks5Reply::HostUnreachable)
-                            .await;
                         let record = session_handle.finish(SessionOutcome::Failed);
                         log_session_failed(
                             &session,
                             record.as_ref(),
-                            "connect_direct",
+                            "relay",
                             started_at.elapsed(),
                             &error,
                             None,
                         );
-                        Err(error.into())
+                        return Err(error.into());
                     }
                 }
+
+                Ok(())
             }
-            ResolvedOutbound::Block { tag } => {
-                session.outbound_tag = Some(tag.unwrap_or("block").to_owned());
+            Ok(EstablishedTcpOutbound::Block { tag }) => {
+                session.outbound_tag = Some(tag);
                 self.set_session_outbound(&session);
                 self.reply_and_close_socks5(&mut client, Socks5Reply::ConnectionNotAllowed)
                     .await;
@@ -233,69 +208,69 @@ impl Engine {
 
                 Ok(())
             }
-            ResolvedOutbound::Socks5 { tag, server, port } => {
-                session.outbound_tag = Some(tag.to_owned());
+            Ok(EstablishedTcpOutbound::Socks5 {
+                tag,
+                server,
+                port,
+                upstream,
+            }) => {
+                session.outbound_tag = Some(tag);
                 self.set_session_outbound(&session);
-                match self
-                    .connect_via_socks5_upstream(&session, server, port)
-                    .await
+                self.protocols
+                    .socks5_inbound
+                    .send_response(&mut client, Socks5Reply::Succeeded)
+                    .await?;
+                let client = client.into_tokio_socket();
+                let upload_engine = self.clone();
+                let download_engine = self.clone();
+                let session_id = session.id;
+
+                match relay_bidirectional_metered(
+                    client,
+                    upstream,
+                    move |bytes| upload_engine.record_session_upload(session_id, bytes),
+                    move |bytes| download_engine.record_session_download(session_id, bytes),
+                )
+                .await
                 {
-                    Ok(upstream) => {
-                        self.protocols
-                            .socks5_inbound
-                            .send_response(&mut client, Socks5Reply::Succeeded)
-                            .await?;
-                        let client = client.into_tokio_socket();
-                        let upload_engine = self.clone();
-                        let download_engine = self.clone();
-                        let session_id = session.id;
-
-                        match relay_bidirectional_metered(
-                            client,
-                            upstream,
-                            move |bytes| upload_engine.record_session_upload(session_id, bytes),
-                            move |bytes| download_engine.record_session_download(session_id, bytes),
-                        )
-                        .await
+                    Ok(_) => {
+                        if let Some(record) = session_handle.finish(SessionOutcome::ChainedRelayed)
                         {
-                            Ok(_) => {
-                                if let Some(record) =
-                                    session_handle.finish(SessionOutcome::ChainedRelayed)
-                                {
-                                    log_session_finished(&record, Some((server, port)));
-                                }
-                            }
-                            Err(error) => {
-                                let record = session_handle.finish(SessionOutcome::Failed);
-                                log_session_failed(
-                                    &session,
-                                    record.as_ref(),
-                                    "relay",
-                                    started_at.elapsed(),
-                                    &error,
-                                    Some((server, port)),
-                                );
-                                return Err(error.into());
-                            }
+                            log_session_finished(&record, Some((&server, port)));
                         }
-
-                        Ok(())
                     }
                     Err(error) => {
-                        self.reply_and_close_socks5(&mut client, Socks5Reply::HostUnreachable)
-                            .await;
                         let record = session_handle.finish(SessionOutcome::Failed);
                         log_session_failed(
                             &session,
                             record.as_ref(),
-                            "connect_upstream_socks5",
+                            "relay",
                             started_at.elapsed(),
                             &error,
-                            Some((server, port)),
+                            Some((&server, port)),
                         );
-                        Err(error)
+                        return Err(error.into());
                     }
                 }
+
+                Ok(())
+            }
+            Err(failure) => {
+                self.reply_and_close_socks5(&mut client, Socks5Reply::HostUnreachable)
+                    .await;
+                let record = session_handle.finish(SessionOutcome::Failed);
+                log_session_failed(
+                    &session,
+                    record.as_ref(),
+                    failure.stage,
+                    started_at.elapsed(),
+                    &failure.error,
+                    failure
+                        .upstream_endpoint
+                        .as_ref()
+                        .map(|(server, port)| (server.as_str(), *port)),
+                );
+                Err(failure.error)
             }
         }
     }

@@ -144,6 +144,8 @@ impl OutboundGroupConfig {
                 .as_deref()
                 .or(default.as_deref())
                 .or_else(|| outbounds.first().map(String::as_str)),
+            OutboundGroupKind::Fallback { outbounds } => outbounds.first().map(String::as_str),
+            OutboundGroupKind::UrlTest { outbounds, .. } => outbounds.first().map(String::as_str),
         }
     }
 }
@@ -159,6 +161,19 @@ pub enum OutboundGroupKind {
         #[serde(default)]
         selected: Option<String>,
     },
+    #[serde(rename = "fallback")]
+    Fallback { outbounds: Vec<String> },
+    #[serde(rename = "urltest")]
+    UrlTest {
+        outbounds: Vec<String>,
+        url: String,
+        #[serde(default = "default_urltest_interval_seconds")]
+        interval_seconds: u64,
+    },
+}
+
+const fn default_urltest_interval_seconds() -> u64 {
+    300
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

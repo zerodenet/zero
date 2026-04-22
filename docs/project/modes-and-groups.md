@@ -1,21 +1,23 @@
 # 模式和节点组
 
-这份文档说的是模式和节点组设计。其中一部分已经在 `v0.0.1` 落地：
+这份文档说的是模式和节点组设计。当前已经落地：
 
 - `mode = rule | global | direct`
-- `selector` 组
+- `selector`
+- `selector` 运行时切换
+- `fallback`
+- `urltest`
 
 还没落地的部分：
 
-- `urltest`
-- `fallback`
-- 运行时动态切换接口
+- 组嵌套组
+- 更复杂的健康检查调度
 
 目标很简单：入站尽量固定，节点尽量都放在出站里，真正变化的是“当前怎么选出站”。
 
 ## 基本拆分
 
-- `inbounds`：固定监听口。典型就是一个 `mixed` 在 `127.0.0.1:7890`
+- `inbounds`：固定监听口。典型是一个 `mixed` 在 `127.0.0.1:7890`
 - `outbounds`：具体节点或内建动作，比如 `node-a`、`node-b`、`direct`、`block`
 - `outbound_groups`：对一组出站做统一选择
 - `mode`：决定当前流量按什么方式走
@@ -32,13 +34,23 @@
 
 ## outbound_groups
 
-长期建议至少有三类：
+当前已经实现三类：
 
-- `selector`：手动选择一个节点
-- `urltest`：定时探测后选延迟更优的节点
-- `fallback`：主节点不可用时自动切到下一个
+- `selector`
+  - 手动指定当前成员
+  - 当前支持运行时切换
+- `fallback`
+  - 前一个成员建连失败时，顺序切到下一个
+- `urltest`
+  - 周期探测后，选择可用且延迟更低的成员
 
-客户端只负责改“当前选哪个”或“当前 mode 是什么”。真正的选择逻辑、健康检查和切换结果都应该在内核里。
+客户端只负责改“当前选哪个”或“当前 mode 是什么”。真正的选择逻辑、健康检查和最终出站决策都在内核里。
+
+当前本地最小控制入口复用了 `--status-listen`，支持：
+
+```text
+POST /selectors/{group_tag}/{outbound_tag}
+```
 
 ## 配置草案
 
@@ -58,15 +70,22 @@
   ],
   "outbound_groups": [
     {
-      "tag": "proxy",
+      "tag": "manual",
       "type": "selector",
       "outbounds": ["node-a", "node-b"],
-      "default": "node-a"
+      "selected": "node-a"
     },
+    {
+      "tag": "probe",
+      "type": "urltest",
+      "outbounds": ["node-a", "node-b", "direct"],
+      "url": "http://example.com/",
+      "interval_seconds": 300
+    }
   ],
   "mode": {
     "type": "global",
-    "outbound": "proxy"
+    "outbound": "probe"
   },
   "route": {
     "rules": [
@@ -75,7 +94,7 @@
         "action": { "type": "route", "outbound": "direct" }
       }
     ],
-    "final": { "type": "route", "outbound": "proxy" }
+    "final": { "type": "route", "outbound": "probe" }
   }
 }
 ```
@@ -84,5 +103,6 @@
 
 - 客户端负责交互，不负责转发实现
 - 内核负责模式语义、节点组解析、健康检查和最终出站选择
+- 本地控制入口当前复用 `--status-listen`，提供最小写接口用于切换 `selector`
 - 云端最小节点不一定需要 `mode` 和 `outbound_groups`
 - 本地用户侧一般最需要这套能力

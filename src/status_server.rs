@@ -98,30 +98,67 @@ fn is_transient_disconnect(error: &io::Error) -> bool {
 }
 
 async fn handle_connection(mut stream: TcpStream, engine: Engine) -> io::Result<()> {
-    let path = read_path(&mut stream).await?;
-    let (status_line, body) = match path.as_str() {
-        "/status" => (
+    let request = read_request(&mut stream).await?;
+    let (status_line, body) = match (request.method.as_str(), request.path.as_str()) {
+        ("GET", "/status") => (
             "HTTP/1.1 200 OK\r\n",
             serde_json::to_vec_pretty(&engine.export_status()).map_err(io::Error::other)?,
         ),
-        "/config" => (
+        ("GET", "/config") => (
             "HTTP/1.1 200 OK\r\n",
             serde_json::to_vec_pretty(&engine.export_config()).map_err(io::Error::other)?,
         ),
-        "/runtime" => (
+        ("GET", "/runtime") => (
             "HTTP/1.1 200 OK\r\n",
             serde_json::to_vec_pretty(&engine.export_runtime()).map_err(io::Error::other)?,
         ),
-        _ => (
+        ("POST", path) => match parse_selector_update_path(path) {
+            Some((group_tag, outbound_tag)) => {
+                match engine.set_selector_outbound(group_tag, outbound_tag) {
+                    Ok(()) => (
+                        "HTTP/1.1 200 OK\r\n",
+                        serde_json::to_vec_pretty(&engine.export_config())
+                            .map_err(io::Error::other)?,
+                    ),
+                    Err(zero_engine::EngineError::SelectorGroupNotFound { .. }) => (
+                        "HTTP/1.1 404 Not Found\r\n",
+                        br#"{"error":"selector group not found"}"#.to_vec(),
+                    ),
+                    Err(
+                        zero_engine::EngineError::SelectorGroupTypeMismatch { .. }
+                        | zero_engine::EngineError::SelectorOutboundNotFound { .. },
+                    ) => (
+                        "HTTP/1.1 400 Bad Request\r\n",
+                        br#"{"error":"invalid selector update"}"#.to_vec(),
+                    ),
+                    Err(error) => {
+                        warn!(error = %error, "selector update failed");
+                        (
+                            "HTTP/1.1 500 Internal Server Error\r\n",
+                            br#"{"error":"selector update failed"}"#.to_vec(),
+                        )
+                    }
+                }
+            }
+            None => (
+                "HTTP/1.1 404 Not Found\r\n",
+                br#"{"error":"not found"}"#.to_vec(),
+            ),
+        },
+        _ if request.method == "GET" => (
             "HTTP/1.1 404 Not Found\r\n",
             br#"{"error":"not found"}"#.to_vec(),
+        ),
+        _ => (
+            "HTTP/1.1 405 Method Not Allowed\r\n",
+            br#"{"error":"method not allowed"}"#.to_vec(),
         ),
     };
 
     write_json_response(&mut stream, status_line, &body).await
 }
 
-async fn read_path(stream: &mut TcpStream) -> io::Result<String> {
+async fn read_request(stream: &mut TcpStream) -> io::Result<HttpRequest> {
     let mut request = Vec::new();
 
     loop {
@@ -161,14 +198,10 @@ async fn read_path(stream: &mut TcpStream) -> io::Result<String> {
         .next()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing request path"))?;
 
-    if method != "GET" {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "status server only supports GET",
-        ));
-    }
-
-    Ok(path.to_owned())
+    Ok(HttpRequest {
+        method: method.to_owned(),
+        path: path.to_owned(),
+    })
 }
 
 async fn write_json_response(
@@ -184,4 +217,21 @@ async fn write_json_response(
     stream.write_all(headers.as_bytes()).await?;
     stream.write_all(body).await?;
     stream.shutdown().await
+}
+
+fn parse_selector_update_path(path: &str) -> Option<(&str, &str)> {
+    let segments = path.split('/').collect::<Vec<_>>();
+    match segments.as_slice() {
+        ["", "selectors", group_tag, outbound_tag]
+            if !group_tag.is_empty() && !outbound_tag.is_empty() =>
+        {
+            Some((group_tag, outbound_tag))
+        }
+        _ => None,
+    }
+}
+
+struct HttpRequest {
+    method: String,
+    path: String,
 }

@@ -18,4 +18,17 @@ pub enum EngineError {
     MissingRouteTarget { tag: String },
     #[error("inbound task exited unexpectedly")]
     InboundTaskExited,
+    #[error("urltest group `{tag}` is invalid: {message}")]
+    InvalidUrlTestGroup { tag: String, message: String },
+    #[error("urltest task exited unexpectedly")]
+    UrlTestTaskExited,
+    #[error("selector group `{tag}` does not exist")]
+    SelectorGroupNotFound { tag: String },
+    #[error("group `{tag}` is not a selector group")]
+    SelectorGroupTypeMismatch { tag: String },
+    #[error("selector group `{group_tag}` does not contain outbound `{outbound_tag}`")]
+    SelectorOutboundNotFound {
+        group_tag: String,
+        outbound_tag: String,
+    },
 }

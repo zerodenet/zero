@@ -7,7 +7,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use support::{free_port, http_get, remove_temp_file, wait_for_port, write_temp_config};
+use support::{free_port, http_get, http_post, remove_temp_file, wait_for_port, write_temp_config};
 
 #[test]
 fn local_status_listener_exposes_live_runtime_view() {
@@ -134,6 +134,150 @@ fn local_status_listener_exposes_live_runtime_view() {
     let runtime_after: serde_json::Value =
         serde_json::from_str(runtime_after_body).expect("parse runtime json");
     assert_eq!(runtime_after["stats"]["active_sessions"], 0);
+
+    child.kill().expect("kill zero process");
+    let _ = child.wait();
+    let _ = echo_thread.join();
+    remove_temp_file(&config_path);
+}
+
+#[test]
+fn local_status_listener_can_switch_selector_group() {
+    let socks_port = free_port();
+    let status_port = free_port();
+    let echo_port = free_port();
+
+    let config = format!(
+        r#"{{
+            "inbounds": [
+                {{
+                    "tag": "socks-in",
+                    "listen": {{ "address": "127.0.0.1", "port": {socks_port} }},
+                    "protocol": {{ "type": "socks5" }}
+                }}
+            ],
+            "outbounds": [
+                {{
+                    "tag": "direct",
+                    "protocol": {{ "type": "direct" }}
+                }},
+                {{
+                    "tag": "block",
+                    "protocol": {{ "type": "block" }}
+                }}
+            ],
+            "outbound_groups": [
+                {{
+                    "tag": "proxy",
+                    "type": "selector",
+                    "outbounds": ["block", "direct"],
+                    "selected": "block"
+                }}
+            ],
+            "mode": {{
+                "type": "global",
+                "outbound": "proxy"
+            }},
+            "route": {{
+                "rules": [],
+                "final": {{ "type": "reject" }}
+            }}
+        }}"#
+    );
+    let config_path = write_temp_config(&config, "selector-control");
+
+    let echo_thread = thread::spawn(move || {
+        let listener = TcpListener::bind(("127.0.0.1", echo_port)).expect("bind echo");
+        let (mut stream, _) = listener.accept().expect("accept echo");
+        let mut buf = [0_u8; 4];
+        stream.read_exact(&mut buf).expect("read echo");
+        stream.write_all(&buf).expect("write echo");
+    });
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_zero"))
+        .args([
+            "run",
+            "--status-listen",
+            &format!("127.0.0.1:{status_port}"),
+            config_path.to_str().expect("utf-8 config path"),
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn zero run");
+
+    wait_for_port(status_port);
+    wait_for_port(socks_port);
+
+    let initial_config = http_get(status_port, "/config");
+    let initial_body = initial_config.split("\r\n\r\n").nth(1).expect("http body");
+    let initial_json: serde_json::Value =
+        serde_json::from_str(initial_body).expect("parse config json");
+    assert_eq!(initial_json["outbound_groups"][0]["selected"], "block");
+
+    let mut blocked = TcpStream::connect(("127.0.0.1", socks_port)).expect("connect socks5");
+    blocked
+        .write_all(&[0x05, 0x01, 0x00])
+        .expect("write socks auth");
+    let mut auth = [0_u8; 2];
+    blocked.read_exact(&mut auth).expect("read auth");
+    assert_eq!(auth, [0x05, 0x00]);
+
+    let request = [
+        0x05,
+        0x01,
+        0x00,
+        0x01,
+        127,
+        0,
+        0,
+        1,
+        ((echo_port >> 8) & 0xff) as u8,
+        (echo_port & 0xff) as u8,
+    ];
+    blocked.write_all(&request).expect("write socks request");
+    let mut blocked_response = [0_u8; 10];
+    blocked
+        .read_exact(&mut blocked_response)
+        .expect("read blocked response");
+    assert_eq!(blocked_response[1], 0x02);
+    drop(blocked);
+
+    let update_response = http_post(status_port, "/selectors/proxy/direct");
+    assert!(update_response.starts_with("HTTP/1.1 200 OK"));
+    let update_body = update_response.split("\r\n\r\n").nth(1).expect("http body");
+    let update_json: serde_json::Value =
+        serde_json::from_str(update_body).expect("parse config json");
+    assert_eq!(update_json["outbound_groups"][0]["selected"], "direct");
+
+    let config_after = http_get(status_port, "/config");
+    let config_after_body = config_after.split("\r\n\r\n").nth(1).expect("http body");
+    let config_after_json: serde_json::Value =
+        serde_json::from_str(config_after_body).expect("parse config json");
+    assert_eq!(
+        config_after_json["outbound_groups"][0]["selected"],
+        "direct"
+    );
+
+    let mut client = TcpStream::connect(("127.0.0.1", socks_port)).expect("connect socks5");
+    client
+        .write_all(&[0x05, 0x01, 0x00])
+        .expect("write socks auth");
+    client.read_exact(&mut auth).expect("read auth");
+    assert_eq!(auth, [0x05, 0x00]);
+    client.write_all(&request).expect("write socks request");
+
+    let mut response = [0_u8; 10];
+    client
+        .read_exact(&mut response)
+        .expect("read socks response");
+    assert_eq!(response[1], 0x00);
+
+    client.write_all(b"ping").expect("write echo payload");
+    let mut echoed = [0_u8; 4];
+    client.read_exact(&mut echoed).expect("read echo payload");
+    assert_eq!(&echoed, b"ping");
+    drop(client);
 
     child.kill().expect("kill zero process");
     let _ = child.wait();

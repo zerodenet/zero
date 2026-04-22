@@ -322,6 +322,86 @@ fn global_mode_accepts_selector_group_target() {
 }
 
 #[test]
+fn accepts_fallback_group_type() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "direct",
+                    "protocol": { "type": "direct" }
+                },
+                {
+                    "tag": "chain",
+                    "protocol": { "type": "socks5", "server": "127.0.0.1", "port": 2080 }
+                }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "proxy",
+                    "type": "fallback",
+                    "outbounds": ["chain", "direct"]
+                }
+            ],
+            "mode": {
+                "type": "global",
+                "outbound": "proxy"
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert!(matches!(
+        config.outbound_groups[0].group,
+        OutboundGroupKind::Fallback { .. }
+    ));
+}
+
+#[test]
+fn accepts_urltest_group_type() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "direct",
+                    "protocol": { "type": "direct" }
+                },
+                {
+                    "tag": "chain",
+                    "protocol": { "type": "socks5", "server": "127.0.0.1", "port": 2080 }
+                }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "proxy",
+                    "type": "urltest",
+                    "outbounds": ["chain", "direct"],
+                    "url": "http://127.0.0.1:8081/",
+                    "interval_seconds": 15
+                }
+            ],
+            "mode": {
+                "type": "global",
+                "outbound": "proxy"
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert!(matches!(
+        config.outbound_groups[0].group,
+        OutboundGroupKind::UrlTest { .. }
+    ));
+}
+
+#[test]
 fn loads_rule_set_from_relative_file_path() {
     let project_dir = temp_test_dir("config-rule-set-relative");
     let rules_dir = project_dir.join("rules");

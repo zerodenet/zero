@@ -16,8 +16,9 @@ use super::logging::{
     log_udp_upstream_association_created, log_udp_upstream_association_dropped,
     log_udp_upstream_association_idle_timeout, log_udp_upstream_association_reused,
 };
-use super::resolve::ResolvedOutbound;
+use super::resolve::{ResolvedLeafOutbound, ResolvedOutbound};
 use super::runtime::Engine;
+use super::session_lifecycle::SessionHandle;
 use super::stats::SessionOutcome;
 use super::stream::ClientStream;
 use super::upstream_socks5_udp::{
@@ -200,7 +201,87 @@ impl Engine {
         log_session_accepted(&session, &action, self.config.mode.kind());
 
         match resolved {
-            ResolvedOutbound::Direct { tag } => {
+            ResolvedOutbound::Single(candidate) => {
+                self.process_socks5_udp_candidate(
+                    candidate,
+                    UdpCandidateContext {
+                        inbound_tag,
+                        relay,
+                        session: &session,
+                        payload: &udp_packet.payload,
+                        upstream_association,
+                        upstream_idle_deadline,
+                        session_handle: &mut session_handle,
+                        started_at,
+                    },
+                )
+                .await?;
+            }
+            ResolvedOutbound::Fallback { candidates } => {
+                let mut handled = false;
+
+                for candidate in candidates {
+                    match self
+                        .process_socks5_udp_candidate(
+                            candidate,
+                            UdpCandidateContext {
+                                inbound_tag,
+                                relay,
+                                session: &session,
+                                payload: &udp_packet.payload,
+                                upstream_association,
+                                upstream_idle_deadline,
+                                session_handle: &mut session_handle,
+                                started_at,
+                            },
+                        )
+                        .await
+                    {
+                        Ok(true) => {
+                            handled = true;
+                            break;
+                        }
+                        Ok(false) => {}
+                        Err(error) => return Err(error),
+                    }
+                }
+
+                if !handled {
+                    let record = session_handle.finish(SessionOutcome::Failed);
+                    log_session_failed(
+                        &session,
+                        record.as_ref(),
+                        "fallback_exhausted",
+                        started_at.elapsed(),
+                        &EngineError::Io(std::io::Error::other("all fallback outbounds failed")),
+                        None,
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn process_socks5_udp_candidate(
+        &self,
+        candidate: ResolvedLeafOutbound<'_>,
+        context: UdpCandidateContext<'_>,
+    ) -> Result<bool, EngineError> {
+        let UdpCandidateContext {
+            inbound_tag,
+            relay,
+            session,
+            payload,
+            upstream_association,
+            upstream_idle_deadline,
+            session_handle,
+            started_at,
+        } = context;
+
+        match candidate {
+            ResolvedLeafOutbound::Direct { tag } => {
+                let mut session = session.clone();
                 session.outbound_tag = Some(tag.unwrap_or("direct").to_owned());
                 self.set_session_outbound(&session);
                 let target_addr = match self
@@ -211,37 +292,42 @@ impl Engine {
                 {
                     Ok(addr) => addr,
                     Err(error) => {
-                        let record = session_handle.finish(SessionOutcome::Failed);
                         log_session_failed(
                             &session,
-                            record.as_ref(),
+                            None,
                             "resolve_udp_target",
                             started_at.elapsed(),
                             &error,
                             None,
                         );
-                        return Ok(());
+                        return Ok(false);
                     }
                 };
 
                 relay
-                    .send_to_addr(&udp_packet.payload, target_addr)
+                    .send_to_addr(payload, target_addr)
                     .await
                     .map_err(EngineError::from)?;
 
-                self.record_session_upload(session.id, udp_packet.payload.len() as u64);
+                self.record_session_upload(session.id, payload.len() as u64);
                 if let Some(record) = session_handle.finish(SessionOutcome::DirectRelayed) {
                     log_session_finished(&record, None);
                 }
+
+                Ok(true)
             }
-            ResolvedOutbound::Block { tag } => {
+            ResolvedLeafOutbound::Block { tag } => {
+                let mut session = session.clone();
                 session.outbound_tag = Some(tag.unwrap_or("block").to_owned());
                 self.set_session_outbound(&session);
                 if let Some(record) = session_handle.finish(SessionOutcome::Blocked) {
                     log_session_finished(&record, None);
                 }
+
+                Ok(true)
             }
-            ResolvedOutbound::Socks5 { tag, server, port } => {
+            ResolvedLeafOutbound::Socks5 { tag, server, port } => {
+                let mut session = session.clone();
                 session.outbound_tag = Some(tag.to_owned());
                 self.set_session_outbound(&session);
                 let needs_new_association = upstream_association
@@ -274,16 +360,15 @@ impl Engine {
                         }
                         Err(error) => {
                             self.stats.record_udp_upstream_association_failed();
-                            let record = session_handle.finish(SessionOutcome::Failed);
                             log_session_failed(
                                 &session,
-                                record.as_ref(),
+                                None,
                                 "udp_upstream_associate",
                                 started_at.elapsed(),
                                 &error,
                                 Some((server, port)),
                             );
-                            return Ok(());
+                            return Ok(false);
                         }
                     };
                 } else {
@@ -295,19 +380,18 @@ impl Engine {
                     .expect("successful establish stores upstream association");
 
                 if let Err(error) = association
-                    .send_packet(&session.target, session.port, &udp_packet.payload)
+                    .send_packet(&session.target, session.port, payload)
                     .await
                 {
-                    let record = session_handle.finish(SessionOutcome::Failed);
+                    self.stats.record_udp_upstream_send_failure();
                     log_session_failed(
                         &session,
-                        record.as_ref(),
+                        None,
                         "udp_upstream_send",
                         started_at.elapsed(),
                         &error,
                         Some((server, port)),
                     );
-                    self.stats.record_udp_upstream_send_failure();
                     if let Some(association) = upstream_association.take() {
                         let outbound_tag = association.outbound_tag().to_owned();
                         association.close(UpstreamAssociationCloseReason::Dropped);
@@ -320,20 +404,20 @@ impl Engine {
                         );
                     }
                     *upstream_idle_deadline = None;
-                    return Ok(());
+                    return Ok(false);
                 }
                 self.stats.record_udp_upstream_packet_sent();
                 *upstream_idle_deadline =
                     Some(TokioInstant::now() + self.udp_upstream_idle_timeout());
 
-                self.record_session_upload(session.id, udp_packet.payload.len() as u64);
+                self.record_session_upload(session.id, payload.len() as u64);
                 if let Some(record) = session_handle.finish(SessionOutcome::ChainedRelayed) {
                     log_session_finished(&record, Some((server, port)));
                 }
+
+                Ok(true)
             }
         }
-
-        Ok(())
     }
 
     async fn forward_direct_udp_response(
@@ -347,6 +431,17 @@ impl Engine {
         relay.send_to_addr(&packet, client_addr).await?;
         Ok(())
     }
+}
+
+struct UdpCandidateContext<'a> {
+    inbound_tag: &'a str,
+    relay: &'a TokioDatagramSocket,
+    session: &'a Session,
+    payload: &'a [u8],
+    upstream_association: &'a mut Option<ActiveUpstreamSocks5UdpAssociation>,
+    upstream_idle_deadline: &'a mut Option<TokioInstant>,
+    session_handle: &'a mut SessionHandle,
+    started_at: Instant,
 }
 
 async fn recv_upstream_packet(

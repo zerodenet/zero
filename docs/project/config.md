@@ -1,6 +1,6 @@
 # 配置
 
-`v0.0.1` 使用 JSON。当前顶层固定这几段：
+`v0.0.2` 使用 JSON。当前顶层结构是：
 
 ```json
 {
@@ -19,27 +19,19 @@
 }
 ```
 
-这份文档只写当前已经实现的配置。模式和节点组的长期设计见 [modes-and-groups.md](/C:/Users/Administrator/develop/rs/zero-new/docs/project/modes-and-groups.md)。
+这里只写当前已经实现的配置。模式和节点组的长期设计见 [modes-and-groups.md](/C:/Users/Administrator/develop/rs/zero-new/docs/project/modes-and-groups.md)。
 
 ## runtime
 
 `runtime.udp_upstream_idle_timeout_seconds` 控制上游 `SOCKS5` UDP association 的空闲超时。
 
-- 默认值：`30`
+- 默认：`30`
 - 单位：秒
 - 约束：必须大于 `0`
 
-```json
-{
-  "runtime": {
-    "udp_upstream_idle_timeout_seconds": 15
-  }
-}
-```
-
 ## 入站
 
-每个入站都要写 `tag`、`listen`、`protocol`：
+每个入站都要有 `tag`、`listen`、`protocol`：
 
 ```json
 {
@@ -49,16 +41,14 @@
 }
 ```
 
-当前支持的入站类型：
+当前支持：
 
 - `socks5`
 - `http-connect`
 - `http`，兼容别名
 - `mixed`，同端口识别 `socks5` 和 `http-connect`
 
-这里的 `mixed` 不是独立外部协议，而是“同端口多协议入站”的配置入口。
-
-`UDP` 当前不需要额外字段。只要入站是 `socks5` 或 `mixed`，客户端走 `SOCKS5 UDP ASSOCIATE` 即可。
+`mixed` 不是外部协议，而是“同端口多协议入站”的配置入口。
 
 ## 出站
 
@@ -73,21 +63,23 @@
 }
 ```
 
-当前支持的出站：
+当前支持：
 
 - `direct`
 - `block`
 - `socks5`
 
-当前 UDP 只支持：
-
-- `direct`
-- `block`
-- 上游 `socks5`
+UDP 当前也只支持走这三类目标。
 
 ## 出站组
 
-`v0.0.1` 当前只实现了一类：
+当前已经实现三类出站组：
+
+- `selector`
+- `fallback`
+- `urltest`
+
+### selector
 
 ```json
 {
@@ -98,7 +90,54 @@
 }
 ```
 
-- `selector`
+`selector` 当前支持运行时切换。启动时带上 `--status-listen` 后，可通过本地端点：
+
+```text
+POST /selectors/{group_tag}/{outbound_tag}
+```
+
+例如：
+
+```text
+POST /selectors/proxy/direct
+```
+
+切换成功后，`/config` 和 `/status` 里的 `outbound_groups[*].selected` 会立刻反映最新选择。
+
+### fallback
+
+```json
+{
+  "tag": "proxy",
+  "type": "fallback",
+  "outbounds": ["node-a", "direct"]
+}
+```
+
+语义：
+
+- 按配置顺序尝试成员
+- 前一个成员建连失败时，自动切到下一个
+- 本次会话一旦建连成功，就固定使用该成员
+
+### urltest
+
+```json
+{
+  "tag": "proxy",
+  "type": "urltest",
+  "outbounds": ["node-a", "node-b", "direct"],
+  "url": "http://example.com/",
+  "interval_seconds": 300
+}
+```
+
+语义：
+
+- 按 `interval_seconds` 定时探测
+- 当前只支持 `http://` 探测地址
+- 选取探测成功且延迟最小的成员
+- 如果本轮都失败，保留当前选择；首次探测前默认落到第一个成员
 
 ## 模式
 
@@ -108,7 +147,7 @@
 - `global`
 - `direct`
 
-`global` 需要指定一个出站或出站组：
+`global` 需要引用一个出站或出站组：
 
 ```json
 {
@@ -128,7 +167,7 @@
 }
 ```
 
-条件：
+当前条件：
 
 - `domain`
 - `ip`
@@ -136,24 +175,22 @@
 - `and`
 - `or`
 
-动作：
+当前动作：
 
 - `direct`
 - `reject`
 - `block`，兼容别名
 - `route`
 
-### 外置规则集
+## 外置规则集
 
-`v0.0.1` 支持把匹配数据放到本地文件里，再在主配置里通过 `tag` 引用。
+当前支持把匹配数据放到本地文件里，再在主配置里通过 `tag` 引用。
 
 当前只支持：
 
 - `type = file`
 - `format = domain-list`
 - `format = cidr-list`
-
-配置形态：
 
 ```json
 {
@@ -206,8 +243,12 @@
   - 1 秒采样吞吐
 - `recent_completed_sessions`
   - 最近完成会话的结算记录
-
-完成会话只保留结算值，不保留平均速率字段。
+- `outbound_groups[*].selected`
+  - 当前组选择的成员
+- `outbound_groups[*].latency_ms`
+  - `urltest` 最近一次成功探测的延迟
+- `outbound_groups[*].last_checked_unix_ms`
+  - `urltest` 最近一次完成探测的时间
 
 ## 约束
 
@@ -216,17 +257,12 @@
 - 同一个 `address:port` 只能有一个入站
 - 同端口同时接 `socks5` 和 `http-connect` 时，用 `mixed`
 - `route` 和 `global mode` 引用的目标必须存在
-- `selector` 组里的成员必须是已定义的出站
+- 出站组里的成员必须是已定义出站
 - `runtime.udp_upstream_idle_timeout_seconds` 必须大于 `0`
 - `rule_sets[*].tag` 不能为空且不能重复
 - `rule-set` 条件引用的 `tag` 必须存在
-- `rule_sets` 当前只支持本地文件
-- 规则按顺序匹配，没命中就走 `final`
-
-## 最小场景
-
-- 本地用户侧：[basic.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/basic.json)，默认监听 `127.0.0.1:7890`
-- 云端节点侧：[server-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/server-socks5.json)，默认监听 `0.0.0.0:7890`
+- `urltest.url` 当前必须是 `http://`
+- `urltest.interval_seconds` 必须大于 `0`
 
 ## 示例
 
@@ -238,11 +274,5 @@
 - [rule-set-files.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/rule-set-files.json)
 - [server-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/server-socks5.json)
 - [udp-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/udp-socks5.json)
-
-## 命令
-
-- `cargo run --`
-- `cargo run -- run path/to/config.json`
-- `cargo run -- run --status-listen 127.0.0.1:9090 path/to/config.json`
-- `cargo run -- status path/to/config.json`
-- `cargo run -- status --json path/to/config.json`
+- [fallback.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.2/fallback.json)
+- [urltest.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.2/urltest.json)
