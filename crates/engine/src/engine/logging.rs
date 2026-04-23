@@ -3,12 +3,15 @@ use std::time::Duration;
 
 use tracing::{debug, info, warn};
 use zero_core::{Network, ProtocolType, Session};
-use zero_router::RouteAction;
 
 use super::completed_sessions::CompletedSessionRecord;
 use super::error::EngineError;
 
-pub(crate) fn log_session_accepted(session: &Session, route_action: &RouteAction, mode: &str) {
+pub(crate) fn log_session_accepted(
+    session: &Session,
+    route_action: &impl std::fmt::Debug,
+    mode: &str,
+) {
     info!(
         session_id = session.id,
         inbound_tag = session.inbound_tag.as_deref().unwrap_or("-"),
@@ -144,6 +147,66 @@ fn network_name(network: Network) -> &'static str {
     match network {
         Network::Tcp => "tcp",
         Network::Udp => "udp",
+    }
+}
+
+pub(crate) fn log_selector_group_target_changed(
+    group_tag: &str,
+    previous: Option<&str>,
+    selected: &str,
+) {
+    match previous {
+        Some(previous) if previous == selected => debug!(
+            group_kind = "selector",
+            group_tag = group_tag,
+            selected = selected,
+            "outbound group target unchanged"
+        ),
+        Some(previous) => info!(
+            group_kind = "selector",
+            group_tag = group_tag,
+            previous = previous,
+            selected = selected,
+            "outbound group target changed"
+        ),
+        None => info!(
+            group_kind = "selector",
+            group_tag = group_tag,
+            selected = selected,
+            "outbound group target initialized"
+        ),
+    }
+}
+
+pub(crate) fn log_urltest_group_target_changed(
+    group_tag: &str,
+    previous: Option<&str>,
+    selected: &str,
+    latency_ms: Option<u64>,
+) {
+    match previous {
+        Some(previous) if previous == selected => debug!(
+            group_kind = "urltest",
+            group_tag = group_tag,
+            selected = selected,
+            latency_ms = latency_ms,
+            "outbound group probe refreshed"
+        ),
+        Some(previous) => info!(
+            group_kind = "urltest",
+            group_tag = group_tag,
+            previous = previous,
+            selected = selected,
+            latency_ms = latency_ms,
+            "outbound group target changed"
+        ),
+        None => info!(
+            group_kind = "urltest",
+            group_tag = group_tag,
+            selected = selected,
+            latency_ms = latency_ms,
+            "outbound group target initialized"
+        ),
     }
 }
 

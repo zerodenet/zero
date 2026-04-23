@@ -7,6 +7,20 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+default = ["full", "status-api"]
+full = [
+    "inbound-socks5",
+    "inbound-http-connect",
+    "inbound-mixed",
+    "outbound-socks5",
+]
+inbound-socks5 = ["zero-engine/inbound-socks5"]
+inbound-http-connect = ["zero-engine/inbound-http-connect"]
+inbound-mixed = ["zero-engine/inbound-mixed"]
+outbound-socks5 = ["zero-engine/outbound-socks5"]
+status-api = []
+
 [workspace]
 members = [
     "crates/traits",
@@ -42,4 +56,4 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-zero-engine = { path = "crates/engine" }
+zero-engine = { path = "crates/engine", default-features = false }

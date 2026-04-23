@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ConfigError, ModeConfig, OutboundGroupConfig, OutboundGroupKind, RouteActionConfig,
@@ -30,8 +30,15 @@ impl RuntimeConfig {
         for group in &self.outbound_groups {
             validate_tag("outbound group", &group.tag, &mut outbound_group_tags)?;
             validate_route_target_tag(group.tag(), &mut route_target_tags)?;
-            group.validate(&outbound_tags)?;
         }
+
+        let mut group_target_tags = outbound_tags.clone();
+        group_target_tags.extend(outbound_group_tags.iter().cloned());
+
+        for group in &self.outbound_groups {
+            group.validate(&group_target_tags)?;
+        }
+        validate_group_reference_graph(&self.outbound_groups)?;
 
         self.route.validate(&route_target_tags, self.source_dir())?;
         validate_runtime(&self.runtime)?;
@@ -138,14 +145,14 @@ impl RuleConditionConfig {
 }
 
 impl OutboundGroupConfig {
-    fn validate(&self, outbound_tags: &HashSet<String>) -> Result<(), ConfigError> {
+    fn validate(&self, target_tags: &HashSet<String>) -> Result<(), ConfigError> {
         match &self.group {
             OutboundGroupKind::Selector {
                 outbounds,
                 default,
                 selected,
             } => {
-                validate_group_outbounds("selector", outbounds, outbound_tags)?;
+                validate_group_outbounds("selector", outbounds, target_tags)?;
 
                 if let Some(default) = default {
                     validate_selector_choice("default", default, outbounds)?;
@@ -158,14 +165,14 @@ impl OutboundGroupConfig {
                 Ok(())
             }
             OutboundGroupKind::Fallback { outbounds } => {
-                validate_group_outbounds("fallback", outbounds, outbound_tags)
+                validate_group_outbounds("fallback", outbounds, target_tags)
             }
             OutboundGroupKind::UrlTest {
                 outbounds,
                 url,
                 interval_seconds,
             } => {
-                validate_group_outbounds("urltest", outbounds, outbound_tags)?;
+                validate_group_outbounds("urltest", outbounds, target_tags)?;
 
                 if url.trim().is_empty() {
                     return Err(ConfigError::InvalidOutboundGroup(
@@ -280,7 +287,7 @@ fn validate_route_target_tag(tag: &str, seen: &mut HashSet<String>) -> Result<()
 fn validate_group_outbounds(
     kind: &'static str,
     outbounds: &[String],
-    outbound_tags: &HashSet<String>,
+    target_tags: &HashSet<String>,
 ) -> Result<(), ConfigError> {
     if outbounds.is_empty() {
         return Err(ConfigError::InvalidOutboundGroup(format!(
@@ -289,7 +296,7 @@ fn validate_group_outbounds(
     }
 
     for outbound in outbounds {
-        validate_group_member_tag(kind, outbound, outbound_tags)?;
+        validate_group_member_tag(kind, outbound, target_tags)?;
     }
 
     Ok(())
@@ -298,17 +305,17 @@ fn validate_group_outbounds(
 fn validate_group_member_tag(
     kind: &'static str,
     tag: &str,
-    outbound_tags: &HashSet<String>,
+    target_tags: &HashSet<String>,
 ) -> Result<(), ConfigError> {
     if tag.trim().is_empty() {
         return Err(ConfigError::InvalidOutboundGroup(format!(
-            "`{kind}` group does not allow empty outbound tags"
+            "`{kind}` group does not allow empty target tags"
         )));
     }
 
-    if !outbound_tags.contains(tag) {
+    if !target_tags.contains(tag) {
         return Err(ConfigError::InvalidOutboundGroup(format!(
-            "`{kind}` group references undefined outbound `{tag}`"
+            "`{kind}` group references undefined target `{tag}`"
         )));
     }
 
@@ -366,6 +373,56 @@ fn validate_nested_condition(
     for item in items {
         item.validate(rule_set_tags)?;
     }
+
+    Ok(())
+}
+
+fn validate_group_reference_graph(groups: &[OutboundGroupConfig]) -> Result<(), ConfigError> {
+    let group_map = groups
+        .iter()
+        .map(|group| (group.tag.as_str(), group))
+        .collect::<HashMap<_, _>>();
+    let mut visited = HashSet::new();
+    let mut stack = Vec::new();
+
+    for group in groups {
+        validate_group_reference_target(group.tag(), &group_map, &mut visited, &mut stack)?;
+    }
+
+    Ok(())
+}
+
+fn validate_group_reference_target<'a>(
+    tag: &'a str,
+    group_map: &HashMap<&'a str, &'a OutboundGroupConfig>,
+    visited: &mut HashSet<&'a str>,
+    stack: &mut Vec<&'a str>,
+) -> Result<(), ConfigError> {
+    if visited.contains(tag) {
+        return Ok(());
+    }
+
+    if let Some(index) = stack.iter().position(|current| *current == tag) {
+        let mut cycle = stack[index..].to_vec();
+        cycle.push(tag);
+        return Err(ConfigError::InvalidOutboundGroup(format!(
+            "group reference cycle detected: {}",
+            cycle.join(" -> ")
+        )));
+    }
+
+    let Some(group) = group_map.get(tag) else {
+        return Ok(());
+    };
+
+    stack.push(tag);
+    for member in group.group.members() {
+        if group_map.contains_key(member.as_str()) {
+            validate_group_reference_target(member.as_str(), group_map, visited, stack)?;
+        }
+    }
+    stack.pop();
+    visited.insert(tag);
 
     Ok(())
 }

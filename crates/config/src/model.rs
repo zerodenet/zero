@@ -172,6 +172,16 @@ pub enum OutboundGroupKind {
     },
 }
 
+impl OutboundGroupKind {
+    pub fn members(&self) -> &[String] {
+        match self {
+            Self::Selector { outbounds, .. }
+            | Self::Fallback { outbounds }
+            | Self::UrlTest { outbounds, .. } => outbounds,
+        }
+    }
+}
+
 const fn default_urltest_interval_seconds() -> u64 {
     300
 }

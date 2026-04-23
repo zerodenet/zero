@@ -7,6 +7,18 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+default = [
+    "inbound-socks5",
+    "inbound-http-connect",
+    "inbound-mixed",
+    "outbound-socks5",
+]
+inbound-socks5 = ["dep:zero-protocol-socks5"]
+inbound-http-connect = ["dep:zero-protocol-http-connect"]
+inbound-mixed = ["inbound-socks5", "inbound-http-connect"]
+outbound-socks5 = ["dep:zero-protocol-socks5"]
+
 [dependencies]
 serde.workspace = true
 tokio.workspace = true
@@ -14,8 +26,8 @@ thiserror.workspace = true
 tracing.workspace = true
 zero-config = { path = "../config" }
 zero-core = { path = "../core" }
-zero-protocol-http-connect = { path = "../../protocols/http-connect" }
-zero-protocol-socks5 = { path = "../../protocols/socks5" }
+zero-protocol-http-connect = { path = "../../protocols/http-connect", optional = true }
+zero-protocol-socks5 = { path = "../../protocols/socks5", optional = true }
 zero-router = { path = "../router" }
 zero-platform-tokio = { path = "../platform/tokio" }
 zero-traits = { path = "../traits" }

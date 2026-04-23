@@ -1,15 +1,17 @@
 use serde::Serialize;
 use zero_config::{
-    InboundConfig, InboundProtocolConfig, ModeConfig, OutboundConfig, OutboundGroupConfig,
-    OutboundGroupKind, OutboundProtocolConfig,
+    InboundConfig, InboundProtocolConfig, ModeConfig, OutboundConfig, OutboundProtocolConfig,
 };
 use zero_core::{Address, Network, ProtocolType};
 
 use super::completed_sessions::CompletedSessionRecord;
 use super::outbound_group_state::OutboundGroupStateStore;
+use super::plan::{EnginePlan, TargetId, TargetKind};
+use super::resolve::resolve_target_chains;
 use super::runtime::Engine;
 use super::session_registry::ActiveSession;
 use super::stats::{EngineStatsSnapshot, SessionOutcome};
+use super::view::PlanView;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct EngineConfigExport {
@@ -64,6 +66,18 @@ pub struct OutboundGroupExport {
     pub selected: Option<String>,
     pub latency_ms: Option<u64>,
     pub last_checked_unix_ms: Option<u64>,
+    pub effective_chains: Vec<Vec<String>>,
+    pub urltest_members: Vec<UrlTestMemberExport>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UrlTestMemberExport {
+    pub member_tag: String,
+    pub healthy: bool,
+    pub latency_ms: Option<u64>,
+    pub last_checked_unix_ms: Option<u64>,
+    pub last_error: Option<String>,
+    pub effective_chains: Vec<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -142,7 +156,13 @@ impl Engine {
                 .config
                 .outbound_groups
                 .iter()
-                .map(|group| OutboundGroupExport::new(group, &self.outbound_group_state))
+                .map(|group| {
+                    let group_id = self
+                        .plan
+                        .target_id(group.tag())
+                        .expect("engine plan should resolve outbound group");
+                    OutboundGroupExport::new(&self.plan, &self.outbound_group_state, group_id)
+                })
                 .collect(),
         }
     }
@@ -218,42 +238,96 @@ impl From<&ModeConfig> for ModeExport {
 }
 
 impl OutboundGroupExport {
-    fn new(group: &OutboundGroupConfig, state: &OutboundGroupStateStore) -> Self {
-        match &group.group {
-            OutboundGroupKind::Selector { outbounds, .. } => Self {
-                tag: group.tag.clone(),
+    fn new(plan: &EnginePlan, state: &OutboundGroupStateStore, group_id: TargetId) -> Self {
+        let view = PlanView::new(plan);
+        let group = plan
+            .target(group_id)
+            .expect("engine plan should resolve outbound group");
+        let effective_chains =
+            view.render_target_chains(&resolve_target_chains(plan, state, group_id));
+
+        match group.kind() {
+            TargetKind::Selector(selector) => Self {
+                tag: group.tag().to_owned(),
                 kind: "selector".to_owned(),
-                outbounds: outbounds.clone(),
+                outbounds: view.target_tags(selector.members()),
                 selected: state
-                    .selector_selected_outbound(group.tag())
-                    .or_else(|| group.active_outbound().map(str::to_owned)),
+                    .selector_selected_target(group_id)
+                    .map(|selected_id| view.target_tag_owned(selected_id))
+                    .or_else(|| Some(view.target_tag_owned(selector.initial_member()))),
                 latency_ms: None,
                 last_checked_unix_ms: None,
+                effective_chains,
+                urltest_members: Vec::new(),
             },
-            OutboundGroupKind::Fallback { outbounds } => Self {
-                tag: group.tag.clone(),
+            TargetKind::Fallback(fallback) => Self {
+                tag: group.tag().to_owned(),
                 kind: "fallback".to_owned(),
-                outbounds: outbounds.clone(),
-                selected: group.active_outbound().map(str::to_owned),
+                outbounds: view.target_tags(fallback.members()),
+                selected: fallback
+                    .members()
+                    .first()
+                    .map(|member_id| view.target_tag_owned(*member_id)),
                 latency_ms: None,
                 last_checked_unix_ms: None,
+                effective_chains,
+                urltest_members: Vec::new(),
             },
-            OutboundGroupKind::UrlTest { outbounds, .. } => {
-                let runtime = state.urltest_state(group.tag());
+            TargetKind::UrlTest(urltest) => {
+                let runtime = state.urltest_state(group_id);
                 Self {
-                    tag: group.tag.clone(),
+                    tag: group.tag().to_owned(),
                     kind: "urltest".to_owned(),
-                    outbounds: outbounds.clone(),
+                    outbounds: view.target_tags(urltest.members()),
                     selected: runtime
                         .as_ref()
-                        .map(|current| current.selected.clone())
-                        .or_else(|| group.active_outbound().map(str::to_owned)),
+                        .map(|current| view.target_tag_owned(current.selected))
+                        .or_else(|| Some(view.target_tag_owned(urltest.initial_member()))),
                     latency_ms: runtime.as_ref().and_then(|current| current.latency_ms),
                     last_checked_unix_ms: runtime
                         .as_ref()
                         .and_then(|current| current.last_checked_unix_ms),
+                    effective_chains,
+                    urltest_members: urltest
+                        .members()
+                        .iter()
+                        .map(|member_id| {
+                            UrlTestMemberExport::new(plan, *member_id, runtime.as_ref())
+                        })
+                        .collect(),
                 }
             }
+            TargetKind::Outbound(_) => {
+                unreachable!("outbound group export requires a group target")
+            }
+        }
+    }
+}
+
+impl UrlTestMemberExport {
+    fn new(
+        plan: &EnginePlan,
+        member_id: TargetId,
+        runtime: Option<&super::outbound_group_state::UrlTestGroupState>,
+    ) -> Self {
+        let view = PlanView::new(plan);
+        let member_tag = view.target_tag(member_id);
+        let member_state = runtime.and_then(|runtime| {
+            runtime
+                .members
+                .iter()
+                .find(|member| member.member_id == member_id)
+        });
+
+        Self {
+            member_tag: member_tag.to_owned(),
+            healthy: member_state.map(|member| member.healthy).unwrap_or(false),
+            latency_ms: member_state.and_then(|member| member.latency_ms),
+            last_checked_unix_ms: member_state.and_then(|member| member.last_checked_unix_ms),
+            last_error: member_state.and_then(|member| member.last_error.clone()),
+            effective_chains: member_state
+                .map(|member| view.render_target_chains(&member.effective_chains))
+                .unwrap_or_default(),
         }
     }
 }

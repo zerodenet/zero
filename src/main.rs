@@ -8,6 +8,7 @@ use zero_engine::Engine;
 mod cli;
 mod error_report;
 mod output;
+#[cfg(feature = "status-api")]
 mod status_server;
 
 #[tokio::main]
@@ -39,19 +40,29 @@ async fn run_command(config_path: &str, status_listen: Option<&str>) -> Result<(
     tracing::info!(config = %config_path, "loaded engine configuration");
 
     if let Some(status_listen) = status_listen {
-        let probe = engine.clone();
-        let status_server = status_server::spawn_status_server(probe, status_listen).await?;
-        let running = engine.spawn();
+        #[cfg(feature = "status-api")]
+        {
+            let probe = engine.clone();
+            let status_server = status_server::spawn_status_server(probe, status_listen).await?;
+            let running = engine.spawn();
 
-        match tokio::signal::ctrl_c().await {
-            Ok(()) => tracing::info!("shutdown signal received"),
-            Err(error) => {
-                tracing::warn!(error = %error, "failed to listen for ctrl-c; stopping engine")
+            match tokio::signal::ctrl_c().await {
+                Ok(()) => tracing::info!("shutdown signal received"),
+                Err(error) => {
+                    tracing::warn!(error = %error, "failed to listen for ctrl-c; stopping engine")
+                }
             }
-        }
 
-        status_server.shutdown().await?;
-        running.shutdown().await?;
+            status_server.shutdown().await?;
+            running.shutdown().await?;
+        }
+        #[cfg(not(feature = "status-api"))]
+        {
+            return Err(std::io::Error::other(format!(
+                "`--status-listen {status_listen}` requires Cargo feature `status-api`"
+            ))
+            .into());
+        }
     } else {
         engine.run().await?;
     }

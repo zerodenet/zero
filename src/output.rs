@@ -78,28 +78,59 @@ pub fn render_status(status: &EngineStatusExport) -> String {
             ) {
                 (Some(selected), Some(latency_ms), Some(last_checked_unix_ms)) => {
                     output.push_str(&format!(
-                        "  - {} {} selected={} latency={}ms checked_at={} members={}\n",
+                        "  - {} {} selected={} latency={}ms checked_at={} members={} effective={}\n",
                         group.tag,
                         group.kind,
                         selected,
                         latency_ms,
                         last_checked_unix_ms,
-                        group.outbounds.join(",")
+                        group.outbounds.join(","),
+                        render_chains(&group.effective_chains),
                     ))
                 }
                 (Some(selected), _, _) => output.push_str(&format!(
-                    "  - {} {} selected={} members={}\n",
+                    "  - {} {} selected={} members={} effective={}\n",
                     group.tag,
                     group.kind,
                     selected,
-                    group.outbounds.join(",")
+                    group.outbounds.join(","),
+                    render_chains(&group.effective_chains),
                 )),
                 (None, _, _) => output.push_str(&format!(
-                    "  - {} {} members={}\n",
+                    "  - {} {} members={} effective={}\n",
                     group.tag,
                     group.kind,
-                    group.outbounds.join(",")
+                    group.outbounds.join(","),
+                    render_chains(&group.effective_chains),
                 )),
+            }
+
+            for member in &group.urltest_members {
+                match (
+                    member.healthy,
+                    member.latency_ms,
+                    member.last_error.as_deref(),
+                ) {
+                    (true, Some(latency_ms), _) => output.push_str(&format!(
+                        "    probe {} healthy latency={}ms checked_at={} effective={}\n",
+                        member.member_tag,
+                        latency_ms,
+                        member.last_checked_unix_ms.unwrap_or_default(),
+                        render_chains(&member.effective_chains),
+                    )),
+                    (_, _, Some(error)) => output.push_str(&format!(
+                        "    probe {} unhealthy error={} checked_at={} effective={}\n",
+                        member.member_tag,
+                        error,
+                        member.last_checked_unix_ms.unwrap_or_default(),
+                        render_chains(&member.effective_chains),
+                    )),
+                    _ => output.push_str(&format!(
+                        "    probe {} pending effective={}\n",
+                        member.member_tag,
+                        render_chains(&member.effective_chains),
+                    )),
+                }
             }
         }
     }
@@ -149,4 +180,16 @@ pub fn render_status(status: &EngineStatusExport) -> String {
 
 fn render_address(address: &AddressExport) -> &str {
     &address.value
+}
+
+fn render_chains(chains: &[Vec<String>]) -> String {
+    if chains.is_empty() {
+        return "-".to_owned();
+    }
+
+    chains
+        .iter()
+        .map(|chain| chain.join("->"))
+        .collect::<Vec<_>>()
+        .join(" | ")
 }

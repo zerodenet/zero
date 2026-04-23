@@ -14,6 +14,7 @@ Zero 是一个用 Rust 编写的网络代理项目。
 - `mode = rule | global | direct`
 - `selector` / `fallback` / `urltest` 出站组
 - `selector` 运行时切换
+- `group -> group` 组合
 - 基于域名、CIDR 和外置 `rule_sets` 的静态路由
 - 结构化日志、状态导出、活动会话和最近完成会话
 
@@ -78,6 +79,7 @@ make test
 - `examples/v0.0.1/server-socks5.json`
 - `examples/v0.0.1/udp-socks5.json`
 - `examples/v0.0.2/fallback.json`
+- `examples/v0.0.2/nested-groups.json`
 - `examples/v0.0.2/urltest.json`
 
 ## 常用命令
@@ -89,6 +91,40 @@ cargo test --workspace
 cargo clippy --workspace --all-targets
 cargo build --release
 ```
+
+## 选择性编译
+
+内核核心能力默认始终保留：
+
+- 配置解析和校验
+- 路由
+- `EnginePlan` / `EngineState`
+- `direct` / `block`
+- 状态导出
+
+可选模块通过 Cargo feature 控制：
+
+- `inbound-socks5`
+- `inbound-http-connect`
+- `inbound-mixed`
+- `outbound-socks5`
+- `status-api`
+
+默认构建等价于：
+
+```powershell
+cargo build --features full,status-api
+```
+
+最小构建示例：
+
+```powershell
+cargo build --no-default-features
+cargo build --no-default-features --features inbound-socks5
+cargo build --no-default-features --features inbound-socks5,outbound-socks5
+```
+
+如果配置引用了未编译进来的协议，启动时会给出明确错误，而不是在运行时走到隐式失败路径。
 
 ## 目录
 
@@ -117,6 +153,7 @@ cargo build --release
 
 - `selector` 运行时切换
 - `fallback`
+- `group -> group`
 - `urltest`
 
 当前还没有进入正式产品发布阶段，`v0.1.0` 仍然保留给第一次正式版。

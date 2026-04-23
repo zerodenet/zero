@@ -179,7 +179,7 @@ fn selector_group_update_is_reflected_in_exported_config() {
     );
 
     engine
-        .set_selector_outbound("proxy", "direct")
+        .set_selector_target("proxy", "direct")
         .expect("update selector");
 
     assert_eq!(
@@ -187,5 +187,67 @@ fn selector_group_update_is_reflected_in_exported_config() {
             .selected
             .as_deref(),
         Some("direct")
+    );
+}
+
+#[test]
+fn selector_group_can_switch_to_group_target_in_exported_config() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                { "tag": "direct", "protocol": { "type": "direct" } },
+                { "tag": "block", "protocol": { "type": "block" } }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "fallback-proxy",
+                    "type": "fallback",
+                    "outbounds": ["block", "direct"]
+                },
+                {
+                    "tag": "proxy",
+                    "type": "selector",
+                    "outbounds": ["direct", "fallback-proxy"],
+                    "selected": "direct"
+                }
+            ],
+            "mode": {
+                "type": "global",
+                "outbound": "proxy"
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "reject" }
+            }
+        }"#,
+    )
+    .expect("parse config");
+
+    let engine = Engine::new(config).expect("build engine");
+    engine
+        .set_selector_target("proxy", "fallback-proxy")
+        .expect("update selector");
+
+    let exported = engine.export_config();
+    let group = exported
+        .outbound_groups
+        .iter()
+        .find(|group| group.tag == "proxy")
+        .expect("find selector group");
+    assert_eq!(group.selected.as_deref(), Some("fallback-proxy"));
+    assert_eq!(
+        group.effective_chains,
+        vec![
+            vec![
+                "proxy".to_owned(),
+                "fallback-proxy".to_owned(),
+                "block".to_owned(),
+            ],
+            vec![
+                "proxy".to_owned(),
+                "fallback-proxy".to_owned(),
+                "direct".to_owned(),
+            ],
+        ]
     );
 }

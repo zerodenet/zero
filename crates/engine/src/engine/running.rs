@@ -52,12 +52,12 @@ impl RunningEngine {
         self.engine.completed_sessions()
     }
 
-    pub fn set_selector_outbound(
+    pub fn set_selector_target(
         &self,
         group_tag: &str,
-        outbound_tag: &str,
+        target_tag: &str,
     ) -> Result<(), EngineError> {
-        self.engine.set_selector_outbound(group_tag, outbound_tag)
+        self.engine.set_selector_target(group_tag, target_tag)
     }
 
     pub async fn shutdown(mut self) -> Result<(), EngineError> {

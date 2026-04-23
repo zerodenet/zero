@@ -18,12 +18,27 @@
 
 像 `direct / global / rule` 这种模式语义、`selector / urltest / fallback` 这种出站组语义，也属于这层，不属于客户端。
 
+`zero-engine` 内部当前再按执行边界拆成：
+
+- `RuntimeConfig`
+  - 面向配置和 `serde`
+- `EnginePlan`
+  - 面向不可变执行结构
+- `EngineState`
+  - 面向运行时可变状态
+- `view`
+  - 面向 `status` / 导出 / 日志里的 tag 渲染
+
+热路径优先读 plan/state，并尽量沿借用边界传递引用；只有控制面和展示面才回到字符串 tag。
+
 ## 协议层
 
 - `zero-core`
 - `protocols/*`
 
 `zero-core` 放通用类型和接口。具体协议放在 `protocols/*`。
+
+协议层按 feature 接入 `zero-engine`。核心内核始终编译，协议和控制面按需选择性编译，避免把嵌入式场景不需要的模块一起带进去。
 
 ## 抽象层
 

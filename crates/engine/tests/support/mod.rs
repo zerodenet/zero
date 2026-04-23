@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 
 use std::net::TcpListener as StdTcpListener;
+use std::net::UdpSocket as StdUdpSocket;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -8,11 +10,15 @@ use tokio::net::TcpStream;
 use tokio::time::{sleep, Duration};
 use zero_engine::{Engine, RunningEngine};
 
+static NEXT_TCP_PORT: AtomicUsize = AtomicUsize::new(30000);
+static NEXT_UDP_PORT: AtomicUsize = AtomicUsize::new(40000);
+
 pub fn free_port() -> u16 {
-    let listener = StdTcpListener::bind(("127.0.0.1", 0)).expect("bind free port probe");
-    let port = listener.local_addr().expect("local addr").port();
-    drop(listener);
-    port
+    next_available_port(&NEXT_TCP_PORT, bind_tcp_port)
+}
+
+pub fn free_udp_port() -> u16 {
+    next_available_port(&NEXT_UDP_PORT, bind_udp_port)
 }
 
 pub async fn wait_for_listener(port: u16) {
@@ -91,4 +97,27 @@ pub async fn wait_for_group_selection(engine: &RunningEngine, group_tag: &str, s
         "urltest group selection did not become ready in time; current={:?}",
         current
     );
+}
+
+fn next_available_port(counter: &AtomicUsize, binder: impl Fn(u16) -> bool) -> u16 {
+    for _ in 0..10_000 {
+        let candidate = counter.fetch_add(1, Ordering::Relaxed) as u16;
+        if candidate < 1024 {
+            continue;
+        }
+
+        if binder(candidate) {
+            return candidate;
+        }
+    }
+
+    panic!("failed to allocate a free test port");
+}
+
+fn bind_tcp_port(port: u16) -> bool {
+    StdTcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
+fn bind_udp_port(port: u16) -> bool {
+    StdUdpSocket::bind(("127.0.0.1", port)).is_ok()
 }

@@ -3,45 +3,48 @@ use std::time::{Duration, Instant};
 use tokio::sync::watch;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, info, warn};
-use zero_config::{OutboundGroupConfig, OutboundGroupKind};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use super::error::EngineError;
-use super::resolve::ResolvedLeafOutbound;
+use super::logging::log_urltest_group_target_changed;
+use super::outbound_group_state::UrlTestMemberState;
+use super::plan::{TargetId, TargetKind};
+use super::resolve::{
+    resolve_target_chains, resolve_target_id, ResolvedLeafOutbound, ResolvedOutbound,
+};
 use super::runtime::Engine;
+use super::view::PlanView;
 
 impl Engine {
     pub(crate) async fn run_urltest_group(
         &self,
-        group: OutboundGroupConfig,
+        group_id: TargetId,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
-        let OutboundGroupKind::UrlTest {
-            outbounds,
-            url,
-            interval_seconds,
-        } = &group.group
-        else {
+        let group = self
+            .plan
+            .target(group_id)
+            .expect("engine plan should resolve urltest group");
+        let TargetKind::UrlTest(urltest) = group.kind() else {
             return Ok(());
         };
-
-        let probe =
-            UrlTestProbe::parse(url).map_err(|message| EngineError::InvalidUrlTestGroup {
-                tag: group.tag.clone(),
+        let probe = UrlTestProbe::parse(urltest.url()).map_err(|message| {
+            EngineError::InvalidUrlTestGroup {
+                tag: group.tag().to_owned(),
                 message,
-            })?;
+            }
+        })?;
 
         info!(
-            group_tag = %group.tag,
+            group_tag = %group.tag(),
             url = probe.url.as_str(),
-            interval_seconds = *interval_seconds,
+            interval_seconds = urltest.interval().as_secs(),
             "urltest group started"
         );
 
         loop {
-            self.refresh_urltest_group(group.tag(), outbounds, &probe)
-                .await;
+            self.refresh_urltest_group(group_id, &probe).await;
 
             tokio::select! {
                 changed = shutdown.changed() => {
@@ -51,33 +54,46 @@ impl Engine {
                         Err(_) => break,
                     }
                 }
-                _ = sleep(Duration::from_secs(*interval_seconds)) => {}
+                _ = sleep(urltest.interval()) => {}
             }
         }
 
-        info!(group_tag = %group.tag, "urltest group stopped");
+        info!(group_tag = %group.tag(), "urltest group stopped");
         Ok(())
     }
 
-    async fn refresh_urltest_group(
-        &self,
-        group_tag: &str,
-        members: &[String],
-        probe: &UrlTestProbe,
-    ) {
+    async fn refresh_urltest_group(&self, group_id: TargetId, probe: &UrlTestProbe) {
+        let group = self
+            .plan
+            .target(group_id)
+            .expect("engine plan should resolve urltest group");
+        let TargetKind::UrlTest(urltest) = group.kind() else {
+            return;
+        };
+        let group_tag = group.tag();
+        let view = PlanView::new(&self.plan);
         let mut best: Option<ProbeSuccess> = None;
+        let checked_at_unix_ms = unix_timestamp_ms();
+        let mut member_states = Vec::with_capacity(urltest.members().len());
 
-        for member in members {
-            let Some(outbound) = self
-                .config
-                .outbounds
-                .iter()
-                .find(|outbound| outbound.tag() == member)
+        for member_id in urltest.members() {
+            let member = view.target_tag(*member_id);
+            let effective_chains =
+                resolve_target_chains(&self.plan, &self.outbound_group_state, *member_id);
+            let Some(candidate) =
+                resolve_target_id(&self.plan, &self.outbound_group_state, *member_id)
             else {
+                member_states.push(UrlTestMemberState {
+                    member_id: *member_id,
+                    healthy: false,
+                    latency_ms: None,
+                    last_checked_unix_ms: Some(checked_at_unix_ms),
+                    last_error: Some("failed to resolve probe target".to_owned()),
+                    effective_chains,
+                });
                 continue;
             };
 
-            let candidate = super::resolve::resolve_named_outbound(outbound);
             match self.probe_outbound(candidate, probe).await {
                 Ok(latency_ms) => {
                     if best
@@ -86,10 +102,19 @@ impl Engine {
                         .unwrap_or(true)
                     {
                         best = Some(ProbeSuccess {
-                            outbound_tag: member.clone(),
+                            outbound_id: *member_id,
                             latency_ms,
                         });
                     }
+
+                    member_states.push(UrlTestMemberState {
+                        member_id: *member_id,
+                        healthy: true,
+                        latency_ms: Some(latency_ms),
+                        last_checked_unix_ms: Some(checked_at_unix_ms),
+                        last_error: None,
+                        effective_chains,
+                    });
                 }
                 Err(error) => {
                     debug!(
@@ -98,51 +123,75 @@ impl Engine {
                         error = %error,
                         "urltest probe failed"
                     );
+                    member_states.push(UrlTestMemberState {
+                        member_id: *member_id,
+                        healthy: false,
+                        latency_ms: None,
+                        last_checked_unix_ms: Some(checked_at_unix_ms),
+                        last_error: Some(error.to_string()),
+                        effective_chains,
+                    });
                 }
             }
         }
 
-        let previous = self.outbound_group_state.selected_outbound(group_tag);
+        let previous = self.outbound_group_state.selected_target(group_id);
         let Some(selected) = best
             .as_ref()
-            .map(|probe| probe.outbound_tag.as_str())
-            .or(previous.as_deref())
-            .or_else(|| members.first().map(String::as_str))
+            .map(|probe| probe.outbound_id)
+            .or(previous)
+            .or(Some(urltest.initial_member()))
         else {
             return;
         };
+        let selected_tag = view.target_tag(selected);
+        let previous_tag = view.target_tag_option(previous);
 
         let latency_ms = best
             .as_ref()
-            .and_then(|probe| (probe.outbound_tag == selected).then_some(probe.latency_ms));
+            .and_then(|probe| (probe.outbound_id == selected).then_some(probe.latency_ms));
         self.outbound_group_state
-            .update_urltest(group_tag, selected, latency_ms);
-
-        match previous.as_deref() {
-            Some(previous) if previous == selected => debug!(
-                group_tag = group_tag,
-                selected = selected,
-                latency_ms = latency_ms,
-                "urltest group refreshed"
-            ),
-            _ => info!(
-                group_tag = group_tag,
-                selected = selected,
-                latency_ms = latency_ms,
-                "urltest group selected outbound"
-            ),
-        }
+            .update_urltest(group_id, selected, latency_ms, member_states);
+        log_urltest_group_target_changed(
+            group_tag,
+            previous_tag.as_deref(),
+            selected_tag,
+            latency_ms,
+        );
 
         if best.is_none() {
             warn!(
                 group_tag = group_tag,
-                selected = selected,
+                selected = selected_tag,
                 "urltest probe found no healthy outbound; keeping current selection"
             );
         }
     }
 
     async fn probe_outbound(
+        &self,
+        candidate: ResolvedOutbound<'_>,
+        probe: &UrlTestProbe,
+    ) -> Result<u64, EngineError> {
+        match candidate {
+            ResolvedOutbound::Single(candidate) => self.probe_leaf_outbound(candidate, probe).await,
+            ResolvedOutbound::Fallback { candidates } => {
+                let mut last_error = None;
+
+                for candidate in candidates {
+                    match self.probe_leaf_outbound(candidate, probe).await {
+                        Ok(latency_ms) => return Ok(latency_ms),
+                        Err(error) => last_error = Some(error),
+                    }
+                }
+
+                Err(last_error
+                    .expect("validated fallback groups always have at least one candidate"))
+            }
+        }
+    }
+
+    async fn probe_leaf_outbound(
         &self,
         candidate: ResolvedLeafOutbound<'_>,
         probe: &UrlTestProbe,
@@ -196,8 +245,17 @@ impl Engine {
     }
 }
 
+fn unix_timestamp_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after unix epoch")
+        .as_millis() as u64
+}
+
 struct ProbeSuccess {
-    outbound_tag: String,
+    outbound_id: TargetId,
     latency_ms: u64,
 }
 

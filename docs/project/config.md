@@ -79,6 +79,8 @@ UDP 当前也只支持走这三类目标。
 - `fallback`
 - `urltest`
 
+组成员当前既可以是具体出站，也可以是另一个出站组。配置阶段会拦掉循环引用。
+
 ### selector
 
 ```json
@@ -93,7 +95,7 @@ UDP 当前也只支持走这三类目标。
 `selector` 当前支持运行时切换。启动时带上 `--status-listen` 后，可通过本地端点：
 
 ```text
-POST /selectors/{group_tag}/{outbound_tag}
+POST /selectors/{group_tag}/{target_tag}
 ```
 
 例如：
@@ -257,7 +259,8 @@ POST /selectors/proxy/direct
 - 同一个 `address:port` 只能有一个入站
 - 同端口同时接 `socks5` 和 `http-connect` 时，用 `mixed`
 - `route` 和 `global mode` 引用的目标必须存在
-- 出站组里的成员必须是已定义出站
+- 出站组里的成员必须是已定义出站或已定义组
+- 出站组不允许循环引用
 - `runtime.udp_upstream_idle_timeout_seconds` 必须大于 `0`
 - `rule_sets[*].tag` 不能为空且不能重复
 - `rule-set` 条件引用的 `tag` 必须存在
@@ -275,4 +278,5 @@ POST /selectors/proxy/direct
 - [server-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/server-socks5.json)
 - [udp-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/udp-socks5.json)
 - [fallback.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.2/fallback.json)
+- [nested-groups.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.2/nested-groups.json)
 - [urltest.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.2/urltest.json)

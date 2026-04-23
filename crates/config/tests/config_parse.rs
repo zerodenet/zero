@@ -402,6 +402,97 @@ fn accepts_urltest_group_type() {
 }
 
 #[test]
+fn accepts_group_member_referencing_another_group() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "direct",
+                    "protocol": { "type": "direct" }
+                },
+                {
+                    "tag": "block",
+                    "protocol": { "type": "block" }
+                }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "fallback-proxy",
+                    "type": "fallback",
+                    "outbounds": ["block", "direct"]
+                },
+                {
+                    "tag": "proxy",
+                    "type": "selector",
+                    "outbounds": ["fallback-proxy", "direct"],
+                    "selected": "fallback-proxy"
+                }
+            ],
+            "mode": {
+                "type": "global",
+                "outbound": "proxy"
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "reject" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert_eq!(config.outbound_groups.len(), 2);
+    assert!(matches!(
+        config.outbound_groups[0].group,
+        OutboundGroupKind::Fallback { .. }
+    ));
+    assert!(matches!(
+        config.outbound_groups[1].group,
+        OutboundGroupKind::Selector { .. }
+    ));
+}
+
+#[test]
+fn rejects_group_reference_cycle() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "direct",
+                    "protocol": { "type": "direct" }
+                }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "group-a",
+                    "type": "selector",
+                    "outbounds": ["group-b"],
+                    "selected": "group-b"
+                },
+                {
+                    "tag": "group-b",
+                    "type": "fallback",
+                    "outbounds": ["group-a"]
+                }
+            ],
+            "mode": {
+                "type": "global",
+                "outbound": "group-a"
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "reject" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(
+        error,
+        zero_config::ConfigError::InvalidOutboundGroup(_)
+    ));
+}
+
+#[test]
 fn loads_rule_set_from_relative_file_path() {
     let project_dir = temp_test_dir("config-rule-set-relative");
     let rules_dir = project_dir.join("rules");

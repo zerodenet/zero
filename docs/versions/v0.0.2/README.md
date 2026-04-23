@@ -6,6 +6,7 @@
 
 - `selector` 运行时切换
 - `fallback`
+- `group -> group`
 - `urltest`
 
 先看这些：

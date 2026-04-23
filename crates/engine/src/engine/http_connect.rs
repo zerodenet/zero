@@ -131,8 +131,8 @@ impl Engine {
         let mut session_handle = self.track_session(session.id);
         let started_at = Instant::now();
 
-        let action = self.route_for(&session.target);
-        let resolved = match self.resolve_outbound(&action) {
+        let action = self.route_decision(&session.target);
+        let resolved = match self.resolve_outbound(action) {
             Ok(resolved) => resolved,
             Err(error) => {
                 let record = session_handle.finish(SessionOutcome::Failed);

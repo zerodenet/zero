@@ -1,6 +1,8 @@
-use std::cmp;
 use std::io;
 use std::net::SocketAddr;
+
+#[cfg(feature = "inbound-mixed")]
+use std::cmp;
 
 use zero_platform_tokio::TokioSocket;
 use zero_traits::AsyncSocket;
@@ -20,6 +22,7 @@ impl ClientStream for TokioSocket {
     }
 }
 
+#[cfg(feature = "inbound-mixed")]
 #[derive(Debug)]
 pub(crate) struct PrefixedSocket {
     prefix: Vec<u8>,
@@ -27,6 +30,7 @@ pub(crate) struct PrefixedSocket {
     inner: TokioSocket,
 }
 
+#[cfg(feature = "inbound-mixed")]
 impl PrefixedSocket {
     pub(crate) fn from_byte(inner: TokioSocket, first: u8) -> Self {
         Self {
@@ -37,6 +41,7 @@ impl PrefixedSocket {
     }
 }
 
+#[cfg(feature = "inbound-mixed")]
 impl ClientStream for PrefixedSocket {
     fn into_tokio_socket(self) -> TokioSocket {
         self.inner
@@ -47,6 +52,7 @@ impl ClientStream for PrefixedSocket {
     }
 }
 
+#[cfg(feature = "inbound-mixed")]
 impl AsyncSocket for PrefixedSocket {
     type Error = io::Error;
 

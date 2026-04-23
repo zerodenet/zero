@@ -17,18 +17,20 @@ use crate::ProtocolInventory;
 
 use super::completed_sessions::{CompletedSessionHistory, CompletedSessionRecord};
 use super::error::EngineError;
+use super::logging::log_selector_group_target_changed;
 use super::outbound_group_state::OutboundGroupStateStore;
-use super::resolve::{
-    resolve_group, resolve_named_outbound, ResolvedLeafOutbound, ResolvedOutbound,
-};
+use super::plan::{EnginePlan, TargetKind};
+use super::resolve::{resolve_target_id, ResolvedLeafOutbound, ResolvedOutbound};
 use super::session_lifecycle::SessionHandle;
 use super::session_registry::{ActiveSession, SessionRegistry};
 use super::stats::{EngineStats, EngineStatsSnapshot, SessionOutcome};
+use super::view::PlanView;
 
 #[derive(Debug, Clone)]
 pub struct Engine {
-    pub(crate) config: RuntimeConfig,
-    pub(crate) router: RuleSet,
+    pub(crate) config: Arc<RuntimeConfig>,
+    pub(crate) plan: Arc<EnginePlan>,
+    pub(crate) router: Arc<RuleSet>,
     pub(crate) resolver: TokioResolver,
     pub(crate) protocols: ProtocolInventory,
     pub(crate) next_session_id: Arc<AtomicU64>,
@@ -39,34 +41,75 @@ pub struct Engine {
     pub(crate) udp_upstream_idle_timeout: Duration,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RouteDecision<'a> {
+    Route(&'a str),
+    Direct,
+    Reject,
+}
+
+impl<'a> RouteDecision<'a> {
+    fn to_owned(self) -> RouteAction {
+        match self {
+            Self::Route(tag) => RouteAction::Route(tag.to_owned()),
+            Self::Direct => RouteAction::Direct,
+            Self::Reject => RouteAction::Reject,
+        }
+    }
+}
+
+impl<'a> From<&'a RouteAction> for RouteDecision<'a> {
+    fn from(value: &'a RouteAction) -> Self {
+        match value {
+            RouteAction::Route(tag) => Self::Route(tag),
+            RouteAction::Direct => Self::Direct,
+            RouteAction::Reject => Self::Reject,
+        }
+    }
+}
+
 impl Engine {
     pub fn new(config: RuntimeConfig) -> Result<Self, EngineError> {
-        let router = config.route.compile(config.source_dir())?;
+        let protocols = ProtocolInventory::default();
+        protocols.validate_config(&config)?;
+        let router = Arc::new(config.route.compile(config.source_dir())?);
+        let plan = Arc::new(EnginePlan::build(&config)?);
         let udp_upstream_idle_timeout =
             Duration::from_secs(config.runtime.udp_upstream_idle_timeout_seconds);
         let outbound_group_state = OutboundGroupStateStore::shared();
 
-        for group in &config.outbound_groups {
-            match &group.group {
-                zero_config::OutboundGroupKind::Selector { .. } => {
-                    if let Some(selected) = group.active_outbound() {
-                        outbound_group_state.initialize_selector(group.tag(), selected);
-                    }
-                }
-                zero_config::OutboundGroupKind::UrlTest { outbounds, .. } => {
-                    if let Some(selected) = outbounds.first() {
-                        outbound_group_state.initialize_urltest(group.tag(), selected);
-                    }
-                }
-                zero_config::OutboundGroupKind::Fallback { .. } => {}
+        for &group_id in plan.selector_groups() {
+            let group = plan
+                .target(group_id)
+                .expect("engine plan should resolve selector group");
+            let TargetKind::Selector(selector) = group.kind() else {
+                continue;
+            };
+            outbound_group_state.initialize_selector(group_id, selector.initial_member());
+        }
+
+        for &group_id in plan.urltest_groups() {
+            let group = plan
+                .target(group_id)
+                .expect("engine plan should resolve urltest group");
+            let TargetKind::UrlTest(urltest) = group.kind() else {
+                continue;
+            };
+            if !urltest.members().is_empty() {
+                outbound_group_state.initialize_urltest(
+                    group_id,
+                    urltest.initial_member(),
+                    urltest.members(),
+                );
             }
         }
 
         Ok(Self {
-            config,
+            config: Arc::new(config),
+            plan,
             router,
             resolver: TokioResolver,
-            protocols: ProtocolInventory::default(),
+            protocols,
             next_session_id: Arc::new(AtomicU64::new(1)),
             session_registry: SessionRegistry::shared(),
             completed_sessions: CompletedSessionHistory::shared(),
@@ -82,7 +125,11 @@ impl Engine {
     }
 
     pub fn config(&self) -> &RuntimeConfig {
-        &self.config
+        self.config.as_ref()
+    }
+
+    pub fn plan(&self) -> &EnginePlan {
+        self.plan.as_ref()
     }
 
     pub fn with_udp_upstream_idle_timeout(mut self, timeout: Duration) -> Self {
@@ -99,10 +146,14 @@ impl Engine {
     }
 
     pub fn route_for(&self, address: &Address) -> RouteAction {
+        self.route_decision(address).to_owned()
+    }
+
+    pub(crate) fn route_decision<'a>(&'a self, address: &Address) -> RouteDecision<'a> {
         match &self.config.mode {
-            ModeConfig::Rule => self.router.decide(address),
-            ModeConfig::Direct => RouteAction::Direct,
-            ModeConfig::Global { outbound } => RouteAction::Route(outbound.clone()),
+            ModeConfig::Rule => self.router.decide_ref(address).into(),
+            ModeConfig::Direct => RouteDecision::Direct,
+            ModeConfig::Global { outbound } => RouteDecision::Route(outbound.as_str()),
         }
     }
 
@@ -118,35 +169,49 @@ impl Engine {
         self.completed_sessions.snapshot()
     }
 
-    pub fn set_selector_outbound(
+    pub fn set_selector_target(
         &self,
         group_tag: &str,
-        outbound_tag: &str,
+        target_tag: &str,
     ) -> Result<(), EngineError> {
+        let group_id =
+            self.plan
+                .target_id(group_tag)
+                .ok_or_else(|| EngineError::SelectorGroupNotFound {
+                    tag: group_tag.to_owned(),
+                })?;
         let group = self
-            .config
-            .outbound_groups
-            .iter()
-            .find(|group| group.tag() == group_tag)
-            .ok_or_else(|| EngineError::SelectorGroupNotFound {
-                tag: group_tag.to_owned(),
-            })?;
-
-        let zero_config::OutboundGroupKind::Selector { outbounds, .. } = &group.group else {
+            .plan
+            .target(group_id)
+            .expect("engine plan should resolve selector group");
+        let TargetKind::Selector(selector) = group.kind() else {
             return Err(EngineError::SelectorGroupTypeMismatch {
                 tag: group_tag.to_owned(),
             });
         };
-
-        if !outbounds.iter().any(|outbound| outbound == outbound_tag) {
-            return Err(EngineError::SelectorOutboundNotFound {
+        let target_id =
+            self.plan
+                .target_id(target_tag)
+                .ok_or_else(|| EngineError::SelectorTargetNotFound {
+                    group_tag: group_tag.to_owned(),
+                    target_tag: target_tag.to_owned(),
+                })?;
+        if !selector.contains_member(target_id) {
+            return Err(EngineError::SelectorTargetNotFound {
                 group_tag: group_tag.to_owned(),
-                outbound_tag: outbound_tag.to_owned(),
+                target_tag: target_tag.to_owned(),
             });
         }
+        let view = PlanView::new(&self.plan);
 
+        let previous = self
+            .outbound_group_state
+            .selector_selected_target(group_id)
+            .map(|target_id| view.target_tag_owned(target_id))
+            .or_else(|| Some(view.target_tag_owned(selector.initial_member())));
         self.outbound_group_state
-            .update_selector(group_tag, outbound_tag);
+            .update_selector(group_id, target_id);
+        log_selector_group_target_changed(group_tag, previous.as_deref(), target_tag);
         Ok(())
     }
 
@@ -175,37 +240,72 @@ impl Engine {
         for inbound in &self.config.inbounds {
             match inbound.protocol {
                 InboundProtocolConfig::Socks5 => {
-                    let engine = self.clone();
-                    let inbound = inbound.clone();
-                    let shutdown = shutdown_rx.clone();
-                    listeners
-                        .spawn(async move { engine.run_socks5_listener(inbound, shutdown).await });
+                    #[cfg(feature = "inbound-socks5")]
+                    {
+                        let engine = self.clone();
+                        let inbound = inbound.clone();
+                        let shutdown = shutdown_rx.clone();
+                        listeners.spawn(async move {
+                            engine.run_socks5_listener(inbound, shutdown).await
+                        });
+                    }
+                    #[cfg(not(feature = "inbound-socks5"))]
+                    {
+                        return Err(EngineError::CompiledFeatureDisabled {
+                            kind: "inbound",
+                            tag: inbound.tag.clone(),
+                            protocol: "socks5",
+                            feature: "inbound-socks5",
+                        });
+                    }
                 }
                 InboundProtocolConfig::HttpConnect => {
-                    let engine = self.clone();
-                    let inbound = inbound.clone();
-                    let shutdown = shutdown_rx.clone();
-                    listeners.spawn(async move {
-                        engine.run_http_connect_listener(inbound, shutdown).await
-                    });
+                    #[cfg(feature = "inbound-http-connect")]
+                    {
+                        let engine = self.clone();
+                        let inbound = inbound.clone();
+                        let shutdown = shutdown_rx.clone();
+                        listeners.spawn(async move {
+                            engine.run_http_connect_listener(inbound, shutdown).await
+                        });
+                    }
+                    #[cfg(not(feature = "inbound-http-connect"))]
+                    {
+                        return Err(EngineError::CompiledFeatureDisabled {
+                            kind: "inbound",
+                            tag: inbound.tag.clone(),
+                            protocol: "http-connect",
+                            feature: "inbound-http-connect",
+                        });
+                    }
                 }
                 InboundProtocolConfig::Mixed => {
-                    let engine = self.clone();
-                    let inbound = inbound.clone();
-                    let shutdown = shutdown_rx.clone();
-                    listeners
-                        .spawn(async move { engine.run_mixed_listener(inbound, shutdown).await });
+                    #[cfg(feature = "inbound-mixed")]
+                    {
+                        let engine = self.clone();
+                        let inbound = inbound.clone();
+                        let shutdown = shutdown_rx.clone();
+                        listeners.spawn(async move {
+                            engine.run_mixed_listener(inbound, shutdown).await
+                        });
+                    }
+                    #[cfg(not(feature = "inbound-mixed"))]
+                    {
+                        return Err(EngineError::CompiledFeatureDisabled {
+                            kind: "inbound",
+                            tag: inbound.tag.clone(),
+                            protocol: "mixed",
+                            feature: "inbound-mixed",
+                        });
+                    }
                 }
             }
         }
 
-        for group in &self.config.outbound_groups {
-            if matches!(group.group, zero_config::OutboundGroupKind::UrlTest { .. }) {
-                let engine = self.clone();
-                let group = group.clone();
-                let shutdown = shutdown_rx.clone();
-                urltests.spawn(async move { engine.run_urltest_group(group, shutdown).await });
-            }
+        for &group_id in self.plan.urltest_groups() {
+            let engine = self.clone();
+            let shutdown = shutdown_rx.clone();
+            urltests.spawn(async move { engine.run_urltest_group(group_id, shutdown).await });
         }
 
         info!(
@@ -276,46 +376,34 @@ impl Engine {
 
     pub(crate) fn resolve_outbound<'a>(
         &'a self,
-        action: &'a RouteAction,
+        action: RouteDecision<'a>,
     ) -> Result<ResolvedOutbound<'a>, EngineError> {
         match action {
-            RouteAction::Direct => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Direct {
+            RouteDecision::Direct => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Direct {
                 tag: None,
             })),
-            RouteAction::Reject => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Block {
+            RouteDecision::Reject => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Block {
                 tag: None,
             })),
-            RouteAction::Route(tag) => self.resolve_target(tag),
+            RouteDecision::Route(tag) => self.resolve_target(tag),
         }
     }
 
     fn resolve_target<'a>(&'a self, tag: &'a str) -> Result<ResolvedOutbound<'a>, EngineError> {
-        if let Some(outbound) = self
-            .config
-            .outbounds
-            .iter()
-            .find(|outbound| outbound.tag() == tag)
-        {
-            return Ok(ResolvedOutbound::Single(resolve_named_outbound(outbound)));
-        }
+        let Some(target_id) = self.plan.target_id(tag) else {
+            return Err(EngineError::MissingRouteTarget {
+                tag: tag.to_owned(),
+            });
+        };
 
-        if let Some(group) = self
-            .config
-            .outbound_groups
-            .iter()
-            .find(|group| group.tag() == tag)
-        {
-            return resolve_group(group, &self.config.outbounds, &self.outbound_group_state)
-                .ok_or_else(|| EngineError::MissingRouteTarget {
-                    tag: tag.to_owned(),
-                });
-        }
-
-        Err(EngineError::MissingRouteTarget {
-            tag: tag.to_owned(),
+        resolve_target_id(&self.plan, &self.outbound_group_state, target_id).ok_or_else(|| {
+            EngineError::MissingRouteTarget {
+                tag: tag.to_owned(),
+            }
         })
     }
 
+    #[cfg(feature = "outbound-socks5")]
     pub(crate) async fn connect_via_socks5_upstream(
         &self,
         session: &zero_core::Session,
@@ -334,6 +422,21 @@ impl Engine {
             .await?;
 
         Ok(upstream)
+    }
+
+    #[cfg(not(feature = "outbound-socks5"))]
+    pub(crate) async fn connect_via_socks5_upstream(
+        &self,
+        _session: &zero_core::Session,
+        _server: &str,
+        _port: u16,
+    ) -> Result<TokioSocket, EngineError> {
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "outbound",
+            tag: "socks5-upstream".to_owned(),
+            protocol: "socks5",
+            feature: "outbound-socks5",
+        })
     }
 
     pub(crate) fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {

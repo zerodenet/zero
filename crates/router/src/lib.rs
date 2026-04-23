@@ -39,12 +39,16 @@ impl RuleSet {
         }
     }
 
-    pub fn decide(&self, address: &Address) -> RouteAction {
+    pub fn decide_ref(&self, address: &Address) -> &RouteAction {
         self.rules
             .iter()
             .find(|rule| condition_matches(&rule.condition, address))
-            .map(|rule| rule.action.clone())
-            .unwrap_or_else(|| self.final_action.clone())
+            .map(|rule| &rule.action)
+            .unwrap_or(&self.final_action)
+    }
+
+    pub fn decide(&self, address: &Address) -> RouteAction {
+        self.decide_ref(address).clone()
     }
 }
 

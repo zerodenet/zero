@@ -113,8 +113,8 @@ async fn handle_connection(mut stream: TcpStream, engine: Engine) -> io::Result<
             serde_json::to_vec_pretty(&engine.export_runtime()).map_err(io::Error::other)?,
         ),
         ("POST", path) => match parse_selector_update_path(path) {
-            Some((group_tag, outbound_tag)) => {
-                match engine.set_selector_outbound(group_tag, outbound_tag) {
+            Some((group_tag, target_tag)) => {
+                match engine.set_selector_target(group_tag, target_tag) {
                     Ok(()) => (
                         "HTTP/1.1 200 OK\r\n",
                         serde_json::to_vec_pretty(&engine.export_config())
@@ -126,7 +126,7 @@ async fn handle_connection(mut stream: TcpStream, engine: Engine) -> io::Result<
                     ),
                     Err(
                         zero_engine::EngineError::SelectorGroupTypeMismatch { .. }
-                        | zero_engine::EngineError::SelectorOutboundNotFound { .. },
+                        | zero_engine::EngineError::SelectorTargetNotFound { .. },
                     ) => (
                         "HTTP/1.1 400 Bad Request\r\n",
                         br#"{"error":"invalid selector update"}"#.to_vec(),

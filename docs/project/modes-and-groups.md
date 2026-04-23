@@ -6,11 +6,11 @@
 - `selector`
 - `selector` 运行时切换
 - `fallback`
+- `group -> group`
 - `urltest`
 
 还没落地的部分：
 
-- 组嵌套组
 - 更复杂的健康检查调度
 
 目标很简单：入站尽量固定，节点尽量都放在出站里，真正变化的是“当前怎么选出站”。
@@ -44,12 +44,14 @@
 - `urltest`
   - 周期探测后，选择可用且延迟更低的成员
 
+这三类组的成员现在都可以引用另一个组。运行时会递归解析，配置阶段会拦掉循环引用。
+
 客户端只负责改“当前选哪个”或“当前 mode 是什么”。真正的选择逻辑、健康检查和最终出站决策都在内核里。
 
 当前本地最小控制入口复用了 `--status-listen`，支持：
 
 ```text
-POST /selectors/{group_tag}/{outbound_tag}
+POST /selectors/{group_tag}/{target_tag}
 ```
 
 ## 配置草案
@@ -76,9 +78,14 @@ POST /selectors/{group_tag}/{outbound_tag}
       "selected": "node-a"
     },
     {
+      "tag": "fallback-proxy",
+      "type": "fallback",
+      "outbounds": ["node-a", "direct"]
+    },
+    {
       "tag": "probe",
       "type": "urltest",
-      "outbounds": ["node-a", "node-b", "direct"],
+      "outbounds": ["fallback-proxy", "node-b", "direct"],
       "url": "http://example.com/",
       "interval_seconds": 300
     }

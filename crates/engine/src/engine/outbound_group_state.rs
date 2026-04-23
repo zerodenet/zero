@@ -2,10 +2,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::plan::TargetId;
+
 #[derive(Debug, Default)]
 pub struct OutboundGroupStateStore {
-    selector: Mutex<HashMap<String, String>>,
-    urltest: Mutex<HashMap<String, UrlTestGroupState>>,
+    selector: Mutex<HashMap<TargetId, TargetId>>,
+    urltest: Mutex<HashMap<TargetId, UrlTestGroupState>>,
 }
 
 impl OutboundGroupStateStore {
@@ -13,83 +15,112 @@ impl OutboundGroupStateStore {
         Arc::new(Self::default())
     }
 
-    pub fn initialize_selector(&self, tag: &str, selected: &str) {
+    pub fn initialize_selector(&self, group_id: TargetId, selected: TargetId) {
         self.selector
             .lock()
             .expect("selector group state lock poisoned")
-            .insert(tag.to_owned(), selected.to_owned());
+            .insert(group_id, selected);
     }
 
-    pub fn update_selector(&self, tag: &str, selected: &str) {
+    pub fn update_selector(&self, group_id: TargetId, selected: TargetId) {
         self.selector
             .lock()
             .expect("selector group state lock poisoned")
-            .insert(tag.to_owned(), selected.to_owned());
+            .insert(group_id, selected);
     }
 
-    pub fn selector_selected_outbound(&self, tag: &str) -> Option<String> {
+    pub fn selector_selected_target(&self, group_id: TargetId) -> Option<TargetId> {
         self.selector
             .lock()
             .expect("selector group state lock poisoned")
-            .get(tag)
-            .cloned()
+            .get(&group_id)
+            .copied()
     }
 
-    pub fn initialize_urltest(&self, tag: &str, selected: &str) {
+    pub fn initialize_urltest(&self, group_id: TargetId, selected: TargetId, members: &[TargetId]) {
         self.urltest
             .lock()
             .expect("urltest group state lock poisoned")
             .insert(
-                tag.to_owned(),
+                group_id,
                 UrlTestGroupState {
-                    selected: selected.to_owned(),
+                    selected,
                     latency_ms: None,
                     last_checked_unix_ms: None,
+                    members: members
+                        .iter()
+                        .map(|member_id| UrlTestMemberState {
+                            member_id: *member_id,
+                            healthy: false,
+                            latency_ms: None,
+                            last_checked_unix_ms: None,
+                            last_error: None,
+                            effective_chains: Vec::new(),
+                        })
+                        .collect(),
                 },
             );
     }
 
-    pub fn update_urltest(&self, tag: &str, selected: &str, latency_ms: Option<u64>) {
+    pub fn update_urltest(
+        &self,
+        group_id: TargetId,
+        selected: TargetId,
+        latency_ms: Option<u64>,
+        members: Vec<UrlTestMemberState>,
+    ) {
         self.urltest
             .lock()
             .expect("urltest group state lock poisoned")
             .insert(
-                tag.to_owned(),
+                group_id,
                 UrlTestGroupState {
-                    selected: selected.to_owned(),
+                    selected,
                     latency_ms,
                     last_checked_unix_ms: Some(unix_timestamp_ms()),
+                    members,
                 },
             );
     }
 
-    pub fn selected_outbound(&self, tag: &str) -> Option<String> {
-        self.urltest_selected_outbound(tag)
-            .or_else(|| self.selector_selected_outbound(tag))
+    pub fn selected_target(&self, group_id: TargetId) -> Option<TargetId> {
+        self.urltest_selected_target(group_id)
+            .or_else(|| self.selector_selected_target(group_id))
     }
 
-    pub fn urltest_state(&self, tag: &str) -> Option<UrlTestGroupState> {
+    pub fn urltest_state(&self, group_id: TargetId) -> Option<UrlTestGroupState> {
         self.urltest
             .lock()
             .expect("urltest group state lock poisoned")
-            .get(tag)
+            .get(&group_id)
             .cloned()
     }
 
-    pub fn urltest_selected_outbound(&self, tag: &str) -> Option<String> {
+    pub fn urltest_selected_target(&self, group_id: TargetId) -> Option<TargetId> {
         self.urltest
             .lock()
             .expect("urltest group state lock poisoned")
-            .get(tag)
-            .map(|state| state.selected.clone())
+            .get(&group_id)
+            .map(|state| state.selected)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UrlTestGroupState {
-    pub selected: String,
+    pub selected: TargetId,
     pub latency_ms: Option<u64>,
     pub last_checked_unix_ms: Option<u64>,
+    pub members: Vec<UrlTestMemberState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UrlTestMemberState {
+    pub member_id: TargetId,
+    pub healthy: bool,
+    pub latency_ms: Option<u64>,
+    pub last_checked_unix_ms: Option<u64>,
+    pub last_error: Option<String>,
+    pub effective_chains: Vec<Vec<TargetId>>,
 }
 
 fn unix_timestamp_ms() -> u64 {
