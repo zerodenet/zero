@@ -18,6 +18,7 @@ use crate::ProtocolInventory;
 use super::completed_sessions::{CompletedSessionHistory, CompletedSessionRecord};
 use super::error::EngineError;
 use super::logging::log_selector_group_target_changed;
+use super::metered::StreamTraffic;
 use super::outbound_group_state::OutboundGroupStateStore;
 use super::plan::{EnginePlan, TargetKind};
 use super::resolve::{resolve_target_id, ResolvedLeafOutbound, ResolvedOutbound};
@@ -239,7 +240,7 @@ impl Engine {
 
         for inbound in &self.config.inbounds {
             match inbound.protocol {
-                InboundProtocolConfig::Socks5 => {
+                InboundProtocolConfig::Socks5 { .. } => {
                     #[cfg(feature = "inbound-socks5")]
                     {
                         let engine = self.clone();
@@ -279,7 +280,7 @@ impl Engine {
                         });
                     }
                 }
-                InboundProtocolConfig::Mixed => {
+                InboundProtocolConfig::Mixed { .. } => {
                     #[cfg(feature = "inbound-mixed")]
                     {
                         let engine = self.clone();
@@ -409,19 +410,31 @@ impl Engine {
         session: &zero_core::Session,
         server: &str,
         port: u16,
+        auth: Option<(&str, &str)>,
     ) -> Result<TokioSocket, EngineError> {
-        let mut upstream = self
+        let upstream = self
             .protocols
             .direct_outbound
             .connect_host(server, port, &self.resolver)
             .await?;
+        let mut upstream = super::metered::MeteredStream::new(upstream);
 
         self.protocols
             .socks5_outbound
-            .establish_tunnel(&mut upstream, session)
+            .establish_tunnel_with_auth(
+                &mut upstream,
+                session,
+                auth.map(
+                    |(username, password)| zero_protocol_socks5::Socks5OutboundAuth {
+                        username,
+                        password,
+                    },
+                ),
+            )
             .await?;
+        self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
 
-        Ok(upstream)
+        Ok(upstream.into_inner())
     }
 
     #[cfg(not(feature = "outbound-socks5"))]
@@ -430,6 +443,7 @@ impl Engine {
         _session: &zero_core::Session,
         _server: &str,
         _port: u16,
+        _auth: Option<(&str, &str)>,
     ) -> Result<TokioSocket, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",
@@ -458,6 +472,40 @@ impl Engine {
 
     pub(crate) fn record_session_download(&self, session_id: u64, bytes: u64) {
         self.session_registry.record_download(session_id, bytes);
+    }
+
+    pub(crate) fn record_session_inbound_rx(&self, session_id: u64, bytes: u64) {
+        self.session_registry.record_inbound_rx(session_id, bytes);
+    }
+
+    pub(crate) fn record_session_inbound_tx(&self, session_id: u64, bytes: u64) {
+        self.session_registry.record_inbound_tx(session_id, bytes);
+    }
+
+    pub(crate) fn record_session_outbound_rx(&self, session_id: u64, bytes: u64) {
+        self.session_registry.record_outbound_rx(session_id, bytes);
+    }
+
+    pub(crate) fn record_session_outbound_tx(&self, session_id: u64, bytes: u64) {
+        self.session_registry.record_outbound_tx(session_id, bytes);
+    }
+
+    pub(crate) fn record_session_inbound_traffic(&self, session_id: u64, traffic: StreamTraffic) {
+        if traffic.is_empty() {
+            return;
+        }
+
+        self.record_session_inbound_rx(session_id, traffic.read_bytes);
+        self.record_session_inbound_tx(session_id, traffic.written_bytes);
+    }
+
+    pub(crate) fn record_session_outbound_traffic(&self, session_id: u64, traffic: StreamTraffic) {
+        if traffic.is_empty() {
+            return;
+        }
+
+        self.record_session_outbound_rx(session_id, traffic.read_bytes);
+        self.record_session_outbound_tx(session_id, traffic.written_bytes);
     }
 
     pub(crate) fn finish_session(

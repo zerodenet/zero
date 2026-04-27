@@ -73,7 +73,7 @@ fn parses_config_into_adts() {
 
     assert!(matches!(
         config.inbounds[0].protocol,
-        InboundProtocolConfig::Socks5
+        InboundProtocolConfig::Socks5 { .. }
     ));
     assert!(matches!(
         config.inbounds[1].protocol,
@@ -210,7 +210,101 @@ fn accepts_mixed_inbound_type() {
 
     assert!(matches!(
         config.inbounds[0].protocol,
-        InboundProtocolConfig::Mixed
+        InboundProtocolConfig::Mixed { .. }
+    ));
+}
+
+#[test]
+fn parses_socks5_inbound_and_outbound_auth() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "socks-in",
+                    "listen": { "address": "127.0.0.1", "port": 1080 },
+                    "protocol": {
+                        "type": "socks5",
+                        "users": [
+                            { "username": "alice", "password": "secret" }
+                        ]
+                    }
+                },
+                {
+                    "tag": "mixed-in",
+                    "listen": { "address": "127.0.0.1", "port": 1081 },
+                    "protocol": {
+                        "type": "mixed",
+                        "socks5_users": [
+                            { "username": "bob", "password": "secret" }
+                        ]
+                    }
+                }
+            ],
+            "outbounds": [
+                {
+                    "tag": "chain",
+                    "protocol": {
+                        "type": "socks5",
+                        "server": "127.0.0.1",
+                        "port": 2080,
+                        "username": "upstream",
+                        "password": "secret"
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "chain" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert_eq!(
+        config.inbounds[0].protocol.socks5_users()[0].username,
+        "alice"
+    );
+    assert_eq!(
+        config.inbounds[1].protocol.socks5_users()[0].username,
+        "bob"
+    );
+    match &config.outbounds[0].protocol {
+        OutboundProtocolConfig::Socks5 {
+            username, password, ..
+        } => {
+            assert_eq!(username.as_deref(), Some("upstream"));
+            assert_eq!(password.as_deref(), Some("secret"));
+        }
+        _ => panic!("expected socks5 outbound"),
+    }
+}
+
+#[test]
+fn rejects_partial_socks5_outbound_auth() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "chain",
+                    "protocol": {
+                        "type": "socks5",
+                        "server": "127.0.0.1",
+                        "port": 2080,
+                        "username": "upstream"
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "chain" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(
+        error,
+        zero_config::ConfigError::InvalidOutbound(_)
     ));
 }
 

@@ -80,9 +80,15 @@ impl Engine {
             ResolvedLeafOutbound::Block { tag } => Ok(EstablishedTcpOutbound::Block {
                 tag: tag.unwrap_or("block").to_owned(),
             }),
-            ResolvedLeafOutbound::Socks5 { tag, server, port } => {
+            ResolvedLeafOutbound::Socks5 {
+                tag,
+                server,
+                port,
+                username,
+                password,
+            } => {
                 match self
-                    .connect_via_socks5_upstream(session, server, port)
+                    .connect_via_socks5_upstream(session, server, port, username.zip(password))
                     .await
                 {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Socks5 {

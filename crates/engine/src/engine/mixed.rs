@@ -40,10 +40,11 @@ impl Engine {
                     let (stream, remote_addr) = accept_result?;
                     let engine = self.clone();
                     let inbound_tag = inbound.tag.clone();
+                    let socks5_users = inbound.protocol.socks5_users().to_vec();
 
                     connections.spawn(async move {
                         if let Err(error) = engine
-                            .handle_mixed_connection(stream, inbound_tag.as_str())
+                            .handle_mixed_connection(stream, inbound_tag.as_str(), &socks5_users)
                             .await
                         {
                             log_listener_connection_error(
@@ -88,6 +89,7 @@ impl Engine {
         &self,
         mut client: TokioSocket,
         inbound_tag: &str,
+        socks5_users: &[zero_config::Socks5UserConfig],
     ) -> Result<(), EngineError> {
         let mut first = [0_u8; 1];
         let read = client.read(&mut first).await?;
@@ -102,7 +104,10 @@ impl Engine {
         let client = PrefixedSocket::from_byte(client, first[0]);
 
         match protocol {
-            MixedProtocol::Socks5 => self.handle_socks5_client(client, inbound_tag).await,
+            MixedProtocol::Socks5 => {
+                self.handle_socks5_client(client, inbound_tag, socks5_users)
+                    .await
+            }
             MixedProtocol::HttpConnect => {
                 self.handle_http_connect_client(client, inbound_tag).await
             }

@@ -91,11 +91,34 @@ pub struct ListenConfig {
 #[serde(tag = "type")]
 pub enum InboundProtocolConfig {
     #[serde(rename = "socks5")]
-    Socks5,
+    Socks5 {
+        #[serde(default)]
+        users: Vec<Socks5UserConfig>,
+    },
     #[serde(rename = "http-connect", alias = "http")]
     HttpConnect,
     #[serde(rename = "mixed")]
-    Mixed,
+    Mixed {
+        #[serde(default, alias = "users")]
+        socks5_users: Vec<Socks5UserConfig>,
+    },
+}
+
+impl InboundProtocolConfig {
+    pub fn socks5_users(&self) -> &[Socks5UserConfig] {
+        match self {
+            Self::Socks5 { users } => users,
+            Self::Mixed { socks5_users } => socks5_users,
+            Self::HttpConnect => &[],
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Socks5UserConfig {
+    pub username: String,
+    pub password: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,7 +142,14 @@ pub enum OutboundProtocolConfig {
     #[serde(rename = "block")]
     Block,
     #[serde(rename = "socks5")]
-    Socks5 { server: String, port: u16 },
+    Socks5 {
+        server: String,
+        port: u16,
+        #[serde(default)]
+        username: Option<String>,
+        #[serde(default)]
+        password: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

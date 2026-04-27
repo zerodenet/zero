@@ -52,6 +52,8 @@ cargo run -- run examples/v0.0.1/basic.json
 
 - `bytes_up` / `bytes_down`：会话视角累计字节
 - `inbound_*` / `outbound_*`：链路视角累计字节
+- 这些字节是应用层链路字节，包含 SOCKS5 / HTTP CONNECT 握手和 SOCKS5 UDP 封包头
+- 不包含 TCP/IP 包头、TCP 建连和挥手等内核网络栈开销
 - 完成日志只记录结算值，不记录平均速率
 
 ## 状态导出

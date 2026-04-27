@@ -8,6 +8,8 @@
 
 负责参数、配置文件路径、进程启动和状态输出。
 
+控制面和观测模型以 Zero 自有规范为准。Clash、sing-box、Xray 等外部生态只作为设计参考；兼容能力应放在 adapter、gateway 或额外工具里，不反向约束内核和长期 API。
+
 ## 配置和执行层
 
 - `zero-config`

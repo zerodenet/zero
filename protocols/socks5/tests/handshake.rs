@@ -2,7 +2,8 @@ use std::collections::VecDeque;
 
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_protocol_socks5::{
-    build_udp_packet, parse_udp_packet, Socks5Inbound, Socks5Outbound, Socks5Request,
+    build_udp_packet, parse_udp_packet, Socks5Inbound, Socks5Outbound, Socks5OutboundAuth,
+    Socks5PasswordAuth, Socks5Request,
 };
 use zero_traits::AsyncSocket;
 
@@ -48,6 +49,18 @@ impl AsyncSocket for MockSocket {
     async fn shutdown(&mut self) -> Result<(), Self::Error> {
         self.shutdown_called = true;
         Ok(())
+    }
+}
+
+struct TestPasswordAuth;
+
+impl Socks5PasswordAuth for TestPasswordAuth {
+    fn required(&self) -> bool {
+        true
+    }
+
+    fn verify(&self, username: &str, password: &str) -> bool {
+        username == "alice" && password == "secret"
     }
 }
 
@@ -109,6 +122,74 @@ async fn rejects_unsupported_auth_method() {
         Error::Unsupported("SOCKS5 auth method is not supported")
     );
     assert_eq!(socket.writes, vec![0x05, 0xff]);
+}
+
+#[tokio::test]
+async fn accepts_username_password_auth_when_configured() {
+    let mut socket = MockSocket::new(&[
+        0x05, 0x02, 0x00, 0x02, // methods: no-auth + username/password
+        0x01, 0x05, b'a', b'l', b'i', b'c', b'e', 0x06, b's', b'e', b'c', b'r', b'e',
+        b't', // username/password auth
+        0x05, 0x01, 0x00, 0x01, // connect + ipv4
+        1, 2, 3, 4, 0x00, 0x50, // port 80
+    ]);
+
+    let session = Socks5Inbound
+        .handshake_with_auth(&mut socket, &TestPasswordAuth)
+        .await
+        .expect("handshake");
+
+    assert_eq!(session.target, Address::Ipv4([1, 2, 3, 4]));
+    assert_eq!(session.port, 80);
+    assert_eq!(
+        socket.writes,
+        vec![
+            0x05, 0x02, // username/password selected
+            0x01, 0x00, // username/password accepted
+            0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0 // connect success
+        ]
+    );
+}
+
+#[tokio::test]
+async fn rejects_no_auth_when_password_is_required() {
+    let mut socket = MockSocket::new(&[0x05, 0x01, 0x00]);
+
+    let error = Socks5Inbound
+        .handshake_with_auth(&mut socket, &TestPasswordAuth)
+        .await
+        .expect_err("should fail");
+
+    assert_eq!(
+        error,
+        Error::Unsupported("SOCKS5 auth method is not supported")
+    );
+    assert_eq!(socket.writes, vec![0x05, 0xff]);
+}
+
+#[tokio::test]
+async fn rejects_invalid_username_password_credentials() {
+    let mut socket = MockSocket::new(&[
+        0x05, 0x01, 0x02, // method negotiation
+        0x01, 0x05, b'a', b'l', b'i', b'c', b'e', 0x05, b'w', b'r', b'o', b'n', b'g',
+    ]);
+
+    let error = Socks5Inbound
+        .handshake_with_auth(&mut socket, &TestPasswordAuth)
+        .await
+        .expect_err("should fail");
+
+    assert_eq!(
+        error,
+        Error::Unsupported("SOCKS5 username/password authentication failed")
+    );
+    assert_eq!(
+        socket.writes,
+        vec![
+            0x05, 0x02, // username/password selected
+            0x01, 0x01 // username/password rejected
+        ]
+    );
 }
 
 #[tokio::test]
@@ -182,6 +263,46 @@ async fn outbound_establishes_tunnel_for_domain_target() {
         socket.writes,
         vec![
             0x05, 0x01, 0x00, // auth negotiation
+            0x05, 0x01, 0x00, 0x03, 0x0b, b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c',
+            b'o', b'm', 0x01, 0xbb
+        ]
+    );
+}
+
+#[tokio::test]
+async fn outbound_establishes_tunnel_with_username_password_auth() {
+    let mut socket = MockSocket::new(&[
+        0x05, 0x02, // username/password selected
+        0x01, 0x00, // credentials accepted
+        0x05, 0x00, 0x00, 0x01, // connect success + ipv4
+        127, 0, 0, 1, 0x00, 0x50,
+    ]);
+    let session = Session::new(
+        0,
+        Address::Domain("example.com".into()),
+        443,
+        Network::Tcp,
+        ProtocolType::Socks5,
+    );
+
+    Socks5Outbound
+        .establish_tunnel_with_auth(
+            &mut socket,
+            &session,
+            Some(Socks5OutboundAuth {
+                username: "upstream",
+                password: "secret",
+            }),
+        )
+        .await
+        .expect("tunnel");
+
+    assert_eq!(
+        socket.writes,
+        vec![
+            0x05, 0x01, 0x02, // auth negotiation
+            0x01, 0x08, b'u', b'p', b's', b't', b'r', b'e', b'a', b'm', 0x06, b's', b'e', b'c',
+            b'r', b'e', b't', // username/password credentials
             0x05, 0x01, 0x00, 0x03, 0x0b, b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c',
             b'o', b'm', 0x01, 0xbb
         ]

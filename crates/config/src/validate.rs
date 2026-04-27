@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ConfigError, ModeConfig, OutboundGroupConfig, OutboundGroupKind, RouteActionConfig,
-    RouteConfig, RouteRuleConfig, RouteRuleSetConfig, RuleConditionConfig, RuleSetSourceType,
-    RuntimeConfig, RuntimeOptionsConfig,
+    ConfigError, InboundProtocolConfig, ModeConfig, OutboundGroupConfig, OutboundGroupKind,
+    OutboundProtocolConfig, RouteActionConfig, RouteConfig, RouteRuleConfig, RouteRuleSetConfig,
+    RuleConditionConfig, RuleSetSourceType, RuntimeConfig, RuntimeOptionsConfig, Socks5UserConfig,
 };
 
 impl RuntimeConfig {
@@ -17,12 +17,14 @@ impl RuntimeConfig {
                 &inbound.listen.address,
                 inbound.listen.port,
             )?;
+            validate_inbound_protocol(&inbound.protocol)?;
         }
 
         let mut outbound_tags = HashSet::new();
         let mut route_target_tags = HashSet::new();
         for outbound in &self.outbounds {
             validate_tag("outbound", &outbound.tag, &mut outbound_tags)?;
+            validate_outbound_protocol(&outbound.protocol)?;
             validate_route_target_tag(outbound.tag(), &mut route_target_tags)?;
         }
 
@@ -269,6 +271,102 @@ fn validate_runtime(runtime: &RuntimeOptionsConfig) -> Result<(), ConfigError> {
         return Err(ConfigError::InvalidRuntime(
             "`runtime.udp_upstream_idle_timeout_seconds` must be greater than 0".to_owned(),
         ));
+    }
+
+    Ok(())
+}
+
+fn validate_inbound_protocol(protocol: &InboundProtocolConfig) -> Result<(), ConfigError> {
+    match protocol {
+        InboundProtocolConfig::Socks5 { users } => validate_socks5_users("socks5 inbound", users),
+        InboundProtocolConfig::Mixed { socks5_users } => {
+            validate_socks5_users("mixed inbound socks5", socks5_users)
+        }
+        InboundProtocolConfig::HttpConnect => Ok(()),
+    }
+}
+
+fn validate_outbound_protocol(protocol: &OutboundProtocolConfig) -> Result<(), ConfigError> {
+    match protocol {
+        OutboundProtocolConfig::Socks5 {
+            username, password, ..
+        } => validate_socks5_outbound_auth(username.as_deref(), password.as_deref()),
+        OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => Ok(()),
+    }
+}
+
+fn validate_socks5_users(
+    scope: &'static str,
+    users: &[Socks5UserConfig],
+) -> Result<(), ConfigError> {
+    let mut seen = HashSet::new();
+
+    for user in users {
+        validate_socks5_credential_part(scope, "username", &user.username)?;
+        validate_socks5_credential_part(scope, "password", &user.password)?;
+        if !seen.insert(user.username.as_str()) {
+            return Err(ConfigError::InvalidInbound(format!(
+                "`{scope}` contains duplicate username `{}`",
+                user.username
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_socks5_outbound_auth(
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Result<(), ConfigError> {
+    match (username, password) {
+        (None, None) => Ok(()),
+        (Some(username), Some(password)) => {
+            validate_socks5_outbound_credential_part("username", username)?;
+            validate_socks5_outbound_credential_part("password", password)
+        }
+        _ => Err(ConfigError::InvalidOutbound(
+            "`socks5` outbound requires both `username` and `password`, or neither".to_owned(),
+        )),
+    }
+}
+
+fn validate_socks5_outbound_credential_part(
+    field: &'static str,
+    value: &str,
+) -> Result<(), ConfigError> {
+    let len = value.len();
+    if len == 0 {
+        return Err(ConfigError::InvalidOutbound(format!(
+            "`socks5` outbound `{field}` must not be empty"
+        )));
+    }
+
+    if len > u8::MAX as usize {
+        return Err(ConfigError::InvalidOutbound(format!(
+            "`socks5` outbound `{field}` must be at most 255 bytes"
+        )));
+    }
+
+    Ok(())
+}
+
+fn validate_socks5_credential_part(
+    scope: &'static str,
+    field: &'static str,
+    value: &str,
+) -> Result<(), ConfigError> {
+    let len = value.len();
+    if len == 0 {
+        return Err(ConfigError::InvalidInbound(format!(
+            "`{scope}` `{field}` must not be empty"
+        )));
+    }
+
+    if len > u8::MAX as usize {
+        return Err(ConfigError::InvalidInbound(format!(
+            "`{scope}` `{field}` must be at most 255 bytes"
+        )));
     }
 
     Ok(())

@@ -3,7 +3,9 @@ use std::time::Instant;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
+use zero_config::Socks5UserConfig;
 use zero_platform_tokio::TokioSocket;
+use zero_protocol_socks5::Socks5PasswordAuth;
 use zero_protocol_socks5::{Socks5Reply, Socks5Request};
 use zero_traits::AsyncSocket;
 
@@ -11,6 +13,7 @@ use super::error::EngineError;
 use super::logging::{
     log_listener_connection_error, log_session_accepted, log_session_failed, log_session_finished,
 };
+use super::metered::MeteredStream;
 use super::runtime::{bind_listener, Engine};
 use super::stats::SessionOutcome;
 use super::stream::ClientStream;
@@ -47,10 +50,15 @@ impl Engine {
                     let (stream, remote_addr) = accept_result?;
                     let engine = self.clone();
                     let inbound_tag = inbound.tag.clone();
+                    let socks5_users = inbound.protocol.socks5_users().to_vec();
 
                     connections.spawn(async move {
                         if let Err(error) = engine
-                            .handle_socks5_connection(stream, inbound_tag.as_str())
+                            .handle_socks5_connection(
+                                stream,
+                                inbound_tag.as_str(),
+                                &socks5_users,
+                            )
                             .await
                         {
                             log_listener_connection_error(
@@ -95,22 +103,26 @@ impl Engine {
         &self,
         client: TokioSocket,
         inbound_tag: &str,
+        users: &[Socks5UserConfig],
     ) -> Result<(), EngineError> {
-        self.handle_socks5_client(client, inbound_tag).await
+        self.handle_socks5_client(client, inbound_tag, users).await
     }
 
     pub(crate) async fn handle_socks5_client<S>(
         &self,
-        mut client: S,
+        client: S,
         inbound_tag: &str,
+        users: &[Socks5UserConfig],
     ) -> Result<(), EngineError>
     where
         S: ClientStream,
     {
+        let mut client = MeteredStream::new(client);
+        let auth = ConfiguredSocks5PasswordAuth { users };
         match self
             .protocols
             .socks5_inbound
-            .accept_command(&mut client)
+            .accept_command_with_auth(&mut client, &auth)
             .await?
         {
             Socks5Request::Connect(session) => {
@@ -126,7 +138,7 @@ impl Engine {
 
     async fn handle_socks5_connect<S>(
         &self,
-        mut client: S,
+        mut client: MeteredStream<S>,
         inbound_tag: &str,
         mut session: zero_core::Session,
     ) -> Result<(), EngineError>
@@ -136,6 +148,7 @@ impl Engine {
         self.prepare_session(&mut session, inbound_tag);
         let mut session_handle = self.track_session(session.id);
         let started_at = Instant::now();
+        self.record_session_inbound_traffic(session.id, client.drain_traffic());
 
         let action = self.route_decision(&session.target);
         let resolved = match self.resolve_outbound(action) {
@@ -163,10 +176,11 @@ impl Engine {
                     .socks5_inbound
                     .send_response(&mut client, Socks5Reply::Succeeded)
                     .await?;
+                let session_id = session.id;
+                self.record_session_inbound_traffic(session_id, client.drain_traffic());
                 let client = client.into_tokio_socket();
                 let upload_engine = self.clone();
                 let download_engine = self.clone();
-                let session_id = session.id;
 
                 match relay_bidirectional_metered(
                     client,
@@ -202,6 +216,7 @@ impl Engine {
                 self.set_session_outbound(&session);
                 self.reply_and_close_socks5(&mut client, Socks5Reply::ConnectionNotAllowed)
                     .await;
+                self.record_session_inbound_traffic(session.id, client.drain_traffic());
                 if let Some(record) = session_handle.finish(SessionOutcome::Blocked) {
                     log_session_finished(&record, None);
                 }
@@ -220,10 +235,11 @@ impl Engine {
                     .socks5_inbound
                     .send_response(&mut client, Socks5Reply::Succeeded)
                     .await?;
+                let session_id = session.id;
+                self.record_session_inbound_traffic(session_id, client.drain_traffic());
                 let client = client.into_tokio_socket();
                 let upload_engine = self.clone();
                 let download_engine = self.clone();
-                let session_id = session.id;
 
                 match relay_bidirectional_metered(
                     client,
@@ -258,6 +274,7 @@ impl Engine {
             Err(failure) => {
                 self.reply_and_close_socks5(&mut client, Socks5Reply::HostUnreachable)
                     .await;
+                self.record_session_inbound_traffic(session.id, client.drain_traffic());
                 let record = session_handle.finish(SessionOutcome::Failed);
                 log_session_failed(
                     &session,
@@ -292,5 +309,21 @@ impl Engine {
         if let Err(error) = client.shutdown().await {
             error!(error = %error, "failed to shutdown client socket");
         }
+    }
+}
+
+struct ConfiguredSocks5PasswordAuth<'a> {
+    users: &'a [Socks5UserConfig],
+}
+
+impl Socks5PasswordAuth for ConfiguredSocks5PasswordAuth<'_> {
+    fn required(&self) -> bool {
+        !self.users.is_empty()
+    }
+
+    fn verify(&self, username: &str, password: &str) -> bool {
+        self.users
+            .iter()
+            .any(|user| user.username == username && user.password == password)
     }
 }

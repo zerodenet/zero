@@ -26,6 +26,10 @@ pub enum ConfigError {
     DuplicateInboundListen { address: String, port: u16 },
     #[error("invalid rule condition: {0}")]
     InvalidRuleCondition(String),
+    #[error("invalid inbound: {0}")]
+    InvalidInbound(String),
+    #[error("invalid outbound: {0}")]
+    InvalidOutbound(String),
     #[error("invalid rule set: {0}")]
     InvalidRuleSet(String),
     #[error("invalid route action: {0}")]

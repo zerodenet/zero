@@ -1,3 +1,4 @@
+use alloc::string::String;
 use alloc::vec;
 
 use zero_core::{Address, Error, InboundHandler, Network, ProtocolType, Session};
@@ -5,7 +6,8 @@ use zero_traits::AsyncSocket;
 
 use crate::shared::{
     read_address, read_exact, write_reply, write_reply_with_address, Socks5Reply, CMD_CONNECT,
-    CMD_UDP_ASSOCIATE, METHOD_NOT_ACCEPTABLE, METHOD_NO_AUTH, SOCKS5_VERSION,
+    CMD_UDP_ASSOCIATE, METHOD_NOT_ACCEPTABLE, METHOD_NO_AUTH, METHOD_USERNAME_PASSWORD,
+    SOCKS5_VERSION, USERPASS_STATUS_FAILURE, USERPASS_STATUS_SUCCESS, USERPASS_VERSION,
 };
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -21,6 +23,24 @@ pub enum Socks5Request {
 pub struct Socks5UdpAssociateRequest {
     pub client_hint: Address,
     pub client_port: u16,
+}
+
+pub trait Socks5PasswordAuth {
+    fn required(&self) -> bool;
+    fn verify(&self, username: &str, password: &str) -> bool;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NoSocks5PasswordAuth;
+
+impl Socks5PasswordAuth for NoSocks5PasswordAuth {
+    fn required(&self) -> bool {
+        false
+    }
+
+    fn verify(&self, _username: &str, _password: &str) -> bool {
+        false
+    }
 }
 
 impl Socks5Inbound {
@@ -45,7 +65,20 @@ impl Socks5Inbound {
     where
         S: AsyncSocket,
     {
-        negotiate_method(stream).await?;
+        self.accept_command_with_auth(stream, &NoSocks5PasswordAuth)
+            .await
+    }
+
+    pub async fn accept_command_with_auth<S, A>(
+        &self,
+        stream: &mut S,
+        auth: &A,
+    ) -> Result<Socks5Request, Error>
+    where
+        S: AsyncSocket,
+        A: Socks5PasswordAuth,
+    {
+        negotiate_method(stream, auth).await?;
         read_request(stream).await
     }
 
@@ -73,7 +106,29 @@ impl Socks5Inbound {
     where
         S: AsyncSocket,
     {
-        let session = self.accept_request(stream).await?;
+        let session = self
+            .handshake_with_auth(stream, &NoSocks5PasswordAuth)
+            .await?;
+
+        Ok(session)
+    }
+
+    pub async fn handshake_with_auth<S, A>(
+        &self,
+        stream: &mut S,
+        auth: &A,
+    ) -> Result<Session, Error>
+    where
+        S: AsyncSocket,
+        A: Socks5PasswordAuth,
+    {
+        let session = match self.accept_command_with_auth(stream, auth).await? {
+            Socks5Request::Connect(session) => session,
+            Socks5Request::UdpAssociate(_) => {
+                write_reply(stream, Socks5Reply::CommandNotSupported).await?;
+                return Err(Error::Unsupported("SOCKS5 command is not supported"));
+            }
+        };
         self.send_response(stream, Socks5Reply::Succeeded).await?;
 
         Ok(session)
@@ -89,9 +144,10 @@ where
     }
 }
 
-async fn negotiate_method<S>(stream: &mut S) -> Result<(), Error>
+async fn negotiate_method<S, A>(stream: &mut S, auth: &A) -> Result<(), Error>
 where
     S: AsyncSocket,
+    A: Socks5PasswordAuth,
 {
     let mut header = [0_u8; 2];
     read_exact(stream, &mut header).await?;
@@ -108,7 +164,9 @@ where
     let mut methods = vec![0_u8; method_count];
     read_exact(stream, &mut methods).await?;
 
-    if !methods.contains(&METHOD_NO_AUTH) {
+    let selected_method = select_method(&methods, auth.required());
+
+    if selected_method == METHOD_NOT_ACCEPTABLE {
         stream
             .write_all(&[SOCKS5_VERSION, METHOD_NOT_ACCEPTABLE])
             .await
@@ -117,11 +175,88 @@ where
     }
 
     stream
-        .write_all(&[SOCKS5_VERSION, METHOD_NO_AUTH])
+        .write_all(&[SOCKS5_VERSION, selected_method])
         .await
         .map_err(|_| Error::Io("failed to write SOCKS5 auth negotiation response"))?;
 
+    if selected_method == METHOD_USERNAME_PASSWORD {
+        authenticate_username_password(stream, auth).await?;
+    }
+
     Ok(())
+}
+
+fn select_method(methods: &[u8], password_required: bool) -> u8 {
+    if password_required {
+        return if methods.contains(&METHOD_USERNAME_PASSWORD) {
+            METHOD_USERNAME_PASSWORD
+        } else {
+            METHOD_NOT_ACCEPTABLE
+        };
+    }
+
+    if methods.contains(&METHOD_NO_AUTH) {
+        METHOD_NO_AUTH
+    } else {
+        METHOD_NOT_ACCEPTABLE
+    }
+}
+
+async fn authenticate_username_password<S, A>(stream: &mut S, auth: &A) -> Result<(), Error>
+where
+    S: AsyncSocket,
+    A: Socks5PasswordAuth,
+{
+    let mut header = [0_u8; 2];
+    read_exact(stream, &mut header).await?;
+
+    if header[0] != USERPASS_VERSION {
+        return Err(Error::Protocol(
+            "invalid SOCKS5 username/password auth version",
+        ));
+    }
+
+    let username_len = header[1] as usize;
+    if username_len == 0 {
+        return Err(Error::Protocol("SOCKS5 username must not be empty"));
+    }
+
+    let mut username = vec![0_u8; username_len];
+    read_exact(stream, &mut username).await?;
+
+    let mut password_len = [0_u8; 1];
+    read_exact(stream, &mut password_len).await?;
+    let password_len = password_len[0] as usize;
+    if password_len == 0 {
+        return Err(Error::Protocol("SOCKS5 password must not be empty"));
+    }
+
+    let mut password = vec![0_u8; password_len];
+    read_exact(stream, &mut password).await?;
+
+    let username = String::from_utf8(username)
+        .map_err(|_| Error::Protocol("SOCKS5 username is not valid UTF-8"))?;
+    let password = String::from_utf8(password)
+        .map_err(|_| Error::Protocol("SOCKS5 password is not valid UTF-8"))?;
+
+    let accepted = auth.verify(&username, &password);
+    let status = if accepted {
+        USERPASS_STATUS_SUCCESS
+    } else {
+        USERPASS_STATUS_FAILURE
+    };
+    stream
+        .write_all(&[USERPASS_VERSION, status])
+        .await
+        .map_err(|_| Error::Io("failed to write SOCKS5 username/password auth response"))?;
+
+    if accepted {
+        Ok(())
+    } else {
+        Err(Error::Unsupported(
+            "SOCKS5 username/password authentication failed",
+        ))
+    }
 }
 
 async fn read_request<S>(stream: &mut S) -> Result<Socks5Request, Error>

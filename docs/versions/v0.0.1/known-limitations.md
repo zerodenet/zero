@@ -4,7 +4,7 @@
 
 ## 协议边界
 
-- `SOCKS5` 只支持 `no-auth`
+- `SOCKS5` 支持 `no-auth` 和 username/password
 - `SOCKS5` 支持 `CONNECT` 和 `UDP ASSOCIATE`
 - 不支持 `BIND`
 - `HTTP` 只支持 `CONNECT`
@@ -22,7 +22,6 @@
 - 活动会话的吞吐是 1 秒采样值，不是更短窗口的平滑速率
 - `process_id` / `process_name` 目前还没有接平台实现
 - 完成会话当前只保留最近一段固定长度历史
-- UDP 当前没有做成和 TCP 完全同口径的会话级历史视图
 
 ## 产品边界
 

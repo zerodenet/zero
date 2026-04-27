@@ -50,6 +50,36 @@
 
 `mixed` 不是外部协议，而是“同端口多协议入站”的配置入口。
 
+SOCKS5 入站默认是 no-auth。配置 `users` 后会启用 RFC 1929 username/password：
+
+```json
+{
+  "tag": "socks-in",
+  "listen": { "address": "127.0.0.1", "port": 7890 },
+  "protocol": {
+    "type": "socks5",
+    "users": [
+      { "username": "alice", "password": "secret" }
+    ]
+  }
+}
+```
+
+`mixed` 入站也可以给 SOCKS5 分支配置认证：
+
+```json
+{
+  "tag": "mixed-in",
+  "listen": { "address": "127.0.0.1", "port": 7890 },
+  "protocol": {
+    "type": "mixed",
+    "socks5_users": [
+      { "username": "alice", "password": "secret" }
+    ]
+  }
+}
+```
+
 ## 出站
 
 ```json
@@ -68,6 +98,21 @@
 - `direct`
 - `block`
 - `socks5`
+
+SOCKS5 出站默认 no-auth。连接需要认证的上游时配置 `username` 和 `password`：
+
+```json
+{
+  "tag": "chain",
+  "protocol": {
+    "type": "socks5",
+    "server": "127.0.0.1",
+    "port": 2080,
+    "username": "upstream",
+    "password": "secret"
+  }
+}
+```
 
 UDP 当前也只支持走这三类目标。
 
@@ -240,11 +285,19 @@ POST /selectors/proxy/direct
 `status --json` 当前和会话观测相关的字段口径是：
 
 - `bytes_up` / `bytes_down`
-  - 累计字节
+  - flow 视角累计应用层链路字节
+  - 包含 SOCKS5 / HTTP CONNECT 握手、SOCKS5 UDP 封包头和转发 payload
+  - 不包含 TCP/IP 包头、TCP 三次握手等内核网络栈开销
+  - TCP 按连接统计，SOCKS5 UDP 按目标 flow 统计
+- `inbound_rx_bytes` / `inbound_tx_bytes`
+  - 入站侧实际读写的应用层字节
+- `outbound_rx_bytes` / `outbound_tx_bytes`
+  - 出站侧实际读写的应用层字节
 - `throughput_up_bps` / `throughput_down_bps`
   - 1 秒采样吞吐
 - `recent_completed_sessions`
   - 最近完成会话的结算记录
+  - TCP 连接和 SOCKS5 UDP flow 使用同一套字段
 - `outbound_groups[*].selected`
   - 当前组选择的成员
 - `outbound_groups[*].latency_ms`
@@ -255,6 +308,8 @@ POST /selectors/proxy/direct
 ## 约束
 
 - `tag` 不能为空
+- SOCKS5 username/password 不能为空，且单项最多 255 字节
+- SOCKS5 出站认证必须同时配置 `username` 和 `password`，不能只配其中一个
 - 同类对象里的 `tag` 不能重复
 - 同一个 `address:port` 只能有一个入站
 - 同端口同时接 `socks5` 和 `http-connect` 时，用 `mixed`

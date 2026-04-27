@@ -21,7 +21,7 @@ Use `rustfmt` defaults. Keep module and function names in `snake_case`, types in
 
 ## Tests
 
-Keep tests in sibling `tests/` directories instead of inline `#[cfg(test)]` blocks unless the test is very local. Name tests by behavior. Update or add tests whenever config shape, protocol handling, routing, or logs change.
+Tests must live in the corresponding sibling `tests/` directories. Do not add inline `#[cfg(test)]` test modules to logic files. Name tests by behavior. Update or add tests whenever config shape, protocol handling, routing, runtime behavior, or logs change.
 
 ## Boundaries
 

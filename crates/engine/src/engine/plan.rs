@@ -33,12 +33,17 @@ impl EnginePlan {
             let kind = match &outbound.protocol {
                 OutboundProtocolConfig::Direct => TargetKind::Outbound(OutboundTarget::Direct),
                 OutboundProtocolConfig::Block => TargetKind::Outbound(OutboundTarget::Block),
-                OutboundProtocolConfig::Socks5 { server, port } => {
-                    TargetKind::Outbound(OutboundTarget::Socks5 {
-                        server: server.clone(),
-                        port: *port,
-                    })
-                }
+                OutboundProtocolConfig::Socks5 {
+                    server,
+                    port,
+                    username,
+                    password,
+                } => TargetKind::Outbound(OutboundTarget::Socks5 {
+                    server: server.clone(),
+                    port: *port,
+                    username: username.clone(),
+                    password: password.clone(),
+                }),
             };
 
             targets.push(TargetNode {
@@ -156,7 +161,12 @@ pub enum TargetKind {
 pub enum OutboundTarget {
     Direct,
     Block,
-    Socks5 { server: String, port: u16 },
+    Socks5 {
+        server: String,
+        port: u16,
+        username: Option<String>,
+        password: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

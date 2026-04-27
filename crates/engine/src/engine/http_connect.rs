@@ -12,6 +12,7 @@ use super::error::EngineError;
 use super::logging::{
     log_listener_connection_error, log_session_accepted, log_session_failed, log_session_finished,
 };
+use super::metered::MeteredStream;
 use super::runtime::{bind_listener, Engine};
 use super::stats::SessionOutcome;
 use super::stream::ClientStream;
@@ -102,12 +103,13 @@ impl Engine {
 
     pub(crate) async fn handle_http_connect_client<S>(
         &self,
-        mut client: S,
+        client: S,
         inbound_tag: &str,
     ) -> Result<(), EngineError>
     where
         S: ClientStream,
     {
+        let mut client = MeteredStream::new(client);
         let mut session = match self
             .protocols
             .http_connect_inbound
@@ -130,6 +132,7 @@ impl Engine {
         self.prepare_session(&mut session, inbound_tag);
         let mut session_handle = self.track_session(session.id);
         let started_at = Instant::now();
+        self.record_session_inbound_traffic(session.id, client.drain_traffic());
 
         let action = self.route_decision(&session.target);
         let resolved = match self.resolve_outbound(action) {
@@ -157,10 +160,11 @@ impl Engine {
                     .http_connect_inbound
                     .send_response(&mut client, HttpConnectResponse::ConnectionEstablished)
                     .await?;
+                let session_id = session.id;
+                self.record_session_inbound_traffic(session_id, client.drain_traffic());
                 let client = client.into_tokio_socket();
                 let upload_engine = self.clone();
                 let download_engine = self.clone();
-                let session_id = session.id;
 
                 match relay_bidirectional_metered(
                     client,
@@ -196,6 +200,7 @@ impl Engine {
                 self.set_session_outbound(&session);
                 self.reply_and_close_http(&mut client, HttpConnectResponse::Forbidden)
                     .await;
+                self.record_session_inbound_traffic(session.id, client.drain_traffic());
                 if let Some(record) = session_handle.finish(SessionOutcome::Blocked) {
                     log_session_finished(&record, None);
                 }
@@ -214,10 +219,11 @@ impl Engine {
                     .http_connect_inbound
                     .send_response(&mut client, HttpConnectResponse::ConnectionEstablished)
                     .await?;
+                let session_id = session.id;
+                self.record_session_inbound_traffic(session_id, client.drain_traffic());
                 let client = client.into_tokio_socket();
                 let upload_engine = self.clone();
                 let download_engine = self.clone();
-                let session_id = session.id;
 
                 match relay_bidirectional_metered(
                     client,
@@ -252,6 +258,7 @@ impl Engine {
             Err(failure) => {
                 self.reply_and_close_http(&mut client, HttpConnectResponse::BadGateway)
                     .await;
+                self.record_session_inbound_traffic(session.id, client.drain_traffic());
                 let record = session_handle.finish(SessionOutcome::Failed);
                 log_session_failed(
                     &session,

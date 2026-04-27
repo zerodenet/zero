@@ -8,6 +8,7 @@ mod enabled {
     use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
 
     use super::super::error::EngineError;
+    use super::super::metered::MeteredStream;
     use super::super::runtime::Engine;
     use super::super::stats::EngineStats;
 
@@ -35,17 +36,30 @@ mod enabled {
             tag: &str,
             server: &str,
             port: u16,
+            auth: Option<(&str, &str)>,
+            session_id: u64,
         ) -> Result<Self, EngineError> {
-            let mut control = engine
+            let control = engine
                 .protocols
                 .direct_outbound
                 .connect_host(server, port, &engine.resolver)
                 .await?;
+            let mut control = MeteredStream::new(control);
             let (relay_address, relay_port) = engine
                 .protocols
                 .socks5_outbound
-                .establish_udp_association(&mut control)
+                .establish_udp_association_with_auth(
+                    &mut control,
+                    auth.map(
+                        |(username, password)| zero_protocol_socks5::Socks5OutboundAuth {
+                            username,
+                            password,
+                        },
+                    ),
+                )
                 .await?;
+            engine.record_session_outbound_traffic(session_id, control.drain_traffic());
+            let control = control.into_inner();
             let relay_addr = engine
                 .protocols
                 .direct_outbound
@@ -112,10 +126,12 @@ mod enabled {
             target: &Address,
             port: u16,
             payload: &[u8],
-        ) -> Result<(), EngineError> {
+        ) -> Result<usize, EngineError> {
             let packet = zero_protocol_socks5::build_udp_packet(target, port, payload)?;
-            self.relay.send_to_addr(&packet, self.relay_addr).await?;
-            Ok(())
+            self.relay
+                .send_to_addr(&packet, self.relay_addr)
+                .await
+                .map_err(EngineError::from)
         }
 
         pub(crate) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
@@ -162,6 +178,8 @@ mod disabled {
             tag: &str,
             _server: &str,
             _port: u16,
+            _auth: Option<(&str, &str)>,
+            _session_id: u64,
         ) -> Result<Self, EngineError> {
             Err(EngineError::CompiledFeatureDisabled {
                 kind: "outbound",
@@ -190,7 +208,7 @@ mod disabled {
             _target: &Address,
             _port: u16,
             _payload: &[u8],
-        ) -> Result<(), EngineError> {
+        ) -> Result<usize, EngineError> {
             Err(EngineError::CompiledFeatureDisabled {
                 kind: "outbound",
                 tag: "socks5-upstream".to_owned(),

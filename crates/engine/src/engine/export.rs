@@ -218,7 +218,7 @@ impl From<&OutboundConfig> for OutboundExport {
                 server: None,
                 port: None,
             },
-            OutboundProtocolConfig::Socks5 { server, port } => Self {
+            OutboundProtocolConfig::Socks5 { server, port, .. } => Self {
                 tag: outbound.tag.clone(),
                 protocol: "socks5".to_owned(),
                 server: Some(server.clone()),
@@ -408,9 +408,9 @@ impl From<&Address> for AddressExport {
 
 fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
     match protocol {
-        InboundProtocolConfig::Socks5 => "socks5",
+        InboundProtocolConfig::Socks5 { .. } => "socks5",
         InboundProtocolConfig::HttpConnect => "http-connect",
-        InboundProtocolConfig::Mixed => "mixed",
+        InboundProtocolConfig::Mixed { .. } => "mixed",
     }
 }
 

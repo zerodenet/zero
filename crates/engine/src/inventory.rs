@@ -79,9 +79,9 @@ impl ProtocolInventory {
 
     pub fn supports_inbound_protocol(&self, protocol: &InboundProtocolConfig) -> bool {
         match protocol {
-            InboundProtocolConfig::Socks5 => cfg!(feature = "inbound-socks5"),
+            InboundProtocolConfig::Socks5 { .. } => cfg!(feature = "inbound-socks5"),
             InboundProtocolConfig::HttpConnect => cfg!(feature = "inbound-http-connect"),
-            InboundProtocolConfig::Mixed => cfg!(feature = "inbound-mixed"),
+            InboundProtocolConfig::Mixed { .. } => cfg!(feature = "inbound-mixed"),
         }
     }
 
@@ -95,17 +95,17 @@ impl ProtocolInventory {
 
 fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
     match protocol {
-        InboundProtocolConfig::Socks5 => "socks5",
+        InboundProtocolConfig::Socks5 { .. } => "socks5",
         InboundProtocolConfig::HttpConnect => "http-connect",
-        InboundProtocolConfig::Mixed => "mixed",
+        InboundProtocolConfig::Mixed { .. } => "mixed",
     }
 }
 
 fn inbound_protocol_feature(protocol: &InboundProtocolConfig) -> &'static str {
     match protocol {
-        InboundProtocolConfig::Socks5 => "inbound-socks5",
+        InboundProtocolConfig::Socks5 { .. } => "inbound-socks5",
         InboundProtocolConfig::HttpConnect => "inbound-http-connect",
-        InboundProtocolConfig::Mixed => "inbound-mixed",
+        InboundProtocolConfig::Mixed { .. } => "inbound-mixed",
     }
 }
 

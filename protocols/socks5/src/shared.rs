@@ -6,7 +6,11 @@ use zero_traits::AsyncSocket;
 
 pub(crate) const SOCKS5_VERSION: u8 = 0x05;
 pub(crate) const METHOD_NO_AUTH: u8 = 0x00;
+pub(crate) const METHOD_USERNAME_PASSWORD: u8 = 0x02;
 pub(crate) const METHOD_NOT_ACCEPTABLE: u8 = 0xff;
+pub(crate) const USERPASS_VERSION: u8 = 0x01;
+pub(crate) const USERPASS_STATUS_SUCCESS: u8 = 0x00;
+pub(crate) const USERPASS_STATUS_FAILURE: u8 = 0x01;
 
 pub(crate) const CMD_CONNECT: u8 = 0x01;
 pub(crate) const CMD_UDP_ASSOCIATE: u8 = 0x03;

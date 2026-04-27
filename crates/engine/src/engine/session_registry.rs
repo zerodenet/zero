@@ -45,6 +45,30 @@ impl SessionRegistry {
         }
     }
 
+    pub fn record_inbound_rx(&self, session_id: u64, bytes: u64) {
+        if let Some(session) = self.get(session_id) {
+            session.record_inbound_rx(bytes);
+        }
+    }
+
+    pub fn record_inbound_tx(&self, session_id: u64, bytes: u64) {
+        if let Some(session) = self.get(session_id) {
+            session.record_inbound_tx(bytes);
+        }
+    }
+
+    pub fn record_outbound_rx(&self, session_id: u64, bytes: u64) {
+        if let Some(session) = self.get(session_id) {
+            session.record_outbound_rx(bytes);
+        }
+    }
+
+    pub fn record_outbound_tx(&self, session_id: u64, bytes: u64) {
+        if let Some(session) = self.get(session_id) {
+            session.record_outbound_tx(bytes);
+        }
+    }
+
     pub fn finish(
         &self,
         session_id: u64,
@@ -134,24 +158,52 @@ impl ActiveSessionEntry {
     }
 
     fn record_upload(&self, bytes: u64) {
+        self.record_inbound_rx(bytes);
+        self.record_outbound_tx(bytes);
+    }
+
+    fn record_download(&self, bytes: u64) {
+        self.record_outbound_rx(bytes);
+        self.record_inbound_tx(bytes);
+    }
+
+    fn record_inbound_rx(&self, bytes: u64) {
         if bytes == 0 {
             return;
         }
 
         self.bytes_up.fetch_add(bytes, Ordering::Relaxed);
         self.inbound_rx_bytes.fetch_add(bytes, Ordering::Relaxed);
-        self.outbound_tx_bytes.fetch_add(bytes, Ordering::Relaxed);
         self.touch();
     }
 
-    fn record_download(&self, bytes: u64) {
+    fn record_inbound_tx(&self, bytes: u64) {
+        if bytes == 0 {
+            return;
+        }
+
+        self.bytes_down.fetch_add(bytes, Ordering::Relaxed);
+        self.inbound_tx_bytes.fetch_add(bytes, Ordering::Relaxed);
+        self.touch();
+    }
+
+    fn record_outbound_rx(&self, bytes: u64) {
         if bytes == 0 {
             return;
         }
 
         self.bytes_down.fetch_add(bytes, Ordering::Relaxed);
         self.outbound_rx_bytes.fetch_add(bytes, Ordering::Relaxed);
-        self.inbound_tx_bytes.fetch_add(bytes, Ordering::Relaxed);
+        self.touch();
+    }
+
+    fn record_outbound_tx(&self, bytes: u64) {
+        if bytes == 0 {
+            return;
+        }
+
+        self.bytes_up.fetch_add(bytes, Ordering::Relaxed);
+        self.outbound_tx_bytes.fetch_add(bytes, Ordering::Relaxed);
         self.touch();
     }
 

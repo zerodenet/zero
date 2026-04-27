@@ -4,6 +4,7 @@ mod export;
 #[cfg(feature = "inbound-http-connect")]
 mod http_connect;
 mod logging;
+mod metered;
 #[cfg(feature = "inbound-mixed")]
 mod mixed;
 mod outbound_group_state;
@@ -22,6 +23,8 @@ mod stream;
 mod tcp_outbound;
 mod tcp_relay;
 mod traffic_sampler;
+#[cfg(feature = "inbound-socks5")]
+mod udp_sessions;
 #[cfg(feature = "inbound-socks5")]
 mod upstream_socks5_udp;
 mod urltest;

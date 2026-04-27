@@ -4,8 +4,10 @@
 
 - `positioning.md`：这个项目到底是什么
 - `goals.md`：长期目标和阶段目标
+- `lifecycle.md`：外部请求进入内核后的处理生命周期
 - `architecture.md`：分层和依赖方向
 - `config.md`：当前配置格式
+- `control-plane.md`：控制面、观测模型和外部兼容边界
 - `modes-and-groups.md`：模式、节点组和手动选择的设计
 - `engine-plan.md`：`RuntimeConfig -> EnginePlan -> EngineState / view` 的内部执行计划设计
 - `logging.md`：日志约定

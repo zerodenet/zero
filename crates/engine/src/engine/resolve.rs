@@ -12,6 +12,8 @@ pub(crate) enum ResolvedLeafOutbound<'a> {
         tag: &'a str,
         server: &'a str,
         port: u16,
+        username: Option<&'a str>,
+        password: Option<&'a str>,
     },
 }
 
@@ -91,10 +93,17 @@ fn resolve_leaf_outbound<'a>(
     match outbound {
         OutboundTarget::Direct => ResolvedLeafOutbound::Direct { tag: Some(tag) },
         OutboundTarget::Block => ResolvedLeafOutbound::Block { tag: Some(tag) },
-        OutboundTarget::Socks5 { server, port } => ResolvedLeafOutbound::Socks5 {
+        OutboundTarget::Socks5 {
+            server,
+            port,
+            username,
+            password,
+        } => ResolvedLeafOutbound::Socks5 {
             tag,
             server,
             port: *port,
+            username: username.as_deref(),
+            password: password.as_deref(),
         },
     }
 }

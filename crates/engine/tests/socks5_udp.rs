@@ -9,8 +9,8 @@ use zero_engine::Engine;
 use zero_protocol_socks5::{build_udp_packet, parse_udp_packet};
 
 use support::{
-    free_port, free_udp_port, spawn_engine, spawn_http_probe_server, wait_for_group_selection,
-    wait_for_listener,
+    free_port, free_udp_port, spawn_engine, spawn_http_probe_server, wait_for,
+    wait_for_group_selection, wait_for_listener,
 };
 
 #[tokio::test]
@@ -131,7 +131,12 @@ async fn relays_udp_through_upstream_socks5_udp_associate() {
                 {{
                     "tag": "upstream-socks-in",
                     "listen": {{ "address": "127.0.0.1", "port": {upstream_port} }},
-                    "protocol": {{ "type": "socks5" }}
+                    "protocol": {{
+                        "type": "socks5",
+                        "users": [
+                            {{ "username": "upstream", "password": "secret" }}
+                        ]
+                    }}
                 }}
             ],
             "outbounds": [],
@@ -162,7 +167,9 @@ async fn relays_udp_through_upstream_socks5_udp_associate() {
                     "protocol": {{
                         "type": "socks5",
                         "server": "127.0.0.1",
-                        "port": {upstream_port}
+                        "port": {upstream_port},
+                        "username": "upstream",
+                        "password": "secret"
                     }}
                 }}
             ],
@@ -174,6 +181,7 @@ async fn relays_udp_through_upstream_socks5_udp_associate() {
     ))
     .expect("parse outer config");
     let outer_engine = Engine::new(outer_config).expect("build outer engine");
+    let outer_probe = outer_engine.clone();
     let outer_handle = spawn_engine(outer_engine);
 
     wait_for_listener(outer_port).await;
@@ -227,7 +235,39 @@ async fn relays_udp_through_upstream_socks5_udp_associate() {
     assert_eq!(response.port, echo_port);
     assert_eq!(response.payload, b"mesh");
 
+    wait_for(
+        "outer udp session to record upstream response bytes",
+        || {
+            outer_probe
+                .active_sessions()
+                .first()
+                .map(|session| {
+                    session.network == zero_core::Network::Udp
+                        && session.outbound_tag.as_deref() == Some("chain")
+                        && session.bytes_up == 71
+                        && session.bytes_down == 54
+                })
+                .unwrap_or(false)
+        },
+    )
+    .await;
+
     drop(control);
+    wait_for("outer udp chained session to complete", || {
+        outer_probe
+            .completed_sessions()
+            .first()
+            .map(|session| {
+                session.network == zero_core::Network::Udp
+                    && session.outbound_tag.as_deref() == Some("chain")
+                    && session.outcome.kind() == "chained-relayed"
+                    && session.bytes_up == 71
+                    && session.bytes_down == 54
+            })
+            .unwrap_or(false)
+    })
+    .await;
+
     outer_handle
         .shutdown()
         .await

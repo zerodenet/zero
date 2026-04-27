@@ -7,6 +7,9 @@ mod inbound;
 mod outbound;
 mod shared;
 
-pub use inbound::{Socks5Inbound, Socks5Request, Socks5UdpAssociateRequest};
-pub use outbound::Socks5Outbound;
+pub use inbound::{
+    NoSocks5PasswordAuth, Socks5Inbound, Socks5PasswordAuth, Socks5Request,
+    Socks5UdpAssociateRequest,
+};
+pub use outbound::{Socks5Outbound, Socks5OutboundAuth};
 pub use shared::{build_udp_packet, parse_udp_packet, Socks5Reply, Socks5UdpPacket};

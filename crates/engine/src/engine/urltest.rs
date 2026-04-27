@@ -211,7 +211,13 @@ impl Engine {
                 ResolvedLeafOutbound::Block { .. } => {
                     return Err(std::io::Error::other("block outbound is not probeable").into());
                 }
-                ResolvedLeafOutbound::Socks5 { server, port, .. } => {
+                ResolvedLeafOutbound::Socks5 {
+                    server,
+                    port,
+                    username,
+                    password,
+                    ..
+                } => {
                     let session = Session::new(
                         0,
                         Address::Domain(probe.host.clone()),
@@ -219,7 +225,7 @@ impl Engine {
                         Network::Tcp,
                         ProtocolType::Unknown,
                     );
-                    self.connect_via_socks5_upstream(&session, server, port)
+                    self.connect_via_socks5_upstream(&session, server, port, username.zip(password))
                         .await?
                 }
             };

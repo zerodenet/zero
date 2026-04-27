@@ -6,12 +6,19 @@ use zero_traits::AsyncSocket;
 
 use crate::shared::{
     read_address, read_exact, write_address, CMD_CONNECT, CMD_UDP_ASSOCIATE, METHOD_NO_AUTH,
-    REP_ADDRESS_TYPE_NOT_SUPPORTED, REP_COMMAND_NOT_SUPPORTED, REP_CONNECTION_NOT_ALLOWED,
-    REP_GENERAL_FAILURE, REP_HOST_UNREACHABLE, REP_SUCCEEDED, SOCKS5_VERSION,
+    METHOD_USERNAME_PASSWORD, REP_ADDRESS_TYPE_NOT_SUPPORTED, REP_COMMAND_NOT_SUPPORTED,
+    REP_CONNECTION_NOT_ALLOWED, REP_GENERAL_FAILURE, REP_HOST_UNREACHABLE, REP_SUCCEEDED,
+    SOCKS5_VERSION, USERPASS_STATUS_SUCCESS, USERPASS_VERSION,
 };
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Socks5Outbound;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Socks5OutboundAuth<'a> {
+    pub username: &'a str,
+    pub password: &'a str,
+}
 
 impl Socks5Outbound {
     pub fn protocol(&self) -> ProtocolType {
@@ -22,11 +29,23 @@ impl Socks5Outbound {
     where
         S: AsyncSocket,
     {
+        self.establish_tunnel_with_auth(stream, session, None).await
+    }
+
+    pub async fn establish_tunnel_with_auth<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+        auth: Option<Socks5OutboundAuth<'_>>,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
         if session.port == 0 {
             return Err(Error::Config("target port is required"));
         }
 
-        negotiate_no_auth(stream).await?;
+        negotiate_auth(stream, auth).await?;
 
         let request = build_connect_request(session)?;
         stream
@@ -45,7 +64,18 @@ impl Socks5Outbound {
     where
         S: AsyncSocket,
     {
-        negotiate_no_auth(stream).await?;
+        self.establish_udp_association_with_auth(stream, None).await
+    }
+
+    pub async fn establish_udp_association_with_auth<S>(
+        &self,
+        stream: &mut S,
+        auth: Option<Socks5OutboundAuth<'_>>,
+    ) -> Result<(Address, u16), Error>
+    where
+        S: AsyncSocket,
+    {
+        negotiate_auth(stream, auth).await?;
 
         let request = vec![
             SOCKS5_VERSION,
@@ -77,24 +107,101 @@ fn build_connect_request(session: &Session) -> Result<Vec<u8>, Error> {
     Ok(request)
 }
 
-async fn negotiate_no_auth<S>(stream: &mut S) -> Result<(), Error>
+async fn negotiate_auth<S>(
+    stream: &mut S,
+    auth: Option<Socks5OutboundAuth<'_>>,
+) -> Result<(), Error>
 where
     S: AsyncSocket,
 {
-    stream
-        .write_all(&[SOCKS5_VERSION, 0x01, METHOD_NO_AUTH])
-        .await
-        .map_err(|_| Error::Io("failed to write SOCKS5 outbound auth negotiation"))?;
+    match auth {
+        Some(auth) => {
+            validate_outbound_auth(auth)?;
+            stream
+                .write_all(&[SOCKS5_VERSION, 0x01, METHOD_USERNAME_PASSWORD])
+                .await
+                .map_err(|_| Error::Io("failed to write SOCKS5 outbound auth negotiation"))?;
+        }
+        None => {
+            stream
+                .write_all(&[SOCKS5_VERSION, 0x01, METHOD_NO_AUTH])
+                .await
+                .map_err(|_| Error::Io("failed to write SOCKS5 outbound auth negotiation"))?;
+        }
+    }
 
-    let mut auth = [0_u8; 2];
-    read_exact(stream, &mut auth).await?;
-    if auth[0] != SOCKS5_VERSION {
+    let mut selected = [0_u8; 2];
+    read_exact(stream, &mut selected).await?;
+    if selected[0] != SOCKS5_VERSION {
         return Err(Error::Protocol("invalid SOCKS5 outbound auth version"));
     }
-    if auth[1] != METHOD_NO_AUTH {
-        return Err(Error::Unsupported(
+
+    match (auth, selected[1]) {
+        (None, METHOD_NO_AUTH) => Ok(()),
+        (Some(auth), METHOD_USERNAME_PASSWORD) => {
+            authenticate_username_password(stream, auth).await
+        }
+        _ => Err(Error::Unsupported(
             "SOCKS5 upstream auth method is not supported",
+        )),
+    }
+}
+
+async fn authenticate_username_password<S>(
+    stream: &mut S,
+    auth: Socks5OutboundAuth<'_>,
+) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    let username = auth.username.as_bytes();
+    let password = auth.password.as_bytes();
+    let mut request = Vec::with_capacity(3 + username.len() + password.len());
+    request.push(USERPASS_VERSION);
+    request.push(username.len() as u8);
+    request.extend_from_slice(username);
+    request.push(password.len() as u8);
+    request.extend_from_slice(password);
+    stream
+        .write_all(&request)
+        .await
+        .map_err(|_| Error::Io("failed to write SOCKS5 username/password credentials"))?;
+
+    let mut response = [0_u8; 2];
+    read_exact(stream, &mut response).await?;
+    if response[0] != USERPASS_VERSION {
+        return Err(Error::Protocol(
+            "invalid SOCKS5 username/password auth response version",
         ));
+    }
+    if response[1] != USERPASS_STATUS_SUCCESS {
+        return Err(Error::Unsupported(
+            "SOCKS5 upstream username/password authentication failed",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_outbound_auth(auth: Socks5OutboundAuth<'_>) -> Result<(), Error> {
+    validate_credential_part(auth.username, "username")?;
+    validate_credential_part(auth.password, "password")
+}
+
+fn validate_credential_part(value: &str, field: &'static str) -> Result<(), Error> {
+    let len = value.len();
+    if len == 0 {
+        return Err(Error::Config(match field {
+            "username" => "SOCKS5 username must not be empty",
+            "password" => "SOCKS5 password must not be empty",
+            _ => "SOCKS5 credential must not be empty",
+        }));
+    }
+    if len > u8::MAX as usize {
+        return Err(Error::Config(match field {
+            "username" => "SOCKS5 username is too long",
+            "password" => "SOCKS5 password is too long",
+            _ => "SOCKS5 credential is too long",
+        }));
     }
 
     Ok(())
