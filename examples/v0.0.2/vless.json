@@ -1,0 +1,28 @@
+{
+  "inbounds": [
+    {
+      "tag": "vless-in",
+      "listen": {
+        "address": "127.0.0.1",
+        "port": 8443
+      },
+      "protocol": {
+        "type": "vless",
+        "users": [
+          {
+            "id": "11111111-2222-3333-4444-555555555555",
+            "credential_id": "local-vless-user",
+            "principal_key": "user:local"
+          }
+        ]
+      }
+    }
+  ],
+  "outbounds": [],
+  "route": {
+    "rules": [],
+    "final": {
+      "type": "direct"
+    }
+  }
+}

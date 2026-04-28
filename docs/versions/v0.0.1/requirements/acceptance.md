@@ -4,8 +4,8 @@
 
 ## 可用性
 
-1. [basic.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/basic.json) 启动后，用户能直接通过 `127.0.0.1:7890` 使用 `SOCKS5` 或 `HTTP CONNECT`
-2. [server-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/server-socks5.json) 启动后，能作为远端 `SOCKS5` 节点被另一个 `zero` 的链式出站接入
+1. [basic.json](../../../../examples/v0.0.1/basic.json) 启动后，用户能直接通过 `127.0.0.1:7890` 使用 `SOCKS5` 或 `HTTP CONNECT`
+2. [server-socks5.json](../../../../examples/v0.0.1/server-socks5.json) 启动后，能作为远端 `SOCKS5` 节点被另一个 `zero` 的链式出站接入
 3. 同端口多协议入站必须可用，当前至少覆盖同一监听口下的 `SOCKS5` 和 `HTTP CONNECT`
 
 ## 功能

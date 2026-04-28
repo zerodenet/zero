@@ -12,6 +12,7 @@ pub enum Network {
 pub enum ProtocolType {
     Socks5,
     HttpConnect,
+    Vless,
     Unknown,
 }
 

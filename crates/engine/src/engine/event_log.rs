@@ -197,6 +197,7 @@ fn protocol_name(protocol: ProtocolType) -> &'static str {
     match protocol {
         ProtocolType::Socks5 => "socks5",
         ProtocolType::HttpConnect => "http-connect",
+        ProtocolType::Vless => "vless",
         ProtocolType::Unknown => "unknown",
     }
 }

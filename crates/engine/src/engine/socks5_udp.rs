@@ -525,6 +525,11 @@ impl Engine {
                     outbound_tx_bytes: sent as u64,
                 })
             }
+            ResolvedLeafOutbound::Vless { server, port, .. } => Err(UdpCandidateFailure {
+                stage: "udp_vless_outbound",
+                error: zero_core::Error::Unsupported("VLESS UDP outbound is not supported").into(),
+                upstream: Some((server.to_owned(), port)),
+            }),
         }
     }
 

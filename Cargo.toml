@@ -13,12 +13,16 @@ full = [
     "inbound-socks5",
     "inbound-http-connect",
     "inbound-mixed",
+    "inbound-vless",
     "outbound-socks5",
+    "outbound-vless",
 ]
 inbound-socks5 = ["zero-engine/inbound-socks5"]
 inbound-http-connect = ["zero-engine/inbound-http-connect"]
 inbound-mixed = ["zero-engine/inbound-mixed"]
+inbound-vless = ["zero-engine/inbound-vless"]
 outbound-socks5 = ["zero-engine/outbound-socks5"]
+outbound-vless = ["zero-engine/outbound-vless"]
 status-api = []
 event-dispatcher = ["dep:zero-connector", "zero-connector/event-dispatcher"]
 sink-jsonl = ["event-dispatcher", "zero-connector/sink-jsonl"]
@@ -35,6 +39,7 @@ members = [
     "crates/platform/tokio",
     "protocols/socks5",
     "protocols/http-connect",
+    "protocols/vless",
     "crates/engine",
 ]
 resolver = "2"

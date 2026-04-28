@@ -308,6 +308,26 @@ impl Engine {
                         });
                     }
                 }
+                InboundProtocolConfig::Vless { .. } => {
+                    #[cfg(feature = "inbound-vless")]
+                    {
+                        let engine = self.clone();
+                        let inbound = inbound.clone();
+                        let shutdown = shutdown_rx.clone();
+                        listeners.spawn(async move {
+                            engine.run_vless_listener(inbound, shutdown).await
+                        });
+                    }
+                    #[cfg(not(feature = "inbound-vless"))]
+                    {
+                        return Err(EngineError::CompiledFeatureDisabled {
+                            kind: "inbound",
+                            tag: inbound.tag.clone(),
+                            protocol: "vless",
+                            feature: "inbound-vless",
+                        });
+                    }
+                }
             }
         }
 
@@ -461,6 +481,47 @@ impl Engine {
         })
     }
 
+    #[cfg(feature = "outbound-vless")]
+    pub(crate) async fn connect_via_vless_upstream(
+        &self,
+        session: &zero_core::Session,
+        server: &str,
+        port: u16,
+        id: &str,
+    ) -> Result<TokioSocket, EngineError> {
+        let id = zero_protocol_vless::parse_uuid(id)?;
+        let upstream = self
+            .protocols
+            .direct_outbound
+            .connect_host(server, port, &self.resolver)
+            .await?;
+        let mut upstream = super::metered::MeteredStream::new(upstream);
+
+        self.protocols
+            .vless_outbound
+            .establish_tcp_tunnel(&mut upstream, session, &id)
+            .await?;
+        self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
+
+        Ok(upstream.into_inner())
+    }
+
+    #[cfg(not(feature = "outbound-vless"))]
+    pub(crate) async fn connect_via_vless_upstream(
+        &self,
+        _session: &zero_core::Session,
+        _server: &str,
+        _port: u16,
+        _id: &str,
+    ) -> Result<TokioSocket, EngineError> {
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "outbound",
+            tag: "vless-upstream".to_owned(),
+            protocol: "vless",
+            feature: "outbound-vless",
+        })
+    }
+
     pub(crate) fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {
         session.id = self.next_session_id.fetch_add(1, Ordering::Relaxed);
         session.inbound_tag = Some(inbound_tag.to_owned());
@@ -551,6 +612,7 @@ impl Engine {
                 zero_config::OutboundProtocolConfig::Direct => "direct",
                 zero_config::OutboundProtocolConfig::Block => "block",
                 zero_config::OutboundProtocolConfig::Socks5 { .. } => "socks5",
+                zero_config::OutboundProtocolConfig::Vless { .. } => "vless",
             })
     }
 }

@@ -233,6 +233,12 @@ impl From<&OutboundConfig> for OutboundExport {
                 server: Some(server.clone()),
                 port: Some(*port),
             },
+            OutboundProtocolConfig::Vless { server, port, .. } => Self {
+                tag: outbound.tag.clone(),
+                protocol: "vless".to_owned(),
+                server: Some(server.clone()),
+                port: Some(*port),
+            },
         }
     }
 }
@@ -432,6 +438,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::Socks5 { .. } => "socks5",
         InboundProtocolConfig::HttpConnect => "http-connect",
         InboundProtocolConfig::Mixed { .. } => "mixed",
+        InboundProtocolConfig::Vless { .. } => "vless",
     }
 }
 
@@ -439,6 +446,7 @@ fn protocol_name(protocol: ProtocolType) -> &'static str {
     match protocol {
         ProtocolType::Socks5 => "socks5",
         ProtocolType::HttpConnect => "http-connect",
+        ProtocolType::Vless => "vless",
         ProtocolType::Unknown => "unknown",
     }
 }

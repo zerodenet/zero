@@ -19,6 +19,12 @@ pub(crate) enum EstablishedTcpOutbound {
         port: u16,
         upstream: TokioSocket,
     },
+    Vless {
+        tag: String,
+        server: String,
+        port: u16,
+        upstream: TokioSocket,
+    },
 }
 
 pub(crate) struct TcpOutboundFailure {
@@ -99,6 +105,29 @@ impl Engine {
                     }),
                     Err(error) => Err(TcpOutboundFailure {
                         stage: "connect_upstream_socks5",
+                        error,
+                        upstream_endpoint: Some((server.to_owned(), port)),
+                    }),
+                }
+            }
+            ResolvedLeafOutbound::Vless {
+                tag,
+                server,
+                port,
+                id,
+            } => {
+                match self
+                    .connect_via_vless_upstream(session, server, port, id)
+                    .await
+                {
+                    Ok(upstream) => Ok(EstablishedTcpOutbound::Vless {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        upstream,
+                    }),
+                    Err(error) => Err(TcpOutboundFailure {
+                        stage: "connect_upstream_vless",
                         error,
                         upstream_endpoint: Some((server.to_owned(), port)),
                     }),

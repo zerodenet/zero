@@ -228,6 +228,19 @@ impl Engine {
                     self.connect_via_socks5_upstream(&session, server, port, username.zip(password))
                         .await?
                 }
+                ResolvedLeafOutbound::Vless {
+                    server, port, id, ..
+                } => {
+                    let session = Session::new(
+                        0,
+                        Address::Domain(probe.host.clone()),
+                        probe.port,
+                        Network::Tcp,
+                        ProtocolType::Unknown,
+                    );
+                    self.connect_via_vless_upstream(&session, server, port, id)
+                        .await?
+                }
             };
 
             socket

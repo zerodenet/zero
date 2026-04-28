@@ -44,6 +44,13 @@ impl EnginePlan {
                     username: username.clone(),
                     password: password.clone(),
                 }),
+                OutboundProtocolConfig::Vless { server, port, id } => {
+                    TargetKind::Outbound(OutboundTarget::Vless {
+                        server: server.clone(),
+                        port: *port,
+                        id: id.clone(),
+                    })
+                }
             };
 
             targets.push(TargetNode {
@@ -166,6 +173,11 @@ pub enum OutboundTarget {
         port: u16,
         username: Option<String>,
         password: Option<String>,
+    },
+    Vless {
+        server: String,
+        port: u16,
+        id: String,
     },
 }
 

@@ -212,6 +212,12 @@ impl Engine {
                 server,
                 port,
                 upstream,
+            })
+            | Ok(EstablishedTcpOutbound::Vless {
+                tag,
+                server,
+                port,
+                upstream,
             }) => {
                 session.outbound_tag = Some(tag);
                 self.set_session_outbound(&session);

@@ -66,13 +66,13 @@ target\release\zero.exe status --json examples\v0.0.1\basic.json
 
 ## 示例配置
 
-- [basic.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/basic.json)
-- [mixed.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/mixed.json)
-- [blocked-route.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/blocked-route.json)
-- [chained-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/chained-socks5.json)
-- [global-selector.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/global-selector.json)
-- [rule-set-files.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/rule-set-files.json)
-- [server-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/server-socks5.json)
-- [udp-socks5.json](/C:/Users/Administrator/develop/rs/zero-new/examples/v0.0.1/udp-socks5.json)
+- [basic.json](../../../examples/v0.0.1/basic.json)
+- [mixed.json](../../../examples/v0.0.1/mixed.json)
+- [blocked-route.json](../../../examples/v0.0.1/blocked-route.json)
+- [chained-socks5.json](../../../examples/v0.0.1/chained-socks5.json)
+- [global-selector.json](../../../examples/v0.0.1/global-selector.json)
+- [rule-set-files.json](../../../examples/v0.0.1/rule-set-files.json)
+- [server-socks5.json](../../../examples/v0.0.1/server-socks5.json)
+- [udp-socks5.json](../../../examples/v0.0.1/udp-socks5.json)
 
-如果想看这一版没做什么，直接看 [known-limitations.md](/C:/Users/Administrator/develop/rs/zero-new/docs/versions/v0.0.1/known-limitations.md)。
+如果想看这一版没做什么，直接看 [known-limitations.md](known-limitations.md)。

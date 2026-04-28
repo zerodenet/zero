@@ -108,6 +108,86 @@ fn parses_config_into_adts() {
 }
 
 #[test]
+fn parses_vless_inbound_and_outbound_config() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vless-in",
+                    "listen": { "address": "127.0.0.1", "port": 1082 },
+                    "protocol": {
+                        "type": "vless",
+                        "users": [
+                            {
+                                "id": "11111111-2222-3333-4444-555555555555",
+                                "credential_id": "node-user-1",
+                                "principal_key": "user:10001"
+                            }
+                        ]
+                    }
+                }
+            ],
+            "outbounds": [
+                {
+                    "tag": "vless-chain",
+                    "protocol": {
+                        "type": "vless",
+                        "server": "127.0.0.1",
+                        "port": 2081,
+                        "id": "11111111-2222-3333-4444-555555555555"
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "vless-chain" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    match &config.inbounds[0].protocol {
+        InboundProtocolConfig::Vless { users } => {
+            assert_eq!(users[0].credential_id.as_deref(), Some("node-user-1"));
+            assert_eq!(users[0].principal_key.as_deref(), Some("user:10001"));
+        }
+        _ => panic!("expected vless inbound"),
+    }
+    assert_eq!(config.inbounds[0].protocol.vless_users().len(), 1);
+    assert!(matches!(
+        config.outbounds[0].protocol,
+        OutboundProtocolConfig::Vless { .. }
+    ));
+}
+
+#[test]
+fn rejects_invalid_vless_uuid() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vless-in",
+                    "listen": { "address": "127.0.0.1", "port": 1082 },
+                    "protocol": {
+                        "type": "vless",
+                        "users": [
+                            { "id": "not-a-uuid" }
+                        ]
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidInbound(_)));
+}
+
+#[test]
 fn parses_api_event_sinks_and_control_config() {
     let config = RuntimeConfig::parse(
         r#"{

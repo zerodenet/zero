@@ -4,7 +4,7 @@ use crate::{
     ApiConfig, ConfigError, ControlApiConfig, EventSinkConfig, InboundProtocolConfig, ModeConfig,
     OutboundGroupConfig, OutboundGroupKind, OutboundProtocolConfig, RouteActionConfig, RouteConfig,
     RouteRuleConfig, RouteRuleSetConfig, RuleConditionConfig, RuleSetSourceType, RuntimeConfig,
-    RuntimeOptionsConfig, Socks5UserConfig,
+    RuntimeOptionsConfig, Socks5UserConfig, VlessUserConfig,
 };
 
 impl RuntimeConfig {
@@ -427,6 +427,7 @@ fn validate_inbound_protocol(protocol: &InboundProtocolConfig) -> Result<(), Con
             validate_socks5_users("mixed inbound socks5", socks5_users)
         }
         InboundProtocolConfig::HttpConnect => Ok(()),
+        InboundProtocolConfig::Vless { users } => validate_vless_users(users),
     }
 }
 
@@ -435,8 +436,64 @@ fn validate_outbound_protocol(protocol: &OutboundProtocolConfig) -> Result<(), C
         OutboundProtocolConfig::Socks5 {
             username, password, ..
         } => validate_socks5_outbound_auth(username.as_deref(), password.as_deref()),
+        OutboundProtocolConfig::Vless { server, port, id } => {
+            validate_outbound_endpoint("vless", server, *port)?;
+            validate_uuid_literal(id).map_err(|message| {
+                ConfigError::InvalidOutbound(format!("`vless` outbound `id` {message}"))
+            })
+        }
         OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => Ok(()),
     }
+}
+
+fn validate_vless_users(users: &[VlessUserConfig]) -> Result<(), ConfigError> {
+    if users.is_empty() {
+        return Err(ConfigError::InvalidInbound(
+            "`vless` inbound requires at least one user".to_owned(),
+        ));
+    }
+
+    let mut seen = HashSet::new();
+    for user in users {
+        validate_uuid_literal(&user.id).map_err(|message| {
+            ConfigError::InvalidInbound(format!("`vless` inbound user `id` {message}"))
+        })?;
+
+        if !seen.insert(normalize_uuid_key(&user.id)) {
+            return Err(ConfigError::InvalidInbound(
+                "`vless` inbound contains duplicate user id".to_owned(),
+            ));
+        }
+
+        if let Some(credential_id) = &user.credential_id {
+            validate_inbound_optional_non_empty("vless credential_id", credential_id)?;
+        }
+        if let Some(principal_key) = &user.principal_key {
+            validate_inbound_optional_non_empty("vless principal_key", principal_key)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_outbound_endpoint(
+    protocol: &'static str,
+    server: &str,
+    port: u16,
+) -> Result<(), ConfigError> {
+    if server.trim().is_empty() {
+        return Err(ConfigError::InvalidOutbound(format!(
+            "`{protocol}` outbound requires a non-empty `server`"
+        )));
+    }
+
+    if port == 0 {
+        return Err(ConfigError::InvalidOutbound(format!(
+            "`{protocol}` outbound `port` must be greater than 0"
+        )));
+    }
+
+    Ok(())
 }
 
 fn validate_socks5_users(
@@ -514,6 +571,53 @@ fn validate_socks5_credential_part(
     }
 
     Ok(())
+}
+
+fn validate_inbound_optional_non_empty(
+    field: &'static str,
+    value: &str,
+) -> Result<(), ConfigError> {
+    if value.trim().is_empty() {
+        return Err(ConfigError::InvalidInbound(format!(
+            "`{field}` must not be empty"
+        )));
+    }
+
+    Ok(())
+}
+
+fn validate_uuid_literal(value: &str) -> Result<(), &'static str> {
+    let value = value.trim();
+    let mut digits = 0;
+
+    for (index, byte) in value.bytes().enumerate() {
+        if byte == b'-' {
+            if value.len() != 36 || !matches!(index, 8 | 13 | 18 | 23) {
+                return Err("must be a canonical UUID or 32 hex digits");
+            }
+            continue;
+        }
+
+        if !byte.is_ascii_hexdigit() {
+            return Err("must contain only hex digits");
+        }
+
+        digits += 1;
+    }
+
+    if digits == 32 {
+        Ok(())
+    } else {
+        Err("must contain 32 hex digits")
+    }
+}
+
+fn normalize_uuid_key(value: &str) -> String {
+    value
+        .bytes()
+        .filter(|byte| *byte != b'-')
+        .map(|byte| char::from(byte.to_ascii_lowercase()))
+        .collect()
 }
 
 fn validate_route_target_tag(tag: &str, seen: &mut HashSet<String>) -> Result<(), ConfigError> {

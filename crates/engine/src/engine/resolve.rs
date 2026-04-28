@@ -15,6 +15,12 @@ pub(crate) enum ResolvedLeafOutbound<'a> {
         username: Option<&'a str>,
         password: Option<&'a str>,
     },
+    Vless {
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        id: &'a str,
+    },
 }
 
 pub(crate) enum ResolvedOutbound<'a> {
@@ -104,6 +110,12 @@ fn resolve_leaf_outbound<'a>(
             port: *port,
             username: username.as_deref(),
             password: password.as_deref(),
+        },
+        OutboundTarget::Vless { server, port, id } => ResolvedLeafOutbound::Vless {
+            tag,
+            server,
+            port: *port,
+            id,
         },
     }
 }

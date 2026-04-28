@@ -31,6 +31,8 @@ mod udp_sessions;
 mod upstream_socks5_udp;
 mod urltest;
 mod view;
+#[cfg(feature = "inbound-vless")]
+mod vless;
 
 pub use completed_sessions::CompletedSessionRecord;
 pub use error::EngineError;

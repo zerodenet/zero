@@ -177,6 +177,8 @@ pub enum InboundProtocolConfig {
         #[serde(default, alias = "users")]
         socks5_users: Vec<Socks5UserConfig>,
     },
+    #[serde(rename = "vless")]
+    Vless { users: Vec<VlessUserConfig> },
 }
 
 impl InboundProtocolConfig {
@@ -184,10 +186,16 @@ impl InboundProtocolConfig {
         match self {
             Self::Socks5 { users } => users,
             Self::Mixed { socks5_users } => socks5_users,
-            Self::HttpConnect => &[],
+            Self::HttpConnect | Self::Vless { .. } => &[],
         }
     }
 
+    pub fn vless_users(&self) -> &[VlessUserConfig] {
+        match self {
+            Self::Vless { users } => users,
+            _ => &[],
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -197,6 +205,15 @@ pub struct Socks5UserConfig {
     pub password: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VlessUserConfig {
+    pub id: String,
+    #[serde(default)]
+    pub credential_id: Option<String>,
+    #[serde(default)]
+    pub principal_key: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -226,6 +243,12 @@ pub enum OutboundProtocolConfig {
         username: Option<String>,
         #[serde(default)]
         password: Option<String>,
+    },
+    #[serde(rename = "vless")]
+    Vless {
+        server: String,
+        port: u16,
+        id: String,
     },
 }
 

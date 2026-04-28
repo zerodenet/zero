@@ -9,7 +9,8 @@ Zero 是一个用 Rust 编写的网络代理项目。
 - `SOCKS5` 入站
 - `HTTP CONNECT` 入站
 - `mixed` 同端口多协议入站
-- `direct` / `block` / 上游 `SOCKS5` 出站
+- `VLESS` TCP 入站
+- `direct` / `block` / 上游 `SOCKS5` / 上游 `VLESS` 出站
 - `SOCKS5 UDP ASSOCIATE`
 - `mode = rule | global | direct`
 - `selector` / `fallback` / `urltest` 出站组
@@ -81,6 +82,7 @@ make test
 - `examples/v0.0.2/fallback.json`
 - `examples/v0.0.2/nested-groups.json`
 - `examples/v0.0.2/urltest.json`
+- `examples/v0.0.2/vless.json`
 
 ## 常用命令
 
@@ -107,7 +109,9 @@ cargo build --release
 - `inbound-socks5`
 - `inbound-http-connect`
 - `inbound-mixed`
+- `inbound-vless`
 - `outbound-socks5`
+- `outbound-vless`
 - `status-api`
 
 默认构建等价于：
@@ -141,11 +145,11 @@ cargo build --no-default-features --features inbound-socks5,outbound-socks5
 
 ## 文档入口
 
-- [配置说明](/C:/Users/Administrator/develop/rs/zero-new/docs/project/config.md)
-- [模式和节点组](/C:/Users/Administrator/develop/rs/zero-new/docs/project/modes-and-groups.md)
-- [日志说明](/C:/Users/Administrator/develop/rs/zero-new/docs/project/logging.md)
-- [版本索引](/C:/Users/Administrator/develop/rs/zero-new/docs/versions/README.md)
-- [v0.0.2](/C:/Users/Administrator/develop/rs/zero-new/docs/versions/v0.0.2/README.md)
+- [配置说明](docs/project/config.md)
+- [模式和节点组](docs/project/modes-and-groups.md)
+- [日志说明](docs/project/logging.md)
+- [版本索引](docs/versions/README.md)
+- [v0.0.2](docs/versions/v0.0.2/README.md)
 
 ## 当前状态
 
