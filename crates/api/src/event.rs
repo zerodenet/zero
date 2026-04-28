@@ -1,0 +1,97 @@
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+
+use crate::EVENT_SCHEMA_VERSION;
+
+pub mod event_type {
+    pub const FLOW_STARTED: &str = "flow.started";
+    pub const FLOW_UPDATED: &str = "flow.updated";
+    pub const FLOW_COMPLETED: &str = "flow.completed";
+
+    pub const POLICY_SELECTED: &str = "policy.selected";
+    pub const POLICY_PROBE_COMPLETED: &str = "policy.probe.completed";
+
+    pub const STATS_SAMPLED: &str = "stats.sampled";
+
+    pub const CONFIG_CHANGED: &str = "config.changed";
+
+    pub const ENGINE_STARTED: &str = "engine.started";
+    pub const ENGINE_STOPPED: &str = "engine.stopped";
+    pub const ENGINE_WARNING: &str = "engine.warning";
+
+    pub const ALL: &[&str] = &[
+        FLOW_STARTED,
+        FLOW_UPDATED,
+        FLOW_COMPLETED,
+        POLICY_SELECTED,
+        POLICY_PROBE_COMPLETED,
+        STATS_SAMPLED,
+        CONFIG_CHANGED,
+        ENGINE_STARTED,
+        ENGINE_STOPPED,
+        ENGINE_WARNING,
+    ];
+
+    pub fn is_known(value: &str) -> bool {
+        ALL.contains(&value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ApiEvent<P = serde_json::Value> {
+    pub schema_version: String,
+    pub event_id: String,
+    pub event_type: String,
+    pub occurred_at_unix_ms: u64,
+    pub source_id: Option<String>,
+    pub sequence: Option<u64>,
+    pub principal_key: Option<String>,
+    pub labels: BTreeMap<String, String>,
+    pub payload: P,
+}
+
+impl<P> ApiEvent<P> {
+    pub fn new(
+        event_id: impl Into<String>,
+        event_type: impl Into<String>,
+        occurred_at_unix_ms: u64,
+        payload: P,
+    ) -> Self {
+        Self {
+            schema_version: EVENT_SCHEMA_VERSION.to_owned(),
+            event_id: event_id.into(),
+            event_type: event_type.into(),
+            occurred_at_unix_ms,
+            source_id: None,
+            sequence: None,
+            principal_key: None,
+            labels: BTreeMap::new(),
+            payload,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventFilter {
+    pub event_types: Vec<String>,
+    pub principal_keys: Vec<String>,
+    pub inbound_tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublishResult {
+    pub delivered: bool,
+    pub retryable: bool,
+    pub message: Option<String>,
+}
+
+impl PublishResult {
+    pub fn delivered() -> Self {
+        Self {
+            delivered: true,
+            retryable: false,
+            message: None,
+        }
+    }
+}

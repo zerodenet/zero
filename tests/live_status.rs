@@ -7,7 +7,10 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use support::{free_port, http_get, http_post, remove_temp_file, wait_for_port, write_temp_config};
+use support::{
+    free_port, http_get, http_post, http_post_json, remove_temp_file, wait_for_port,
+    write_temp_config,
+};
 
 #[test]
 fn local_status_listener_exposes_live_runtime_view() {
@@ -283,4 +286,158 @@ fn local_status_listener_can_switch_selector_group() {
     let _ = child.wait();
     let _ = echo_thread.join();
     remove_temp_file(&config_path);
+}
+
+#[test]
+fn local_status_commands_endpoint_selects_policy() {
+    let socks_port = free_port();
+    let status_port = free_port();
+
+    let config = format!(
+        r#"{{
+            "inbounds": [
+                {{
+                    "tag": "socks-in",
+                    "listen": {{ "address": "127.0.0.1", "port": {socks_port} }},
+                    "protocol": {{ "type": "socks5" }}
+                }}
+            ],
+            "outbounds": [
+                {{
+                    "tag": "direct",
+                    "protocol": {{ "type": "direct" }}
+                }},
+                {{
+                    "tag": "block",
+                    "protocol": {{ "type": "block" }}
+                }}
+            ],
+            "outbound_groups": [
+                {{
+                    "tag": "proxy",
+                    "type": "selector",
+                    "outbounds": ["block", "direct"],
+                    "selected": "block"
+                }}
+            ],
+            "mode": {{
+                "type": "global",
+                "outbound": "proxy"
+            }},
+            "route": {{
+                "rules": [],
+                "final": {{ "type": "reject" }}
+            }}
+        }}"#
+    );
+    let config_path = write_temp_config(&config, "commands-control");
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_zero"))
+        .args([
+            "run",
+            "--status-listen",
+            &format!("127.0.0.1:{status_port}"),
+            config_path.to_str().expect("utf-8 config path"),
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn zero run");
+
+    wait_for_port(status_port);
+    wait_for_port(socks_port);
+
+    let command = r#"{
+        "method": "policies.select",
+        "params": {
+            "policy_tag": "proxy",
+            "target_tag": "direct"
+        }
+    }"#;
+    let response = http_post_json(status_port, "/api/v1/commands", command);
+    assert!(response.starts_with("HTTP/1.1 200 OK"));
+    let body = response.split("\r\n\r\n").nth(1).expect("http body");
+    let body: serde_json::Value = serde_json::from_str(body).expect("parse command response");
+    assert_eq!(body["accepted"], true);
+    assert_eq!(body["result"]["selected"], "direct");
+
+    let config_after = http_get(status_port, "/api/v1/config");
+    let config_after_body = config_after.split("\r\n\r\n").nth(1).expect("http body");
+    let config_after_json: serde_json::Value =
+        serde_json::from_str(config_after_body).expect("parse config json");
+    assert_eq!(
+        config_after_json["outbound_groups"][0]["selected"],
+        "direct"
+    );
+
+    child.kill().expect("kill zero process");
+    let _ = child.wait();
+    remove_temp_file(&config_path);
+}
+
+#[test]
+fn configured_control_api_requires_api_key() {
+    let socks_port = free_port();
+    let status_port = free_port();
+
+    let config = format!(
+        r#"{{
+            "api": {{
+                "control": {{
+                    "enabled": true,
+                    "listen": {{ "address": "127.0.0.1", "port": {status_port} }},
+                    "api_key_env": "ZERO_NODE_API_KEY"
+                }}
+            }},
+            "inbounds": [
+                {{
+                    "tag": "socks-in",
+                    "listen": {{ "address": "127.0.0.1", "port": {socks_port} }},
+                    "protocol": {{ "type": "socks5" }}
+                }}
+            ],
+            "route": {{
+                "rules": [],
+                "final": {{ "type": "direct" }}
+            }}
+        }}"#
+    );
+    let config_path = write_temp_config(&config, "configured-control");
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_zero"))
+        .args(["run", config_path.to_str().expect("utf-8 config path")])
+        .env("ZERO_NODE_API_KEY", "node-secret")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn zero run");
+
+    wait_for_port(status_port);
+    wait_for_port(socks_port);
+
+    let unauthorized = http_get(status_port, "/api/v1/status");
+    assert!(unauthorized.starts_with("HTTP/1.1 401 Unauthorized"));
+
+    let authorized = http_get_with_api_key(status_port, "/api/v1/status", "node-secret");
+    assert!(authorized.starts_with("HTTP/1.1 200 OK"));
+
+    child.kill().expect("kill zero process");
+    let _ = child.wait();
+    remove_temp_file(&config_path);
+}
+
+fn http_get_with_api_key(port: u16, path: &str, api_key: &str) -> String {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect status port");
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {api_key}\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .expect("write http request");
+
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .expect("read http response");
+    response
 }

@@ -37,38 +37,128 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
 async fn run_command(config_path: &str, status_listen: Option<&str>) -> Result<(), Box<dyn Error>> {
     let engine = Engine::from_path(config_path)?;
 
+    #[cfg(not(feature = "status-api"))]
+    ensure_status_api_not_configured(&engine, status_listen)?;
+
+
     tracing::info!(config = %config_path, "loaded engine configuration");
 
-    if let Some(status_listen) = status_listen {
-        #[cfg(feature = "status-api")]
-        {
+    #[cfg(feature = "status-api")]
+    {
+        if let Some(status) = status_server_spec(&engine, status_listen)? {
             let probe = engine.clone();
-            let status_server = status_server::spawn_status_server(probe, status_listen).await?;
+            let status_server =
+                status_server::spawn_status_server(probe, &status.listen, status.auth).await?;
             let running = engine.spawn();
 
-            match tokio::signal::ctrl_c().await {
-                Ok(()) => tracing::info!("shutdown signal received"),
-                Err(error) => {
-                    tracing::warn!(error = %error, "failed to listen for ctrl-c; stopping engine")
-                }
-            }
+            wait_for_shutdown_signal().await;
 
             status_server.shutdown().await?;
             running.shutdown().await?;
+
+            return Ok(());
         }
-        #[cfg(not(feature = "status-api"))]
-        {
-            return Err(std::io::Error::other(format!(
-                "`--status-listen {status_listen}` requires Cargo feature `status-api`"
-            ))
-            .into());
-        }
-    } else {
-        engine.run().await?;
+    }
+
+    engine.run().await?;
+
+    Ok(())
+}
+
+#[cfg(feature = "status-api")]
+struct StatusServerSpec {
+    listen: String,
+    auth: Option<status_server::StatusServerAuth>,
+}
+
+#[cfg(feature = "status-api")]
+fn status_server_spec(
+    engine: &Engine,
+    cli_listen: Option<&str>,
+) -> Result<Option<StatusServerSpec>, Box<dyn Error>> {
+    let control = &engine.config().api.control;
+
+    if cli_listen.is_some() && control.enabled {
+        return Err(std::io::Error::other(
+            "use either `--status-listen` or `api.control`, not both",
+        )
+        .into());
+    }
+
+    if let Some(listen) = cli_listen {
+        return Ok(Some(StatusServerSpec {
+            listen: listen.to_owned(),
+            auth: None,
+        }));
+    }
+
+    if !control.enabled {
+        return Ok(None);
+    }
+
+    let listen = control
+        .listen
+        .as_ref()
+        .expect("config validation requires api.control.listen");
+    let key = config_api_key(control.api_key.as_ref(), control.api_key_env.as_ref())?;
+
+    Ok(Some(StatusServerSpec {
+        listen: format!("{}:{}", listen.address, listen.port),
+        auth: Some(status_server::StatusServerAuth::new(key)),
+    }))
+}
+
+#[cfg(not(feature = "status-api"))]
+fn ensure_status_api_not_configured(
+    engine: &Engine,
+    cli_listen: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
+    if let Some(status_listen) = cli_listen {
+        return Err(std::io::Error::other(format!(
+            "`--status-listen {status_listen}` requires Cargo feature `status-api`"
+        ))
+        .into());
+    }
+
+    if engine.config().api.control.enabled {
+        return Err(std::io::Error::other(
+            "`api.control.enabled` requires Cargo feature `status-api`",
+        )
+        .into());
     }
 
     Ok(())
 }
+
+#[cfg(feature = "status-api")]
+fn config_api_key(
+    api_key: Option<&String>,
+    api_key_env: Option<&String>,
+) -> Result<String, Box<dyn Error>> {
+    if let Some(key) = api_key {
+        return Ok(key.clone());
+    }
+
+    let name = api_key_env.expect("config validation requires api_key or api_key_env");
+    let value = env::var(name)?;
+    if value.trim().is_empty() {
+        return Err(std::io::Error::other(format!(
+            "api key environment variable `{name}` must not be empty"
+        ))
+        .into());
+    }
+    Ok(value)
+}
+
+async fn wait_for_shutdown_signal() {
+    match tokio::signal::ctrl_c().await {
+        Ok(()) => tracing::info!("shutdown signal received"),
+        Err(error) => {
+            tracing::warn!(error = %error, "failed to listen for ctrl-c; stopping engine")
+        }
+    }
+}
+
 
 fn status_command(config_path: &str, json: bool) -> Result<(), Box<dyn Error>> {
     let engine = Engine::from_path(config_path)?;

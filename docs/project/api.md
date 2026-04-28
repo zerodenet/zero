@@ -1,0 +1,471 @@
+# API 能力模型
+
+`zero-api` 的长期目标不是先定义一组 HTTP endpoint，也不是按 HTTP、本地 IPC、FFI、gRPC 拆出一批平行能力模块，而是定义一套稳定的控制、观测和事件导出能力。
+
+HTTP/HTTPS 适合调试和跨语言接入，但不应该成为唯一形态。Zero 需要同时支持本地低开销控制、嵌入式调用、文件落盘、远程回调和兼容适配。这些形态应通过 trait 和 Cargo feature 接入同一个 `zero-api` 能力模型。
+
+## 原则
+
+- API 先定义能力和语义，再定义传输和编码
+- 内核概念以 Zero 自有模型为准：`flow`、`outbound`、`policy`、`target`、`route`、`event`
+- HTTP、Unix socket、Windows named pipe、file、gRPC、FFI 都只是 trait 实现，不是新的能力边界
+- 高频观测优先用增量事件或流式订阅，避免频繁轮询完整状态
+- 远程控制和远程事件推送必须显式开启并有认证
+- 内核不引入 `panel`、`node`、`user` 这类上层业务概念
+- 可选推送能力只处理归一化事件和 sink，不理解事件最终消费者
+- Clash、sing-box、Xray 兼容 API 放在 adapter，不进入核心 API 契约
+
+## 分层
+
+`zero-api` 的能力边界按 CQRS 思路组织：
+
+- `Query`
+  - 读取快照、状态、统计和能力，不改变内核状态
+- `Command`
+  - 表达控制意图，可能改变运行时状态或配置状态
+- `Event`
+  - 描述内核已经发生的事实，用于订阅、审计、计量和外部同步
+- `Sink`
+  - 把事件投递到外部目标
+
+这里不是完整 Event Sourcing。Zero 内核的真实状态仍来自 `RuntimeConfig`、`EnginePlan`、`EngineState`、运行中的 flow registry 和 runtime task。事件不是内核状态的唯一来源，也不要求通过事件回放恢复正在运行的 socket、UDP association 或 Tokio task。
+
+### Core Types
+
+核心类型只描述方法、输入、输出、事件、错误和权限，不关心 HTTP path、socket 帧格式或 FFI ABI。
+
+它应该可以被下面几类前端共用：
+
+- CLI
+- 本地 UI
+- 桌面客户端
+- 移动端控制入口
+- SDK
+- 兼容适配层
+
+### Capability Traits
+
+能力 trait 描述可被调用或订阅的内核能力。
+
+建议先围绕这些 trait 收敛：
+
+- `QueryService`
+  - 执行只读查询
+- `CommandService`
+  - 执行控制命令
+- `EventSource`
+  - 订阅内核产生的归一化事件
+- `EventSink`
+  - 把事件写到某个外部目标
+- `ApiCodec`
+  - 负责 JSON、CBOR、MessagePack、postcard 等编码
+- `ApiAuth`
+  - 负责权限判断和凭据校验
+
+HTTP、file、local、gRPC、FFI 或自定义二进制连接都应实现这些 trait，而不是复制一套 API 概念。
+
+### Adapter Implementations
+
+适配实现负责把核心能力接到具体环境。
+
+可选实现包括：
+
+- HTTP/HTTPS JSON
+- Unix domain socket
+- Windows named pipe
+- 文件 sink
+- Webhook sink
+- gRPC sink
+- 长连接二进制帧
+- in-process Rust 调用
+- FFI
+- 兼容网关
+
+这些实现应按 Cargo feature 开关接入。依赖重、场景窄的实现可以不进入默认构建，面向 ESP 等嵌入式集成时应能只保留 core types、trait 和必要的 in-process callback。
+
+### Compatibility Adapter
+
+兼容适配层负责第三方 API 映射。
+
+这层可以提供 Clash 风格路径、sing-box 风格字段或其他生态兼容能力，但不能反向约束 `zero-engine`、`zero-config` 和核心 API 模型。
+
+## Adapter 和 Sink
+
+### Request/Response Adapter
+
+这类 adapter 暴露 query 和 command 能力，例如：
+
+- `capabilities.get`
+- `runtime.get`
+- `policies.select`
+- `flows.close`
+
+它可以跑在 HTTP、Unix socket、Windows named pipe、FFI 或内存调用上。它们的差别是传输和编码，不是能力语义。
+
+### Event Sink
+
+事件 sink 负责把归一化事件推送到外部目标。
+
+支持的目标可以包括：
+
+- `local`
+  - 进程内回调或本机 IPC
+- `file`
+  - JSON Lines、二进制日志或其他可追加格式
+- `http` / `https`
+  - Webhook POST
+- `grpc`
+  - gRPC streaming 或 unary ingest
+- `custom`
+  - 上层宿主自己实现的 Rust trait
+
+sink 不知道最终消费者，也不负责用户业务。它只接收归一化事件，做编码、重试、过滤和投递。
+
+### HTTP/HTTPS JSON
+
+用途：
+
+- 调试
+- 通用服务端接入
+- 跨语言客户端
+- 远程管理
+
+特点：
+
+- 易接入、易排查
+- 文本开销较高
+- 高频轮询成本较高
+- 远程开启时必须有认证和加密
+
+HTTP 适合作为通用入口，但不是高频观测的最佳入口。
+
+### 本地 IPC Adapter
+
+Unix 平台优先使用 Unix domain socket，Windows 平台优先使用 named pipe。
+
+用途：
+
+- 本机 CLI 控制运行中的 Zero
+- 本地 GUI 或托盘程序
+- 系统服务和用户进程之间通信
+
+特点：
+
+- 不暴露 TCP 端口
+- 可复用操作系统权限模型
+- 延迟和资源消耗低于 HTTP
+- 适合作为默认本地控制入口
+
+### 二进制帧 Adapter
+
+在本地 IPC 或受保护的 TCP/QUIC 连接上，可以使用轻量二进制帧承载核心方法。
+
+用途：
+
+- 高频事件订阅
+- 活动 flow 增量更新
+- 统计采样推送
+- 低开销控制面 SDK
+
+建议形态：
+
+- 固定帧头：版本、消息类型、请求 ID、payload 长度
+- payload 编码可选：JSON、CBOR、MessagePack、postcard
+- 支持 request/response
+- 支持 server event stream
+- 支持 backpressure 和订阅过滤
+
+这一路径用于降低 CPU、内存分配和序列化成本，不作为人工调试首选入口。
+
+### In-process Rust Adapter
+
+用途：
+
+- 嵌入式场景
+- 测试
+- 上层产品把 Zero 当库集成
+
+特点：
+
+- 没有传输成本
+- 类型最强
+- 与 Rust 版本和 crate 边界更强绑定
+
+这层可以直接围绕 `Engine` / `EngineHandle` 暴露受控方法，但对外命名仍应与核心 API 保持一致。
+
+### FFI Adapter
+
+用途：
+
+- 移动端
+- 桌面客户端
+- 非 Rust 宿主
+
+特点：
+
+- 低于 HTTP 的调用成本
+- ABI 稳定性要求高
+- 内存所有权和异步回调需要单独规范
+
+FFI 不应直接暴露内部 Rust 类型，应暴露稳定句柄、字节缓冲和事件回调。
+
+### 远程推送
+
+远程推送不应该引入特定上层服务概念。更合适的模型是：`EventSource` 产出归一化事件，`EventSink` 按配置把事件推送到一个或多个外部地址。
+
+推送地址可以是本地 IPC、文件、HTTP/HTTPS webhook、gRPC 或自定义 sink。远程写控制只适合在认证、加密、权限模型明确后再落地。默认阶段不应开放公网可写控制面。
+
+## 归一化事件
+
+内核事件和传输投递需要分开。
+
+内核只产生核心事件 payload。事件表示已经发生的事实，不是命令，也不是状态存储本身。
+
+事件类型目录：
+
+| Event | 当前状态 | 触发时机 | Payload |
+| --- | --- | --- | --- |
+| `flow.started` | 预留 | flow 被内核接受并进入活动表 | `FlowEventPayload`，`traffic` 为 0，`timing.ended_at_unix_ms` 和 `timing.duration_ms` 为空 |
+| `flow.updated` | 预留 | 活动 flow 的流量或路由信息发生增量变化 | `FlowEventPayload`，用于低频增量快照，不用于高频逐包上报 |
+| `flow.completed` | 已实现 | flow 结束、阻断或失败后生成最终计量结果 | `FlowEventPayload`，包含最终 `traffic`、`timing` 和 `outcome` |
+| `policy.selected` | 预留 | selector / fallback / urltest 等策略组的当前选择发生变化 | `PolicySelectedPayload` |
+| `policy.probe.completed` | 预留 | urltest 或显式探测完成一轮探测 | `PolicyProbeCompletedPayload` |
+| `stats.sampled` | 预留 | 周期性统计采样或按需统计采样 | 统计快照 payload，字段来源于 runtime/stats 快照 |
+| `config.changed` | 预留 | 运行时配置经过校验并完成 staged apply | 配置变更摘要，不包含密钥和完整敏感配置 |
+| `engine.started` | 预留 | 引擎完成启动并进入监听/运行状态 | 引擎版本、启动时间、启用能力和监听摘要 |
+| `engine.stopped` | 预留 | 引擎完成关闭流程 | 关闭原因、运行时长和最终统计摘要 |
+| `engine.warning` | 预留 | 内核或 adapter 产生需要上层关注的非致命告警 | `WarningPayload` |
+
+当前 `zero-engine` 实际产生的是 `flow.completed`。其余事件已经进入 API 事件目录，后续 dispatcher、运行时配置、策略探测和热更新能力落地时按同一命名扩展。
+
+`zero-api` 负责把它们包进稳定 envelope：
+
+```text
+event {
+  schema_version,
+  event_id,
+  event_type,
+  occurred_at_unix_ms,
+  source_id,
+  sequence,
+  principal_key,
+  labels,
+  payload
+}
+```
+
+字段语义：
+
+- `schema_version`
+  - 事件结构版本
+- `event_id`
+  - 事件唯一标识，用于去重
+- `event_type`
+  - 例如 `flow.completed`
+- `source_id`
+  - 由宿主或 adapter 注入的来源标识，不是内核的 `node` 概念
+- `sequence`
+  - 来源内单调递增序号，可用于断点续传和 ack
+- `principal_key`
+  - 对内核不透明的归因 key
+- `labels`
+  - 上层可附加的低基数字段
+- `payload`
+  - 具体事件内容
+
+`source_id`、`sequence`、重试、ack 和缓冲属于 `zero-api` adapter/sink 层；`zero-engine` 不需要知道事件最终会被写入文件、推送到 webhook，还是被外部服务消费。
+
+事件可以用于外部系统构建自己的投影，例如按 `principal_key` 统计流量消耗。但这些外部投影不反向成为 `zero-engine` 的状态来源。
+
+当前已实现的归因来源是 VLESS 入站用户配置。`protocol.users[*].principal_key` 会进入事件顶层 `principal_key`，`credential_id` 和 `principal_key` 会进入 `payload.auth`；VLESS UUID 作为认证凭据使用，不会默认写入事件。
+
+## Webhook 和外部回调
+
+外部回调应建模为 sink 配置，不建模为某个特定上层服务连接。
+
+概念形态：
+
+```json
+{
+  "event_sinks": [
+    {
+      "tag": "billing-webhook",
+      "type": "http",
+      "url": "https://collector.example.com/zero/events",
+      "events": ["flow.completed", "stats.sampled"],
+      "encoding": "json"
+    },
+    {
+      "tag": "local-audit",
+      "type": "file",
+      "path": "zero-events.jsonl",
+      "events": ["flow.completed"],
+      "encoding": "json-lines"
+    }
+  ]
+}
+```
+
+当前版本已经在 `zero-api` 的 `webhook` feature 下提供 `WebhookEventSink`，用于把归一化事件以 JSON POST 到 HTTP/HTTPS 地址；上面的配置形态仍是长期方向，尚未接入完整运行时配置和多 sink 编排。
+
+sink 的共同要求：
+
+- 只消费归一化事件 envelope
+- 支持事件过滤
+- 支持失败重试或明确声明不重试
+- 能表达投递成功、投递失败和丢弃
+- 不把业务用户、套餐、余额、外部节点管理等概念写入核心模型
+
+如果未来需要更复杂的连接生命周期，可以把这层实现称为 connector，但语义仍然是 event exporter/sink，不是内核里的远程客户端。
+
+## 首批核心能力
+
+首批能力应该覆盖当前已经实现并能长期复用的模型。
+
+### Query
+
+- `capabilities.get`
+  - 返回 API 版本、支持的 adapter、sink、feature、只读/可写权限
+- `health.get`
+  - 返回进程存活、启动时间、版本和基础状态
+- `config.get`
+  - 返回当前有效配置视图
+- `runtime.get`
+  - 返回运行时统计、活动 flow、最近完成 flow 和 policy 状态
+- `stats.get`
+  - 返回轻量统计，不包含完整 flow 列表
+- `flows.list_active`
+  - 返回活动 flow 快照
+- `flows.list_recent`
+  - 返回最近完成 flow
+- `flows.get`
+  - 按 flow id 查询单个 flow
+- `policies.list`
+  - 返回所有 policy 状态
+- `policies.get`
+  - 查询单个 policy
+
+现有 `/status`、`/runtime`、`/config` 可以视为这些能力的本地 HTTP 过渡适配。
+
+### Command
+
+- `config.validate`
+  - 已实现。校验一份配置输入，不改变运行中状态；虽然不产生状态变更，但它表达的是提交前的写入意图，放在 command 侧更清晰
+- `flows.close`
+  - 预留。主动关闭某个活动 flow
+- `policies.select`
+  - 已实现。切换 `selector` 当前成员
+- `policies.probe`
+  - 预留。触发 `urltest` 立即探测
+
+首批不做完整热重载。后续如果引入热重载，应走 staged apply：validate、plan、apply、rollback。
+
+`flows.close` 是写操作，需要单独权限。当前返回 `unsupported`，后续需要先给活动 flow 增加可控关闭句柄，再接入该命令。
+
+现有 `POST /selectors/{group}/{target}` 对应长期能力里的 `policies.select`。HTTP 控制面同时提供 `POST /api/v1/commands`，请求体示例：
+
+```json
+{
+  "method": "policies.select",
+  "params": {
+    "policy_tag": "proxy",
+    "target_tag": "direct"
+  }
+}
+```
+
+### Event
+
+- `events.subscribe`
+  - 订阅运行时事件
+- `events.export`
+  - 把事件写入一个或多个配置的 sink
+
+事件类型使用上文“归一化事件”里的事件目录。配置里不应该出现目录外的事件类型；如果需要实验事件，应使用显式 feature 或实验命名空间，避免面板误把它当作稳定契约。
+
+事件订阅和导出应该支持过滤条件，例如只订阅 flow、只订阅某个 inbound、只订阅 policy 变化。
+
+### Diagnostics
+
+- `logs.tail`
+  - 订阅结构化日志流
+- `diagnostics.get`
+  - 返回当前诊断摘要
+- `diagnostics.probe_target`
+  - 对某个 target 做一次受控探测
+
+诊断方法容易变成高权限入口，默认应只在本地控制面开放。
+
+## 权限模型
+
+控制面至少需要这些权限范围：
+
+- `read`
+  - 查看配置视图、状态、统计、flow 和 policy
+- `control`
+  - 切换 policy、关闭 flow、触发探测
+- `config`
+  - 校验、提交和应用配置
+- `admin`
+  - 关闭进程、修改监听、安全设置和高级诊断
+
+本地 IPC 可以依赖文件权限或 named pipe ACL，但仍应在协议层保留权限概念，便于未来远程管理和多客户端。
+
+HTTP/HTTPS、gRPC 或远程二进制传输必须显式配置认证。默认不应该开启远程可写控制面。
+
+## 错误模型
+
+核心 API 错误应稳定，不能直接泄露内部 Rust 错误类型。
+
+建议基础错误码：
+
+- `not_found`
+- `invalid_argument`
+- `permission_denied`
+- `feature_disabled`
+- `conflict`
+- `unsupported`
+- `internal`
+
+错误响应应包含：
+
+- 稳定错误码
+- 人类可读消息
+- 可选字段路径
+- 可选底层原因
+
+## 版本和兼容
+
+API 需要独立版本，不直接等同 crate 版本。
+
+建议暴露：
+
+- `api_version`
+- `schema_version`
+- `engine_version`
+- `capabilities`
+- `experimental_features`
+
+破坏性变更只能进入新的 API 主版本。实验能力必须显式标记，不能被外部客户端当作稳定契约。
+
+## 初始落地顺序
+
+1. 在 `zero-api` 中定义 query、command、event、sink、错误和权限模型
+2. 把现有 `export_status` / `export_runtime` / `export_config` 映射为核心能力
+3. 把 `selector` 切换映射为 `policies.select`
+4. 定义 `QueryService`、`CommandService`、`EventSource`、`EventSink`、`ApiCodec` 等 trait
+5. 增加 in-process adapter，先服务测试、嵌入式宿主和内部调用
+6. 增加 HTTP JSON adapter，服务调试和通用接入
+7. 增加事件 sink，先支持 file 和 HTTP/HTTPS webhook
+8. 再按 feature 评估 IPC、gRPC、FFI、二进制帧和第三方兼容网关
+
+## 当前不做
+
+- 不把当前 `/status` 路径固化为长期 API
+- 不直接复制第三方控制面字段
+- 不按 HTTP、IPC、FFI 等传输形态拆散 API 能力
+- 不把 `panel`、`node`、`user` 写进内核 API
+- 不在首批做完整热重载
+- 不把事件流设计成内核状态的唯一来源
+- 不默认开放远程写控制面
+- 不让高频 flow 更新依赖 HTTP 轮询

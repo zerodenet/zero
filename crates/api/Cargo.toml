@@ -1,5 +1,5 @@
 [package]
-name = "zero-config"
+name = "zero-api"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,10 +7,17 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+default = []
+webhook = ["dep:reqwest"]
+
 [dependencies]
-ipnet.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-zero-api = { path = "../api" }
-zero-router = { path = "../router" }
+
+[dependencies.reqwest]
+version = "0.12"
+default-features = false
+features = ["blocking", "json", "rustls-tls"]
+optional = true

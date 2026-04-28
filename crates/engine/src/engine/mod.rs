@@ -1,5 +1,7 @@
+mod api;
 mod completed_sessions;
 mod error;
+mod event_log;
 mod export;
 #[cfg(feature = "inbound-http-connect")]
 mod http_connect;
@@ -35,7 +37,7 @@ pub use error::EngineError;
 pub use export::{
     ActiveSessionExport, AddressExport, CompletedSessionExport, EngineConfigExport,
     EngineRuntimeExport, EngineStatusExport, InboundExport, ModeExport, OutboundExport,
-    OutboundGroupExport,
+    OutboundGroupExport, SessionAuthExport,
 };
 pub use plan::{
     EnginePlan, FallbackGroupPlan, OutboundTarget, SelectorGroupPlan, TargetId, TargetKind,

@@ -11,4 +11,4 @@ pub mod session;
 pub use address::{Address, AddressFamily};
 pub use error::Error;
 pub use handler::{InboundHandler, OutboundHandler};
-pub use session::{Network, ProtocolType, Session};
+pub use session::{Network, ProtocolType, Session, SessionAuth};

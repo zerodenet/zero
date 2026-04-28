@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use zero_core::{Address, Network, ProtocolType, Session};
+use zero_core::{Address, Network, ProtocolType, Session, SessionAuth};
 
 use super::completed_sessions::CompletedSessionRecord;
 use super::stats::SessionOutcome;
@@ -110,6 +110,7 @@ struct ActiveSessionEntry {
     target: Address,
     port: u16,
     protocol: ProtocolType,
+    auth: Option<SessionAuth>,
     network: Network,
     mode: String,
     started_at: Instant,
@@ -135,6 +136,7 @@ impl ActiveSessionEntry {
             target: session.target.clone(),
             port: session.port,
             protocol: session.protocol,
+            auth: session.auth.clone(),
             network: session.network,
             mode: mode.to_owned(),
             started_at: Instant::now(),
@@ -226,6 +228,7 @@ impl ActiveSessionEntry {
             target: self.target.clone(),
             port: self.port,
             protocol: self.protocol,
+            auth: self.auth.clone(),
             network: self.network,
             mode: self.mode.clone(),
             started_at_unix_ms: self.started_at_unix_ms,
@@ -260,6 +263,7 @@ impl ActiveSessionEntry {
             target: self.target.clone(),
             port: self.port,
             protocol: self.protocol,
+            auth: self.auth.clone(),
             network: self.network,
             mode: self.mode.clone(),
             started_at_unix_ms: self.started_at_unix_ms,
@@ -292,6 +296,7 @@ pub struct ActiveSession {
     pub target: Address,
     pub port: u16,
     pub protocol: ProtocolType,
+    pub auth: Option<SessionAuth>,
     pub network: Network,
     pub mode: String,
     pub started_at_unix_ms: u64,

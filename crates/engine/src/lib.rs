@@ -7,7 +7,7 @@ pub use engine::{
     CompletedSessionRecord, Engine, EngineConfigExport, EngineError, EnginePlan,
     EngineRuntimeExport, EngineStatsSnapshot, EngineStatusExport, FallbackGroupPlan, InboundExport,
     ModeExport, OutboundExport, OutboundGroupExport, OutboundTarget, RunningEngine,
-    SelectorGroupPlan, TargetId, TargetKind, TargetNode, UdpUpstreamStatsSnapshot,
-    UrlTestGroupPlan,
+    SelectorGroupPlan, SessionAuthExport, TargetId, TargetKind, TargetNode,
+    UdpUpstreamStatsSnapshot, UrlTestGroupPlan,
 };
 pub use inventory::ProtocolInventory;

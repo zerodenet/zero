@@ -38,6 +38,8 @@ pub enum ConfigError {
     InvalidOutboundGroup(String),
     #[error("invalid runtime config: {0}")]
     InvalidRuntime(String),
+    #[error("invalid api config: {0}")]
+    InvalidApi(String),
     #[error("invalid mode config: {0}")]
     InvalidMode(String),
     #[error("duplicate route target tag `{tag}` across outbounds and outbound groups")]

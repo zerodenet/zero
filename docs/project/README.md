@@ -8,6 +8,8 @@
 - `architecture.md`：分层和依赖方向
 - `config.md`：当前配置格式
 - `control-plane.md`：控制面、观测模型和外部兼容边界
+- `api.md`：对外 API 能力模型、传输形态和首批方法
+- `panel-node-connector.md`：面板和节点的可选 connector 对接方式
 - `modes-and-groups.md`：模式、节点组和手动选择的设计
 - `engine-plan.md`：`RuntimeConfig -> EnginePlan -> EngineState / view` 的内部执行计划设计
 - `logging.md`：日志约定

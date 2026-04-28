@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{info, warn};
+use zero_api::{EventFilter, RawApiEvent};
 use zero_config::{InboundConfig, InboundProtocolConfig, ModeConfig, RuntimeConfig};
 use zero_core::{Address, Session};
 use zero_platform_tokio::{TokioListener, TokioResolver, TokioSocket};
@@ -17,6 +18,7 @@ use crate::ProtocolInventory;
 
 use super::completed_sessions::{CompletedSessionHistory, CompletedSessionRecord};
 use super::error::EngineError;
+use super::event_log::EngineEventLog;
 use super::logging::log_selector_group_target_changed;
 use super::metered::StreamTraffic;
 use super::outbound_group_state::OutboundGroupStateStore;
@@ -37,6 +39,7 @@ pub struct Engine {
     pub(crate) next_session_id: Arc<AtomicU64>,
     pub(crate) session_registry: Arc<SessionRegistry>,
     pub(crate) completed_sessions: Arc<CompletedSessionHistory>,
+    pub(crate) event_log: Arc<EngineEventLog>,
     pub(crate) stats: Arc<EngineStats>,
     pub(crate) outbound_group_state: Arc<OutboundGroupStateStore>,
     pub(crate) udp_upstream_idle_timeout: Duration,
@@ -114,6 +117,7 @@ impl Engine {
             next_session_id: Arc::new(AtomicU64::new(1)),
             session_registry: SessionRegistry::shared(),
             completed_sessions: CompletedSessionHistory::shared(),
+            event_log: EngineEventLog::shared(),
             stats: EngineStats::shared(),
             outbound_group_state,
             udp_upstream_idle_timeout,
@@ -168,6 +172,10 @@ impl Engine {
 
     pub fn completed_sessions(&self) -> Vec<CompletedSessionRecord> {
         self.completed_sessions.snapshot()
+    }
+
+    pub fn events_snapshot(&self, filter: &EventFilter) -> Vec<RawApiEvent> {
+        self.event_log.snapshot(filter)
     }
 
     pub fn set_selector_target(
@@ -516,11 +524,34 @@ impl Engine {
         let record = self.session_registry.finish(session_id, outcome)?;
         self.stats.record_finish(outcome);
         self.completed_sessions.push(record.clone());
+        self.event_log
+            .push_flow_completed(&record, |tag| self.outbound_protocol_for_tag(tag));
         Some(record)
     }
 
     pub(crate) fn track_session(&self, session_id: u64) -> SessionHandle {
         SessionHandle::new(self.clone(), session_id)
+    }
+}
+
+impl Engine {
+    fn outbound_protocol_for_tag(&self, tag: &str) -> Option<&'static str> {
+        if tag == "direct" {
+            return Some("direct");
+        }
+        if tag == "block" {
+            return Some("block");
+        }
+
+        self.config
+            .outbounds
+            .iter()
+            .find(|outbound| outbound.tag == tag)
+            .map(|outbound| match outbound.protocol {
+                zero_config::OutboundProtocolConfig::Direct => "direct",
+                zero_config::OutboundProtocolConfig::Block => "block",
+                zero_config::OutboundProtocolConfig::Socks5 { .. } => "socks5",
+            })
     }
 }
 

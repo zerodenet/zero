@@ -21,9 +21,11 @@ outbound-socks5 = ["dep:zero-protocol-socks5"]
 
 [dependencies]
 serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+zero-api = { path = "../api" }
 zero-config = { path = "../config" }
 zero-core = { path = "../core" }
 zero-protocol-http-connect = { path = "../../protocols/http-connect", optional = true }

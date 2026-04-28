@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use zero_config::{
-    InboundProtocolConfig, ModeConfig, OutboundGroupKind, OutboundProtocolConfig,
+    EventSinkConfig, InboundProtocolConfig, ModeConfig, OutboundGroupKind, OutboundProtocolConfig,
     RouteActionConfig, RuleConditionConfig, RuntimeConfig,
 };
 
@@ -105,6 +105,118 @@ fn parses_config_into_adts() {
         config.route.rules[0].condition,
         RuleConditionConfig::Or { .. }
     ));
+}
+
+#[test]
+fn parses_api_event_sinks_and_control_config() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "api": {
+                "event_sinks": [
+                    {
+                        "tag": "panel",
+                        "type": "webhook",
+                        "url": "https://panel.example.com/api/zero/events",
+                        "events": ["flow.completed", "engine.warning"],
+                        "source_id": "edge-01",
+                        "api_key_env": "ZERO_PANEL_API_KEY"
+                    },
+                    {
+                        "tag": "local-events",
+                        "type": "jsonl",
+                        "path": "zero-events.jsonl",
+                        "events": ["flow.completed"]
+                    }
+                ],
+                "control": {
+                    "enabled": true,
+                    "listen": { "address": "127.0.0.1", "port": 9090 },
+                    "api_key_env": "ZERO_NODE_API_KEY"
+                }
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert_eq!(config.api.event_sinks.len(), 2);
+    let EventSinkConfig::Webhook {
+        tag,
+        url,
+        events,
+        source_id,
+        api_key_env,
+        ..
+    } = &config.api.event_sinks[0]
+    else {
+        panic!("expected webhook sink");
+    };
+    assert_eq!(tag, "panel");
+    assert_eq!(url, "https://panel.example.com/api/zero/events");
+    assert_eq!(events, &["flow.completed", "engine.warning"]);
+    assert_eq!(source_id.as_deref(), Some("edge-01"));
+    assert_eq!(api_key_env.as_deref(), Some("ZERO_PANEL_API_KEY"));
+
+    assert!(config.api.control.enabled);
+    assert_eq!(
+        config.api.control.listen.as_ref().expect("listen").port,
+        9090
+    );
+}
+
+#[test]
+fn rejects_unknown_api_event_type() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "api": {
+                "event_sinks": [
+                    {
+                        "tag": "panel",
+                        "type": "webhook",
+                        "url": "https://panel.example.com/api/zero/events",
+                        "events": ["panel.user.changed"],
+                        "api_key": "secret"
+                    }
+                ]
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("unknown event type should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidApi(_)));
+}
+
+#[test]
+fn rejects_insecure_webhook_without_explicit_opt_in() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "api": {
+                "event_sinks": [
+                    {
+                        "tag": "panel",
+                        "type": "webhook",
+                        "url": "http://127.0.0.1:9000/events",
+                        "events": ["flow.completed"],
+                        "api_key": "secret"
+                    }
+                ]
+            },
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("http webhook should require allow_insecure");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidApi(_)));
 }
 
 #[test]

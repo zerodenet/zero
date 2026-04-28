@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use zero_core::{Address, Network, ProtocolType};
+use zero_core::{Address, Network, ProtocolType, SessionAuth};
 
 use super::stats::SessionOutcome;
 
@@ -55,6 +55,7 @@ pub struct CompletedSessionRecord {
     pub target: Address,
     pub port: u16,
     pub protocol: ProtocolType,
+    pub auth: Option<SessionAuth>,
     pub network: Network,
     pub mode: String,
     pub started_at_unix_ms: u64,

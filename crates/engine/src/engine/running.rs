@@ -1,5 +1,6 @@
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+use zero_api::{EventFilter, RawApiEvent};
 
 use super::completed_sessions::CompletedSessionRecord;
 use super::error::EngineError;
@@ -28,6 +29,10 @@ impl RunningEngine {
         }
     }
 
+    pub(crate) fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
     pub fn export_config(&self) -> EngineConfigExport {
         self.engine.export_config()
     }
@@ -50,6 +55,10 @@ impl RunningEngine {
 
     pub fn completed_sessions(&self) -> Vec<CompletedSessionRecord> {
         self.engine.completed_sessions()
+    }
+
+    pub fn events_snapshot(&self, filter: &EventFilter) -> Vec<RawApiEvent> {
+        self.engine.events_snapshot(filter)
     }
 
     pub fn set_selector_target(

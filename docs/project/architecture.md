@@ -5,10 +5,13 @@
 ## 应用层
 
 - 根包 `zero`
+- `zero-api`
 
 负责参数、配置文件路径、进程启动和状态输出。
 
 控制面和观测模型以 Zero 自有规范为准。Clash、sing-box、Xray 等外部生态只作为设计参考；兼容能力应放在 adapter、gateway 或额外工具里，不反向约束内核和长期 API。
+
+`zero-api` 负责定义对外控制、观测和事件导出能力，不等同于 HTTP 服务，也不按传输形态拆散能力。HTTP/HTTPS、本地 IPC、file、gRPC、二进制帧、Rust API 和 FFI 都应作为 trait 实现或 feature-gated adapter/sink 挂到同一套核心能力上。
 
 ## 配置和执行层
 

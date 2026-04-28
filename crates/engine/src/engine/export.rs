@@ -88,6 +88,7 @@ pub struct ActiveSessionExport {
     pub target: AddressExport,
     pub port: u16,
     pub protocol: String,
+    pub auth: Option<SessionAuthExport>,
     pub network: String,
     pub mode: String,
     pub started_at_unix_ms: u64,
@@ -112,6 +113,7 @@ pub struct CompletedSessionExport {
     pub target: AddressExport,
     pub port: u16,
     pub protocol: String,
+    pub auth: Option<SessionAuthExport>,
     pub network: String,
     pub mode: String,
     pub started_at_unix_ms: u64,
@@ -133,6 +135,13 @@ pub struct CompletedSessionExport {
 pub struct AddressExport {
     pub family: String,
     pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionAuthExport {
+    pub scheme: String,
+    pub credential_id: Option<String>,
+    pub principal_key: Option<String>,
 }
 
 impl Engine {
@@ -341,6 +350,7 @@ impl From<&ActiveSession> for ActiveSessionExport {
             target: AddressExport::from(&session.target),
             port: session.port,
             protocol: protocol_name(session.protocol).to_owned(),
+            auth: session.auth.as_ref().map(SessionAuthExport::from),
             network: network_name(session.network).to_owned(),
             mode: session.mode.clone(),
             started_at_unix_ms: session.started_at_unix_ms,
@@ -368,6 +378,7 @@ impl From<&CompletedSessionRecord> for CompletedSessionExport {
             target: AddressExport::from(&session.target),
             port: session.port,
             protocol: protocol_name(session.protocol).to_owned(),
+            auth: session.auth.as_ref().map(SessionAuthExport::from),
             network: network_name(session.network).to_owned(),
             mode: session.mode.clone(),
             started_at_unix_ms: session.started_at_unix_ms,
@@ -402,6 +413,16 @@ impl From<&Address> for AddressExport {
                 family: "ipv6".to_owned(),
                 value: std::net::Ipv6Addr::from(*addr).to_string(),
             },
+        }
+    }
+}
+
+impl From<&zero_core::SessionAuth> for SessionAuthExport {
+    fn from(auth: &zero_core::SessionAuth) -> Self {
+        Self {
+            scheme: auth.scheme.clone(),
+            credential_id: auth.credential_id.clone(),
+            principal_key: auth.principal_key.clone(),
         }
     }
 }
