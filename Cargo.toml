@@ -20,6 +20,9 @@ inbound-http-connect = ["zero-engine/inbound-http-connect"]
 inbound-mixed = ["zero-engine/inbound-mixed"]
 outbound-socks5 = ["zero-engine/outbound-socks5"]
 status-api = []
+event-dispatcher = ["dep:zero-connector", "zero-connector/event-dispatcher"]
+sink-jsonl = ["event-dispatcher", "zero-connector/sink-jsonl"]
+panel-connector = ["status-api", "event-dispatcher", "zero-connector/panel-connector"]
 
 [workspace]
 members = [
@@ -27,6 +30,7 @@ members = [
     "crates/core",
     "crates/api",
     "crates/config",
+    "crates/connector",
     "crates/router",
     "crates/platform/tokio",
     "protocols/socks5",
@@ -59,3 +63,4 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 zero-api = { path = "crates/api" }
 zero-engine = { path = "crates/engine", default-features = false }
+zero-connector = { path = "crates/connector", optional = true, default-features = false }

@@ -40,6 +40,7 @@ async fn run_command(config_path: &str, status_listen: Option<&str>) -> Result<(
     #[cfg(not(feature = "status-api"))]
     ensure_status_api_not_configured(&engine, status_listen)?;
 
+    let event_dispatcher = spawn_event_dispatcher_if_configured(&engine)?;
 
     tracing::info!(config = %config_path, "loaded engine configuration");
 
@@ -53,6 +54,7 @@ async fn run_command(config_path: &str, status_listen: Option<&str>) -> Result<(
 
             wait_for_shutdown_signal().await;
 
+            shutdown_event_dispatcher(event_dispatcher).await;
             status_server.shutdown().await?;
             running.shutdown().await?;
 
@@ -60,7 +62,15 @@ async fn run_command(config_path: &str, status_listen: Option<&str>) -> Result<(
         }
     }
 
-    engine.run().await?;
+    if event_dispatcher.is_some() {
+        let running = engine.spawn();
+        wait_for_shutdown_signal().await;
+
+        shutdown_event_dispatcher(event_dispatcher).await;
+        running.shutdown().await?;
+    } else {
+        engine.run().await?;
+    }
 
     Ok(())
 }
@@ -159,6 +169,43 @@ async fn wait_for_shutdown_signal() {
     }
 }
 
+#[cfg(feature = "event-dispatcher")]
+fn spawn_event_dispatcher_if_configured(
+    engine: &Engine,
+) -> Result<Option<zero_connector::EventDispatcherHandle>, Box<dyn Error>> {
+    let config = engine.config();
+    let dispatcher = zero_connector::spawn_event_dispatcher(
+        engine.clone(),
+        config.api.clone(),
+        config.source_dir.clone(),
+        zero_connector::EventDispatcherOptions::default(),
+    )?;
+    Ok(dispatcher)
+}
+
+#[cfg(not(feature = "event-dispatcher"))]
+fn spawn_event_dispatcher_if_configured(
+    engine: &Engine,
+) -> Result<Option<EventDispatcherUnavailable>, Box<dyn Error>> {
+    if engine.config().api.event_sinks.is_empty() {
+        return Ok(None);
+    }
+
+    Err(std::io::Error::other("`api.event_sinks` requires Cargo feature `event-dispatcher`").into())
+}
+
+#[cfg(feature = "event-dispatcher")]
+async fn shutdown_event_dispatcher(dispatcher: Option<zero_connector::EventDispatcherHandle>) {
+    if let Some(dispatcher) = dispatcher {
+        dispatcher.shutdown().await;
+    }
+}
+
+#[cfg(not(feature = "event-dispatcher"))]
+async fn shutdown_event_dispatcher(_dispatcher: Option<EventDispatcherUnavailable>) {}
+
+#[cfg(not(feature = "event-dispatcher"))]
+struct EventDispatcherUnavailable;
 
 fn status_command(config_path: &str, json: bool) -> Result<(), Box<dyn Error>> {
     let engine = Engine::from_path(config_path)?;

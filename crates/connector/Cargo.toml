@@ -1,0 +1,23 @@
+[package]
+name = "zero-connector"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = []
+event-dispatcher = []
+sink-jsonl = ["event-dispatcher"]
+webhook = ["event-dispatcher", "zero-api/webhook"]
+panel-connector = ["webhook"]
+
+[dependencies]
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+zero-api = { path = "../api" }
+zero-config = { path = "../config" }
