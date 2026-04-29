@@ -4,6 +4,7 @@ use std::process;
 
 use tracing_subscriber::EnvFilter;
 use zero_engine::Engine;
+use zero_proxy::Proxy;
 
 mod cli;
 mod error_report;
@@ -35,14 +36,15 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn run_command(config_path: &str, status_listen: Option<&str>) -> Result<(), Box<dyn Error>> {
-    let engine = Engine::from_path(config_path)?;
+    let proxy = Proxy::from_path(config_path)?;
+    let engine = proxy.engine().clone();
 
     #[cfg(not(feature = "status-api"))]
     ensure_status_api_not_configured(&engine, status_listen)?;
 
     let event_dispatcher = spawn_event_dispatcher_if_configured(&engine)?;
 
-    tracing::info!(config = %config_path, "loaded engine configuration");
+    tracing::info!(config = %config_path, "loaded proxy configuration");
 
     #[cfg(feature = "status-api")]
     {
@@ -50,7 +52,7 @@ async fn run_command(config_path: &str, status_listen: Option<&str>) -> Result<(
             let probe = engine.clone();
             let status_server =
                 status_server::spawn_status_server(probe, &status.listen, status.auth).await?;
-            let running = engine.spawn();
+            let running = proxy.spawn();
 
             wait_for_shutdown_signal().await;
 
@@ -63,13 +65,13 @@ async fn run_command(config_path: &str, status_listen: Option<&str>) -> Result<(
     }
 
     if event_dispatcher.is_some() {
-        let running = engine.spawn();
+        let running = proxy.spawn();
         wait_for_shutdown_signal().await;
 
         shutdown_event_dispatcher(event_dispatcher).await;
         running.shutdown().await?;
     } else {
-        engine.run().await?;
+        proxy.run().await?;
     }
 
     Ok(())
@@ -164,7 +166,7 @@ async fn wait_for_shutdown_signal() {
     match tokio::signal::ctrl_c().await {
         Ok(()) => tracing::info!("shutdown signal received"),
         Err(error) => {
-            tracing::warn!(error = %error, "failed to listen for ctrl-c; stopping engine")
+            tracing::warn!(error = %error, "failed to listen for ctrl-c; stopping proxy")
         }
     }
 }
@@ -208,8 +210,8 @@ async fn shutdown_event_dispatcher(_dispatcher: Option<EventDispatcherUnavailabl
 struct EventDispatcherUnavailable;
 
 fn status_command(config_path: &str, json: bool) -> Result<(), Box<dyn Error>> {
-    let engine = Engine::from_path(config_path)?;
-    let status = engine.export_status();
+    let proxy = Proxy::from_path(config_path)?;
+    let status = proxy.export_status();
 
     if json {
         println!("{}", serde_json::to_string_pretty(&status)?);

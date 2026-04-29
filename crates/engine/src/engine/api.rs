@@ -14,27 +14,11 @@ use super::export::{
     ActiveSessionExport, CompletedSessionExport, EngineConfigExport, EngineRuntimeExport,
     OutboundGroupExport,
 };
-use super::running::RunningEngine;
 use super::runtime::Engine;
 use super::session_registry::ActiveSession;
 use super::stats::EngineStatsSnapshot;
 
 impl QueryService for Engine {
-    fn query(&self, request: QueryRequest) -> zero_api::ApiResult<QueryResponse> {
-        query_engine(
-            EngineQueryView {
-                config: self.export_config(),
-                runtime: self.export_runtime(),
-                stats: self.stats_snapshot(),
-                active_sessions: self.active_sessions(),
-                completed_sessions: self.completed_sessions(),
-            },
-            request,
-        )
-    }
-}
-
-impl QueryService for RunningEngine {
     fn query(&self, request: QueryRequest) -> zero_api::ApiResult<QueryResponse> {
         query_engine(
             EngineQueryView {
@@ -55,21 +39,7 @@ impl CommandService for Engine {
     }
 }
 
-impl CommandService for RunningEngine {
-    fn execute(&self, command: CommandRequest) -> zero_api::ApiResult<CommandResponse> {
-        execute_engine_command(self.engine(), command)
-    }
-}
-
 impl EventSource for Engine {
-    type Stream = Vec<RawApiEvent>;
-
-    fn subscribe(&self, filter: EventFilter) -> zero_api::ApiResult<Self::Stream> {
-        Ok(self.events_snapshot(&filter))
-    }
-}
-
-impl EventSource for RunningEngine {
     type Stream = Vec<RawApiEvent>;
 
     fn subscribe(&self, filter: EventFilter) -> zero_api::ApiResult<Self::Stream> {
@@ -162,10 +132,7 @@ fn execute_engine_command(
 
 fn validate_config_command(command: ConfigValidateCommand) -> zero_api::ApiResult<CommandResponse> {
     let raw = serde_json::to_string(&command.config).map_err(to_internal_error)?;
-    let config = RuntimeConfig::parse(&raw).map_err(config_error_to_api)?;
-    crate::ProtocolInventory::default()
-        .validate_config(&config)
-        .map_err(engine_error_to_api)?;
+    let _config = RuntimeConfig::parse(&raw).map_err(config_error_to_api)?;
 
     Ok(CommandResponse {
         accepted: true,

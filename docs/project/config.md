@@ -123,7 +123,7 @@ POST /api/v1/selectors/{group}/{target}
 - `http-connect`
 - `http`，兼容别名
 - `mixed`，同端口识别 `socks5` 和 `http-connect`
-- `vless`，当前只支持 TCP
+- `vless`，当前支持 TCP，可选 TLS 包裹
 
 `mixed` 不是外部协议，而是“同端口多协议入站”的配置入口。
 
@@ -176,6 +176,25 @@ VLESS 入站必须配置用户 UUID。`credential_id` 和 `principal_key` 是观
 }
 ```
 
+VLESS 入站需要 TLS 时，在协议内增加 `tls`：
+
+```json
+{
+  "tag": "vless-tls-in",
+  "listen": { "address": "0.0.0.0", "port": 443 },
+  "protocol": {
+    "type": "vless",
+    "users": [
+      { "id": "11111111-2222-3333-4444-555555555555" }
+    ],
+    "tls": {
+      "cert_path": "certs/fullchain.pem",
+      "key_path": "certs/privkey.pem"
+    }
+  }
+}
+```
+
 ## 出站
 
 ```json
@@ -221,6 +240,24 @@ VLESS 出站用于连接上游 VLESS TCP 节点：
     "server": "203.0.113.10",
     "port": 443,
     "id": "11111111-2222-3333-4444-555555555555"
+  }
+}
+```
+
+连接 TLS VLESS 上游时配置 `tls`。`server_name` 默认使用 `server`，自签或私有 CA 可通过 `ca_cert_path` 指定：
+
+```json
+{
+  "tag": "vless-tls-chain",
+  "protocol": {
+    "type": "vless",
+    "server": "edge.example.com",
+    "port": 443,
+    "id": "11111111-2222-3333-4444-555555555555",
+    "tls": {
+      "server_name": "edge.example.com",
+      "ca_cert_path": "certs/ca.pem"
+    }
   }
 }
 ```
@@ -421,8 +458,8 @@ POST /selectors/proxy/direct
 - `tag` 不能为空
 - SOCKS5 username/password 不能为空，且单项最多 255 字节
 - SOCKS5 出站认证必须同时配置 `username` 和 `password`，不能只配其中一个
-- VLESS 入站必须至少配置一个用户，`id` 必须是 UUID
-- VLESS 出站的 `server` 不能为空，`port` 必须大于 `0`，`id` 必须是 UUID
+- VLESS 入站必须至少配置一个用户，`id` 必须是 UUID；启用 TLS 时 `cert_path` 和 `key_path` 不能为空
+- VLESS 出站的 `server` 不能为空，`port` 必须大于 `0`，`id` 必须是 UUID；`tls.server_name` 和 `tls.ca_cert_path` 如果配置则不能为空
 - 同类对象里的 `tag` 不能重复
 - 同一个 `address:port` 只能有一个入站
 - 同端口同时接 `socks5` 和 `http-connect` 时，用 `mixed`
@@ -449,3 +486,5 @@ POST /selectors/proxy/direct
 - [nested-groups.json](../../examples/v0.0.2/nested-groups.json)
 - [urltest.json](../../examples/v0.0.2/urltest.json)
 - [vless.json](../../examples/v0.0.2/vless.json)
+- [vless-tls.json](../../examples/v0.0.2/vless-tls.json)
+- [chained-vless-tls.json](../../examples/v0.0.2/chained-vless-tls.json)

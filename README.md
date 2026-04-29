@@ -9,8 +9,8 @@ Zero 是一个用 Rust 编写的网络代理项目。
 - `SOCKS5` 入站
 - `HTTP CONNECT` 入站
 - `mixed` 同端口多协议入站
-- `VLESS` TCP 入站
-- `direct` / `block` / 上游 `SOCKS5` / 上游 `VLESS` 出站
+- `VLESS` TCP / TLS 入站
+- `direct` / `block` / 上游 `SOCKS5` / 上游 `VLESS` TCP / TLS 出站
 - `SOCKS5 UDP ASSOCIATE`
 - `mode = rule | global | direct`
 - `selector` / `fallback` / `urltest` 出站组
@@ -83,6 +83,8 @@ make test
 - `examples/v0.0.2/nested-groups.json`
 - `examples/v0.0.2/urltest.json`
 - `examples/v0.0.2/vless.json`
+- `examples/v0.0.2/vless-tls.json`
+- `examples/v0.0.2/chained-vless-tls.json`
 
 ## 常用命令
 
@@ -96,12 +98,12 @@ cargo build --release
 
 ## 选择性编译
 
-内核核心能力默认始终保留：
+决策和状态核心能力默认始终保留：
 
 - 配置解析和校验
 - 路由
 - `EnginePlan` / `EngineState`
-- `direct` / `block`
+- `direct` / `block` 目标语义
 - 状态导出
 
 可选模块通过 Cargo feature 控制：
@@ -134,7 +136,8 @@ cargo build --no-default-features --features inbound-socks5,outbound-socks5
 
 - `src/`：根程序入口
 - `crates/config`：配置模型、校验和规则集装载
-- `crates/engine`：执行内核
+- `crates/engine`：决策、计划、状态、会话、统计和事件
+- `crates/proxy`：代理运行时、监听、传输和协议接线
 - `crates/router`：路由规则匹配
 - `crates/core`：通用类型和领域模型
 - `crates/traits`：平台能力抽象

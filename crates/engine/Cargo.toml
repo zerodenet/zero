@@ -8,38 +8,20 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-default = [
-    "inbound-socks5",
-    "inbound-http-connect",
-    "inbound-mixed",
-    "inbound-vless",
-    "outbound-socks5",
-    "outbound-vless",
-]
-inbound-socks5 = ["dep:zero-protocol-socks5"]
-inbound-http-connect = ["dep:zero-protocol-http-connect"]
-inbound-mixed = ["inbound-socks5", "inbound-http-connect"]
-inbound-vless = ["dep:zero-protocol-vless"]
-outbound-socks5 = ["dep:zero-protocol-socks5"]
-outbound-vless = ["dep:zero-protocol-vless"]
+default = []
 
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 zero-api = { path = "../api" }
 zero-config = { path = "../config" }
 zero-core = { path = "../core" }
-zero-protocol-http-connect = { path = "../../protocols/http-connect", optional = true }
-zero-protocol-socks5 = { path = "../../protocols/socks5", optional = true }
-zero-protocol-vless = { path = "../../protocols/vless", optional = true }
 zero-router = { path = "../router" }
-zero-platform-tokio = { path = "../platform/tokio" }
-zero-traits = { path = "../traits" }
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
+rcgen = "0.14"
 serde_json.workspace = true
 tokio.workspace = true

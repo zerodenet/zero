@@ -5,7 +5,7 @@ use zero_config::{
 use zero_core::{Address, Network, ProtocolType};
 
 use super::completed_sessions::CompletedSessionRecord;
-use super::outbound_group_state::OutboundGroupStateStore;
+use super::groups::OutboundGroupStateStore;
 use super::plan::{EnginePlan, TargetId, TargetKind};
 use super::resolve::resolve_target_chains;
 use super::runtime::Engine;
@@ -323,7 +323,7 @@ impl UrlTestMemberExport {
     fn new(
         plan: &EnginePlan,
         member_id: TargetId,
-        runtime: Option<&super::outbound_group_state::UrlTestGroupState>,
+        runtime: Option<&super::groups::UrlTestGroupState>,
     ) -> Self {
         let view = PlanView::new(plan);
         let member_tag = view.target_tag(member_id);

@@ -178,7 +178,11 @@ pub enum InboundProtocolConfig {
         socks5_users: Vec<Socks5UserConfig>,
     },
     #[serde(rename = "vless")]
-    Vless { users: Vec<VlessUserConfig> },
+    Vless {
+        users: Vec<VlessUserConfig>,
+        #[serde(default)]
+        tls: Option<TlsConfig>,
+    },
 }
 
 impl InboundProtocolConfig {
@@ -192,8 +196,15 @@ impl InboundProtocolConfig {
 
     pub fn vless_users(&self) -> &[VlessUserConfig] {
         match self {
-            Self::Vless { users } => users,
+            Self::Vless { users, .. } => users,
             _ => &[],
+        }
+    }
+
+    pub fn vless_tls(&self) -> Option<&TlsConfig> {
+        match self {
+            Self::Vless { tls, .. } => tls.as_ref(),
+            _ => None,
         }
     }
 }
@@ -213,6 +224,22 @@ pub struct VlessUserConfig {
     pub credential_id: Option<String>,
     #[serde(default)]
     pub principal_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TlsConfig {
+    pub cert_path: String,
+    pub key_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClientTlsConfig {
+    #[serde(default)]
+    pub server_name: Option<String>,
+    #[serde(default)]
+    pub ca_cert_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -249,6 +276,8 @@ pub enum OutboundProtocolConfig {
         server: String,
         port: u16,
         id: String,
+        #[serde(default)]
+        tls: Option<ClientTlsConfig>,
     },
 }
 

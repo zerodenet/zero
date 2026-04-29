@@ -17,12 +17,12 @@ full = [
     "outbound-socks5",
     "outbound-vless",
 ]
-inbound-socks5 = ["zero-engine/inbound-socks5"]
-inbound-http-connect = ["zero-engine/inbound-http-connect"]
-inbound-mixed = ["zero-engine/inbound-mixed"]
-inbound-vless = ["zero-engine/inbound-vless"]
-outbound-socks5 = ["zero-engine/outbound-socks5"]
-outbound-vless = ["zero-engine/outbound-vless"]
+inbound-socks5 = ["zero-proxy/inbound-socks5"]
+inbound-http-connect = ["zero-proxy/inbound-http-connect"]
+inbound-mixed = ["zero-proxy/inbound-mixed"]
+inbound-vless = ["zero-proxy/inbound-vless"]
+outbound-socks5 = ["zero-proxy/outbound-socks5"]
+outbound-vless = ["zero-proxy/outbound-vless"]
 status-api = []
 event-dispatcher = ["dep:zero-connector", "zero-connector/event-dispatcher"]
 sink-jsonl = ["event-dispatcher", "zero-connector/sink-jsonl"]
@@ -35,6 +35,7 @@ members = [
     "crates/api",
     "crates/config",
     "crates/connector",
+    "crates/proxy",
     "crates/router",
     "crates/platform/tokio",
     "protocols/socks5",
@@ -68,4 +69,5 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 zero-api = { path = "crates/api" }
 zero-engine = { path = "crates/engine", default-features = false }
+zero-proxy = { path = "crates/proxy", default-features = false }
 zero-connector = { path = "crates/connector", optional = true, default-features = false }

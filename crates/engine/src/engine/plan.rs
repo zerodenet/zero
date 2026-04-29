@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use zero_config::{OutboundGroupKind, OutboundProtocolConfig, RuntimeConfig};
+use zero_config::{ClientTlsConfig, OutboundGroupKind, OutboundProtocolConfig, RuntimeConfig};
 
 use super::error::EngineError;
 
@@ -44,13 +44,17 @@ impl EnginePlan {
                     username: username.clone(),
                     password: password.clone(),
                 }),
-                OutboundProtocolConfig::Vless { server, port, id } => {
-                    TargetKind::Outbound(OutboundTarget::Vless {
-                        server: server.clone(),
-                        port: *port,
-                        id: id.clone(),
-                    })
-                }
+                OutboundProtocolConfig::Vless {
+                    server,
+                    port,
+                    id,
+                    tls,
+                } => TargetKind::Outbound(OutboundTarget::Vless {
+                    server: server.clone(),
+                    port: *port,
+                    id: id.clone(),
+                    tls: tls.clone(),
+                }),
             };
 
             targets.push(TargetNode {
@@ -178,6 +182,7 @@ pub enum OutboundTarget {
         server: String,
         port: u16,
         id: String,
+        tls: Option<ClientTlsConfig>,
     },
 }
 

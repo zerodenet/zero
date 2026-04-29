@@ -1,6 +1,6 @@
 # MVP 范围
 
-`v0.0.2` 继续在 `v0.0.x` 线上推进，不扩协议面，重点补节点组能力。
+`v0.0.2` 继续在 `v0.0.x` 线上推进，重点补节点组能力，并收敛 engine/proxy 分层。
 
 ## 本版先做
 
@@ -8,6 +8,8 @@
 - `fallback` 出站组
 - `group -> group`
 - `urltest` 出站组
+- VLESS TCP/TLS 入站和出站第一阶段
+- `zero-proxy` 运行层拆分，`zero-engine` 只保留决策、状态和观测核心
 
 ## 本版语义
 

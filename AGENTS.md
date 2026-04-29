@@ -2,31 +2,60 @@
 
 ## Structure
 
-Root `src/main.rs` builds the `zero` binary. Reusable crates live under `crates/`: `core`, `traits`, `config`, `router`, `engine`, and `platform/tokio`. External protocol implementations live under `protocols/`. Versioned docs and release notes live under `docs/versions/v0.0.1/`. Long-term project notes live under `docs/project/`. Example configs live under `examples/v0.0.1/`.
+Root `src/main.rs` builds the `zero` binary. Reusable crates live under `crates/`: `api`, `core`, `traits`, `config`, `router`, `engine`, `proxy`, and `platform/tokio`. External protocol implementations live under `protocols/`: `socks5`, `http-connect`, `vless`. Versioned docs live under `docs/versions/vX.X.X/`. Long-term project notes live under `docs/project/`. Example configs live under `examples/vX.X.X/`.
+
+## Features & Build
+
+Default build is `--features full,status-api`. Optional features:
+- `inbound-socks5`, `inbound-http-connect`, `inbound-mixed`, `inbound-vless`
+- `outbound-socks5`, `outbound-vless`
+- `status-api` enables runtime status endpoint and selector switching
+
+If a config references an uncompiled protocol, it fails early with a clear error.
 
 ## Commands
 
+Always use workspace-wide commands by default:
 - `cargo fmt --all`
 - `cargo check --workspace`
-- `cargo test --workspace`
+- `cargo test --workspace` (full test suite)
 - `cargo clippy --workspace --all-targets`
-- `cargo run -- run examples/v0.0.1/basic.json`
-- `cargo run -- status --json examples/v0.0.1/basic.json`
+- `cargo build --release`
+- `cargo run -- run <config>` - run proxy with given config
+- `cargo run -- status [--json] <config>` - show current status
 
-Use workspace commands by default. If you change protocol behavior, config parsing, routing, or runtime wiring, run the full test suite.
+Run a single test: `cargo test <test_name>`
+
+If you change protocol behavior, config parsing, routing, or runtime wiring, run the full test suite.
 
 ## Style
 
-Use `rustfmt` defaults. Keep module and function names in `snake_case`, types in `CamelCase`, package names in `zero-*` form, and directory names short. Prefer ASCII unless the file already uses Unicode. Avoid large source files; around 300 lines is a good point to split code by responsibility.
+- Use `rustfmt` defaults
+- Keep module/function names `snake_case`, types `CamelCase`, packages `zero-*`
+- Prefer ASCII, keep directory names short
+- Split files around 300 lines
 
 ## Tests
 
-Tests must live in the corresponding sibling `tests/` directories. Do not add inline `#[cfg(test)]` test modules to logic files. Name tests by behavior. Update or add tests whenever config shape, protocol handling, routing, runtime behavior, or logs change.
+- Tests live in sibling `tests/` directories, not inline in logic files
+- Name tests after the behavior they test
+- Always add/update tests when changing config shape, protocol handling, routing, runtime behavior, or logging
 
 ## Boundaries
 
-Do not move protocol parsing into the root binary. Keep config ADTs in `crates/config`, routing in `crates/router`, orchestration in `crates/engine`, and concrete protocol code in `protocols/*`. `direct` and `block` stay inside `zero-engine`; they are not standalone protocol crates.
+- Do not move protocol parsing into root binary
+- Keep:
+  - config ADTs -> `crates/config`
+  - routing -> `crates/router`
+  - decisions, plan/state, groups, sessions, stats, events -> `crates/engine`
+  - proxy orchestration, listeners, transports, protocol wiring -> `crates/proxy`
+  - platform abstraction -> `crates/traits` + `crates/platform/tokio`
+  - concrete protocol implementations -> `protocols/*`
+- `direct` and `block` target semantics stay inside `zero-engine`; socket-level direct execution stays in `zero-proxy`
+- `mixed` is an inbound multiplexor, not an external protocol
 
 ## Docs
 
-When changing config, protocol scope, or release boundaries, update the matching docs in the same change. `docs/project/` is for long-term rules. `docs/versions/v0.0.1/` is for what this version actually ships.
+When changing config, protocol scope, or release boundaries, update matching docs in the same change:
+- `docs/project/` for long-term rules
+- `docs/versions/vX.X.X/` for version-specific release notes

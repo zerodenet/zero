@@ -1,7 +1,9 @@
 use std::io;
 use std::net::{IpAddr, SocketAddr};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
-use tokio::io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{lookup_host, TcpListener as TokioTcpListener, TcpStream, UdpSocket};
 use zero_traits::{
     AsyncSocket, DatagramSocket as DatagramSocketTrait, DnsResolver, IpAddress,
@@ -52,6 +54,34 @@ impl AsyncSocket for TokioSocket {
 
     async fn shutdown(&mut self) -> Result<(), Self::Error> {
         self.inner.shutdown().await
+    }
+}
+
+impl AsyncRead for TokioSocket {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for TokioSocket {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 }
 

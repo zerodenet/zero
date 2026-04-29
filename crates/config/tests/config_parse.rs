@@ -147,7 +147,7 @@ fn parses_vless_inbound_and_outbound_config() {
     .expect("config should parse");
 
     match &config.inbounds[0].protocol {
-        InboundProtocolConfig::Vless { users } => {
+        InboundProtocolConfig::Vless { users, .. } => {
             assert_eq!(users[0].credential_id.as_deref(), Some("node-user-1"));
             assert_eq!(users[0].principal_key.as_deref(), Some("user:10001"));
         }
@@ -158,6 +158,97 @@ fn parses_vless_inbound_and_outbound_config() {
         config.outbounds[0].protocol,
         OutboundProtocolConfig::Vless { .. }
     ));
+}
+
+#[test]
+fn parses_vless_tls_config() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vless-tls-in",
+                    "listen": { "address": "127.0.0.1", "port": 8443 },
+                    "protocol": {
+                        "type": "vless",
+                        "users": [
+                            { "id": "11111111-2222-3333-4444-555555555555" }
+                        ],
+                        "tls": {
+                            "cert_path": "certs/fullchain.pem",
+                            "key_path": "certs/privkey.pem"
+                        }
+                    }
+                }
+            ],
+            "outbounds": [
+                {
+                    "tag": "vless-tls-chain",
+                    "protocol": {
+                        "type": "vless",
+                        "server": "example.com",
+                        "port": 443,
+                        "id": "11111111-2222-3333-4444-555555555555",
+                        "tls": {
+                            "server_name": "edge.example.com",
+                            "ca_cert_path": "certs/ca.pem"
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "vless-tls-chain" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    let inbound_tls = config.inbounds[0]
+        .protocol
+        .vless_tls()
+        .expect("vless inbound tls");
+    assert_eq!(inbound_tls.cert_path, "certs/fullchain.pem");
+    assert_eq!(inbound_tls.key_path, "certs/privkey.pem");
+
+    match &config.outbounds[0].protocol {
+        OutboundProtocolConfig::Vless { tls, .. } => {
+            let tls = tls.as_ref().expect("vless outbound tls");
+            assert_eq!(tls.server_name.as_deref(), Some("edge.example.com"));
+            assert_eq!(tls.ca_cert_path.as_deref(), Some("certs/ca.pem"));
+        }
+        _ => panic!("expected vless outbound"),
+    }
+}
+
+#[test]
+fn rejects_empty_vless_tls_paths() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vless-tls-in",
+                    "listen": { "address": "127.0.0.1", "port": 8443 },
+                    "protocol": {
+                        "type": "vless",
+                        "users": [
+                            { "id": "11111111-2222-3333-4444-555555555555" }
+                        ],
+                        "tls": {
+                            "cert_path": "",
+                            "key_path": "certs/privkey.pem"
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidInbound(_)));
 }
 
 #[test]

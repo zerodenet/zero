@@ -427,7 +427,14 @@ fn validate_inbound_protocol(protocol: &InboundProtocolConfig) -> Result<(), Con
             validate_socks5_users("mixed inbound socks5", socks5_users)
         }
         InboundProtocolConfig::HttpConnect => Ok(()),
-        InboundProtocolConfig::Vless { users } => validate_vless_users(users),
+        InboundProtocolConfig::Vless { users, tls } => {
+            validate_vless_users(users)?;
+            if let Some(tls) = tls {
+                validate_inbound_optional_non_empty("vless tls.cert_path", &tls.cert_path)?;
+                validate_inbound_optional_non_empty("vless tls.key_path", &tls.key_path)?;
+            }
+            Ok(())
+        }
     }
 }
 
@@ -436,11 +443,25 @@ fn validate_outbound_protocol(protocol: &OutboundProtocolConfig) -> Result<(), C
         OutboundProtocolConfig::Socks5 {
             username, password, ..
         } => validate_socks5_outbound_auth(username.as_deref(), password.as_deref()),
-        OutboundProtocolConfig::Vless { server, port, id } => {
+        OutboundProtocolConfig::Vless {
+            server,
+            port,
+            id,
+            tls,
+        } => {
             validate_outbound_endpoint("vless", server, *port)?;
             validate_uuid_literal(id).map_err(|message| {
                 ConfigError::InvalidOutbound(format!("`vless` outbound `id` {message}"))
-            })
+            })?;
+            if let Some(tls) = tls {
+                if let Some(server_name) = &tls.server_name {
+                    validate_outbound_optional_non_empty("vless tls.server_name", server_name)?;
+                }
+                if let Some(ca_cert_path) = &tls.ca_cert_path {
+                    validate_outbound_optional_non_empty("vless tls.ca_cert_path", ca_cert_path)?;
+                }
+            }
+            Ok(())
         }
         OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => Ok(()),
     }
@@ -579,6 +600,19 @@ fn validate_inbound_optional_non_empty(
 ) -> Result<(), ConfigError> {
     if value.trim().is_empty() {
         return Err(ConfigError::InvalidInbound(format!(
+            "`{field}` must not be empty"
+        )));
+    }
+
+    Ok(())
+}
+
+fn validate_outbound_optional_non_empty(
+    field: &'static str,
+    value: &str,
+) -> Result<(), ConfigError> {
+    if value.trim().is_empty() {
+        return Err(ConfigError::InvalidOutbound(format!(
             "`{field}` must not be empty"
         )));
     }

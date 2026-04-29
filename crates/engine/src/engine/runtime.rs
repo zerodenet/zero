@@ -1,29 +1,22 @@
-use std::future::Future;
-use std::io;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::watch;
-use tokio::task::JoinSet;
-use tracing::{info, warn};
+use tracing::info;
 use zero_api::{EventFilter, RawApiEvent};
-use zero_config::{InboundConfig, InboundProtocolConfig, ModeConfig, RuntimeConfig};
+use zero_config::{ModeConfig, RuntimeConfig};
 use zero_core::{Address, Session};
-use zero_platform_tokio::{TokioListener, TokioResolver, TokioSocket};
 use zero_router::{RouteAction, RuleSet};
-
-use crate::ProtocolInventory;
 
 use super::completed_sessions::{CompletedSessionHistory, CompletedSessionRecord};
 use super::error::EngineError;
 use super::event_log::EngineEventLog;
-use super::logging::log_selector_group_target_changed;
-use super::metered::StreamTraffic;
-use super::outbound_group_state::OutboundGroupStateStore;
-use super::plan::{EnginePlan, TargetKind};
-use super::resolve::{resolve_target_id, ResolvedLeafOutbound, ResolvedOutbound};
+use super::groups::{OutboundGroupStateStore, UrlTestGroupState, UrlTestMemberState};
+use super::plan::{EnginePlan, TargetId, TargetKind};
+use super::resolve::{
+    resolve_target_chains, resolve_target_id, ResolvedLeafOutbound, ResolvedOutbound,
+};
 use super::session_lifecycle::SessionHandle;
 use super::session_registry::{ActiveSession, SessionRegistry};
 use super::stats::{EngineStats, EngineStatsSnapshot, SessionOutcome};
@@ -34,19 +27,17 @@ pub struct Engine {
     pub(crate) config: Arc<RuntimeConfig>,
     pub(crate) plan: Arc<EnginePlan>,
     pub(crate) router: Arc<RuleSet>,
-    pub(crate) resolver: TokioResolver,
-    pub(crate) protocols: ProtocolInventory,
-    pub(crate) next_session_id: Arc<AtomicU64>,
-    pub(crate) session_registry: Arc<SessionRegistry>,
-    pub(crate) completed_sessions: Arc<CompletedSessionHistory>,
-    pub(crate) event_log: Arc<EngineEventLog>,
-    pub(crate) stats: Arc<EngineStats>,
+    next_session_id: Arc<AtomicU64>,
+    session_registry: Arc<SessionRegistry>,
+    completed_sessions: Arc<CompletedSessionHistory>,
+    event_log: Arc<EngineEventLog>,
+    stats: Arc<EngineStats>,
     pub(crate) outbound_group_state: Arc<OutboundGroupStateStore>,
-    pub(crate) udp_upstream_idle_timeout: Duration,
+    udp_upstream_idle_timeout: Duration,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RouteDecision<'a> {
+pub enum RouteDecision<'a> {
     Route(&'a str),
     Direct,
     Reject,
@@ -74,8 +65,6 @@ impl<'a> From<&'a RouteAction> for RouteDecision<'a> {
 
 impl Engine {
     pub fn new(config: RuntimeConfig) -> Result<Self, EngineError> {
-        let protocols = ProtocolInventory::default();
-        protocols.validate_config(&config)?;
         let router = Arc::new(config.route.compile(config.source_dir())?);
         let plan = Arc::new(EnginePlan::build(&config)?);
         let udp_upstream_idle_timeout =
@@ -112,8 +101,6 @@ impl Engine {
             config: Arc::new(config),
             plan,
             router,
-            resolver: TokioResolver,
-            protocols,
             next_session_id: Arc::new(AtomicU64::new(1)),
             session_registry: SessionRegistry::shared(),
             completed_sessions: CompletedSessionHistory::shared(),
@@ -146,20 +133,67 @@ impl Engine {
         self.udp_upstream_idle_timeout
     }
 
-    pub fn protocols(&self) -> &ProtocolInventory {
-        &self.protocols
+    pub fn mode_kind(&self) -> &'static str {
+        self.config.mode.kind()
     }
 
     pub fn route_for(&self, address: &Address) -> RouteAction {
         self.route_decision(address).to_owned()
     }
 
-    pub(crate) fn route_decision<'a>(&'a self, address: &Address) -> RouteDecision<'a> {
+    pub fn route_decision<'a>(&'a self, address: &Address) -> RouteDecision<'a> {
         match &self.config.mode {
             ModeConfig::Rule => self.router.decide_ref(address).into(),
             ModeConfig::Direct => RouteDecision::Direct,
             ModeConfig::Global { outbound } => RouteDecision::Route(outbound.as_str()),
         }
+    }
+
+    pub fn resolve_route_decision<'a>(
+        &'a self,
+        action: RouteDecision<'a>,
+    ) -> Result<ResolvedOutbound<'a>, EngineError> {
+        match action {
+            RouteDecision::Direct => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Direct {
+                tag: None,
+            })),
+            RouteDecision::Reject => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Block {
+                tag: None,
+            })),
+            RouteDecision::Route(tag) => self.resolve_target(tag),
+        }
+    }
+
+    pub fn resolve_route_action<'a>(
+        &'a self,
+        action: &'a RouteAction,
+    ) -> Result<ResolvedOutbound<'a>, EngineError> {
+        self.resolve_route_decision(action.into())
+    }
+
+    pub fn resolve_target_id<'a>(&'a self, target_id: TargetId) -> Option<ResolvedOutbound<'a>> {
+        resolve_target_id(&self.plan, &self.outbound_group_state, target_id)
+    }
+
+    pub fn resolve_target_chains(&self, target_id: TargetId) -> Vec<Vec<TargetId>> {
+        resolve_target_chains(&self.plan, &self.outbound_group_state, target_id)
+    }
+
+    pub fn target_tag(&self, target_id: TargetId) -> Option<&str> {
+        self.plan.target(target_id).map(|target| target.tag())
+    }
+
+    fn resolve_target<'a>(&'a self, tag: &'a str) -> Result<ResolvedOutbound<'a>, EngineError> {
+        let Some(target_id) = self.plan.target_id(tag) else {
+            return Err(EngineError::MissingRouteTarget {
+                tag: tag.to_owned(),
+            });
+        };
+
+        self.resolve_target_id(target_id)
+            .ok_or_else(|| EngineError::MissingRouteTarget {
+                tag: tag.to_owned(),
+            })
     }
 
     pub fn stats_snapshot(&self) -> EngineStatsSnapshot {
@@ -220,309 +254,35 @@ impl Engine {
             .or_else(|| Some(view.target_tag_owned(selector.initial_member())));
         self.outbound_group_state
             .update_selector(group_id, target_id);
-        log_selector_group_target_changed(group_tag, previous.as_deref(), target_tag);
+        info!(
+            group_tag = group_tag,
+            previous = previous.as_deref().unwrap_or("-"),
+            selected = target_tag,
+            "selector group target changed"
+        );
         Ok(())
     }
 
-    pub async fn run(&self) -> Result<(), EngineError> {
-        self.run_until(async {
-            match tokio::signal::ctrl_c().await {
-                Ok(()) => info!("shutdown signal received"),
-                Err(error) => warn!(error = %error, "failed to listen for ctrl-c; stopping engine"),
-            }
-        })
-        .await
+    pub fn urltest_state(&self, group_id: TargetId) -> Option<UrlTestGroupState> {
+        self.outbound_group_state.urltest_state(group_id)
     }
 
-    pub async fn run_until<F>(&self, shutdown: F) -> Result<(), EngineError>
-    where
-        F: Future<Output = ()> + Send,
-    {
-        if self.config.inbounds.is_empty() {
-            return Err(EngineError::NoInbounds);
-        }
-
-        let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        let mut listeners = JoinSet::new();
-        let mut urltests = JoinSet::new();
-
-        for inbound in &self.config.inbounds {
-            match inbound.protocol {
-                InboundProtocolConfig::Socks5 { .. } => {
-                    #[cfg(feature = "inbound-socks5")]
-                    {
-                        let engine = self.clone();
-                        let inbound = inbound.clone();
-                        let shutdown = shutdown_rx.clone();
-                        listeners.spawn(async move {
-                            engine.run_socks5_listener(inbound, shutdown).await
-                        });
-                    }
-                    #[cfg(not(feature = "inbound-socks5"))]
-                    {
-                        return Err(EngineError::CompiledFeatureDisabled {
-                            kind: "inbound",
-                            tag: inbound.tag.clone(),
-                            protocol: "socks5",
-                            feature: "inbound-socks5",
-                        });
-                    }
-                }
-                InboundProtocolConfig::HttpConnect => {
-                    #[cfg(feature = "inbound-http-connect")]
-                    {
-                        let engine = self.clone();
-                        let inbound = inbound.clone();
-                        let shutdown = shutdown_rx.clone();
-                        listeners.spawn(async move {
-                            engine.run_http_connect_listener(inbound, shutdown).await
-                        });
-                    }
-                    #[cfg(not(feature = "inbound-http-connect"))]
-                    {
-                        return Err(EngineError::CompiledFeatureDisabled {
-                            kind: "inbound",
-                            tag: inbound.tag.clone(),
-                            protocol: "http-connect",
-                            feature: "inbound-http-connect",
-                        });
-                    }
-                }
-                InboundProtocolConfig::Mixed { .. } => {
-                    #[cfg(feature = "inbound-mixed")]
-                    {
-                        let engine = self.clone();
-                        let inbound = inbound.clone();
-                        let shutdown = shutdown_rx.clone();
-                        listeners.spawn(async move {
-                            engine.run_mixed_listener(inbound, shutdown).await
-                        });
-                    }
-                    #[cfg(not(feature = "inbound-mixed"))]
-                    {
-                        return Err(EngineError::CompiledFeatureDisabled {
-                            kind: "inbound",
-                            tag: inbound.tag.clone(),
-                            protocol: "mixed",
-                            feature: "inbound-mixed",
-                        });
-                    }
-                }
-                InboundProtocolConfig::Vless { .. } => {
-                    #[cfg(feature = "inbound-vless")]
-                    {
-                        let engine = self.clone();
-                        let inbound = inbound.clone();
-                        let shutdown = shutdown_rx.clone();
-                        listeners.spawn(async move {
-                            engine.run_vless_listener(inbound, shutdown).await
-                        });
-                    }
-                    #[cfg(not(feature = "inbound-vless"))]
-                    {
-                        return Err(EngineError::CompiledFeatureDisabled {
-                            kind: "inbound",
-                            tag: inbound.tag.clone(),
-                            protocol: "vless",
-                            feature: "inbound-vless",
-                        });
-                    }
-                }
-            }
-        }
-
-        for &group_id in self.plan.urltest_groups() {
-            let engine = self.clone();
-            let shutdown = shutdown_rx.clone();
-            urltests.spawn(async move { engine.run_urltest_group(group_id, shutdown).await });
-        }
-
-        info!(
-            inbound_count = self.config.inbounds.len(),
-            outbound_count = self.config.outbounds.len(),
-            outbound_group_count = self.config.outbound_groups.len(),
-            rule_count = self.config.route.rules.len(),
-            mode = %self.config.mode.kind(),
-            udp_upstream_idle_timeout_seconds = self.udp_upstream_idle_timeout().as_secs(),
-            supported_inbounds = ?self.protocols.supported_inbounds(),
-            supported_outbounds = ?self.protocols.supported_outbounds(),
-            "zero-engine started"
-        );
-
-        tokio::pin!(shutdown);
-        let mut shutting_down = false;
-
-        loop {
-            if shutting_down && listeners.is_empty() && urltests.is_empty() {
-                let stats = self.stats_snapshot();
-                info!(
-                    total_started = stats.total_started,
-                    completed_sessions = stats.completed_sessions,
-                    failed_sessions = stats.failed_sessions,
-                    blocked_sessions = stats.blocked_sessions,
-                    direct_sessions = stats.direct_sessions,
-                    chained_sessions = stats.chained_sessions,
-                    udp_upstream_active_associations = stats.udp_upstream.active_associations,
-                    udp_upstream_created_associations = stats.udp_upstream.created_associations,
-                    udp_upstream_reused_associations = stats.udp_upstream.reused_associations,
-                    udp_upstream_closed_associations = stats.udp_upstream.closed_associations,
-                    udp_upstream_idle_timeouts = stats.udp_upstream.idle_timeouts,
-                    udp_upstream_dropped_associations = stats.udp_upstream.dropped_associations,
-                    "zero-engine stopped"
-                );
-                return Ok(());
-            }
-
-            tokio::select! {
-                _ = &mut shutdown, if !shutting_down => {
-                    shutting_down = true;
-                    let _ = shutdown_tx.send(true);
-                    info!("propagated engine shutdown to background tasks");
-                }
-                result = listeners.join_next(), if !listeners.is_empty() => {
-                    match result {
-                        Some(Ok(Ok(()))) if shutting_down => {}
-                        Some(Ok(Ok(()))) => return Err(EngineError::InboundTaskExited),
-                        Some(Ok(Err(error))) => return Err(error),
-                        Some(Err(error)) => return Err(io::Error::other(error).into()),
-                        None if shutting_down => return Ok(()),
-                        None => return Err(EngineError::InboundTaskExited),
-                    }
-                }
-                result = urltests.join_next(), if !urltests.is_empty() => {
-                    match result {
-                        Some(Ok(Ok(()))) if shutting_down => {}
-                        Some(Ok(Ok(()))) => return Err(EngineError::UrlTestTaskExited),
-                        Some(Ok(Err(error))) => return Err(error),
-                        Some(Err(error)) => return Err(io::Error::other(error).into()),
-                        None if shutting_down => {}
-                        None => return Err(EngineError::UrlTestTaskExited),
-                    }
-                }
-            }
-        }
+    pub fn urltest_selected_target(&self, group_id: TargetId) -> Option<TargetId> {
+        self.outbound_group_state.urltest_selected_target(group_id)
     }
 
-    pub(crate) fn resolve_outbound<'a>(
-        &'a self,
-        action: RouteDecision<'a>,
-    ) -> Result<ResolvedOutbound<'a>, EngineError> {
-        match action {
-            RouteDecision::Direct => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Direct {
-                tag: None,
-            })),
-            RouteDecision::Reject => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Block {
-                tag: None,
-            })),
-            RouteDecision::Route(tag) => self.resolve_target(tag),
-        }
-    }
-
-    fn resolve_target<'a>(&'a self, tag: &'a str) -> Result<ResolvedOutbound<'a>, EngineError> {
-        let Some(target_id) = self.plan.target_id(tag) else {
-            return Err(EngineError::MissingRouteTarget {
-                tag: tag.to_owned(),
-            });
-        };
-
-        resolve_target_id(&self.plan, &self.outbound_group_state, target_id).ok_or_else(|| {
-            EngineError::MissingRouteTarget {
-                tag: tag.to_owned(),
-            }
-        })
-    }
-
-    #[cfg(feature = "outbound-socks5")]
-    pub(crate) async fn connect_via_socks5_upstream(
+    pub fn update_urltest_state(
         &self,
-        session: &zero_core::Session,
-        server: &str,
-        port: u16,
-        auth: Option<(&str, &str)>,
-    ) -> Result<TokioSocket, EngineError> {
-        let upstream = self
-            .protocols
-            .direct_outbound
-            .connect_host(server, port, &self.resolver)
-            .await?;
-        let mut upstream = super::metered::MeteredStream::new(upstream);
-
-        self.protocols
-            .socks5_outbound
-            .establish_tunnel_with_auth(
-                &mut upstream,
-                session,
-                auth.map(
-                    |(username, password)| zero_protocol_socks5::Socks5OutboundAuth {
-                        username,
-                        password,
-                    },
-                ),
-            )
-            .await?;
-        self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
-
-        Ok(upstream.into_inner())
+        group_id: TargetId,
+        selected: TargetId,
+        latency_ms: Option<u64>,
+        members: Vec<UrlTestMemberState>,
+    ) {
+        self.outbound_group_state
+            .update_urltest(group_id, selected, latency_ms, members);
     }
 
-    #[cfg(not(feature = "outbound-socks5"))]
-    pub(crate) async fn connect_via_socks5_upstream(
-        &self,
-        _session: &zero_core::Session,
-        _server: &str,
-        _port: u16,
-        _auth: Option<(&str, &str)>,
-    ) -> Result<TokioSocket, EngineError> {
-        Err(EngineError::CompiledFeatureDisabled {
-            kind: "outbound",
-            tag: "socks5-upstream".to_owned(),
-            protocol: "socks5",
-            feature: "outbound-socks5",
-        })
-    }
-
-    #[cfg(feature = "outbound-vless")]
-    pub(crate) async fn connect_via_vless_upstream(
-        &self,
-        session: &zero_core::Session,
-        server: &str,
-        port: u16,
-        id: &str,
-    ) -> Result<TokioSocket, EngineError> {
-        let id = zero_protocol_vless::parse_uuid(id)?;
-        let upstream = self
-            .protocols
-            .direct_outbound
-            .connect_host(server, port, &self.resolver)
-            .await?;
-        let mut upstream = super::metered::MeteredStream::new(upstream);
-
-        self.protocols
-            .vless_outbound
-            .establish_tcp_tunnel(&mut upstream, session, &id)
-            .await?;
-        self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
-
-        Ok(upstream.into_inner())
-    }
-
-    #[cfg(not(feature = "outbound-vless"))]
-    pub(crate) async fn connect_via_vless_upstream(
-        &self,
-        _session: &zero_core::Session,
-        _server: &str,
-        _port: u16,
-        _id: &str,
-    ) -> Result<TokioSocket, EngineError> {
-        Err(EngineError::CompiledFeatureDisabled {
-            kind: "outbound",
-            tag: "vless-upstream".to_owned(),
-            protocol: "vless",
-            feature: "outbound-vless",
-        })
-    }
-
-    pub(crate) fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {
+    pub fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {
         session.id = self.next_session_id.fetch_add(1, Ordering::Relaxed);
         session.inbound_tag = Some(inbound_tag.to_owned());
         self.session_registry
@@ -530,54 +290,76 @@ impl Engine {
         self.stats.record_start();
     }
 
-    pub(crate) fn set_session_outbound(&self, session: &Session) {
+    pub fn set_session_outbound(&self, session: &Session) {
         self.session_registry
             .update_outbound_tag(session.id, session.outbound_tag.as_deref());
     }
 
-    pub(crate) fn record_session_upload(&self, session_id: u64, bytes: u64) {
+    pub fn record_session_upload(&self, session_id: u64, bytes: u64) {
         self.session_registry.record_upload(session_id, bytes);
     }
 
-    pub(crate) fn record_session_download(&self, session_id: u64, bytes: u64) {
+    pub fn record_session_download(&self, session_id: u64, bytes: u64) {
         self.session_registry.record_download(session_id, bytes);
     }
 
-    pub(crate) fn record_session_inbound_rx(&self, session_id: u64, bytes: u64) {
+    pub fn record_session_inbound_rx(&self, session_id: u64, bytes: u64) {
         self.session_registry.record_inbound_rx(session_id, bytes);
     }
 
-    pub(crate) fn record_session_inbound_tx(&self, session_id: u64, bytes: u64) {
+    pub fn record_session_inbound_tx(&self, session_id: u64, bytes: u64) {
         self.session_registry.record_inbound_tx(session_id, bytes);
     }
 
-    pub(crate) fn record_session_outbound_rx(&self, session_id: u64, bytes: u64) {
+    pub fn record_session_outbound_rx(&self, session_id: u64, bytes: u64) {
         self.session_registry.record_outbound_rx(session_id, bytes);
     }
 
-    pub(crate) fn record_session_outbound_tx(&self, session_id: u64, bytes: u64) {
+    pub fn record_session_outbound_tx(&self, session_id: u64, bytes: u64) {
         self.session_registry.record_outbound_tx(session_id, bytes);
     }
 
-    pub(crate) fn record_session_inbound_traffic(&self, session_id: u64, traffic: StreamTraffic) {
-        if traffic.is_empty() {
-            return;
-        }
-
-        self.record_session_inbound_rx(session_id, traffic.read_bytes);
-        self.record_session_inbound_tx(session_id, traffic.written_bytes);
+    pub fn record_udp_upstream_association_created(&self) {
+        self.stats.record_udp_upstream_association_created();
     }
 
-    pub(crate) fn record_session_outbound_traffic(&self, session_id: u64, traffic: StreamTraffic) {
-        if traffic.is_empty() {
-            return;
-        }
-
-        self.record_session_outbound_rx(session_id, traffic.read_bytes);
-        self.record_session_outbound_tx(session_id, traffic.written_bytes);
+    pub fn record_udp_upstream_association_reused(&self) {
+        self.stats.record_udp_upstream_association_reused();
     }
 
-    pub(crate) fn finish_session(
+    pub fn record_udp_upstream_association_closed(&self) {
+        self.stats.record_udp_upstream_association_closed();
+    }
+
+    pub fn record_udp_upstream_association_idle_timeout(&self) {
+        self.stats.record_udp_upstream_association_idle_timeout();
+    }
+
+    pub fn record_udp_upstream_association_dropped(&self) {
+        self.stats.record_udp_upstream_association_dropped();
+    }
+
+    pub fn record_udp_upstream_association_failed(&self) {
+        self.stats.record_udp_upstream_association_failed();
+    }
+
+    pub fn record_udp_upstream_send_failure(&self) {
+        self.stats.record_udp_upstream_send_failure();
+    }
+
+    pub fn record_udp_upstream_recv_failure(&self) {
+        self.stats.record_udp_upstream_recv_failure();
+    }
+
+    pub fn record_udp_upstream_packet_sent(&self) {
+        self.stats.record_udp_upstream_packet_sent();
+    }
+
+    pub fn record_udp_upstream_packet_received(&self) {
+        self.stats.record_udp_upstream_packet_received();
+    }
+
+    pub fn finish_session(
         &self,
         session_id: u64,
         outcome: SessionOutcome,
@@ -590,12 +372,10 @@ impl Engine {
         Some(record)
     }
 
-    pub(crate) fn track_session(&self, session_id: u64) -> SessionHandle {
+    pub fn track_session(&self, session_id: u64) -> SessionHandle {
         SessionHandle::new(self.clone(), session_id)
     }
-}
 
-impl Engine {
     fn outbound_protocol_for_tag(&self, tag: &str) -> Option<&'static str> {
         if tag == "direct" {
             return Some("direct");
@@ -615,9 +395,4 @@ impl Engine {
                 zero_config::OutboundProtocolConfig::Vless { .. } => "vless",
             })
     }
-}
-
-pub(crate) async fn bind_listener(inbound: &InboundConfig) -> io::Result<TokioListener> {
-    let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
-    TokioListener::bind(&listen).await
 }

@@ -1,7 +1,10 @@
-use super::outbound_group_state::OutboundGroupStateStore;
+use zero_config::ClientTlsConfig;
+
+use super::groups::OutboundGroupStateStore;
 use super::plan::{EnginePlan, OutboundTarget, TargetId, TargetKind};
 
-pub(crate) enum ResolvedLeafOutbound<'a> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolvedLeafOutbound<'a> {
     Direct {
         tag: Option<&'a str>,
     },
@@ -20,10 +23,12 @@ pub(crate) enum ResolvedLeafOutbound<'a> {
         server: &'a str,
         port: u16,
         id: &'a str,
+        tls: Option<&'a ClientTlsConfig>,
     },
 }
 
-pub(crate) enum ResolvedOutbound<'a> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolvedOutbound<'a> {
     Single(ResolvedLeafOutbound<'a>),
     Fallback {
         candidates: Vec<ResolvedLeafOutbound<'a>>,
@@ -111,11 +116,17 @@ fn resolve_leaf_outbound<'a>(
             username: username.as_deref(),
             password: password.as_deref(),
         },
-        OutboundTarget::Vless { server, port, id } => ResolvedLeafOutbound::Vless {
+        OutboundTarget::Vless {
+            server,
+            port,
+            id,
+            tls,
+        } => ResolvedLeafOutbound::Vless {
             tag,
             server,
             port: *port,
             id,
+            tls: tls.as_ref(),
         },
     }
 }

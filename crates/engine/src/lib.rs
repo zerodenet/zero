@@ -1,13 +1,11 @@
 mod engine;
-mod inventory;
-mod outbound;
 
 pub use engine::{
     ActiveSession, ActiveSessionExport, AddressExport, CompletedSessionExport,
     CompletedSessionRecord, Engine, EngineConfigExport, EngineError, EnginePlan,
     EngineRuntimeExport, EngineStatsSnapshot, EngineStatusExport, FallbackGroupPlan, InboundExport,
-    ModeExport, OutboundExport, OutboundGroupExport, OutboundTarget, RunningEngine,
-    SelectorGroupPlan, SessionAuthExport, TargetId, TargetKind, TargetNode,
-    UdpUpstreamStatsSnapshot, UrlTestGroupPlan,
+    ModeExport, OutboundExport, OutboundGroupExport, OutboundTarget, ResolvedLeafOutbound,
+    ResolvedOutbound, RouteDecision, SelectorGroupPlan, SessionAuthExport, SessionHandle,
+    SessionOutcome, TargetId, TargetKind, TargetNode, UdpUpstreamStatsSnapshot, UrlTestGroupPlan,
+    UrlTestGroupState, UrlTestMemberState,
 };
-pub use inventory::ProtocolInventory;

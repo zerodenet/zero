@@ -3,36 +3,15 @@ mod completed_sessions;
 mod error;
 mod event_log;
 mod export;
-#[cfg(feature = "inbound-http-connect")]
-mod http_connect;
-mod logging;
-mod metered;
-#[cfg(feature = "inbound-mixed")]
-mod mixed;
-mod outbound_group_state;
+mod groups;
 mod plan;
 mod resolve;
-mod running;
 mod runtime;
 mod session_lifecycle;
 mod session_registry;
-#[cfg(feature = "inbound-socks5")]
-mod socks5;
-#[cfg(feature = "inbound-socks5")]
-mod socks5_udp;
 mod stats;
-mod stream;
-mod tcp_outbound;
-mod tcp_relay;
 mod traffic_sampler;
-#[cfg(feature = "inbound-socks5")]
-mod udp_sessions;
-#[cfg(feature = "inbound-socks5")]
-mod upstream_socks5_udp;
-mod urltest;
 mod view;
-#[cfg(feature = "inbound-vless")]
-mod vless;
 
 pub use completed_sessions::CompletedSessionRecord;
 pub use error::EngineError;
@@ -41,11 +20,14 @@ pub use export::{
     EngineRuntimeExport, EngineStatusExport, InboundExport, ModeExport, OutboundExport,
     OutboundGroupExport, SessionAuthExport,
 };
+pub use groups::{UrlTestGroupState, UrlTestMemberState};
 pub use plan::{
     EnginePlan, FallbackGroupPlan, OutboundTarget, SelectorGroupPlan, TargetId, TargetKind,
     TargetNode, UrlTestGroupPlan,
 };
-pub use running::RunningEngine;
+pub use resolve::{ResolvedLeafOutbound, ResolvedOutbound};
 pub use runtime::Engine;
+pub use runtime::RouteDecision;
+pub use session_lifecycle::SessionHandle;
 pub use session_registry::ActiveSession;
-pub use stats::{EngineStatsSnapshot, UdpUpstreamStatsSnapshot};
+pub use stats::{EngineStatsSnapshot, SessionOutcome, UdpUpstreamStatsSnapshot};
