@@ -36,6 +36,61 @@ use super::stream::ClientStream;
 use super::stream::TcpRelayStream;
 use zero_engine::EngineError;
 
+#[cfg(feature = "outbound-vless")]
+#[derive(Debug)]
+struct InsecureCertVerifier;
+
+#[cfg(feature = "outbound-vless")]
+impl rustls::client::danger::ServerCertVerifier for InsecureCertVerifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        // 对于 insecure 模式，跳过签名验证（因为证书已经被信任了）
+        let _ = (message, cert, dss);
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        // 对于 insecure 模式，跳过签名验证
+        let _ = (message, cert, dss);
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        vec![
+            rustls::SignatureScheme::RSA_PKCS1_SHA256,
+            rustls::SignatureScheme::RSA_PKCS1_SHA384,
+            rustls::SignatureScheme::RSA_PKCS1_SHA512,
+            rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+            rustls::SignatureScheme::ECDSA_NISTP384_SHA384,
+            rustls::SignatureScheme::ECDSA_NISTP521_SHA512,
+            rustls::SignatureScheme::RSA_PSS_SHA256,
+            rustls::SignatureScheme::RSA_PSS_SHA384,
+            rustls::SignatureScheme::RSA_PSS_SHA512,
+            rustls::SignatureScheme::ED25519,
+        ]
+    }
+}
+
 #[cfg(feature = "inbound-vless")]
 pub(crate) fn build_tls_acceptor(
     tls: &TlsConfig,
@@ -43,10 +98,18 @@ pub(crate) fn build_tls_acceptor(
 ) -> Result<TlsAcceptor, EngineError> {
     let certs = load_certs(&resolve_path(base_dir, &tls.cert_path))?;
     let key = load_private_key(&resolve_path(base_dir, &tls.key_path))?;
-    let config = rustls::ServerConfig::builder()
+    let mut config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+
+    if !tls.alpn.is_empty() {
+        config.alpn_protocols = tls
+            .alpn
+            .iter()
+            .map(|proto| proto.as_bytes().to_vec())
+            .collect();
+    }
 
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
@@ -63,9 +126,7 @@ pub(crate) async fn connect_tls_upstream(
         .as_deref()
         .unwrap_or(default_server_name)
         .to_owned();
-    let server_name = rustls::pki_types::ServerName::try_from(server_name.as_str())
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid tls server_name"))?
-        .to_owned();
+
     let mut roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     if let Some(path) = &tls.ca_cert_path {
         for cert in load_certs(&resolve_path(base_dir, path))? {
@@ -75,10 +136,29 @@ pub(crate) async fn connect_tls_upstream(
         }
     }
 
-    let config = ClientConfig::builder()
-        .with_root_certificates(roots)
-        .with_no_client_auth();
+    let mut config = if tls.insecure {
+        ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(InsecureCertVerifier))
+            .with_no_client_auth()
+    } else {
+        ClientConfig::builder()
+            .with_root_certificates(roots)
+            .with_no_client_auth()
+    };
+
+    if !tls.alpn.is_empty() {
+        config.alpn_protocols = tls
+            .alpn
+            .iter()
+            .map(|proto| proto.as_bytes().to_vec())
+            .collect();
+    }
+
     let connector = TlsConnector::from(Arc::new(config));
+    let server_name = rustls::pki_types::ServerName::try_from(server_name.as_str())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid tls server_name"))?
+        .to_owned();
     let stream = connector.connect(server_name, socket.into_inner()).await?;
 
     Ok(TcpRelayStream::Tls(Box::new(stream)))

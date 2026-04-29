@@ -116,9 +116,10 @@ impl Proxy {
                 port,
                 id,
                 tls,
+                ws,
             } => {
                 match self
-                    .connect_via_vless_upstream(session, server, port, id, tls)
+                    .connect_via_vless_upstream(session, server, port, id, tls, ws)
                     .await
                 {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Vless {

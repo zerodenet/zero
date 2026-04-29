@@ -222,6 +222,7 @@ impl Proxy {
                     port,
                     id,
                     tls,
+                    ws,
                     ..
                 } => {
                     let session = Session::new(
@@ -231,7 +232,7 @@ impl Proxy {
                         Network::Tcp,
                         ProtocolType::Unknown,
                     );
-                    self.connect_via_vless_upstream(&session, server, port, id, tls)
+                    self.connect_via_vless_upstream(&session, server, port, id, tls, ws)
                         .await?
                 }
             };

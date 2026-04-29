@@ -469,26 +469,41 @@ impl Proxy {
         port: u16,
         id: &str,
         tls: Option<&ClientTlsConfig>,
+        ws: Option<&zero_config::WebSocketConfig>,
     ) -> Result<TcpRelayStream, EngineError> {
         let id = zero_protocol_vless::parse_uuid(id)?;
-        let upstream = self
+        let socket = self
             .protocols
             .direct_outbound
             .connect_host(server, port, &self.resolver)
             .await?;
-        let upstream = match tls {
-            Some(tls) => {
-                crate::transport::connect_tls_upstream(
-                    upstream,
-                    tls,
-                    self.config.source_dir(),
-                    server,
-                )
-                .await?
+
+        let stream = match (tls, ws) {
+            (Some(tls), Some(ws)) => {
+                let tls_stream =
+                    crate::transport::connect_tls_upstream(socket, tls, self.config.source_dir(), server)
+                        .await?;
+                match tls_stream {
+                    TcpRelayStream::Tls(tls_inner) => {
+                        let ws_stream =
+                            crate::transport::connect_ws(*tls_inner, ws, server, port).await?;
+                        TcpRelayStream::WsTls(Box::new(ws_stream))
+                    }
+                    _ => unreachable!("connect_tls_upstream always returns Tls variant"),
+                }
             }
-            None => upstream.into(),
+            (Some(tls), None) => {
+                crate::transport::connect_tls_upstream(socket, tls, self.config.source_dir(), server)
+                    .await?
+            }
+            (None, Some(ws)) => {
+                let ws_stream = crate::transport::connect_ws(socket, ws, server, port).await?;
+                TcpRelayStream::WsPlain(Box::new(ws_stream))
+            }
+            (None, None) => socket.into(),
         };
-        let mut upstream = MeteredStream::new(upstream);
+
+        let mut upstream = crate::transport::MeteredStream::new(stream);
 
         self.protocols
             .vless_outbound
@@ -507,6 +522,7 @@ impl Proxy {
         _port: u16,
         _id: &str,
         _tls: Option<&ClientTlsConfig>,
+        _ws: Option<&zero_config::WebSocketConfig>,
     ) -> Result<TcpRelayStream, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",

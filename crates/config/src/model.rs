@@ -182,6 +182,8 @@ pub enum InboundProtocolConfig {
         users: Vec<VlessUserConfig>,
         #[serde(default)]
         tls: Option<TlsConfig>,
+        #[serde(default)]
+        ws: Option<WebSocketConfig>,
     },
 }
 
@@ -231,6 +233,8 @@ pub struct VlessUserConfig {
 pub struct TlsConfig {
     pub cert_path: String,
     pub key_path: String,
+    #[serde(default)]
+    pub alpn: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -239,7 +243,26 @@ pub struct ClientTlsConfig {
     #[serde(default)]
     pub server_name: Option<String>,
     #[serde(default)]
+    pub disable_sni: bool,
+    #[serde(default)]
     pub ca_cert_path: Option<String>,
+    #[serde(default)]
+    pub insecure: bool,
+    #[serde(default)]
+    pub alpn: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WebSocketConfig {
+    #[serde(default = "default_ws_path")]
+    pub path: String,
+    #[serde(default)]
+    pub headers: std::collections::HashMap<String, String>,
+}
+
+fn default_ws_path() -> String {
+    "/".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -278,6 +301,8 @@ pub enum OutboundProtocolConfig {
         id: String,
         #[serde(default)]
         tls: Option<ClientTlsConfig>,
+        #[serde(default)]
+        ws: Option<WebSocketConfig>,
     },
 }
 

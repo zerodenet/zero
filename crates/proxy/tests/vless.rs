@@ -307,6 +307,214 @@ async fn relays_tcp_through_vless_chained_outbound() {
 }
 
 #[tokio::test]
+async fn vless_tls_with_alpn_config() {
+    let echo_port = free_port();
+    let proxy_port = free_port();
+    let tls = test_tls_material();
+
+    let echo_task = spawn_echo_server(echo_port).await;
+
+    let config = RuntimeConfig::parse(&format!(
+        r#"{{
+            "inbounds": [
+                {{
+                    "tag": "vless-tls-alpn-in",
+                    "listen": {{ "address": "127.0.0.1", "port": {proxy_port} }},
+                    "protocol": {{
+                        "type": "vless",
+                        "users": [{{ "id": "{USER_ID}" }}],
+                        "tls": {{
+                            "cert_path": "{}",
+                            "key_path": "{}",
+                            "alpn": ["http/1.1", "h2"]
+                        }}
+                    }}
+                }}
+            ],
+            "outbounds": [],
+            "route": {{
+                "rules": [],
+                "final": {{ "type": "direct" }}
+            }}
+        }}"#,
+        escape_json_path(&tls.cert_path),
+        escape_json_path(&tls.key_path),
+    ))
+    .expect("parse engine config");
+
+    let engine = Engine::new(config).expect("build engine");
+    let engine_handle = spawn_engine(engine);
+
+    wait_for_listener(proxy_port).await;
+
+    // 客户端也配置 ALPN 连接
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(tls.cert_der.clone()).expect("trust test cert");
+    let mut client_config = rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    client_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+
+    let connector = TlsConnector::from(Arc::new(client_config));
+    let server_name = rustls::pki_types::ServerName::try_from("localhost")
+        .expect("server name")
+        .to_owned();
+    let stream = TcpStream::connect(("127.0.0.1", proxy_port))
+        .await
+        .expect("connect proxy");
+
+    // TLS + ALPN 握手成功
+    let mut tls_stream = connector
+        .connect(server_name, stream)
+        .await
+        .expect("tls handshake with alpn");
+
+    // 验证 VLESS 握手也能正常完成
+    tls_stream
+        .write_all(&vless_request_for_ipv4(USER_ID, [127, 0, 0, 1], echo_port))
+        .await
+        .expect("write vless request");
+
+    let mut response = [0_u8; 2];
+    tls_stream
+        .read_exact(&mut response)
+        .await
+        .expect("read vless response");
+    assert_eq!(response, [0x00, 0x00]);
+
+    engine_handle.shutdown().await.expect("shutdown engine");
+    let _ = echo_task.await;
+}
+
+#[tokio::test]
+async fn vless_outbound_tls_insecure_skip_verification() {
+    let echo_port = free_port();
+    let upstream_port = free_port();
+    let outer_port = free_port();
+    let tls = test_tls_material();
+
+    let echo_task = spawn_echo_server(echo_port).await;
+
+    // 上游服务端用自签名证书（正常情况下客户端会拒绝）
+    let upstream_config = RuntimeConfig::parse(&format!(
+        r#"{{
+            "inbounds": [
+                {{
+                    "tag": "upstream-vless-tls-in",
+                    "listen": {{ "address": "127.0.0.1", "port": {upstream_port} }},
+                    "protocol": {{
+                        "type": "vless",
+                        "users": [{{ "id": "{USER_ID}" }}],
+                        "tls": {{
+                            "cert_path": "{}",
+                            "key_path": "{}"
+                        }}
+                    }}
+                }}
+            ],
+            "outbounds": [],
+            "route": {{
+                "rules": [],
+                "final": {{ "type": "direct" }}
+            }}
+        }}"#,
+        escape_json_path(&tls.cert_path),
+        escape_json_path(&tls.key_path),
+    ))
+    .expect("parse upstream config");
+    let upstream_engine = Engine::new(upstream_config).expect("build upstream engine");
+    let upstream_handle = spawn_engine(upstream_engine);
+
+    wait_for_listener(upstream_port).await;
+
+    // 外部代理客户端用 insecure: true 跳过证书验证，连接到自签名的上游
+    let outer_config = RuntimeConfig::parse(&format!(
+        r#"{{
+            "inbounds": [
+                {{
+                    "tag": "outer-socks-in",
+                    "listen": {{ "address": "127.0.0.1", "port": {outer_port} }},
+                    "protocol": {{ "type": "socks5" }}
+                }}
+            ],
+            "outbounds": [
+                {{
+                    "tag": "vless-tls-chain",
+                    "protocol": {{
+                        "type": "vless",
+                        "server": "127.0.0.1",
+                        "port": {upstream_port},
+                        "id": "{USER_ID}",
+                        "tls": {{
+                            "server_name": "localhost",
+                            "insecure": true
+                        }}
+                    }}
+                }}
+            ],
+            "route": {{
+                "rules": [],
+                "final": {{ "type": "route", "outbound": "vless-tls-chain" }}
+            }}
+        }}"#
+    ))
+    .expect("parse outer config");
+    let outer_engine = Engine::new(outer_config).expect("build outer engine");
+    let outer_handle = spawn_engine(outer_engine);
+
+    wait_for_listener(outer_port).await;
+
+    // 通过 SOCKS5 -> VLESS(TLS, insecure) -> 目标
+    let mut client = TcpStream::connect(("127.0.0.1", outer_port))
+        .await
+        .expect("connect outer proxy");
+    client
+        .write_all(&[0x05, 0x01, 0x00])
+        .await
+        .expect("write auth");
+
+    let mut auth = [0_u8; 2];
+    client.read_exact(&mut auth).await.expect("read auth");
+    assert_eq!(auth, [0x05, 0x00]);
+
+    let request = [
+        0x05,
+        0x01,
+        0x00,
+        0x01,
+        127,
+        0,
+        0,
+        1,
+        ((echo_port >> 8) & 0xff) as u8,
+        (echo_port & 0xff) as u8,
+    ];
+    client.write_all(&request).await.expect("write request");
+
+    let mut response = [0_u8; 10];
+    client
+        .read_exact(&mut response)
+        .await
+        .expect("read response");
+    assert_eq!(response[1], 0x00);
+
+    client.write_all(b"isky").await.expect("write payload");
+    let mut echoed = [0_u8; 4];
+    client.read_exact(&mut echoed).await.expect("read payload");
+    assert_eq!(&echoed, b"isky");
+
+    outer_handle
+        .shutdown()
+        .await
+        .expect("shutdown outer engine");
+    upstream_handle
+        .shutdown()
+        .await
+        .expect("shutdown upstream engine");
+    let _ = echo_task.await;
+}
+
+#[tokio::test]
 async fn relays_tcp_through_vless_tls_chained_outbound() {
     let echo_port = free_port();
     let upstream_port = free_port();

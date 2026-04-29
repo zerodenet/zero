@@ -427,7 +427,7 @@ fn validate_inbound_protocol(protocol: &InboundProtocolConfig) -> Result<(), Con
             validate_socks5_users("mixed inbound socks5", socks5_users)
         }
         InboundProtocolConfig::HttpConnect => Ok(()),
-        InboundProtocolConfig::Vless { users, tls } => {
+        InboundProtocolConfig::Vless { users, tls, ws: _ } => {
             validate_vless_users(users)?;
             if let Some(tls) = tls {
                 validate_inbound_optional_non_empty("vless tls.cert_path", &tls.cert_path)?;
@@ -448,6 +448,7 @@ fn validate_outbound_protocol(protocol: &OutboundProtocolConfig) -> Result<(), C
             port,
             id,
             tls,
+            ws: _,
         } => {
             validate_outbound_endpoint("vless", server, *port)?;
             validate_uuid_literal(id).map_err(|message| {

@@ -10,5 +10,5 @@ pub use model::{
     InboundProtocolConfig, ListenConfig, ModeConfig, OutboundConfig, OutboundGroupConfig,
     OutboundGroupKind, OutboundProtocolConfig, RouteActionConfig, RouteConfig, RouteRuleConfig,
     RouteRuleSetConfig, RuleConditionConfig, RuleSetFormatConfig, RuleSetSourceType, RuntimeConfig,
-    RuntimeOptionsConfig, Socks5UserConfig, TlsConfig, VlessUserConfig,
+    RuntimeOptionsConfig, Socks5UserConfig, TlsConfig, VlessUserConfig, WebSocketConfig,
 };

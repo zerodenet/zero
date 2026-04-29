@@ -49,11 +49,13 @@ impl EnginePlan {
                     port,
                     id,
                     tls,
+                    ws,
                 } => TargetKind::Outbound(OutboundTarget::Vless {
                     server: server.clone(),
                     port: *port,
                     id: id.clone(),
                     tls: tls.clone(),
+                    ws: ws.clone(),
                 }),
             };
 
@@ -183,6 +185,7 @@ pub enum OutboundTarget {
         port: u16,
         id: String,
         tls: Option<ClientTlsConfig>,
+        ws: Option<zero_config::WebSocketConfig>,
     },
 }
 

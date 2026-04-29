@@ -31,6 +31,10 @@ pub(crate) enum TcpRelayStream {
     Plain(TokioSocket),
     #[cfg(feature = "outbound-vless")]
     Tls(Box<tokio_rustls::client::TlsStream<TcpStream>>),
+    #[cfg(feature = "outbound-vless")]
+    WsPlain(Box<super::ws::WebSocketSocket<TokioSocket>>),
+    #[cfg(feature = "outbound-vless")]
+    WsTls(Box<super::ws::WebSocketSocket<tokio_rustls::client::TlsStream<TcpStream>>>),
 }
 
 impl From<TokioSocket> for TcpRelayStream {
@@ -47,6 +51,10 @@ impl AsyncSocket for TcpRelayStream {
             Self::Plain(socket) => socket.read(buf).await,
             #[cfg(feature = "outbound-vless")]
             Self::Tls(stream) => tokio::io::AsyncReadExt::read(stream, buf).await,
+            #[cfg(feature = "outbound-vless")]
+            Self::WsPlain(stream) => tokio::io::AsyncReadExt::read(stream, buf).await,
+            #[cfg(feature = "outbound-vless")]
+            Self::WsTls(stream) => tokio::io::AsyncReadExt::read(stream, buf).await,
         }
     }
 
@@ -55,6 +63,10 @@ impl AsyncSocket for TcpRelayStream {
             Self::Plain(socket) => socket.write_all(buf).await,
             #[cfg(feature = "outbound-vless")]
             Self::Tls(stream) => tokio::io::AsyncWriteExt::write_all(stream, buf).await,
+            #[cfg(feature = "outbound-vless")]
+            Self::WsPlain(stream) => tokio::io::AsyncWriteExt::write_all(stream, buf).await,
+            #[cfg(feature = "outbound-vless")]
+            Self::WsTls(stream) => tokio::io::AsyncWriteExt::write_all(stream, buf).await,
         }
     }
 
@@ -63,6 +75,10 @@ impl AsyncSocket for TcpRelayStream {
             Self::Plain(socket) => socket.shutdown().await,
             #[cfg(feature = "outbound-vless")]
             Self::Tls(stream) => tokio::io::AsyncWriteExt::shutdown(stream).await,
+            #[cfg(feature = "outbound-vless")]
+            Self::WsPlain(stream) => tokio::io::AsyncWriteExt::shutdown(stream).await,
+            #[cfg(feature = "outbound-vless")]
+            Self::WsTls(stream) => tokio::io::AsyncWriteExt::shutdown(stream).await,
         }
     }
 }
@@ -77,6 +93,10 @@ impl AsyncRead for TcpRelayStream {
             Self::Plain(socket) => Pin::new(socket).poll_read(cx, buf),
             #[cfg(feature = "outbound-vless")]
             Self::Tls(stream) => Pin::new(stream.as_mut()).poll_read(cx, buf),
+            #[cfg(feature = "outbound-vless")]
+            Self::WsPlain(stream) => Pin::new(stream.as_mut()).poll_read(cx, buf),
+            #[cfg(feature = "outbound-vless")]
+            Self::WsTls(stream) => Pin::new(stream.as_mut()).poll_read(cx, buf),
         }
     }
 }
@@ -91,6 +111,10 @@ impl AsyncWrite for TcpRelayStream {
             Self::Plain(socket) => Pin::new(socket).poll_write(cx, buf),
             #[cfg(feature = "outbound-vless")]
             Self::Tls(stream) => Pin::new(stream.as_mut()).poll_write(cx, buf),
+            #[cfg(feature = "outbound-vless")]
+            Self::WsPlain(stream) => Pin::new(stream.as_mut()).poll_write(cx, buf),
+            #[cfg(feature = "outbound-vless")]
+            Self::WsTls(stream) => Pin::new(stream.as_mut()).poll_write(cx, buf),
         }
     }
 
@@ -99,6 +123,10 @@ impl AsyncWrite for TcpRelayStream {
             Self::Plain(socket) => Pin::new(socket).poll_flush(cx),
             #[cfg(feature = "outbound-vless")]
             Self::Tls(stream) => Pin::new(stream.as_mut()).poll_flush(cx),
+            #[cfg(feature = "outbound-vless")]
+            Self::WsPlain(stream) => Pin::new(stream.as_mut()).poll_flush(cx),
+            #[cfg(feature = "outbound-vless")]
+            Self::WsTls(stream) => Pin::new(stream.as_mut()).poll_flush(cx),
         }
     }
 
@@ -107,6 +135,10 @@ impl AsyncWrite for TcpRelayStream {
             Self::Plain(socket) => Pin::new(socket).poll_shutdown(cx),
             #[cfg(feature = "outbound-vless")]
             Self::Tls(stream) => Pin::new(stream.as_mut()).poll_shutdown(cx),
+            #[cfg(feature = "outbound-vless")]
+            Self::WsPlain(stream) => Pin::new(stream.as_mut()).poll_shutdown(cx),
+            #[cfg(feature = "outbound-vless")]
+            Self::WsTls(stream) => Pin::new(stream.as_mut()).poll_shutdown(cx),
         }
     }
 }
