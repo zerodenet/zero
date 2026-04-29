@@ -1,23 +1,42 @@
 use std::fs::File;
 use std::io::{self, BufReader};
 use std::path::{Path, PathBuf};
+#[cfg(feature = "inbound-vless")]
 use std::pin::Pin;
 use std::sync::Arc;
+#[cfg(feature = "inbound-vless")]
 use std::task::{Context, Poll};
 
+#[cfg(feature = "inbound-vless")]
 use rustls::pki_types::PrivateKeyDer;
+#[cfg(feature = "outbound-vless")]
 use rustls::{ClientConfig, RootCertStore};
+#[cfg(feature = "inbound-vless")]
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+#[cfg(feature = "inbound-vless")]
 use tokio::net::TcpStream;
+#[cfg(feature = "inbound-vless")]
 use tokio_rustls::server::TlsStream;
-use tokio_rustls::{TlsAcceptor, TlsConnector};
-use zero_config::{ClientTlsConfig, TlsConfig};
+#[cfg(feature = "inbound-vless")]
+use tokio_rustls::TlsAcceptor;
+#[cfg(feature = "outbound-vless")]
+use tokio_rustls::TlsConnector;
+#[cfg(feature = "outbound-vless")]
+use zero_config::ClientTlsConfig;
+#[cfg(feature = "inbound-vless")]
+use zero_config::TlsConfig;
+#[cfg(feature = "outbound-vless")]
 use zero_platform_tokio::TokioSocket;
+#[cfg(feature = "inbound-vless")]
 use zero_traits::AsyncSocket;
 
-use super::stream::{ClientStream, TcpRelayStream};
+#[cfg(feature = "inbound-vless")]
+use super::stream::ClientStream;
+#[cfg(feature = "outbound-vless")]
+use super::stream::TcpRelayStream;
 use zero_engine::EngineError;
 
+#[cfg(feature = "inbound-vless")]
 pub(crate) fn build_tls_acceptor(
     tls: &TlsConfig,
     base_dir: Option<&Path>,
@@ -32,6 +51,7 @@ pub(crate) fn build_tls_acceptor(
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
+#[cfg(feature = "outbound-vless")]
 pub(crate) async fn connect_tls_upstream(
     socket: TokioSocket,
     tls: &ClientTlsConfig,
@@ -89,6 +109,7 @@ fn load_certs(path: &Path) -> io::Result<Vec<rustls::pki_types::CertificateDer<'
     Ok(certs)
 }
 
+#[cfg(feature = "inbound-vless")]
 fn load_private_key(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
     let file = File::open(path).map_err(|source| {
         io::Error::new(
@@ -122,16 +143,19 @@ fn resolve_path(base_dir: Option<&Path>, path: &str) -> PathBuf {
         .unwrap_or(path)
 }
 
+#[cfg(feature = "inbound-vless")]
 pub(crate) struct InboundTlsStream {
     inner: TlsStream<TcpStream>,
 }
 
+#[cfg(feature = "inbound-vless")]
 impl InboundTlsStream {
     pub(crate) fn new(inner: TlsStream<TcpStream>) -> Self {
         Self { inner }
     }
 }
 
+#[cfg(feature = "inbound-vless")]
 impl ClientStream for InboundTlsStream {
     #[cfg(feature = "inbound-socks5")]
     fn local_addr(&self) -> io::Result<std::net::SocketAddr> {
@@ -139,6 +163,7 @@ impl ClientStream for InboundTlsStream {
     }
 }
 
+#[cfg(feature = "inbound-vless")]
 impl AsyncSocket for InboundTlsStream {
     type Error = io::Error;
 
@@ -155,6 +180,7 @@ impl AsyncSocket for InboundTlsStream {
     }
 }
 
+#[cfg(feature = "inbound-vless")]
 impl AsyncRead for InboundTlsStream {
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -165,6 +191,7 @@ impl AsyncRead for InboundTlsStream {
     }
 }
 
+#[cfg(feature = "inbound-vless")]
 impl AsyncWrite for InboundTlsStream {
     fn poll_write(
         mut self: Pin<&mut Self>,
