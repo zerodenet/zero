@@ -2,7 +2,6 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_config::VlessUserConfig;
-use zero_platform_tokio::TokioSocket;
 use zero_protocol_vless::{VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
@@ -11,7 +10,7 @@ use super::super::runtime::{bind_listener, Proxy};
 use super::super::transport::ClientStream;
 use super::super::transport::MeteredStream;
 use super::super::transport::TcpInboundProtocol;
-use super::super::transport::{build_tls_acceptor, InboundTlsStream};
+use super::super::transport::{accept_ws, build_tls_acceptor, InboundTlsStream};
 use zero_engine::EngineError;
 
 impl Proxy {
@@ -27,6 +26,7 @@ impl Proxy {
             .vless_tls()
             .map(|tls| build_tls_acceptor(tls, self.config.source_dir()))
             .transpose()?;
+        let ws_config = inbound.protocol.vless_ws().cloned();
         let mut connections = JoinSet::new();
 
         info!(
@@ -34,6 +34,7 @@ impl Proxy {
             protocol = "vless",
             listen = %local_addr,
             tls = tls_acceptor.is_some(),
+            ws = ws_config.is_some(),
             "inbound listener ready"
         );
 
@@ -52,6 +53,7 @@ impl Proxy {
                     let inbound_tag = inbound.tag.clone();
                     let vless_users = inbound.protocol.vless_users().to_vec();
                     let tls_acceptor = tls_acceptor.clone();
+                    let ws_config = ws_config.clone();
 
                     connections.spawn(async move {
                         let result = match tls_acceptor {
@@ -59,10 +61,11 @@ impl Proxy {
                                 match acceptor.accept(stream.into_inner()).await {
                                     Ok(tls_stream) => {
                                         engine
-                                            .handle_vless_client(
+                                            .handle_vless_stream(
                                                 InboundTlsStream::new(tls_stream),
                                                 inbound_tag.as_str(),
                                                 &vless_users,
+                                                ws_config.as_ref(),
                                             )
                                             .await
                                     }
@@ -71,10 +74,11 @@ impl Proxy {
                             }
                             None => {
                                 engine
-                                    .handle_vless_connection(
+                                    .handle_vless_stream(
                                         stream,
                                         inbound_tag.as_str(),
                                         &vless_users,
+                                        ws_config.as_ref(),
                                     )
                                     .await
                             }
@@ -119,13 +123,24 @@ impl Proxy {
         Ok(())
     }
 
-    pub(crate) async fn handle_vless_connection(
+    async fn handle_vless_stream<S>(
         &self,
-        client: TokioSocket,
+        stream: S,
         inbound_tag: &str,
         users: &[VlessUserConfig],
-    ) -> Result<(), EngineError> {
-        self.handle_vless_client(client, inbound_tag, users).await
+        ws_config: Option<&zero_config::WebSocketConfig>,
+    ) -> Result<(), EngineError>
+    where
+        S: ClientStream + 'static,
+    {
+        match ws_config {
+            Some(ws) => {
+                let ws_stream = accept_ws(stream, &ws.path).await?;
+                self.handle_vless_client(ws_stream, inbound_tag, users)
+                    .await
+            }
+            None => self.handle_vless_client(stream, inbound_tag, users).await,
+        }
     }
 
     pub(crate) async fn handle_vless_client<S>(

@@ -55,23 +55,19 @@ impl rustls::client::danger::ServerCertVerifier for InsecureCertVerifier {
 
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &rustls::pki_types::CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
+        _message: &[u8],
+        _cert: &rustls::pki_types::CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        // 对于 insecure 模式，跳过签名验证（因为证书已经被信任了）
-        let _ = (message, cert, dss);
         Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
     }
 
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &rustls::pki_types::CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
+        _message: &[u8],
+        _cert: &rustls::pki_types::CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        // 对于 insecure 模式，跳过签名验证
-        let _ = (message, cert, dss);
         Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
     }
 
@@ -146,6 +142,10 @@ pub(crate) async fn connect_tls_upstream(
             .with_root_certificates(roots)
             .with_no_client_auth()
     };
+
+    if tls.disable_sni {
+        config.enable_sni = false;
+    }
 
     if !tls.alpn.is_empty() {
         config.alpn_protocols = tls

@@ -123,7 +123,7 @@ POST /api/v1/selectors/{group}/{target}
 - `http-connect`
 - `http`，兼容别名
 - `mixed`，同端口识别 `socks5` 和 `http-connect`
-- `vless`，当前支持 TCP，可选 TLS 包裹
+- `vless`，当前支持 TCP/TLS/WS/WSS
 
 `mixed` 不是外部协议，而是“同端口多协议入站”的配置入口。
 
@@ -195,6 +195,46 @@ VLESS 入站需要 TLS 时，在协议内增加 `tls`：
 }
 ```
 
+VLESS 入站支持 WebSocket 传输，配置 `ws` 启用：
+
+```json
+{
+  "tag": "vless-ws-in",
+  "listen": { "address": "0.0.0.0", "port": 80 },
+  "protocol": {
+    "type": "vless",
+    "users": [
+      { "id": "11111111-2222-3333-4444-555555555555" }
+    ],
+    "ws": {
+      "path": "/vless"
+    }
+  }
+}
+```
+
+WebSocket 可以和 TLS 同时使用（WSS）：
+
+```json
+{
+  "tag": "vless-wss-in",
+  "listen": { "address": "0.0.0.0", "port": 443 },
+  "protocol": {
+    "type": "vless",
+    "users": [
+      { "id": "11111111-2222-3333-4444-555555555555" }
+    ],
+    "tls": {
+      "cert_path": "certs/fullchain.pem",
+      "key_path": "certs/privkey.pem"
+    },
+    "ws": {
+      "path": "/vless"
+    }
+  }
+}
+```
+
 ## 出站
 
 ```json
@@ -244,7 +284,7 @@ VLESS 出站用于连接上游 VLESS TCP 节点：
 }
 ```
 
-连接 TLS VLESS 上游时配置 `tls`。`server_name` 默认使用 `server`，自签或私有 CA 可通过 `ca_cert_path` 指定：
+连接 TLS VLESS 上游时配置 `tls`。`server_name` 默认使用 `server`，自签或私有 CA 可通过 `ca_cert_path` 指定。当上游不依赖 SNI 或需要隐藏目标域名时，可设置 `disable_sni: true`：
 
 ```json
 {
@@ -256,11 +296,64 @@ VLESS 出站用于连接上游 VLESS TCP 节点：
     "id": "11111111-2222-3333-4444-555555555555",
     "tls": {
       "server_name": "edge.example.com",
-      "ca_cert_path": "certs/ca.pem"
+      "ca_cert_path": "certs/ca.pem",
+      "disable_sni": false,
+      "insecure": false
     }
   }
 }
 ```
+
+TLS 配置字段说明：
+- `server_name`：可选，SNI 和证书校验域名，默认使用 `server`
+- `ca_cert_path`：可选，自定义 CA 证书路径
+- `disable_sni`：可选，不发送 SNI 扩展，默认 `false`
+- `insecure`：可选，跳过证书校验，默认 `false`
+- `alpn`：可选，ALPN 协议列表
+
+VLESS 出站支持 WebSocket 传输，配置 `ws` 启用：
+
+```json
+{
+  "tag": "vless-ws-chain",
+  "protocol": {
+    "type": "vless",
+    "server": "edge.example.com",
+    "port": 80,
+    "id": "11111111-2222-3333-4444-555555555555",
+    "ws": {
+      "path": "/vless",
+      "headers": {
+        "User-Agent": "zero-proxy"
+      }
+    }
+  }
+}
+```
+
+WebSocket 可以和 TLS 同时使用（WSS）：
+
+```json
+{
+  "tag": "vless-wss-chain",
+  "protocol": {
+    "type": "vless",
+    "server": "edge.example.com",
+    "port": 443,
+    "id": "11111111-2222-3333-4444-555555555555",
+    "tls": {
+      "server_name": "edge.example.com"
+    },
+    "ws": {
+      "path": "/vless"
+    }
+  }
+}
+```
+
+WebSocket 配置字段说明：
+- `path`：WebSocket 握手路径，不能为空
+- `headers`：可选，自定义 HTTP 头，不能包含 `Host`、`Connection`、`Upgrade`、`Sec-WebSocket-*` 等握手必需头
 
 UDP 当前只支持 `direct`、`block` 和上游 `socks5`，暂不支持上游 `vless`。
 
@@ -458,7 +551,7 @@ POST /selectors/proxy/direct
 - `tag` 不能为空
 - SOCKS5 username/password 不能为空，且单项最多 255 字节
 - SOCKS5 出站认证必须同时配置 `username` 和 `password`，不能只配其中一个
-- VLESS 入站必须至少配置一个用户，`id` 必须是 UUID；启用 TLS 时 `cert_path` 和 `key_path` 不能为空
+- VLESS 入站必须至少配置一个用户，`id` 必须是 UUID；启用 TLS 时 `cert_path` 和 `key_path` 不能为空；启用 WebSocket 时 `ws.path` 不能为空
 - VLESS 出站的 `server` 不能为空，`port` 必须大于 `0`，`id` 必须是 UUID；`tls.server_name` 和 `tls.ca_cert_path` 如果配置则不能为空
 - 同类对象里的 `tag` 不能重复
 - 同一个 `address:port` 只能有一个入站
@@ -487,4 +580,5 @@ POST /selectors/proxy/direct
 - [urltest.json](../../examples/v0.0.2/urltest.json)
 - [vless.json](../../examples/v0.0.2/vless.json)
 - [vless-tls.json](../../examples/v0.0.2/vless-tls.json)
+- [vless-ws.json](../../examples/v0.0.2/vless-ws.json)
 - [chained-vless-tls.json](../../examples/v0.0.2/chained-vless-tls.json)

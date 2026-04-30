@@ -64,9 +64,15 @@ impl AsyncSocket for TcpRelayStream {
             #[cfg(feature = "outbound-vless")]
             Self::Tls(stream) => tokio::io::AsyncWriteExt::write_all(stream, buf).await,
             #[cfg(feature = "outbound-vless")]
-            Self::WsPlain(stream) => tokio::io::AsyncWriteExt::write_all(stream, buf).await,
+            Self::WsPlain(stream) => {
+                tokio::io::AsyncWriteExt::write_all(stream, buf).await?;
+                tokio::io::AsyncWriteExt::flush(stream).await
+            }
             #[cfg(feature = "outbound-vless")]
-            Self::WsTls(stream) => tokio::io::AsyncWriteExt::write_all(stream, buf).await,
+            Self::WsTls(stream) => {
+                tokio::io::AsyncWriteExt::write_all(stream, buf).await?;
+                tokio::io::AsyncWriteExt::flush(stream).await
+            }
         }
     }
 

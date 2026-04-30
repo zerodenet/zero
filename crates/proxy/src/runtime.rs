@@ -16,7 +16,7 @@ use zero_engine::{
 use zero_platform_tokio::{TokioListener, TokioResolver};
 
 use crate::inventory::ProtocolInventory;
-#[cfg(any(feature = "outbound-socks5", feature = "outbound-vless"))]
+#[cfg(feature = "outbound-socks5")]
 use crate::transport::MeteredStream;
 use crate::transport::{StreamTraffic, TcpRelayStream};
 
@@ -99,92 +99,11 @@ impl Proxy {
         }
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        let mut listeners = JoinSet::new();
-        let mut urltests = JoinSet::new();
+        let mut listeners: JoinSet<Result<(), EngineError>> = JoinSet::new();
+        let mut urltests: JoinSet<Result<(), EngineError>> = JoinSet::new();
 
         for inbound in &self.config.inbounds {
-            match inbound.protocol {
-                InboundProtocolConfig::Socks5 { .. } => {
-                    #[cfg(feature = "inbound-socks5")]
-                    {
-                        let proxy = self.clone();
-                        let inbound = inbound.clone();
-                        let shutdown = shutdown_rx.clone();
-                        listeners.spawn(async move {
-                            proxy.run_socks5_listener(inbound, shutdown).await
-                        });
-                    }
-                    #[cfg(not(feature = "inbound-socks5"))]
-                    {
-                        return Err(EngineError::CompiledFeatureDisabled {
-                            kind: "inbound",
-                            tag: inbound.tag.clone(),
-                            protocol: "socks5",
-                            feature: "inbound-socks5",
-                        });
-                    }
-                }
-                InboundProtocolConfig::HttpConnect => {
-                    #[cfg(feature = "inbound-http-connect")]
-                    {
-                        let proxy = self.clone();
-                        let inbound = inbound.clone();
-                        let shutdown = shutdown_rx.clone();
-                        listeners.spawn(async move {
-                            proxy.run_http_connect_listener(inbound, shutdown).await
-                        });
-                    }
-                    #[cfg(not(feature = "inbound-http-connect"))]
-                    {
-                        return Err(EngineError::CompiledFeatureDisabled {
-                            kind: "inbound",
-                            tag: inbound.tag.clone(),
-                            protocol: "http-connect",
-                            feature: "inbound-http-connect",
-                        });
-                    }
-                }
-                InboundProtocolConfig::Mixed { .. } => {
-                    #[cfg(feature = "inbound-mixed")]
-                    {
-                        let proxy = self.clone();
-                        let inbound = inbound.clone();
-                        let shutdown = shutdown_rx.clone();
-                        listeners.spawn(async move {
-                            proxy.run_mixed_listener(inbound, shutdown).await
-                        });
-                    }
-                    #[cfg(not(feature = "inbound-mixed"))]
-                    {
-                        return Err(EngineError::CompiledFeatureDisabled {
-                            kind: "inbound",
-                            tag: inbound.tag.clone(),
-                            protocol: "mixed",
-                            feature: "inbound-mixed",
-                        });
-                    }
-                }
-                InboundProtocolConfig::Vless { .. } => {
-                    #[cfg(feature = "inbound-vless")]
-                    {
-                        let proxy = self.clone();
-                        let inbound = inbound.clone();
-                        let shutdown = shutdown_rx.clone();
-                        listeners.spawn(async move {
-                            proxy.run_vless_listener(inbound, shutdown).await
-                        });
-                    }
-                    #[cfg(not(feature = "inbound-vless"))]
-                    {
-                        return Err(EngineError::CompiledFeatureDisabled {
-                            kind: "inbound",
-                            tag: inbound.tag.clone(),
-                            protocol: "vless",
-                            feature: "inbound-vless",
-                        });
-                    }
-                }
-            }
+            self.spawn_inbound_listener(inbound, &shutdown_rx, &mut listeners)?;
         }
 
         for &group_id in self.engine.plan().urltest_groups() {
@@ -254,6 +173,97 @@ impl Proxy {
                         None if shutting_down => {}
                         None => return Err(EngineError::UrlTestTaskExited),
                     }
+                }
+            }
+        }
+    }
+
+    fn spawn_inbound_listener(
+        &self,
+        inbound: &InboundConfig,
+        shutdown_rx: &watch::Receiver<bool>,
+        listeners: &mut JoinSet<Result<(), EngineError>>,
+    ) -> Result<(), EngineError> {
+        match inbound.protocol {
+            InboundProtocolConfig::Socks5 { .. } => {
+                #[cfg(feature = "inbound-socks5")]
+                {
+                    let proxy = self.clone();
+                    let inbound = inbound.clone();
+                    let shutdown = shutdown_rx.clone();
+                    listeners
+                        .spawn(async move { proxy.run_socks5_listener(inbound, shutdown).await });
+                    Ok(())
+                }
+                #[cfg(not(feature = "inbound-socks5"))]
+                {
+                    Err(EngineError::CompiledFeatureDisabled {
+                        kind: "inbound",
+                        tag: inbound.tag.clone(),
+                        protocol: "socks5",
+                        feature: "inbound-socks5",
+                    })
+                }
+            }
+            InboundProtocolConfig::HttpConnect => {
+                #[cfg(feature = "inbound-http-connect")]
+                {
+                    let proxy = self.clone();
+                    let inbound = inbound.clone();
+                    let shutdown = shutdown_rx.clone();
+                    listeners.spawn(async move {
+                        proxy.run_http_connect_listener(inbound, shutdown).await
+                    });
+                    Ok(())
+                }
+                #[cfg(not(feature = "inbound-http-connect"))]
+                {
+                    Err(EngineError::CompiledFeatureDisabled {
+                        kind: "inbound",
+                        tag: inbound.tag.clone(),
+                        protocol: "http-connect",
+                        feature: "inbound-http-connect",
+                    })
+                }
+            }
+            InboundProtocolConfig::Mixed { .. } => {
+                #[cfg(feature = "inbound-mixed")]
+                {
+                    let proxy = self.clone();
+                    let inbound = inbound.clone();
+                    let shutdown = shutdown_rx.clone();
+                    listeners
+                        .spawn(async move { proxy.run_mixed_listener(inbound, shutdown).await });
+                    Ok(())
+                }
+                #[cfg(not(feature = "inbound-mixed"))]
+                {
+                    Err(EngineError::CompiledFeatureDisabled {
+                        kind: "inbound",
+                        tag: inbound.tag.clone(),
+                        protocol: "mixed",
+                        feature: "inbound-mixed",
+                    })
+                }
+            }
+            InboundProtocolConfig::Vless { .. } => {
+                #[cfg(feature = "inbound-vless")]
+                {
+                    let proxy = self.clone();
+                    let inbound = inbound.clone();
+                    let shutdown = shutdown_rx.clone();
+                    listeners
+                        .spawn(async move { proxy.run_vless_listener(inbound, shutdown).await });
+                    Ok(())
+                }
+                #[cfg(not(feature = "inbound-vless"))]
+                {
+                    Err(EngineError::CompiledFeatureDisabled {
+                        kind: "inbound",
+                        tag: inbound.tag.clone(),
+                        protocol: "vless",
+                        feature: "inbound-vless",
+                    })
                 }
             }
         }
@@ -480,9 +490,13 @@ impl Proxy {
 
         let stream = match (tls, ws) {
             (Some(tls), Some(ws)) => {
-                let tls_stream =
-                    crate::transport::connect_tls_upstream(socket, tls, self.config.source_dir(), server)
-                        .await?;
+                let tls_stream = crate::transport::connect_tls_upstream(
+                    socket,
+                    tls,
+                    self.config.source_dir(),
+                    server,
+                )
+                .await?;
                 match tls_stream {
                     TcpRelayStream::Tls(tls_inner) => {
                         let ws_stream =
@@ -493,8 +507,13 @@ impl Proxy {
                 }
             }
             (Some(tls), None) => {
-                crate::transport::connect_tls_upstream(socket, tls, self.config.source_dir(), server)
-                    .await?
+                crate::transport::connect_tls_upstream(
+                    socket,
+                    tls,
+                    self.config.source_dir(),
+                    server,
+                )
+                .await?
             }
             (None, Some(ws)) => {
                 let ws_stream = crate::transport::connect_ws(socket, ws, server, port).await?;

@@ -209,6 +209,13 @@ impl InboundProtocolConfig {
             _ => None,
         }
     }
+
+    pub fn vless_ws(&self) -> Option<&WebSocketConfig> {
+        match self {
+            Self::Vless { ws, .. } => ws.as_ref(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

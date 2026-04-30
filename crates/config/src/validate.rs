@@ -427,11 +427,15 @@ fn validate_inbound_protocol(protocol: &InboundProtocolConfig) -> Result<(), Con
             validate_socks5_users("mixed inbound socks5", socks5_users)
         }
         InboundProtocolConfig::HttpConnect => Ok(()),
-        InboundProtocolConfig::Vless { users, tls, ws: _ } => {
+        InboundProtocolConfig::Vless { users, tls, ws } => {
             validate_vless_users(users)?;
             if let Some(tls) = tls {
                 validate_inbound_optional_non_empty("vless tls.cert_path", &tls.cert_path)?;
                 validate_inbound_optional_non_empty("vless tls.key_path", &tls.key_path)?;
+            }
+            if let Some(ws) = ws {
+                validate_inbound_optional_non_empty("vless ws.path", &ws.path)?;
+                validate_inbound_ws_headers("vless ws.headers", &ws.headers)?;
             }
             Ok(())
         }
@@ -448,7 +452,7 @@ fn validate_outbound_protocol(protocol: &OutboundProtocolConfig) -> Result<(), C
             port,
             id,
             tls,
-            ws: _,
+            ws,
         } => {
             validate_outbound_endpoint("vless", server, *port)?;
             validate_uuid_literal(id).map_err(|message| {
@@ -461,6 +465,10 @@ fn validate_outbound_protocol(protocol: &OutboundProtocolConfig) -> Result<(), C
                 if let Some(ca_cert_path) = &tls.ca_cert_path {
                     validate_outbound_optional_non_empty("vless tls.ca_cert_path", ca_cert_path)?;
                 }
+            }
+            if let Some(ws) = ws {
+                validate_outbound_optional_non_empty("vless ws.path", &ws.path)?;
+                validate_outbound_ws_headers("vless ws.headers", &ws.headers)?;
             }
             Ok(())
         }
@@ -619,6 +627,52 @@ fn validate_outbound_optional_non_empty(
     }
 
     Ok(())
+}
+
+fn validate_inbound_ws_headers(
+    field: &'static str,
+    headers: &std::collections::HashMap<String, String>,
+) -> Result<(), ConfigError> {
+    for key in headers.keys() {
+        let key_lower = key.to_lowercase();
+        if is_reserved_ws_header(&key_lower) {
+            return Err(ConfigError::InvalidInbound(format!(
+                "`{field}` contains reserved header `{key}` which is managed by WebSocket handshake",
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_outbound_ws_headers(
+    field: &'static str,
+    headers: &std::collections::HashMap<String, String>,
+) -> Result<(), ConfigError> {
+    for key in headers.keys() {
+        let key_lower = key.to_lowercase();
+        if is_reserved_ws_header(&key_lower) {
+            return Err(ConfigError::InvalidOutbound(format!(
+                "`{field}` contains reserved header `{key}` which is managed by WebSocket handshake",
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn is_reserved_ws_header(header: &str) -> bool {
+    const RESERVED_HEADERS: &[&str] = &[
+        "host",
+        "connection",
+        "upgrade",
+        "sec-websocket-key",
+        "sec-websocket-version",
+        "sec-websocket-protocol",
+        "sec-websocket-extensions",
+        "sec-websocket-accept",
+    ];
+    RESERVED_HEADERS.contains(&header)
 }
 
 fn validate_uuid_literal(value: &str) -> Result<(), &'static str> {

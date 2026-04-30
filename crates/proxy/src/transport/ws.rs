@@ -1,20 +1,24 @@
-#[cfg(feature = "outbound-vless")]
+use std::io;
+#[cfg(feature = "inbound-socks5")]
+use std::net::SocketAddr;
+
 use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(feature = "outbound-vless")]
 use tokio_tungstenite::tungstenite::http::Request;
 #[cfg(feature = "outbound-vless")]
 use zero_config::WebSocketConfig;
-#[cfg(feature = "outbound-vless")]
+#[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
 use zero_engine::EngineError;
+use zero_traits::AsyncSocket;
 
-#[cfg(feature = "outbound-vless")]
+use super::ClientStream;
+
 pub(crate) struct WebSocketSocket<S> {
     inner: tokio_tungstenite::WebSocketStream<S>,
     read_buffer: Vec<u8>,
     read_offset: usize,
 }
 
-#[cfg(feature = "outbound-vless")]
 impl<S> WebSocketSocket<S> {
     pub(crate) fn new(inner: tokio_tungstenite::WebSocketStream<S>) -> Self {
         Self {
@@ -23,6 +27,38 @@ impl<S> WebSocketSocket<S> {
             read_offset: 0,
         }
     }
+}
+
+#[cfg(feature = "inbound-vless")]
+pub(crate) async fn accept_ws<S>(
+    stream: S,
+    expected_path: &str,
+) -> Result<WebSocketSocket<S>, EngineError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
+
+    let callback = |request: &Request, response: Response| -> Result<Response, ErrorResponse> {
+        let path = request.uri().path();
+        if path != expected_path {
+            return Err(ErrorResponse::new(Some(format!(
+                "expected path {expected_path}, got {path}"
+            ))));
+        }
+        Ok(response)
+    };
+
+    let ws_stream = tokio_tungstenite::accept_hdr_async(stream, callback)
+        .await
+        .map_err(|e| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                format!("WebSocket accept failed: {e}"),
+            ))
+        })?;
+
+    Ok(WebSocketSocket::new(ws_stream))
 }
 
 #[cfg(feature = "outbound-vless")]
@@ -77,7 +113,6 @@ where
     Ok(WebSocketSocket::new(ws_stream))
 }
 
-#[cfg(feature = "outbound-vless")]
 impl<S> tokio::io::AsyncRead for WebSocketSocket<S>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
@@ -121,7 +156,7 @@ where
                 _ => std::task::Poll::Pending,
             },
             std::task::Poll::Ready(Some(Err(e))) => {
-                std::task::Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::Other, e)))
+                std::task::Poll::Ready(Err(std::io::Error::other(e)))
             }
             std::task::Poll::Ready(None) => std::task::Poll::Ready(Ok(())),
             std::task::Poll::Pending => std::task::Poll::Pending,
@@ -129,7 +164,6 @@ where
     }
 }
 
-#[cfg(feature = "outbound-vless")]
 impl<S> tokio::io::AsyncWrite for WebSocketSocket<S>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
@@ -142,21 +176,14 @@ where
         use futures_util::SinkExt;
         use tokio_tungstenite::tungstenite::Message;
 
-        let inner = &mut self.inner;
-        match inner.poll_ready_unpin(cx) {
+        match self.inner.poll_ready_unpin(cx) {
             std::task::Poll::Ready(Ok(())) => {
-                match inner.start_send_unpin(Message::Binary(buf.to_vec())) {
+                match self.inner.start_send_unpin(Message::Binary(buf.to_vec())) {
                     Ok(()) => std::task::Poll::Ready(Ok(buf.len())),
-                    Err(e) => std::task::Poll::Ready(Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        e,
-                    ))),
+                    Err(e) => std::task::Poll::Ready(Err(std::io::Error::other(e))),
                 }
             }
-            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e,
-            ))),
+            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(std::io::Error::other(e))),
             std::task::Poll::Pending => std::task::Poll::Pending,
         }
     }
@@ -170,10 +197,7 @@ where
         let inner = &mut self.inner;
         match inner.poll_flush_unpin(cx) {
             std::task::Poll::Ready(Ok(())) => std::task::Poll::Ready(Ok(())),
-            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e,
-            ))),
+            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(std::io::Error::other(e))),
             std::task::Poll::Pending => std::task::Poll::Pending,
         }
     }
@@ -187,11 +211,44 @@ where
         let inner = &mut self.inner;
         match inner.poll_close_unpin(cx) {
             std::task::Poll::Ready(Ok(())) => std::task::Poll::Ready(Ok(())),
-            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e,
-            ))),
+            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(std::io::Error::other(e))),
             std::task::Poll::Pending => std::task::Poll::Pending,
         }
+    }
+}
+
+impl<S> AsyncSocket for WebSocketSocket<S>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + Sync,
+{
+    type Error = io::Error;
+
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        use tokio::io::AsyncReadExt;
+        AsyncReadExt::read(self, buf).await
+    }
+
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        use tokio::io::AsyncWriteExt;
+        AsyncWriteExt::write_all(self, buf).await?;
+        AsyncWriteExt::flush(self).await
+    }
+
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        use tokio::io::AsyncWriteExt;
+        AsyncWriteExt::shutdown(self).await
+    }
+}
+
+impl<S> ClientStream for WebSocketSocket<S>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + Sync,
+{
+    #[cfg(feature = "inbound-socks5")]
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "WebSocketSocket does not expose local_addr",
+        ))
     }
 }

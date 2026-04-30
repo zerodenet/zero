@@ -40,6 +40,7 @@ where
         }
 
         writer.write_all(&buf[..read]).await?;
+        writer.flush().await?;
 
         let read = read as u64;
         total = total.saturating_add(read);

@@ -1,3 +1,5 @@
+#![cfg(feature = "inbound-socks5")]
+
 mod support;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
