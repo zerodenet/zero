@@ -8,7 +8,7 @@
 - `fallback` 出站组
 - `group -> group`
 - `urltest` 出站组
-- VLESS TCP/TLS/WS/WSS 入站和出站第一阶段
+- VLESS TCP/TLS/WS/WSS 入站和出站第一阶段，包含 outbound Reality raw TCP
 - `zero-proxy` 运行层拆分，`zero-engine` 只保留决策、状态和观测核心
 
 ## 本版语义
@@ -47,6 +47,7 @@
 - 支持 TLS 入站和出站
 - 支持 WebSocket 入站和出站
 - 支持 TLS + WebSocket 组合（WSS）
+- 支持 outbound Reality raw TCP 传输
 - 当前只覆盖 TCP 转发，不做 VLESS UDP
 
 ## 本版不做

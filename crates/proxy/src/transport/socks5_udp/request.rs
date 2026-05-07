@@ -1,0 +1,265 @@
+use std::time::Instant;
+
+use zero_core::{Network, ProtocolType, Session};
+use zero_engine::{EngineError, ResolvedOutbound, SessionOutcome};
+use zero_protocol_socks5::parse_udp_packet;
+
+use super::super::super::logging::{
+    log_session_accepted, log_session_failed, log_session_finished,
+};
+use super::super::super::runtime::Proxy;
+use super::super::metered::StreamTraffic;
+use super::super::udp_sessions::{UdpFlowOutbound, UdpFlowSnapshot};
+use super::context::{
+    ExistingUdpFlowContext, Socks5UdpPacketContext, UdpCandidateContext, UdpCandidateStart,
+    UdpRequestContext,
+};
+
+impl Proxy {
+    pub(super) async fn handle_socks5_udp_request(
+        &self,
+        packet: &[u8],
+        context: UdpRequestContext<'_>,
+    ) -> Result<(), EngineError> {
+        let udp_packet = parse_udp_packet(packet)?;
+
+        if let Some(flow) = context
+            .udp_flows
+            .snapshot(&udp_packet.target, udp_packet.port)
+        {
+            self.forward_existing_udp_flow(
+                &flow,
+                packet.len() as u64,
+                &udp_packet.payload,
+                ExistingUdpFlowContext {
+                    inbound_tag: context.inbound_tag,
+                    relay: context.relay,
+                    udp_flows: context.udp_flows,
+                    upstream_association: context.upstream_association,
+                    upstream_idle_deadline: context.upstream_idle_deadline,
+                },
+            )
+            .await?;
+            return Ok(());
+        }
+
+        let mut session = Session::new(
+            0,
+            udp_packet.target,
+            udp_packet.port,
+            Network::Udp,
+            ProtocolType::Socks5,
+        );
+        self.prepare_session(&mut session, context.inbound_tag);
+        let mut session_handle = self.track_session(session.id);
+        let started_at = Instant::now();
+        self.record_session_inbound_traffic(session.id, *context.pending_control_traffic);
+        *context.pending_control_traffic = StreamTraffic::default();
+        self.record_session_inbound_rx(session.id, packet.len() as u64);
+
+        let action = self.route_decision(&session.target);
+        let resolved = match self.resolve_outbound(action) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                let record = session_handle.finish(SessionOutcome::Failed);
+                log_session_failed(
+                    &session,
+                    record.as_ref(),
+                    "resolve_outbound",
+                    started_at.elapsed(),
+                    &error,
+                    None,
+                );
+                return Err(error);
+            }
+        };
+        log_session_accepted(&session, &action, self.config.mode.kind());
+
+        let candidates = match resolved {
+            ResolvedOutbound::Single(candidate) => vec![candidate],
+            ResolvedOutbound::Fallback { candidates } => candidates,
+        };
+        let is_fallback = candidates.len() > 1;
+        let mut last_failure = None;
+
+        for candidate in candidates {
+            match self
+                .start_udp_flow_candidate(
+                    candidate,
+                    UdpCandidateContext {
+                        inbound_tag: context.inbound_tag,
+                        relay: context.relay,
+                        session: &session,
+                        payload: &udp_packet.payload,
+                        upstream_association: context.upstream_association,
+                        upstream_idle_deadline: context.upstream_idle_deadline,
+                    },
+                )
+                .await
+            {
+                Ok(UdpCandidateStart::Flow {
+                    outbound,
+                    outbound_tx_bytes,
+                }) => {
+                    let session_id = session.id;
+                    session.outbound_tag = Some(outbound.tag().to_owned());
+                    self.set_session_outbound(&session);
+                    context.udp_flows.insert(session, session_handle, outbound);
+                    self.record_session_outbound_tx(session_id, outbound_tx_bytes);
+                    return Ok(());
+                }
+                Ok(UdpCandidateStart::Blocked { tag }) => {
+                    session.outbound_tag = Some(tag);
+                    self.set_session_outbound(&session);
+                    if let Some(record) = session_handle.finish(SessionOutcome::Blocked) {
+                        log_session_finished(&record, None);
+                    }
+                    return Ok(());
+                }
+                Err(failure) => {
+                    last_failure = Some(failure);
+                }
+            }
+        }
+
+        let record = session_handle.finish(SessionOutcome::Failed);
+        if let Some(failure) = last_failure {
+            let stage = if is_fallback {
+                "fallback_exhausted"
+            } else {
+                failure.stage
+            };
+            log_session_failed(
+                &session,
+                record.as_ref(),
+                stage,
+                started_at.elapsed(),
+                &failure.error,
+                failure
+                    .upstream
+                    .as_ref()
+                    .map(|(server, port)| (server.as_str(), *port)),
+            );
+        } else {
+            let error = EngineError::Io(std::io::Error::other("all fallback outbounds failed"));
+            log_session_failed(
+                &session,
+                record.as_ref(),
+                "fallback_exhausted",
+                started_at.elapsed(),
+                &error,
+                None,
+            );
+        }
+
+        Ok(())
+    }
+
+    async fn forward_existing_udp_flow(
+        &self,
+        flow: &UdpFlowSnapshot,
+        inbound_rx_bytes: u64,
+        payload: &[u8],
+        context: ExistingUdpFlowContext<'_>,
+    ) -> Result<(), EngineError> {
+        let started_at = Instant::now();
+        self.record_session_inbound_rx(flow.session.id, inbound_rx_bytes);
+
+        match &flow.outbound {
+            UdpFlowOutbound::Direct { target_addr, .. } => {
+                match context.relay.send_to_addr(payload, *target_addr).await {
+                    Ok(sent) => {
+                        self.record_session_outbound_tx(flow.session.id, sent as u64);
+                    }
+                    Err(error) => {
+                        if let Some(completed) = context.udp_flows.finish(
+                            &flow.session.target,
+                            flow.session.port,
+                            SessionOutcome::Failed,
+                        ) {
+                            log_session_failed(
+                                &flow.session,
+                                Some(&completed.record),
+                                "udp_direct_send",
+                                started_at.elapsed(),
+                                &error,
+                                None,
+                            );
+                        } else {
+                            log_session_failed(
+                                &flow.session,
+                                None,
+                                "udp_direct_send",
+                                started_at.elapsed(),
+                                &error,
+                                None,
+                            );
+                        }
+                        return Err(error.into());
+                    }
+                }
+            }
+            UdpFlowOutbound::Socks5 {
+                tag,
+                server,
+                port,
+                username,
+                password,
+            } => {
+                match self
+                    .send_socks5_udp_packet(Socks5UdpPacketContext {
+                        inbound_tag: context.inbound_tag,
+                        tag,
+                        server,
+                        port: *port,
+                        auth: username.as_deref().zip(password.as_deref()),
+                        session: &flow.session,
+                        payload,
+                        upstream_association: context.upstream_association,
+                        upstream_idle_deadline: context.upstream_idle_deadline,
+                    })
+                    .await
+                {
+                    Ok(sent) => {
+                        self.record_session_outbound_tx(flow.session.id, sent as u64);
+                    }
+                    Err(failure) => {
+                        let stage = failure.stage;
+                        let upstream = failure.upstream;
+                        let error = failure.error;
+                        if let Some(completed) = context.udp_flows.finish(
+                            &flow.session.target,
+                            flow.session.port,
+                            SessionOutcome::Failed,
+                        ) {
+                            log_session_failed(
+                                &flow.session,
+                                Some(&completed.record),
+                                stage,
+                                started_at.elapsed(),
+                                &error,
+                                upstream
+                                    .as_ref()
+                                    .map(|(server, port)| (server.as_str(), *port)),
+                            );
+                        } else {
+                            log_session_failed(
+                                &flow.session,
+                                None,
+                                stage,
+                                started_at.elapsed(),
+                                &error,
+                                upstream
+                                    .as_ref()
+                                    .map(|(server, port)| (server.as_str(), *port)),
+                            );
+                        }
+                        return Err(error);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+}

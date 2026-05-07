@@ -123,7 +123,7 @@ POST /api/v1/selectors/{group}/{target}
 - `http-connect`
 - `http`，兼容别名
 - `mixed`，同端口识别 `socks5` 和 `http-connect`
-- `vless`，当前支持 TCP/TLS/WS/WSS
+- `vless`，当前支持 TCP/TLS/WS/WSS，出站额外支持 Reality raw TCP
 
 `mixed` 不是外部协议，而是“同端口多协议入站”的配置入口。
 
@@ -310,6 +310,31 @@ TLS 配置字段说明：
 - `disable_sni`：可选，不发送 SNI 扩展，默认 `false`
 - `insecure`：可选，跳过证书校验，默认 `false`
 - `alpn`：可选，ALPN 协议列表
+
+连接 VLESS Reality 上游时配置 `reality`。Reality 是 VLESS 出站的 TLS-like 安全层，不能和 `tls` 或 `ws` 同时配置；当前只支持 raw TCP 上的 outbound Reality：
+
+```json
+{
+  "tag": "vless-reality-chain",
+  "protocol": {
+    "type": "vless",
+    "server": "edge.example.com",
+    "port": 443,
+    "id": "11111111-2222-3333-4444-555555555555",
+    "reality": {
+      "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "short_id": "0123456789abcdef",
+      "server_name": "www.cloudflare.com"
+    }
+  }
+}
+```
+
+Reality 配置字段说明：
+- `public_key`：必填，上游 Reality X25519 公钥，base64url no padding 编码，解码后必须是 32 字节
+- `short_id`：可选，0 到 16 个十六进制字符，默认空 short id
+- `server_name`：可选，Reality ClientHello 使用的 SNI，默认使用 `server`
+- `cipher_suites`：可选，TLS 1.3 cipher suite 名称列表；支持 `TLS_AES_128_GCM_SHA256`、`TLS_AES_256_GCM_SHA384`、`TLS_CHACHA20_POLY1305_SHA256`
 
 VLESS 出站支持 WebSocket 传输，配置 `ws` 启用：
 
@@ -552,7 +577,8 @@ POST /selectors/proxy/direct
 - SOCKS5 username/password 不能为空，且单项最多 255 字节
 - SOCKS5 出站认证必须同时配置 `username` 和 `password`，不能只配其中一个
 - VLESS 入站必须至少配置一个用户，`id` 必须是 UUID；启用 TLS 时 `cert_path` 和 `key_path` 不能为空；启用 WebSocket 时 `ws.path` 不能为空
-- VLESS 出站的 `server` 不能为空，`port` 必须大于 `0`，`id` 必须是 UUID；`tls.server_name` 和 `tls.ca_cert_path` 如果配置则不能为空
+- VLESS 出站的 `server` 不能为空，`port` 必须大于 `0`，`id` 必须是 UUID；`tls.server_name`、`tls.ca_cert_path` 和 `reality.server_name` 如果配置则不能为空
+- VLESS 出站 `reality.public_key` 必须是 32 字节 base64url no padding 值；`reality.short_id` 最多 16 个十六进制字符；`reality` 不能和 `tls` 或 `ws` 同时配置
 - 同类对象里的 `tag` 不能重复
 - 同一个 `address:port` 只能有一个入站
 - 同端口同时接 `socks5` 和 `http-connect` 时，用 `mixed`
@@ -582,3 +608,4 @@ POST /selectors/proxy/direct
 - [vless-tls.json](../../examples/v0.0.2/vless-tls.json)
 - [vless-ws.json](../../examples/v0.0.2/vless-ws.json)
 - [chained-vless-tls.json](../../examples/v0.0.2/chained-vless-tls.json)
+- [chained-vless-reality.json](../../examples/v0.0.2/chained-vless-reality.json)

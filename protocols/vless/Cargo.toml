@@ -7,9 +7,31 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+default = []
+reality = [
+    "dep:base64",
+    "dep:log",
+    "dep:rand",
+    "dep:ring",
+    "dep:subtle",
+    "dep:tokio",
+    "dep:x25519-dalek",
+    "dep:x509-parser",
+]
+
 [dependencies]
+base64 = { version = "0.22", optional = true }
+log = { version = "0.4", optional = true }
+rand = { version = "0.9", optional = true }
+ring = { version = "0.17", optional = true }
+subtle = { version = "2.6", optional = true }
+tokio = { workspace = true, optional = true }
+x25519-dalek = { version = "2.0.1", default-features = false, features = ["static_secrets"], optional = true }
+x509-parser = { version = "0.18", default-features = false, features = ["verify"], optional = true }
 zero-core = { path = "../../crates/core" }
 zero-traits = { path = "../../crates/traits" }
 
 [dev-dependencies]
+rcgen = "0.14"
 tokio.workspace = true

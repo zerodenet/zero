@@ -6,6 +6,7 @@ use tracing::{debug, info, warn};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
+use super::super::runtime::upstream::VlessUpstream;
 use super::super::transport::TcpRelayStream;
 use super::super::{logging::log_urltest_group_target_changed, runtime::Proxy};
 use zero_engine::{
@@ -222,6 +223,7 @@ impl Proxy {
                     port,
                     id,
                     tls,
+                    reality,
                     ws,
                     ..
                 } => {
@@ -232,8 +234,18 @@ impl Proxy {
                         Network::Tcp,
                         ProtocolType::Unknown,
                     );
-                    self.connect_via_vless_upstream(&session, server, port, id, tls, ws)
-                        .await?
+                    self.connect_via_vless_upstream(
+                        &session,
+                        VlessUpstream {
+                            server,
+                            port,
+                            id,
+                            tls,
+                            reality,
+                            ws,
+                        },
+                    )
+                    .await?
                 }
             };
 

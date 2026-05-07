@@ -13,7 +13,7 @@ use rustls::pki_types::PrivateKeyDer;
 use rustls::{ClientConfig, RootCertStore};
 #[cfg(feature = "inbound-vless")]
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-#[cfg(feature = "inbound-vless")]
+#[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
 use tokio::net::TcpStream;
 #[cfg(feature = "inbound-vless")]
 use tokio_rustls::server::TlsStream;
@@ -32,8 +32,6 @@ use zero_traits::AsyncSocket;
 
 #[cfg(feature = "inbound-vless")]
 use super::stream::ClientStream;
-#[cfg(feature = "outbound-vless")]
-use super::stream::TcpRelayStream;
 use zero_engine::EngineError;
 
 #[cfg(feature = "outbound-vless")]
@@ -116,7 +114,7 @@ pub(crate) async fn connect_tls_upstream(
     tls: &ClientTlsConfig,
     base_dir: Option<&Path>,
     default_server_name: &str,
-) -> Result<TcpRelayStream, EngineError> {
+) -> Result<tokio_rustls::client::TlsStream<TcpStream>, EngineError> {
     let server_name = tls
         .server_name
         .as_deref()
@@ -161,7 +159,7 @@ pub(crate) async fn connect_tls_upstream(
         .to_owned();
     let stream = connector.connect(server_name, socket.into_inner()).await?;
 
-    Ok(TcpRelayStream::Tls(Box::new(stream)))
+    Ok(stream)
 }
 
 fn load_certs(path: &Path) -> io::Result<Vec<rustls::pki_types::CertificateDer<'static>>> {

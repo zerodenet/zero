@@ -221,6 +221,145 @@ fn parses_vless_tls_config() {
 }
 
 #[test]
+fn parses_vless_reality_outbound_config() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "vless-reality-chain",
+                    "protocol": {
+                        "type": "vless",
+                        "server": "edge.example.com",
+                        "port": 443,
+                        "id": "11111111-2222-3333-4444-555555555555",
+                        "reality": {
+                            "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                            "short_id": "0123456789abcdef",
+                            "server_name": "www.cloudflare.com",
+                            "cipher_suites": [
+                                "TLS_AES_128_GCM_SHA256",
+                                "TLS_CHACHA20_POLY1305_SHA256"
+                            ]
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "vless-reality-chain" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    match &config.outbounds[0].protocol {
+        OutboundProtocolConfig::Vless { reality, .. } => {
+            let reality = reality.as_ref().expect("vless outbound reality");
+            assert_eq!(reality.server_name.as_deref(), Some("www.cloudflare.com"));
+            assert_eq!(reality.short_id, "0123456789abcdef");
+            assert_eq!(reality.cipher_suites.len(), 2);
+        }
+        _ => panic!("expected vless outbound"),
+    }
+}
+
+#[test]
+fn rejects_invalid_vless_reality_config() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "vless-reality-chain",
+                    "protocol": {
+                        "type": "vless",
+                        "server": "edge.example.com",
+                        "port": 443,
+                        "id": "11111111-2222-3333-4444-555555555555",
+                        "reality": {
+                            "public_key": "bad",
+                            "short_id": "0123456789abcdef00"
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "vless-reality-chain" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(
+        error,
+        zero_config::ConfigError::InvalidOutbound(_)
+    ));
+}
+
+#[test]
+fn rejects_vless_reality_with_tls_or_ws() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "vless-reality-chain",
+                    "protocol": {
+                        "type": "vless",
+                        "server": "edge.example.com",
+                        "port": 443,
+                        "id": "11111111-2222-3333-4444-555555555555",
+                        "tls": {},
+                        "reality": {
+                            "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "vless-reality-chain" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(
+        error,
+        zero_config::ConfigError::InvalidOutbound(_)
+    ));
+
+    let error = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "vless-reality-chain",
+                    "protocol": {
+                        "type": "vless",
+                        "server": "edge.example.com",
+                        "port": 443,
+                        "id": "11111111-2222-3333-4444-555555555555",
+                        "ws": { "path": "/vless" },
+                        "reality": {
+                            "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "vless-reality-chain" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(
+        error,
+        zero_config::ConfigError::InvalidOutbound(_)
+    ));
+}
+
+#[test]
 fn rejects_empty_vless_tls_paths() {
     let error = RuntimeConfig::parse(
         r#"{

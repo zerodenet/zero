@@ -1,5 +1,6 @@
 use zero_core::Session;
 
+use super::super::runtime::upstream::VlessUpstream;
 use super::super::runtime::Proxy;
 use super::stream::TcpRelayStream;
 use zero_engine::EngineError;
@@ -116,10 +117,21 @@ impl Proxy {
                 port,
                 id,
                 tls,
+                reality,
                 ws,
             } => {
                 match self
-                    .connect_via_vless_upstream(session, server, port, id, tls, ws)
+                    .connect_via_vless_upstream(
+                        session,
+                        VlessUpstream {
+                            server,
+                            port,
+                            id,
+                            tls,
+                            reality,
+                            ws,
+                        },
+                    )
                     .await
                 {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Vless {

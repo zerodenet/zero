@@ -26,11 +26,12 @@
 20. VLESS 入站和出站可选择 TLS
 21. VLESS 入站和出站可选择 WebSocket
 22. VLESS 入站和出站支持 TLS + WebSocket 组合（WSS）
-23. `zero-engine` 不再承载监听、协议握手、relay 和 Tokio 运行时接线
+23. VLESS 出站可选择 Reality raw TCP 传输
+24. `zero-engine` 不再承载监听、协议握手、relay 和 Tokio 运行时接线
 
 ## 工程
 
 - `cargo check --workspace`
 - `cargo test --workspace`
 - `cargo clippy --workspace --all-targets`
-- 至少提供一份 `fallback` 示例、一份 `nested-groups` 示例、一份 `urltest` 示例、VLESS TLS 示例和 VLESS WS 示例
+- 至少提供一份 `fallback` 示例、一份 `nested-groups` 示例、一份 `urltest` 示例、VLESS TLS 示例、VLESS WS 示例和 VLESS Reality 示例

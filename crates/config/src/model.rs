@@ -261,6 +261,18 @@ pub struct ClientTlsConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct RealityConfig {
+    pub public_key: String,
+    #[serde(default)]
+    pub short_id: String,
+    #[serde(default)]
+    pub server_name: Option<String>,
+    #[serde(default)]
+    pub cipher_suites: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WebSocketConfig {
     #[serde(default = "default_ws_path")]
     pub path: String,
@@ -308,6 +320,8 @@ pub enum OutboundProtocolConfig {
         id: String,
         #[serde(default)]
         tls: Option<ClientTlsConfig>,
+        #[serde(default)]
+        reality: Option<Box<RealityConfig>>,
         #[serde(default)]
         ws: Option<WebSocketConfig>,
     },

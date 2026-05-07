@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use zero_config::{ClientTlsConfig, OutboundGroupKind, OutboundProtocolConfig, RuntimeConfig};
+use zero_config::{
+    ClientTlsConfig, OutboundGroupKind, OutboundProtocolConfig, RealityConfig, RuntimeConfig,
+};
 
 use super::error::EngineError;
 
@@ -31,32 +33,38 @@ impl EnginePlan {
 
         for outbound in &config.outbounds {
             let kind = match &outbound.protocol {
-                OutboundProtocolConfig::Direct => TargetKind::Outbound(OutboundTarget::Direct),
-                OutboundProtocolConfig::Block => TargetKind::Outbound(OutboundTarget::Block),
+                OutboundProtocolConfig::Direct => {
+                    TargetKind::Outbound(Box::new(OutboundTarget::Direct))
+                }
+                OutboundProtocolConfig::Block => {
+                    TargetKind::Outbound(Box::new(OutboundTarget::Block))
+                }
                 OutboundProtocolConfig::Socks5 {
                     server,
                     port,
                     username,
                     password,
-                } => TargetKind::Outbound(OutboundTarget::Socks5 {
+                } => TargetKind::Outbound(Box::new(OutboundTarget::Socks5 {
                     server: server.clone(),
                     port: *port,
                     username: username.clone(),
                     password: password.clone(),
-                }),
+                })),
                 OutboundProtocolConfig::Vless {
                     server,
                     port,
                     id,
                     tls,
+                    reality,
                     ws,
-                } => TargetKind::Outbound(OutboundTarget::Vless {
+                } => TargetKind::Outbound(Box::new(OutboundTarget::Vless {
                     server: server.clone(),
                     port: *port,
                     id: id.clone(),
                     tls: tls.clone(),
+                    reality: reality.clone(),
                     ws: ws.clone(),
-                }),
+                })),
             };
 
             targets.push(TargetNode {
@@ -164,7 +172,7 @@ impl TargetNode {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetKind {
-    Outbound(OutboundTarget),
+    Outbound(Box<OutboundTarget>),
     Selector(SelectorGroupPlan),
     Fallback(FallbackGroupPlan),
     UrlTest(UrlTestGroupPlan),
@@ -185,6 +193,7 @@ pub enum OutboundTarget {
         port: u16,
         id: String,
         tls: Option<ClientTlsConfig>,
+        reality: Option<Box<RealityConfig>>,
         ws: Option<zero_config::WebSocketConfig>,
     },
 }

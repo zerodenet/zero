@@ -1,4 +1,4 @@
-use zero_config::{ClientTlsConfig, WebSocketConfig};
+use zero_config::{ClientTlsConfig, RealityConfig, WebSocketConfig};
 
 use super::groups::OutboundGroupStateStore;
 use super::plan::{EnginePlan, OutboundTarget, TargetId, TargetKind};
@@ -24,6 +24,7 @@ pub enum ResolvedLeafOutbound<'a> {
         port: u16,
         id: &'a str,
         tls: Option<&'a ClientTlsConfig>,
+        reality: Option<&'a RealityConfig>,
         ws: Option<&'a WebSocketConfig>,
     },
 }
@@ -122,6 +123,7 @@ fn resolve_leaf_outbound<'a>(
             port,
             id,
             tls,
+            reality,
             ws,
         } => ResolvedLeafOutbound::Vless {
             tag,
@@ -129,6 +131,7 @@ fn resolve_leaf_outbound<'a>(
             port: *port,
             id,
             tls: tls.as_ref(),
+            reality: reality.as_deref(),
             ws: ws.as_ref(),
         },
     }

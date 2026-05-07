@@ -64,7 +64,7 @@ fn builds_engine_plan_for_nested_groups() {
     assert_eq!(direct.tag(), "direct");
     assert!(matches!(
         direct.kind(),
-        TargetKind::Outbound(OutboundTarget::Direct)
+        TargetKind::Outbound(outbound) if matches!(outbound.as_ref(), OutboundTarget::Direct)
     ));
 
     let fallback = plan.target(fallback_id).expect("resolve fallback target");

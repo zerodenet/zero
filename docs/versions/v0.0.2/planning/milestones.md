@@ -6,4 +6,5 @@
 4. 支持 `group -> group` 递归解析和循环校验
 5. 配置层支持 `urltest`
 6. engine 支持后台探测、选路和状态导出
-7. 补示例和回归测试
+7. VLESS 出站支持 Reality raw TCP
+8. 补示例和回归测试

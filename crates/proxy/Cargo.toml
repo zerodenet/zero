@@ -30,16 +30,19 @@ inbound-vless = [
 outbound-socks5 = ["dep:zero-protocol-socks5"]
 outbound-vless = [
     "dep:futures-util",
+    "dep:log",
     "dep:rustls",
     "dep:rustls-pemfile",
     "dep:tokio-rustls",
     "dep:tokio-tungstenite",
     "dep:webpki-roots",
     "dep:zero-protocol-vless",
+    "zero-protocol-vless/reality",
 ]
 
 [dependencies]
 futures-util = { version = "0.3.32", optional = true }
+log = { version = "0.4", optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"], optional = true }
 rustls-pemfile = { version = "2", optional = true }
 tokio.workspace = true
@@ -53,7 +56,7 @@ zero-engine = { path = "../engine" }
 zero-platform-tokio = { path = "../platform/tokio" }
 zero-protocol-http-connect = { path = "../../protocols/http-connect", optional = true }
 zero-protocol-socks5 = { path = "../../protocols/socks5", optional = true }
-zero-protocol-vless = { path = "../../protocols/vless", optional = true }
+zero-protocol-vless = { path = "../../protocols/vless", optional = true, default-features = false }
 zero-traits = { path = "../traits" }
 
 [dev-dependencies]
