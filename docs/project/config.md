@@ -123,7 +123,7 @@ POST /api/v1/selectors/{group}/{target}
 - `http-connect`
 - `http`，兼容别名
 - `mixed`，同端口识别 `socks5` 和 `http-connect`
-- `vless`，当前支持 TCP/TLS/WS/WSS，出站额外支持 Reality raw TCP
+- `vless`，当前支持 TCP/TLS/WS/WSS，Reality raw TCP 出站和入站第一阶段
 
 `mixed` 不是外部协议，而是“同端口多协议入站”的配置入口。
 
@@ -311,7 +311,7 @@ TLS 配置字段说明：
 - `insecure`：可选，跳过证书校验，默认 `false`
 - `alpn`：可选，ALPN 协议列表
 
-连接 VLESS Reality 上游时配置 `reality`。Reality 是 VLESS 出站的 TLS-like 安全层，不能和 `tls` 或 `ws` 同时配置；当前只支持 raw TCP 上的 outbound Reality：
+连接 VLESS Reality 上游时配置 `reality`。Reality 是 VLESS 的 TLS-like 安全层，不能和 `tls` 或 `ws` 同时配置；当前支持 raw TCP 上的 outbound Reality：
 
 ```json
 {

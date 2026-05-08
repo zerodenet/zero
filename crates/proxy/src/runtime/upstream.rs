@@ -134,15 +134,28 @@ impl Proxy {
             }
         };
 
+        let is_reality = upstream.reality.is_some();
         let mut upstream = crate::transport::MeteredStream::new(stream);
 
-        self.protocols
-            .vless_outbound
-            .establish_tcp_tunnel(&mut upstream, session, &id)
-            .await?;
-        self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
+        if is_reality {
+            self.protocols
+                .vless_outbound
+                .send_tcp_request(&mut upstream, session, &id)
+                .await?;
+            self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
 
-        Ok(upstream.into_inner())
+            Ok(TcpRelayStream::new(
+                zero_protocol_vless::DeferredVlessResponseStream::new(upstream.into_inner()),
+            ))
+        } else {
+            self.protocols
+                .vless_outbound
+                .establish_tcp_tunnel(&mut upstream, session, &id)
+                .await?;
+            self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
+
+            Ok(upstream.into_inner())
+        }
     }
 
     #[cfg(not(feature = "outbound-vless"))]

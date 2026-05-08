@@ -3,9 +3,10 @@ use zero_core::Session;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
-use super::super::metered::StreamTraffic;
-use super::super::udp_sessions::{UdpFlowOutbound, UdpSessionFlows};
-use super::super::upstream_socks5_udp::ActiveUpstreamSocks5UdpAssociation;
+use crate::transport::StreamTraffic;
+
+use super::sessions::{UdpFlowOutbound, UdpSessionFlows};
+use super::upstream::ActiveUpstreamSocks5UdpAssociation;
 
 pub(super) struct UdpCandidateContext<'a> {
     pub(super) inbound_tag: &'a str,

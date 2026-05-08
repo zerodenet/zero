@@ -1,6 +1,7 @@
 use super::*;
 
 #[tokio::test]
+#[cfg(feature = "outbound-socks5")]
 async fn relays_udp_through_nested_group_target() {
     let echo_port = free_udp_port();
     let outer_port = free_port();

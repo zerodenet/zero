@@ -6,27 +6,26 @@ use zero_platform_tokio::TokioDatagramSocket;
 use zero_protocol_socks5::{parse_udp_packet, Socks5Reply, Socks5UdpAssociateRequest};
 use zero_traits::AsyncSocket;
 
-use super::super::logging::{
+use crate::logging::{
     log_udp_upstream_association_dropped, log_udp_upstream_association_idle_timeout,
 };
-use super::super::runtime::Proxy;
-use super::metered::MeteredStream;
-use super::stream::ClientStream;
-use super::udp_sessions::UdpSessionFlows;
-use super::upstream_socks5_udp::{
-    ActiveUpstreamSocks5UdpAssociation, UpstreamAssociationCloseReason,
-};
+use crate::runtime::Proxy;
+use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
 
 mod context;
 mod helpers;
 mod outbound;
 mod request;
+mod sessions;
+mod upstream;
 
 use context::UdpRequestContext;
 use helpers::{
     address_from_socket_addr, log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };
+use sessions::UdpSessionFlows;
+use upstream::{ActiveUpstreamSocks5UdpAssociation, UpstreamAssociationCloseReason};
 
 impl Proxy {
     pub(crate) async fn handle_socks5_udp_associate<S>(

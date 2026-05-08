@@ -792,6 +792,7 @@ impl RealityClientConnection {
                             self.received_close_notify = true;
                             // Per RFC 8446: "Any data received after a closure alert
                             // has been received MUST be ignored."
+                            self.ciphertext_read_buf.consume(total_record_len);
                             return Ok(());
                         } else if alert_level != ALERT_LEVEL_WARNING {
                             // Fatal alert - connection must be terminated

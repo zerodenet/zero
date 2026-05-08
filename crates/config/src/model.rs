@@ -183,6 +183,8 @@ pub enum InboundProtocolConfig {
         #[serde(default)]
         tls: Option<TlsConfig>,
         #[serde(default)]
+        reality: Option<Box<InboundRealityConfig>>,
+        #[serde(default)]
         ws: Option<WebSocketConfig>,
     },
 }
@@ -206,6 +208,13 @@ impl InboundProtocolConfig {
     pub fn vless_tls(&self) -> Option<&TlsConfig> {
         match self {
             Self::Vless { tls, .. } => tls.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn vless_reality(&self) -> Option<&InboundRealityConfig> {
+        match self {
+            Self::Vless { reality, .. } => reality.as_deref(),
             _ => None,
         }
     }
@@ -257,6 +266,18 @@ pub struct ClientTlsConfig {
     pub insecure: bool,
     #[serde(default)]
     pub alpn: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InboundRealityConfig {
+    pub private_key: String,
+    #[serde(default)]
+    pub short_ids: Vec<String>,
+    #[serde(default)]
+    pub server_name: Option<String>,
+    #[serde(default)]
+    pub cipher_suites: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

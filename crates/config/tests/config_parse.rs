@@ -264,6 +264,44 @@ fn parses_vless_reality_outbound_config() {
 }
 
 #[test]
+fn parses_vless_reality_inbound_config() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vless-reality-in",
+                    "listen": { "address": "127.0.0.1", "port": 8443 },
+                    "protocol": {
+                        "type": "vless",
+                        "users": [
+                            { "id": "11111111-2222-3333-4444-555555555555" }
+                        ],
+                        "reality": {
+                            "private_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                            "short_ids": ["0123456789abcdef"],
+                            "server_name": "www.cloudflare.com",
+                            "cipher_suites": ["TLS_AES_128_GCM_SHA256"]
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    let reality = config.inbounds[0]
+        .protocol
+        .vless_reality()
+        .expect("vless inbound reality");
+    assert_eq!(reality.short_ids, vec!["0123456789abcdef"]);
+    assert_eq!(reality.server_name.as_deref(), Some("www.cloudflare.com"));
+}
+
+#[test]
 fn rejects_invalid_vless_reality_config() {
     let error = RuntimeConfig::parse(
         r#"{
@@ -294,6 +332,37 @@ fn rejects_invalid_vless_reality_config() {
         error,
         zero_config::ConfigError::InvalidOutbound(_)
     ));
+}
+
+#[test]
+fn rejects_invalid_vless_inbound_reality_config() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vless-reality-in",
+                    "listen": { "address": "127.0.0.1", "port": 8443 },
+                    "protocol": {
+                        "type": "vless",
+                        "users": [
+                            { "id": "11111111-2222-3333-4444-555555555555" }
+                        ],
+                        "reality": {
+                            "private_key": "invalid",
+                            "short_ids": ["not-hex"]
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidInbound(_)));
 }
 
 #[test]
@@ -357,6 +426,68 @@ fn rejects_vless_reality_with_tls_or_ws() {
         error,
         zero_config::ConfigError::InvalidOutbound(_)
     ));
+}
+
+#[test]
+fn rejects_vless_inbound_reality_with_tls_or_ws() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vless-reality-in",
+                    "listen": { "address": "127.0.0.1", "port": 8443 },
+                    "protocol": {
+                        "type": "vless",
+                        "users": [
+                            { "id": "11111111-2222-3333-4444-555555555555" }
+                        ],
+                        "tls": {
+                            "cert_path": "cert.pem",
+                            "key_path": "key.pem"
+                        },
+                        "reality": {
+                            "private_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidInbound(_)));
+
+    let error = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vless-reality-in",
+                    "listen": { "address": "127.0.0.1", "port": 8443 },
+                    "protocol": {
+                        "type": "vless",
+                        "users": [
+                            { "id": "11111111-2222-3333-4444-555555555555" }
+                        ],
+                        "ws": { "path": "/vless" },
+                        "reality": {
+                            "private_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidInbound(_)));
 }
 
 #[test]

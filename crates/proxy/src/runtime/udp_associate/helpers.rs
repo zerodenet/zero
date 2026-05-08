@@ -1,12 +1,13 @@
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 
 use tokio::time::{sleep_until, Instant as TokioInstant};
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use super::super::super::logging::log_session_finished;
-use super::super::udp_sessions::CompletedUdpFlow;
-use super::super::upstream_socks5_udp::ActiveUpstreamSocks5UdpAssociation;
+use crate::logging::log_session_finished;
+
+use super::sessions::CompletedUdpFlow;
+use super::upstream::ActiveUpstreamSocks5UdpAssociation;
 
 pub(super) fn log_completed_udp_flow(completed: CompletedUdpFlow) {
     log_session_finished(
@@ -36,8 +37,8 @@ pub(super) async fn wait_for_upstream_idle(deadline: Option<TokioInstant>) {
 }
 
 pub(super) fn address_from_socket_addr(addr: SocketAddr) -> Address {
-    match addr.ip() {
-        IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
-        IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
+    match zero_platform_tokio::socket_addr_to_ip(addr) {
+        zero_traits::IpAddress::V4(ip) => Address::Ipv4(ip),
+        zero_traits::IpAddress::V6(ip) => Address::Ipv6(ip),
     }
 }

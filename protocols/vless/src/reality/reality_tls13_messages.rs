@@ -2,7 +2,11 @@
 //
 // Construct TLS 1.3 handshake messages for REALITY protocol
 
-use super::common::{HANDSHAKE_TYPE_FINISHED, VERSION_TLS_1_2_MAJOR, VERSION_TLS_1_2_MINOR};
+use super::common::{
+    HANDSHAKE_TYPE_CERTIFICATE, HANDSHAKE_TYPE_CERTIFICATE_VERIFY,
+    HANDSHAKE_TYPE_ENCRYPTED_EXTENSIONS, HANDSHAKE_TYPE_FINISHED, HANDSHAKE_TYPE_SERVER_HELLO,
+    VERSION_TLS_1_2_MAJOR, VERSION_TLS_1_2_MINOR,
+};
 use std::io::Result;
 
 /// Construct Finished message
@@ -29,6 +33,94 @@ pub fn construct_finished(verify_data: &[u8]) -> Result<Vec<u8>> {
     finished.extend_from_slice(verify_data);
 
     Ok(finished)
+}
+
+pub fn construct_server_hello(
+    server_random: &[u8; 32],
+    session_id: &[u8],
+    cipher_suite: u16,
+    server_public_key: &[u8; 32],
+) -> Result<Vec<u8>> {
+    let mut hello = Vec::with_capacity(128);
+    hello.push(HANDSHAKE_TYPE_SERVER_HELLO);
+    let length_offset = hello.len();
+    hello.extend_from_slice(&[0u8; 3]);
+    hello.extend_from_slice(&[VERSION_TLS_1_2_MAJOR, VERSION_TLS_1_2_MINOR]);
+    hello.extend_from_slice(server_random);
+    hello.push(session_id.len() as u8);
+    hello.extend_from_slice(session_id);
+    hello.extend_from_slice(&cipher_suite.to_be_bytes());
+    hello.push(0x00);
+
+    let extensions_offset = hello.len();
+    hello.extend_from_slice(&[0u8; 2]);
+    let mut extensions = Vec::new();
+
+    extensions.extend_from_slice(&[0x00, 0x2b]);
+    extensions.extend_from_slice(&[0x00, 0x02]);
+    extensions.extend_from_slice(&[0x03, 0x04]);
+
+    extensions.extend_from_slice(&[0x00, 0x33]);
+    extensions.extend_from_slice(&(4 + server_public_key.len() as u16).to_be_bytes());
+    extensions.extend_from_slice(&[0x00, 0x1d]);
+    extensions.extend_from_slice(&(server_public_key.len() as u16).to_be_bytes());
+    extensions.extend_from_slice(server_public_key);
+
+    hello[extensions_offset..extensions_offset + 2]
+        .copy_from_slice(&(extensions.len() as u16).to_be_bytes());
+    hello.extend_from_slice(&extensions);
+
+    let message_length = hello.len() - 4;
+    hello[length_offset..length_offset + 3]
+        .copy_from_slice(&(message_length as u32).to_be_bytes()[1..]);
+    Ok(hello)
+}
+
+pub fn construct_encrypted_extensions(alpn: Option<&str>) -> Result<Vec<u8>> {
+    let mut body = Vec::new();
+    let mut extensions = Vec::new();
+    if let Some(protocol) = alpn {
+        extensions.extend_from_slice(&[0x00, 0x10]);
+        let protocol = protocol.as_bytes();
+        let protocols_list_len = 1 + protocol.len();
+        extensions.extend_from_slice(&((2 + protocols_list_len) as u16).to_be_bytes());
+        extensions.extend_from_slice(&(protocols_list_len as u16).to_be_bytes());
+        extensions.push(protocol.len() as u8);
+        extensions.extend_from_slice(protocol);
+    }
+    body.extend_from_slice(&(extensions.len() as u16).to_be_bytes());
+    body.extend_from_slice(&extensions);
+    Ok(handshake_message(
+        HANDSHAKE_TYPE_ENCRYPTED_EXTENSIONS,
+        &body,
+    ))
+}
+
+pub fn construct_certificate(cert_der: &[u8]) -> Result<Vec<u8>> {
+    let mut body = Vec::with_capacity(cert_der.len() + 16);
+    body.push(0x00);
+    let list_len = 3 + cert_der.len() + 2;
+    body.extend_from_slice(&(list_len as u32).to_be_bytes()[1..]);
+    body.extend_from_slice(&(cert_der.len() as u32).to_be_bytes()[1..]);
+    body.extend_from_slice(cert_der);
+    body.extend_from_slice(&[0x00, 0x00]);
+    Ok(handshake_message(HANDSHAKE_TYPE_CERTIFICATE, &body))
+}
+
+pub fn construct_certificate_verify(signature: &[u8]) -> Result<Vec<u8>> {
+    let mut body = Vec::with_capacity(4 + signature.len());
+    body.extend_from_slice(&[0x08, 0x07]);
+    body.extend_from_slice(&(signature.len() as u16).to_be_bytes());
+    body.extend_from_slice(signature);
+    Ok(handshake_message(HANDSHAKE_TYPE_CERTIFICATE_VERIFY, &body))
+}
+
+fn handshake_message(message_type: u8, body: &[u8]) -> Vec<u8> {
+    let mut message = Vec::with_capacity(4 + body.len());
+    message.push(message_type);
+    message.extend_from_slice(&(body.len() as u32).to_be_bytes()[1..]);
+    message.extend_from_slice(body);
+    message
 }
 
 /// Default ALPN protocols for REALITY client (matches browser fingerprints)
@@ -133,9 +225,23 @@ pub fn construct_client_hello(
     // signature_algorithms extension (type 13)
     {
         extensions.extend_from_slice(&[0x00, 0x0d]); // Extension type: signature_algorithms
-        extensions.extend_from_slice(&[0x00, 0x04]); // Extension length: 4
-        extensions.extend_from_slice(&[0x00, 0x02]); // Signature algorithms length: 2
-        extensions.extend_from_slice(&[0x08, 0x07]); // ed25519
+        const SIGNATURE_ALGORITHMS: &[u16] = &[
+            0x0403, // ecdsa_secp256r1_sha256
+            0x0804, // rsa_pss_rsae_sha256
+            0x0401, // rsa_pkcs1_sha256
+            0x0503, // ecdsa_secp384r1_sha384
+            0x0805, // rsa_pss_rsae_sha384
+            0x0501, // rsa_pkcs1_sha384
+            0x0806, // rsa_pss_rsae_sha512
+            0x0601, // rsa_pkcs1_sha512
+            0x0807, // ed25519, required for REALITY certificate verification
+        ];
+        let algorithms_len = (SIGNATURE_ALGORITHMS.len() * 2) as u16;
+        extensions.extend_from_slice(&(2 + algorithms_len).to_be_bytes());
+        extensions.extend_from_slice(&algorithms_len.to_be_bytes());
+        for algorithm in SIGNATURE_ALGORITHMS {
+            extensions.extend_from_slice(&algorithm.to_be_bytes());
+        }
     }
 
     // ALPN extension (type 16)

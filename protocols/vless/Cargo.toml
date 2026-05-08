@@ -13,6 +13,7 @@ reality = [
     "dep:base64",
     "dep:log",
     "dep:rand",
+    "dep:rcgen",
     "dep:ring",
     "dep:subtle",
     "dep:tokio",
@@ -24,6 +25,7 @@ reality = [
 base64 = { version = "0.22", optional = true }
 log = { version = "0.4", optional = true }
 rand = { version = "0.9", optional = true }
+rcgen = { version = "0.14", optional = true }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.6", optional = true }
 tokio = { workspace = true, optional = true }
@@ -33,5 +35,4 @@ zero-core = { path = "../../crates/core" }
 zero-traits = { path = "../../crates/traits" }
 
 [dev-dependencies]
-rcgen = "0.14"
 tokio.workspace = true

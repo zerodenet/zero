@@ -1,7 +1,8 @@
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
-use zero_config::VlessUserConfig;
+use zero_config::{InboundRealityConfig, VlessUserConfig};
+use zero_protocol_vless::RealityServerOptions;
 use zero_protocol_vless::{VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
@@ -26,6 +27,7 @@ impl Proxy {
             .vless_tls()
             .map(|tls| build_tls_acceptor(tls, self.config.source_dir()))
             .transpose()?;
+        let reality_config = inbound.protocol.vless_reality().cloned();
         let ws_config = inbound.protocol.vless_ws().cloned();
         let mut connections = JoinSet::new();
 
@@ -34,6 +36,7 @@ impl Proxy {
             protocol = "vless",
             listen = %local_addr,
             tls = tls_acceptor.is_some(),
+            reality = reality_config.is_some(),
             ws = ws_config.is_some(),
             "inbound listener ready"
         );
@@ -53,11 +56,12 @@ impl Proxy {
                     let inbound_tag = inbound.tag.clone();
                     let vless_users = inbound.protocol.vless_users().to_vec();
                     let tls_acceptor = tls_acceptor.clone();
+                    let reality_config = reality_config.clone();
                     let ws_config = ws_config.clone();
 
                     connections.spawn(async move {
-                        let result = match tls_acceptor {
-                            Some(acceptor) => {
+                        let result = match (tls_acceptor, reality_config) {
+                            (Some(acceptor), None) => {
                                 match acceptor.accept(stream.into_inner()).await {
                                     Ok(tls_stream) => {
                                         engine
@@ -72,7 +76,22 @@ impl Proxy {
                                     Err(error) => Err(error.into()),
                                 }
                             }
-                            None => {
+                            (None, Some(reality)) => {
+                                match upgrade_vless_reality_server(stream, &reality).await {
+                                    Ok(reality_stream) => {
+                                        engine
+                                            .handle_vless_stream(
+                                                reality_stream,
+                                                inbound_tag.as_str(),
+                                                &vless_users,
+                                                ws_config.as_ref(),
+                                            )
+                                            .await
+                                    }
+                                    Err(error) => Err(error.into()),
+                                }
+                            }
+                            (None, None) => {
                                 engine
                                     .handle_vless_stream(
                                         stream,
@@ -82,6 +101,11 @@ impl Proxy {
                                     )
                                     .await
                             }
+                            (Some(_), Some(_)) => Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                "vless inbound cannot set both tls and reality",
+                            )
+                            .into()),
                         };
 
                         if let Err(error) = result {
@@ -172,6 +196,26 @@ impl Proxy {
             error!(error = %error, "failed to shutdown client socket");
         }
     }
+}
+
+async fn upgrade_vless_reality_server<S>(
+    stream: S,
+    reality: &InboundRealityConfig,
+) -> std::io::Result<zero_protocol_vless::RealityTlsStream<S>>
+where
+    S: ClientStream + 'static,
+{
+    let server_name = reality.server_name.as_deref().unwrap_or("localhost");
+    zero_protocol_vless::upgrade_reality_server(
+        stream,
+        RealityServerOptions {
+            private_key: &reality.private_key,
+            short_ids: &reality.short_ids,
+            server_name,
+            cipher_suites: &reality.cipher_suites,
+        },
+    )
+    .await
 }
 
 struct ConfiguredVlessUsers<'a> {

@@ -1,6 +1,7 @@
 use super::*;
 
 #[tokio::test]
+#[cfg(feature = "outbound-socks5")]
 async fn relays_udp_through_fallback_group_when_primary_unreachable() {
     let echo_port = free_udp_port();
     let outer_port = free_port();

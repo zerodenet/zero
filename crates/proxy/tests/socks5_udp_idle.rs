@@ -1,4 +1,4 @@
-#![cfg(feature = "inbound-socks5")]
+#![cfg(all(feature = "inbound-socks5", feature = "outbound-socks5"))]
 
 mod support;
 

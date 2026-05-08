@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use crate::{
-    ConfigError, InboundProtocolConfig, OutboundProtocolConfig, RealityConfig, Socks5UserConfig,
-    VlessUserConfig,
+    ConfigError, InboundProtocolConfig, InboundRealityConfig, OutboundProtocolConfig,
+    RealityConfig, Socks5UserConfig, VlessUserConfig,
 };
 
 pub(super) fn validate_inbound_protocol(
@@ -14,11 +14,30 @@ pub(super) fn validate_inbound_protocol(
             validate_socks5_users("mixed inbound socks5", socks5_users)
         }
         InboundProtocolConfig::HttpConnect => Ok(()),
-        InboundProtocolConfig::Vless { users, tls, ws } => {
+        InboundProtocolConfig::Vless {
+            users,
+            tls,
+            reality,
+            ws,
+        } => {
             validate_vless_users(users)?;
             if let Some(tls) = tls {
                 validate_inbound_optional_non_empty("vless tls.cert_path", &tls.cert_path)?;
                 validate_inbound_optional_non_empty("vless tls.key_path", &tls.key_path)?;
+            }
+            if let Some(reality) = reality {
+                validate_vless_inbound_reality(reality)?;
+            }
+            if tls.is_some() && reality.is_some() {
+                return Err(ConfigError::InvalidInbound(
+                    "`vless` inbound cannot set both `tls` and `reality`".to_owned(),
+                ));
+            }
+            if ws.is_some() && reality.is_some() {
+                return Err(ConfigError::InvalidInbound(
+                    "`vless` inbound `reality` currently supports raw TCP only, not `ws`"
+                        .to_owned(),
+                ));
             }
             if let Some(ws) = ws {
                 validate_inbound_optional_non_empty("vless ws.path", &ws.path)?;
@@ -110,6 +129,27 @@ fn validate_vless_users(users: &[VlessUserConfig]) -> Result<(), ConfigError> {
     Ok(())
 }
 
+fn validate_vless_inbound_reality(reality: &InboundRealityConfig) -> Result<(), ConfigError> {
+    validate_inbound_optional_non_empty("vless reality.private_key", &reality.private_key)?;
+    if !matches!(base64url_decoded_len(&reality.private_key), Some(32)) {
+        return Err(ConfigError::InvalidInbound(
+            "`vless` inbound `reality.private_key` must be a 32-byte base64url value without padding"
+                .to_owned(),
+        ));
+    }
+
+    for short_id in &reality.short_ids {
+        validate_short_id("inbound", short_id).map_err(ConfigError::InvalidInbound)?;
+    }
+
+    if let Some(server_name) = &reality.server_name {
+        validate_inbound_optional_non_empty("vless reality.server_name", server_name)?;
+    }
+
+    validate_reality_cipher_suites("inbound", &reality.cipher_suites)
+        .map_err(ConfigError::InvalidInbound)
+}
+
 fn validate_vless_reality(reality: &RealityConfig) -> Result<(), ConfigError> {
     validate_outbound_optional_non_empty("vless reality.public_key", &reality.public_key)?;
     if !matches!(base64url_decoded_len(&reality.public_key), Some(32)) {
@@ -119,34 +159,40 @@ fn validate_vless_reality(reality: &RealityConfig) -> Result<(), ConfigError> {
         ));
     }
 
-    if reality.short_id.len() > 16 {
-        return Err(ConfigError::InvalidOutbound(
-            "`vless` outbound `reality.short_id` must be at most 16 hex characters".to_owned(),
-        ));
-    }
-    if !reality
-        .short_id
-        .bytes()
-        .all(|byte| byte.is_ascii_hexdigit())
-    {
-        return Err(ConfigError::InvalidOutbound(
-            "`vless` outbound `reality.short_id` must contain only hex digits".to_owned(),
-        ));
-    }
+    validate_short_id("outbound", &reality.short_id).map_err(ConfigError::InvalidOutbound)?;
 
     if let Some(server_name) = &reality.server_name {
         validate_outbound_optional_non_empty("vless reality.server_name", server_name)?;
     }
 
-    for cipher_suite in &reality.cipher_suites {
+    validate_reality_cipher_suites("outbound", &reality.cipher_suites)
+        .map_err(ConfigError::InvalidOutbound)
+}
+
+fn validate_short_id(kind: &str, short_id: &str) -> Result<(), String> {
+    if short_id.len() > 16 {
+        return Err(format!(
+            "`vless` {kind} `reality.short_id` must be at most 16 hex characters"
+        ));
+    }
+    if !short_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(format!(
+            "`vless` {kind} `reality.short_id` must contain only hex digits"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_reality_cipher_suites(kind: &str, cipher_suites: &[String]) -> Result<(), String> {
+    for cipher_suite in cipher_suites {
         match cipher_suite.as_str() {
             "TLS_AES_128_GCM_SHA256"
             | "TLS_AES_256_GCM_SHA384"
             | "TLS_CHACHA20_POLY1305_SHA256" => {}
             _ => {
-                return Err(ConfigError::InvalidOutbound(format!(
-                    "`vless` outbound `reality.cipher_suites` contains unsupported suite `{cipher_suite}`"
-                )));
+                return Err(format!(
+                    "`vless` {kind} `reality.cipher_suites` contains unsupported suite `{cipher_suite}`"
+                ));
             }
         }
     }

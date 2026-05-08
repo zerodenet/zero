@@ -14,6 +14,8 @@ use zero_platform_tokio::{TokioListener, TokioResolver};
 use crate::inventory::ProtocolInventory;
 
 mod engine_facade;
+#[cfg(feature = "inbound-socks5")]
+mod udp_associate;
 pub(crate) mod upstream;
 
 #[derive(Debug, Clone)]

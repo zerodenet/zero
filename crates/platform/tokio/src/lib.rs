@@ -137,7 +137,7 @@ impl DnsResolver for TokioResolver {
     }
 }
 
-fn socket_addr_to_ip(addr: SocketAddr) -> IpAddress {
+pub fn socket_addr_to_ip(addr: SocketAddr) -> IpAddress {
     ip_addr_to_ip(addr.ip())
 }
 

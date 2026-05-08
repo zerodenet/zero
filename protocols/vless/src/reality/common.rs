@@ -75,21 +75,22 @@ pub const PLAINTEXT_READ_BUF_CAPACITY: usize = TLS_MAX_RECORD_SIZE * 2;
 /// and ciphertext write buffer (post-encryption). rustls uses 64KB for both.
 pub const OUTGOING_BUFFER_LIMIT: usize = 64 * 1024;
 
-/// Strip TLS 1.3 content type trailer from decrypted plaintext slice.
+/// Strip TLS 1.3 content type trailer and optional zero padding from a decrypted
+/// plaintext slice.
 ///
-/// TLS 1.3 format: content || type_byte
+/// TLS 1.3 format: content || type_byte || zero_padding
 /// Returns (content_type, valid_content_length) without modifying the slice.
-///
-/// This is the zero-allocation version for use with in-place decryption.
-/// NOTE: Does NOT strip padding zeros - our implementation doesn't add padding.
 #[inline]
 pub fn strip_content_type_slice(plaintext: &[u8]) -> io::Result<(u8, usize)> {
     if plaintext.is_empty() {
         return Err(Error::new(ErrorKind::InvalidData, "Empty plaintext"));
     }
 
-    // No padding in our implementation
-    let content_type = plaintext[plaintext.len() - 1];
+    let content_type_pos = plaintext
+        .iter()
+        .rposition(|byte| *byte != 0)
+        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Plaintext is all zeros"))?;
+    let content_type = plaintext[content_type_pos];
 
     if content_type != CONTENT_TYPE_HANDSHAKE
         && content_type != CONTENT_TYPE_APPLICATION_DATA
@@ -101,20 +102,14 @@ pub fn strip_content_type_slice(plaintext: &[u8]) -> io::Result<(u8, usize)> {
         ));
     }
 
-    Ok((content_type, plaintext.len() - 1))
+    Ok((content_type, content_type_pos))
 }
 
-/// Strip TLS 1.3 content type trailer from decrypted plaintext.
+/// Strip TLS 1.3 content type trailer and optional zero padding from decrypted
+/// plaintext.
 ///
-/// TLS 1.3 format: content || type_byte
+/// TLS 1.3 format: content || type_byte || zero_padding
 /// Returns the actual content type and modifies plaintext to contain only content.
-///
-/// NOTE: This function does NOT strip padding zeros. Our REALITY implementation
-/// does not add padding, so stripping zeros could corrupt data that legitimately
-/// ends with zero bytes. Use `strip_content_type_with_padding` for messages from
-/// external implementations that may use padding.
-///
-/// Only used by tests - the hot path uses `strip_content_type_slice` for zero-allocation.
 #[cfg(test)]
 pub fn strip_content_type(plaintext: &mut Vec<u8>) -> io::Result<u8> {
     let (content_type, valid_len) = strip_content_type_slice(plaintext)?;
@@ -130,31 +125,8 @@ pub fn strip_content_type(plaintext: &mut Vec<u8>) -> io::Result<u8> {
 /// Use this for messages from external TLS implementations (e.g., sing-box) that
 /// may add optional padding per RFC 8446 Section 5.4.
 pub fn strip_content_type_with_padding(plaintext: &mut Vec<u8>) -> io::Result<u8> {
-    if plaintext.is_empty() {
-        return Err(Error::new(ErrorKind::InvalidData, "Empty plaintext"));
-    }
-
-    // Remove trailing zeros (padding) per RFC 8446 Section 5.4
-    while !plaintext.is_empty() && *plaintext.last().unwrap() == 0 {
-        plaintext.pop();
-    }
-
-    if plaintext.is_empty() {
-        return Err(Error::new(ErrorKind::InvalidData, "Plaintext is all zeros"));
-    }
-
-    let content_type = plaintext.pop().unwrap();
-
-    if content_type != CONTENT_TYPE_HANDSHAKE
-        && content_type != CONTENT_TYPE_APPLICATION_DATA
-        && content_type != CONTENT_TYPE_ALERT
-    {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            format!("Invalid content type: 0x{:02x}", content_type),
-        ));
-    }
-
+    let (content_type, valid_len) = strip_content_type_slice(plaintext)?;
+    plaintext.truncate(valid_len);
     Ok(content_type)
 }
 

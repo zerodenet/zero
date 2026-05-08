@@ -26,6 +26,7 @@ inbound-vless = [
     "dep:tokio-rustls",
     "dep:tokio-tungstenite",
     "dep:zero-protocol-vless",
+    "zero-protocol-vless/reality",
 ]
 outbound-socks5 = ["dep:zero-protocol-socks5"]
 outbound-vless = [

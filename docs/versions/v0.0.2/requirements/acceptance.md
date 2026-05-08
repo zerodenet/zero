@@ -26,7 +26,7 @@
 20. VLESS 入站和出站可选择 TLS
 21. VLESS 入站和出站可选择 WebSocket
 22. VLESS 入站和出站支持 TLS + WebSocket 组合（WSS）
-23. VLESS 出站可选择 Reality raw TCP 传输
+23. VLESS 出站可选择 Reality raw TCP 传输，VLESS 入站可选择 Reality raw TCP 第一阶段传输
 24. `zero-engine` 不再承载监听、协议握手、relay 和 Tokio 运行时接线
 
 ## 工程

@@ -22,6 +22,19 @@ impl VlessOutbound {
     where
         S: AsyncSocket,
     {
+        self.send_tcp_request(stream, session, id).await?;
+        read_response(stream).await
+    }
+
+    pub async fn send_tcp_request<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+        id: &[u8; 16],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
         if session.port == 0 {
             return Err(Error::Config("target port is required"));
         }
@@ -30,9 +43,7 @@ impl VlessOutbound {
         stream
             .write_all(&request)
             .await
-            .map_err(|_| Error::Io("failed to write VLESS outbound request"))?;
-
-        read_response(stream).await
+            .map_err(|_| Error::Io("failed to write VLESS outbound request"))
     }
 }
 

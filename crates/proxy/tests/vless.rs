@@ -21,20 +21,31 @@ use support::{free_port, spawn_engine, wait_for, wait_for_listener};
 const USER_ID: &str = "11111111-2222-3333-4444-555555555555";
 static NEXT_TLS_DIR: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(feature = "outbound-vless")]
 #[path = "vless/relays_tcp_through_vless_chained_outbound.rs"]
 mod relays_tcp_through_vless_chained_outbound;
 #[path = "vless/relays_tcp_through_vless_direct_outbound_and_records_principal.rs"]
 mod relays_tcp_through_vless_direct_outbound_and_records_principal;
+#[cfg(feature = "outbound-vless")]
+#[path = "vless/relays_tcp_through_vless_reality_xray.rs"]
+mod relays_tcp_through_vless_reality_xray;
+#[cfg(feature = "outbound-vless")]
+#[path = "vless/relays_tcp_through_vless_reality_zero_inbound.rs"]
+mod relays_tcp_through_vless_reality_zero_inbound;
+#[cfg(feature = "outbound-vless")]
 #[path = "vless/relays_tcp_through_vless_tls_chained_outbound.rs"]
 mod relays_tcp_through_vless_tls_chained_outbound;
 #[path = "vless/relays_tcp_through_vless_tls_direct_outbound.rs"]
 mod relays_tcp_through_vless_tls_direct_outbound;
+#[cfg(feature = "outbound-vless")]
 #[path = "vless/relays_tcp_through_vless_ws_chained_outbound.rs"]
 mod relays_tcp_through_vless_ws_chained_outbound;
 #[path = "vless/relays_tcp_through_vless_ws_inbound.rs"]
 mod relays_tcp_through_vless_ws_inbound;
+#[cfg(feature = "outbound-vless")]
 #[path = "vless/relays_tcp_through_vless_wss_chained_outbound.rs"]
 mod relays_tcp_through_vless_wss_chained_outbound;
+#[cfg(feature = "outbound-vless")]
 #[path = "vless/vless_outbound_tls_insecure_skip_verification.rs"]
 mod vless_outbound_tls_insecure_skip_verification;
 #[path = "vless/vless_tls_with_alpn_config.rs"]

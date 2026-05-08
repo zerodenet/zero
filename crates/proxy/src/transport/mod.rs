@@ -1,17 +1,11 @@
 mod direct;
 mod metered;
-#[cfg(feature = "inbound-socks5")]
-mod socks5_udp;
 mod stream;
 mod tcp_flow;
 mod tcp_outbound;
 mod tcp_relay;
 #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
 mod tls;
-#[cfg(feature = "inbound-socks5")]
-mod udp_sessions;
-#[cfg(feature = "inbound-socks5")]
-mod upstream_socks5_udp;
 #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
 mod ws;
 

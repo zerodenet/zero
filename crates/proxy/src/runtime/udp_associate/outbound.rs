@@ -1,19 +1,18 @@
 use tokio::time::Instant as TokioInstant;
 use zero_engine::ResolvedLeafOutbound;
 
-use super::super::super::logging::{
+use crate::logging::{
     log_udp_upstream_association_created, log_udp_upstream_association_dropped,
     log_udp_upstream_association_reused,
 };
-use super::super::super::runtime::Proxy;
-use super::super::udp_sessions::UdpFlowOutbound;
-use super::super::upstream_socks5_udp::{
-    ActiveUpstreamSocks5UdpAssociation, UpstreamAssociationCloseReason,
-};
+use crate::runtime::Proxy;
+
 use super::context::{
     Socks5UdpAssociationEndpoint, Socks5UdpPacketContext, UdpCandidateContext, UdpCandidateFailure,
     UdpCandidateStart,
 };
+use super::sessions::UdpFlowOutbound;
+use super::upstream::{ActiveUpstreamSocks5UdpAssociation, UpstreamAssociationCloseReason};
 
 impl Proxy {
     pub(super) async fn start_udp_flow_candidate(

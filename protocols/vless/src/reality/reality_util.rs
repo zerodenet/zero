@@ -24,6 +24,18 @@ pub fn decode_public_key(encoded: &str) -> Result<[u8; 32], std::io::Error> {
     Ok(key)
 }
 
+/// Decodes a base64url-encoded private key.
+pub fn decode_private_key(encoded: &str) -> Result<[u8; 32], std::io::Error> {
+    decode_public_key(encoded).map_err(|e| {
+        std::io::Error::new(e.kind(), e.to_string().replace("public key", "private key"))
+    })
+}
+
+/// Encodes a 32-byte key as base64url without padding.
+pub fn encode_key(key: &[u8; 32]) -> String {
+    URL_SAFE_NO_PAD.encode(key)
+}
+
 /// Decodes a hex-encoded short ID with zero-padding
 ///
 /// Short IDs can be 0-16 hex characters (0-8 bytes).

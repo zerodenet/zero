@@ -25,6 +25,20 @@ impl ClientStream for TokioSocket {
     }
 }
 
+#[cfg(feature = "inbound-vless")]
+impl<S> ClientStream for zero_protocol_vless::RealityTlsStream<S>
+where
+    S: AsyncRead + AsyncWrite + Send + Sync + Unpin,
+{
+    #[cfg(feature = "inbound-socks5")]
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Reality stream does not expose local_addr",
+        ))
+    }
+}
+
 pub(crate) struct TcpRelayStream {
     inner: Box<dyn RelayIo>,
 }

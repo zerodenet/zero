@@ -1,11 +1,12 @@
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_protocol_socks5::{
     build_udp_packet, parse_udp_packet, Socks5Inbound, Socks5Outbound, Socks5OutboundAuth,
-    Socks5PasswordAuth, Socks5Request,
+    Socks5PasswordAuth, Socks5Request, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError,
 };
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, DatagramSocket, IpAddress};
 
 #[derive(Debug, Default)]
 struct MockSocket {
@@ -61,6 +62,58 @@ impl Socks5PasswordAuth for TestPasswordAuth {
 
     fn verify(&self, username: &str, password: &str) -> bool {
         username == "alice" && password == "secret"
+    }
+}
+
+#[derive(Debug, Default)]
+struct MockDatagramSocket {
+    state: Arc<Mutex<MockDatagramState>>,
+}
+
+#[derive(Debug, Default)]
+struct MockDatagramState {
+    recv: VecDeque<(Vec<u8>, IpAddress, u16)>,
+    sends: Vec<(Vec<u8>, IpAddress, u16)>,
+}
+
+impl MockDatagramSocket {
+    fn with_recv(packets: Vec<(Vec<u8>, IpAddress, u16)>) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(MockDatagramState {
+                recv: packets.into(),
+                sends: Vec::new(),
+            })),
+        }
+    }
+
+    fn sends(&self) -> Vec<(Vec<u8>, IpAddress, u16)> {
+        self.state.lock().expect("lock").sends.clone()
+    }
+}
+
+impl DatagramSocket for MockDatagramSocket {
+    type Error = ();
+
+    async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, IpAddress, u16), Self::Error> {
+        let (packet, address, port) = self
+            .state
+            .lock()
+            .expect("lock")
+            .recv
+            .pop_front()
+            .expect("recv packet");
+        let read = packet.len();
+        buf[..read].copy_from_slice(&packet);
+        Ok((read, address, port))
+    }
+
+    async fn send_to(&self, buf: &[u8], addr: IpAddress, port: u16) -> Result<(), Self::Error> {
+        self.state
+            .lock()
+            .expect("lock")
+            .sends
+            .push((buf.to_vec(), addr, port));
+        Ok(())
     }
 }
 
@@ -365,4 +418,60 @@ fn builds_and_parses_udp_packet() {
     assert_eq!(parsed.target, Address::Domain("example.com".into()));
     assert_eq!(parsed.port, 5353);
     assert_eq!(parsed.payload, b"ping");
+}
+
+#[tokio::test]
+async fn udp_relay_wraps_socks5_packet_before_send() {
+    let socket = MockDatagramSocket::default();
+    let relay = Socks5UdpRelay::new(
+        socket,
+        Socks5UdpRelayEndpoint {
+            address: IpAddress::V4([127, 0, 0, 1]),
+            port: 1080,
+        },
+    );
+
+    let sent = relay
+        .send_packet(&Address::Domain("example.com".into()), 5353, b"ping")
+        .await
+        .expect("send packet");
+
+    let sends = relay.socket().sends();
+    assert_eq!(sends.len(), 1);
+    assert_eq!(sends[0].1, IpAddress::V4([127, 0, 0, 1]));
+    assert_eq!(sends[0].2, 1080);
+    assert_eq!(sent, sends[0].0.len());
+
+    let parsed = parse_udp_packet(&sends[0].0).expect("parse packet");
+    assert_eq!(parsed.target, Address::Domain("example.com".into()));
+    assert_eq!(parsed.port, 5353);
+    assert_eq!(parsed.payload, b"ping");
+}
+
+#[tokio::test]
+async fn udp_relay_rejects_packets_from_unexpected_sender() {
+    let socket = MockDatagramSocket::with_recv(vec![(
+        b"payload".to_vec(),
+        IpAddress::V4([127, 0, 0, 2]),
+        1080,
+    )]);
+    let relay = Socks5UdpRelay::new(
+        socket,
+        Socks5UdpRelayEndpoint {
+            address: IpAddress::V4([127, 0, 0, 1]),
+            port: 1080,
+        },
+    );
+
+    let error = relay
+        .recv_packet(&mut [0_u8; 32])
+        .await
+        .expect_err("unexpected sender");
+
+    assert_eq!(
+        error,
+        Socks5UdpRelayError::Protocol(Error::Protocol(
+            "unexpected UDP sender from SOCKS5 upstream"
+        ))
+    );
 }

@@ -13,11 +13,15 @@ pub(crate) mod reality_client_verify;
 pub(crate) mod reality_io_state;
 pub(crate) mod reality_reader_writer;
 pub(crate) mod reality_records;
+pub(crate) mod reality_server_connection;
 pub(crate) mod reality_tls13_keys;
 pub(crate) mod reality_tls13_messages;
 pub(crate) mod reality_util;
 pub(crate) mod slide_buffer;
 
-pub use stream::{upgrade_reality_client, RealityClientOptions, RealityTlsStream};
+pub use stream::{
+    generate_reality_key_pair, upgrade_reality_client, upgrade_reality_server,
+    RealityClientOptions, RealityServerOptions, RealityTlsStream,
+};
 
 mod stream;

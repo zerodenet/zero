@@ -3,11 +3,12 @@ mod enabled {
     use std::net::{IpAddr, SocketAddr};
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use zero_core::{Address, Error as CoreError};
+    use zero_core::Address;
     use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
+    use zero_protocol_socks5::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
 
-    use super::super::super::runtime::Proxy;
-    use super::super::metered::MeteredStream;
+    use crate::runtime::Proxy;
+    use crate::transport::MeteredStream;
     use zero_engine::EngineError;
 
     pub(crate) struct ActiveUpstreamSocks5UdpAssociation {
@@ -17,8 +18,7 @@ mod enabled {
         proxy: Proxy,
         close_recorded: AtomicBool,
         _control: TokioSocket,
-        relay: TokioDatagramSocket,
-        relay_addr: SocketAddr,
+        relay: Socks5UdpRelay<TokioDatagramSocket>,
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,8 +86,13 @@ mod enabled {
                 proxy: proxy.clone(),
                 close_recorded: AtomicBool::new(false),
                 _control: control,
-                relay,
-                relay_addr,
+                relay: Socks5UdpRelay::new(
+                    relay,
+                    Socks5UdpRelayEndpoint {
+                        address: zero_platform_tokio::socket_addr_to_ip(relay_addr),
+                        port: relay_addr.port(),
+                    },
+                ),
             })
         }
 
@@ -125,22 +130,19 @@ mod enabled {
             port: u16,
             payload: &[u8],
         ) -> Result<usize, EngineError> {
-            let packet = zero_protocol_socks5::build_udp_packet(target, port, payload)?;
-            self.relay
-                .send_to_addr(&packet, self.relay_addr)
-                .await
-                .map_err(EngineError::from)
+            match self.relay.send_packet(target, port, payload).await {
+                Ok(sent) => Ok(sent),
+                Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
+                Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),
+            }
         }
 
         pub(crate) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-            let (read, sender) = self.relay.recv_from_addr(buf).await?;
-            if sender != self.relay_addr {
-                return Err(
-                    CoreError::Protocol("unexpected UDP sender from SOCKS5 upstream").into(),
-                );
+            match self.relay.recv_packet(buf).await {
+                Ok(read) => Ok(read),
+                Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
+                Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),
             }
-
-            Ok(read)
         }
     }
 
@@ -158,7 +160,7 @@ mod enabled {
 mod disabled {
     use zero_core::Address;
 
-    use super::super::super::runtime::Proxy;
+    use crate::runtime::Proxy;
     use zero_engine::EngineError;
 
     pub(crate) struct ActiveUpstreamSocks5UdpAssociation;
