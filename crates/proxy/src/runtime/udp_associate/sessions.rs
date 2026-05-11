@@ -203,12 +203,14 @@ impl UdpSessionFlows {
     }
 
     fn single_socks5_flow_session_id(&self, outbound_tag: &str) -> Option<u64> {
-        let mut socks5_flows = self.flows.values().filter(|flow| match &flow.outbound {
-            UdpFlowOutbound::Socks5 { tag, .. } => tag == outbound_tag,
+        let mut upstream_flows = self.flows.values().filter(|flow| match &flow.outbound {
+            UdpFlowOutbound::Socks5 { tag, .. } => {
+                tag == outbound_tag
+            }
             UdpFlowOutbound::Direct { .. } => false,
         });
-        let flow = socks5_flows.next()?;
-        socks5_flows.next().is_none().then_some(flow.session.id)
+        let flow = upstream_flows.next()?;
+        upstream_flows.next().is_none().then_some(flow.session.id)
     }
 }
 

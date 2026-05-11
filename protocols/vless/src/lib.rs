@@ -20,4 +20,4 @@ pub use reality::{
     generate_reality_key_pair, upgrade_reality_client, upgrade_reality_server,
     RealityClientOptions, RealityServerOptions, RealityTlsStream,
 };
-pub use shared::{format_uuid, parse_uuid, VLESS_VERSION};
+pub use shared::{build_udp_packet, format_uuid, parse_uuid, parse_udp_packet, VlessUdpPacket, VLESS_VERSION};

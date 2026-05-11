@@ -13,19 +13,18 @@ use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
 
-mod context;
-mod helpers;
+pub(crate) mod context;
+pub(crate) mod helpers;
 mod outbound;
 mod request;
-mod sessions;
-mod upstream;
+pub(crate) mod sessions;
 
 use context::UdpRequestContext;
 use helpers::{
     address_from_socket_addr, log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };
 use sessions::UdpSessionFlows;
-use upstream::{ActiveUpstreamSocks5UdpAssociation, UpstreamAssociationCloseReason};
+use crate::outbound::socks5::{ActiveUpstreamSocks5UdpAssociation, UpstreamAssociationCloseReason};
 
 impl Proxy {
     pub(crate) async fn handle_socks5_udp_associate<S>(

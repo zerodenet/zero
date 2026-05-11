@@ -2,7 +2,8 @@ use std::collections::VecDeque;
 
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_protocol_vless::{
-    format_uuid, parse_uuid, VlessInbound, VlessOutbound, VlessUser, VlessUserStore,
+    build_udp_packet, format_uuid, parse_uuid, parse_udp_packet, VlessInbound, VlessOutbound,
+    VlessUser, VlessUserStore,
 };
 use zero_traits::AsyncSocket;
 
@@ -166,4 +167,78 @@ async fn outbound_establishes_tcp_tunnel_for_ipv4_target() {
         127, 0, 0, 1,
     ]);
     assert_eq!(socket.writes, expected);
+}
+
+#[tokio::test]
+async fn inbound_accepts_authorized_udp_request_with_ipv4_target() {
+    let id = parse_uuid(USER_ID).expect("uuid");
+    let mut request = vec![0x00];
+    request.extend_from_slice(&id);
+    request.extend_from_slice(&[
+        0x00, // addon length
+        0x02, // udp command
+        0x00, 0x35, // port 53
+        0x01, // ipv4
+        8, 8, 8, 8,
+    ]);
+
+    let mut socket = MockSocket::new(&request);
+    let users = TestUsers { id };
+
+    let session = VlessInbound
+        .handshake_with_auth(&mut socket, &users)
+        .await
+        .expect("handshake");
+
+    assert_eq!(session.target, Address::Ipv4([8, 8, 8, 8]));
+    assert_eq!(session.port, 53);
+    assert_eq!(session.network, Network::Udp);
+    assert_eq!(session.protocol, ProtocolType::Vless);
+}
+
+#[test]
+fn parse_udp_packet_with_ipv4() {
+    let mut packet = vec![
+        0x00, 0x35, // port 53
+        0x01, // ipv4
+        8, 8, 8, 8,
+    ];
+    packet.extend_from_slice(b"dns query");
+
+    let parsed = parse_udp_packet(&packet).expect("parse");
+    assert_eq!(parsed.target, Address::Ipv4([8, 8, 8, 8]));
+    assert_eq!(parsed.port, 53);
+    assert_eq!(parsed.payload, b"dns query");
+}
+
+#[test]
+fn parse_udp_packet_with_domain() {
+    let mut packet = vec![
+        0x01, 0xbb, // port 443
+        0x02, // domain
+        0x0b, // domain length
+    ];
+    packet.extend_from_slice(b"example.com");
+    packet.extend_from_slice(b"udp payload");
+
+    let parsed = parse_udp_packet(&packet).expect("parse");
+    assert_eq!(parsed.target, Address::Domain("example.com".into()));
+    assert_eq!(parsed.port, 443);
+    assert_eq!(parsed.payload, b"udp payload");
+}
+
+#[test]
+fn build_udp_packet_with_ipv6() {
+    let payload = b"hello v6";
+    let packet =
+        build_udp_packet(&Address::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]), 53, payload)
+            .expect("build");
+
+    let parsed = parse_udp_packet(&packet).expect("parse");
+    assert_eq!(
+        parsed.target,
+        Address::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+    );
+    assert_eq!(parsed.port, 53);
+    assert_eq!(parsed.payload, payload);
 }

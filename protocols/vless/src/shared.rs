@@ -175,6 +175,80 @@ fn hex_nibble(byte: u8) -> Option<u8> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VlessUdpPacket {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+}
+
+pub fn parse_udp_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
+    if packet.len() < 3 {
+        return Err(Error::Protocol("VLESS UDP packet is too short"));
+    }
+
+    let mut offset = 0;
+    let port = u16::from_be_bytes([packet[offset], packet[offset + 1]]);
+    offset += 2;
+
+    let atyp = packet[offset];
+    offset += 1;
+
+    let target = match atyp {
+        ATYP_IPV4 => {
+            if packet.len() < offset + 4 {
+                return Err(Error::Protocol("VLESS UDP IPv4 packet is truncated"));
+            }
+            let mut bytes = [0_u8; 4];
+            bytes.copy_from_slice(&packet[offset..offset + 4]);
+            offset += 4;
+            Address::Ipv4(bytes)
+        }
+        ATYP_IPV6 => {
+            if packet.len() < offset + 16 {
+                return Err(Error::Protocol("VLESS UDP IPv6 packet is truncated"));
+            }
+            let mut bytes = [0_u8; 16];
+            bytes.copy_from_slice(&packet[offset..offset + 16]);
+            offset += 16;
+            Address::Ipv6(bytes)
+        }
+        ATYP_DOMAIN => {
+            if packet.len() < offset + 1 {
+                return Err(Error::Protocol("VLESS UDP domain packet is truncated"));
+            }
+            let len = packet[offset] as usize;
+            offset += 1;
+            if len == 0 || packet.len() < offset + len {
+                return Err(Error::Protocol("VLESS UDP domain packet is truncated"));
+            }
+            let domain = String::from_utf8(packet[offset..offset + len].to_vec())
+                .map_err(|_| Error::Protocol("VLESS UDP domain is not valid UTF-8"))?;
+            offset += len;
+            Address::Domain(domain)
+        }
+        _ => {
+            return Err(Error::Unsupported(
+                "VLESS UDP address type is not supported",
+            ));
+        }
+    };
+
+    Ok(VlessUdpPacket {
+        target,
+        port,
+        payload: packet[offset..].to_vec(),
+    })
+}
+
+pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut packet = Vec::with_capacity(2 + 1 + payload.len());
+    packet.extend_from_slice(&port.to_be_bytes());
+    write_address(&mut packet, address)?;
+    packet.extend_from_slice(payload);
+    Ok(packet)
+}
+
 fn hex_char(value: u8) -> char {
     match value {
         0..=9 => char::from(b'0' + value),

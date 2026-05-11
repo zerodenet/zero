@@ -131,7 +131,10 @@ where
             Session::new(0, target, port, Network::Tcp, ProtocolType::Vless),
             id,
         )),
-        CMD_UDP => Err(Error::Unsupported("VLESS UDP command is not supported")),
+        CMD_UDP => Ok((
+            Session::new(0, target, port, Network::Udp, ProtocolType::Vless),
+            id,
+        )),
         CMD_MUX => Err(Error::Unsupported("VLESS MUX command is not supported")),
         _ => Err(Error::Unsupported("VLESS command is not supported")),
     }

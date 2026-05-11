@@ -11,6 +11,7 @@ mod groups;
 mod inbound;
 mod inventory;
 mod logging;
+mod outbound;
 mod runtime;
 mod transport;
 

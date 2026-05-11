@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use zero_core::{Error, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
-use crate::shared::{read_addon, read_exact, write_address, CMD_TCP, VLESS_VERSION};
+use crate::shared::{read_addon, read_exact, write_address, CMD_TCP, CMD_UDP, VLESS_VERSION};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VlessOutbound;
@@ -45,6 +45,26 @@ impl VlessOutbound {
             .await
             .map_err(|_| Error::Io("failed to write VLESS outbound request"))
     }
+
+    pub async fn send_udp_request<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+        id: &[u8; 16],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        if session.port == 0 {
+            return Err(Error::Config("target port is required"));
+        }
+
+        let request = build_udp_request(session, id)?;
+        stream
+            .write_all(&request)
+            .await
+            .map_err(|_| Error::Io("failed to write VLESS UDP request"))
+    }
 }
 
 fn build_tcp_request(session: &Session, id: &[u8; 16]) -> Result<Vec<u8>, Error> {
@@ -53,6 +73,18 @@ fn build_tcp_request(session: &Session, id: &[u8; 16]) -> Result<Vec<u8>, Error>
     request.extend_from_slice(id);
     request.push(0x00);
     request.push(CMD_TCP);
+    request.extend_from_slice(&session.port.to_be_bytes());
+    write_address(&mut request, &session.target)?;
+
+    Ok(request)
+}
+
+fn build_udp_request(session: &Session, id: &[u8; 16]) -> Result<Vec<u8>, Error> {
+    let mut request = Vec::with_capacity(24);
+    request.push(VLESS_VERSION);
+    request.extend_from_slice(id);
+    request.push(0x00);
+    request.push(CMD_UDP);
     request.extend_from_slice(&session.port.to_be_bytes());
     write_address(&mut request, &session.target)?;
 

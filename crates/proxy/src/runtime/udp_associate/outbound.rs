@@ -1,18 +1,12 @@
-use tokio::time::Instant as TokioInstant;
 use zero_engine::ResolvedLeafOutbound;
 
-use crate::logging::{
-    log_udp_upstream_association_created, log_udp_upstream_association_dropped,
-    log_udp_upstream_association_reused,
-};
+use crate::outbound::socks5::{send_socks5_udp_packet, Socks5UdpAssociation};
 use crate::runtime::Proxy;
 
 use super::context::{
-    Socks5UdpAssociationEndpoint, Socks5UdpPacketContext, UdpCandidateContext, UdpCandidateFailure,
-    UdpCandidateStart,
+    Socks5UdpPacketContext, UdpCandidateContext, UdpCandidateFailure, UdpCandidateStart,
 };
 use super::sessions::UdpFlowOutbound;
-use super::upstream::{ActiveUpstreamSocks5UdpAssociation, UpstreamAssociationCloseReason};
 
 impl Proxy {
     pub(super) async fn start_udp_flow_candidate(
@@ -61,19 +55,28 @@ impl Proxy {
                 username,
                 password,
             } => {
-                let sent = self
-                    .send_socks5_udp_packet(Socks5UdpPacketContext {
-                        inbound_tag: context.inbound_tag,
-                        tag,
-                        server,
-                        port,
-                        auth: username.zip(password),
-                        session: context.session,
-                        payload: context.payload,
-                        upstream_association: context.upstream_association,
-                        upstream_idle_deadline: context.upstream_idle_deadline,
-                    })
-                    .await?;
+                let association = Socks5UdpAssociation {
+                    tag: tag.to_owned(),
+                    server: server.to_owned(),
+                    port,
+                    auth: username.zip(password).map(|(u, p)| (u.to_owned(), p.to_owned())),
+                };
+
+                let sent = send_socks5_udp_packet(
+                    self,
+                    context.inbound_tag,
+                    &association,
+                    context.session,
+                    context.payload,
+                    context.upstream_association,
+                    context.upstream_idle_deadline,
+                )
+                .await
+                .map_err(|error| UdpCandidateFailure {
+                    stage: "udp_upstream_send",
+                    error,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
 
                 Ok(UdpCandidateStart::Flow {
                     outbound: UdpFlowOutbound::Socks5 {
@@ -86,10 +89,13 @@ impl Proxy {
                     outbound_tx_bytes: sent as u64,
                 })
             }
-            ResolvedLeafOutbound::Vless { server, port, .. } => Err(UdpCandidateFailure {
+            ResolvedLeafOutbound::Vless { .. } => Err(UdpCandidateFailure {
                 stage: "udp_vless_outbound",
-                error: zero_core::Error::Unsupported("VLESS UDP outbound is not supported").into(),
-                upstream: Some((server.to_owned(), port)),
+                error: zero_core::Error::Unsupported(
+                    "VLESS UDP chain outbound must be handled in VLESS inbound handler",
+                )
+                .into(),
+                upstream: None,
             }),
         }
     }
@@ -98,123 +104,27 @@ impl Proxy {
         &self,
         context: Socks5UdpPacketContext<'_>,
     ) -> Result<usize, UdpCandidateFailure> {
-        self.ensure_socks5_udp_association(
+        let association = Socks5UdpAssociation {
+            tag: context.tag.to_owned(),
+            server: context.server.to_owned(),
+            port: context.port,
+            auth: context.auth.map(|(u, p)| (u.to_owned(), p.to_owned())),
+        };
+
+        send_socks5_udp_packet(
+            self,
             context.inbound_tag,
-            Socks5UdpAssociationEndpoint {
-                tag: context.tag,
-                server: context.server,
-                port: context.port,
-                auth: context.auth,
-            },
-            context.session.id,
+            &association,
+            context.session,
+            context.payload,
             context.upstream_association,
             context.upstream_idle_deadline,
         )
-        .await?;
-
-        let association = context
-            .upstream_association
-            .as_ref()
-            .expect("successful establish stores upstream association");
-
-        let sent = match association
-            .send_packet(
-                &context.session.target,
-                context.session.port,
-                context.payload,
-            )
-            .await
-        {
-            Ok(sent) => sent,
-            Err(error) => {
-                self.record_udp_upstream_send_failure();
-                if let Some(association) = context.upstream_association.take() {
-                    let outbound_tag = association.outbound_tag().to_owned();
-                    association.close(UpstreamAssociationCloseReason::Dropped);
-                    log_udp_upstream_association_dropped(
-                        context.inbound_tag,
-                        &outbound_tag,
-                        context.server,
-                        context.port,
-                        &error,
-                    );
-                }
-                *context.upstream_idle_deadline = None;
-                return Err(UdpCandidateFailure {
-                    stage: "udp_upstream_send",
-                    error,
-                    upstream: Some((context.server.to_owned(), context.port)),
-                });
-            }
-        };
-
-        self.record_udp_upstream_packet_sent();
-        *context.upstream_idle_deadline =
-            Some(TokioInstant::now() + self.udp_upstream_idle_timeout());
-        Ok(sent)
-    }
-
-    async fn ensure_socks5_udp_association(
-        &self,
-        inbound_tag: &str,
-        endpoint: Socks5UdpAssociationEndpoint<'_>,
-        session_id: u64,
-        upstream_association: &mut Option<ActiveUpstreamSocks5UdpAssociation>,
-        upstream_idle_deadline: &mut Option<TokioInstant>,
-    ) -> Result<(), UdpCandidateFailure> {
-        let needs_new_association = upstream_association
-            .as_ref()
-            .map(|association| !association.matches(endpoint.tag, endpoint.server, endpoint.port))
-            .unwrap_or(true);
-
-        if !needs_new_association {
-            self.record_udp_upstream_association_reused();
-            log_udp_upstream_association_reused(
-                inbound_tag,
-                endpoint.tag,
-                endpoint.server,
-                endpoint.port,
-            );
-            return Ok(());
-        }
-
-        if let Some(association) = upstream_association.take() {
-            association.close(UpstreamAssociationCloseReason::Closed);
-            *upstream_idle_deadline = None;
-        }
-
-        match ActiveUpstreamSocks5UdpAssociation::establish(
-            self,
-            endpoint.tag,
-            endpoint.server,
-            endpoint.port,
-            endpoint.auth,
-            session_id,
-        )
         .await
-        {
-            Ok(association) => {
-                self.record_udp_upstream_association_created();
-                *upstream_idle_deadline =
-                    Some(TokioInstant::now() + self.udp_upstream_idle_timeout());
-                log_udp_upstream_association_created(
-                    inbound_tag,
-                    endpoint.tag,
-                    endpoint.server,
-                    endpoint.port,
-                    self.udp_upstream_idle_timeout(),
-                );
-                *upstream_association = Some(association);
-                Ok(())
-            }
-            Err(error) => {
-                self.record_udp_upstream_association_failed();
-                Err(UdpCandidateFailure {
-                    stage: "udp_upstream_associate",
-                    error,
-                    upstream: Some((endpoint.server.to_owned(), endpoint.port)),
-                })
-            }
-        }
+        .map_err(|error| UdpCandidateFailure {
+            stage: "udp_upstream_send",
+            error,
+            upstream: Some((context.server.to_owned(), context.port)),
+        })
     }
 }

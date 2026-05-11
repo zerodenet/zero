@@ -2,17 +2,19 @@ use std::time::Instant;
 
 use zero_core::{Network, ProtocolType, Session};
 use zero_engine::{EngineError, ResolvedOutbound, SessionOutcome};
+use zero_platform_tokio::TokioDatagramSocket;
 use zero_protocol_socks5::parse_udp_packet;
 
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
 use crate::runtime::Proxy;
 use crate::transport::StreamTraffic;
+use tracing::warn;
 
 use super::context::{
     ExistingUdpFlowContext, Socks5UdpPacketContext, UdpCandidateContext, UdpCandidateStart,
     UdpRequestContext,
 };
-use super::sessions::{UdpFlowOutbound, UdpFlowSnapshot};
+use super::sessions::{UdpFlowOutbound, UdpFlowSnapshot, UdpSessionFlows};
 
 impl Proxy {
     pub(super) async fn handle_socks5_udp_request(
@@ -137,7 +139,7 @@ impl Proxy {
                 failure
                     .upstream
                     .as_ref()
-                    .map(|(server, port)| (server.as_str(), *port)),
+                    .map(|(server, port): &(String, u16)| (server.as_str(), *port)),
             );
         } else {
             let error = EngineError::Io(std::io::Error::other("all fallback outbounds failed"));
@@ -239,7 +241,7 @@ impl Proxy {
                                 &error,
                                 upstream
                                     .as_ref()
-                                    .map(|(server, port)| (server.as_str(), *port)),
+                                    .map(|(server, port): &(String, u16)| (server.as_str(), *port)),
                             );
                         } else {
                             log_session_failed(
@@ -250,7 +252,7 @@ impl Proxy {
                                 &error,
                                 upstream
                                     .as_ref()
-                                    .map(|(server, port)| (server.as_str(), *port)),
+                                    .map(|(server, port): &(String, u16)| (server.as_str(), *port)),
                             );
                         }
                         return Err(error);
@@ -261,4 +263,5 @@ impl Proxy {
 
         Ok(())
     }
+
 }

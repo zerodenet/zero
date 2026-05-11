@@ -14,9 +14,12 @@ use zero_platform_tokio::{TokioListener, TokioResolver};
 use crate::inventory::ProtocolInventory;
 
 mod engine_facade;
-#[cfg(feature = "inbound-socks5")]
-mod udp_associate;
+pub(crate) mod udp_associate;
 pub(crate) mod upstream;
+
+pub(crate) use udp_associate::helpers::log_completed_udp_flow;
+pub(crate) use udp_associate::sessions::UdpFlowOutbound;
+pub(crate) use udp_associate::sessions::UdpSessionFlows;
 
 #[derive(Debug, Clone)]
 pub struct Proxy {

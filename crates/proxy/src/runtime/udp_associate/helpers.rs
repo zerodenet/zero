@@ -7,9 +7,9 @@ use zero_engine::EngineError;
 use crate::logging::log_session_finished;
 
 use super::sessions::CompletedUdpFlow;
-use super::upstream::ActiveUpstreamSocks5UdpAssociation;
+use crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation;
 
-pub(super) fn log_completed_udp_flow(completed: CompletedUdpFlow) {
+pub(crate) fn log_completed_udp_flow(completed: CompletedUdpFlow) {
     log_session_finished(
         &completed.record,
         completed
