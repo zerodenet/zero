@@ -45,6 +45,43 @@ impl VlessInbound {
         ProtocolType::Vless
     }
 
+    /// Accept a VLESS connection, authenticate the user, and return both
+    /// the session and the raw UUID (needed for MUX stream encryption).
+    pub async fn accept_tcp_with_auth_and_id<S, A>(
+        &self,
+        stream: &mut S,
+        auth: &A,
+    ) -> Result<(Session, [u8; 16]), Error>
+    where
+        S: AsyncSocket,
+        A: VlessUserStore,
+    {
+        #[cfg(feature = "reality")]
+        {
+            let (mut session, id) = read_request_with_flow(stream).await?;
+            let Some(user) = auth.find_user(&id) else {
+                return Err(Error::Unsupported("VLESS user is not authorized"));
+            };
+            let mut sa = SessionAuth::new("vless");
+            sa.credential_id = user.credential_id;
+            sa.principal_key = user.principal_key;
+            session.auth = Some(sa);
+            Ok((session, id))
+        }
+        #[cfg(not(feature = "reality"))]
+        {
+            let (mut session, id) = read_request(stream).await?;
+            let Some(user) = auth.find_user(&id) else {
+                return Err(Error::Unsupported("VLESS user is not authorized"));
+            };
+            let mut sa = SessionAuth::new("vless");
+            sa.credential_id = user.credential_id;
+            sa.principal_key = user.principal_key;
+            session.auth = Some(sa);
+            Ok((session, id))
+        }
+    }
+
     pub async fn accept_tcp_with_auth<S, A>(
         &self,
         stream: &mut S,

@@ -20,7 +20,11 @@ inbound-socks5 = ["dep:zero-protocol-socks5"]
 inbound-http-connect = ["dep:zero-protocol-http-connect"]
 inbound-mixed = ["inbound-socks5", "inbound-http-connect"]
 inbound-vless = [
+    "dep:bytes",
     "dep:futures-util",
+    "dep:h2",
+    "dep:http",
+    "dep:quinn",
     "dep:rustls",
     "dep:rustls-pemfile",
     "dep:tokio-rustls",
@@ -30,8 +34,12 @@ inbound-vless = [
 ]
 outbound-socks5 = ["dep:zero-protocol-socks5"]
 outbound-vless = [
+    "dep:bytes",
     "dep:futures-util",
+    "dep:h2",
+    "dep:http",
     "dep:log",
+    "dep:quinn",
     "dep:rustls",
     "dep:rustls-pemfile",
     "dep:tokio-rustls",
@@ -42,8 +50,12 @@ outbound-vless = [
 ]
 
 [dependencies]
+bytes = { version = "1", optional = true }
 futures-util = { version = "0.3.32", optional = true }
+h2 = { version = "0.4", optional = true }
+http = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
+quinn = { version = "0.11", default-features = false, features = ["rustls-ring"], optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"], optional = true }
 rustls-pemfile = { version = "2", optional = true }
 tokio.workspace = true

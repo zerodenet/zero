@@ -7,8 +7,9 @@
 - `lifecycle.md`：外部请求进入代理运行时后的处理生命周期
 - `architecture.md`：分层和依赖方向
 - `config.md`：当前配置格式
-- `control-plane.md`：控制面、观测模型和外部兼容边界
-- `api.md`：对外 API 能力模型、传输形态和首批方法
+- `control-plane.md`：控制面、观测模型和外部兼容边界（高阶概览）
+- `api.md`：对外 API 能力模型、传输形态和首批方法（高阶概览）
+- **`../control-plane/`**：控制面详细设计文档目录
 - `panel-node-connector.md`：面板和节点的可选 connector 对接方式
 - `modes-and-groups.md`：模式、节点组和手动选择的设计
 - `engine-plan.md`：`RuntimeConfig -> EnginePlan -> EngineState / view` 的内部执行计划设计

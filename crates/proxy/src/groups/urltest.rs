@@ -247,6 +247,9 @@ impl Proxy {
                             tls,
                             reality,
                             ws,
+                            grpc: None,
+                            h2: None,
+                            quic: None,
                         },
                     )
                     .await?

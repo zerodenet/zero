@@ -122,6 +122,9 @@ impl Proxy {
                 tls,
                 reality,
                 ws,
+                grpc,
+                h2,
+                quic,
             } => {
                 match self
                     .connect_via_vless_upstream(
@@ -136,6 +139,9 @@ impl Proxy {
                             tls,
                             reality,
                             ws,
+                            grpc,
+                            h2,
+                            quic,
                         },
                     )
                     .await

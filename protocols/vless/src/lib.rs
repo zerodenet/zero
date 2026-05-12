@@ -9,6 +9,8 @@ mod deferred_response;
 mod flow;
 mod inbound;
 pub mod mux;
+#[cfg(feature = "reality")]
+mod mux_crypto;
 mod outbound;
 #[cfg(feature = "reality")]
 mod reality;
@@ -24,6 +26,8 @@ pub use mux::{
     parse_new_stream_response, MuxClient, MuxClientStream, MuxFrame, MuxServer,
     MUX_FRAME_HEADER_LEN, MUX_MAX_PAYLOAD, MUX_STATUS_FAIL, MUX_STATUS_OK, MUX_STREAM_NEW,
 };
+#[cfg(feature = "reality")]
+pub use mux_crypto::MuxCrypto;
 pub use outbound::VlessOutbound;
 #[cfg(feature = "reality")]
 pub use reality::{

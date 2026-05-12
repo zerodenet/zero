@@ -29,6 +29,9 @@ pub enum ResolvedLeafOutbound<'a> {
         tls: Option<&'a ClientTlsConfig>,
         reality: Option<&'a RealityConfig>,
         ws: Option<&'a WebSocketConfig>,
+        grpc: Option<&'a zero_config::GrpcConfig>,
+        h2: Option<&'a zero_config::H2Config>,
+        quic: Option<&'a zero_config::QuicConfig>,
     },
 }
 
@@ -131,6 +134,9 @@ fn resolve_leaf_outbound<'a>(
             tls,
             reality,
             ws,
+            grpc,
+            h2,
+            quic,
         } => ResolvedLeafOutbound::Vless {
             tag,
             server,
@@ -142,6 +148,9 @@ fn resolve_leaf_outbound<'a>(
             tls: tls.as_ref(),
             reality: reality.as_deref(),
             ws: ws.as_ref(),
+            grpc: grpc.as_ref(),
+            h2: h2.as_ref(),
+            quic: quic.as_ref(),
         },
     }
 }

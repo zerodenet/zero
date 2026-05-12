@@ -186,6 +186,12 @@ pub enum InboundProtocolConfig {
         reality: Option<Box<InboundRealityConfig>>,
         #[serde(default)]
         ws: Option<WebSocketConfig>,
+        #[serde(default)]
+        grpc: Option<GrpcConfig>,
+        #[serde(default)]
+        h2: Option<H2Config>,
+        #[serde(default)]
+        quic: Option<QuicConfig>,
     },
 }
 
@@ -222,6 +228,27 @@ impl InboundProtocolConfig {
     pub fn vless_ws(&self) -> Option<&WebSocketConfig> {
         match self {
             Self::Vless { ws, .. } => ws.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn vless_grpc(&self) -> Option<&GrpcConfig> {
+        match self {
+            Self::Vless { grpc, .. } => grpc.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn vless_h2(&self) -> Option<&H2Config> {
+        match self {
+            Self::Vless { h2, .. } => h2.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn vless_quic(&self) -> Option<&QuicConfig> {
+        match self {
+            Self::Vless { quic, .. } => quic.as_ref(),
             _ => None,
         }
     }
@@ -309,6 +336,47 @@ fn default_ws_path() -> String {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct GrpcConfig {
+    #[serde(default = "default_grpc_service_name")]
+    pub service_name: String,
+}
+
+fn default_grpc_service_name() -> String {
+    "/v2ray.core.proxy.vless.encap.GrpcService/Tun".to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct H2Config {
+    #[serde(default)]
+    pub host: Option<String>,
+    #[serde(default = "default_h2_path")]
+    pub path: String,
+}
+
+fn default_h2_path() -> String {
+    "/".to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct QuicConfig {
+    // Inbound
+    #[serde(default)]
+    pub cert_path: Option<String>,
+    #[serde(default)]
+    pub key_path: Option<String>,
+    // Outbound
+    #[serde(default)]
+    pub server_name: Option<String>,
+    #[serde(default)]
+    pub ca_cert_path: Option<String>,
+    #[serde(default)]
+    pub insecure: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OutboundConfig {
     pub tag: String,
     pub protocol: OutboundProtocolConfig,
@@ -353,6 +421,12 @@ pub enum OutboundProtocolConfig {
         reality: Option<Box<RealityConfig>>,
         #[serde(default)]
         ws: Option<WebSocketConfig>,
+        #[serde(default)]
+        grpc: Option<GrpcConfig>,
+        #[serde(default)]
+        h2: Option<H2Config>,
+        #[serde(default)]
+        quic: Option<QuicConfig>,
     },
 }
 

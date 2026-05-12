@@ -151,11 +151,25 @@ pub struct MuxClientStream {
 /// Minimal MUX client — manages stream allocation and frame I/O.
 pub struct MuxClient {
     next_id: u16,
+    #[cfg(feature = "reality")]
+    crypto: Option<crate::mux_crypto::MuxCrypto>,
 }
 
 impl MuxClient {
     pub fn new() -> Self {
-        Self { next_id: 1 }
+        Self {
+            next_id: 1,
+            #[cfg(feature = "reality")]
+            crypto: None,
+        }
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn with_encryption(master_uuid: &[u8; 16]) -> Self {
+        Self {
+            next_id: 1,
+            crypto: Some(crate::mux_crypto::MuxCrypto::new(master_uuid)),
+        }
     }
 
     /// Allocate next available stream ID.
@@ -197,11 +211,12 @@ impl MuxClient {
     }
 
     /// Write data to a stream.
-    pub async fn write_data<S>(&self, stream: &mut S, sid: u16, data: &[u8]) -> Result<(), Error>
+    pub async fn write_data<S>(&mut self, stream: &mut S, sid: u16, data: &[u8]) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
-        let frame = encode_frame(sid, data);
+        let payload = self.encrypt_payload_c2s(sid, data);
+        let frame = encode_frame(sid, &payload);
         stream
             .write_all(&frame)
             .await
@@ -209,22 +224,60 @@ impl MuxClient {
     }
 
     /// Read next incoming frame from server.
-    pub async fn recv<S>(&self, stream: &mut S) -> Result<MuxFrame, Error>
+    pub async fn recv<S>(&mut self, stream: &mut S) -> Result<MuxFrame, Error>
     where
         S: AsyncSocket,
     {
-        read_mux_frame(stream).await
+        let frame = read_mux_frame(stream).await?;
+        self.decrypt_frame_s2c(frame)
+    }
+
+    fn encrypt_payload_c2s(&mut self, sid: u16, data: &[u8]) -> Vec<u8> {
+        #[cfg(feature = "reality")]
+        if sid != MUX_STREAM_NEW {
+            if let Some(ref mut crypto) = self.crypto {
+                return crypto.encrypt_c2s(sid, data).unwrap_or_else(|_| data.to_vec());
+            }
+        }
+        data.to_vec()
+    }
+
+    fn decrypt_frame_s2c(&mut self, frame: MuxFrame) -> Result<MuxFrame, Error> {
+        #[cfg(feature = "reality")]
+        if frame.stream_id != MUX_STREAM_NEW && !frame.payload.is_empty() {
+            if let Some(ref mut crypto) = self.crypto {
+                let decrypted = crypto.decrypt_s2c(frame.stream_id, &frame.payload)?;
+                return Ok(MuxFrame {
+                    stream_id: frame.stream_id,
+                    payload: decrypted,
+                });
+            }
+        }
+        Ok(frame)
     }
 }
 
 /// ——— mux server ———————————————————————————
 
 /// MUX server-side handler — reads frames and dispatches.
-pub struct MuxServer;
+pub struct MuxServer {
+    #[cfg(feature = "reality")]
+    crypto: Option<crate::mux_crypto::MuxCrypto>,
+}
 
 impl MuxServer {
     pub fn new() -> Self {
-        Self
+        Self {
+            #[cfg(feature = "reality")]
+            crypto: None,
+        }
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn with_encryption(master_uuid: &[u8; 16]) -> Self {
+        Self {
+            crypto: Some(crate::mux_crypto::MuxCrypto::new(master_uuid)),
+        }
     }
 
     /// Accept a new stream request, allocate an ID, and send response.
@@ -253,22 +306,48 @@ impl MuxServer {
     }
 
     /// Read next frame.
-    pub async fn recv<S>(&self, stream: &mut S) -> Result<MuxFrame, Error>
+    pub async fn recv<S>(&mut self, stream: &mut S) -> Result<MuxFrame, Error>
     where
         S: AsyncSocket,
     {
-        read_mux_frame(stream).await
+        let frame = read_mux_frame(stream).await?;
+        self.decrypt_frame_c2s(frame)
     }
 
     /// Write data to a stream.
-    pub async fn write_data<S>(&self, stream: &mut S, sid: u16, data: &[u8]) -> Result<(), Error>
+    pub async fn write_data<S>(&mut self, stream: &mut S, sid: u16, data: &[u8]) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
-        let frame = encode_frame(sid, data);
+        let payload = self.encrypt_payload_s2c(sid, data);
+        let frame = encode_frame(sid, &payload);
         stream
             .write_all(&frame)
             .await
             .map_err(|_| Error::Io("failed to write MUX data frame"))
+    }
+
+    fn encrypt_payload_s2c(&mut self, sid: u16, data: &[u8]) -> Vec<u8> {
+        #[cfg(feature = "reality")]
+        if sid != MUX_STREAM_NEW {
+            if let Some(ref mut crypto) = self.crypto {
+                return crypto.encrypt_s2c(sid, data).unwrap_or_else(|_| data.to_vec());
+            }
+        }
+        data.to_vec()
+    }
+
+    fn decrypt_frame_c2s(&mut self, frame: MuxFrame) -> Result<MuxFrame, Error> {
+        #[cfg(feature = "reality")]
+        if frame.stream_id != MUX_STREAM_NEW && !frame.payload.is_empty() {
+            if let Some(ref mut crypto) = self.crypto {
+                let decrypted = crypto.decrypt_c2s(frame.stream_id, &frame.payload)?;
+                return Ok(MuxFrame {
+                    stream_id: frame.stream_id,
+                    payload: decrypted,
+                });
+            }
+        }
+        Ok(frame)
     }
 }

@@ -1,4 +1,4 @@
-use zero_config::{ClientTlsConfig, RealityConfig};
+use zero_config::{ClientTlsConfig, GrpcConfig, H2Config, QuicConfig, RealityConfig};
 use zero_core::Session;
 use zero_engine::EngineError;
 #[cfg(feature = "outbound-vless")]
@@ -19,6 +19,9 @@ pub(crate) struct VlessUpstream<'a> {
     pub tls: Option<&'a ClientTlsConfig>,
     pub reality: Option<&'a RealityConfig>,
     pub ws: Option<&'a zero_config::WebSocketConfig>,
+    pub grpc: Option<&'a GrpcConfig>,
+    pub h2: Option<&'a H2Config>,
+    pub quic: Option<&'a QuicConfig>,
 }
 
 impl Proxy {
@@ -97,14 +100,58 @@ impl Proxy {
                 .await;
         }
 
+        // QUIC uses UDP — handle before TCP connect entirely
+        if let Some(quic) = upstream.quic {
+            let server_name = quic.server_name.as_deref().unwrap_or(upstream.server);
+            let quic_stream =
+                crate::transport::connect_quic(server_name, upstream.port, quic.insecure).await?;
+            return Ok(TcpRelayStream::new(quic_stream));
+        }
+
         let socket = self
             .protocols
             .direct_outbound
             .connect_host(upstream.server, upstream.port, &self.resolver)
             .await?;
 
-        let stream = match (upstream.tls, upstream.reality, upstream.ws) {
-            (Some(tls), None, Some(ws)) => {
+        let stream = match (upstream.tls, upstream.reality, upstream.ws, upstream.grpc, upstream.h2) {
+            (Some(tls), None, None, Some(grpc), None) => {
+                let tls_stream = crate::transport::connect_tls_upstream(
+                    socket,
+                    tls,
+                    self.config.source_dir(),
+                    upstream.server,
+                )
+                .await?;
+                let grpc_stream =
+                    crate::transport::connect_grpc(tls_stream, &grpc.service_name).await?;
+                TcpRelayStream::new(grpc_stream)
+            }
+            (None, None, None, Some(grpc), None) => {
+                let grpc_stream =
+                    crate::transport::connect_grpc(socket, &grpc.service_name).await?;
+                TcpRelayStream::new(grpc_stream)
+            }
+            (Some(tls), None, None, None, Some(h2)) => {
+                let tls_stream = crate::transport::connect_tls_upstream(
+                    socket,
+                    tls,
+                    self.config.source_dir(),
+                    upstream.server,
+                )
+                .await?;
+                let h2_stream =
+                    crate::transport::connect_h2(tls_stream, h2, upstream.server, upstream.port)
+                        .await?;
+                TcpRelayStream::new(h2_stream)
+            }
+            (None, None, None, None, Some(h2)) => {
+                let h2_stream =
+                    crate::transport::connect_h2(socket, h2, upstream.server, upstream.port)
+                        .await?;
+                TcpRelayStream::new(h2_stream)
+            }
+            (Some(tls), None, Some(ws), None, None) => {
                 let tls_stream = crate::transport::connect_tls_upstream(
                     socket,
                     tls,
@@ -117,7 +164,7 @@ impl Proxy {
                         .await?;
                 TcpRelayStream::new(ws_stream)
             }
-            (Some(tls), None, None) => {
+            (Some(tls), None, None, None, None) => {
                 let tls_stream = crate::transport::connect_tls_upstream(
                     socket,
                     tls,
@@ -127,7 +174,7 @@ impl Proxy {
                 .await?;
                 TcpRelayStream::new(tls_stream)
             }
-            (None, Some(reality), None) => {
+            (None, Some(reality), None, None, None) => {
                 let server_name = reality.server_name.as_deref().unwrap_or(upstream.server);
                 let reality_stream = zero_protocol_vless::upgrade_reality_client(
                     socket,
@@ -141,14 +188,14 @@ impl Proxy {
                 .await?;
                 TcpRelayStream::new(reality_stream)
             }
-            (None, None, Some(ws)) => {
+            (None, None, Some(ws), None, None) => {
                 let ws_stream =
                     crate::transport::connect_ws(socket, ws, upstream.server, upstream.port)
                         .await?;
                 TcpRelayStream::new(ws_stream)
             }
-            (None, None, None) => socket.into(),
-            (Some(_), Some(_), _) | (None, Some(_), Some(_)) => {
+            (None, None, None, None, None) => socket.into(),
+            _ => {
                 return Err(EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "invalid vless outbound transport combination",

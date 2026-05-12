@@ -60,6 +60,9 @@ impl EnginePlan {
                     tls,
                     reality,
                     ws,
+                    grpc,
+                    h2,
+                    quic,
                 } => TargetKind::Outbound(Box::new(OutboundTarget::Vless {
                     server: server.clone(),
                     port: *port,
@@ -70,6 +73,9 @@ impl EnginePlan {
                     tls: tls.clone(),
                     reality: reality.clone(),
                     ws: ws.clone(),
+                    grpc: grpc.clone(),
+                    h2: h2.clone(),
+                    quic: quic.clone(),
                 })),
             };
 
@@ -204,6 +210,9 @@ pub enum OutboundTarget {
         tls: Option<ClientTlsConfig>,
         reality: Option<Box<RealityConfig>>,
         ws: Option<zero_config::WebSocketConfig>,
+        grpc: Option<zero_config::GrpcConfig>,
+        h2: Option<zero_config::H2Config>,
+        quic: Option<zero_config::QuicConfig>,
     },
 }
 

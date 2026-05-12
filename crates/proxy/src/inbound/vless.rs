@@ -14,7 +14,7 @@ use zero_protocol_vless::{VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
 use crate::outbound::direct::{resolve_udp_target, send_direct_udp_packet};
-use crate::outbound::vless::{establish_vless_udp_upstream, VlessUdpUpstream};
+use crate::outbound::vless::{VlessUdpTransport};
 use crate::runtime::{log_completed_udp_flow, UdpFlowOutbound, UdpSessionFlows};
 
 use super::super::logging::log_listener_connection_error;
@@ -31,6 +31,41 @@ impl Proxy {
         inbound: zero_config::InboundConfig,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
+        let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
+        let quic_config = inbound.protocol.vless_quic().cloned();
+
+        // QUIC uses UDP — if configured, create a QUIC endpoint instead of TCP
+        if let Some(ref quic) = quic_config {
+            if let (Some(cert_path), Some(key_path)) = (&quic.cert_path, &quic.key_path) {
+                let quic_inbound = crate::transport::QuicInbound::bind(
+                    &listen_addr.to_string(),
+                    cert_path,
+                    key_path,
+                    self.config.source_dir(),
+                )
+                .await?;
+
+                info!(
+                    inbound_tag = %inbound.tag,
+                    protocol = "vless",
+                    listen = %listen_addr,
+                    transport = "quic",
+                    "inbound listener ready"
+                );
+
+                let mut connections = JoinSet::new();
+                return Self::run_vless_quic_accept_loop(
+                    self,
+                    &inbound,
+                    &quic_inbound,
+                    &mut shutdown,
+                    &mut connections,
+                )
+                .await;
+            }
+        }
+
+        // Standard TCP listener path
         let listener = bind_listener(&inbound).await?;
         let local_addr = listener.local_addr()?;
         let tls_acceptor = inbound
@@ -40,6 +75,7 @@ impl Proxy {
             .transpose()?;
         let reality_config = inbound.protocol.vless_reality().cloned();
         let ws_config = inbound.protocol.vless_ws().cloned();
+        let grpc_config = inbound.protocol.vless_grpc().cloned();
         let mut connections = JoinSet::new();
 
         info!(
@@ -49,6 +85,7 @@ impl Proxy {
             tls = tls_acceptor.is_some(),
             reality = reality_config.is_some(),
             ws = ws_config.is_some(),
+            grpc = grpc_config.is_some(),
             "inbound listener ready"
         );
 
@@ -69,6 +106,7 @@ impl Proxy {
                     let tls_acceptor = tls_acceptor.clone();
                     let reality_config = reality_config.clone();
                     let ws_config = ws_config.clone();
+                    let grpc_config = grpc_config.clone();
 
                     connections.spawn(async move {
                         let result = match (tls_acceptor, reality_config) {
@@ -81,6 +119,7 @@ impl Proxy {
                                                 inbound_tag.as_str(),
                                                 &vless_users,
                                                 ws_config.as_ref(),
+                                                grpc_config.as_ref(),
                                             )
                                             .await
                                     }
@@ -96,6 +135,7 @@ impl Proxy {
                                                 inbound_tag.as_str(),
                                                 &vless_users,
                                                 ws_config.as_ref(),
+                                                grpc_config.as_ref(),
                                             )
                                             .await
                                     }
@@ -109,6 +149,7 @@ impl Proxy {
                                         inbound_tag.as_str(),
                                         &vless_users,
                                         ws_config.as_ref(),
+                                        grpc_config.as_ref(),
                                     )
                                     .await
                             }
@@ -158,23 +199,111 @@ impl Proxy {
         Ok(())
     }
 
+    async fn run_vless_quic_accept_loop(
+        &self,
+        inbound: &zero_config::InboundConfig,
+        quic_inbound: &crate::transport::QuicInbound,
+        shutdown: &mut watch::Receiver<bool>,
+        connections: &mut JoinSet<Result<(), EngineError>>,
+    ) -> Result<(), EngineError> {
+        loop {
+            tokio::select! {
+                changed = shutdown.changed() => {
+                    match changed {
+                        Ok(()) if *shutdown.borrow() => break,
+                        Ok(()) => {}
+                        Err(_) => break,
+                    }
+                }
+                accept_result = quic_inbound.accept() => {
+                    match accept_result {
+                        Ok(quic_stream) => {
+                            let engine = self.clone();
+                            let inbound_tag = inbound.tag.clone();
+                            let vless_users = inbound.protocol.vless_users().to_vec();
+
+                            connections.spawn(async move {
+                                let result = engine
+                                    .handle_vless_client(
+                                        quic_stream,
+                                        inbound_tag.as_str(),
+                                        &vless_users,
+                                    )
+                                    .await;
+
+                                if let Err(error) = &result {
+                                    log_listener_connection_error(
+                                        "vless",
+                                        inbound_tag.as_str(),
+                                        &"quic".parse().unwrap_or(std::net::SocketAddr::from(([0, 0, 0, 0], 0))),
+                                        error,
+                                    );
+                                }
+                                result
+                            });
+                        }
+                        Err(error) => {
+                            error!(error = %error, "vless quic accept error");
+                            break;
+                        }
+                    }
+                }
+                result = connections.join_next(), if !connections.is_empty() => {
+                    if let Some(Err(error)) = result {
+                        if !error.is_cancelled() {
+                            error!(error = %error, "vless quic connection task panicked");
+                        }
+                    }
+                }
+            }
+        }
+
+        connections.abort_all();
+        while let Some(result) = connections.join_next().await {
+            if let Err(error) = result {
+                if !error.is_cancelled() {
+                    error!(error = %error, "vless quic connection task panicked during shutdown");
+                }
+            }
+        }
+
+        info!(
+            inbound_tag = %inbound.tag,
+            protocol = "vless",
+            transport = "quic",
+            "inbound listener stopped"
+        );
+
+        Ok(())
+    }
+
     async fn handle_vless_stream<S>(
         &self,
         stream: S,
         inbound_tag: &str,
         users: &[VlessUserConfig],
         ws_config: Option<&zero_config::WebSocketConfig>,
+        grpc_config: Option<&zero_config::GrpcConfig>,
     ) -> Result<(), EngineError>
     where
         S: ClientStream + 'static,
     {
-        match ws_config {
-            Some(ws) => {
+        match (ws_config, grpc_config) {
+            (Some(ws), None) => {
                 let ws_stream = accept_ws(stream, &ws.path).await?;
                 self.handle_vless_client(ws_stream, inbound_tag, users)
                     .await
             }
-            None => self.handle_vless_client(stream, inbound_tag, users).await,
+            (None, Some(grpc)) => {
+                let grpc_stream = crate::transport::accept_grpc(stream, &grpc.service_name).await?;
+                self.handle_vless_client(grpc_stream, inbound_tag, users)
+                    .await
+            }
+            (None, None) => self.handle_vless_client(stream, inbound_tag, users).await,
+            _ => Err(EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "vless inbound: ws and grpc are mutually exclusive",
+            ))),
         }
     }
 
@@ -189,14 +318,15 @@ impl Proxy {
     {
         let mut client = MeteredStream::new(client);
         let auth = ConfiguredVlessUsers { users };
-        let session = self
+        let (session, uuid) = self
             .protocols
             .vless_inbound
-            .accept_tcp_with_auth(&mut client, &auth)
+            .accept_tcp_with_auth_and_id(&mut client, &auth)
             .await?;
 
         if zero_protocol_vless::VlessInbound::is_mux_session(&session) {
-            self.handle_vless_mux_session(client, inbound_tag).await
+            self.handle_vless_mux_session(client, inbound_tag, uuid)
+                .await
         } else if session.network == zero_core::Network::Udp {
             self.handle_vless_udp_session(client, inbound_tag, session)
                 .await
@@ -219,6 +349,7 @@ impl Proxy {
         &self,
         mut client: MeteredStream<S>,
         inbound_tag: &str,
+        uuid: [u8; 16],
     ) -> Result<(), EngineError>
     where
         S: ClientStream,
@@ -235,7 +366,7 @@ impl Proxy {
             .await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
 
-        let mux = MuxServer::new();
+        let mut mux = MuxServer::with_encryption(&uuid);
         let mut next_id: u16 = 1;
         let mut up_senders: HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> = HashMap::new();
         let mut relay_tasks = JoinSet::new();
@@ -395,8 +526,7 @@ impl Proxy {
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
         let mut udp_flows = UdpSessionFlows::default();
-        let mut vless_upstreams: HashMap<(Address, u16), VlessUdpUpstream> = HashMap::new();
-        let mut upstream_responses = JoinSet::new();
+        let mut vless_manager = crate::outbound::vless::VlessUdpOutboundManager::new();
 
         info!(
             inbound_tag = inbound_tag,
@@ -430,8 +560,7 @@ impl Proxy {
                                 inbound_tag,
                                 &mut udp_flows,
                                 &udp_socket,
-                                &mut vless_upstreams,
-                                &mut upstream_responses,
+                                &mut vless_manager,
                             ).await {
                                 warn!(
                                     error = %error,
@@ -489,9 +618,9 @@ impl Proxy {
                         }
                     }
                 }
-                response = upstream_responses.join_next(), if !upstream_responses.is_empty() => {
+                response = vless_manager.next_response() => {
                     match response {
-                        Some(Ok(Ok((target, port, payload, session_id)))) => {
+                        Some(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
                             if let Some(sid) = session_id {
                                 self.record_session_outbound_rx(sid, payload.len() as u64);
@@ -517,26 +646,16 @@ impl Proxy {
                                 }
                             }
                         }
-                        Some(Ok(Err(error))) => {
+                        Some(Err(error)) => {
                             warn!(error = %error, "vless upstream read error");
                         }
-                        Some(Err(error)) if !error.is_cancelled() => {
-                            error!(error = %error, "vless upstream response task panicked");
-                        }
-                        _ => {}
+                        None => {}
                     }
                 }
             }
         }
 
-        upstream_responses.abort_all();
-        while let Some(result) = upstream_responses.join_next().await {
-            if let Err(error) = result {
-                if !error.is_cancelled() {
-                    error!(error = %error, "vless upstream task clean error");
-                }
-            }
-        }
+        drop(vless_manager);
 
         for completed in udp_flows.finish_all() {
             log_completed_udp_flow(completed);
@@ -558,8 +677,7 @@ impl Proxy {
         inbound_tag: &str,
         udp_flows: &mut UdpSessionFlows,
         udp_socket: &TokioDatagramSocket,
-        vless_upstreams: &mut HashMap<(Address, u16), VlessUdpUpstream>,
-        upstream_responses: &mut JoinSet<Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>>,
+        vless_manager: &mut crate::outbound::vless::VlessUdpOutboundManager,
     ) -> Result<(), EngineError> {
         use zero_protocol_vless::parse_udp_packet;
 
@@ -567,22 +685,15 @@ impl Proxy {
         let flow_key = (udp_packet.target.clone(), udp_packet.port);
 
         // Check if we already have an upstream connection for this target
-        if let Some(handle) = vless_upstreams.get(&flow_key) {
+        if let Some(handle) = vless_manager.get(&udp_packet.target, udp_packet.port) {
             // Existing VLESS upstream - send the payload
             self.record_session_inbound_rx(handle.session_id, packet.len() as u64);
 
-            match handle.send_tx.send(udp_packet.payload.clone()).await {
-                Ok(_) => {
-                    self.record_session_outbound_tx(
-                        handle.session_id,
-                        udp_packet.payload.len() as u64,
-                    );
-                }
-                Err(_) => {
-                    // Channel closed - remove and fallback
-                    vless_upstreams.remove(&flow_key);
-                }
-            }
+            let _ = handle.send_tx.send(udp_packet.payload.clone()).await;
+            self.record_session_outbound_tx(
+                handle.session_id,
+                udp_packet.payload.len() as u64,
+            );
             return Ok(());
         }
 
@@ -651,52 +762,38 @@ impl Proxy {
                 tls,
                 reality,
                 ws,
+                grpc,
+                h2,
+                quic,
                 ..
             } => {
-                if tls.is_some() || reality.is_some() || ws.is_some() {
-                    warn!(
-                        server = %server,
-                        port = %port,
-                        "VLESS UDP chain outbound with TLS/Reality/WS not supported yet"
-                    );
-                    return Ok(());
-                }
-
                 session.outbound_tag = Some(tag.to_owned());
                 self.set_session_outbound(&session);
 
-                // Establish VLESS upstream connection
-                match establish_vless_udp_upstream(
-                    self,
-                    &session,
-                    server,
-                    port,
-                    &id,
-                    &udp_packet.payload,
-                )
-                .await
+                let transport = crate::outbound::vless::VlessUdpTransport {
+                    tls,
+                    reality,
+                    ws,
+                    grpc,
+                    h2,
+                    quic,
+                };
+
+                match vless_manager
+                    .get_or_create_upstream(
+                        self,
+                        &session,
+                        udp_packet.target.clone(),
+                        udp_packet.port,
+                        server.to_owned(),
+                        port,
+                        id.to_owned(),
+                        udp_packet.payload.clone(),
+                        Some(&transport),
+                    )
+                    .await
                 {
-                    Ok((upstream, mut recv_rx)) => {
-                        vless_upstreams.insert(flow_key, upstream.clone());
-
-                        // Spawn response reader task
-                        let target = udp_packet.target.clone();
-                        let port = udp_packet.port;
-                        let session_id = upstream.session_id;
-                        upstream_responses.spawn(async move {
-                            loop {
-                                let payload = recv_rx.recv().await.ok_or_else(|| {
-                                    EngineError::Io(std::io::Error::other(
-                                        "upstream channel closed",
-                                    ))
-                                })?;
-
-                                // Use the same target/port as the original request (simplified)
-                                // In VLESS UDP, response packets don't need to be re-parsed since they're raw
-                                return Ok((target, port, payload, Some(session_id)));
-                            }
-                        });
-                    }
+                    Ok(()) => {}
                     Err(error) => {
                         warn!(error = %error, "failed to establish vless upstream for udp");
                         let record = session_handle.finish(zero_engine::SessionOutcome::Failed);
@@ -753,10 +850,14 @@ impl VlessUserStore for ConfiguredVlessUsers<'_> {
         self.users.iter().find_map(|user| {
             let configured_id = zero_protocol_vless::parse_uuid(&user.id).ok()?;
             if &configured_id == id {
+                let flow = user
+                    .flow
+                    .as_deref()
+                    .and_then(|f| zero_protocol_vless::parse_flow(f).ok());
                 Some(VlessUser {
                     credential_id: user.credential_id.clone(),
                     principal_key: user.principal_key.clone(),
-                    flow: None,
+                    flow,
                 })
             } else {
                 None

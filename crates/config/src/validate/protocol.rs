@@ -19,6 +19,9 @@ pub(super) fn validate_inbound_protocol(
             tls,
             reality,
             ws,
+            grpc,
+            h2,
+            quic,
         } => {
             validate_vless_users(users)?;
             if let Some(tls) = tls {
@@ -39,9 +42,28 @@ pub(super) fn validate_inbound_protocol(
                         .to_owned(),
                 ));
             }
+            if grpc.is_some() && reality.is_some() {
+                return Err(ConfigError::InvalidInbound(
+                    "`vless` inbound `reality` does not support `grpc`".to_owned(),
+                ));
+            }
             if let Some(ws) = ws {
                 validate_inbound_optional_non_empty("vless ws.path", &ws.path)?;
                 validate_inbound_ws_headers("vless ws.headers", &ws.headers)?;
+            }
+            if let Some(grpc) = grpc {
+                validate_inbound_optional_non_empty("vless grpc.service_name", &grpc.service_name)?;
+            }
+            if let Some(h2) = h2 {
+                validate_inbound_optional_non_empty("vless h2.path", &h2.path)?;
+            }
+            if let Some(quic) = quic {
+                if let Some(cert_path) = &quic.cert_path {
+                    validate_inbound_optional_non_empty("vless quic.cert_path", cert_path)?;
+                }
+                if let Some(key_path) = &quic.key_path {
+                    validate_inbound_optional_non_empty("vless quic.key_path", key_path)?;
+                }
             }
             Ok(())
         }
@@ -65,6 +87,9 @@ pub(super) fn validate_outbound_protocol(
             tls,
             reality,
             ws,
+            grpc,
+            h2,
+            quic,
         } => {
             validate_outbound_endpoint("vless", server, *port)?;
             validate_uuid_literal(id).map_err(|message| {
@@ -92,9 +117,25 @@ pub(super) fn validate_outbound_protocol(
                         .to_owned(),
                 ));
             }
+            if grpc.is_some() && reality.is_some() {
+                return Err(ConfigError::InvalidOutbound(
+                    "`vless` outbound `reality` does not support `grpc`".to_owned(),
+                ));
+            }
             if let Some(ws) = ws {
                 validate_outbound_optional_non_empty("vless ws.path", &ws.path)?;
                 validate_outbound_ws_headers("vless ws.headers", &ws.headers)?;
+            }
+            if let Some(grpc) = grpc {
+                validate_outbound_optional_non_empty("vless grpc.service_name", &grpc.service_name)?;
+            }
+            if let Some(h2) = h2 {
+                validate_outbound_optional_non_empty("vless h2.path", &h2.path)?;
+            }
+            if let Some(quic) = quic {
+                if let Some(server_name) = &quic.server_name {
+                    validate_outbound_optional_non_empty("vless quic.server_name", server_name)?;
+                }
             }
             Ok(())
         }

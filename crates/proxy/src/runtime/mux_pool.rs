@@ -43,6 +43,7 @@ struct MuxPoolConn {
     active: Mutex<usize>,
     max_concurrency: u32,
     last_activity: Mutex<std::time::Instant>,
+    crypto: Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>>,
 }
 
 #[derive(Clone)]
@@ -148,20 +149,22 @@ impl MuxConnectionPool {
             .send(req)
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
 
-        // Spawn upload relay: up_rx → MUX frame → write_tx
+        // Spawn upload relay: up_rx → encrypt → MUX frame → write_tx
         let write = conn.write_tx.clone();
         let conn_drop = conn.clone();
+        let crypto = conn.crypto.clone();
         tokio::spawn(async move {
             let mut up_rx = up_rx;
             while let Some(data) = up_rx.recv().await {
-                let frame = zero_protocol_vless::encode_frame(sid, &data);
+                let payload = encrypt_mux_payload(&crypto, sid, &data, true);
+                let frame = zero_protocol_vless::encode_frame(sid, &payload);
                 if write.send(frame).is_err() {
                     break;
                 }
             }
-            // Stream ended — send close notification
-            let close = zero_protocol_vless::encode_frame(sid, &[]);
-            let _ = write.send(close);
+            // Stream ended — send close notification (empty payload = close)
+            let close_frame = zero_protocol_vless::encode_frame(sid, &[]);
+            let _ = write.send(close_frame);
             *conn_drop.active.lock().unwrap() -= 1;
         });
 
@@ -232,6 +235,12 @@ impl MuxConnectionPool {
 
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
+        // Create shared MUX stream encryption
+        let crypto: Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>> =
+            Some(Arc::new(Mutex::new(zero_protocol_vless::MuxCrypto::new(
+                &key.uuid,
+            ))));
+
         // Write relay: frames → TCP
         tokio::spawn(async move {
             use tokio::io::AsyncWriteExt;
@@ -249,7 +258,8 @@ impl MuxConnectionPool {
         let streams_for_relay = streams.clone();
         let streams_for_pool = streams;
 
-        // Read relay: TCP → dispatch MUX frames → stream channels
+        // Read relay: TCP → dispatch MUX frames → decrypt → stream channels
+        let crypto_for_read = crypto.clone();
         tokio::spawn(async move {
             use tokio::io::AsyncReadExt;
             let mut r = tcp_read;
@@ -269,9 +279,13 @@ impl MuxConnectionPool {
                 }
 
                 if stream_id != 0 {
-                    let streams = streams_for_relay.lock().unwrap();
-                    if let Some(tx) = streams.get(&stream_id) {
-                        let _ = tx.send(payload);
+                    // Decrypt payload before dispatching
+                    let decrypted = decrypt_mux_payload(&crypto_for_read, stream_id, &payload, false);
+                    if let Some(decrypted_payload) = decrypted {
+                        let streams = streams_for_relay.lock().unwrap();
+                        if let Some(tx) = streams.get(&stream_id) {
+                            let _ = tx.send(decrypted_payload);
+                        }
                     }
                 }
             }
@@ -284,6 +298,7 @@ impl MuxConnectionPool {
             active: Mutex::new(0),
             max_concurrency,
             last_activity: Mutex::new(std::time::Instant::now()),
+            crypto,
         })
     }
 }
@@ -354,5 +369,54 @@ impl tokio::io::AsyncWrite for MuxStreamRelay {
         _: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         std::task::Poll::Ready(Ok(()))
+    }
+}
+
+/// Encrypt a MUX frame payload. `is_c2s`: true for client→server (upload), false for server→client.
+fn encrypt_mux_payload(
+    crypto: &Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>>,
+    sid: u16,
+    payload: &[u8],
+    is_c2s: bool,
+) -> Vec<u8> {
+    if let Some(ref crypto) = crypto {
+        if payload.is_empty() {
+            return vec![];
+        }
+        let mut c = crypto.lock().unwrap();
+        let result = if is_c2s {
+            c.encrypt_c2s(sid, payload)
+        } else {
+            c.encrypt_s2c(sid, payload)
+        };
+        result.unwrap_or_else(|_| payload.to_vec())
+    } else {
+        payload.to_vec()
+    }
+}
+
+/// Decrypt a MUX frame payload. Returns None if decryption fails (frame should be dropped).
+fn decrypt_mux_payload(
+    crypto: &Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>>,
+    sid: u16,
+    payload: &[u8],
+    is_c2s: bool,
+) -> Option<Vec<u8>> {
+    if let Some(ref crypto) = crypto {
+        if payload.is_empty() {
+            return Some(vec![]);
+        }
+        let mut c = crypto.lock().unwrap();
+        let result = if is_c2s {
+            c.decrypt_c2s(sid, payload)
+        } else {
+            c.decrypt_s2c(sid, payload)
+        };
+        match result {
+            Ok(pt) => Some(pt),
+            Err(_) => None,
+        }
+    } else {
+        Some(payload.to_vec())
     }
 }
