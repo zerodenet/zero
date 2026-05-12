@@ -44,6 +44,20 @@ pub struct RealityClientConfig {
     pub server_name: String,
     /// Supported TLS 1.3 cipher suites (empty = use defaults)
     pub cipher_suites: Vec<CipherSuite>,
+    /// Handshake timeout in milliseconds (default: 10000 = 10 seconds)
+    pub handshake_timeout_ms: u64,
+}
+
+impl Default for RealityClientConfig {
+    fn default() -> Self {
+        Self {
+            public_key: [0u8; 32],
+            short_id: [0u8; 8],
+            server_name: String::new(),
+            cipher_suites: Vec::new(),
+            handshake_timeout_ms: 10_000,
+        }
+    }
 }
 
 /// Handshake state machine for REALITY client
@@ -104,6 +118,9 @@ pub struct RealityClientConnection {
     // Connection state flags (mirrors rustls patterns)
     received_close_notify: bool,        // Peer sent close_notify alert
     fatal_error: Option<io::ErrorKind>, // Fatal error occurred, connection unusable
+
+    // Handshake timing - for timeout detection
+    handshake_start: std::time::Instant,
 }
 
 impl RealityClientConnection {
@@ -130,6 +147,7 @@ impl RealityClientConnection {
             plaintext_write_buf: Vec::with_capacity(OUTGOING_BUFFER_LIMIT),
             received_close_notify: false,
             fatal_error: None,
+            handshake_start: std::time::Instant::now(),
         };
 
         conn.generate_client_hello()?;
@@ -272,6 +290,22 @@ impl RealityClientConnection {
         // RFC 8446: don't process data after close_notify
         if self.received_close_notify {
             return Ok(RealityIoState::new(self.plaintext_read_buf.len()));
+        }
+
+        // Check for handshake timeout before processing
+        if !matches!(self.handshake_state, HandshakeState::Complete) {
+            let elapsed = self.handshake_start.elapsed();
+            let timeout = std::time::Duration::from_millis(self.config.handshake_timeout_ms);
+            if elapsed > timeout {
+                self.fatal_error = Some(io::ErrorKind::TimedOut);
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!(
+                        "Reality handshake timed out after {}ms",
+                        self.config.handshake_timeout_ms
+                    ),
+                ));
+            }
         }
 
         let result = self.process_new_packets_inner();

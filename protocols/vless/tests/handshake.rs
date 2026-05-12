@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_protocol_vless::{
-    build_udp_packet, format_uuid, parse_uuid, parse_udp_packet, VlessInbound, VlessOutbound,
+    build_udp_packet, format_uuid, parse_udp_packet, parse_uuid, VlessInbound, VlessOutbound,
     VlessUser, VlessUserStore,
 };
 use zero_traits::AsyncSocket;
@@ -64,6 +64,7 @@ impl VlessUserStore for TestUsers {
             Some(VlessUser {
                 credential_id: Some("node-user-1".to_owned()),
                 principal_key: Some("user:10001".to_owned()),
+                flow: None,
             })
         } else {
             None
@@ -230,9 +231,12 @@ fn parse_udp_packet_with_domain() {
 #[test]
 fn build_udp_packet_with_ipv6() {
     let payload = b"hello v6";
-    let packet =
-        build_udp_packet(&Address::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]), 53, payload)
-            .expect("build");
+    let packet = build_udp_packet(
+        &Address::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
+        53,
+        payload,
+    )
+    .expect("build");
 
     let parsed = parse_udp_packet(&packet).expect("parse");
     assert_eq!(

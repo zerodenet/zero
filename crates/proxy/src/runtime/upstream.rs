@@ -13,6 +13,9 @@ pub(crate) struct VlessUpstream<'a> {
     pub server: &'a str,
     pub port: u16,
     pub id: &'a str,
+    pub flow: Option<&'a str>,
+    pub mux_concurrency: Option<u32>,
+    pub mux_idle_timeout_secs: Option<u64>,
     pub tls: Option<&'a ClientTlsConfig>,
     pub reality: Option<&'a RealityConfig>,
     pub ws: Option<&'a zero_config::WebSocketConfig>,
@@ -75,6 +78,25 @@ impl Proxy {
         upstream: VlessUpstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         let id = zero_protocol_vless::parse_uuid(upstream.id)?;
+
+        // If MUX flow is configured, use connection pool
+        if upstream.flow == Some("xtls-rprx-vision") {
+            return self
+                .mux_pool
+                .open_stream(
+                    self,
+                    session,
+                    upstream.server.to_owned(),
+                    upstream.port,
+                    &id,
+                    upstream.tls,
+                    upstream.reality,
+                    upstream.mux_concurrency.unwrap_or(8),
+                    upstream.mux_idle_timeout_secs.unwrap_or(300),
+                )
+                .await;
+        }
+
         let socket = self
             .protocols
             .direct_outbound
@@ -134,27 +156,28 @@ impl Proxy {
             }
         };
 
+        let flow = upstream.flow;
         let is_reality = upstream.reality.is_some();
-        let mut upstream = crate::transport::MeteredStream::new(stream);
+        let mut metered = crate::transport::MeteredStream::new(stream);
 
         if is_reality {
             self.protocols
                 .vless_outbound
-                .send_tcp_request(&mut upstream, session, &id)
+                .send_tcp_request_with_flow(&mut metered, session, &id, flow)
                 .await?;
-            self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
+            self.record_session_outbound_traffic(session.id, metered.drain_traffic());
 
             Ok(TcpRelayStream::new(
-                zero_protocol_vless::DeferredVlessResponseStream::new(upstream.into_inner()),
+                zero_protocol_vless::DeferredVlessResponseStream::new(metered.into_inner()),
             ))
         } else {
             self.protocols
                 .vless_outbound
-                .establish_tcp_tunnel(&mut upstream, session, &id)
+                .establish_tcp_tunnel_with_flow(&mut metered, session, &id, flow)
                 .await?;
-            self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
+            self.record_session_outbound_traffic(session.id, metered.drain_traffic());
 
-            Ok(upstream.into_inner())
+            Ok(metered.into_inner())
         }
     }
 
@@ -168,6 +191,8 @@ impl Proxy {
             upstream.server,
             upstream.port,
             upstream.id,
+            upstream.mux_concurrency,
+            upstream.mux_idle_timeout_secs,
             upstream.tls,
             upstream.reality,
             upstream.ws,

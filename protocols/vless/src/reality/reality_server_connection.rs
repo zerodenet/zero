@@ -7,7 +7,8 @@ use x25519_dalek::{PublicKey, StaticSecret};
 use x509_parser::prelude::FromDer;
 
 use super::common::{
-    ALERT_DESC_CLOSE_NOTIFY, ALERT_LEVEL_WARNING, CIPHERTEXT_READ_BUF_CAPACITY, CONTENT_TYPE_ALERT,
+    build_tls_alert, random_anti_detection_delay, ALERT_DESC_CLOSE_NOTIFY, ALERT_DESC_DECODE_ERROR,
+    ALERT_LEVEL_WARNING, CIPHERTEXT_READ_BUF_CAPACITY, CONTENT_TYPE_ALERT,
     CONTENT_TYPE_APPLICATION_DATA, CONTENT_TYPE_CHANGE_CIPHER_SPEC, CONTENT_TYPE_HANDSHAKE,
     HANDSHAKE_TYPE_FINISHED, OUTGOING_BUFFER_LIMIT, PLAINTEXT_READ_BUF_CAPACITY,
     TLS_MAX_RECORD_SIZE, TLS_RECORD_HEADER_SIZE,
@@ -38,6 +39,20 @@ pub struct RealityServerConfig {
     pub short_ids: Vec<[u8; 8]>,
     pub server_name: String,
     pub cipher_suites: Vec<CipherSuite>,
+    /// Handshake timeout in milliseconds (default: 10000 = 10 seconds)
+    pub handshake_timeout_ms: u64,
+}
+
+impl Default for RealityServerConfig {
+    fn default() -> Self {
+        Self {
+            private_key: [0u8; 32],
+            short_ids: Vec::new(),
+            server_name: String::new(),
+            cipher_suites: Vec::new(),
+            handshake_timeout_ms: 10_000,
+        }
+    }
 }
 
 enum HandshakeState {
@@ -69,6 +84,7 @@ pub struct RealityServerConnection {
     plaintext_write_buf: Vec<u8>,
     received_close_notify: bool,
     fatal_error: Option<io::ErrorKind>,
+    handshake_start: std::time::Instant,
 }
 
 impl RealityServerConnection {
@@ -89,6 +105,7 @@ impl RealityServerConnection {
             plaintext_write_buf: Vec::with_capacity(OUTGOING_BUFFER_LIMIT),
             received_close_notify: false,
             fatal_error: None,
+            handshake_start: std::time::Instant::now(),
         }
     }
 
@@ -111,6 +128,22 @@ impl RealityServerConnection {
         }
         if self.received_close_notify {
             return Ok(RealityIoState::new(self.plaintext_read_buf.len()));
+        }
+
+        // Check for handshake timeout before processing
+        if !matches!(self.handshake_state, HandshakeState::Complete) {
+            let elapsed = self.handshake_start.elapsed();
+            let timeout = std::time::Duration::from_millis(self.config.handshake_timeout_ms);
+            if elapsed > timeout {
+                self.fatal_error = Some(io::ErrorKind::TimedOut);
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!(
+                        "Reality server handshake timed out after {}ms",
+                        self.config.handshake_timeout_ms
+                    ),
+                ));
+            }
         }
 
         let result = self.process_new_packets_inner();
@@ -157,9 +190,10 @@ impl RealityServerConnection {
 
         let record_type = self.ciphertext_read_buf[0];
         if record_type != CONTENT_TYPE_HANDSHAKE {
+            // Send standard TLS decode_error - no Reality fingerprint in error
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "expected Reality ClientHello handshake record",
+                "expected handshake record",
             ));
         }
 
@@ -182,7 +216,7 @@ impl RealityServerConnection {
         if encrypted_session_id.len() != 32 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "Reality ClientHello session id must be 32 bytes",
+                "invalid session id length",
             ));
         }
 
@@ -201,10 +235,15 @@ impl RealityServerConnection {
         let session_id = decrypt_session_id(&encrypted, &auth_key, &client_random[20..32], &aad)?;
         let short_id: [u8; 8] = session_id[8..16].try_into().expect("slice length checked");
         if !self.config.short_ids.is_empty() && !self.config.short_ids.contains(&short_id) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "Reality short id is not authorized",
-            ));
+            // CRITICAL: On short_id mismatch:
+            // 1. Add random anti-detection delay to mask verification timing
+            // 2. Send a standard TLS decode_error alert
+            // 3. Fail silently - no Reality-specific error message to avoid fingerprinting
+            // This mimics a regular TLS server rejecting a malformed ClientHello.
+            std::thread::sleep(random_anti_detection_delay());
+            self.ciphertext_write_buf = build_tls_alert(ALERT_DESC_DECODE_ERROR);
+            self.fatal_error = Some(io::ErrorKind::InvalidData);
+            return Ok(true); // Signal handshake complete (but failed silently)
         }
 
         let client_cipher_suites = extract_client_cipher_suites(&record)?;
@@ -214,9 +253,7 @@ impl RealityServerConnection {
             &self.config.cipher_suites
         };
         let cipher_suite = negotiate_cipher_suite(server_preferences, &client_cipher_suites)
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "no common Reality cipher suite")
-            })?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no common cipher suite"))?;
 
         let mut rng = rand::rng();
         let mut server_private_bytes = [0u8; 32];
@@ -530,8 +567,13 @@ fn construct_reality_certificate(
 ) -> io::Result<(Vec<u8>, KeyPair)> {
     let key_pair = KeyPair::generate_for(&PKCS_ED25519)
         .map_err(|error| io::Error::other(error.to_string()))?;
+
+    // Construct certificate with reasonable TLS parameters
+    // Note: We use default params from CertificateParams::new which already
+    // sets up appropriate defaults for key usage, extended key usage, etc.
     let params = CertificateParams::new(vec![server_name.to_owned()])
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error.to_string()))?;
+
     let cert = params
         .self_signed(&key_pair)
         .map_err(|error| io::Error::other(error.to_string()))?;

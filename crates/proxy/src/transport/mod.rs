@@ -13,6 +13,7 @@ pub(crate) use direct::*;
 pub(crate) use metered::*;
 pub(crate) use stream::*;
 pub(crate) use tcp_flow::*;
+pub(crate) use tcp_outbound::*;
 #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
 pub(crate) use tls::*;
 #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]

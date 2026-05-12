@@ -239,6 +239,8 @@ pub struct Socks5UserConfig {
 pub struct VlessUserConfig {
     pub id: String,
     #[serde(default)]
+    pub flow: Option<String>,
+    #[serde(default)]
     pub credential_id: Option<String>,
     #[serde(default)]
     pub principal_key: Option<String>,
@@ -339,6 +341,12 @@ pub enum OutboundProtocolConfig {
         server: String,
         port: u16,
         id: String,
+        #[serde(default)]
+        flow: Option<String>,
+        #[serde(default)]
+        mux_concurrency: Option<u32>,
+        #[serde(default)]
+        mux_idle_timeout_secs: Option<u64>,
         #[serde(default)]
         tls: Option<ClientTlsConfig>,
         #[serde(default)]

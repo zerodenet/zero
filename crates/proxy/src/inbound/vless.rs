@@ -8,21 +8,21 @@ use tracing::{error, info, warn};
 use zero_config::{InboundRealityConfig, VlessUserConfig};
 use zero_core::Address;
 use zero_platform_tokio::TokioDatagramSocket;
-use zero_protocol_vless::RealityServerOptions;
 use zero_protocol_vless::build_udp_packet;
+use zero_protocol_vless::RealityServerOptions;
 use zero_protocol_vless::{VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
-use crate::outbound::vless::{establish_vless_udp_upstream, VlessUdpUpstream};
 use crate::outbound::direct::{resolve_udp_target, send_direct_udp_packet};
+use crate::outbound::vless::{establish_vless_udp_upstream, VlessUdpUpstream};
 use crate::runtime::{log_completed_udp_flow, UdpFlowOutbound, UdpSessionFlows};
 
 use super::super::logging::log_listener_connection_error;
 use super::super::runtime::{bind_listener, Proxy};
-use super::super::transport::ClientStream;
-use super::super::transport::MeteredStream;
-use super::super::transport::TcpInboundProtocol;
 use super::super::transport::{accept_ws, build_tls_acceptor, InboundTlsStream};
+use crate::transport::{
+    ClientStream, EstablishedTcpOutbound, MeteredStream, TcpInboundProtocol, TcpRelayStream,
+};
 use zero_engine::EngineError;
 
 impl Proxy {
@@ -195,7 +195,9 @@ impl Proxy {
             .accept_tcp_with_auth(&mut client, &auth)
             .await?;
 
-        if session.network == zero_core::Network::Udp {
+        if zero_protocol_vless::VlessInbound::is_mux_session(&session) {
+            self.handle_vless_mux_session(client, inbound_tag).await
+        } else if session.network == zero_core::Network::Udp {
             self.handle_vless_udp_session(client, inbound_tag, session)
                 .await
         } else {
@@ -213,6 +215,167 @@ impl Proxy {
         }
     }
 
+    async fn handle_vless_mux_session<S>(
+        &self,
+        mut client: MeteredStream<S>,
+        inbound_tag: &str,
+    ) -> Result<(), EngineError>
+    where
+        S: ClientStream,
+    {
+        use tokio::sync::mpsc;
+        use zero_protocol_vless::{
+            encode_new_stream_response, parse_new_stream_payload, MuxServer, MUX_STATUS_FAIL,
+            MUX_STATUS_OK, MUX_STREAM_NEW,
+        };
+
+        self.protocols
+            .vless_inbound
+            .send_response(&mut client)
+            .await?;
+        self.record_session_inbound_traffic(0, client.drain_traffic());
+
+        let mux = MuxServer::new();
+        let mut next_id: u16 = 1;
+        let mut up_senders: HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> = HashMap::new();
+        let mut relay_tasks = JoinSet::new();
+        let (down_tx, mut down_rx) = mpsc::unbounded_channel::<(u16, Vec<u8>)>();
+
+        info!(inbound_tag, "VLESS MUX session started");
+        loop {
+            tokio::select! {
+                frame_res = mux.recv(&mut client) => {
+                    let frame = match frame_res {
+                        Ok(f) => f,
+                        Err(_) => break,
+                    };
+                    if frame.stream_id == MUX_STREAM_NEW {
+                        match parse_new_stream_payload(&frame.payload) {
+                            Ok((port, target)) => {
+                                let sid = next_id;
+                                next_id = next_id.wrapping_add(1);
+                                if next_id == 0 { next_id = 1; }
+
+                                // Route and establish outbound
+                                let mut session = zero_core::Session::new(
+                                    0, target, port, zero_core::Network::Tcp,
+                                    zero_core::ProtocolType::Vless,
+                                );
+                                self.prepare_session(&mut session, inbound_tag);
+                                let action = self.route_decision(&session.target);
+                                let Ok(resolved) = self.resolve_outbound(action) else {
+                                    let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
+                                    let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
+                                    continue;
+                                };
+                                let upstream = match self.establish_tcp_outbound(&session, resolved).await {
+                                    Ok(outbound) => match outbound {
+                                        EstablishedTcpOutbound::Direct { upstream, .. } => upstream,
+                                        EstablishedTcpOutbound::Vless { upstream, .. } => upstream,
+                                        EstablishedTcpOutbound::Socks5 { upstream, .. } => upstream,
+                                        EstablishedTcpOutbound::Block { .. } => {
+                                            let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
+                                            let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
+                                            continue;
+                                        }
+                                    },
+                                    Err(_) => {
+                                        let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
+                                        let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
+                                        continue;
+                                    }
+                                };
+
+                                let resp = encode_new_stream_response(sid, MUX_STATUS_OK);
+                                mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await?;
+
+                                let (up_tx, up_rx) = mpsc::unbounded_channel();
+                                up_senders.insert(sid, up_tx);
+                                let down = down_tx.clone();
+
+                                relay_tasks.spawn(async move {
+                                    Self::mux_stream_relay(sid, up_rx, down, upstream).await;
+                                });
+
+                                info!(inbound_tag, mux_stream_id = sid, port, "MUX stream accepted");
+                            }
+                            Err(e) => {
+                                warn!(error = %e, "MUX new stream parse failed");
+                                let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
+                                let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
+                            }
+                        }
+                    } else if frame.payload.is_empty() {
+                        // Client closed this stream
+                        up_senders.remove(&frame.stream_id);
+                        // Notify client of stream close
+                        let _ = mux.write_data(&mut client, frame.stream_id, &[]).await;
+                    } else if let Some(tx) = up_senders.get(&frame.stream_id) {
+                        let _ = tx.send(frame.payload);
+                    }
+                }
+
+                down = down_rx.recv() => {
+                    if let Some((sid, payload)) = down {
+                        if up_senders.contains_key(&sid) {
+                            if payload.is_empty() {
+                                // Upstream closed — notify client and clean up
+                                let _ = mux.write_data(&mut client, sid, &[]).await;
+                                up_senders.remove(&sid);
+                            } else {
+                                let _ = mux.write_data(&mut client, sid, &payload).await;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        relay_tasks.abort_all();
+        info!(inbound_tag, "VLESS MUX session ended");
+        Ok(())
+    }
+
+    async fn mux_stream_relay(
+        stream_id: u16,
+        mut up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+        down_tx: tokio::sync::mpsc::UnboundedSender<(u16, Vec<u8>)>,
+        upstream: TcpRelayStream,
+    ) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let (mut upstream_r, mut upstream_w) = tokio::io::split(upstream);
+
+        let upload = tokio::spawn(async move {
+            while let Some(data) = up_rx.recv().await {
+                if upstream_w.write_all(&data).await.is_err() {
+                    break;
+                }
+            }
+            let _ = upstream_w.shutdown().await;
+        });
+
+        let sid = stream_id;
+        let download = tokio::spawn(async move {
+            let mut buf = [0u8; 16384];
+            loop {
+                match upstream_r.read(&mut buf).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if down_tx.send((sid, buf[..n].to_vec())).is_err() {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+            // Send empty payload as close notification
+            let _ = down_tx.send((sid, vec![]));
+        });
+
+        let _ = tokio::join!(upload, download);
+    }
+
     async fn handle_vless_udp_session<S>(
         &self,
         mut client: MeteredStream<S>,
@@ -222,7 +385,10 @@ impl Proxy {
     where
         S: ClientStream,
     {
-        self.protocols.vless_inbound.send_response(&mut client).await?;
+        self.protocols
+            .vless_inbound
+            .send_response(&mut client)
+            .await?;
         self.record_session_inbound_traffic(_session.id, client.drain_traffic());
 
         let udp_socket = TokioDatagramSocket::bind("0.0.0.0:0").await?;
@@ -407,7 +573,10 @@ impl Proxy {
 
             match handle.send_tx.send(udp_packet.payload.clone()).await {
                 Ok(_) => {
-                    self.record_session_outbound_tx(handle.session_id, udp_packet.payload.len() as u64);
+                    self.record_session_outbound_tx(
+                        handle.session_id,
+                        udp_packet.payload.len() as u64,
+                    );
                 }
                 Err(_) => {
                     // Channel closed - remove and fallback
@@ -421,7 +590,8 @@ impl Proxy {
         if let Some(flow) = udp_flows.snapshot(&udp_packet.target, udp_packet.port) {
             self.record_session_inbound_rx(flow.session.id, packet.len() as u64);
             if let UdpFlowOutbound::Direct { target_addr, .. } = flow.outbound {
-                let sent = send_direct_udp_packet(udp_socket, target_addr, &udp_packet.payload).await?;
+                let sent =
+                    send_direct_udp_packet(udp_socket, target_addr, &udp_packet.payload).await?;
                 self.record_session_outbound_tx(flow.session.id, sent as u64);
             }
             return Ok(());
@@ -455,14 +625,16 @@ impl Proxy {
 
                 let target_addr = resolve_udp_target(self, &session).await?;
 
-                let sent = send_direct_udp_packet(udp_socket, target_addr, &udp_packet.payload).await?;
+                let sent =
+                    send_direct_udp_packet(udp_socket, target_addr, &udp_packet.payload).await?;
                 self.record_session_outbound_tx(session.id, sent as u64);
 
                 let tag = session.outbound_tag.clone().unwrap_or_default();
-                udp_flows.insert(session, session_handle, UdpFlowOutbound::Direct {
-                    tag,
-                    target_addr,
-                });
+                udp_flows.insert(
+                    session,
+                    session_handle,
+                    UdpFlowOutbound::Direct { tag, target_addr },
+                );
             }
             zero_engine::ResolvedLeafOutbound::Block { tag } => {
                 session.outbound_tag = Some(tag.unwrap_or("block").to_owned());
@@ -479,6 +651,7 @@ impl Proxy {
                 tls,
                 reality,
                 ws,
+                ..
             } => {
                 if tls.is_some() || reality.is_some() || ws.is_some() {
                     warn!(
@@ -500,7 +673,9 @@ impl Proxy {
                     port,
                     &id,
                     &udp_packet.payload,
-                ).await {
+                )
+                .await
+                {
                     Ok((upstream, mut recv_rx)) => {
                         vless_upstreams.insert(flow_key, upstream.clone());
 
@@ -510,8 +685,11 @@ impl Proxy {
                         let session_id = upstream.session_id;
                         upstream_responses.spawn(async move {
                             loop {
-                                let payload = recv_rx.recv().await
-                                    .ok_or_else(|| EngineError::Io(std::io::Error::other("upstream channel closed")))?;
+                                let payload = recv_rx.recv().await.ok_or_else(|| {
+                                    EngineError::Io(std::io::Error::other(
+                                        "upstream channel closed",
+                                    ))
+                                })?;
 
                                 // Use the same target/port as the original request (simplified)
                                 // In VLESS UDP, response packets don't need to be re-parsed since they're raw
@@ -578,6 +756,7 @@ impl VlessUserStore for ConfiguredVlessUsers<'_> {
                 Some(VlessUser {
                     credential_id: user.credential_id.clone(),
                     principal_key: user.principal_key.clone(),
+                    flow: None,
                 })
             } else {
                 None

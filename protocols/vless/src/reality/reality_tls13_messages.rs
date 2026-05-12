@@ -3,7 +3,7 @@
 // Construct TLS 1.3 handshake messages for REALITY protocol
 
 use super::common::{
-    HANDSHAKE_TYPE_CERTIFICATE, HANDSHAKE_TYPE_CERTIFICATE_VERIFY,
+    calculate_client_hello_padding, HANDSHAKE_TYPE_CERTIFICATE, HANDSHAKE_TYPE_CERTIFICATE_VERIFY,
     HANDSHAKE_TYPE_ENCRYPTED_EXTENSIONS, HANDSHAKE_TYPE_FINISHED, HANDSHAKE_TYPE_SERVER_HELLO,
     VERSION_TLS_1_2_MAJOR, VERSION_TLS_1_2_MINOR,
 };
@@ -180,98 +180,145 @@ pub fn construct_client_hello(
 
     let mut extensions = Vec::new();
 
-    // server_name extension (type 0)
+    // server_name (0)
     {
         let server_name_bytes = server_name.as_bytes();
         let server_name_len = server_name_bytes.len();
-
-        extensions.extend_from_slice(&[0x00, 0x00]); // Extension type: server_name
+        extensions.extend_from_slice(&[0x00, 0x00]);
         let ext_len = 5 + server_name_len;
-        extensions.extend_from_slice(&(ext_len as u16).to_be_bytes()); // Extension length
-        extensions.extend_from_slice(&((server_name_len + 3) as u16).to_be_bytes()); // Server name list length
-        extensions.push(0x00); // Name type: host_name
-        extensions.extend_from_slice(&(server_name_len as u16).to_be_bytes()); // Name length
-        extensions.extend_from_slice(server_name_bytes); // Server name
+        extensions.extend_from_slice(&(ext_len as u16).to_be_bytes());
+        extensions.extend_from_slice(&((server_name_len + 3) as u16).to_be_bytes());
+        extensions.push(0x00);
+        extensions.extend_from_slice(&(server_name_len as u16).to_be_bytes());
+        extensions.extend_from_slice(server_name_bytes);
     }
 
-    // supported_versions extension (type 43)
+    // supported_versions (43)
     {
-        extensions.extend_from_slice(&[0x00, 0x2b]); // Extension type: supported_versions
-        extensions.extend_from_slice(&[0x00, 0x03]); // Extension length: 3
-        extensions.push(0x02); // Supported versions length: 2
-        extensions.extend_from_slice(&[0x03, 0x04]); // TLS 1.3
+        extensions.extend_from_slice(&[0x00, 0x2b]);
+        extensions.extend_from_slice(&[0x00, 0x03]);
+        extensions.push(0x02);
+        extensions.extend_from_slice(&[0x03, 0x04]);
     }
 
-    // supported_groups extension (type 10)
+    // extended_master_secret (23)
     {
-        extensions.extend_from_slice(&[0x00, 0x0a]); // Extension type: supported_groups
-        extensions.extend_from_slice(&[0x00, 0x04]); // Extension length: 4
-        extensions.extend_from_slice(&[0x00, 0x02]); // Supported groups length: 2
+        extensions.extend_from_slice(&[0x00, 0x17]);
+        extensions.extend_from_slice(&[0x00, 0x00]);
+    }
+
+    // ec_point_formats (11)
+    {
+        extensions.extend_from_slice(&[0x00, 0x0b]);
+        extensions.extend_from_slice(&[0x00, 0x02]);
+        extensions.push(0x01);
+        extensions.push(0x00);
+    }
+
+    // supported_groups (10) — Chrome 120+: x25519, secp256r1, secp384r1
+    {
+        extensions.extend_from_slice(&[0x00, 0x0a]);
+        extensions.extend_from_slice(&[0x00, 0x08]);
+        extensions.extend_from_slice(&[0x00, 0x06]);
         extensions.extend_from_slice(&[0x00, 0x1d]); // x25519
+        extensions.extend_from_slice(&[0x00, 0x17]); // secp256r1
+        extensions.extend_from_slice(&[0x00, 0x18]); // secp384r1
     }
 
-    // key_share extension (type 51)
+    // key_share (51)
     {
-        extensions.extend_from_slice(&[0x00, 0x33]); // Extension type: key_share
+        extensions.extend_from_slice(&[0x00, 0x33]);
         let key_share_len = 2 + 4 + client_public_key.len();
-        extensions.extend_from_slice(&(key_share_len as u16).to_be_bytes()); // Extension length
+        extensions.extend_from_slice(&(key_share_len as u16).to_be_bytes());
         let key_share_list_len = 4 + client_public_key.len();
-        extensions.extend_from_slice(&(key_share_list_len as u16).to_be_bytes()); // Key share list length
-        extensions.extend_from_slice(&[0x00, 0x1d]); // Group: x25519
-        extensions.extend_from_slice(&(client_public_key.len() as u16).to_be_bytes()); // Key length
-        extensions.extend_from_slice(client_public_key); // Public key
+        extensions.extend_from_slice(&(key_share_list_len as u16).to_be_bytes());
+        extensions.extend_from_slice(&[0x00, 0x1d]); // x25519
+        extensions.extend_from_slice(&(client_public_key.len() as u16).to_be_bytes());
+        extensions.extend_from_slice(client_public_key);
     }
 
-    // signature_algorithms extension (type 13)
+    // signature_algorithms (13)
     {
-        extensions.extend_from_slice(&[0x00, 0x0d]); // Extension type: signature_algorithms
-        const SIGNATURE_ALGORITHMS: &[u16] = &[
-            0x0403, // ecdsa_secp256r1_sha256
-            0x0804, // rsa_pss_rsae_sha256
-            0x0401, // rsa_pkcs1_sha256
-            0x0503, // ecdsa_secp384r1_sha384
-            0x0805, // rsa_pss_rsae_sha384
-            0x0501, // rsa_pkcs1_sha384
-            0x0806, // rsa_pss_rsae_sha512
-            0x0601, // rsa_pkcs1_sha512
-            0x0807, // ed25519, required for REALITY certificate verification
+        extensions.extend_from_slice(&[0x00, 0x0d]);
+        const ALGS: &[u16] = &[
+            0x0403, 0x0804, 0x0807, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601,
         ];
-        let algorithms_len = (SIGNATURE_ALGORITHMS.len() * 2) as u16;
-        extensions.extend_from_slice(&(2 + algorithms_len).to_be_bytes());
-        extensions.extend_from_slice(&algorithms_len.to_be_bytes());
-        for algorithm in SIGNATURE_ALGORITHMS {
-            extensions.extend_from_slice(&algorithm.to_be_bytes());
+        let alen = (ALGS.len() * 2) as u16;
+        extensions.extend_from_slice(&(2 + alen).to_be_bytes());
+        extensions.extend_from_slice(&alen.to_be_bytes());
+        for &a in ALGS {
+            extensions.extend_from_slice(&a.to_be_bytes());
         }
     }
 
-    // ALPN extension (type 16)
+    // supported_signature_algorithms_cert (50)
+    {
+        extensions.extend_from_slice(&[0x00, 0x32]);
+        const CERT_ALGS: &[u16] = &[0x0403, 0x0804, 0x0807, 0x0401, 0x0503, 0x0805];
+        let alen = (CERT_ALGS.len() * 2) as u16;
+        extensions.extend_from_slice(&(2 + alen).to_be_bytes());
+        extensions.extend_from_slice(&alen.to_be_bytes());
+        for &a in CERT_ALGS {
+            extensions.extend_from_slice(&a.to_be_bytes());
+        }
+    }
+
+    // ALPN (16)
     if !alpn_protocols.is_empty() {
-        extensions.extend_from_slice(&[0x00, 0x10]); // Extension type: ALPN (16)
-
-        // Calculate total length of protocol list
-        let protocols_list_len: usize = alpn_protocols
-            .iter()
-            .map(|p| 1 + p.len()) // 1 byte length prefix + protocol bytes
-            .sum();
-
-        // Extension length = 2 (list length field) + protocols_list_len
+        extensions.extend_from_slice(&[0x00, 0x10]);
+        let protocols_list_len: usize = alpn_protocols.iter().map(|p| 1 + p.len()).sum();
         let ext_len = 2 + protocols_list_len;
         extensions.extend_from_slice(&(ext_len as u16).to_be_bytes());
-
-        // Protocol list length
         extensions.extend_from_slice(&(protocols_list_len as u16).to_be_bytes());
-
-        // Each protocol: 1 byte length + protocol string
         for protocol in alpn_protocols {
             extensions.push(protocol.len() as u8);
             extensions.extend_from_slice(protocol.as_bytes());
         }
     }
 
-    // Write extensions length
-    let extensions_length = extensions.len();
+    // compress_certificate (27)
+    {
+        extensions.extend_from_slice(&[0x00, 0x1b]);
+        extensions.extend_from_slice(&[0x00, 0x04]); // Extension length: 4
+        extensions.push(0x02); // Algorithms length: 1 byte (TLS vector <2..2^8-2>)
+        extensions.extend_from_slice(&[0x00, 0x02]); // brotli (1)
+        extensions.extend_from_slice(&[0x00, 0x03]); // zstd (2)
+    }
+
+    // encrypt_then_mac (22)
+    {
+        extensions.extend_from_slice(&[0x00, 0x16]);
+        extensions.extend_from_slice(&[0x00, 0x00]);
+    }
+
+    // psk_key_exchange_modes (45)
+    {
+        extensions.extend_from_slice(&[0x00, 0x2d]);
+        extensions.extend_from_slice(&[0x00, 0x02]);
+        extensions.push(0x01);
+        extensions.push(0x01);
+    }
+
+    // Temporary: write extensions length without padding, compute size,
+    // then add RFC 7685 padding extension to round to 512-byte boundary.
+    let extensions_len_before_padding = extensions.len();
     hello[extensions_offset..extensions_offset + 2]
-        .copy_from_slice(&(extensions_length as u16).to_be_bytes());
+        .copy_from_slice(&(extensions_len_before_padding as u16).to_be_bytes());
+
+    // Total message size without padding = hello header + extensions
+    let current_total = hello.len() + extensions_len_before_padding;
+    let padding_data_len = calculate_client_hello_padding(current_total);
+
+    if padding_data_len > 0 {
+        // padding extension: type (2) + length (2) + data (padding_data_len)
+        extensions.extend_from_slice(&[0x00, 0x15]);
+        extensions.extend_from_slice(&(padding_data_len as u16).to_be_bytes());
+        extensions.extend_from_slice(&vec![0u8; padding_data_len]);
+
+        // Update extensions length in hello
+        hello[extensions_offset..extensions_offset + 2]
+            .copy_from_slice(&(extensions.len() as u16).to_be_bytes());
+    }
 
     // Append extensions
     hello.extend_from_slice(&extensions);

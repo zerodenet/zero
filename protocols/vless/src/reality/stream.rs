@@ -45,6 +45,7 @@ where
         short_id: decode_short_id(options.short_id)?,
         server_name: options.server_name.to_owned(),
         cipher_suites: parse_cipher_suites(options.cipher_suites)?,
+        handshake_timeout_ms: 10_000,
     };
 
     let mut session = RealityClientConnection::new(config)?;
@@ -69,6 +70,7 @@ where
             .collect::<io::Result<Vec<_>>>()?,
         server_name: options.server_name.to_owned(),
         cipher_suites: parse_cipher_suites(options.cipher_suites)?,
+        handshake_timeout_ms: 10_000,
     };
 
     let mut session = RealityServerConnection::new(config);

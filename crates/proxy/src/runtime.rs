@@ -12,8 +12,10 @@ use zero_engine::{Engine, EngineError};
 use zero_platform_tokio::{TokioListener, TokioResolver};
 
 use crate::inventory::ProtocolInventory;
+use crate::runtime::mux_pool::MuxConnectionPool;
 
 mod engine_facade;
+pub(crate) mod mux_pool;
 pub(crate) mod udp_associate;
 pub(crate) mod upstream;
 
@@ -27,6 +29,7 @@ pub struct Proxy {
     pub(crate) config: Arc<RuntimeConfig>,
     pub(crate) resolver: TokioResolver,
     pub(crate) protocols: ProtocolInventory,
+    pub(crate) mux_pool: MuxConnectionPool,
 }
 
 impl Proxy {
@@ -47,6 +50,7 @@ impl Proxy {
             engine,
             resolver: TokioResolver,
             protocols,
+            mux_pool: MuxConnectionPool::new(),
         })
     }
 

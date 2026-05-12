@@ -150,23 +150,16 @@ pub fn verify_certificate_hmac(cert_der: &[u8], auth_key: &[u8; 32]) -> io::Resu
     // Compare full 64-byte signature with expected HMAC using constant-time comparison
     // to prevent timing attacks that could leak information about the expected signature
     if expected_signature.ct_eq(signature).unwrap_u8() == 0 {
-        // HMAC mismatch - the certificate is not signed by a REALITY server.
-        // Possible causes:
-        // 1. Connection intercepted/MITM (received real certificate from target site)
-        // 2. ISP traffic hijacking/redirection
-        // 3. Misconfigured server (wrong keys)
-        // 4. Connection to wrong server
-        // Note: Unlike Xray-core, we don't fall back to X.509 validation and spider crawling.
-        log::warn!(
-            "REALITY CLIENT: Certificate HMAC mismatch - not a REALITY server (possible MITM or misconfiguration)"
-        );
+        // HMAC mismatch - certificate signature verification failed.
+        // Possible causes: MITM attack, misconfiguration, or connection to wrong server.
+        log::warn!("TLS client: Certificate signature verification failed (possible MITM)");
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            "Certificate HMAC verification failed - not a REALITY-signed certificate",
+            "Certificate signature verification failed",
         ));
     }
 
-    log::debug!("REALITY CLIENT: Certificate HMAC verified successfully");
+    log::debug!("TLS client: Certificate signature verified successfully");
     Ok(())
 }
 
