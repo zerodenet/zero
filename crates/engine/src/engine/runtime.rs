@@ -393,6 +393,7 @@ impl Engine {
                 zero_config::OutboundProtocolConfig::Block => "block",
                 zero_config::OutboundProtocolConfig::Socks5 { .. } => "socks5",
                 zero_config::OutboundProtocolConfig::Vless { .. } => "vless",
+                zero_config::OutboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
             })
     }
 }

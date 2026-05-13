@@ -239,6 +239,12 @@ impl From<&OutboundConfig> for OutboundExport {
                 server: Some(server.clone()),
                 port: Some(*port),
             },
+            OutboundProtocolConfig::Hysteria2 { server, port, .. } => Self {
+                tag: outbound.tag.clone(),
+                protocol: "hysteria2".to_owned(),
+                server: Some(server.clone()),
+                port: Some(*port),
+            },
         }
     }
 }
@@ -439,6 +445,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::HttpConnect => "http-connect",
         InboundProtocolConfig::Mixed { .. } => "mixed",
         InboundProtocolConfig::Vless { .. } => "vless",
+        InboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
     }
 }
 
@@ -447,6 +454,7 @@ fn protocol_name(protocol: ProtocolType) -> &'static str {
         ProtocolType::Socks5 => "socks5",
         ProtocolType::HttpConnect => "http-connect",
         ProtocolType::Vless => "vless",
+        ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Unknown => "unknown",
     }
 }

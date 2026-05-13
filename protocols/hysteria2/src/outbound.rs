@@ -1,0 +1,82 @@
+// Hysteria2 outbound protocol — outbound.rs
+
+#[cfg(feature = "quic")]
+use crate::shared::build_tcp_connect_header;
+use zero_core::{Error, ProtocolType, Session};
+use zero_traits::AsyncSocket;
+
+/// Hysteria2 outbound handler — sends auth and opens streams.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Hysteria2Outbound;
+
+impl Hysteria2Outbound {
+    pub fn protocol(&self) -> ProtocolType {
+        ProtocolType::Hysteria2
+    }
+
+    /// Send the authentication frame over a QUIC stream.
+    pub async fn send_auth<S: AsyncSocket>(
+        &self,
+        stream: &mut S,
+        hmac: &[u8; 32],
+    ) -> Result<(), Error> {
+        let frame = crate::shared::build_auth_frame(hmac);
+        stream
+            .write_all(&frame)
+            .await
+            .map_err(|_| Error::Io("hysteria2: failed to write auth"))
+    }
+
+    /// Read the authentication response from the server.
+    pub async fn read_auth_response<S: AsyncSocket>(&self, stream: &mut S) -> Result<(), Error> {
+        let mut buf = [0u8; 64];
+        let n = stream
+            .read(&mut buf)
+            .await
+            .map_err(|_| Error::Io("hysteria2: failed to read auth response"))?;
+        if n == 0 {
+            return Err(Error::Io("hysteria2: EOF reading auth response"));
+        }
+        crate::shared::parse_auth_response(&buf[..n])
+    }
+
+    /// Send a TCP connect request on a new stream.
+    #[cfg(feature = "quic")]
+    pub async fn send_tcp_connect<S: AsyncSocket>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+    ) -> Result<(), Error> {
+        let header = build_tcp_connect_header(&session.target, session.port)?;
+        stream
+            .write_all(&header)
+            .await
+            .map_err(|_| Error::Io("hysteria2: failed to write connect header"))
+    }
+
+    /// Read the TCP connect response.
+    #[cfg(feature = "quic")]
+    pub async fn read_connect_response<S: AsyncSocket>(
+        &self,
+        stream: &mut S,
+    ) -> Result<(), Error> {
+        let mut buf = [0u8; 256];
+        let n = stream
+            .read(&mut buf)
+            .await
+            .map_err(|_| Error::Io("hysteria2: failed to read connect response"))?;
+        if n == 0 {
+            return Err(Error::Io("hysteria2: EOF reading connect response"));
+        }
+        if buf[0] != 0x01 {
+            let err_msg = if n >= 3 {
+                let msg_len = u16::from_be_bytes([buf[1], buf[2]]) as usize;
+                alloc::string::String::from_utf8_lossy(&buf[3..(3 + msg_len).min(n)]).into_owned()
+            } else {
+                alloc::string::String::from("unknown")
+            };
+            return Err(Error::Protocol("hysteria2: connect rejected"));
+        }
+        Ok(())
+    }
+}

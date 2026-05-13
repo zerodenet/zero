@@ -74,6 +74,20 @@ pub(super) fn validate_inbound_protocol(
             }
             Ok(())
         }
+        InboundProtocolConfig::Hysteria2 {
+            password,
+            cert_path,
+            key_path,
+        } => {
+            validate_inbound_optional_non_empty("hysteria2 password", password)?;
+            if let Some(cert_path) = cert_path {
+                validate_inbound_optional_non_empty("hysteria2 cert_path", cert_path)?;
+            }
+            if let Some(key_path) = key_path {
+                validate_inbound_optional_non_empty("hysteria2 key_path", key_path)?;
+            }
+            Ok(())
+        }
     }
 }
 
@@ -150,6 +164,15 @@ pub(super) fn validate_outbound_protocol(
                     validate_outbound_optional_non_empty("vless quic.server_name", server_name)?;
                 }
             }
+            Ok(())
+        }
+        OutboundProtocolConfig::Hysteria2 {
+            server,
+            port,
+            password: _,
+            insecure: _,
+        } => {
+            validate_outbound_endpoint("hysteria2", server, *port)?;
             Ok(())
         }
         OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => Ok(()),

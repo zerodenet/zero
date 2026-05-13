@@ -6,3 +6,5 @@ mod mixed;
 mod socks5;
 #[cfg(feature = "inbound-vless")]
 mod vless;
+#[cfg(feature = "inbound-hysteria2")]
+mod hysteria2;

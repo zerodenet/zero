@@ -79,6 +79,17 @@ impl EnginePlan {
                     http_upgrade: http_upgrade.clone(),
                     quic: quic.clone(),
                 })),
+                OutboundProtocolConfig::Hysteria2 {
+                    server,
+                    port,
+                    password,
+                    insecure,
+                } => TargetKind::Outbound(Box::new(OutboundTarget::Hysteria2 {
+                    server: server.clone(),
+                    port: *port,
+                    password: password.clone(),
+                    insecure: *insecure,
+                })),
             };
 
             targets.push(TargetNode {
@@ -216,6 +227,12 @@ pub enum OutboundTarget {
         h2: Option<zero_config::H2Config>,
         http_upgrade: Option<zero_config::HttpUpgradeConfig>,
         quic: Option<zero_config::QuicConfig>,
+    },
+    Hysteria2 {
+        server: String,
+        port: u16,
+        password: String,
+        insecure: bool,
     },
 }
 

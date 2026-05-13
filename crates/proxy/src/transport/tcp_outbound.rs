@@ -26,6 +26,12 @@ pub(crate) enum EstablishedTcpOutbound {
         port: u16,
         upstream: TcpRelayStream,
     },
+    Hysteria2 {
+        tag: String,
+        server: String,
+        port: u16,
+        upstream: TcpRelayStream,
+    },
 }
 
 pub(crate) struct TcpOutboundFailure {
@@ -156,6 +162,26 @@ impl Proxy {
                     }),
                     Err(error) => Err(TcpOutboundFailure {
                         stage: "connect_upstream_vless",
+                        error,
+                        upstream_endpoint: Some((server.to_owned(), port)),
+                    }),
+                }
+            }
+            ResolvedLeafOutbound::Hysteria2 {
+                tag,
+                server,
+                port,
+                ..
+            } => {
+                match self.connect_via_hysteria2_upstream(session, server, port).await {
+                    Ok(upstream) => Ok(EstablishedTcpOutbound::Hysteria2 {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        upstream,
+                    }),
+                    Err(error) => Err(TcpOutboundFailure {
+                        stage: "connect_upstream_hysteria2",
                         error,
                         upstream_endpoint: Some((server.to_owned(), port)),
                     }),

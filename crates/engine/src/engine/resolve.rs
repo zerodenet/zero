@@ -34,6 +34,13 @@ pub enum ResolvedLeafOutbound<'a> {
         http_upgrade: Option<&'a zero_config::HttpUpgradeConfig>,
         quic: Option<&'a zero_config::QuicConfig>,
     },
+    Hysteria2 {
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        password: &'a str,
+        insecure: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,6 +161,18 @@ fn resolve_leaf_outbound<'a>(
             h2: h2.as_ref(),
             http_upgrade: http_upgrade.as_ref(),
             quic: quic.as_ref(),
+        },
+        OutboundTarget::Hysteria2 {
+            server,
+            port,
+            password,
+            insecure,
+        } => ResolvedLeafOutbound::Hysteria2 {
+            tag,
+            server,
+            port: *port,
+            password,
+            insecure: *insecure,
         },
     }
 }

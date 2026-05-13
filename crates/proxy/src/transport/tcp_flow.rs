@@ -20,6 +20,8 @@ pub(crate) enum TcpInboundProtocol {
     HttpConnect,
     #[cfg(feature = "inbound-vless")]
     Vless,
+    #[cfg(feature = "inbound-hysteria2")]
+    Hysteria2,
 }
 
 impl Proxy {
@@ -92,6 +94,12 @@ impl Proxy {
                 upstream,
             })
             | Ok(EstablishedTcpOutbound::Vless {
+                tag,
+                server,
+                port,
+                upstream,
+            })
+            | Ok(EstablishedTcpOutbound::Hysteria2 {
                 tag,
                 server,
                 port,
@@ -211,6 +219,10 @@ impl Proxy {
             TcpInboundProtocol::Vless => {
                 self.protocols.vless_inbound.send_response(client).await?;
             }
+            #[cfg(feature = "inbound-hysteria2")]
+            TcpInboundProtocol::Hysteria2 => {
+                // Hysteria2 uses QUIC, not TCP — this arm is unreachable
+            }
         }
 
         Ok(())
@@ -244,6 +256,8 @@ impl Proxy {
             TcpInboundProtocol::Vless => {
                 self.close_vless_client(client).await;
             }
+            #[cfg(feature = "inbound-hysteria2")]
+            TcpInboundProtocol::Hysteria2 => {}
         }
     }
 
@@ -275,6 +289,8 @@ impl Proxy {
             TcpInboundProtocol::Vless => {
                 self.close_vless_client(client).await;
             }
+            #[cfg(feature = "inbound-hysteria2")]
+            TcpInboundProtocol::Hysteria2 => {}
         }
     }
 }

@@ -197,6 +197,14 @@ pub enum InboundProtocolConfig {
         #[serde(default)]
         quic: Option<QuicConfig>,
     },
+    #[serde(rename = "hysteria2")]
+    Hysteria2 {
+        password: String,
+        #[serde(default)]
+        cert_path: Option<String>,
+        #[serde(default)]
+        key_path: Option<String>,
+    },
 }
 
 impl InboundProtocolConfig {
@@ -204,7 +212,7 @@ impl InboundProtocolConfig {
         match self {
             Self::Socks5 { users } => users,
             Self::Mixed { socks5_users } => socks5_users,
-            Self::HttpConnect | Self::Vless { .. } => &[],
+            Self::HttpConnect | Self::Vless { .. } | Self::Hysteria2 { .. } => &[],
         }
     }
 
@@ -514,6 +522,14 @@ pub enum OutboundProtocolConfig {
         http_upgrade: Option<HttpUpgradeConfig>,
         #[serde(default)]
         quic: Option<QuicConfig>,
+    },
+    #[serde(rename = "hysteria2")]
+    Hysteria2 {
+        server: String,
+        port: u16,
+        password: String,
+        #[serde(default)]
+        insecure: bool,
     },
 }
 

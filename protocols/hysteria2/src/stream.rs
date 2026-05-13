@@ -1,0 +1,75 @@
+// Hysteria2 QUIC stream wrapper — stream.rs
+//
+// Wraps a quinn SendStream + RecvStream into a single bidirectional
+// AsyncRead + AsyncWrite for use by the proxy relay layer.
+
+use std::io;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+
+use zero_traits::AsyncSocket;
+
+/// Bidirectional QUIC stream for Hysteria2 TCP relay.
+pub struct Hysteria2Stream {
+    send: quinn::SendStream,
+    recv: quinn::RecvStream,
+}
+
+impl Hysteria2Stream {
+    pub fn new(send: quinn::SendStream, recv: quinn::RecvStream) -> Self {
+        Self { send, recv }
+    }
+}
+
+impl AsyncRead for Hysteria2Stream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.recv).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for Hysteria2Stream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.send).poll_write(cx, buf).map_err(|e| io::Error::other(e))
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.send).poll_flush(cx).map_err(|e| io::Error::other(e))
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.send).poll_shutdown(cx).map_err(|e| io::Error::other(e))
+    }
+}
+
+impl AsyncSocket for Hysteria2Stream {
+    type Error = io::Error;
+
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        AsyncReadExt::read(self, buf).await
+    }
+
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        AsyncWriteExt::write_all(self, buf).await?;
+        AsyncWriteExt::flush(self).await
+    }
+
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        AsyncWriteExt::shutdown(self).await
+    }
+}

@@ -176,4 +176,31 @@ impl Proxy {
             feature: "outbound-vless",
         })
     }
+
+    #[cfg(feature = "outbound-hysteria2")]
+    pub(crate) async fn connect_via_hysteria2_upstream(
+        &self,
+        _session: &Session,
+        server: &str,
+        port: u16,
+    ) -> Result<TcpRelayStream, EngineError> {
+        let quic_stream =
+            crate::transport::connect_quic(server, port, true).await?;
+        Ok(TcpRelayStream::new(quic_stream))
+    }
+
+    #[cfg(not(feature = "outbound-hysteria2"))]
+    pub(crate) async fn connect_via_hysteria2_upstream(
+        &self,
+        _session: &Session,
+        _server: &str,
+        _port: u16,
+    ) -> Result<TcpRelayStream, EngineError> {
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "outbound",
+            tag: "hysteria2-upstream".to_owned(),
+            protocol: "hysteria2",
+            feature: "outbound-hysteria2",
+        })
+    }
 }

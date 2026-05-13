@@ -13,6 +13,7 @@ pub enum ProtocolType {
     Socks5,
     HttpConnect,
     Vless,
+    Hysteria2,
     Unknown,
 }
 

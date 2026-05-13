@@ -270,6 +270,26 @@ impl Proxy {
                     })
                 }
             }
+            InboundProtocolConfig::Hysteria2 { .. } => {
+                #[cfg(feature = "inbound-hysteria2")]
+                {
+                    let proxy = self.clone();
+                    let inbound = inbound.clone();
+                    let shutdown = shutdown_rx.clone();
+                    listeners
+                        .spawn(async move { proxy.run_hysteria2_listener(inbound, shutdown).await });
+                    Ok(())
+                }
+                #[cfg(not(feature = "inbound-hysteria2"))]
+                {
+                    Err(EngineError::CompiledFeatureDisabled {
+                        kind: "inbound",
+                        tag: inbound.tag.clone(),
+                        protocol: "hysteria2",
+                        feature: "inbound-hysteria2",
+                    })
+                }
+            }
         }
     }
 }

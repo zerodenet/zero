@@ -97,6 +97,14 @@ impl Proxy {
                 .into(),
                 upstream: None,
             }),
+            ResolvedLeafOutbound::Hysteria2 { .. } => Err(UdpCandidateFailure {
+                stage: "udp_hysteria2_outbound",
+                error: zero_core::Error::Unsupported(
+                    "Hysteria2 UDP outbound not yet implemented",
+                )
+                .into(),
+                upstream: None,
+            }),
         }
     }
 

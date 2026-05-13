@@ -14,15 +14,19 @@ full = [
     "inbound-http-connect",
     "inbound-mixed",
     "inbound-vless",
+    "inbound-hysteria2",
     "outbound-socks5",
     "outbound-vless",
+    "outbound-hysteria2",
 ]
 inbound-socks5 = ["zero-proxy/inbound-socks5"]
 inbound-http-connect = ["zero-proxy/inbound-http-connect"]
 inbound-mixed = ["zero-proxy/inbound-mixed"]
 inbound-vless = ["zero-proxy/inbound-vless"]
+inbound-hysteria2 = ["zero-proxy/inbound-hysteria2"]
 outbound-socks5 = ["zero-proxy/outbound-socks5"]
 outbound-vless = ["zero-proxy/outbound-vless"]
+outbound-hysteria2 = ["zero-proxy/outbound-hysteria2"]
 status-api = []
 event-dispatcher = ["dep:zero-connector", "zero-connector/event-dispatcher"]
 sink-jsonl = ["event-dispatcher", "zero-connector/sink-jsonl"]
@@ -41,6 +45,7 @@ members = [
     "protocols/socks5",
     "protocols/http-connect",
     "protocols/vless",
+    "protocols/hysteria2",
     "crates/engine",
 ]
 resolver = "2"

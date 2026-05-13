@@ -14,6 +14,10 @@ use zero_protocol_socks5::Socks5Outbound;
 use zero_protocol_vless::VlessInbound;
 #[cfg(feature = "outbound-vless")]
 use zero_protocol_vless::VlessOutbound;
+#[cfg(feature = "inbound-hysteria2")]
+use zero_protocol_hysteria2::Hysteria2Inbound;
+#[cfg(feature = "outbound-hysteria2")]
+use zero_protocol_hysteria2::Hysteria2Outbound;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ProtocolInventory {
@@ -27,6 +31,10 @@ pub struct ProtocolInventory {
     pub vless_inbound: VlessInbound,
     #[cfg(feature = "outbound-vless")]
     pub vless_outbound: VlessOutbound,
+    #[cfg(feature = "inbound-hysteria2")]
+    pub hysteria2_inbound: Hysteria2Inbound,
+    #[cfg(feature = "outbound-hysteria2")]
+    pub hysteria2_outbound: Hysteria2Outbound,
     pub(crate) direct_outbound: DirectConnector,
 }
 
@@ -46,6 +54,9 @@ impl ProtocolInventory {
         if cfg!(feature = "inbound-vless") {
             protocols.push("vless");
         }
+        if cfg!(feature = "inbound-hysteria2") {
+            protocols.push("hysteria2");
+        }
 
         protocols
     }
@@ -58,6 +69,9 @@ impl ProtocolInventory {
         }
         if cfg!(feature = "outbound-vless") {
             protocols.push("vless");
+        }
+        if cfg!(feature = "outbound-hysteria2") {
+            protocols.push("hysteria2");
         }
 
         protocols
@@ -99,6 +113,7 @@ impl ProtocolInventory {
             InboundProtocolConfig::HttpConnect => cfg!(feature = "inbound-http-connect"),
             InboundProtocolConfig::Mixed { .. } => cfg!(feature = "inbound-mixed"),
             InboundProtocolConfig::Vless { .. } => cfg!(feature = "inbound-vless"),
+            InboundProtocolConfig::Hysteria2 { .. } => cfg!(feature = "inbound-hysteria2"),
         }
     }
 
@@ -107,6 +122,7 @@ impl ProtocolInventory {
             OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => true,
             OutboundProtocolConfig::Socks5 { .. } => cfg!(feature = "outbound-socks5"),
             OutboundProtocolConfig::Vless { .. } => cfg!(feature = "outbound-vless"),
+            OutboundProtocolConfig::Hysteria2 { .. } => cfg!(feature = "outbound-hysteria2"),
         }
     }
 }
@@ -117,6 +133,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::HttpConnect => "http-connect",
         InboundProtocolConfig::Mixed { .. } => "mixed",
         InboundProtocolConfig::Vless { .. } => "vless",
+        InboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
     }
 }
 
@@ -126,6 +143,7 @@ fn inbound_protocol_feature(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::HttpConnect => "inbound-http-connect",
         InboundProtocolConfig::Mixed { .. } => "inbound-mixed",
         InboundProtocolConfig::Vless { .. } => "inbound-vless",
+        InboundProtocolConfig::Hysteria2 { .. } => "inbound-hysteria2",
     }
 }
 
@@ -135,6 +153,7 @@ fn outbound_protocol_name(protocol: &OutboundProtocolConfig) -> &'static str {
         OutboundProtocolConfig::Block => "block",
         OutboundProtocolConfig::Socks5 { .. } => "socks5",
         OutboundProtocolConfig::Vless { .. } => "vless",
+        OutboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
     }
 }
 
@@ -145,5 +164,6 @@ fn outbound_protocol_feature(protocol: &OutboundProtocolConfig) -> &'static str 
         }
         OutboundProtocolConfig::Socks5 { .. } => "outbound-socks5",
         OutboundProtocolConfig::Vless { .. } => "outbound-vless",
+        OutboundProtocolConfig::Hysteria2 { .. } => "outbound-hysteria2",
     }
 }

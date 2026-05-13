@@ -48,6 +48,21 @@ outbound-vless = [
     "dep:zero-protocol-vless",
     "zero-protocol-vless/reality",
 ]
+inbound-hysteria2 = [
+    "dep:quinn",
+    "dep:ring",
+    "dep:rustls",
+    "dep:rustls-pemfile",
+    "dep:zero-protocol-hysteria2",
+    "zero-protocol-hysteria2/quic",
+]
+outbound-hysteria2 = [
+    "dep:quinn",
+    "dep:ring",
+    "dep:rustls",
+    "dep:zero-protocol-hysteria2",
+    "zero-protocol-hysteria2/quic",
+]
 
 [dependencies]
 bytes = { version = "1", optional = true }
@@ -56,6 +71,7 @@ h2 = { version = "0.4", optional = true }
 http = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
 quinn = { version = "0.11", default-features = false, features = ["rustls-ring"], optional = true }
+ring = { version = "0.17", optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"], optional = true }
 rustls-pemfile = { version = "2", optional = true }
 tokio.workspace = true
@@ -70,6 +86,7 @@ zero-platform-tokio = { path = "../platform/tokio" }
 zero-protocol-http-connect = { path = "../../protocols/http-connect", optional = true }
 zero-protocol-socks5 = { path = "../../protocols/socks5", optional = true }
 zero-protocol-vless = { path = "../../protocols/vless", optional = true, default-features = false }
+zero-protocol-hysteria2 = { path = "../../protocols/hysteria2", optional = true, default-features = false }
 zero-traits = { path = "../traits" }
 
 [dev-dependencies]

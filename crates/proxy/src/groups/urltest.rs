@@ -255,6 +255,13 @@ impl Proxy {
                     )
                     .await?
                 }
+                ResolvedLeafOutbound::Hysteria2 {
+                    server, port, ..
+                } => {
+                    let quic_stream =
+                        crate::transport::connect_quic(server, port, true).await?;
+                    TcpRelayStream::new(quic_stream)
+                }
             };
 
             socket

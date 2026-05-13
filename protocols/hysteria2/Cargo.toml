@@ -1,0 +1,24 @@
+[package]
+name = "zero-protocol-hysteria2"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = []
+quic = ["dep:quinn", "dep:ring", "dep:rustls", "dep:rustls-pemfile", "dep:tokio"]
+
+[dependencies]
+quinn = { version = "0.11", optional = true }
+ring = { version = "0.17", optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"], optional = true }
+rustls-pemfile = { version = "2", optional = true }
+tokio = { workspace = true, optional = true }
+zero-core = { path = "../../crates/core" }
+zero-traits = { path = "../../crates/traits" }
+
+[dev-dependencies]
+tokio.workspace = true

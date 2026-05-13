@@ -62,10 +62,20 @@
 
 ### gRPC MultiMode ✅
 
-已实现：
-- `GrpcConfig.service_names: Vec<String>` + 自定义反序列化器（`"str"` 或 `["arr"]`）
-- `connect_grpc`: 随机选取 `service_names`
-- `accept_grpc`: 匹配任意 `expected_services`
+已实现。
+
+---
+
+## Hysteria2 协议 ✅ (2025-05-13)
+
+新协议已接入，基础框架完成：
+- `protocols/hysteria2/` crate（shared, inbound, outbound, stream, udp）
+- QUIC 入站监听器 + 密码认证
+- 出站 upstream（QUIC connect）
+- 配置模型 + engine 类型 + inventory 注册
+- 示例配置 `examples/v0.1.0/hysteria2.json`
+
+待完善：完整的 auth 流程（HMAC 验证）、TCP stream dispatch、UDP datagram 转发。
 
 ---
 
