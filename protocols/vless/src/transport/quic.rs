@@ -142,8 +142,20 @@ impl QuicInbound {
     }
 
     pub async fn accept(&self) -> Result<QuicStream, EngineError> {
-        let conn = self
-            .endpoint
+        let conn = self.accept_connection().await?;
+
+        let (send, recv) = conn
+            .accept_bi()
+            .await
+            .map_err(|e| EngineError::Io(io::Error::other(format!("quic accept stream: {e}"))))?;
+
+        Ok(QuicStream::new(send, recv))
+    }
+
+    /// Accept a raw QUIC connection — returns the full Connection for protocols
+    /// that need multi-stream support and key export (e.g. Hysteria2).
+    pub async fn accept_connection(&self) -> Result<quinn::Connection, EngineError> {
+        self.endpoint
             .accept()
             .await
             .ok_or_else(|| {
@@ -153,14 +165,7 @@ impl QuicInbound {
                 ))
             })?
             .await
-            .map_err(|e| EngineError::Io(io::Error::other(format!("quic accept: {e}"))))?;
-
-        let (send, recv) = conn
-            .accept_bi()
-            .await
-            .map_err(|e| EngineError::Io(io::Error::other(format!("quic accept stream: {e}"))))?;
-
-        Ok(QuicStream::new(send, recv))
+            .map_err(|e| EngineError::Io(io::Error::other(format!("quic connection: {e}"))))
     }
 }
 
