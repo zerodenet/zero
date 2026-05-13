@@ -60,15 +60,12 @@
 
 **工时估计：** 8-12h
 
-### gRPC MultiMode
+### gRPC MultiMode ✅
 
-gRPC 传输支持多服务名，连接时随机选取。
-
-**范围：**
-- `GrpcConfig.service_name` 从 `String` 改为 `Vec<String>`
-- `connect_grpc` / `accept_grpc` 支持多路径
-
-**工时估计：** 0.5h
+已实现：
+- `GrpcConfig.service_names: Vec<String>` + 自定义反序列化器（`"str"` 或 `["arr"]`）
+- `connect_grpc`: 随机选取 `service_names`
+- `accept_grpc`: 匹配任意 `expected_services`
 
 ---
 
