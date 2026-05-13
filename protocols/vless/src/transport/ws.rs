@@ -1,26 +1,22 @@
 use std::io;
-#[cfg(feature = "inbound-socks5")]
 use std::net::SocketAddr;
 
 use tokio::io::{AsyncRead, AsyncWrite};
-#[cfg(feature = "outbound-vless")]
 use tokio_tungstenite::tungstenite::http::Request;
-#[cfg(feature = "outbound-vless")]
 use zero_config::WebSocketConfig;
-#[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
-use super::ClientStream;
+use zero_platform_tokio::ClientStream;
 
-pub(crate) struct WebSocketSocket<S> {
+pub struct WebSocketSocket<S> {
     inner: tokio_tungstenite::WebSocketStream<S>,
     read_buffer: Vec<u8>,
     read_offset: usize,
 }
 
 impl<S> WebSocketSocket<S> {
-    pub(crate) fn new(inner: tokio_tungstenite::WebSocketStream<S>) -> Self {
+    pub fn new(inner: tokio_tungstenite::WebSocketStream<S>) -> Self {
         Self {
             inner,
             read_buffer: Vec::new(),
@@ -29,8 +25,7 @@ impl<S> WebSocketSocket<S> {
     }
 }
 
-#[cfg(feature = "inbound-vless")]
-pub(crate) async fn accept_ws<S>(
+pub async fn accept_ws<S>(
     stream: S,
     expected_path: &str,
 ) -> Result<WebSocketSocket<S>, EngineError>
@@ -61,8 +56,7 @@ where
     Ok(WebSocketSocket::new(ws_stream))
 }
 
-#[cfg(feature = "outbound-vless")]
-pub(crate) async fn connect_ws<S>(
+pub async fn connect_ws<S>(
     stream: S,
     ws: &WebSocketConfig,
     server: &str,
@@ -244,7 +238,6 @@ impl<S> ClientStream for WebSocketSocket<S>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + Sync,
 {
-    #[cfg(feature = "inbound-socks5")]
     fn local_addr(&self) -> io::Result<SocketAddr> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,

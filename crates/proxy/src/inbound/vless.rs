@@ -1,27 +1,35 @@
 use std::collections::HashMap;
+use std::io;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{error, info, warn};
 use zero_config::{InboundRealityConfig, VlessUserConfig};
-use zero_core::Address;
-use zero_platform_tokio::TokioDatagramSocket;
+use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
 use zero_protocol_vless::build_udp_packet;
 use zero_protocol_vless::RealityServerOptions;
 use zero_protocol_vless::{VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
 use crate::outbound::direct::{resolve_udp_target, send_direct_udp_packet};
-use crate::outbound::vless::{VlessUdpTransport};
-use crate::runtime::{log_completed_udp_flow, UdpFlowOutbound, UdpSessionFlows};
+use crate::runtime::udp_associate::sessions::UdpSessionFlows;
+use zero_protocol_vless::VlessUdpTransport;
+use crate::runtime::{log_completed_udp_flow, UdpFlowOutbound};
 
 use super::super::logging::log_listener_connection_error;
 use super::super::runtime::{bind_listener, Proxy};
-use super::super::transport::{accept_ws, build_tls_acceptor, InboundTlsStream};
+use super::super::transport::{
+    accept_ws, build_tls_acceptor, InboundTlsStream, PrefixedSocket,
+};
 use crate::transport::{
-    ClientStream, EstablishedTcpOutbound, MeteredStream, TcpInboundProtocol, TcpRelayStream,
+    relay_bidirectional_metered, ClientStream, EstablishedTcpOutbound, MeteredStream,
+    TcpInboundProtocol, TcpRelayStream,
 };
 use zero_engine::EngineError;
 
@@ -54,12 +62,14 @@ impl Proxy {
                 );
 
                 let mut connections = JoinSet::new();
+                let fallback_config = inbound.protocol.vless_fallback().cloned();
                 return Self::run_vless_quic_accept_loop(
                     self,
                     &inbound,
                     &quic_inbound,
                     &mut shutdown,
                     &mut connections,
+                    fallback_config,
                 )
                 .await;
             }
@@ -76,6 +86,9 @@ impl Proxy {
         let reality_config = inbound.protocol.vless_reality().cloned();
         let ws_config = inbound.protocol.vless_ws().cloned();
         let grpc_config = inbound.protocol.vless_grpc().cloned();
+        let h2_config = inbound.protocol.vless_h2().cloned();
+        let http_upgrade_config = inbound.protocol.vless_http_upgrade().cloned();
+        let fallback_config = inbound.protocol.vless_fallback().cloned();
         let mut connections = JoinSet::new();
 
         info!(
@@ -86,6 +99,8 @@ impl Proxy {
             reality = reality_config.is_some(),
             ws = ws_config.is_some(),
             grpc = grpc_config.is_some(),
+            http_upgrade = http_upgrade_config.is_some(),
+            fallback = fallback_config.is_some(),
             "inbound listener ready"
         );
 
@@ -107,23 +122,80 @@ impl Proxy {
                     let reality_config = reality_config.clone();
                     let ws_config = ws_config.clone();
                     let grpc_config = grpc_config.clone();
+                    let h2_config = h2_config.clone();
+                    let http_upgrade_config = http_upgrade_config.clone();
+                    let fallback_config = fallback_config.clone();
 
                     connections.spawn(async move {
                         let result = match (tls_acceptor, reality_config) {
                             (Some(acceptor), None) => {
-                                match acceptor.accept(stream.into_inner()).await {
-                                    Ok(tls_stream) => {
-                                        engine
-                                            .handle_vless_stream(
-                                                InboundTlsStream::new(tls_stream),
-                                                inbound_tag.as_str(),
-                                                &vless_users,
-                                                ws_config.as_ref(),
-                                                grpc_config.as_ref(),
-                                            )
-                                            .await
+                                // Only peek ClientHello when ALPN fallback is configured
+                                let needs_peek = fallback_config.as_ref()
+                                    .and_then(|fb| fb.alpn.as_ref())
+                                    .is_some();
+
+                                if needs_peek {
+                                    let mut raw = stream.into_inner();
+                                    let hello = match crate::transport::tls_hello::peek_client_hello(
+                                        &mut raw,
+                                    ).await {
+                                        Ok(h) => h,
+                                        Err(_) => {
+                                            // Not valid TLS — fall through to direct accept
+                                            return match acceptor.accept(raw).await {
+                                                Ok(tls_stream) => engine.handle_vless_stream(
+                                                    InboundTlsStream::new(tls_stream),
+                                                    inbound_tag.as_str(), &vless_users,
+                                                    ws_config.as_ref(), grpc_config.as_ref(),
+                                                    h2_config.as_ref(),
+                                                    http_upgrade_config.as_ref(), fallback_config.as_ref(),
+                                                ).await,
+                                                Err(error) => Err(error.into()),
+                                            };
+                                        }
+                                    };
+
+                                    // Check ALPN match
+                                    let fb = fallback_config.as_ref().unwrap();
+                                    let expected_alpn = fb.alpn.as_ref().unwrap();
+                                    if hello.alpn.iter().any(|a| a == expected_alpn) {
+                                        let mut upstream = engine.protocols.direct_outbound
+                                            .connect_host(&fb.server, fb.port, &engine.resolver)
+                                            .await?;
+                                        tokio::io::AsyncWriteExt::write_all(
+                                            &mut upstream, &hello.consumed,
+                                        ).await?;
+                                        return engine.relay_fallback_no_tls(
+                                            TokioSocket::new(raw), upstream,
+                                        ).await;
                                     }
-                                    Err(error) => Err(error.into()),
+
+                                    // ALPN didn't match — continue with TLS accept, replay bytes
+                                    let prefixed = PrefixedSocket::from_prefix(
+                                        TokioSocket::new(raw), hello.consumed,
+                                    );
+                                    match acceptor.accept(prefixed).await {
+                                        Ok(tls_stream) => engine.handle_vless_stream(
+                                            InboundTlsStream::new_generic(tls_stream),
+                                            inbound_tag.as_str(), &vless_users,
+                                            ws_config.as_ref(), grpc_config.as_ref(),
+                                            h2_config.as_ref(),
+                                            http_upgrade_config.as_ref(), fallback_config.as_ref(),
+                                        ).await,
+                                        Err(error) => Err(error.into()),
+                                    }
+                                } else {
+                                    // No ALPN fallback — direct TLS accept
+                                    match acceptor.accept(stream.into_inner()).await {
+                                        Ok(tls_stream) => engine.handle_vless_stream(
+                                            InboundTlsStream::new(tls_stream),
+                                            inbound_tag.as_str(), &vless_users,
+                                            ws_config.as_ref(), grpc_config.as_ref(),
+                                            h2_config.as_ref(),
+                                            http_upgrade_config.as_ref(), fallback_config.as_ref(),
+                                        ).await,
+                                        Err(error) => Err(error.into()),
+                                    }
                                 }
                             }
                             (None, Some(reality)) => {
@@ -136,6 +208,9 @@ impl Proxy {
                                                 &vless_users,
                                                 ws_config.as_ref(),
                                                 grpc_config.as_ref(),
+                                            h2_config.as_ref(),
+                                            http_upgrade_config.as_ref(),
+                                            fallback_config.as_ref(),
                                             )
                                             .await
                                     }
@@ -150,6 +225,9 @@ impl Proxy {
                                         &vless_users,
                                         ws_config.as_ref(),
                                         grpc_config.as_ref(),
+                                        h2_config.as_ref(),
+                                        http_upgrade_config.as_ref(),
+                                        fallback_config.as_ref(),
                                     )
                                     .await
                             }
@@ -160,14 +238,15 @@ impl Proxy {
                             .into()),
                         };
 
-                        if let Err(error) = result {
+                        if let Err(ref error) = result {
                             log_listener_connection_error(
                                 "vless",
                                 inbound_tag.as_str(),
                                 &remote_addr,
-                                &error,
+                                error,
                             );
                         }
+                        result
                     });
                 }
                 result = connections.join_next(), if !connections.is_empty() => {
@@ -205,6 +284,7 @@ impl Proxy {
         quic_inbound: &crate::transport::QuicInbound,
         shutdown: &mut watch::Receiver<bool>,
         connections: &mut JoinSet<Result<(), EngineError>>,
+        fallback_config: Option<zero_config::FallbackConfig>,
     ) -> Result<(), EngineError> {
         loop {
             tokio::select! {
@@ -221,13 +301,14 @@ impl Proxy {
                             let engine = self.clone();
                             let inbound_tag = inbound.tag.clone();
                             let vless_users = inbound.protocol.vless_users().to_vec();
+                            let fallback_config = fallback_config.clone();
 
                             connections.spawn(async move {
                                 let result = engine
                                     .handle_vless_client(
                                         quic_stream,
                                         inbound_tag.as_str(),
-                                        &vless_users,
+                                        &vless_users, fallback_config.as_ref(),
                                     )
                                     .await;
 
@@ -284,25 +365,37 @@ impl Proxy {
         users: &[VlessUserConfig],
         ws_config: Option<&zero_config::WebSocketConfig>,
         grpc_config: Option<&zero_config::GrpcConfig>,
+        h2_config: Option<&zero_config::H2Config>,
+        http_upgrade_config: Option<&zero_config::HttpUpgradeConfig>,
+        fallback: Option<&zero_config::FallbackConfig>,
     ) -> Result<(), EngineError>
     where
         S: ClientStream + 'static,
     {
-        match (ws_config, grpc_config) {
-            (Some(ws), None) => {
+        if let Some(cfg) = http_upgrade_config {
+            let upg_stream = crate::transport::accept_http_upgrade(stream, cfg).await?;
+            return self.handle_vless_client(upg_stream, inbound_tag, users, fallback).await;
+        }
+        match (ws_config, grpc_config, h2_config) {
+            (Some(ws), None, None) => {
                 let ws_stream = accept_ws(stream, &ws.path).await?;
-                self.handle_vless_client(ws_stream, inbound_tag, users)
+                self.handle_vless_client(ws_stream, inbound_tag, users, fallback)
                     .await
             }
-            (None, Some(grpc)) => {
-                let grpc_stream = crate::transport::accept_grpc(stream, &grpc.service_name).await?;
-                self.handle_vless_client(grpc_stream, inbound_tag, users)
+            (None, Some(grpc), None) => {
+                let grpc_stream = crate::transport::accept_grpc(stream, &grpc.service_names).await?;
+                self.handle_vless_client(grpc_stream, inbound_tag, users, fallback)
                     .await
             }
-            (None, None) => self.handle_vless_client(stream, inbound_tag, users).await,
+            (None, None, Some(h2)) => {
+                let h2_stream = crate::transport::accept_h2(stream, h2).await?;
+                self.handle_vless_client(h2_stream, inbound_tag, users, fallback)
+                    .await
+            }
+            (None, None, None) => self.handle_vless_client(stream, inbound_tag, users, fallback).await,
             _ => Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "vless inbound: ws and grpc are mutually exclusive",
+                "vless inbound: ws, grpc, and h2 are mutually exclusive",
             ))),
         }
     }
@@ -312,17 +405,32 @@ impl Proxy {
         client: S,
         inbound_tag: &str,
         users: &[VlessUserConfig],
+        fallback: Option<&zero_config::FallbackConfig>,
     ) -> Result<(), EngineError>
     where
         S: ClientStream,
     {
-        let mut client = MeteredStream::new(client);
+        let mut metered = MeteredStream::new(RecordingStream::new(client));
         let auth = ConfiguredVlessUsers { users };
-        let (session, uuid) = self
+        let result = self
             .protocols
             .vless_inbound
-            .accept_tcp_with_auth_and_id(&mut client, &auth)
-            .await?;
+            .accept_tcp_with_auth_and_id(&mut metered, &auth)
+            .await;
+
+        let (session, uuid) = match result {
+            Ok(x) => x,
+            Err(auth_error) => {
+                if let Some(fb) = fallback {
+                    let (inner, head) = metered.into_inner().into_parts();
+                    return self.relay_fallback(inner, head, fb).await;
+                }
+                return Err(EngineError::Core(auth_error));
+            }
+        };
+
+        let (inner_stream, _head) = metered.into_inner().into_parts();
+        let client = MeteredStream::new(inner_stream);
 
         if zero_protocol_vless::VlessInbound::is_mux_session(&session) {
             self.handle_vless_mux_session(client, inbound_tag, uuid)
@@ -682,7 +790,7 @@ impl Proxy {
         use zero_protocol_vless::parse_udp_packet;
 
         let udp_packet = parse_udp_packet(packet)?;
-        let flow_key = (udp_packet.target.clone(), udp_packet.port);
+        let _flow_key = (udp_packet.target.clone(), udp_packet.port);
 
         // Check if we already have an upstream connection for this target
         if let Some(handle) = vless_manager.get(&udp_packet.target, udp_packet.port) {
@@ -764,18 +872,20 @@ impl Proxy {
                 ws,
                 grpc,
                 h2,
+                http_upgrade,
                 quic,
                 ..
             } => {
                 session.outbound_tag = Some(tag.to_owned());
                 self.set_session_outbound(&session);
 
-                let transport = crate::outbound::vless::VlessUdpTransport {
+                let transport = zero_protocol_vless::VlessUdpTransport {
                     tls,
                     reality,
                     ws,
                     grpc,
                     h2,
+                    http_upgrade,
                     quic,
                 };
 
@@ -819,6 +929,119 @@ impl Proxy {
 
         Ok(())
     }
+    /// Relay a raw TCP stream (post-ClientHello) to a fallback target.
+    /// The ClientHello bytes were already written by the caller.
+    async fn relay_fallback_no_tls(
+        &self,
+        client: impl AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        upstream: TokioSocket,
+    ) -> Result<(), EngineError> {
+        let metered_client = MeteredStream::new(client);
+        let metered_upstream = MeteredStream::new(upstream);
+        let result = relay_bidirectional_metered(metered_client, metered_upstream, |_| {}, |_| {}).await;
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::NotConnected
+                || e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+            Err(e) => Err(EngineError::Io(e)),
+        }
+    }
+
+    /// Relay to fallback: replay captured VLESS header bytes, then relay.
+    async fn relay_fallback<S>(
+        &self,
+        client_stream: S,
+        head: Vec<u8>,
+        fallback: &zero_config::FallbackConfig,
+    ) -> Result<(), EngineError>
+    where
+        S: ClientStream,
+    {
+        let mut upstream = self
+            .protocols
+            .direct_outbound
+            .connect_host(&fallback.server, fallback.port, &self.resolver)
+            .await?;
+
+        if !head.is_empty() {
+            tokio::io::AsyncWriteExt::write_all(&mut upstream, &head).await?;
+        }
+
+        let metered_client = MeteredStream::new(client_stream);
+        let metered_upstream = MeteredStream::new(upstream);
+
+        let result = relay_bidirectional_metered(
+            metered_client,
+            metered_upstream,
+            |_| {},
+            |_| {},
+        )
+        .await;
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::NotConnected
+                || e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+            Err(e) => Err(EngineError::Io(e)),
+        }
+    }
+}
+
+// ── Fallback helpers ──
+
+/// Wraps an inner stream and records all bytes read, for replay to a
+/// fallback target when VLESS authentication fails.
+struct RecordingStream<S> {
+    inner: S,
+    recorded: Vec<u8>,
+}
+
+impl<S> RecordingStream<S> {
+    fn new(inner: S) -> Self {
+        Self { inner, recorded: Vec::with_capacity(128) }
+    }
+    fn into_parts(self) -> (S, Vec<u8>) {
+        (self.inner, self.recorded)
+    }
+}
+
+impl<S> AsyncRead for RecordingStream<S> where S: AsyncRead + Unpin {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        let prev = buf.filled().len();
+        let result = Pin::new(&mut self.inner).poll_read(cx, buf);
+        if let Poll::Ready(Ok(())) = &result {
+            let n = buf.filled().len() - prev;
+            if n > 0 { self.recorded.extend_from_slice(&buf.filled()[prev..]); }
+        }
+        result
+    }
+}
+
+impl<S> AsyncWrite for RecordingStream<S> where S: AsyncWrite + Unpin {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.inner).poll_write(cx, buf)
+    }
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+impl<S> AsyncSocket for RecordingStream<S> where S: AsyncSocket<Error = io::Error> + Send + Sync {
+    type Error = io::Error;
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        let n = self.inner.read(buf).await?;
+        self.recorded.extend_from_slice(&buf[..n]);
+        Ok(n)
+    }
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> { self.inner.write_all(buf).await }
+    async fn shutdown(&mut self) -> Result<(), Self::Error> { self.inner.shutdown().await }
+}
+
+impl<S> ClientStream for RecordingStream<S> where S: ClientStream + Send + Sync {
+    fn local_addr(&self) -> io::Result<SocketAddr> { self.inner.local_addr() }
 }
 
 async fn upgrade_vless_reality_server<S>(

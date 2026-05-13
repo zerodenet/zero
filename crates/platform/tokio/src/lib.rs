@@ -204,3 +204,126 @@ fn socket_addr_from_ip(ip: IpAddress, port: u16) -> SocketAddr {
         IpAddress::V6(bytes) => SocketAddr::new(IpAddr::V6(bytes.into()), port),
     }
 }
+
+// ── ClientStream & TcpRelayStream ──
+
+/// A bidirectional client stream that can report its local address.
+pub trait ClientStream:
+    AsyncSocket<Error = io::Error> + AsyncRead + AsyncWrite + Send + Sync + Unpin
+{
+    fn local_addr(&self) -> io::Result<SocketAddr>;
+}
+
+impl ClientStream for TokioSocket {
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.local_addr()
+    }
+}
+
+/// Type-erased bidirectional relay stream.
+///
+/// Wraps any `AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static` stream
+/// behind a `Box<dyn>` so callers can return different concrete stream types
+/// from the same function.
+pub struct TcpRelayStream {
+    inner: Box<dyn RelayIo>,
+}
+
+trait RelayIo: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
+
+impl<T> RelayIo for T where T: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static {}
+
+impl TcpRelayStream {
+    pub fn new<S>(stream: S) -> Self
+    where
+        S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
+    {
+        Self {
+            inner: Box::new(stream),
+        }
+    }
+}
+
+impl From<TokioSocket> for TcpRelayStream {
+    fn from(socket: TokioSocket) -> Self {
+        Self::new(socket)
+    }
+}
+
+impl AsyncSocket for TcpRelayStream {
+    type Error = io::Error;
+
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        AsyncReadExt::read(&mut self.inner, buf).await
+    }
+
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        AsyncWriteExt::write_all(&mut self.inner, buf).await?;
+        AsyncWriteExt::flush(&mut self.inner).await
+    }
+
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        AsyncWriteExt::shutdown(&mut self.inner).await
+    }
+}
+
+impl AsyncRead for TcpRelayStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for TcpRelayStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+// ── TransportConnector trait ──
+
+/// Establishes transport-layer connections over raw TCP sockets.
+///
+/// Protocol crates implement this to wrap a connected [`TokioSocket`] with
+/// their transport (TLS, WebSocket, gRPC, H2, etc.).  Callers inject the
+/// transport configuration at construction time and call
+/// [`TransportConnector::connect`] for each socket.
+#[allow(async_fn_in_trait)]
+pub trait TransportConnector: Send + Sync {
+    /// The concrete bidirectional stream type, e.g. [`TcpRelayStream`].
+    type Stream;
+
+    /// Wrap `socket` with the transport layer and return a stream
+    /// connected to `server:port`.
+    async fn connect(
+        &self,
+        socket: TokioSocket,
+        server: &str,
+        port: u16,
+    ) -> io::Result<Self::Stream>;
+}
+
+/// Resolves a host and establishes a raw TCP connection.
+///
+/// Used by connection pools and protocol handlers to obtain connected
+/// [`TokioSocket`]s for further transport wrapping.
+#[allow(async_fn_in_trait)]
+pub trait TcpConnector: Send + Sync {
+    /// Resolve `host` and connect to `host:port`, returning a connected socket.
+    async fn connect(&self, host: &str, port: u16) -> io::Result<TokioSocket>;
+}

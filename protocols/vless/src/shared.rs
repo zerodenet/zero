@@ -249,6 +249,141 @@ pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<
     Ok(packet)
 }
 
+// ── VLESS UDP packet v2 ──
+
+/// Flags for v2 UDP packet encoding.
+const UDP_V2_HAS_ADDR: u8 = 0x01;
+
+/// V2 magic marker — two zero bytes that can never occur in v1 (port 0 is
+/// invalid), making auto-detection unambiguous.
+const UDP_V2_MARKER: [u8; 2] = [0x00, 0x00];
+
+/// Parse a VLESS UDP packet, auto-detecting v1 or v2 format.
+///
+/// v1: `[port:2][atyp:1][addr…][payload]`
+/// v2: `[0x00:2][flags:1][port:2][atyp:1][addr… (if flags&1)][payload]`
+///
+/// When `flags & 1 == 0` (no address in v2), the caller must provide the
+/// previously resolved `cached_target` / `cached_port`.
+pub fn parse_udp_packet_v2(
+    packet: &[u8],
+    cached_target: Option<&Address>,
+    cached_port: Option<u16>,
+) -> Result<VlessUdpPacket, Error> {
+    if packet.len() < 3 {
+        return Err(Error::Protocol("VLESS UDP packet is too short"));
+    }
+
+    // Auto-detect: v2 starts with [0x00, 0x00], v1 starts with port
+    if packet[0] == UDP_V2_MARKER[0] && packet[1] == UDP_V2_MARKER[1] {
+        parse_udp_v2(packet, cached_target, cached_port)
+    } else {
+        parse_udp_packet(packet)
+    }
+}
+
+fn parse_udp_v2(
+    packet: &[u8],
+    cached_target: Option<&Address>,
+    cached_port: Option<u16>,
+) -> Result<VlessUdpPacket, Error> {
+    let flags = packet[2];
+    let has_addr = flags & UDP_V2_HAS_ADDR != 0;
+
+    if has_addr {
+        // Full address present: [marker:2][flags:1][port:2][atyp:1][addr…][payload]
+        if packet.len() < 8 {
+            return Err(Error::Protocol("VLESS UDP v2 packet is too short"));
+        }
+        let port = u16::from_be_bytes([packet[3], packet[4]]);
+        let atyp = packet[5];
+        let (target, addr_len) = parse_addr_from_packet(atyp, &packet[6..])?;
+        let payload = packet[6 + addr_len..].to_vec();
+        Ok(VlessUdpPacket {
+            target,
+            port,
+            payload,
+        })
+    } else {
+        // Address omitted — reuse cached: [marker:2][flags:1][payload]
+        let target = cached_target
+            .ok_or_else(|| Error::Protocol("VLESS UDP v2: no cached target"))?
+            .clone();
+        let port = cached_port
+            .ok_or_else(|| Error::Protocol("VLESS UDP v2: no cached port"))?;
+        Ok(VlessUdpPacket {
+            target,
+            port,
+            payload: packet[3..].to_vec(),
+        })
+    }
+}
+
+fn parse_addr_from_packet(atyp: u8, data: &[u8]) -> Result<(Address, usize), Error> {
+    match atyp {
+        ATYP_IPV4 => {
+            if data.len() < 4 {
+                return Err(Error::Protocol("VLESS UDP v2 IPv4 address is truncated"));
+            }
+            let mut bytes = [0_u8; 4];
+            bytes.copy_from_slice(&data[..4]);
+            Ok((Address::Ipv4(bytes), 4))
+        }
+        ATYP_IPV6 => {
+            if data.len() < 16 {
+                return Err(Error::Protocol("VLESS UDP v2 IPv6 address is truncated"));
+            }
+            let mut bytes = [0_u8; 16];
+            bytes.copy_from_slice(&data[..16]);
+            Ok((Address::Ipv6(bytes), 16))
+        }
+        ATYP_DOMAIN => {
+            if data.is_empty() {
+                return Err(Error::Protocol("VLESS UDP v2 domain packet is truncated"));
+            }
+            let len = data[0] as usize;
+            if len == 0 || data.len() < 1 + len {
+                return Err(Error::Protocol("VLESS UDP v2 domain packet is truncated"));
+            }
+            let domain = String::from_utf8(data[1..1 + len].to_vec())
+                .map_err(|_| Error::Protocol("VLESS UDP v2 domain is not valid UTF-8"))?;
+            Ok((Address::Domain(domain), 1 + len))
+        }
+        _ => Err(Error::Unsupported(
+            "VLESS UDP v2 address type is not supported",
+        )),
+    }
+}
+
+/// Build a VLESS UDP packet in v2 format.
+///
+/// When `omit_address` is true and a valid `cached` address/port would be
+/// reused by the peer, the address section is omitted, saving 3–21 bytes.
+pub fn build_udp_packet_v2(
+    address: &Address,
+    port: u16,
+    payload: &[u8],
+    omit_address: bool,
+) -> Result<Vec<u8>, Error> {
+    if omit_address {
+        // [marker:2][flags(0x00):1][payload]
+        let mut packet = Vec::with_capacity(3 + payload.len());
+        packet.extend_from_slice(&UDP_V2_MARKER);
+        packet.push(0x00); // flags: no address
+        packet.extend_from_slice(payload);
+        Ok(packet)
+    } else {
+        // [marker:2][flags(0x01):1][port:2][atyp:1][addr…][payload]
+        let mut packet = Vec::with_capacity(6 + 1 + payload.len());
+        packet.extend_from_slice(&UDP_V2_MARKER);
+        packet.push(UDP_V2_HAS_ADDR);
+        packet.extend_from_slice(&port.to_be_bytes());
+        write_address(&mut packet, address)?;
+        packet.extend_from_slice(payload);
+        Ok(packet)
+    }
+}
+
 fn hex_char(value: u8) -> char {
     match value {
         0..=9 => char::from(b'0' + value),

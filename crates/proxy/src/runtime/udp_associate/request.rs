@@ -2,19 +2,17 @@ use std::time::Instant;
 
 use zero_core::{Network, ProtocolType, Session};
 use zero_engine::{EngineError, ResolvedOutbound, SessionOutcome};
-use zero_platform_tokio::TokioDatagramSocket;
 use zero_protocol_socks5::parse_udp_packet;
 
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
 use crate::runtime::Proxy;
 use crate::transport::StreamTraffic;
-use tracing::warn;
 
 use super::context::{
     ExistingUdpFlowContext, Socks5UdpPacketContext, UdpCandidateContext, UdpCandidateStart,
     UdpRequestContext,
 };
-use super::sessions::{UdpFlowOutbound, UdpFlowSnapshot, UdpSessionFlows};
+use super::sessions::{UdpFlowOutbound, UdpFlowSnapshot};
 
 impl Proxy {
     pub(super) async fn handle_socks5_udp_request(

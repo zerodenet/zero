@@ -345,27 +345,5 @@ pub fn write_record_header(record_type: u8, length: u16) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::super::common::CONTENT_TYPE_HANDSHAKE;
-    use super::*;
-
-    #[test]
-    fn test_construct_finished() {
-        let verify_data = vec![0xCCu8; 32];
-        let result = construct_finished(&verify_data);
-        assert!(result.is_ok());
-        let msg = result.unwrap();
-        assert_eq!(msg[0], HANDSHAKE_TYPE_FINISHED);
-        assert_eq!(msg.len(), 1 + 3 + 32); // type + length + verify_data
-    }
-
-    #[test]
-    fn test_write_record_header() {
-        let header = write_record_header(CONTENT_TYPE_HANDSHAKE, 100);
-        assert_eq!(header.len(), 5);
-        assert_eq!(header[0], 0x16); // Handshake
-        assert_eq!(header[1], 0x03); // TLS 1.2
-        assert_eq!(header[2], 0x03);
-        assert_eq!(u16::from_be_bytes([header[3], header[4]]), 100);
-    }
-}
+#[path = "../../tests/reality_tls13_messages_tests.rs"]
+mod tests;

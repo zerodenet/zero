@@ -6,20 +6,20 @@
 // Max frame payload: 16384 bytes (within single TLS record boundary).
 
 use std::io;
-#[cfg(feature = "inbound-socks5")]
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::Bytes;
 use http::{Method, Request, Response};
+use rand::seq::IndexedRandom;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
 
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
-use super::ClientStream;
+use zero_platform_tokio::ClientStream;
 
 const GRPC_HEADER_LEN: usize = 5;
 const GRPC_MAX_PAYLOAD: usize = 16384;
@@ -39,7 +39,7 @@ fn parse_grpc_frame_header(header: &[u8; GRPC_HEADER_LEN]) -> (bool, usize) {
 }
 
 /// Bidirectional gRPC stream wrapping h2 send/recv halves via internal channels.
-pub(crate) struct GrpcStream {
+pub struct GrpcStream {
     read_rx: mpsc::Receiver<Vec<u8>>,
     write_tx: mpsc::Sender<Vec<u8>>,
     read_buffer: Vec<u8>,
@@ -61,10 +61,9 @@ impl GrpcStream {
 
 // ── client (outbound) connect ──
 
-#[cfg(feature = "outbound-vless")]
-pub(crate) async fn connect_grpc<S>(
+pub async fn connect_grpc<S>(
     stream: S,
-    service_name: &str,
+    service_names: &[String],
 ) -> Result<GrpcStream, EngineError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -79,9 +78,15 @@ where
         }
     });
 
+    // Pick a random service name
+    let name = service_names
+        .choose(&mut rand::rng())
+        .map(|s| s.as_str())
+        .unwrap_or("/v2ray.core.proxy.vless.encap.GrpcService/Tun");
+
     let request = Request::builder()
         .method(Method::POST)
-        .uri(service_name)
+        .uri(name)
         .header("content-type", "application/grpc")
         .header("te", "trailers")
         .body(())
@@ -111,10 +116,9 @@ where
 
 // ── server (inbound) accept ──
 
-#[cfg(feature = "inbound-vless")]
-pub(crate) async fn accept_grpc<S>(
+pub async fn accept_grpc<S>(
     stream: S,
-    expected_service: &str,
+    expected_services: &[String],
 ) -> Result<GrpcStream, EngineError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -136,7 +140,7 @@ where
         .map_err(|e| EngineError::Io(io::Error::other(format!("h2 accept: {e}"))))?;
 
     let path = request.uri().path();
-    if path != expected_service {
+    if !expected_services.iter().any(|s| s == path) {
         let mut resp = Response::new(());
         *resp.status_mut() = http::StatusCode::NOT_FOUND;
         respond
@@ -144,7 +148,7 @@ where
             .map_err(|e| EngineError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
         return Err(EngineError::Io(io::Error::new(
             io::ErrorKind::ConnectionRefused,
-            format!("grpc path mismatch: expected {expected_service}, got {path}"),
+            format!("grpc path mismatch: got {path}"),
         )));
     }
 
@@ -340,7 +344,6 @@ impl AsyncSocket for GrpcStream {
 }
 
 impl ClientStream for GrpcStream {
-    #[cfg(feature = "inbound-socks5")]
     fn local_addr(&self) -> io::Result<SocketAddr> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,

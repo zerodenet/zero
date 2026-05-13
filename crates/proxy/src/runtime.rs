@@ -21,7 +21,6 @@ pub(crate) mod upstream;
 
 pub(crate) use udp_associate::helpers::log_completed_udp_flow;
 pub(crate) use udp_associate::sessions::UdpFlowOutbound;
-pub(crate) use udp_associate::sessions::UdpSessionFlows;
 
 #[derive(Debug, Clone)]
 pub struct Proxy {

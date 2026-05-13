@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use zero_core::{Error, InboundHandler, Network, ProtocolType, Session};
+use zero_core::{Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::parse::{first_line, parse_connect_request};
@@ -84,15 +84,6 @@ impl HttpConnectInbound {
         self.send_response(stream, HttpConnectResponse::ConnectionEstablished)
             .await?;
         Ok(session)
-    }
-}
-
-impl<S> InboundHandler<S> for HttpConnectInbound
-where
-    S: AsyncSocket,
-{
-    async fn handshake(&self, stream: &mut S) -> Result<Session, Error> {
-        Self::handshake(self, stream).await
     }
 }
 

@@ -4,7 +4,6 @@
 // Simpler than gRPC transport: bytes flow directly in DATA frames.
 
 use std::io;
-#[cfg(feature = "inbound-socks5")]
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -18,10 +17,10 @@ use zero_config::H2Config;
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
-use super::ClientStream;
+use zero_platform_tokio::ClientStream;
 
 /// Bidirectional HTTP/2 stream.
-pub(crate) struct H2Stream {
+pub struct H2Stream {
     read_rx: mpsc::Receiver<Vec<u8>>,
     write_tx: mpsc::Sender<Vec<u8>>,
     read_buffer: Vec<u8>,
@@ -41,8 +40,7 @@ impl H2Stream {
 
 // ── client (outbound) connect ──
 
-#[cfg(feature = "outbound-vless")]
-pub(crate) async fn connect_h2<S>(
+pub async fn connect_h2<S>(
     stream: S,
     h2_config: &H2Config,
     server: &str,
@@ -95,6 +93,61 @@ where
     }
 
     let recv_stream = resp.into_body();
+
+    build_h2_stream(send_stream, recv_stream)
+}
+
+// ── server (inbound) accept ──
+
+pub async fn accept_h2<S>(
+    stream: S,
+    h2_config: &H2Config,
+) -> Result<H2Stream, EngineError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let mut conn = h2::server::handshake(stream)
+        .await
+        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 server handshake: {e}"))))?;
+
+    let (request, mut respond) = conn
+        .accept()
+        .await
+        .ok_or_else(|| {
+            EngineError::Io(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "h2 connection closed before request",
+            ))
+        })?
+        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 accept: {e}"))))?;
+
+    let expected_path = if h2_config.path.starts_with('/') {
+        h2_config.path.as_str()
+    } else {
+        "/"
+    };
+    let got_path = request.uri().path();
+    if got_path != expected_path {
+        let mut resp = Response::new(());
+        *resp.status_mut() = http::StatusCode::NOT_FOUND;
+        respond
+            .send_response(resp, true)
+            .map_err(|e| EngineError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
+        return Err(EngineError::Io(io::Error::new(
+            io::ErrorKind::ConnectionRefused,
+            format!("h2 path mismatch: expected {expected_path}, got {got_path}"),
+        )));
+    }
+
+    let mut resp = Response::new(());
+    resp.headers_mut()
+        .insert("content-type", "application/octet-stream".parse().unwrap());
+
+    let send_stream = respond
+        .send_response(resp, false)
+        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
+
+    let recv_stream = request.into_body();
 
     build_h2_stream(send_stream, recv_stream)
 }
@@ -218,7 +271,6 @@ impl AsyncSocket for H2Stream {
 }
 
 impl ClientStream for H2Stream {
-    #[cfg(feature = "inbound-socks5")]
     fn local_addr(&self) -> io::Result<SocketAddr> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,

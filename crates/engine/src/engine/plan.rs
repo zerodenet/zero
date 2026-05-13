@@ -62,6 +62,7 @@ impl EnginePlan {
                     ws,
                     grpc,
                     h2,
+                    http_upgrade,
                     quic,
                 } => TargetKind::Outbound(Box::new(OutboundTarget::Vless {
                     server: server.clone(),
@@ -75,6 +76,7 @@ impl EnginePlan {
                     ws: ws.clone(),
                     grpc: grpc.clone(),
                     h2: h2.clone(),
+                    http_upgrade: http_upgrade.clone(),
                     quic: quic.clone(),
                 })),
             };
@@ -212,6 +214,7 @@ pub enum OutboundTarget {
         ws: Option<zero_config::WebSocketConfig>,
         grpc: Option<zero_config::GrpcConfig>,
         h2: Option<zero_config::H2Config>,
+        http_upgrade: Option<zero_config::HttpUpgradeConfig>,
         quic: Option<zero_config::QuicConfig>,
     },
 }

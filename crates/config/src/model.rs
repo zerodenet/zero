@@ -191,6 +191,10 @@ pub enum InboundProtocolConfig {
         #[serde(default)]
         h2: Option<H2Config>,
         #[serde(default)]
+        http_upgrade: Option<HttpUpgradeConfig>,
+        #[serde(default)]
+        fallback: Option<FallbackConfig>,
+        #[serde(default)]
         quic: Option<QuicConfig>,
     },
 }
@@ -242,6 +246,20 @@ impl InboundProtocolConfig {
     pub fn vless_h2(&self) -> Option<&H2Config> {
         match self {
             Self::Vless { h2, .. } => h2.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn vless_http_upgrade(&self) -> Option<&HttpUpgradeConfig> {
+        match self {
+            Self::Vless { http_upgrade, .. } => http_upgrade.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn vless_fallback(&self) -> Option<&FallbackConfig> {
+        match self {
+            Self::Vless { fallback, .. } => fallback.as_ref(),
             _ => None,
         }
     }
@@ -337,12 +355,57 @@ fn default_ws_path() -> String {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GrpcConfig {
-    #[serde(default = "default_grpc_service_name")]
-    pub service_name: String,
+    #[serde(
+        alias = "service_name",
+        default = "default_grpc_service_names",
+        deserialize_with = "deserialize_service_names"
+    )]
+    pub service_names: Vec<String>,
 }
 
-fn default_grpc_service_name() -> String {
-    "/v2ray.core.proxy.vless.encap.GrpcService/Tun".to_string()
+fn default_grpc_service_names() -> Vec<String> {
+    vec!["/v2ray.core.proxy.vless.encap.GrpcService/Tun".to_string()]
+}
+
+fn deserialize_service_names<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, SeqAccess, Visitor};
+    use std::fmt;
+
+    struct ServiceNames;
+
+    impl<'de> Visitor<'de> for ServiceNames {
+        type Value = Vec<String>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a string or array of strings")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![value.to_owned()])
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut names = Vec::new();
+            while let Some(name) = seq.next_element::<String>()? {
+                names.push(name);
+            }
+            if names.is_empty() {
+                return Err(de::Error::invalid_length(0, &self));
+            }
+            Ok(names)
+        }
+    }
+
+    deserializer.deserialize_any(ServiceNames)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -356,6 +419,28 @@ pub struct H2Config {
 
 fn default_h2_path() -> String {
     "/".to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HttpUpgradeConfig {
+    #[serde(default)]
+    pub host: Option<String>,
+    #[serde(default = "default_http_upgrade_path")]
+    pub path: String,
+}
+
+fn default_http_upgrade_path() -> String {
+    "/".to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FallbackConfig {
+    pub server: String,
+    pub port: u16,
+    #[serde(default)]
+    pub alpn: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -425,6 +510,8 @@ pub enum OutboundProtocolConfig {
         grpc: Option<GrpcConfig>,
         #[serde(default)]
         h2: Option<H2Config>,
+        #[serde(default)]
+        http_upgrade: Option<HttpUpgradeConfig>,
         #[serde(default)]
         quic: Option<QuicConfig>,
     },

@@ -2,6 +2,9 @@
 //
 // Reuses MUX connections to the same upstream (server + port + transport).
 // Supports TCP, TLS, REALITY transports.
+//
+// Types moved to zero_protocol_vless::mux_pool; this module handles
+// connection establishment which depends on proxy I/O infrastructure.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -9,42 +12,15 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use zero_core::Session;
 use zero_engine::EngineError;
+use zero_platform_tokio::TransportConnector;
 
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 use zero_config::{ClientTlsConfig, RealityConfig};
-
-/// Identifies a unique upstream endpoint including transport.
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct PoolKey {
-    server: String,
-    port: u16,
-    uuid: [u8; 16],
-    transport: TransportKey,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-enum TransportKey {
-    Raw,
-    Tls {
-        server_name: Option<String>,
-    },
-    Reality {
-        public_key: String,
-        server_name: String,
-    },
-}
-
-struct MuxPoolConn {
-    write_tx: mpsc::UnboundedSender<Vec<u8>>,
-    streams: Arc<Mutex<HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>>>,
-    next_id: Mutex<u16>,
-    active: Mutex<usize>,
-    max_concurrency: u32,
-    last_activity: Mutex<std::time::Instant>,
-    crypto: Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>>,
-}
+use zero_protocol_vless::mux_pool::{
+    decrypt_mux_payload, encrypt_mux_payload, MuxPoolConn, MuxStreamRelay, PoolKey, TransportKey,
+};
 
 #[derive(Clone)]
 pub(crate) struct MuxConnectionPool {
@@ -76,7 +52,7 @@ impl MuxConnectionPool {
         tls: Option<&ClientTlsConfig>,
         reality: Option<&RealityConfig>,
         max_concurrency: u32,
-        idle_timeout_secs: u64,
+        _idle_timeout_secs: u64,
     ) -> Result<TcpRelayStream, EngineError> {
         let transport = match (tls, reality) {
             (Some(t), None) => TransportKey::Tls {
@@ -103,7 +79,6 @@ impl MuxConnectionPool {
 
         let conn = match conn {
             Some(c) => {
-                // Check concurrency — if full, create a new connection instead
                 if *c.active.lock().unwrap() >= c.max_concurrency as usize {
                     let conn =
                         Self::create_mux_connection(proxy, &key, tls, reality, max_concurrency)
@@ -137,7 +112,7 @@ impl MuxConnectionPool {
 
         *conn.active.lock().unwrap() += 1;
 
-        let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (_up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let (down_tx, down_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
         conn.streams.lock().unwrap().insert(sid, down_tx);
@@ -162,7 +137,6 @@ impl MuxConnectionPool {
                     break;
                 }
             }
-            // Stream ended — send close notification (empty payload = close)
             let close_frame = zero_protocol_vless::encode_frame(sid, &[]);
             let _ = write.send(close_frame);
             *conn_drop.active.lock().unwrap() -= 1;
@@ -186,7 +160,6 @@ impl MuxConnectionPool {
         max_concurrency: u32,
     ) -> Result<MuxPoolConn, EngineError> {
         use crate::transport::MeteredStream;
-        use zero_protocol_vless::RealityClientOptions;
 
         let socket = proxy
             .protocols
@@ -194,33 +167,18 @@ impl MuxConnectionPool {
             .connect_host(&key.server, key.port, &proxy.resolver)
             .await?;
 
-        let stream: TcpRelayStream = match (tls, reality) {
-            (Some(t), None) => {
-                let tls_stream = crate::transport::connect_tls_upstream(
-                    socket,
-                    t,
-                    proxy.config.source_dir(),
-                    &key.server,
-                )
-                .await?;
-                TcpRelayStream::new(tls_stream)
-            }
-            (None, Some(r)) => {
-                let sn = r.server_name.as_deref().unwrap_or(&key.server);
-                let rs = zero_protocol_vless::upgrade_reality_client(
-                    socket,
-                    RealityClientOptions {
-                        public_key: &r.public_key,
-                        short_id: &r.short_id,
-                        server_name: sn,
-                        cipher_suites: &r.cipher_suites,
-                    },
-                )
-                .await?;
-                TcpRelayStream::new(rs)
-            }
-            _ => socket.into(),
-        };
+        let connector = zero_protocol_vless::VlessTransportConnector::new(
+            tls,
+            reality,
+            None,
+            None,
+            None,
+            None,
+            proxy.config.source_dir(),
+        );
+        let stream: TcpRelayStream = connector
+            .connect(socket, &key.server, key.port)
+            .await?;
 
         let mut metered = MeteredStream::new(stream);
         let _mux = proxy
@@ -235,7 +193,6 @@ impl MuxConnectionPool {
 
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
-        // Create shared MUX stream encryption
         let crypto: Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>> =
             Some(Arc::new(Mutex::new(zero_protocol_vless::MuxCrypto::new(
                 &key.uuid,
@@ -279,8 +236,8 @@ impl MuxConnectionPool {
                 }
 
                 if stream_id != 0 {
-                    // Decrypt payload before dispatching
-                    let decrypted = decrypt_mux_payload(&crypto_for_read, stream_id, &payload, false);
+                    let decrypted =
+                        decrypt_mux_payload(&crypto_for_read, stream_id, &payload, false);
                     if let Some(decrypted_payload) = decrypted {
                         let streams = streams_for_relay.lock().unwrap();
                         if let Some(tx) = streams.get(&stream_id) {
@@ -297,126 +254,7 @@ impl MuxConnectionPool {
             next_id: Mutex::new(1),
             active: Mutex::new(0),
             max_concurrency,
-            last_activity: Mutex::new(std::time::Instant::now()),
             crypto,
         })
-    }
-}
-
-struct MuxStreamRelay {
-    up_tx: mpsc::UnboundedSender<Vec<u8>>,
-    sid: u16,
-    down_rx: Option<mpsc::UnboundedReceiver<Vec<u8>>>,
-    conn: Arc<MuxPoolConn>,
-}
-
-impl Drop for MuxStreamRelay {
-    fn drop(&mut self) {
-        self.conn.streams.lock().unwrap().remove(&self.sid);
-        *self.conn.active.lock().unwrap() -= 1;
-    }
-}
-
-impl tokio::io::AsyncRead for MuxStreamRelay {
-    fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let rx = match &mut self.down_rx {
-            Some(rx) => rx,
-            None => return std::task::Poll::Ready(Ok(())),
-        };
-        match rx.poll_recv(cx) {
-            std::task::Poll::Ready(Some(data)) => {
-                let n = data.len().min(buf.remaining());
-                buf.put_slice(&data[..n]);
-                std::task::Poll::Ready(Ok(()))
-            }
-            std::task::Poll::Ready(None) => {
-                self.down_rx = None;
-                std::task::Poll::Ready(Ok(()))
-            }
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
-    }
-}
-
-impl tokio::io::AsyncWrite for MuxStreamRelay {
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        _: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        self.up_tx
-            .send(buf.to_vec())
-            .map(|_| std::task::Poll::Ready(Ok(buf.len())))
-            .unwrap_or_else(|_| {
-                std::task::Poll::Ready(Err(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
-                    "MUX upstream closed",
-                )))
-            })
-    }
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        _: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        std::task::Poll::Ready(Ok(()))
-    }
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        _: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        std::task::Poll::Ready(Ok(()))
-    }
-}
-
-/// Encrypt a MUX frame payload. `is_c2s`: true for client→server (upload), false for server→client.
-fn encrypt_mux_payload(
-    crypto: &Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>>,
-    sid: u16,
-    payload: &[u8],
-    is_c2s: bool,
-) -> Vec<u8> {
-    if let Some(ref crypto) = crypto {
-        if payload.is_empty() {
-            return vec![];
-        }
-        let mut c = crypto.lock().unwrap();
-        let result = if is_c2s {
-            c.encrypt_c2s(sid, payload)
-        } else {
-            c.encrypt_s2c(sid, payload)
-        };
-        result.unwrap_or_else(|_| payload.to_vec())
-    } else {
-        payload.to_vec()
-    }
-}
-
-/// Decrypt a MUX frame payload. Returns None if decryption fails (frame should be dropped).
-fn decrypt_mux_payload(
-    crypto: &Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>>,
-    sid: u16,
-    payload: &[u8],
-    is_c2s: bool,
-) -> Option<Vec<u8>> {
-    if let Some(ref crypto) = crypto {
-        if payload.is_empty() {
-            return Some(vec![]);
-        }
-        let mut c = crypto.lock().unwrap();
-        let result = if is_c2s {
-            c.decrypt_c2s(sid, payload)
-        } else {
-            c.decrypt_s2c(sid, payload)
-        };
-        match result {
-            Ok(pt) => Some(pt),
-            Err(_) => None,
-        }
-    } else {
-        Some(payload.to_vec())
     }
 }

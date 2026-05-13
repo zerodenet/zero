@@ -124,6 +124,7 @@ impl Proxy {
                 ws,
                 grpc,
                 h2,
+                http_upgrade,
                 quic,
             } => {
                 match self
@@ -141,6 +142,7 @@ impl Proxy {
                             ws,
                             grpc,
                             h2,
+                            http_upgrade,
                             quic,
                         },
                     )

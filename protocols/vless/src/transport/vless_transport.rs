@@ -1,0 +1,194 @@
+//! Unified VLESS outbound transport builder.
+//!
+//! Wraps a raw TCP socket with the configured VLESS transport layer
+//! (TLS / Reality / WebSocket / gRPC / H2), dispatching to the correct
+//! connect function for every valid combination.
+
+use std::path::Path;
+
+use zero_config::{
+    ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, RealityConfig, WebSocketConfig,
+};
+use zero_engine::EngineError;
+use zero_platform_tokio::{TcpRelayStream, TokioSocket};
+
+use std::io;
+
+use zero_platform_tokio::TransportConnector;
+
+use crate::reality::{upgrade_reality_client, RealityClientOptions};
+use crate::transport::{grpc, h2, http_upgrade, tls, ws};
+
+/// Wrap a raw TCP socket with the configured VLESS transport layer.
+///
+/// Handles every valid combination of TLS, Reality, WebSocket, gRPC, and H2.
+/// Pass `None` for transports that are not configured.
+pub async fn build_vless_outbound_transport(
+    socket: TokioSocket,
+    tls_config: Option<&ClientTlsConfig>,
+    reality: Option<&RealityConfig>,
+    ws_config: Option<&WebSocketConfig>,
+    grpc_config: Option<&GrpcConfig>,
+    h2_config: Option<&H2Config>,
+    http_upgrade_config: Option<&HttpUpgradeConfig>,
+    source_dir: Option<&Path>,
+    server: &str,
+    port: u16,
+) -> Result<TcpRelayStream, EngineError> {
+    // ── HTTPUpgrade (handled separately - mutually exclusive with WS/gRPC/H2) ──
+    if let Some(cfg) = http_upgrade_config {
+        let stream: TcpRelayStream = match tls_config {
+            Some(tls) => {
+                let tls_stream = tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
+                TcpRelayStream::new(http_upgrade::connect_http_upgrade(tls_stream, cfg).await?)
+            }
+            None => TcpRelayStream::new(http_upgrade::connect_http_upgrade(socket, cfg).await?),
+        };
+        return Ok(stream);
+    }
+
+    match (tls_config, reality, ws_config, grpc_config, h2_config) {
+        // ── gRPC ──
+        (Some(tls), None, None, Some(grpc), None) => {
+            let tls_stream =
+                tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
+            let grpc_stream =
+                grpc::connect_grpc(tls_stream, &grpc.service_names).await?;
+            Ok(TcpRelayStream::new(grpc_stream))
+        }
+        (None, None, None, Some(grpc), None) => {
+            let grpc_stream =
+                grpc::connect_grpc(socket, &grpc.service_names).await?;
+            Ok(TcpRelayStream::new(grpc_stream))
+        }
+
+        // ── H2 ──
+        (Some(tls), None, None, None, Some(h2_config)) => {
+            let tls_stream =
+                tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
+            let h2_stream =
+                h2::connect_h2(tls_stream, h2_config, server, port).await?;
+            Ok(TcpRelayStream::new(h2_stream))
+        }
+        (None, None, None, None, Some(h2_config)) => {
+            let h2_stream =
+                h2::connect_h2(socket, h2_config, server, port).await?;
+            Ok(TcpRelayStream::new(h2_stream))
+        }
+
+        // ── WebSocket ──
+        (Some(tls), None, Some(ws), None, None) => {
+            let tls_stream =
+                tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
+            let ws_stream =
+                ws::connect_ws(tls_stream, ws, server, port).await?;
+            Ok(TcpRelayStream::new(ws_stream))
+        }
+        (None, None, Some(ws), None, None) => {
+            let ws_stream =
+                ws::connect_ws(socket, ws, server, port).await?;
+            Ok(TcpRelayStream::new(ws_stream))
+        }
+
+        // ── TLS only ──
+        (Some(tls), None, None, None, None) => {
+            let tls_stream =
+                tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
+            Ok(TcpRelayStream::new(tls_stream))
+        }
+
+        // ── Reality ──
+        (None, Some(reality), None, None, None) => {
+            let server_name = reality.server_name.as_deref().unwrap_or(server);
+            let reality_stream = upgrade_reality_client(
+                socket,
+                RealityClientOptions {
+                    public_key: &reality.public_key,
+                    short_id: &reality.short_id,
+                    server_name,
+                    cipher_suites: &reality.cipher_suites,
+                },
+            )
+            .await?;
+            Ok(TcpRelayStream::new(reality_stream))
+        }
+
+        // ── Raw TCP ──
+        (None, None, None, None, None) => Ok(socket.into()),
+
+        _ => Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "invalid vless outbound transport combination",
+        ))),
+    }
+}
+
+// ── TransportConnector impl ──
+
+/// VLESS transport connector that implements [`TransportConnector`].
+///
+/// Created with transport configuration, then [`connect`] wraps each
+/// raw socket with the configured transport layer.
+///
+/// [`connect`]: TransportConnector::connect
+pub struct VlessTransportConnector<'a> {
+    tls: Option<&'a ClientTlsConfig>,
+    reality: Option<&'a RealityConfig>,
+    ws: Option<&'a WebSocketConfig>,
+    grpc: Option<&'a GrpcConfig>,
+    h2: Option<&'a H2Config>,
+    http_upgrade: Option<&'a HttpUpgradeConfig>,
+    source_dir: Option<&'a Path>,
+}
+
+impl<'a> VlessTransportConnector<'a> {
+    /// Create a new connector with the given transport configuration.
+    pub fn new(
+        tls: Option<&'a ClientTlsConfig>,
+        reality: Option<&'a RealityConfig>,
+        ws: Option<&'a WebSocketConfig>,
+        grpc: Option<&'a GrpcConfig>,
+        h2: Option<&'a H2Config>,
+        http_upgrade: Option<&'a HttpUpgradeConfig>,
+        source_dir: Option<&'a Path>,
+    ) -> Self {
+        Self {
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            source_dir,
+        }
+    }
+}
+
+impl TransportConnector for VlessTransportConnector<'_> {
+    type Stream = TcpRelayStream;
+
+    async fn connect(
+        &self,
+        socket: TokioSocket,
+        server: &str,
+        port: u16,
+    ) -> io::Result<Self::Stream> {
+        build_vless_outbound_transport(
+            socket,
+            self.tls,
+            self.reality,
+            self.ws,
+            self.grpc,
+            self.h2,
+            self.http_upgrade,
+            self.source_dir,
+            server,
+            port,
+        )
+        .await
+        .map_err(|e| match e {
+            EngineError::Io(io_err) => io_err,
+            other => io::Error::other(other),
+        })
+    }
+}

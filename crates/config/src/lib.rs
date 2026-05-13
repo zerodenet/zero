@@ -6,8 +6,10 @@ mod validate;
 
 pub use error::ConfigError;
 pub use model::{
-    ApiConfig, ClientTlsConfig, ControlApiConfig, EventSinkConfig, GrpcConfig, H2Config,
-    InboundConfig, InboundProtocolConfig, InboundRealityConfig, ListenConfig, ModeConfig,
+    ApiConfig, ClientTlsConfig, ControlApiConfig, EventSinkConfig, FallbackConfig, GrpcConfig,
+    H2Config, HttpUpgradeConfig, InboundConfig, InboundProtocolConfig, InboundRealityConfig,
+    ListenConfig,
+    ModeConfig,
     OutboundConfig, OutboundGroupConfig, OutboundGroupKind, OutboundProtocolConfig, QuicConfig,
     RealityConfig, RouteActionConfig, RouteConfig, RouteRuleConfig, RouteRuleSetConfig,
     RuleConditionConfig, RuleSetFormatConfig, RuleSetSourceType, RuntimeConfig,

@@ -1,7 +1,7 @@
 use alloc::string::String;
 use alloc::vec;
 
-use zero_core::{Address, Error, InboundHandler, Network, ProtocolType, Session};
+use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::shared::{
@@ -132,15 +132,6 @@ impl Socks5Inbound {
         self.send_response(stream, Socks5Reply::Succeeded).await?;
 
         Ok(session)
-    }
-}
-
-impl<S> InboundHandler<S> for Socks5Inbound
-where
-    S: AsyncSocket,
-{
-    async fn handshake(&self, stream: &mut S) -> Result<Session, Error> {
-        Self::handshake(self, stream).await
     }
 }
 

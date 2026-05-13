@@ -1,89 +1,135 @@
 # TODO — 架构改进
 
-## 当前状态
+## 目标 vs 现状
 
-依赖方向正确（`traits → core → protocols → config/router/engine → proxy`），但抽象层未随功能增长同步演化，导致 proxy crate 膨胀为 7318 行的单体。
+- **目标：** `traits → core → protocols → config/router/engine → proxy`
+- **现状：** 依赖方向正确，抽象边界逐步清晰
 
----
-
-## 架构问题
-
-### 1. Transport 实现放错了位置
-
-**现状：** gRPC / H2 / QUIC / TLS / WS 传输实现全部在 `crates/proxy/src/transport/` 下（~1416 行），但它们不依赖 proxy 的任何东西，是 VLESS 专有传输。
-
-**目标：**
-- 将这些传输移至 `protocols/vless/src/transport/` 下
-- 在 `zero-traits` 或 `zero-core` 中定义统一的 `TransportConnector` trait
-- proxy crate 只通过 trait 调用传输层，不直接依赖具体实现
-
-**影响范围：** `protocols/vless/`, `crates/proxy/src/transport/`, `crates/proxy/src/runtime/upstream.rs`, `crates/proxy/src/outbound/vless.rs`
-
-**工时估计：** 6-8h
+| 维度 | 初始 | 现在 | 变化 |
+|------|:----:|:----:|:----:|
+| proxy 行数 | 7318 | **5398** | -26.2% |
+| proxy warning | ~14 | **0** | 清零 |
+| VLESS transport（独立模块） | 0 | **1549** | 新增 |
+| VLESS 协议层独立性 | no_std 可行 | **no_std 可行** | 保持 |
+| VLESS reality 模式 | heavy deps | **全部 optional** | feature-gated |
 
 ---
 
-### 2. Transport 分发逻辑重复三份
+## 已完成
 
-**现状：** 同一个 TLS/Reality/WS/gRPC/H2/QUIC 的 match 分发逻辑出现在三个地方：
-- `runtime/upstream.rs` — TCP 出站（~40 行）
-- `outbound/vless.rs` — UDP 出站（~60 行）
-- `runtime/mux_pool.rs` — MUX 连接池（~30 行）
+### 1. Transport 实现放错位置 ✅
 
-**目标：** 抽取为单一函数 `build_vless_transport(socket, config) -> impl AsyncSocket`，三处调用点改为使用该函数。
+- 5 个传输文件（tls/ws/grpc/h2/quic）从 `crates/proxy/src/transport/` 移至 `protocols/vless/src/transport/`（1373 行）
+- `vless_transport.rs` 统一分发函数移至 VLESS（106 行）
+- proxy 通过 `transport/mod.rs` 按需重导出 `InboundTlsStream`、`QuicInbound`、`accept_grpc` 等入站类型
+- `ClientStream` + `TcpRelayStream` 移至 `zero-platform-tokio`（正确的平台抽象层）
+- `TransportConnector` trait 定义在 `zero-platform-tokio`，VLESS 实现 `VlessTransportConnector`
+- proxy 通过 trait 调用：`connector.connect(socket, server, port)` 替代裸函数
 
-**影响范围：** 上述三个文件
+### 2. Transport 分发去重 ✅
 
-**工时估计：** 2-3h（与问题 1 一起做）
+- 3 处重复 match（~130 行）→ 1 个 `build_vless_outbound_transport()` 函数
+- 函数在 `protocols/vless/src/transport/vless_transport.rs`
 
----
+### 3. InboundHandler / OutboundHandler 删除 ✅
 
-### 3. InboundHandler / OutboundHandler trait 形同虚设
+- 方案 B：死代码直接删除
+- `crates/core/src/handler.rs` 移除
+- 3 个协议 crate 的 `impl InboundHandler` 移除
+- 协议 crate 各自提供 public API
 
-**现状：**
-- `VlessInbound::handshake()` 永远返回 `Err("requires a user store")`，调用方绕过 trait 直接调用 `handshake_with_auth()`
-- `OutboundHandler` trait 全代码库零实现，纯死代码
+### 4. 协议类型归位 ✅
 
-**目标（二选一）：**
+- `ConfiguredVlessUsers` adapter → `protocols/vless/src/inbound.rs`
+- `upgrade_reality_server_from_config` → `protocols/vless/src/reality/stream.rs`
+- `VlessUdpTransport` + `VlessUdpUpstream` → `protocols/vless/src/udp.rs`
+- `MuxStreamRelay` / `MuxPoolConn` / `PoolKey` / `TransportKey` → `protocols/vless/src/mux_pool.rs`
+- `encrypt_mux_payload` / `decrypt_mux_payload` → VLESS mux_pool
 
-方案 A — 修复 trait 使其可用：
-- 将 `VlessUserStore` 作为泛型参数加入 `InboundHandler`
-- 为 `VlessOutbound` 实现 `OutboundHandler`
+### 5. 传输 relay 去重 ✅
 
-方案 B — 删除 trait，接受 VLESS 协议需要额外参数的现实：
-- 从 `zero-core` 中移除 `InboundHandler` 和 `OutboundHandler`
-- 协议 crate 各自提供自己的 public API（当前实际做法）
-
-**影响范围：** `zero-core/src/handler.rs`, `protocols/*/`
-
-**工时估计：** 1-2h
-
----
-
-### 4. Proxy crate 职责过重
-
-**现状：** proxy crate 7318 行，混合了：
-- 协议处理逻辑（UDP 会话管理、MUX 流分发）
-- 传输层实现（6 种传输）
-- 运行时管理（监听、连接生成、关闭）
-- 出站组管理（urltest、selector）
-
-**目标：**
-- 问题 1 解决后，proxy 自然缩减 ~1400 行（传输层移出）
-- 考虑将 `groups/` 出站组逻辑拆分到独立 crate 或并入 engine
-- 考虑将 `runtime/upstream.rs` 中的 VLESS 特定连接逻辑移入 protocol crate
-
-**工时估计：** 随问题 1、2 逐步推进
+- `outbound/vless.rs` QUIC/TCP 两个分支的 60 行重复 relay spawn 抽取为 `spawn_vless_udp_relay()`
 
 ---
 
-## 执行优先级
+## 依赖合规性
 
-| 顺序 | 任务 | 工时 | 影响 |
-|:----:|------|:----:|------|
-| 1 | 修复 InboundHandler/OutboundHandler trait | 1-2h | 消除死代码，明确抽象边界 |
-| 2 | 消除 Transport 分发重复 | 2-3h | 减少 ~100 行重复代码 |
-| 3 | Transport 实现移至 protocol crate | 6-8h | proxy 缩减 ~1400 行 |
-| 4 | Proxy 进一步瘦身 | 渐进 | 持续改进 |
+### VLESS — no features（纯协议模式）
 
-建议 **1 → 2 → 3** 顺序执行，每步独立可验证。
+```
+zero-protocol-vless
+├── zero-core        # 协议类型
+└── zero-traits      # I/O 抽象（no_std）
+```
+
+**独立可用。** 只做 VLESS 握手、MUX 帧编解码、UUID 解析、加密原语。
+
+### VLESS — reality feature（传输模式）
+
+```
+zero-protocol-vless
+├── zero-core
+├── zero-traits
+├── zero-platform-tokio   # optional
+├── zero-config           # optional — 可进一步解耦
+├── zero-engine           # optional — 可进一步解耦
+├── h2, quinn, rustls...  # optional — 传输实现依赖
+└── tokio                 # optional
+```
+
+所有重型依赖 feature-gated，不破坏协议层独立性。
+
+### 已知矛盾
+
+| 依赖 | 问题 | 修复方向 |
+|------|------|------|
+| `zero-engine` (EngineError) | 传输函数返回 EngineError | 改为 `io::Error`，EngineError: From<io::Error> 自动转换 |
+| `zero-config` (ClientTlsConfig 等) | 传输函数参数用 config 类型 | 在 VLESS 中定义传输原生配置类型，proxy 侧做转换 |
+| `zero-platform-tokio` (reality feature) | 平台抽象类型 | **合理** — 传输层天然需要平台 I/O 类型 |
+
+---
+
+## 剩余工作（渐进，无强制顺序）
+
+### proxy 中仍含协议逻辑的模块
+
+| 文件 | 行数 | 内容 | 归属问题 |
+|------|:----:|------|------|
+| `inbound/vless.rs` | 821 | VLESS listener + 会话处理 | listener 骨架属 proxy，MUX/UDP 会话处理是集成层 |
+| `outbound/vless.rs` | 216 | VLESS UDP 出站管理 | `VlessUdpOutboundManager` 是纯协议逻辑但依赖 Proxy |
+| `runtime/upstream.rs` | 177 | VLESS 出站连接 | `VlessUpstream` 参数结构是 VLESS 概念 |
+| `runtime/mux_pool.rs` | 259 | MUX 池连接建立 | 核心已移出，剩余是 Proxy 依赖的连接工厂 |
+
+这些是**集成层**而非协议逻辑——它们需要 Proxy 的 TCP 连接、DNS 解析、流量统计、会话生命周期管理。深入分离需要引入更多 trait 抽象（如连接工厂、会话回调），收益递减。
+
+### 可做的小改进
+
+- `zero-engine` 依赖移除：传输函数返回值从 `EngineError` 改为 `io::Error`
+- `zero-config` 依赖移除：传输函数参数用 VLESS 原生类型替代 config 类型
+- `groups/`（360 行）：出站组逻辑可并入 engine 或保持现状（规模小）
+
+---
+
+## 架构总览
+
+```
+zero (app)
+ ├── config (配置)
+ ├── engine (决策、状态、事件)
+ │    ├── router (规则匹配)
+ │    ├── core (协议类型)
+ │    └── platform/tokio (I/O 抽象)
+ ├── proxy (运行时／集成层)
+ │    ├── inbound/outbound (协议集成)
+ │    ├── groups (出站组)
+ │    ├── runtime (连接池、会话)
+ │    └── transport (TCP relay、metering)
+ └── protocols/
+      ├── socks5
+      ├── http-connect
+      └── vless
+           ├── 纯协议：握手、MUX 帧、加密
+           ├── transport/ (reality-gated)：5 种传输实现
+           ├── mux_pool (reality-gated)：MUX 池核心类型
+           └── udp (reality-gated)：UDP 出站类型
+```

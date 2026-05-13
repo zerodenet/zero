@@ -31,6 +31,7 @@ pub enum ResolvedLeafOutbound<'a> {
         ws: Option<&'a WebSocketConfig>,
         grpc: Option<&'a zero_config::GrpcConfig>,
         h2: Option<&'a zero_config::H2Config>,
+        http_upgrade: Option<&'a zero_config::HttpUpgradeConfig>,
         quic: Option<&'a zero_config::QuicConfig>,
     },
 }
@@ -136,6 +137,7 @@ fn resolve_leaf_outbound<'a>(
             ws,
             grpc,
             h2,
+            http_upgrade,
             quic,
         } => ResolvedLeafOutbound::Vless {
             tag,
@@ -150,6 +152,7 @@ fn resolve_leaf_outbound<'a>(
             ws: ws.as_ref(),
             grpc: grpc.as_ref(),
             h2: h2.as_ref(),
+            http_upgrade: http_upgrade.as_ref(),
             quic: quic.as_ref(),
         },
     }

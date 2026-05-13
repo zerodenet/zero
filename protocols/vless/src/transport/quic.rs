@@ -4,7 +4,6 @@
 // Uses quinn (Rust QUIC implementation).
 
 use std::io;
-#[cfg(feature = "inbound-socks5")]
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -16,10 +15,10 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
-use super::ClientStream;
+use zero_platform_tokio::ClientStream;
 
 /// Bidirectional QUIC stream wrapping quinn SendStream and RecvStream.
-pub(crate) struct QuicStream {
+pub struct QuicStream {
     send: quinn::SendStream,
     recv: quinn::RecvStream,
 }
@@ -32,8 +31,7 @@ impl QuicStream {
 
 // ── client (outbound) connect ──
 
-#[cfg(feature = "outbound-vless")]
-pub(crate) async fn connect_quic(
+pub async fn connect_quic(
     server_name: &str,
     port: u16,
     _insecure: bool,
@@ -84,14 +82,12 @@ pub(crate) async fn connect_quic(
 
 // ── server (inbound) accept ──
 
-#[cfg(feature = "inbound-vless")]
-pub(crate) struct QuicInbound {
+pub struct QuicInbound {
     endpoint: quinn::Endpoint,
 }
 
-#[cfg(feature = "inbound-vless")]
 impl QuicInbound {
-    pub(crate) async fn bind(
+    pub async fn bind(
         listen_addr: &str,
         cert_path: &str,
         key_path: &str,
@@ -145,7 +141,7 @@ impl QuicInbound {
         Ok(Self { endpoint })
     }
 
-    pub(crate) async fn accept(&self) -> Result<QuicStream, EngineError> {
+    pub async fn accept(&self) -> Result<QuicStream, EngineError> {
         let conn = self
             .endpoint
             .accept()
@@ -170,18 +166,15 @@ impl QuicInbound {
 
 // ── SkipServerVerification for QUIC client ──
 
-#[cfg(feature = "outbound-vless")]
 #[derive(Debug)]
 struct SkipServerVerification;
 
-#[cfg(feature = "outbound-vless")]
 impl SkipServerVerification {
     fn new() -> Arc<Self> {
         Arc::new(Self)
     }
 }
 
-#[cfg(feature = "outbound-vless")]
 impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
     fn verify_server_cert(
         &self,
@@ -275,7 +268,6 @@ impl AsyncSocket for QuicStream {
 }
 
 impl ClientStream for QuicStream {
-    #[cfg(feature = "inbound-socks5")]
     fn local_addr(&self) -> io::Result<SocketAddr> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,

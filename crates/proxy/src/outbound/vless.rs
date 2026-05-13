@@ -4,204 +4,30 @@ use std::collections::HashMap;
 
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
-use zero_config::{ClientTlsConfig, GrpcConfig, H2Config, QuicConfig, RealityConfig, WebSocketConfig};
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
+use zero_platform_tokio::TransportConnector;
 use zero_protocol_vless::parse_uuid;
+use zero_protocol_vless::{VlessUdpTransport, VlessUdpUpstream};
 use zero_traits::AsyncSocket;
 
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
-/// VLESS UDP upstream connection handle
-#[derive(Clone)]
-pub struct VlessUdpUpstream {
-    pub session_id: u64,
-    pub send_tx: mpsc::Sender<Vec<u8>>,
-}
-
-/// Transport options for VLESS UDP upstream connections.
-pub struct VlessUdpTransport<'a> {
-    pub tls: Option<&'a ClientTlsConfig>,
-    pub reality: Option<&'a RealityConfig>,
-    pub ws: Option<&'a WebSocketConfig>,
-    pub grpc: Option<&'a GrpcConfig>,
-    pub h2: Option<&'a H2Config>,
-    pub quic: Option<&'a QuicConfig>,
-}
-
-/// Establishes a VLESS UDP upstream connection with optional transport encryption.
-pub async fn establish_vless_udp_upstream(
+/// Spawn the bidirectional meter + relay task for a VLESS UDP upstream,
+/// returning the upstream handle and receive channel.
+fn spawn_vless_udp_relay(
     proxy: &Proxy,
-    session: &Session,
-    server: &str,
-    port: u16,
-    id: &str,
-    initial_payload: &[u8],
-    transport: Option<&VlessUdpTransport<'_>>,
-) -> Result<(VlessUdpUpstream, mpsc::Receiver<Vec<u8>>), EngineError> {
-    // QUIC uses UDP — handle before TCP connect entirely
-    if let Some(t) = transport {
-        if let Some(quic) = t.quic {
-            let server_name = quic.server_name.as_deref().unwrap_or(server);
-            let quic_stream =
-                crate::transport::connect_quic(server_name, port, quic.insecure).await?;
-
-            let vless_id = parse_uuid(id)?;
-            let mut metered = MeteredStream::new(quic_stream);
-            proxy
-                .protocols
-                .vless_outbound
-                .send_udp_request(&mut metered, session, &vless_id)
-                .await?;
-            metered.write_all(initial_payload).await?;
-
-            let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
-            let (recv_tx, recv_rx) = mpsc::channel::<Vec<u8>>(32);
-            proxy.record_session_outbound_tx(session.id, initial_payload.len() as u64);
-
-            let proxy_clone = proxy.clone();
-            let session_id = session.id;
-            tokio::spawn(async move {
-                let mut buffer = vec![0_u8; 64 * 1024];
-                loop {
-                    tokio::select! {
-                        to_send = send_rx.recv() => {
-                            match to_send {
-                                Some(payload) => {
-                                    if metered.write_all(&payload).await.is_err() {
-                                        break;
-                                    }
-                                    proxy_clone.record_session_outbound_tx(session_id, payload.len() as u64);
-                                }
-                                None => break,
-                            }
-                        }
-                        read = metered.read(&mut buffer) => {
-                            match read {
-                                Ok(0) => break,
-                                Ok(n) => {
-                                    if recv_tx.send(buffer[..n].to_vec()).await.is_err() {
-                                        break;
-                                    }
-                                }
-                                Err(_) => break,
-                            }
-                        }
-                    }
-                }
-            });
-
-            return Ok((VlessUdpUpstream {
-                session_id: session.id,
-                send_tx,
-            }, recv_rx));
-        }
-    }
-
-    let socket = proxy
-        .protocols
-        .direct_outbound
-        .connect_host(server, port, &proxy.resolver)
-        .await?;
-
-    let stream: TcpRelayStream = match transport {
-        Some(t) => {
-            match (t.tls, t.reality, t.ws, t.grpc, t.h2) {
-                (Some(tls), None, None, None, None) => {
-                    let tls_stream = crate::transport::connect_tls_upstream(
-                        socket,
-                        tls,
-                        proxy.config.source_dir(),
-                        server,
-                    )
-                    .await?;
-                    TcpRelayStream::new(tls_stream)
-                }
-                (None, Some(reality), None, None, None) => {
-                    let server_name = reality.server_name.as_deref().unwrap_or(server);
-                    use zero_protocol_vless::RealityClientOptions;
-                    let reality_stream = zero_protocol_vless::upgrade_reality_client(
-                        socket,
-                        RealityClientOptions {
-                            public_key: &reality.public_key,
-                            short_id: &reality.short_id,
-                            server_name,
-                            cipher_suites: &reality.cipher_suites,
-                        },
-                    )
-                    .await?;
-                    TcpRelayStream::new(reality_stream)
-                }
-                (None, None, Some(ws), None, None) => {
-                    let ws_stream =
-                        crate::transport::connect_ws(socket, ws, server, port).await?;
-                    TcpRelayStream::new(ws_stream)
-                }
-                (Some(tls), None, Some(ws), None, None) => {
-                    let tls_stream = crate::transport::connect_tls_upstream(
-                        socket,
-                        tls,
-                        proxy.config.source_dir(),
-                        server,
-                    )
-                    .await?;
-                    let ws_stream =
-                        crate::transport::connect_ws(tls_stream, ws, server, port).await?;
-                    TcpRelayStream::new(ws_stream)
-                }
-                (None, None, None, Some(grpc), None) => {
-                    let grpc_stream =
-                        crate::transport::connect_grpc(socket, &grpc.service_name).await?;
-                    TcpRelayStream::new(grpc_stream)
-                }
-                (Some(tls), None, None, Some(grpc), None) => {
-                    let tls_stream = crate::transport::connect_tls_upstream(
-                        socket,
-                        tls,
-                        proxy.config.source_dir(),
-                        server,
-                    )
-                    .await?;
-                    let grpc_stream =
-                        crate::transport::connect_grpc(tls_stream, &grpc.service_name).await?;
-                    TcpRelayStream::new(grpc_stream)
-                }
-                (None, None, None, None, Some(h2)) => {
-                    let h2_stream =
-                        crate::transport::connect_h2(socket, h2, server, port).await?;
-                    TcpRelayStream::new(h2_stream)
-                }
-                (None, None, None, None, None) => socket.into(),
-                _ => {
-                    return Err(EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "invalid vless udp transport combination",
-                    )));
-                }
-            }
-        }
-        None => socket.into(),
-    };
-
-    let mut metered = MeteredStream::new(stream);
-    let vless_id = parse_uuid(id)?;
-
-    proxy
-        .protocols
-        .vless_outbound
-        .send_udp_request(&mut metered, session, &vless_id)
-        .await?;
-
-    metered.write_all(initial_payload).await?;
-
+    session_id: u64,
+    mut metered: MeteredStream<TcpRelayStream>,
+    initial_payload_len: usize,
+) -> (VlessUdpUpstream, mpsc::Receiver<Vec<u8>>) {
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
     let (recv_tx, recv_rx) = mpsc::channel::<Vec<u8>>(32);
 
-    proxy.record_session_outbound_tx(session.id, initial_payload.len() as u64);
+    proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
 
     let proxy_clone = proxy.clone();
-    let session_id = session.id;
     tokio::spawn(async move {
         let mut buffer = vec![0_u8; 64 * 1024];
         loop {
@@ -232,10 +58,82 @@ pub async fn establish_vless_udp_upstream(
         }
     });
 
-    Ok((VlessUdpUpstream {
-        session_id: session.id,
-        send_tx,
-    }, recv_rx))
+    (VlessUdpUpstream { session_id, send_tx }, recv_rx)
+}
+
+/// Establishes a VLESS UDP upstream connection with optional transport encryption.
+pub async fn establish_vless_udp_upstream(
+    proxy: &Proxy,
+    session: &Session,
+    server: &str,
+    port: u16,
+    id: &str,
+    initial_payload: &[u8],
+    transport: Option<&VlessUdpTransport<'_>>,
+) -> Result<(VlessUdpUpstream, mpsc::Receiver<Vec<u8>>), EngineError> {
+    let vless_id = parse_uuid(id)?;
+
+    // QUIC uses UDP — handle before TCP connect entirely
+    if let Some(t) = transport {
+        if let Some(quic) = t.quic {
+            let server_name = quic.server_name.as_deref().unwrap_or(server);
+            let quic_stream =
+                crate::transport::connect_quic(server_name, port, quic.insecure).await?;
+
+            let mut metered = MeteredStream::new(TcpRelayStream::new(quic_stream));
+            proxy
+                .protocols
+                .vless_outbound
+                .send_udp_request(&mut metered, session, &vless_id)
+                .await?;
+            metered.write_all(initial_payload).await?;
+
+            return Ok(spawn_vless_udp_relay(
+                proxy,
+                session.id,
+                metered,
+                initial_payload.len(),
+            ));
+        }
+    }
+
+    let socket = proxy
+        .protocols
+        .direct_outbound
+        .connect_host(server, port, &proxy.resolver)
+        .await?;
+
+    let stream: TcpRelayStream = match transport {
+        Some(t) => {
+            let connector = zero_protocol_vless::VlessTransportConnector::new(
+                t.tls,
+                t.reality,
+                t.ws,
+                t.grpc,
+                t.h2,
+                t.http_upgrade,
+                proxy.config.source_dir(),
+            );
+            connector.connect(socket, server, port).await?
+        }
+        None => socket.into(),
+    };
+
+    let mut metered = MeteredStream::new(stream);
+
+    proxy
+        .protocols
+        .vless_outbound
+        .send_udp_request(&mut metered, session, &vless_id)
+        .await?;
+    metered.write_all(initial_payload).await?;
+
+    Ok(spawn_vless_udp_relay(
+        proxy,
+        session.id,
+        metered,
+        initial_payload.len(),
+    ))
 }
 
 /// VLESS UDP outbound manager — manages per-target upstream connections.

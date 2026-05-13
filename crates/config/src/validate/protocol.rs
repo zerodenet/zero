@@ -21,6 +21,8 @@ pub(super) fn validate_inbound_protocol(
             ws,
             grpc,
             h2,
+            http_upgrade,
+            fallback,
             quic,
         } => {
             validate_vless_users(users)?;
@@ -52,10 +54,15 @@ pub(super) fn validate_inbound_protocol(
                 validate_inbound_ws_headers("vless ws.headers", &ws.headers)?;
             }
             if let Some(grpc) = grpc {
-                validate_inbound_optional_non_empty("vless grpc.service_name", &grpc.service_name)?;
+                for name in &grpc.service_names {
+    validate_inbound_optional_non_empty("vless grpc.service_name", name)?;
+}
             }
             if let Some(h2) = h2 {
                 validate_inbound_optional_non_empty("vless h2.path", &h2.path)?;
+            }
+            if let Some(http_upgrade) = http_upgrade {
+                validate_inbound_optional_non_empty("vless http_upgrade.path", &http_upgrade.path)?;
             }
             if let Some(quic) = quic {
                 if let Some(cert_path) = &quic.cert_path {
@@ -89,6 +96,7 @@ pub(super) fn validate_outbound_protocol(
             ws,
             grpc,
             h2,
+            http_upgrade,
             quic,
         } => {
             validate_outbound_endpoint("vless", server, *port)?;
@@ -127,10 +135,15 @@ pub(super) fn validate_outbound_protocol(
                 validate_outbound_ws_headers("vless ws.headers", &ws.headers)?;
             }
             if let Some(grpc) = grpc {
-                validate_outbound_optional_non_empty("vless grpc.service_name", &grpc.service_name)?;
+                for name in &grpc.service_names {
+    validate_outbound_optional_non_empty("vless grpc.service_name", name)?;
+}
             }
             if let Some(h2) = h2 {
                 validate_outbound_optional_non_empty("vless h2.path", &h2.path)?;
+            }
+            if let Some(http_upgrade) = http_upgrade {
+                validate_outbound_optional_non_empty("vless http_upgrade.path", &http_upgrade.path)?;
             }
             if let Some(quic) = quic {
                 if let Some(server_name) = &quic.server_name {
