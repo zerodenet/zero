@@ -1,74 +1,64 @@
 # VLESS TODO
 
-进度记录，对标 Xray VLESS 的缺失功能。
+对标 Xray VLESS 的功能差距追踪。
 
-## 已完成 (2026-05-13)
+## 已完成
 
-- [x] gRPC 传输 (入站 + 出站)
-- [x] HTTP/2 传输 (入站 + 出站)
-- [x] QUIC 传输 (入站 + 出站)
-- [x] MUX 流级别 AES-128-GCM 加密
-- [x] UDP 链式全传输支持 (TLS / Reality / WS / gRPC / H2 / QUIC)
-- [x] VlessUdpOutboundManager 接入生产路径
-- [x] VlessUserConfig.flow 字段传播
-- [x] QUIC 入站运行时集成
+### 协议核心
+- [x] VLESS v0 帧格式 (version, UUID, addon, command, port, address)
+- [x] UUID 认证 (canonical + 32-hex)
+- [x] TCP / UDP / MUX 命令分发
+- [x] AEAD Flow (xtls-rprx-vision, xtls-rprx-vision-udp443) — AES-128-GCM + HKDF-SHA256
+- [x] UDP 包 v1 + v2 (auto-detect, address omission)
+
+### 传输层 (7 种)
+- [x] TLS (rustls, cert/key, ALPN, SNI, insecure, custom CA)
+- [x] WebSocket (tokio-tungstenite, path validation, custom headers)
+- [x] gRPC (h2 framing, service_name, TLS+gRPC)
+- [x] HTTP/2 (raw DATA frames, host+path)
+- [x] QUIC (quinn, rustls-ring, 入站 + 出站)
+- [x] HTTPUpgrade (GET + Upgrade 头 → 101, path validation)
+- [x] Reality (自研 TLS 1.3: ClientHello 指纹, X25519 ECDH, Session ID 加密, HMAC 证书, Ed25519 签名)
+
+### MUX
+- [x] Xray 兼容 MUX 帧格式 (session_id + length + payload, max 16384)
+- [x] MUX 连接池 (PoolKey, TransportKey, MuxPoolConn, MuxStreamRelay)
+- [x] 流级别 AES-128-GCM 加密 (per-stream key derivation, counter nonce)
+
+### UDP
+- [x] VLESS UDP 包 v1 + v2 格式
+- [x] UDP 链式全传输支持 (TLS / Reality / WS / gRPC / H2 / QUIC / HTTPUpgrade)
+- [x] VlessUdpOutboundManager (per-target upstream 管理)
+- [x] UDP 会话空闲超时 + 流追踪
+
+### Fallback
+- [x] 入站 TLS SNI/ALPN 探测 → 回落至配置目标
+- [x] 非 TLS 流量直接回落
+- [x] 配置: `fallback: { address, port }` + ALPN 映射
+
+### 架构
+- [x] Transport 实现从 proxy 移至 protocols/vless
+- [x] Transport 分发去重 (build_vless_outbound_transport)
+- [x] InboundHandler / OutboundHandler 死代码删除
+- [x] 协议类型归位 (ConfiguredVlessUsers, VlessUdpTransport, MuxPoolConn...)
+- [x] Reality 测试文件独立提取 (11 个 test 文件, 2294 行)
+- [x] proxy 瘦身 7318 → 5398 行 (-26%)
 
 ---
 
 ## 待实现
 
-### Fallback
+### SplitHTTP (XHTTP)
 
-认证失败时将连接转发到其他服务，实现伪装能力。
-
-**范围：**
-- 配置：`InboundProtocolConfig::Vless` 新增 `fallback` 字段
-- TLS 场景下支持 ALPN 映射不同回落目标
-- 修改 `handle_vless_client`：认证失败时做双向中继而非直接返回错误
-
-**工时估计：** 4-6h
-
----
-
-### HTTPUpgrade 传输
-
-WebSocket 的轻量替代，CDN 友好，无帧格式和掩码开销。
+拆分上传(POST) / 下载(GET)为独立 HTTP 连接，兼容仅支持 GET 的 CDN。
 
 **范围：**
-- 新建 `crates/proxy/src/transport/http_upgrade.rs`
-- 客户端：GET + Upgrade 头 → 101 响应 → 裸双向流
-- 服务端：读升级请求 → 发 101 → 裸双向流
-- 配置：`http_upgrade` 块 (path, host)
-
-**工时估计：** 2-3h
-
----
-
-### SplitHTTP (XHTTP) 传输
-
-拆分上传/下载为独立 HTTP 请求，兼容仅支持 GET 或 POST 的 CDN。
-
-**范围：**
-- 新建 `crates/proxy/src/transport/split_http.rs`
-- POST 连接负责上传，GET 连接负责下载
-- 服务端需 session ID 配对机制
-- 可能需修改 `ClientStream` trait 支持非对称连接
+- 新建 `protocols/vless/src/transport/split_http.rs`
+- 客户端: 两个 HTTP 连接，通过 session ID 配对
+- 服务端: 配对 POST/GET 请求，session ID 关联
+- 可能需修改流抽象支持非对称连接
 
 **工时估计：** 8-12h
-
----
-
-### Packet Encoding (新版 VLESS UDP 包格式)
-
-优化小包性能的新版 VLESS UDP 包格式。
-
-**范围：**
-- 新增 `parse_udp_packet_v2` / `build_udp_packet_v2`
-- 协商机制：服务端自动识别新旧格式
-
-**工时估计：** 1-2h
-
----
 
 ### gRPC MultiMode
 
@@ -76,6 +66,7 @@ gRPC 传输支持多服务名，连接时随机选取。
 
 **范围：**
 - `GrpcConfig.service_name` 从 `String` 改为 `Vec<String>`
+- `connect_grpc` / `accept_grpc` 支持多路径
 
 **工时估计：** 0.5h
 
@@ -85,4 +76,4 @@ gRPC 传输支持多服务名，连接时随机选取。
 
 ### DomainSocket
 
-Unix 域套接字传输层。仅适合本机进程间通信场景（配合 Nginx/Caddy 前置代理），非独立代理的核心需求。
+Unix 域套接字传输。仅适合本机前置代理（Nginx/Caddy）场景，非独立代理核心需求。
