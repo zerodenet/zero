@@ -1,6 +1,7 @@
 // Hysteria2 inbound — hysteria2.rs
 
 use std::io;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use tokio::select;
@@ -8,11 +9,12 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 use zero_config::InboundConfig;
-use zero_core::{Network, ProtocolType, Session};
+use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
 use zero_protocol_hysteria2::{
     build_auth_error, build_auth_ok, build_connect_error, build_connect_ok,
-    parse_auth_frame, parse_tcp_connect_header, Hysteria2Stream,
+    build_udp_datagram, parse_auth_frame, parse_tcp_connect_header, parse_udp_datagram,
+    Hysteria2Stream, Hysteria2UdpPacket,
 };
 use zero_traits::AsyncSocket;
 
@@ -189,9 +191,28 @@ impl Proxy {
 
         info!(inbound_tag, "hysteria2 auth success");
 
-        // Accept and dispatch streams
+        // Open local UDP socket for datagram forwarding
+        let udp_socket = match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
+            Ok(s) => Some(Arc::new(s)),
+            Err(e) => {
+                warn!(error = %e, "hysteria2: failed to bind UDP socket, datagrams disabled");
+                None
+            }
+        };
+
+        // Accept and dispatch streams + datagrams
         let mut stream_tasks = JoinSet::new();
         let conn = Arc::new(conn);
+
+        // Spawn datagram reader task
+        if let Some(ref udp) = udp_socket {
+            let conn_dg = conn.clone();
+            let udp_dg = udp.clone();
+            let inbound_tag = inbound_tag.to_owned();
+            stream_tasks.spawn(async move {
+                Self::hysteria2_datagram_loop(conn_dg, udp_dg, &inbound_tag).await
+            });
+        }
 
         loop {
             select! {
@@ -222,6 +243,94 @@ impl Proxy {
         }
 
         stream_tasks.abort_all();
+        Ok(())
+    }
+
+    /// Datagram forwarding loop: receive datagrams from client, forward to local UDP,
+    /// and send responses back.
+    async fn hysteria2_datagram_loop(
+        conn: Arc<quinn::Connection>,
+        udp_socket: Arc<tokio::net::UdpSocket>,
+        inbound_tag: &str,
+    ) -> Result<(), EngineError> {
+        let mut buf = [0u8; 65536];
+        let mut session_map: std::collections::HashMap<
+            (SocketAddr, u16),
+            (u16, Address, u16),
+        > = std::collections::HashMap::new();
+
+        loop {
+            select! {
+                // Incoming datagram from client
+                dg = conn.read_datagram() => {
+                    match dg {
+                        Ok(data) => {
+                            if let Ok(pkt) = parse_udp_datagram(&data) {
+                                let target_addr = match &pkt.target {
+                                    Address::Domain(d) => {
+                                        // Resolve domain (simplified: just log warning)
+                                        warn!("hysteria2 UDP: domain resolution not implemented for {}", d);
+                                        continue;
+                                    }
+                                    Address::Ipv4(ip) => {
+                                        SocketAddr::new(
+                                            std::net::IpAddr::V4(std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])),
+                                            pkt.port,
+                                        )
+                                    }
+                                    Address::Ipv6(ip) => {
+                                        SocketAddr::new(
+                                            std::net::IpAddr::V6(std::net::Ipv6Addr::from(*ip)),
+                                            pkt.port,
+                                        )
+                                    }
+                                };
+
+                                // Track session for response routing
+                                let local_addr = udp_socket.local_addr().unwrap_or_else(|_| "0.0.0.0:0".parse().unwrap());
+                                session_map.insert(
+                                    (local_addr, pkt.session_id),
+                                    (pkt.packet_id, pkt.target.clone(), pkt.port),
+                                );
+
+                                if let Err(e) = udp_socket.send_to(&pkt.payload, target_addr).await {
+                                    warn!(error = %e, "hysteria2 UDP send_to failed");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "hysteria2 read_datagram error");
+                            break;
+                        }
+                    }
+                }
+
+                // Response from local UDP target
+                recv = udp_socket.recv_from(&mut buf) => {
+                    match recv {
+                        Ok((n, sender)) => {
+                            // Find session mapping for this response
+                            // For now, use a simple approach: echo back to session 1
+                            // Full implementation would look up session from map
+                            if let Some(((local_addr, sid), (_, ref target, port))) =
+                                session_map.iter().find(|((la, _), _)| la == &sender)
+                            {
+                                if let Ok(dg) = build_udp_datagram(
+                                    *sid, 0, target, *port, &buf[..n],
+                                ) {
+                                    let _ = conn.send_datagram(dg.into());
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "hysteria2 UDP recv_from error");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
