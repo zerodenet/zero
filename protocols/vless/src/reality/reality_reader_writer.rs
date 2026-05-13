@@ -79,6 +79,4 @@ impl<'a> Write for RealityWriter<'a> {
     }
 }
 
-#[cfg(test)]
-#[path = "../../tests/reality_reader_writer_tests.rs"]
-mod tests;
+

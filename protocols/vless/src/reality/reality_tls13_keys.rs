@@ -69,7 +69,7 @@ pub fn hkdf_expand(
 }
 
 /// HKDF-Expand-Label as defined in RFC 8446 Section 7.1
-pub(crate) fn hkdf_expand_label_with_algorithm(
+pub fn hkdf_expand_label_with_algorithm(
     hmac_algorithm: hmac::Algorithm,
     secret: &[u8],
     label: &[u8],
@@ -121,7 +121,7 @@ fn derive_secret_with_algorithm(
 }
 
 /// HKDF-Extract operation with configurable HMAC algorithm
-pub(crate) fn hkdf_extract_with_algorithm(
+pub fn hkdf_extract_with_algorithm(
     hmac_algorithm: hmac::Algorithm,
     salt: &[u8],
     ikm: &[u8],
@@ -382,6 +382,4 @@ pub fn compute_finished_verify_data(
     Ok(verify_data)
 }
 
-#[cfg(test)]
-#[path = "../../tests/reality_tls13_keys_tests.rs"]
-mod tests;
+

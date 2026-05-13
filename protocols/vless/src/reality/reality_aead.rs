@@ -167,7 +167,7 @@ pub fn decrypt_handshake_message(
     Ok(plaintext)
 }
 
-pub(crate) fn encrypt_tls13_record(
+pub fn encrypt_tls13_record(
     cipher_suite: CipherSuite,
     key: &[u8],
     iv: &[u8],
@@ -178,7 +178,7 @@ pub(crate) fn encrypt_tls13_record(
     AeadKey::new(cipher_suite, key)?.seal(plaintext, iv, seq, aad)
 }
 
-pub(crate) fn decrypt_tls13_record(
+pub fn decrypt_tls13_record(
     cipher_suite: CipherSuite,
     key: &[u8],
     iv: &[u8],
@@ -189,7 +189,4 @@ pub(crate) fn decrypt_tls13_record(
     AeadKey::new(cipher_suite, key)?.open(ciphertext, iv, seq, aad)
 }
 
-#[path = "../../tests/reality_aead_tests.rs"]
-#[cfg(test)]
-#[path = "../../tests/reality_aead_tests.rs"]
-mod tests;
+

@@ -1,4 +1,9 @@
-    use crate::reality::reality_records::*;
+use std::io::{self, ErrorKind};
+use zero_protocol_vless::reality::common::*;
+use ring::hmac;
+use zero_protocol_vless::reality::reality_cipher_suite::CipherSuite;
+use zero_protocol_vless::reality::reality_aead::AeadKey;
+    use zero_protocol_vless::reality::reality_records::*;
 
     const CS: CipherSuite = CipherSuite::AES_128_GCM_SHA256;
 

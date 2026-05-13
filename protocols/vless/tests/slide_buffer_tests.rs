@@ -1,4 +1,5 @@
-    use crate::reality::slide_buffer::*;
+use std::io::{self, Read, Write, BufRead, ErrorKind};
+    use zero_protocol_vless::reality::slide_buffer::*;
 
     #[test]
     fn test_new_buffer() {

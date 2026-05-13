@@ -3,21 +3,21 @@
 
 #![allow(dead_code)]
 
-pub(crate) mod buf_reader;
-pub(crate) mod common;
-pub(crate) mod reality_aead;
-pub(crate) mod reality_auth;
-pub(crate) mod reality_cipher_suite;
-pub(crate) mod reality_client_connection;
-pub(crate) mod reality_client_verify;
-pub(crate) mod reality_io_state;
-pub(crate) mod reality_reader_writer;
-pub(crate) mod reality_records;
-pub(crate) mod reality_server_connection;
-pub(crate) mod reality_tls13_keys;
-pub(crate) mod reality_tls13_messages;
-pub(crate) mod reality_util;
-pub(crate) mod slide_buffer;
+pub mod buf_reader;
+pub mod common;
+pub mod reality_aead;
+pub mod reality_auth;
+pub mod reality_cipher_suite;
+pub mod reality_client_connection;
+pub mod reality_client_verify;
+pub mod reality_io_state;
+pub mod reality_reader_writer;
+pub mod reality_records;
+pub mod reality_server_connection;
+pub mod reality_tls13_keys;
+pub mod reality_tls13_messages;
+pub mod reality_util;
+pub mod slide_buffer;
 
 pub use stream::{
     generate_reality_key_pair, upgrade_reality_client, upgrade_reality_server,

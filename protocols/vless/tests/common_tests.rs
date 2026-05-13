@@ -1,4 +1,6 @@
-    use crate::reality::common::*;
+use std::io::{self, ErrorKind};
+use zero_protocol_vless::reality::common::*;
+    use zero_protocol_vless::reality::common::*;
 
     #[test]
     fn test_strip_content_type_app_data() {

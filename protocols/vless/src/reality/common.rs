@@ -337,7 +337,4 @@ pub fn strip_content_type_with_padding(plaintext: &mut Vec<u8>) -> io::Result<u8
     Ok(content_type)
 }
 
-#[path = "../../tests/common_tests.rs"]
-#[cfg(test)]
-#[path = "../../tests/common_tests.rs"]
-mod tests;
+

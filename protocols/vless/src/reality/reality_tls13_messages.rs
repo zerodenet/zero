@@ -344,6 +344,4 @@ pub fn write_record_header(record_type: u8, length: u16) -> Vec<u8> {
     header
 }
 
-#[cfg(test)]
-#[path = "../../tests/reality_tls13_messages_tests.rs"]
-mod tests;
+

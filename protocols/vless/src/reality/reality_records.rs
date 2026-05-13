@@ -318,7 +318,4 @@ fn make_record_header(ciphertext_len: usize) -> [u8; TLS_RECORD_HEADER_SIZE] {
     ]
 }
 
-#[path = "../../tests/reality_records_tests.rs"]
-#[cfg(test)]
-#[path = "../../tests/reality_records_tests.rs"]
-mod tests;
+

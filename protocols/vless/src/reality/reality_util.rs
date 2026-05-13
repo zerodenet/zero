@@ -444,6 +444,4 @@ pub fn negotiate_cipher_suite(
     None
 }
 
-#[cfg(test)]
-#[path = "../../tests/reality_util_tests.rs"]
-mod tests;
+

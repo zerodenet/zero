@@ -1,4 +1,6 @@
-    use crate::reality::reality_reader_writer::*;
+use zero_protocol_vless::reality::slide_buffer::SlideBuffer;
+use std::io::{self, Read, Write, BufRead, ErrorKind};
+    use zero_protocol_vless::reality::reality_reader_writer::*;
 
     #[test]
     fn test_reality_crypto_reader() {

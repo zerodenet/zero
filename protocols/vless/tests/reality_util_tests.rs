@@ -1,4 +1,4 @@
-use crate::reality::reality_util::*;
+use zero_protocol_vless::reality::reality_util::*;
 
 #[test]
 fn test_decode_short_id() {

@@ -15,7 +15,7 @@ mod mux_crypto;
 pub mod mux_pool;
 mod outbound;
 #[cfg(feature = "reality")]
-mod reality;
+pub mod reality;
 mod shared;
 #[cfg(feature = "reality")]
 mod udp;

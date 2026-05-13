@@ -1,5 +1,6 @@
-use crate::reality::common::CONTENT_TYPE_HANDSHAKE;
-use crate::reality::reality_tls13_messages::*;
+use zero_protocol_vless::reality::common::*;
+use zero_protocol_vless::reality::common::CONTENT_TYPE_HANDSHAKE;
+use zero_protocol_vless::reality::reality_tls13_messages::*;
 
 #[test]
 fn test_construct_finished() {

@@ -1,4 +1,6 @@
-    use crate::reality::reality_tls13_keys::*;
+use ring::hmac;
+use zero_protocol_vless::reality::reality_cipher_suite::CipherSuite;
+    use zero_protocol_vless::reality::reality_tls13_keys::*;
 
     const CS_SHA256: CipherSuite = CipherSuite::AES_128_GCM_SHA256;
 

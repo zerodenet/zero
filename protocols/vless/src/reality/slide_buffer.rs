@@ -256,6 +256,4 @@ impl std::ops::Index<std::ops::RangeTo<usize>> for SlideBuffer {
     }
 }
 
-#[cfg(test)]
-#[path = "../../tests/slide_buffer_tests.rs"]
-mod tests;
+

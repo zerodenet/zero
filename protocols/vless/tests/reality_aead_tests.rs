@@ -1,4 +1,8 @@
-    use crate::reality::reality_aead::*;
+use std::io::{self, ErrorKind};
+use zero_protocol_vless::reality::common::*;
+use ring::hmac;
+use zero_protocol_vless::reality::reality_cipher_suite::CipherSuite;
+    use zero_protocol_vless::reality::reality_aead::*;
 
     const CS: CipherSuite = CipherSuite::AES_128_GCM_SHA256;
 
@@ -173,8 +177,8 @@
 
     #[test]
     fn test_decrypt_handshake_message() {
-        use crate::reality::common::CONTENT_TYPE_HANDSHAKE;
-        use crate::reality::reality_aead::decrypt_handshake_message;
+        use zero_protocol_vless::reality::common::CONTENT_TYPE_HANDSHAKE;
+        use zero_protocol_vless::reality::reality_aead::decrypt_handshake_message;
 
         let key = vec![0x42u8; 16];
         let iv = vec![0x99u8; 12];
@@ -209,8 +213,8 @@
 
     #[test]
     fn test_decrypt_handshake_message_with_padding() {
-        use crate::reality::common::CONTENT_TYPE_HANDSHAKE;
-        use crate::reality::reality_aead::decrypt_handshake_message;
+        use zero_protocol_vless::reality::common::CONTENT_TYPE_HANDSHAKE;
+        use zero_protocol_vless::reality::reality_aead::decrypt_handshake_message;
 
         let key = vec![0x42u8; 16];
         let iv = vec![0x99u8; 12];

@@ -174,7 +174,7 @@ pub fn decrypt_session_id(
 }
 
 /// Creates a REALITY SessionId (test helper)
-pub(crate) fn create_session_id(version: [u8; 3], timestamp: u32, short_id: &[u8; 8]) -> [u8; 32] {
+pub fn create_session_id(version: [u8; 3], timestamp: u32, short_id: &[u8; 8]) -> [u8; 32] {
     let mut session_id = [0u8; 32];
     session_id[0] = version[0]; // Major version
     session_id[1] = version[1]; // Minor version
@@ -187,14 +187,11 @@ pub(crate) fn create_session_id(version: [u8; 3], timestamp: u32, short_id: &[u8
 }
 
 /// Gets current Unix timestamp (test helper)
-pub(crate) fn get_current_timestamp() -> u32 {
+pub fn get_current_timestamp() -> u32 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
         .as_secs() as u32
 }
 
-#[path = "../../tests/reality_auth_tests.rs"]
-#[cfg(test)]
-#[path = "../../tests/reality_auth_tests.rs"]
-mod tests;
+
