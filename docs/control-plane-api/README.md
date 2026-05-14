@@ -1,0 +1,85 @@
+# Zero 控制面 API
+
+Zero 内核提供标准化的控制面，支持本地管理、远程上报和外部业务系统集成。所有能力通过三种通道暴露：**HTTP**、**Unix Domain Socket / Windows Named Pipe**、**CLI**。
+
+## 快速导航
+
+| 文档 | 说明 |
+|------|------|
+| [configuration.md](./configuration.md) | `api.*` 配置模型完整参考 |
+| [http-api.md](./http-api.md) | HTTP JSON 端点规范 |
+| [ipc-protocol.md](./ipc-protocol.md) | UDS / Named Pipe 帧协议 |
+| [events.md](./events.md) | 事件目录和 payload 规范 |
+| [hooks.md](./hooks.md) | FlowHook 扩展点 |
+| [push-connector.md](./push-connector.md) | 节点主动上报与远程命令 |
+| [cli.md](./cli.md) | CLI 控制命令 |
+
+## 架构概览
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    GUI / CLI / 面板                    │
+├──────────┬──────────┬──────────┬──────────┬─────────┤
+│  HTTP    │   UDS    │   CLI    │  Panel   │  Hook   │
+│  :9090   │ .sock    │  zero    │Connector │  UDS    │
+├──────────┴──────────┴──────────┴──────────┴─────────┤
+│                   EngineHandle                       │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────────┐ │
+│  │  Query   │ │ Command  │ │     EventSource      │ │
+│  │ Service  │ │ Service  │ │  (SSE / IPC / Sink)  │ │
+│  └──────────┘ └──────────┘ └──────────────────────┘ │
+├─────────────────────────────────────────────────────┤
+│                      Engine                          │
+│  ┌──────────┐ ┌──────────────┐ ┌─────────────────┐  │
+│  │  Router  │ │ Session Reg  │ │   Event Log     │  │
+│  └──────────┘ └──────────────┘ └─────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+## 三种通道对比
+
+| 维度 | HTTP | IPC (UDS/Pipe) | CLI |
+|------|------|----------------|-----|
+| 传输 | TCP | Unix Domain Socket / Named Pipe | UDS / Named Pipe |
+| 认证 | Bearer token | 文件系统权限 (0600) | 文件系统权限 |
+| 查询 | `GET /api/v1/*` | `{"type":"query",...}` | `zero status/flows/policies` |
+| 命令 | `POST /api/v1/commands` | `{"type":"command",...}` | `zero select <p> <t>` |
+| 事件流 | SSE (`text/event-stream`) | JSON-line 推送 | `zero events` |
+| 适用场景 | 远程调试、Web 面板 | 本地 GUI 进程 | 终端管理 |
+| 默认端口/路径 | 127.0.0.1:9090 | `~/.zero/control.sock` / `\\.\pipe\zero-control` | 自动发现 |
+
+## 核心设计原则
+
+1. **内核通用** — API 不绑定任何特定面板或平台，所有消费者平等
+2. **能力原语** — 暴露原子能力（查询、切换、关闭），业务逻辑在外部
+3. **多通道一致** — HTTP、IPC、CLI 三种通道共享相同的语义和数据模型
+4. **安全后置** — 本地默认无认证（文件权限隔离），远程使用 Bearer token，mTLS 可选
+5. **事件驱动** — 所有状态变更以归一化事件推送，支持 SSE、IPC 流、Sink 投递三种消费方式
+
+## 最小可用配置
+
+```json
+{
+  "inbounds": [...],
+  "outbounds": [...],
+  "route": {...},
+  "api": {
+    "control": {
+      "enabled": true,
+      "listen": { "address": "127.0.0.1", "port": 9090 }
+    }
+  }
+}
+```
+
+启动后即可通过 HTTP 或 IPC 访问控制面：
+
+```bash
+# HTTP
+curl http://127.0.0.1:9090/api/v1/runtime
+
+# CLI (自动连接 ~/.zero/control.sock)
+zero status
+zero select proxy direct
+zero events
+```
