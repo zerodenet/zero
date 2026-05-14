@@ -101,24 +101,24 @@ fn local_status_listener_exposes_live_runtime_view() {
         .expect("http body");
     let runtime: serde_json::Value =
         serde_json::from_str(runtime_body).expect("parse runtime json");
-    assert_eq!(runtime["stats"]["active_sessions"], 1);
-    assert_eq!(runtime["active_sessions"][0]["inbound_tag"], "socks-in");
-    assert_eq!(runtime["active_sessions"][0]["outbound_tag"], "direct");
-    assert_eq!(runtime["active_sessions"][0]["network"], "tcp");
-    assert_eq!(runtime["active_sessions"][0]["mode"], "rule");
+    assert_eq!(runtime["result"]["stats"]["active_sessions"], 1);
+    assert_eq!(runtime["result"]["active_sessions"][0]["inbound_tag"], "socks-in");
+    assert_eq!(runtime["result"]["active_sessions"][0]["outbound_tag"], "direct");
+    assert_eq!(runtime["result"]["active_sessions"][0]["network"], "tcp");
+    assert_eq!(runtime["result"]["active_sessions"][0]["mode"], "rule");
 
     let config_response = http_get(status_port, "/config");
     let config_body = config_response.split("\r\n\r\n").nth(1).expect("http body");
     let config_json: serde_json::Value =
         serde_json::from_str(config_body).expect("parse config json");
-    assert_eq!(config_json["rule_count"], 0);
-    assert_eq!(config_json["inbounds"][0]["listen_port"], socks_port);
+    assert_eq!(config_json["result"]["rule_count"], 0);
+    assert_eq!(config_json["result"]["inbounds"][0]["listen_port"], socks_port);
 
     let status_response = http_get(status_port, "/status");
     let status_body = status_response.split("\r\n\r\n").nth(1).expect("http body");
     let status_json: serde_json::Value =
         serde_json::from_str(status_body).expect("parse status json");
-    assert_eq!(status_json["runtime"]["stats"]["active_sessions"], 1);
+    assert_eq!(status_json["result"]["stats"]["active_sessions"], 1);
 
     release_tx.send(()).expect("release echo");
     client.write_all(b"ping").expect("write echo payload");
@@ -136,7 +136,7 @@ fn local_status_listener_exposes_live_runtime_view() {
         .expect("http body");
     let runtime_after: serde_json::Value =
         serde_json::from_str(runtime_after_body).expect("parse runtime json");
-    assert_eq!(runtime_after["stats"]["active_sessions"], 0);
+    assert_eq!(runtime_after["result"]["stats"]["active_sessions"], 0);
 
     child.kill().expect("kill zero process");
     let _ = child.wait();
@@ -216,7 +216,7 @@ fn local_status_listener_can_switch_selector_group() {
     let initial_body = initial_config.split("\r\n\r\n").nth(1).expect("http body");
     let initial_json: serde_json::Value =
         serde_json::from_str(initial_body).expect("parse config json");
-    assert_eq!(initial_json["outbound_groups"][0]["selected"], "block");
+    assert_eq!(initial_json["result"]["outbound_groups"][0]["selected"], "block");
 
     let mut blocked = TcpStream::connect(("127.0.0.1", socks_port)).expect("connect socks5");
     blocked
@@ -258,7 +258,7 @@ fn local_status_listener_can_switch_selector_group() {
     let config_after_json: serde_json::Value =
         serde_json::from_str(config_after_body).expect("parse config json");
     assert_eq!(
-        config_after_json["outbound_groups"][0]["selected"],
+        config_after_json["result"]["outbound_groups"][0]["selected"],
         "direct"
     );
 
@@ -358,15 +358,15 @@ fn local_status_commands_endpoint_selects_policy() {
     assert!(response.starts_with("HTTP/1.1 200 OK"));
     let body = response.split("\r\n\r\n").nth(1).expect("http body");
     let body: serde_json::Value = serde_json::from_str(body).expect("parse command response");
-    assert_eq!(body["accepted"], true);
-    assert_eq!(body["result"]["selected"], "direct");
+    assert_eq!(body["result"]["accepted"], true);
+    assert_eq!(body["result"]["result"]["selected"], "direct");
 
     let config_after = http_get(status_port, "/api/v1/config");
     let config_after_body = config_after.split("\r\n\r\n").nth(1).expect("http body");
     let config_after_json: serde_json::Value =
         serde_json::from_str(config_after_body).expect("parse config json");
     assert_eq!(
-        config_after_json["outbound_groups"][0]["selected"],
+        config_after_json["result"]["outbound_groups"][0]["selected"],
         "direct"
     );
 

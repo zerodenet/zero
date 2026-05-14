@@ -60,6 +60,18 @@ outbound-hysteria2 = [
     "dep:zero-protocol-hysteria2",
     "zero-protocol-hysteria2/crypto",
 ]
+inbound-shadowsocks = [
+    "dep:ring",
+    "dep:zero-protocol-shadowsocks",
+    "zero-protocol-shadowsocks/crypto",
+    "zero-protocol-shadowsocks/blake3",
+]
+outbound-shadowsocks = [
+    "dep:ring",
+    "dep:zero-protocol-shadowsocks",
+    "zero-protocol-shadowsocks/crypto",
+    "zero-protocol-shadowsocks/blake3",
+]
 
 [dependencies]
 quinn = { version = "0.11", default-features = false, features = ["rustls-ring"], optional = true }
@@ -75,6 +87,7 @@ zero-protocol-http-connect = { path = "../../protocols/http-connect", optional =
 zero-protocol-socks5 = { path = "../../protocols/socks5", optional = true }
 zero-protocol-vless = { path = "../../protocols/vless", optional = true, default-features = false }
 zero-protocol-hysteria2 = { path = "../../protocols/hysteria2", optional = true, default-features = false }
+zero-protocol-shadowsocks = { path = "../../protocols/shadowsocks", optional = true, default-features = false }
 zero-traits = { path = "../traits" }
 zero-transport = { path = "../transport", optional = true, features = ["vless"] }
 

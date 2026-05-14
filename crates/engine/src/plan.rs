@@ -92,6 +92,17 @@ impl EnginePlan {
                     password: password.clone(),
                     insecure: *insecure,
                 })),
+                OutboundProtocolConfig::Shadowsocks {
+                    server,
+                    port,
+                    password,
+                    cipher,
+                } => TargetKind::Outbound(Box::new(OutboundTarget::Shadowsocks {
+                    server: server.clone(),
+                    port: *port,
+                    password: password.clone(),
+                    cipher: cipher.clone(),
+                })),
             };
 
             targets.push(TargetNode {
@@ -236,6 +247,12 @@ pub enum OutboundTarget {
         port: u16,
         password: String,
         insecure: bool,
+    },
+    Shadowsocks {
+        server: String,
+        port: u16,
+        password: String,
+        cipher: String,
     },
 }
 

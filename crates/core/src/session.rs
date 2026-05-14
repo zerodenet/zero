@@ -14,6 +14,7 @@ pub enum ProtocolType {
     HttpConnect,
     Vless,
     Hysteria2,
+    Shadowsocks,
     Unknown,
 }
 

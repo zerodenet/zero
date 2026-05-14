@@ -22,6 +22,8 @@ pub(crate) enum TcpInboundProtocol {
     Vless,
     #[cfg(feature = "inbound-hysteria2")]
     Hysteria2,
+    #[cfg(feature = "inbound-shadowsocks")]
+    Shadowsocks,
 }
 
 impl Proxy {
@@ -100,6 +102,12 @@ impl Proxy {
                 upstream,
             })
             | Ok(EstablishedTcpOutbound::Hysteria2 {
+                tag,
+                server,
+                port,
+                upstream,
+            })
+            | Ok(EstablishedTcpOutbound::Shadowsocks {
                 tag,
                 server,
                 port,
@@ -223,6 +231,8 @@ impl Proxy {
             TcpInboundProtocol::Hysteria2 => {
                 // Hysteria2 uses QUIC, not TCP — this arm is unreachable
             }
+            #[cfg(feature = "inbound-shadowsocks")]
+            TcpInboundProtocol::Shadowsocks => {}
         }
 
         Ok(())
@@ -258,6 +268,8 @@ impl Proxy {
             }
             #[cfg(feature = "inbound-hysteria2")]
             TcpInboundProtocol::Hysteria2 => {}
+            #[cfg(feature = "inbound-shadowsocks")]
+            TcpInboundProtocol::Shadowsocks => {}
         }
     }
 
@@ -291,6 +303,8 @@ impl Proxy {
             }
             #[cfg(feature = "inbound-hysteria2")]
             TcpInboundProtocol::Hysteria2 => {}
+            #[cfg(feature = "inbound-shadowsocks")]
+            TcpInboundProtocol::Shadowsocks => {}
         }
     }
 }

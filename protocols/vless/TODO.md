@@ -67,16 +67,17 @@
 
 ---
 
-## Hysteria2 协议 ✅ (2025-05-13)
+## Hysteria2 协议 ✅ (2026-05-14)
 
-新协议已接入，基础框架完成：
-- `protocols/hysteria2/` crate（shared, inbound, outbound, stream, udp）
-- QUIC 入站监听器 + 密码认证
-- 出站 upstream（QUIC connect）
+完整实现，对标生产可用：
+- `protocols/hysteria2/` crate（shared, inbound, outbound, udp）— 纯协议层，no_std
+- `stream.rs` 已提取到 `transport/quic.rs`（Hysteria2Connector）
+- 入站：QUIC accept_connection → TLS key export salt → HMAC-SHA256 验证 → auth OK/ERR
+- 入站：accept_bi loop → parse connect header → route → bidirectional relay
+- 入站：UDP datagram loop with resolver-based domain forwarding
+- 出站：QUIC connect → auth handshake → open_bi → connect header → relay
 - 配置模型 + engine 类型 + inventory 注册
 - 示例配置 `examples/v0.1.0/hysteria2.json`
-
-待完善：完整的 auth 流程（HMAC 验证）、TCP stream dispatch、UDP datagram 转发。
 
 ---
 

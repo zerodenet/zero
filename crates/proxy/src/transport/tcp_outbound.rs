@@ -32,6 +32,12 @@ pub(crate) enum EstablishedTcpOutbound {
         port: u16,
         upstream: TcpRelayStream,
     },
+    Shadowsocks {
+        tag: String,
+        server: String,
+        port: u16,
+        upstream: TcpRelayStream,
+    },
 }
 
 pub(crate) struct TcpOutboundFailure {
@@ -185,6 +191,27 @@ impl Proxy {
                     }),
                     Err(error) => Err(TcpOutboundFailure {
                         stage: "connect_upstream_hysteria2",
+                        error,
+                        upstream_endpoint: Some((server.to_owned(), port)),
+                    }),
+                }
+            }
+            ResolvedLeafOutbound::Shadowsocks {
+                tag,
+                server,
+                port,
+                password,
+                cipher,
+            } => {
+                match self.connect_via_shadowsocks_upstream(session, server, port, password, cipher).await {
+                    Ok(upstream) => Ok(EstablishedTcpOutbound::Shadowsocks {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        upstream,
+                    }),
+                    Err(error) => Err(TcpOutboundFailure {
+                        stage: "connect_upstream_shadowsocks",
                         error,
                         upstream_endpoint: Some((server.to_owned(), port)),
                     }),

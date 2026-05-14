@@ -269,6 +269,16 @@ pub enum InboundProtocolConfig {
         #[serde(default)]
         key_path: Option<String>,
     },
+    #[serde(rename = "shadowsocks")]
+    Shadowsocks {
+        password: String,
+        #[serde(default = "default_ss_cipher")]
+        cipher: String,
+    },
+}
+
+fn default_ss_cipher() -> String {
+    "chacha20-ietf-poly1305".to_string()
 }
 
 impl InboundProtocolConfig {
@@ -276,7 +286,7 @@ impl InboundProtocolConfig {
         match self {
             Self::Socks5 { users } => users,
             Self::Mixed { socks5_users } => socks5_users,
-            Self::HttpConnect | Self::Vless { .. } | Self::Hysteria2 { .. } => &[],
+            Self::HttpConnect | Self::Vless { .. } | Self::Hysteria2 { .. } | Self::Shadowsocks { .. } => &[],
         }
     }
 
@@ -616,6 +626,14 @@ pub enum OutboundProtocolConfig {
         password: String,
         #[serde(default)]
         insecure: bool,
+    },
+    #[serde(rename = "shadowsocks")]
+    Shadowsocks {
+        server: String,
+        port: u16,
+        password: String,
+        #[serde(default = "default_ss_cipher")]
+        cipher: String,
     },
 }
 

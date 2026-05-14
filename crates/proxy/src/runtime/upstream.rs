@@ -208,4 +208,51 @@ impl Proxy {
             feature: "outbound-hysteria2",
         })
     }
+
+    #[cfg(feature = "outbound-shadowsocks")]
+    pub(crate) async fn connect_via_shadowsocks_upstream(
+        &self,
+        session: &Session,
+        server: &str,
+        port: u16,
+        password: &str,
+        cipher: &str,
+    ) -> Result<TcpRelayStream, EngineError> {
+        use zero_protocol_shadowsocks::CipherKind;
+        let upstream = self
+            .protocols
+            .direct_outbound
+            .connect_host(server, port, &self.resolver)
+            .await?;
+        let mut metered = crate::transport::MeteredStream::new(upstream);
+        let cipher_kind = CipherKind::from_str(cipher).ok_or_else(|| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("unknown shadowsocks cipher: {cipher}"),
+            ))
+        })?;
+        self.protocols
+            .shadowsocks_outbound
+            .send_request(&mut metered, session, cipher_kind, password.as_bytes())
+            .await?;
+        self.record_session_outbound_traffic(session.id, metered.drain_traffic());
+        Ok(metered.into_inner().into())
+    }
+
+    #[cfg(not(feature = "outbound-shadowsocks"))]
+    pub(crate) async fn connect_via_shadowsocks_upstream(
+        &self,
+        _session: &Session,
+        _server: &str,
+        _port: u16,
+        _password: &str,
+        _cipher: &str,
+    ) -> Result<TcpRelayStream, EngineError> {
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "outbound",
+            tag: "shadowsocks-upstream".to_owned(),
+            protocol: "shadowsocks",
+            feature: "outbound-shadowsocks",
+        })
+    }
 }

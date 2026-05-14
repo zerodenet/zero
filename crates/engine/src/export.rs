@@ -245,6 +245,12 @@ impl From<&OutboundConfig> for OutboundExport {
                 server: Some(server.clone()),
                 port: Some(*port),
             },
+            OutboundProtocolConfig::Shadowsocks { server, port, .. } => Self {
+                tag: outbound.tag.clone(),
+                protocol: "shadowsocks".to_owned(),
+                server: Some(server.clone()),
+                port: Some(*port),
+            },
         }
     }
 }
@@ -446,6 +452,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::Mixed { .. } => "mixed",
         InboundProtocolConfig::Vless { .. } => "vless",
         InboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
+        InboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
     }
 }
 
@@ -455,6 +462,7 @@ fn protocol_name(protocol: ProtocolType) -> &'static str {
         ProtocolType::HttpConnect => "http-connect",
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
+        ProtocolType::Shadowsocks => "shadowsocks",
         ProtocolType::Unknown => "unknown",
     }
 }

@@ -393,6 +393,7 @@ impl Proxy {
                 crate::transport::EstablishedTcpOutbound::Vless { upstream, .. } => upstream,
                 crate::transport::EstablishedTcpOutbound::Socks5 { upstream, .. } => upstream,
                 crate::transport::EstablishedTcpOutbound::Hysteria2 { upstream, .. } => upstream,
+                crate::transport::EstablishedTcpOutbound::Shadowsocks { upstream, .. } => upstream,
                 crate::transport::EstablishedTcpOutbound::Block { .. } => {
                     let err = build_connect_error("blocked");
                     let _ = AsyncSocket::write_all(&mut stream, &err).await;

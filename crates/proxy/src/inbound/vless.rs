@@ -550,6 +550,7 @@ impl Proxy {
                                         EstablishedTcpOutbound::Vless { upstream, .. } => upstream,
                                         EstablishedTcpOutbound::Socks5 { upstream, .. } => upstream,
                                         EstablishedTcpOutbound::Hysteria2 { upstream, .. } => upstream,
+                                        EstablishedTcpOutbound::Shadowsocks { upstream, .. } => upstream,
                                         EstablishedTcpOutbound::Block { .. } => {
                                             let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
                                             let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;

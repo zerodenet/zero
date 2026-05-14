@@ -290,6 +290,26 @@ impl Proxy {
                     })
                 }
             }
+            InboundProtocolConfig::Shadowsocks { .. } => {
+                #[cfg(feature = "inbound-shadowsocks")]
+                {
+                    let proxy = self.clone();
+                    let inbound = inbound.clone();
+                    let shutdown = shutdown_rx.clone();
+                    listeners
+                        .spawn(async move { proxy.run_shadowsocks_listener(inbound, shutdown).await });
+                    Ok(())
+                }
+                #[cfg(not(feature = "inbound-shadowsocks"))]
+                {
+                    Err(EngineError::CompiledFeatureDisabled {
+                        kind: "inbound",
+                        tag: inbound.tag.clone(),
+                        protocol: "shadowsocks",
+                        feature: "inbound-shadowsocks",
+                    })
+                }
+            }
         }
     }
 }

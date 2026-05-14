@@ -42,6 +42,13 @@ pub enum ResolvedLeafOutbound<'a> {
         password: &'a str,
         insecure: bool,
     },
+    Shadowsocks {
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        password: &'a str,
+        cipher: &'a str,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -176,6 +183,18 @@ fn resolve_leaf_outbound<'a>(
             port: *port,
             password,
             insecure: *insecure,
+        },
+        OutboundTarget::Shadowsocks {
+            server,
+            port,
+            password,
+            cipher,
+        } => ResolvedLeafOutbound::Shadowsocks {
+            tag,
+            server,
+            port: *port,
+            password,
+            cipher,
         },
     }
 }

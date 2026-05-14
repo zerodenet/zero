@@ -8,3 +8,5 @@ mod socks5;
 mod vless;
 #[cfg(feature = "inbound-hysteria2")]
 mod hysteria2;
+#[cfg(feature = "inbound-shadowsocks")]
+mod shadowsocks;

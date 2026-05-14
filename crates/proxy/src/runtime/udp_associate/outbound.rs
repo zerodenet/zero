@@ -105,6 +105,14 @@ impl Proxy {
                 .into(),
                 upstream: None,
             }),
+            ResolvedLeafOutbound::Shadowsocks { .. } => Err(UdpCandidateFailure {
+                stage: "udp_shadowsocks_outbound",
+                error: zero_core::Error::Unsupported(
+                    "SS UDP chaining is handled via Shadowsocks inbound, not SOCKS5 UDP associate",
+                )
+                .into(),
+                upstream: None,
+            }),
         }
     }
 

@@ -233,6 +233,7 @@ fn protocol_str(proto: ProtocolType) -> &'static str {
         ProtocolType::HttpConnect => "http-connect",
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
+        ProtocolType::Shadowsocks => "shadowsocks",
         ProtocolType::Unknown => "unknown",
     }
 }

@@ -89,6 +89,10 @@ pub(super) fn validate_inbound_protocol(
             }
             Ok(())
         }
+        InboundProtocolConfig::Shadowsocks { password, cipher: _ } => {
+            validate_inbound_optional_non_empty("shadowsocks password", password)?;
+            Ok(())
+        }
     }
 }
 
@@ -175,6 +179,15 @@ pub(super) fn validate_outbound_protocol(
             insecure: _,
         } => {
             validate_outbound_endpoint("hysteria2", server, *port)?;
+            Ok(())
+        }
+        OutboundProtocolConfig::Shadowsocks {
+            server,
+            port,
+            password: _,
+            cipher: _,
+        } => {
+            validate_outbound_endpoint("shadowsocks", server, *port)?;
             Ok(())
         }
         OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => Ok(()),

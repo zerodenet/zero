@@ -282,6 +282,15 @@ impl Proxy {
                         crate::transport::connect_quic(server, port, true).await?;
                     TcpRelayStream::new(quic_stream)
                 }
+                ResolvedLeafOutbound::Shadowsocks {
+                    server, port, ..
+                } => {
+                    self.protocols.direct_outbound
+                        .connect_host(server, port, &self.resolver)
+                        .await
+                        .map_err(EngineError::from)?
+                        .into()
+                }
             };
 
             socket
