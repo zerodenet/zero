@@ -45,6 +45,12 @@ impl EventSource for Engine {
     fn subscribe(&self, filter: EventFilter) -> zero_api::ApiResult<Self::Stream> {
         Ok(self.events_snapshot(&filter))
     }
+
+    fn latest(&self, limit: usize, filter: EventFilter) -> zero_api::ApiResult<Vec<RawApiEvent>> {
+        let mut events = self.events_snapshot(&filter);
+        events.truncate(limit);
+        Ok(events)
+    }
 }
 
 struct EngineQueryView {

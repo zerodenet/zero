@@ -65,6 +65,10 @@ impl WebhookEventSink {
 }
 
 impl EventSink for WebhookEventSink {
+    fn name(&self) -> &str {
+        "webhook"
+    }
+
     fn publish(&self, event: &RawApiEvent) -> ApiResult<PublishResult> {
         let mut request = self.client.post(self.url.clone()).json(event);
         if !self.headers.is_empty() {

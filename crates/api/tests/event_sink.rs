@@ -15,7 +15,7 @@ fn event(id: &str, event_type: &str) -> RawApiEvent {
 fn callback_event_sink_publishes_to_in_process_callback() {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let seen_for_callback = Arc::clone(&seen);
-    let sink = CallbackEventSink::new(move |event: &RawApiEvent| {
+    let sink = CallbackEventSink::new("test-callback", move |event: &RawApiEvent| {
         seen_for_callback
             .lock()
             .expect("seen lock")

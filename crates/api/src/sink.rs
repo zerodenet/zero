@@ -1,15 +1,20 @@
+use std::collections::HashSet;
 use std::io::Write;
 use std::sync::Mutex;
 
 use crate::{ApiError, ApiErrorCode, ApiResult, EventSink, PublishResult, RawApiEvent};
 
 pub struct CallbackEventSink<F> {
+    name: String,
     callback: F,
 }
 
 impl<F> CallbackEventSink<F> {
-    pub fn new(callback: F) -> Self {
-        Self { callback }
+    pub fn new(name: impl Into<String>, callback: F) -> Self {
+        Self {
+            name: name.into(),
+            callback,
+        }
     }
 }
 
@@ -17,6 +22,10 @@ impl<F> EventSink for CallbackEventSink<F>
 where
     F: Fn(&RawApiEvent) -> ApiResult<PublishResult> + Send + Sync,
 {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
     fn publish(&self, event: &RawApiEvent) -> ApiResult<PublishResult> {
         (self.callback)(event)
     }
@@ -24,6 +33,7 @@ where
 
 #[derive(Debug)]
 pub struct JsonLineEventSink<W> {
+    name: String,
     writer: Mutex<W>,
 }
 
@@ -33,6 +43,14 @@ where
 {
     pub fn new(writer: W) -> Self {
         Self {
+            name: "jsonl".to_owned(),
+            writer: Mutex::new(writer),
+        }
+    }
+
+    pub fn named(name: impl Into<String>, writer: W) -> Self {
+        Self {
+            name: name.into(),
             writer: Mutex::new(writer),
         }
     }
@@ -51,6 +69,10 @@ impl<W> EventSink for JsonLineEventSink<W>
 where
     W: Write + Send,
 {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
     fn publish(&self, event: &RawApiEvent) -> ApiResult<PublishResult> {
         let mut writer = self.writer.lock().map_err(|_| {
             ApiError::new(

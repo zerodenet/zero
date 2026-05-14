@@ -97,6 +97,11 @@ impl Engine {
             }
         }
 
+        let event_log = EngineEventLog::shared();
+
+        info!(version = env!("CARGO_PKG_VERSION"), "engine started");
+        event_log.push_engine_started(env!("CARGO_PKG_VERSION"));
+
         Ok(Self {
             config: Arc::new(config),
             plan,
@@ -104,7 +109,7 @@ impl Engine {
             next_session_id: Arc::new(AtomicU64::new(1)),
             session_registry: SessionRegistry::shared(),
             completed_sessions: CompletedSessionHistory::shared(),
-            event_log: EngineEventLog::shared(),
+            event_log,
             stats: EngineStats::shared(),
             outbound_group_state,
             udp_upstream_idle_timeout,

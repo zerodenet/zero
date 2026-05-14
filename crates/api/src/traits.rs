@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -19,10 +21,32 @@ pub trait EventSource {
     type Stream;
 
     fn subscribe(&self, filter: EventFilter) -> ApiResult<Self::Stream>;
+
+    /// Snapshot of recent events matching the filter.
+    fn latest(&self, limit: usize, filter: EventFilter) -> ApiResult<Vec<RawApiEvent>>;
 }
 
 pub trait EventSink {
+    /// Human-readable name for logging and debugging.
+    fn name(&self) -> &str;
+
+    /// Publish a single event to this sink.
     fn publish(&self, event: &RawApiEvent) -> ApiResult<PublishResult>;
+
+    /// Flush any buffered events.
+    fn flush(&self) -> ApiResult<()> {
+        Ok(())
+    }
+
+    /// Optional event type filter for this sink. If `None`, accepts all events.
+    fn filter(&self) -> &Option<HashSet<String>> {
+        &None
+    }
+
+    /// Preferred batch size for this sink. Default 1 (no batching).
+    fn batch_size(&self) -> usize {
+        1
+    }
 }
 
 pub trait ApiCodec {

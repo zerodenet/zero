@@ -12,7 +12,6 @@ pub(crate) use stream::*;
 pub(crate) use tcp_flow::*;
 pub(crate) use tcp_outbound::*;
 pub(crate) use tcp_relay::*;
-pub(crate) use tls_hello::peek_client_hello;
 
 // Re-export transport implementations from zero-transport.
 // Only items used directly by proxy code are listed.
@@ -31,4 +30,4 @@ pub(crate) use zero_transport::tls::{build_tls_acceptor, InboundTlsStream};
 #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
 pub(crate) use zero_transport::ws::accept_ws;
 #[cfg(any(feature = "inbound-hysteria2", feature = "outbound-hysteria2"))]
-pub(crate) use zero_transport::hysteria2_quic::Hysteria2Stream;
+pub(crate) use zero_transport::hysteria2_quic::{Hysteria2Connector, Hysteria2Stream};

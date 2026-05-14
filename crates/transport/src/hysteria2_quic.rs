@@ -73,3 +73,151 @@ impl AsyncSocket for Hysteria2Stream {
         AsyncWriteExt::shutdown(self).await
     }
 }
+
+// ── Hysteria2Connector ──
+
+use std::sync::Arc;
+use zero_core::Session;
+use zero_engine::EngineError;
+use zero_protocol_hysteria2::{
+    build_auth_frame, build_tcp_connect_header, parse_auth_response,
+};
+
+/// Establishes a Hysteria2 outbound connection.
+///
+/// Handles the full flow: QUIC connect → HMAC auth → TCP stream setup.
+/// Implements the same pattern as [`VlessTransportConnector`].
+pub struct Hysteria2Connector {
+    server: String,
+    port: u16,
+    password: String,
+}
+
+impl Hysteria2Connector {
+    pub fn new(server: &str, port: u16, password: &str) -> Self {
+        Self {
+            server: server.to_owned(),
+            port,
+            password: password.to_owned(),
+        }
+    }
+
+    /// Establish a Hysteria2 connection and return a bidirectional stream.
+    pub async fn connect(&self, session: &Session) -> Result<Hysteria2Stream, EngineError> {
+        // ── QUIC connect ──
+        let tls_config = rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(SkipVerify))
+            .with_no_client_auth();
+
+        let mut tls_config = tls_config;
+        tls_config.alpn_protocols = vec![b"hysteria2".to_vec()];
+
+        let quic_cfg = quinn::crypto::rustls::QuicClientConfig::try_from(tls_config)
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 tls cfg: {e}"))))?;
+
+        let mut client_cfg = quinn::ClientConfig::new(Arc::new(quic_cfg));
+        let mut transport = quinn::TransportConfig::default();
+        transport.max_idle_timeout(Some(
+            std::time::Duration::from_secs(30).try_into().unwrap(),
+        ));
+        client_cfg.transport_config(Arc::new(transport));
+
+        let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap())
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 endpoint: {e}"))))?;
+        endpoint.set_default_client_config(client_cfg);
+
+        let server_addr = format!("{}:{}", self.server, self.port)
+            .parse::<std::net::SocketAddr>()
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 addr: {e}"))))?;
+
+        let conn = endpoint
+            .connect(server_addr, &self.server)
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connect: {e}"))))?
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connection: {e}"))))?;
+
+        // ── HMAC auth ──
+        let salt = derive_salt(&server_addr, &self.password);
+        let hmac_bytes = compute_hmac(&self.password, &salt);
+
+        let (mut send, mut recv) = conn
+            .open_bi()
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}"))))?;
+
+        let auth_frame = build_auth_frame(&hmac_bytes);
+        send.write_all(&auth_frame).await.map_err(|e| EngineError::Io(e.into()))?;
+
+        let mut resp_buf = [0u8; 32];
+        let n = recv.read(&mut resp_buf)
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 auth read: {e}"))))?
+            .unwrap_or(0);
+        parse_auth_response(&resp_buf[..n])
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 auth failed: {e}"))))?;
+
+        // ── TCP connect ──
+        let connect_header = build_tcp_connect_header(&session.target, session.port)
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connect header: {e}"))))?;
+        send.write_all(&connect_header).await.map_err(|e| EngineError::Io(e.into()))?;
+        send.flush().await.map_err(|e| EngineError::Io(e.into()))?;
+
+        let mut ok_buf = [0u8; 1];
+        recv.read_exact(&mut ok_buf)
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connect read: {e}"))))?;
+        if ok_buf[0] != 0x01 {
+            return Err(EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                "hysteria2: connect rejected",
+            )));
+        }
+
+        Ok(Hysteria2Stream::new(send, recv))
+    }
+}
+
+fn derive_salt(server_addr: &std::net::SocketAddr, password: &str) -> [u8; 32] {
+    use ring::digest;
+    let mut ctx = digest::Context::new(&digest::SHA256);
+    ctx.update(server_addr.to_string().as_bytes());
+    ctx.update(b":");
+    ctx.update(password.as_bytes());
+    ctx.finish().as_ref().try_into().unwrap()
+}
+
+fn compute_hmac(password: &str, salt: &[u8; 32]) -> [u8; 32] {
+    use ring::hmac;
+    let key = hmac::Key::new(hmac::HMAC_SHA256, password.as_bytes());
+    hmac::sign(&key, salt).as_ref().try_into().unwrap()
+}
+
+#[derive(Debug)]
+struct SkipVerify;
+
+impl rustls::client::danger::ServerCertVerifier for SkipVerify {
+    fn verify_server_cert(
+        &self, _: &rustls::pki_types::CertificateDer<'_>,
+        _: &[rustls::pki_types::CertificateDer<'_>],
+        _: &rustls::pki_types::ServerName<'_>,
+        _: &[u8], _: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+    fn verify_tls12_signature(
+        &self, _: &[u8], _: &rustls::pki_types::CertificateDer<'_>,
+        _: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+    fn verify_tls13_signature(
+        &self, _: &[u8], _: &rustls::pki_types::CertificateDer<'_>,
+        _: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        vec![rustls::SignatureScheme::RSA_PKCS1_SHA256]
+    }
+}

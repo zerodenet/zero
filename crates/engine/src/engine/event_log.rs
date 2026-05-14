@@ -2,11 +2,12 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use serde_json::Value;
+use serde_json::{json, Value};
+use std::time::{SystemTime, UNIX_EPOCH};
 use zero_api::{
     event_type, ApiEvent, AuthInfo, EndpointRef, EventFilter, FlowEventPayload, FlowOutcome,
-    FlowTiming, Network as ApiNetwork, PolicyDecision, RawApiEvent, RouteDecision, TargetAddress,
-    TrafficStats,
+    FlowTiming, Network as ApiNetwork, PolicyDecision, PolicySelectedPayload, RawApiEvent,
+    RouteDecision, TargetAddress, TrafficStats,
 };
 use zero_core::{Address, Network, ProtocolType};
 
@@ -35,6 +36,62 @@ impl Default for EngineEventLog {
 impl EngineEventLog {
     pub fn shared() -> Arc<Self> {
         Arc::new(Self::default())
+    }
+
+    pub fn push_engine_started(&self, version: &str) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let payload = json!({
+            "version": version,
+            "started_at_unix_ms": now_ms,
+        });
+        let event = ApiEvent::new("engine-1", event_type::ENGINE_STARTED, now_ms, payload);
+        self.push(event);
+    }
+
+    pub fn push_engine_stopped(&self) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let payload = json!({ "stopped_at_unix_ms": now_ms });
+        let event = ApiEvent::new(
+            format!("engine-stop-{}", now_ms),
+            event_type::ENGINE_STOPPED,
+            now_ms,
+            payload,
+        );
+        self.push(event);
+    }
+
+    pub fn push_policy_selected(
+        &self,
+        policy_tag: &str,
+        policy_kind: &str,
+        selected: &str,
+        previous: Option<&str>,
+    ) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let payload = PolicySelectedPayload {
+            policy_tag: policy_tag.to_owned(),
+            policy_kind: policy_kind.to_owned(),
+            selected: selected.to_owned(),
+            previous: previous.map(str::to_owned),
+        };
+        let payload = serde_json::to_value(payload)
+            .expect("policy selected event payload should be serializable");
+        let event = ApiEvent::new(
+            format!("policy-select-{}-{}", policy_tag, now_ms),
+            event_type::POLICY_SELECTED,
+            now_ms,
+            payload,
+        );
+        self.push(event);
     }
 
     pub fn push_flow_completed(
