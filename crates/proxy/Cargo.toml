@@ -26,6 +26,7 @@ inbound-vless = [
     "zero-transport/grpc",
     "zero-transport/h2",
     "zero-transport/http-upgrade",
+    "zero-transport/split-http",
     "zero-transport/quic",
     "dep:zero-protocol-vless",
     "zero-protocol-vless/reality",
@@ -38,6 +39,7 @@ outbound-vless = [
     "zero-transport/grpc",
     "zero-transport/h2",
     "zero-transport/http-upgrade",
+    "zero-transport/split-http",
     "zero-transport/quic",
     "dep:zero-protocol-vless",
     "zero-protocol-vless/reality",
@@ -48,6 +50,7 @@ inbound-hysteria2 = [
     "dep:rustls",
     "zero-transport/quic",
     "dep:zero-protocol-hysteria2",
+    "zero-protocol-hysteria2/crypto",
 ]
 outbound-hysteria2 = [
     "dep:quinn",
@@ -55,6 +58,7 @@ outbound-hysteria2 = [
     "dep:rustls",
     "zero-transport/quic",
     "dep:zero-protocol-hysteria2",
+    "zero-protocol-hysteria2/crypto",
 ]
 
 [dependencies]

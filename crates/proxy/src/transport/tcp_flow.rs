@@ -41,10 +41,10 @@ impl Proxy {
                 reason = %reason.message,
                 "flow blocked by hook"
             );
-            return Err(std::io::Error::new(
+            return Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::ConnectionRefused,
-                reason.message,
-            ));
+                std::io::Error::other(reason.message),
+            )));
         }
         let mut session_handle = self.track_session(session.id);
         let started_at = Instant::now();

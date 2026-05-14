@@ -32,6 +32,7 @@ pub enum ResolvedLeafOutbound<'a> {
         grpc: Option<&'a zero_config::GrpcConfig>,
         h2: Option<&'a zero_config::H2Config>,
         http_upgrade: Option<&'a zero_config::HttpUpgradeConfig>,
+        split_http: Option<&'a zero_config::SplitHttpConfig>,
         quic: Option<&'a zero_config::QuicConfig>,
     },
     Hysteria2 {
@@ -145,6 +146,7 @@ fn resolve_leaf_outbound<'a>(
             grpc,
             h2,
             http_upgrade,
+            split_http,
             quic,
         } => ResolvedLeafOutbound::Vless {
             tag,
@@ -160,6 +162,7 @@ fn resolve_leaf_outbound<'a>(
             grpc: grpc.as_ref(),
             h2: h2.as_ref(),
             http_upgrade: http_upgrade.as_ref(),
+            split_http: split_http.as_ref(),
             quic: quic.as_ref(),
         },
         OutboundTarget::Hysteria2 {

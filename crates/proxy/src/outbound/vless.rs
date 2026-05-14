@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use zero_config::{
     ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, QuicConfig, RealityConfig,
-    WebSocketConfig,
+    SplitHttpConfig, WebSocketConfig,
 };
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
@@ -33,6 +33,7 @@ pub struct VlessUdpTransport<'a> {
     pub grpc: Option<&'a GrpcConfig>,
     pub h2: Option<&'a H2Config>,
     pub http_upgrade: Option<&'a HttpUpgradeConfig>,
+    pub split_http: Option<&'a SplitHttpConfig>,
     pub quic: Option<&'a QuicConfig>,
 }
 
@@ -134,6 +135,7 @@ pub async fn establish_vless_udp_upstream(
                 t.grpc,
                 t.h2,
                 t.http_upgrade,
+                t.split_http,
                 proxy.config.source_dir(),
             );
             connector.connect(socket, server, port).await?

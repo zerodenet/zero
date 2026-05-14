@@ -24,6 +24,7 @@ pub(super) fn validate_inbound_protocol(
             http_upgrade,
             fallback,
             quic,
+            split_http: _,
         } => {
             validate_vless_users(users)?;
             if let Some(tls) = tls {
@@ -112,6 +113,7 @@ pub(super) fn validate_outbound_protocol(
             h2,
             http_upgrade,
             quic,
+            split_http: _,
         } => {
             validate_outbound_endpoint("vless", server, *port)?;
             validate_uuid_literal(id).map_err(|message| {

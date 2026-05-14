@@ -21,6 +21,7 @@ pub(crate) struct VlessUpstream<'a> {
     pub grpc: Option<&'a GrpcConfig>,
     pub h2: Option<&'a H2Config>,
     pub http_upgrade: Option<&'a zero_config::HttpUpgradeConfig>,
+    pub split_http: Option<&'a zero_config::SplitHttpConfig>,
     pub quic: Option<&'a QuicConfig>,
 }
 
@@ -121,6 +122,7 @@ impl Proxy {
             upstream.grpc,
             upstream.h2,
             upstream.http_upgrade,
+            upstream.split_http,
             self.config.source_dir(),
         );
         let stream = connector

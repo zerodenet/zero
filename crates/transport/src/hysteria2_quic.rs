@@ -80,7 +80,8 @@ use std::sync::Arc;
 use zero_core::Session;
 use zero_engine::EngineError;
 use zero_protocol_hysteria2::{
-    build_auth_frame, build_tcp_connect_header, parse_auth_response,
+    build_auth_frame, build_tcp_connect_header, derive_salt, parse_auth_response,
+    sign_hmac,
 };
 
 /// Establishes a Hysteria2 outbound connection.
@@ -102,15 +103,15 @@ impl Hysteria2Connector {
         }
     }
 
-    /// Establish a Hysteria2 connection and return a bidirectional stream.
-    pub async fn connect(&self, session: &Session) -> Result<Hysteria2Stream, EngineError> {
-        // ── QUIC connect ──
-        let tls_config = rustls::ClientConfig::builder()
+    /// Connect + authenticate, returning the raw QUIC connection.
+    ///
+    /// Used by both TCP and UDP outbound paths — callers can then
+    /// open bi streams or send datagrams on the authenticated connection.
+    pub async fn connect_raw(&self) -> Result<quinn::Connection, EngineError> {
+        let mut tls_config = rustls::ClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(SkipVerify))
             .with_no_client_auth();
-
-        let mut tls_config = tls_config;
         tls_config.alpn_protocols = vec![b"hysteria2".to_vec()];
 
         let quic_cfg = quinn::crypto::rustls::QuicClientConfig::try_from(tls_config)
@@ -121,6 +122,7 @@ impl Hysteria2Connector {
         transport.max_idle_timeout(Some(
             std::time::Duration::from_secs(30).try_into().unwrap(),
         ));
+        transport.datagram_receive_buffer_size(Some(65536));
         client_cfg.transport_config(Arc::new(transport));
 
         let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap())
@@ -137,9 +139,9 @@ impl Hysteria2Connector {
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connection: {e}"))))?;
 
-        // ── HMAC auth ──
-        let salt = derive_salt(&server_addr, &self.password);
-        let hmac_bytes = compute_hmac(&self.password, &salt);
+        // HMAC auth
+        let salt = derive_salt(&server_addr.to_string(), &self.password);
+        let hmac_bytes = sign_hmac(&self.password, &salt);
 
         let (mut send, mut recv) = conn
             .open_bi()
@@ -157,7 +159,22 @@ impl Hysteria2Connector {
         parse_auth_response(&resp_buf[..n])
             .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 auth failed: {e}"))))?;
 
-        // ── TCP connect ──
+        drop(send);
+        drop(recv);
+
+        Ok(conn)
+    }
+
+    /// Establish a Hysteria2 TCP connection (QUIC connect + auth + TCP stream).
+    pub async fn connect(&self, session: &Session) -> Result<Hysteria2Stream, EngineError> {
+        let conn = self.connect_raw().await?;
+
+        let (mut send, mut recv) = conn
+            .open_bi()
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}"))))?;
+
+        // TCP connect
         let connect_header = build_tcp_connect_header(&session.target, session.port)
             .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connect header: {e}"))))?;
         send.write_all(&connect_header).await.map_err(|e| EngineError::Io(e.into()))?;
@@ -176,21 +193,6 @@ impl Hysteria2Connector {
 
         Ok(Hysteria2Stream::new(send, recv))
     }
-}
-
-fn derive_salt(server_addr: &std::net::SocketAddr, password: &str) -> [u8; 32] {
-    use ring::digest;
-    let mut ctx = digest::Context::new(&digest::SHA256);
-    ctx.update(server_addr.to_string().as_bytes());
-    ctx.update(b":");
-    ctx.update(password.as_bytes());
-    ctx.finish().as_ref().try_into().unwrap()
-}
-
-fn compute_hmac(password: &str, salt: &[u8; 32]) -> [u8; 32] {
-    use ring::hmac;
-    let key = hmac::Key::new(hmac::HMAC_SHA256, password.as_bytes());
-    hmac::sign(&key, salt).as_ref().try_into().unwrap()
 }
 
 #[derive(Debug)]

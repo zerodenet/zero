@@ -234,6 +234,7 @@ impl Proxy {
                                         grpc_config.as_ref(),
                                         h2_config.as_ref(),
                                         split_http_config.as_ref(),
+                                        split_http_registry.as_ref(),
                                         http_upgrade_config.as_ref(),
                                         fallback_config.as_ref(),
                                     )
@@ -374,9 +375,9 @@ impl Proxy {
         ws_config: Option<&zero_config::WebSocketConfig>,
         grpc_config: Option<&zero_config::GrpcConfig>,
         h2_config: Option<&zero_config::H2Config>,
-        http_upgrade_config: Option<&zero_config::HttpUpgradeConfig>,
         split_http_config: Option<&zero_config::SplitHttpConfig>,
         split_http_registry: Option<&crate::transport::SplitHttpRegistry>,
+        http_upgrade_config: Option<&zero_config::HttpUpgradeConfig>,
         fallback: Option<&zero_config::FallbackConfig>,
     ) -> Result<(), EngineError>
     where
@@ -868,16 +869,17 @@ impl Proxy {
         );
         if let Err(reason) = self.prepare_session(&mut session, inbound_tag) {
             tracing::warn!(reason = %reason.message, "vless udp flow blocked by hook");
-            return Err(std::io::Error::new(
+            return Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::ConnectionRefused,
-                reason.message,
-            ));
+                std::io::Error::other(reason.message),
+            )));
         }
         let mut session_handle = self.track_session(session.id);
         self.record_session_inbound_rx(session.id, packet.len() as u64);
 
         let action = self.route_decision(&session.target);
         let resolved = self.resolve_outbound(action)?;
+        crate::logging::log_session_accepted(&session, &action, self.config.mode.kind());
         crate::logging::log_session_accepted(&session, &action, self.config.mode.kind());
 
         let candidate = match resolved {

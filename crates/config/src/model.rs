@@ -22,6 +22,11 @@ pub struct RuntimeConfig {
     pub route: RouteConfig,
     #[serde(default)]
     pub api: ApiConfig,
+    /// Node push connector — actively reports to an external management
+    /// endpoint.  Generic: the receiver can be a panel, monitoring system,
+    /// or any HTTP service.
+    #[serde(default)]
+    pub push: PushConfig,
     #[serde(skip)]
     pub source_dir: Option<PathBuf>,
 }
@@ -81,10 +86,6 @@ pub struct ApiConfig {
     pub event_sinks: Vec<EventSinkConfig>,
     #[serde(default)]
     pub control: ControlApiConfig,
-    /// Active panel connector configuration.
-    /// When set, the node will connect to the panel and push heartbeats.
-    #[serde(default)]
-    pub panel: PanelApiConfig,
     /// Flow hooks executed in registration order.
     #[serde(default)]
     pub hooks: Vec<HookConfig>,
@@ -171,38 +172,38 @@ fn default_hook_timeout_ms() -> u64 {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-pub struct PanelApiConfig {
-    /// Panel API base URL.
+pub struct PushConfig {
+    /// Receiver endpoint URL.  When set, the node pushes heartbeats here.
     #[serde(default)]
     pub url: Option<String>,
-    /// Node identifier reported to the panel.
+    /// Node identifier sent to the receiver.
     #[serde(default)]
     pub node_id: Option<String>,
-    /// API key for panel authentication.
+    /// Authentication key for the receiver.
     #[serde(default)]
     pub api_key: Option<String>,
     /// Environment variable name for the API key.
     #[serde(default)]
     pub api_key_env: Option<String>,
     /// Heartbeat interval in seconds (default 30).
-    #[serde(default = "default_panel_heartbeat_interval")]
+    #[serde(default = "default_push_heartbeat_interval")]
     pub heartbeat_interval_seconds: u64,
-    /// Whether to poll for pending commands from the panel.
+    /// Whether to poll for pending commands from the receiver.
     #[serde(default)]
     pub pull_commands: bool,
     /// Command polling interval in seconds (default 10).
-    #[serde(default = "default_panel_command_poll_interval")]
+    #[serde(default = "default_push_command_poll_interval")]
     pub command_poll_interval_seconds: u64,
 }
 
-fn default_panel_heartbeat_interval() -> u64 {
+fn default_push_heartbeat_interval() -> u64 {
     30
 }
-fn default_panel_command_poll_interval() -> u64 {
+fn default_push_command_poll_interval() -> u64 {
     10
 }
 
-impl PanelApiConfig {
+impl PushConfig {
     pub fn enabled(&self) -> bool {
         self.url.is_some() && self.node_id.is_some()
     }

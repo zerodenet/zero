@@ -6,6 +6,8 @@ pub mod h2;
 pub mod http_upgrade;
 #[cfg(feature = "quic")]
 pub mod quic;
+#[cfg(feature = "split-http")]
+pub mod split_http;
 #[cfg(feature = "tls")]
 pub mod tls;
 #[cfg(feature = "vless")]

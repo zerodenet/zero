@@ -63,6 +63,7 @@ impl EnginePlan {
                     grpc,
                     h2,
                     http_upgrade,
+                    split_http,
                     quic,
                 } => TargetKind::Outbound(Box::new(OutboundTarget::Vless {
                     server: server.clone(),
@@ -77,6 +78,7 @@ impl EnginePlan {
                     grpc: grpc.clone(),
                     h2: h2.clone(),
                     http_upgrade: http_upgrade.clone(),
+                    split_http: split_http.clone(),
                     quic: quic.clone(),
                 })),
                 OutboundProtocolConfig::Hysteria2 {
@@ -226,6 +228,7 @@ pub enum OutboundTarget {
         grpc: Option<zero_config::GrpcConfig>,
         h2: Option<zero_config::H2Config>,
         http_upgrade: Option<zero_config::HttpUpgradeConfig>,
+        split_http: Option<zero_config::SplitHttpConfig>,
         quic: Option<zero_config::QuicConfig>,
     },
     Hysteria2 {

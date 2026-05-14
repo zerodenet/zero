@@ -48,21 +48,22 @@
 
 ## 待实现
 
-### SplitHTTP (XHTTP)
+### ~~SplitHTTP (XHTTP)~~ ✅ 完整实现
 
-拆分上传(POST) / 下载(GET)为独立 HTTP 连接，兼容仅支持 GET 的 CDN。
+- 客户端多连接：开两条 TCP，peer_addr 取 GET 连接，显式 drop 防泄漏
+- 服务端多路: `SplitHttpRegistry` 按 X-Session-Id 配对 POST/GET
+- `SplitHttpPairedStream<R, W>` 支持非对称读写 (reader=GET, writer=POST)
+- Chunked transfer encoding 双向编解码，shutdown 写 `0\r\n\r\n` 干净终止
+- 60s 超时 + 清理
+- 入站 accept / 出站 connect 全分发链路
 
-**范围：**
-- 新建 `protocols/vless/src/transport/split_http.rs`
-- 客户端: 两个 HTTP 连接，通过 session ID 配对
-- 服务端: 配对 POST/GET 请求，session ID 关联
-- 可能需修改流抽象支持非对称连接
+### ~~gRPC MultiMode~~ ✅ 已完成
 
-**工时估计：** 8-12h
-
-### gRPC MultiMode ✅
-
-已实现。
+- `serve_grpc(stream, services, handler)`: 循环 accept h2 requests，每请求构建
+  GrpcStream + spawn handler task。单 h2 连接承载多路 gRPC stream。
+- `poll_write` 使用 `poll_send` 正确反压，不静默丢数据
+- `poll_shutdown` 发送 gRPC END_STREAM frame
+- `accept_grpc` 保留为 SingleMode legacy wrapper
 
 ---
 

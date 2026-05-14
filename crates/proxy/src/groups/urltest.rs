@@ -269,6 +269,7 @@ impl Proxy {
                             grpc: None,
                             h2: None,
                             http_upgrade: None,
+                            split_http: None,
                             quic: None,
                         },
                     )

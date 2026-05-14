@@ -10,7 +10,7 @@ pub use model::{
     H2Config, HookConfig, HttpUpgradeConfig, InboundConfig, InboundProtocolConfig,
     InboundRealityConfig, ListenConfig,
     ModeConfig,
-    OutboundConfig, OutboundGroupConfig, OutboundGroupKind, OutboundProtocolConfig, PanelApiConfig,
+    OutboundConfig, OutboundGroupConfig, OutboundGroupKind, OutboundProtocolConfig, PushConfig,
     QuicConfig,
     RealityConfig, RouteActionConfig, RouteConfig, RouteRuleConfig, RouteRuleSetConfig,
     RuleConditionConfig, RuleSetFormatConfig, RuleSetSourceType, RuntimeConfig,

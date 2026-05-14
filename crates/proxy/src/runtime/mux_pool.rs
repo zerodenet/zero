@@ -174,6 +174,7 @@ impl MuxConnectionPool {
             None,
             None,
             None,
+            None,
             proxy.config.source_dir(),
         );
         let stream: TcpRelayStream = connector

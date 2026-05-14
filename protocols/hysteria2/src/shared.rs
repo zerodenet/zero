@@ -210,6 +210,44 @@ pub async fn read_exact<S: AsyncSocket>(stream: &mut S, buf: &mut [u8]) -> Resul
     Ok(())
 }
 
+// ── Crypto helpers (feature-gated, like VLESS reality) ──
+
+#[cfg(feature = "crypto")]
+mod crypto {
+    use ring::digest;
+
+    /// Derive the HMAC salt from server address + password.
+    ///
+    /// Used by the outbound (client) side: `SHA256("server:port:password")`.
+    /// The inbound side derives the same salt from QUIC keying material instead,
+    /// so this function is only needed for outbound connections.
+    pub fn derive_salt(server_addr: &str, password: &str) -> [u8; 32] {
+        let mut ctx = digest::Context::new(&digest::SHA256);
+        ctx.update(server_addr.as_bytes());
+        ctx.update(b":");
+        ctx.update(password.as_bytes());
+        ctx.finish().as_ref().try_into().unwrap()
+    }
+
+    /// Compute HMAC-SHA256 over the salt with the password as key.
+    pub fn sign_hmac(password: &str, salt: &[u8; 32]) -> [u8; 32] {
+        let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, password.as_bytes());
+        ring::hmac::sign(&key, salt).as_ref().try_into().unwrap()
+    }
+
+    /// Constant-time verification of a client-supplied HMAC.
+    ///
+    /// Used by the inbound (server) side when the salt has already been
+    /// derived from QUIC keying material.
+    pub fn verify_hmac(password: &str, salt: &[u8; 32], client_hmac: &[u8; 32]) -> bool {
+        let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, password.as_bytes());
+        ring::hmac::verify(&key, salt, client_hmac).is_ok()
+    }
+}
+
+#[cfg(feature = "crypto")]
+pub use crypto::*;
+
 #[cfg(test)]
 mod tests {
     use super::*;

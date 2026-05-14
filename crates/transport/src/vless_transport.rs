@@ -7,7 +7,8 @@
 use std::path::Path;
 
 use zero_config::{
-    ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, RealityConfig, WebSocketConfig,
+    ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, RealityConfig, SplitHttpConfig,
+    WebSocketConfig,
 };
 use zero_engine::EngineError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
@@ -17,7 +18,7 @@ use std::io;
 use zero_platform_tokio::TransportConnector;
 
 use zero_protocol_vless::{upgrade_reality_client, RealityClientOptions};
-use crate::{grpc, h2, http_upgrade, tls, ws};
+use crate::{grpc, h2, http_upgrade, split_http, tls, ws};
 
 /// Wrap a raw TCP socket with the configured VLESS transport layer.
 ///
@@ -31,10 +32,61 @@ pub async fn build_vless_outbound_transport(
     grpc_config: Option<&GrpcConfig>,
     h2_config: Option<&H2Config>,
     http_upgrade_config: Option<&HttpUpgradeConfig>,
+    split_http_config: Option<&SplitHttpConfig>,
     source_dir: Option<&Path>,
     server: &str,
     port: u16,
 ) -> Result<TcpRelayStream, EngineError> {
+    // ── SplitHTTP (handled first — mutually exclusive with other transports) ──
+    if let Some(cfg) = split_http_config {
+        let peer = socket.peer_addr().map_err(|e| EngineError::Io(e))?;
+        let stream: TcpRelayStream = match tls_config {
+            Some(tls) => {
+                let post_stream =
+                    tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
+                match TokioSocket::connect_addr(peer).await {
+                    Ok(get_socket) => {
+                        let get_stream = match tls::connect_tls_upstream(
+                            get_socket, tls, source_dir, server,
+                        )
+                        .await
+                        {
+                            Ok(s) => s,
+                            Err(e) => {
+                                // GET TLS connect failed — drop POST on the floor
+                                drop(post_stream);
+                                return Err(e);
+                            }
+                        };
+                        TcpRelayStream::new(
+                            split_http::connect_split_http(post_stream, get_stream, cfg).await?,
+                        )
+                    }
+                    Err(e) => {
+                        // Cannot open GET TCP — release POST
+                        drop(post_stream);
+                        return Err(EngineError::Io(io::Error::new(
+                            io::ErrorKind::ConnectionRefused,
+                            format!("split-http: failed to open GET connection: {e}"),
+                        )));
+                    }
+                }
+            }
+            None => {
+                let get_socket = TokioSocket::connect_addr(peer)
+                    .await
+                    .map_err(|e| EngineError::Io(io::Error::new(
+                        io::ErrorKind::ConnectionRefused,
+                        format!("split-http: failed to open GET connection: {e}"),
+                    )))?;
+                TcpRelayStream::new(
+                    split_http::connect_split_http(socket, get_socket, cfg).await?,
+                )
+            }
+        };
+        return Ok(stream);
+    }
+
     // ── HTTPUpgrade (handled separately - mutually exclusive with WS/gRPC/H2) ──
     if let Some(cfg) = http_upgrade_config {
         let stream: TcpRelayStream = match tls_config {
@@ -138,6 +190,7 @@ pub struct VlessTransportConnector<'a> {
     grpc: Option<&'a GrpcConfig>,
     h2: Option<&'a H2Config>,
     http_upgrade: Option<&'a HttpUpgradeConfig>,
+    split_http: Option<&'a SplitHttpConfig>,
     source_dir: Option<&'a Path>,
 }
 
@@ -150,6 +203,7 @@ impl<'a> VlessTransportConnector<'a> {
         grpc: Option<&'a GrpcConfig>,
         h2: Option<&'a H2Config>,
         http_upgrade: Option<&'a HttpUpgradeConfig>,
+        split_http: Option<&'a SplitHttpConfig>,
         source_dir: Option<&'a Path>,
     ) -> Self {
         Self {
@@ -159,6 +213,7 @@ impl<'a> VlessTransportConnector<'a> {
             grpc,
             h2,
             http_upgrade,
+            split_http,
             source_dir,
         }
     }
@@ -181,6 +236,7 @@ impl TransportConnector for VlessTransportConnector<'_> {
             self.grpc,
             self.h2,
             self.http_upgrade,
+            self.split_http,
             self.source_dir,
             server,
             port,

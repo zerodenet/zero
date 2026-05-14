@@ -12,11 +12,12 @@ default = []
 grpc = []
 h2 = []
 http-upgrade = []
+split-http = []
 quic = []
 tls = []
 ws = []
 hysteria2 = []
-vless = ["grpc", "h2", "http-upgrade", "quic", "tls", "ws"]
+vless = ["grpc", "h2", "http-upgrade", "split-http", "quic", "tls", "ws"]
 
 [dependencies]
 bytes = "1"
@@ -38,6 +39,6 @@ zero-config = { path = "../config" }
 zero-core = { path = "../core" }
 zero-engine = { path = "../engine" }
 zero-platform-tokio = { path = "../platform/tokio" }
-zero-protocol-hysteria2 = { path = "../../protocols/hysteria2" }
+zero-protocol-hysteria2 = { path = "../../protocols/hysteria2", features = ["crypto"] }
 zero-protocol-vless = { path = "../../protocols/vless", default-features = false, features = ["reality"] }
 zero-traits = { path = "../traits" }
