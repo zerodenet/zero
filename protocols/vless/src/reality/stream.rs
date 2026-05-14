@@ -646,35 +646,5 @@ where
     }
 }
 
-impl<IO> zero_platform_tokio::ClientStream for RealityTlsStream<IO>
-where
-    IO: AsyncRead + AsyncWrite + Send + Sync + Unpin,
-{
-    fn local_addr(&self) -> std::io::Result<std::net::SocketAddr> {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "Reality stream does not expose local_addr",
-        ))
-    }
-}
 
-/// Convenience wrapper: upgrade a Reality server connection from config.
-pub async fn upgrade_reality_server_from_config<IO>(
-    io: IO,
-    reality: &zero_config::InboundRealityConfig,
-) -> io::Result<RealityTlsStream<IO>>
-where
-    IO: AsyncRead + AsyncWrite + Unpin,
-{
-    let server_name = reality.server_name.as_deref().unwrap_or("localhost");
-    upgrade_reality_server(
-        io,
-        RealityServerOptions {
-            private_key: &reality.private_key,
-            short_ids: &reality.short_ids,
-            server_name,
-            cipher_suites: &reality.cipher_suites,
-        },
-    )
-    .await
-}
+

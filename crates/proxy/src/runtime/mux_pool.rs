@@ -167,7 +167,7 @@ impl MuxConnectionPool {
             .connect_host(&key.server, key.port, &proxy.resolver)
             .await?;
 
-        let connector = zero_protocol_vless::VlessTransportConnector::new(
+        let connector = crate::transport::VlessTransportConnector::new(
             tls,
             reality,
             None,

@@ -211,7 +211,9 @@ fn socket_addr_from_ip(ip: IpAddress, port: u16) -> SocketAddr {
 pub trait ClientStream:
     AsyncSocket<Error = io::Error> + AsyncRead + AsyncWrite + Send + Sync + Unpin
 {
-    fn local_addr(&self) -> io::Result<SocketAddr>;
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "ClientStream: local_addr not available"))
+    }
 }
 
 impl ClientStream for TokioSocket {
@@ -219,6 +221,9 @@ impl ClientStream for TokioSocket {
         self.local_addr()
     }
 }
+
+
+
 
 /// Type-erased bidirectional relay stream.
 ///
@@ -326,4 +331,13 @@ pub trait TransportConnector: Send + Sync {
 pub trait TcpConnector: Send + Sync {
     /// Resolve `host` and connect to `host:port`, returning a connected socket.
     async fn connect(&self, host: &str, port: u16) -> io::Result<TokioSocket>;
+}
+
+// ── Cross-crate trait impls ──
+
+#[cfg(feature = "vless-reality")]
+impl<IO> ClientStream for zero_protocol_vless::RealityTlsStream<IO>
+where
+    IO: AsyncRead + AsyncWrite + Send + Sync + Unpin,
+{
 }

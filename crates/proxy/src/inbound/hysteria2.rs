@@ -11,11 +11,13 @@ use tracing::{error, info, warn};
 use zero_config::InboundConfig;
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
+use zero_traits::DnsResolver;
 use zero_protocol_hysteria2::{
     build_auth_error, build_auth_ok, build_connect_error, build_connect_ok,
     build_udp_datagram, parse_auth_frame, parse_tcp_connect_header, parse_udp_datagram,
-    Hysteria2Stream, Hysteria2UdpPacket,
+    Hysteria2UdpPacket,
 };
+use crate::transport::Hysteria2Stream;
 use zero_traits::AsyncSocket;
 
 use crate::runtime::Proxy;
@@ -209,8 +211,9 @@ impl Proxy {
             let conn_dg = conn.clone();
             let udp_dg = udp.clone();
             let inbound_tag = inbound_tag.to_owned();
+            let resolver = self.resolver;
             stream_tasks.spawn(async move {
-                Self::hysteria2_datagram_loop(conn_dg, udp_dg, &inbound_tag).await
+                Self::hysteria2_datagram_loop(conn_dg, udp_dg, &inbound_tag, resolver).await
             });
         }
 
@@ -252,6 +255,7 @@ impl Proxy {
         conn: Arc<quinn::Connection>,
         udp_socket: Arc<tokio::net::UdpSocket>,
         inbound_tag: &str,
+        resolver: zero_platform_tokio::TokioResolver,
     ) -> Result<(), EngineError> {
         let mut buf = [0u8; 65536];
         let mut session_map: std::collections::HashMap<
@@ -268,9 +272,29 @@ impl Proxy {
                             if let Ok(pkt) = parse_udp_datagram(&data) {
                                 let target_addr = match &pkt.target {
                                     Address::Domain(d) => {
-                                        // Resolve domain (simplified: just log warning)
-                                        warn!("hysteria2 UDP: domain resolution not implemented for {}", d);
-                                        continue;
+                                        match resolver.resolve(d).await {
+                                            Ok(addrs) => {
+                                                let first = match addrs.first() {
+                                                    Some(ip) => *ip,
+                                                    None => {
+                                                        warn!("hysteria2 UDP: no addresses resolved for {}", d);
+                                                        continue;
+                                                    }
+                                                };
+                                                match first {
+                                                    zero_traits::IpAddress::V4(ip) => {
+                                                        SocketAddr::new(std::net::IpAddr::V4(ip.into()), pkt.port)
+                                                    }
+                                                    zero_traits::IpAddress::V6(ip) => {
+                                                        SocketAddr::new(std::net::IpAddr::V6(ip.into()), pkt.port)
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                warn!("hysteria2 UDP: DNS resolve failed for {}: {}", d, e);
+                                                continue;
+                                            }
+                                        }
                                     }
                                     Address::Ipv4(ip) => {
                                         SocketAddr::new(

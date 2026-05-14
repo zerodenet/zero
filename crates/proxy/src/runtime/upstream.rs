@@ -114,7 +114,7 @@ impl Proxy {
             .connect_host(upstream.server, upstream.port, &self.resolver)
             .await?;
 
-        let connector = zero_protocol_vless::VlessTransportConnector::new(
+        let connector = crate::transport::VlessTransportConnector::new(
             upstream.tls,
             upstream.reality,
             upstream.ws,
@@ -180,13 +180,142 @@ impl Proxy {
     #[cfg(feature = "outbound-hysteria2")]
     pub(crate) async fn connect_via_hysteria2_upstream(
         &self,
-        _session: &Session,
+        session: &Session,
         server: &str,
         port: u16,
+        password: &str,
     ) -> Result<TcpRelayStream, EngineError> {
-        let quic_stream =
-            crate::transport::connect_quic(server, port, true).await?;
-        Ok(TcpRelayStream::new(quic_stream))
+        use std::sync::Arc;
+        use quinn::crypto::rustls::QuicClientConfig;
+        use ring::hmac;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use zero_protocol_hysteria2::{
+            build_auth_frame, build_tcp_connect_header, parse_auth_response,
+        };
+        use crate::transport::Hysteria2Stream;
+
+        // ── QUIC connect ──
+        // Use the same insecure verifier as VLESS QUIC transport
+        #[derive(Debug)]
+        struct SkipVerify;
+        impl rustls::client::danger::ServerCertVerifier for SkipVerify {
+            fn verify_server_cert(
+                &self, _: &rustls::pki_types::CertificateDer<'_>,
+                _: &[rustls::pki_types::CertificateDer<'_>],
+                _: &rustls::pki_types::ServerName<'_>,
+                _: &[u8], _: rustls::pki_types::UnixTime,
+            ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+                Ok(rustls::client::danger::ServerCertVerified::assertion())
+            }
+            fn verify_tls12_signature(
+                &self, _: &[u8], _: &rustls::pki_types::CertificateDer<'_>,
+                _: &rustls::DigitallySignedStruct,
+            ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+                Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+            }
+            fn verify_tls13_signature(
+                &self, _: &[u8], _: &rustls::pki_types::CertificateDer<'_>,
+                _: &rustls::DigitallySignedStruct,
+            ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+                Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+            }
+            fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+                vec![rustls::SignatureScheme::RSA_PKCS1_SHA256]
+            }
+        }
+
+        let mut tls_config = rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(SkipVerify))
+            .with_no_client_auth();
+
+        tls_config.alpn_protocols = vec![b"hysteria2".to_vec()];
+
+        let quic_cfg = QuicClientConfig::try_from(tls_config)
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("quic cfg: {e}"))))?;
+
+        let mut client_cfg = quinn::ClientConfig::new(Arc::new(quic_cfg));
+        let mut transport = quinn::TransportConfig::default();
+        transport.max_idle_timeout(Some(
+            std::time::Duration::from_secs(30).try_into().unwrap(),
+        ));
+        client_cfg.transport_config(Arc::new(transport));
+
+        let bind_addr = "0.0.0.0:0"
+            .parse::<std::net::SocketAddr>()
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("quic bind: {e}"))))?;
+
+        let mut endpoint = quinn::Endpoint::client(bind_addr)
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("quic endpoint: {e}"))))?;
+        endpoint.set_default_client_config(client_cfg);
+
+        let server_addr = format!("{server}:{port}")
+            .parse::<std::net::SocketAddr>()
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("quic addr: {e}"))))?;
+
+        let conn = endpoint
+            .connect(server_addr, server)
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("quic connect: {e}"))))?
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("quic connection: {e}"))))?;
+
+        // ── HMAC auth ──
+        // Salt: SHA256(server_addr + password), deterministic & matching server
+        use ring::digest;
+        let mut salt_ctx = digest::Context::new(&digest::SHA256);
+        salt_ctx.update(server_addr.to_string().as_bytes());
+        salt_ctx.update(b":");
+        salt_ctx.update(password.as_bytes());
+        let salt_digest = salt_ctx.finish();
+        let salt: [u8; 32] = salt_digest.as_ref().try_into().unwrap();
+
+        let key = hmac::Key::new(hmac::HMAC_SHA256, password.as_bytes());
+        let auth_tag = hmac::sign(&key, &salt);
+        let hmac_bytes: [u8; 32] = auth_tag.as_ref().try_into().unwrap();
+
+        // ── Open bidirectional stream + auth ──
+        let (mut send, mut recv) = conn
+            .open_bi()
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}"))))?;
+
+        let auth_frame = build_auth_frame(&hmac_bytes);
+        send.write_all(&auth_frame)
+            .await
+            .map_err(|e| EngineError::Io(e.into()))?;
+        send.flush().await.map_err(|e| EngineError::Io(e.into()))?;
+
+        // Read auth response
+        let mut resp_buf = [0u8; 32];
+        let n = recv.read(&mut resp_buf)
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 auth read: {e}"))))?
+            .unwrap_or(0);
+        parse_auth_response(&resp_buf[..n])
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 auth failed: {e}"))))?;
+
+        // ── TCP connect ──
+        let connect_header = build_tcp_connect_header(&session.target, session.port)
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connect header: {e}"))))?;
+        send.write_all(&connect_header)
+            .await
+            .map_err(|e| EngineError::Io(e.into()))?;
+        send.flush().await.map_err(|e| EngineError::Io(e.into()))?;
+
+        // Read connect response (1 byte: 0x01 = ok)
+        let mut ok_buf = [0u8; 1];
+        recv.read_exact(&mut ok_buf)
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connect read: {e}"))))?;
+        if ok_buf[0] != 0x01 {
+            return Err(EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                "hysteria2: connect rejected",
+            )));
+        }
+
+        let stream = Hysteria2Stream::new(send, recv);
+        Ok(TcpRelayStream::new(stream))
     }
 
     #[cfg(not(feature = "outbound-hysteria2"))]
@@ -195,6 +324,7 @@ impl Proxy {
         _session: &Session,
         _server: &str,
         _port: u16,
+        _password: &str,
     ) -> Result<TcpRelayStream, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",

@@ -4,15 +4,37 @@ use std::collections::HashMap;
 
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
+use zero_config::{
+    ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, QuicConfig, RealityConfig,
+    WebSocketConfig,
+};
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 use zero_protocol_vless::parse_uuid;
-use zero_protocol_vless::{VlessUdpTransport, VlessUdpUpstream};
 use zero_traits::AsyncSocket;
 
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
+
+/// Handle to an established VLESS UDP upstream connection.
+#[derive(Clone)]
+pub struct VlessUdpUpstream {
+    pub session_id: u64,
+    pub send_tx: mpsc::Sender<Vec<u8>>,
+}
+
+/// Transport options for VLESS UDP upstream connections.
+#[derive(Clone, Copy)]
+pub struct VlessUdpTransport<'a> {
+    pub tls: Option<&'a ClientTlsConfig>,
+    pub reality: Option<&'a RealityConfig>,
+    pub ws: Option<&'a WebSocketConfig>,
+    pub grpc: Option<&'a GrpcConfig>,
+    pub h2: Option<&'a H2Config>,
+    pub http_upgrade: Option<&'a HttpUpgradeConfig>,
+    pub quic: Option<&'a QuicConfig>,
+}
 
 /// Spawn the bidirectional meter + relay task for a VLESS UDP upstream,
 /// returning the upstream handle and receive channel.
@@ -105,7 +127,7 @@ pub async fn establish_vless_udp_upstream(
 
     let stream: TcpRelayStream = match transport {
         Some(t) => {
-            let connector = zero_protocol_vless::VlessTransportConnector::new(
+            let connector = crate::transport::VlessTransportConnector::new(
                 t.tls,
                 t.reality,
                 t.ws,

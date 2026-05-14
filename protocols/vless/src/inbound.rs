@@ -327,33 +327,4 @@ fn command_to_session(
 
 // ── Config adapter ──
 
-/// Adapter that implements [`VlessUserStore`] from zero-config user definitions.
-#[cfg(feature = "reality")]
-pub struct ConfiguredVlessUsers<'a> {
-    pub users: &'a [zero_config::VlessUserConfig],
-}
 
-#[cfg(feature = "reality")]
-impl VlessUserStore for ConfiguredVlessUsers<'_> {
-    fn find_user(&self, id: &[u8; 16]) -> Option<VlessUser> {
-        use crate::shared::parse_uuid;
-        use crate::flow::parse_flow;
-
-        self.users.iter().find_map(|user| {
-            let configured_id = parse_uuid(&user.id).ok()?;
-            if &configured_id == id {
-                let flow = user
-                    .flow
-                    .as_deref()
-                    .and_then(|f| parse_flow(f).ok());
-                Some(VlessUser {
-                    credential_id: user.credential_id.clone(),
-                    principal_key: user.principal_key.clone(),
-                    flow,
-                })
-            } else {
-                None
-            }
-        })
-    }
-}

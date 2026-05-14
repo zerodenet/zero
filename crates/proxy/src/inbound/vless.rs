@@ -19,7 +19,7 @@ use zero_traits::AsyncSocket;
 
 use crate::outbound::direct::{resolve_udp_target, send_direct_udp_packet};
 use crate::runtime::udp_associate::sessions::UdpSessionFlows;
-use zero_protocol_vless::VlessUdpTransport;
+use crate::outbound::vless::VlessUdpTransport;
 use crate::runtime::{log_completed_udp_flow, UdpFlowOutbound};
 
 use super::super::logging::log_listener_connection_error;
@@ -880,7 +880,7 @@ impl Proxy {
                 session.outbound_tag = Some(tag.to_owned());
                 self.set_session_outbound(&session);
 
-                let transport = zero_protocol_vless::VlessUdpTransport {
+                let transport = crate::outbound::vless::VlessUdpTransport {
                     tls,
                     reality,
                     ws,

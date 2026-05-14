@@ -16,8 +16,8 @@ use std::io;
 
 use zero_platform_tokio::TransportConnector;
 
-use crate::reality::{upgrade_reality_client, RealityClientOptions};
-use crate::transport::{grpc, h2, http_upgrade, tls, ws};
+use zero_protocol_vless::{upgrade_reality_client, RealityClientOptions};
+use crate::{grpc, h2, http_upgrade, tls, ws};
 
 /// Wrap a raw TCP socket with the configured VLESS transport layer.
 ///

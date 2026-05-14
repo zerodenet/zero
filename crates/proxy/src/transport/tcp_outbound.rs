@@ -171,9 +171,10 @@ impl Proxy {
                 tag,
                 server,
                 port,
+                password,
                 ..
             } => {
-                match self.connect_via_hysteria2_upstream(session, server, port).await {
+                match self.connect_via_hysteria2_upstream(session, server, port, password).await {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Hysteria2 {
                         tag: tag.to_owned(),
                         server: server.to_owned(),

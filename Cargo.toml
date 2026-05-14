@@ -42,6 +42,7 @@ members = [
     "crates/proxy",
     "crates/router",
     "crates/platform/tokio",
+    "crates/transport",
     "protocols/socks5",
     "protocols/http-connect",
     "protocols/vless",
