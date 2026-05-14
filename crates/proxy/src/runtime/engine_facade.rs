@@ -1,6 +1,7 @@
 use zero_core::Session;
 use zero_engine::{
-    EngineError, ResolvedOutbound, RouteDecision, SessionHandle, TargetId, UrlTestMemberState,
+    BlockReason, EngineError, ResolvedOutbound, RouteDecision, SessionHandle, TargetId,
+    UrlTestMemberState,
 };
 
 use crate::runtime::Proxy;
@@ -48,8 +49,12 @@ impl Proxy {
             .update_urltest_state(group_id, selected, latency_ms, members);
     }
 
-    pub(crate) fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {
-        self.engine.prepare_session(session, inbound_tag);
+    pub(crate) fn prepare_session(
+        &self,
+        session: &mut Session,
+        inbound_tag: &str,
+    ) -> Result<(), BlockReason> {
+        self.engine.prepare_session(session, inbound_tag)
     }
 
     pub(crate) fn set_session_outbound(&self, session: &Session) {

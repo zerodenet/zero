@@ -81,6 +81,13 @@ pub struct ApiConfig {
     pub event_sinks: Vec<EventSinkConfig>,
     #[serde(default)]
     pub control: ControlApiConfig,
+    /// Active panel connector configuration.
+    /// When set, the node will connect to the panel and push heartbeats.
+    #[serde(default)]
+    pub panel: PanelApiConfig,
+    /// Flow hooks executed in registration order.
+    #[serde(default)]
+    pub hooks: Vec<HookConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +155,60 @@ pub struct ControlApiConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum HookConfig {
+    #[serde(rename = "ipc")]
+    Ipc {
+        socket: String,
+        #[serde(default = "default_hook_timeout_ms")]
+        timeout_ms: u64,
+    },
+}
+
+fn default_hook_timeout_ms() -> u64 {
+    100
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct PanelApiConfig {
+    /// Panel API base URL.
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Node identifier reported to the panel.
+    #[serde(default)]
+    pub node_id: Option<String>,
+    /// API key for panel authentication.
+    #[serde(default)]
+    pub api_key: Option<String>,
+    /// Environment variable name for the API key.
+    #[serde(default)]
+    pub api_key_env: Option<String>,
+    /// Heartbeat interval in seconds (default 30).
+    #[serde(default = "default_panel_heartbeat_interval")]
+    pub heartbeat_interval_seconds: u64,
+    /// Whether to poll for pending commands from the panel.
+    #[serde(default)]
+    pub pull_commands: bool,
+    /// Command polling interval in seconds (default 10).
+    #[serde(default = "default_panel_command_poll_interval")]
+    pub command_poll_interval_seconds: u64,
+}
+
+fn default_panel_heartbeat_interval() -> u64 {
+    30
+}
+fn default_panel_command_poll_interval() -> u64 {
+    10
+}
+
+impl PanelApiConfig {
+    pub fn enabled(&self) -> bool {
+        self.url.is_some() && self.node_id.is_some()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InboundConfig {
     pub tag: String,
@@ -196,6 +257,8 @@ pub enum InboundProtocolConfig {
         fallback: Option<FallbackConfig>,
         #[serde(default)]
         quic: Option<QuicConfig>,
+        #[serde(default)]
+        split_http: Option<SplitHttpConfig>,
     },
     #[serde(rename = "hysteria2")]
     Hysteria2 {
@@ -261,6 +324,13 @@ impl InboundProtocolConfig {
     pub fn vless_http_upgrade(&self) -> Option<&HttpUpgradeConfig> {
         match self {
             Self::Vless { http_upgrade, .. } => http_upgrade.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn vless_split_http(&self) -> Option<&SplitHttpConfig> {
+        match self {
+            Self::Vless { split_http, .. } => split_http.as_ref(),
             _ => None,
         }
     }
@@ -444,6 +514,19 @@ fn default_http_upgrade_path() -> String {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct SplitHttpConfig {
+    #[serde(default)]
+    pub host: Option<String>,
+    #[serde(default = "default_split_http_path")]
+    pub path: String,
+}
+
+fn default_split_http_path() -> String {
+    "/".to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FallbackConfig {
     pub server: String,
     pub port: u16,
@@ -520,6 +603,8 @@ pub enum OutboundProtocolConfig {
         h2: Option<H2Config>,
         #[serde(default)]
         http_upgrade: Option<HttpUpgradeConfig>,
+        #[serde(default)]
+        split_http: Option<SplitHttpConfig>,
         #[serde(default)]
         quic: Option<QuicConfig>,
     },

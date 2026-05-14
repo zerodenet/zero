@@ -48,3 +48,18 @@ pub enum ApiErrorCode {
     #[error("internal")]
     Internal,
 }
+
+impl ApiErrorCode {
+    /// Stable string code used in JSON error responses.
+    pub fn as_code_str(&self) -> &'static str {
+        match self {
+            Self::NotFound => "not_found",
+            Self::InvalidArgument => "invalid_argument",
+            Self::PermissionDenied => "permission_denied",
+            Self::FeatureDisabled => "feature_disabled",
+            Self::Conflict => "conflict",
+            Self::Unsupported => "unsupported",
+            Self::Internal => "internal",
+        }
+    }
+}

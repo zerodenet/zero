@@ -121,14 +121,28 @@ fn execute_engine_command(
                 })),
             })
         }
-        CommandRequest::FlowClose(_) => Err(ApiError::new(
-            ApiErrorCode::Unsupported,
-            "`flows.close` is not implemented yet",
-        )),
-        CommandRequest::PolicyProbe(_) => Err(ApiError::new(
-            ApiErrorCode::Unsupported,
-            "`policies.probe` is not implemented yet",
-        )),
+        CommandRequest::FlowClose(command) => match engine.close_flow(&command.flow_id) {
+            Ok(()) => Ok(CommandResponse {
+                accepted: true,
+                result: Some(json!({
+                    "flow_id": command.flow_id,
+                    "closed": true,
+                })),
+            }),
+            Err(error) => Err(engine_error_to_api(error)),
+        },
+        CommandRequest::PolicyProbe(command) => {
+            match engine.trigger_urltest_probe(&command.policy_tag) {
+                Ok(()) => Ok(CommandResponse {
+                    accepted: true,
+                    result: Some(json!({
+                        "policy_tag": command.policy_tag,
+                        "probe_triggered": true,
+                    })),
+                }),
+                Err(error) => Err(engine_error_to_api(error)),
+            }
+        }
         CommandRequest::DiagnosticsProbeTarget(_) => Err(ApiError::new(
             ApiErrorCode::Unsupported,
             "`diagnostics.probe_target` is not implemented yet",
@@ -360,6 +374,20 @@ fn engine_error_to_api(error: EngineError) -> ApiError {
                 cause: Some(error.to_string()),
             }
         }
+        EngineError::Io(ref io_err) if io_err.kind() == std::io::ErrorKind::NotFound => {
+            ApiError {
+                code: ApiErrorCode::NotFound,
+                message: io_err.to_string(),
+                field_path: Some("flow_id".to_owned()),
+                cause: Some(error.to_string()),
+            }
+        }
+        EngineError::Io(_) => ApiError {
+            code: ApiErrorCode::InvalidArgument,
+            message: error.to_string(),
+            field_path: None,
+            cause: None,
+        },
         error => ApiError {
             code: ApiErrorCode::Internal,
             message: "command execution failed".to_owned(),

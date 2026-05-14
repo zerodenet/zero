@@ -1,6 +1,7 @@
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tokio::sync::watch;
+use tokio::sync::{watch, Notify};
 use tokio::time::{sleep, timeout};
 use tracing::{debug, info, warn};
 use zero_core::{Address, Network, ProtocolType, Session};
@@ -10,7 +11,8 @@ use super::super::runtime::upstream::VlessUpstream;
 use super::super::transport::TcpRelayStream;
 use super::super::{logging::log_urltest_group_target_changed, runtime::Proxy};
 use zero_engine::{
-    EngineError, ResolvedLeafOutbound, ResolvedOutbound, TargetId, TargetKind, UrlTestMemberState,
+    EngineError, ProbeTrigger, ResolvedLeafOutbound, ResolvedOutbound, TargetId, TargetKind,
+    UrlTestMemberState,
 };
 
 impl Proxy {
@@ -27,15 +29,26 @@ impl Proxy {
         let TargetKind::UrlTest(urltest) = group.kind() else {
             return Ok(());
         };
+        let group_tag = group.tag().to_owned();
         let probe = UrlTestProbe::parse(urltest.url()).map_err(|message| {
             EngineError::InvalidUrlTestGroup {
-                tag: group.tag().to_owned(),
+                tag: group_tag.clone(),
                 message,
             }
         })?;
 
+        // Register a probe trigger so `policies.probe` can wake this loop.
+        let probe_notify = Arc::new(Notify::new());
+        let trigger = ProbeTrigger::new({
+            let notify = Arc::clone(&probe_notify);
+            move || notify.notify_one()
+        });
+        self.engine()
+            .probe_trigger_registry()
+            .register(&group_tag, trigger);
+
         info!(
-            group_tag = %group.tag(),
+            group_tag = %group_tag,
             url = probe.url.as_str(),
             interval_seconds = urltest.interval().as_secs(),
             "urltest group started"
@@ -52,11 +65,17 @@ impl Proxy {
                         Err(_) => break,
                     }
                 }
+                _ = probe_notify.notified() => {
+                    debug!(group_tag = %group_tag, "urltest probe triggered by api");
+                }
                 _ = sleep(urltest.interval()) => {}
             }
         }
 
-        info!(group_tag = %group.tag(), "urltest group stopped");
+        self.engine()
+            .probe_trigger_registry()
+            .remove(&group_tag);
+        info!(group_tag = %group_tag, "urltest group stopped");
         Ok(())
     }
 

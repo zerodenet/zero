@@ -1,0 +1,218 @@
+use std::io;
+
+use zero_api::{
+    ApiError, ApiErrorCode, CommandRequest, CommandService, EventFilter, EventSource,
+    FlowGetQuery, FlowListQuery, PolicySelectCommand, QueryRequest, QueryResponse, QueryService,
+};
+use zero_engine::EngineHandle;
+
+use super::response::{api_error_status, ApiResponse};
+
+/// Handle GET /api/v1/capabilities.
+pub fn capabilities(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+    let resp = handle.query(QueryRequest::Capabilities(Default::default()));
+    serialize_response(resp)
+}
+
+/// Handle GET /api/v1/health.
+pub fn health(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+    let resp = handle.query(QueryRequest::Health(Default::default()));
+    serialize_response(resp)
+}
+
+/// Handle GET /api/v1/config.
+pub fn config(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+    let status = handle.inner().export_config();
+    let body = ApiResponse::ok(status);
+    serde_json::to_vec_pretty(&body).map_err(io::Error::other)
+}
+
+/// Handle GET /api/v1/runtime.
+pub fn runtime(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+    let status = handle.inner().export_runtime();
+    let body = ApiResponse::ok(status);
+    serde_json::to_vec_pretty(&body).map_err(io::Error::other)
+}
+
+/// Handle GET /api/v1/stats.
+pub fn stats(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+    let resp = handle.query(QueryRequest::Stats(Default::default()));
+    serialize_response(resp)
+}
+
+/// Handle GET /api/v1/flows (active flows list).
+pub fn flows_list(handle: &EngineHandle, query: &str) -> io::Result<Vec<u8>> {
+    let params = parse_flow_list_params(query);
+    let resp = handle.query(QueryRequest::ActiveFlows(params));
+    serialize_response(resp)
+}
+
+/// Handle GET /api/v1/flows/{flow_id}.
+pub fn flow_get(handle: &EngineHandle, flow_id: &str) -> io::Result<Vec<u8>> {
+    let resp = handle.query(QueryRequest::Flow(FlowGetQuery {
+        flow_id: flow_id.to_owned(),
+    }));
+    serialize_response(resp)
+}
+
+/// Handle GET /api/v1/policies.
+pub fn policies_list(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+    let resp = handle.query(QueryRequest::Policies(Default::default()));
+    serialize_response(resp)
+}
+
+/// Handle GET /api/v1/policies/{policy_tag}.
+pub fn policy_get(handle: &EngineHandle, policy_tag: &str) -> io::Result<Vec<u8>> {
+    let resp = handle.query(QueryRequest::Policy(zero_api::PolicyGetQuery {
+        policy_tag: policy_tag.to_owned(),
+    }));
+    serialize_response(resp)
+}
+
+/// Handle GET /api/v1/events (snapshot).
+pub fn events_snapshot(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+    let events = handle.inner().events_snapshot(&EventFilter::default());
+    let body = ApiResponse::ok(events);
+    serde_json::to_vec_pretty(&body).map_err(io::Error::other)
+}
+
+/// Handle POST /api/v1/commands.
+pub fn commands(handle: &EngineHandle, body: &[u8]) -> Result<Vec<u8>, (&'static str, Vec<u8>)> {
+    let command = serde_json::from_slice::<CommandRequest>(body).map_err(|error| {
+        let api_error = ApiError {
+            code: ApiErrorCode::InvalidArgument,
+            message: "invalid command request".to_owned(),
+            field_path: None,
+            cause: Some(error.to_string()),
+        };
+        let status = api_error_status(&api_error);
+        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::error(&api_error))
+            .unwrap_or_default();
+        (status, body)
+    })?;
+
+    match handle.execute(command) {
+        Ok(response) => {
+            let body = ApiResponse::ok(response);
+            Ok(serde_json::to_vec_pretty(&body).unwrap_or_default())
+        }
+        Err(error) => {
+            let status = api_error_status(&error);
+            let body = serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error))
+                .unwrap_or_default();
+            Err((status, body))
+        }
+    }
+}
+
+/// Handle POST /selectors/{group}/{target} (compatibility).
+pub fn selector_update(
+    handle: &EngineHandle,
+    group_tag: &str,
+    target_tag: &str,
+) -> Result<Vec<u8>, (&'static str, Vec<u8>)> {
+    let command = CommandRequest::PolicySelect(PolicySelectCommand {
+        policy_tag: group_tag.to_owned(),
+        target_tag: target_tag.to_owned(),
+    });
+
+    match handle.execute(command) {
+        Ok(_) => {
+            let config = handle.inner().export_config();
+            Ok(serde_json::to_vec_pretty(&config).unwrap_or_default())
+        }
+        Err(error) => {
+            let status = api_error_status(&error);
+            let body = serde_json::to_vec_pretty(&error).unwrap_or_default();
+            Err((status, body))
+        }
+    }
+}
+
+/// Handle GET /api/v1/events/stream (SSE).
+///
+/// Returns `(subscriber, catch_up_events)`.  `catch_up_events` contains
+/// missed events when the client provides `?since=<seq>` or
+/// `Last-Event-ID: <seq>`.
+pub fn events_stream(
+    handle: &EngineHandle,
+    query: &str,
+    headers: &[(String, String)],
+) -> Result<
+    (zero_engine::EventSubscriber, Vec<zero_api::RawApiEvent>),
+    (&'static str, Vec<u8>),
+> {
+    let mut filter = EventFilter::default();
+    if let Some(types) = parse_query_param(query, "types") {
+        filter.event_types = types.split(',').map(|t| t.trim().to_owned()).collect();
+    }
+
+    // Resolve `since` from query param or Last-Event-ID header.
+    let since = parse_query_param(query, "since")
+        .and_then(|v| v.parse::<u64>().ok())
+        .or_else(|| {
+            headers
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("last-event-id"))
+                .and_then(|(_, value)| value.parse::<u64>().ok())
+        });
+
+    let catch_up = match since {
+        Some(s) => handle.inner().events_since(s, 256, &filter),
+        None => Vec::new(),
+    };
+
+    match handle.subscribe(filter) {
+        Ok(subscriber) => Ok((subscriber, catch_up)),
+        Err(error) => {
+            let status = api_error_status(&error);
+            let body = serde_json::to_vec_pretty(&error).unwrap_or_default();
+            Err((status, body))
+        }
+    }
+}
+
+// ── helpers ──────────────────────────────────────────────────────────
+
+fn serialize_response(resp: Result<QueryResponse, ApiError>) -> io::Result<Vec<u8>> {
+    match resp {
+        Ok(result) => {
+            let body = ApiResponse::ok(result);
+            serde_json::to_vec_pretty(&body).map_err(io::Error::other)
+        }
+        Err(error) => {
+            let body = ApiResponse::<()>::error(&error);
+            serde_json::to_vec_pretty(&body).map_err(io::Error::other)
+        }
+    }
+}
+
+fn parse_flow_list_params(query: &str) -> FlowListQuery {
+    let limit = parse_query_param(query, "limit")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(100);
+    let inbound_tag = parse_query_param(query, "inbound_tag").map(|v| v.to_owned());
+    let principal_key = parse_query_param(query, "principal_key").map(|v| v.to_owned());
+
+    FlowListQuery {
+        limit: Some(limit),
+        filter: zero_api::FlowFilter {
+            inbound_tag,
+            principal_key,
+            network: None,
+        },
+    }
+}
+
+fn parse_query_param<'a>(query: &'a str, key: &str) -> Option<&'a str> {
+    let prefix = format!("{key}=");
+    query.split('&').find_map(|pair| {
+        if pair.starts_with(&prefix) {
+            Some(pair[prefix.len()..].trim())
+        } else if pair == key {
+            Some("") // boolean flag
+        } else {
+            None
+        }
+    })
+}

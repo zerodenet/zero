@@ -90,6 +90,9 @@ impl EngineStats {
             SessionOutcome::Failed => {
                 self.failed_sessions.fetch_add(1, Ordering::Relaxed);
             }
+            SessionOutcome::Cancelled => {
+                self.completed_sessions.fetch_add(1, Ordering::Relaxed);
+            }
         }
     }
 
@@ -158,6 +161,7 @@ pub enum SessionOutcome {
     ChainedRelayed,
     Blocked,
     Failed,
+    Cancelled,
 }
 
 impl SessionOutcome {
@@ -167,6 +171,7 @@ impl SessionOutcome {
             SessionOutcome::ChainedRelayed => "chained-relayed",
             SessionOutcome::Blocked => "blocked",
             SessionOutcome::Failed => "failed",
+            SessionOutcome::Cancelled => "cancelled",
         }
     }
 }

@@ -4,7 +4,10 @@ mod error;
 mod event_log;
 mod export;
 mod groups;
+mod handle;
+mod hook;
 mod plan;
+mod probe_trigger;
 mod resolve;
 mod runtime;
 mod session_lifecycle;
@@ -21,10 +24,13 @@ pub use export::{
     OutboundGroupExport, SessionAuthExport,
 };
 pub use groups::{UrlTestGroupState, UrlTestMemberState};
+pub use handle::{EngineHandle, EventSubscriber};
+pub use hook::{BlockReason, FlowContext, FlowHook, FlowHookChain, FlowTraffic};
 pub use plan::{
     EnginePlan, FallbackGroupPlan, OutboundTarget, SelectorGroupPlan, TargetId, TargetKind,
     TargetNode, UrlTestGroupPlan,
 };
+pub use probe_trigger::{ProbeTrigger, ProbeTriggerRegistry};
 pub use resolve::{ResolvedLeafOutbound, ResolvedOutbound};
 pub use runtime::Engine;
 pub use runtime::RouteDecision;

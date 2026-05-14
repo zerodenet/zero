@@ -13,7 +13,9 @@ use super::completed_sessions::{CompletedSessionHistory, CompletedSessionRecord}
 use super::error::EngineError;
 use super::event_log::EngineEventLog;
 use super::groups::{OutboundGroupStateStore, UrlTestGroupState, UrlTestMemberState};
+use super::hook::{FlowHook, FlowHookChain};
 use super::plan::{EnginePlan, TargetId, TargetKind};
+use super::probe_trigger::ProbeTriggerRegistry;
 use super::resolve::{
     resolve_target_chains, resolve_target_id, ResolvedLeafOutbound, ResolvedOutbound,
 };
@@ -33,6 +35,8 @@ pub struct Engine {
     event_log: Arc<EngineEventLog>,
     stats: Arc<EngineStats>,
     pub(crate) outbound_group_state: Arc<OutboundGroupStateStore>,
+    pub(crate) probe_trigger_registry: Arc<ProbeTriggerRegistry>,
+    flow_hook: Option<Arc<FlowHookChain>>,
     udp_upstream_idle_timeout: Duration,
 }
 
@@ -112,6 +116,8 @@ impl Engine {
             event_log,
             stats: EngineStats::shared(),
             outbound_group_state,
+            probe_trigger_registry: ProbeTriggerRegistry::shared(),
+            flow_hook: None,
             udp_upstream_idle_timeout,
         })
     }
@@ -131,6 +137,20 @@ impl Engine {
 
     pub fn with_udp_upstream_idle_timeout(mut self, timeout: Duration) -> Self {
         self.udp_upstream_idle_timeout = timeout;
+        self
+    }
+
+    pub fn with_flow_hook(mut self, hook: impl FlowHook + 'static) -> Self {
+        let mut chain = FlowHookChain::empty();
+        chain.push(Arc::new(hook));
+        self.flow_hook = Some(Arc::new(chain));
+        self
+    }
+
+    pub fn with_flow_hook_chain(mut self, chain: FlowHookChain) -> Self {
+        if !chain.is_empty() {
+            self.flow_hook = Some(Arc::new(chain));
+        }
         self
     }
 
@@ -217,6 +237,37 @@ impl Engine {
         self.event_log.snapshot(filter)
     }
 
+    pub fn events_since(
+        &self,
+        since: u64,
+        limit: usize,
+        filter: &EventFilter,
+    ) -> Vec<RawApiEvent> {
+        self.event_log.events_since(since, limit, filter)
+    }
+
+    pub fn latest_event_sequence(&self) -> u64 {
+        self.event_log.latest_sequence()
+    }
+
+    pub fn push_stats_sampled(&self) {
+        let snapshot = self.stats_snapshot();
+        self.event_log.push_stats_sampled(&snapshot);
+    }
+
+    /// Emit `flow.updated` events for all currently active sessions.
+    /// Emit an `engine.warning` event. Call this from anywhere in the
+    /// proxy to surface non-fatal issues to consumers.
+    pub fn emit_warning(&self, code: &str, message: &str) {
+        self.event_log.push_warning(code, message);
+    }
+
+    pub fn push_flow_updates(&self) {
+        for session in self.active_sessions() {
+            self.event_log.push_flow_updated(&session);
+        }
+    }
+
     pub fn set_selector_target(
         &self,
         group_tag: &str,
@@ -259,6 +310,12 @@ impl Engine {
             .or_else(|| Some(view.target_tag_owned(selector.initial_member())));
         self.outbound_group_state
             .update_selector(group_id, target_id);
+        self.event_log.push_policy_selected(
+            group_tag,
+            "selector",
+            target_tag,
+            previous.as_deref(),
+        );
         info!(
             group_tag = group_tag,
             previous = previous.as_deref().unwrap_or("-"),
@@ -287,12 +344,43 @@ impl Engine {
             .update_urltest(group_id, selected, latency_ms, members);
     }
 
-    pub fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {
+    pub fn prepare_session(
+        &self,
+        session: &mut Session,
+        inbound_tag: &str,
+    ) -> Result<(), super::hook::BlockReason> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
         session.id = self.next_session_id.fetch_add(1, Ordering::Relaxed);
         session.inbound_tag = Some(inbound_tag.to_owned());
+
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        // Check hooks before committing.
+        if let Some(ref hook) = self.flow_hook {
+            let ctx = super::hook::FlowContext::from_session(
+                session,
+                self.config.mode.kind(),
+                now_ms,
+            );
+            if let Err(reason) = hook.on_flow_start(&ctx) {
+                tracing::warn!(
+                    flow_id = session.id,
+                    reason = %reason.message,
+                    "flow blocked by hook"
+                );
+                return Err(reason);
+            }
+        }
+
         self.session_registry
             .insert(session, self.config.mode.kind());
         self.stats.record_start();
+        self.event_log.push_flow_started(session, self.config.mode.kind());
+        Ok(())
     }
 
     pub fn set_session_outbound(&self, session: &Session) {
@@ -374,11 +462,58 @@ impl Engine {
         self.completed_sessions.push(record.clone());
         self.event_log
             .push_flow_completed(&record, |tag| self.outbound_protocol_for_tag(tag));
+
+        // Notify hooks.
+        if let Some(ref hook) = self.flow_hook {
+            let ctx = super::hook::FlowContext::from_completed(&record);
+            let stats = super::hook::FlowTraffic::from_completed(&record);
+            hook.on_flow_end(&ctx, outcome, &stats);
+        }
+
         Some(record)
     }
 
     pub fn track_session(&self, session_id: u64) -> SessionHandle {
         SessionHandle::new(self.clone(), session_id)
+    }
+
+    /// Force-close an active flow by its flow id.
+    ///
+    /// Returns `Ok(())` if the flow was found and closed, or an error if
+    /// the flow id is invalid or the flow is no longer active.
+    pub fn probe_trigger_registry(&self) -> &ProbeTriggerRegistry {
+        &self.probe_trigger_registry
+    }
+
+    /// Request an immediate urltest probe cycle for the given policy tag.
+    ///
+    /// Returns an error if the policy is not found or is not a urltest group.
+    pub fn trigger_urltest_probe(&self, policy_tag: &str) -> Result<(), EngineError> {
+        let trigger =
+            self.probe_trigger_registry
+                .get(policy_tag)
+                .ok_or_else(|| EngineError::SelectorGroupNotFound {
+                    tag: policy_tag.to_owned(),
+                })?;
+        trigger.trigger();
+        Ok(())
+    }
+
+    pub fn close_flow(&self, flow_id: &str) -> Result<(), EngineError> {
+        let session_id: u64 = flow_id.parse().map_err(|_| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "invalid flow id",
+            ))
+        })?;
+        self.finish_session(session_id, SessionOutcome::Cancelled)
+            .map(|_| ())
+            .ok_or_else(|| {
+                EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("flow `{flow_id}` not found or already completed"),
+                ))
+            })
     }
 
     fn outbound_protocol_for_tag(&self, tag: &str) -> Option<&'static str> {

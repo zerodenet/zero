@@ -28,7 +28,9 @@ pub use query::{
     HealthQuery, HealthSnapshot, PoliciesQuery, PolicyGetQuery, QueryRequest, QueryResponse,
     RuntimeQuery, Snapshot, StatsQuery,
 };
-pub use sink::{CallbackEventSink, JsonLineEventSink};
+pub use sink::{
+    CallbackEventSink, JsonLineEventSink, MemorySink, RotatingFileSink, SinkManager, SinkStatus,
+};
 pub use traits::{ApiAuth, ApiCodec, CommandService, EventSink, EventSource, QueryService};
 #[cfg(feature = "webhook")]
 pub use webhook::{WebhookEventSink, WebhookEventSinkConfig};

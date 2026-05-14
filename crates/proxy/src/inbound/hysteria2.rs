@@ -15,7 +15,7 @@ use zero_traits::DnsResolver;
 use zero_protocol_hysteria2::{
     build_auth_error, build_auth_ok, build_connect_error, build_connect_ok,
     build_udp_datagram, parse_auth_frame, parse_tcp_connect_header, parse_udp_datagram,
-    Hysteria2UdpPacket,
+    verify_hmac, Hysteria2UdpPacket,
 };
 use crate::transport::Hysteria2Stream;
 use zero_traits::AsyncSocket;
@@ -172,8 +172,7 @@ impl Proxy {
         let client_hmac = parse_auth_frame(&auth_buf[..n])?;
 
         // Validate HMAC-SHA256(password, salt)
-        let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, password.as_bytes());
-        if ring::hmac::verify(&key, &salt, &client_hmac).is_err() {
+        if !verify_hmac(&password, &salt, &client_hmac) {
             let err_resp = build_auth_error("authentication failed");
             let _ = AsyncSocket::write_all(&mut auth_stream, &err_resp).await;
             return Err(EngineError::Io(io::Error::new(
@@ -379,7 +378,12 @@ impl Proxy {
         let (target, port) = parse_tcp_connect_header(&header_buf[..n])?;
 
         let mut session = Session::new(0, target.clone(), port, Network::Tcp, ProtocolType::Hysteria2);
-        self.prepare_session(&mut session, inbound_tag);
+        if let Err(reason) = self.prepare_session(&mut session, inbound_tag) {
+            tracing::warn!(reason = %reason.message, "hysteria2 flow blocked by hook");
+            let err = build_connect_error(&reason.message);
+            let _ = AsyncSocket::write_all(&mut stream, &err).await;
+            return Ok(());
+        }
 
         let action = self.route_decision(&session.target);
         let Ok(resolved) = self.resolve_outbound(action) else {

@@ -29,4 +29,15 @@ pub enum ConnectorError {
     DispatcherStart,
     #[error("api error while building connector: {0}")]
     Api(#[from] zero_api::ApiError),
+    #[error("connector config error: {0}")]
+    Config(String),
+    #[error("connector request failed: {0}")]
+    Request(String),
+}
+
+#[cfg(feature = "panel-connector")]
+impl From<reqwest::Error> for ConnectorError {
+    fn from(e: reqwest::Error) -> Self {
+        ConnectorError::Request(e.to_string())
+    }
 }

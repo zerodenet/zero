@@ -94,6 +94,7 @@ pub enum FlowOutcome {
     ChainedRelayed,
     Blocked,
     Failed,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

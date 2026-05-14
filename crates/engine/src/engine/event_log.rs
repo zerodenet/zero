@@ -9,9 +9,10 @@ use zero_api::{
     FlowTiming, Network as ApiNetwork, PolicyDecision, PolicySelectedPayload, RawApiEvent,
     RouteDecision, TargetAddress, TrafficStats,
 };
-use zero_core::{Address, Network, ProtocolType};
+use zero_core::{Address, Network, ProtocolType, Session};
 
 use super::completed_sessions::CompletedSessionRecord;
+use super::session_registry::ActiveSession;
 use super::stats::SessionOutcome;
 
 const DEFAULT_EVENT_LOG_CAPACITY: usize = 1024;
@@ -51,6 +52,7 @@ impl EngineEventLog {
         self.push(event);
     }
 
+    #[allow(dead_code)]
     pub fn push_engine_stopped(&self) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -94,6 +96,132 @@ impl EngineEventLog {
         self.push(event);
     }
 
+    pub fn push_warning(&self, code: &str, message: &str) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let payload = json!({
+            "code": code,
+            "message": message,
+        });
+        let event = ApiEvent::new(
+            format!("warn-{}", now_ms),
+            event_type::ENGINE_WARNING,
+            now_ms,
+            payload,
+        );
+        self.push(event);
+    }
+
+    pub fn push_stats_sampled(&self, stats: &super::stats::EngineStatsSnapshot) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let payload = serde_json::to_value(stats)
+            .expect("stats sampled payload should be serializable");
+        let event = ApiEvent::new(
+            format!("stats-{}", now_ms),
+            event_type::STATS_SAMPLED,
+            now_ms,
+            payload,
+        );
+        self.push(event);
+    }
+
+    pub fn push_flow_updated(&self, session: &ActiveSession) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let payload = json!({
+            "flow_id": session.id.to_string(),
+            "network": match session.network {
+                Network::Tcp => "tcp",
+                Network::Udp => "udp",
+            },
+            "inbound_tag": session.inbound_tag,
+            "outbound_tag": session.outbound_tag,
+            "bytes_up": session.bytes_up,
+            "bytes_down": session.bytes_down,
+            "inbound_rx_bytes": session.inbound_rx_bytes,
+            "inbound_tx_bytes": session.inbound_tx_bytes,
+            "outbound_rx_bytes": session.outbound_rx_bytes,
+            "outbound_tx_bytes": session.outbound_tx_bytes,
+            "throughput_up_bps": session.throughput_up_bps,
+            "throughput_down_bps": session.throughput_down_bps,
+            "snapshot_at_unix_ms": now_ms,
+        });
+        let event = ApiEvent::new(
+            format!("{}:{}:{}", event_type::FLOW_UPDATED, session.id, now_ms),
+            event_type::FLOW_UPDATED,
+            now_ms,
+            payload,
+        );
+        self.push(event);
+    }
+
+    pub fn push_flow_started(&self, session: &Session, mode: &str) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let auth = session.auth.as_ref().map(|auth| AuthInfo {
+            scheme: auth.scheme.clone(),
+            credential_id: auth.credential_id.clone(),
+            principal_key: auth.principal_key.clone(),
+            attributes: BTreeMap::new(),
+        });
+        let principal_key = auth.as_ref().and_then(|a| a.principal_key.clone());
+
+        let payload = FlowEventPayload {
+            flow_id: session.id.to_string(),
+            network: api_network(session.network),
+            inbound: EndpointRef {
+                tag: session.inbound_tag.clone().unwrap_or_default(),
+                protocol: protocol_name(session.protocol).to_owned(),
+            },
+            auth,
+            target: TargetAddress {
+                host: address_host(&session.target),
+                port: session.port,
+            },
+            route: RouteDecision {
+                mode: mode.to_owned(),
+                target: None,
+            },
+            policy: None::<PolicyDecision>,
+            outbound: session.outbound_tag.as_ref().map(|tag| EndpointRef {
+                tag: tag.clone(),
+                protocol: "unknown".to_owned(),
+            }),
+            traffic: TrafficStats::default(),
+            timing: FlowTiming {
+                started_at_unix_ms: now_ms,
+                ended_at_unix_ms: None,
+                duration_ms: None,
+            },
+            outcome: FlowOutcome::DirectRelayed, // placeholder; overwritten at completion
+        };
+
+        let payload = serde_json::to_value(payload)
+            .expect("flow started event payload should be serializable");
+        let mut event = ApiEvent::new(
+            format!(
+                "{}:{}:{}",
+                event_type::FLOW_STARTED,
+                session.id,
+                now_ms,
+            ),
+            event_type::FLOW_STARTED,
+            now_ms,
+            payload,
+        );
+        event.principal_key = principal_key;
+        self.push(event);
+    }
+
     pub fn push_flow_completed(
         &self,
         record: &CompletedSessionRecord,
@@ -111,6 +239,37 @@ impl EngineEventLog {
             .filter(|event| matches_filter(event, filter))
             .cloned()
             .collect()
+    }
+
+    /// Return events with `sequence > since` that match the filter.
+    ///
+    /// Used for SSE `Last-Event-ID` / `?since=` resumption.
+    pub fn events_since(
+        &self,
+        since: u64,
+        limit: usize,
+        filter: &EventFilter,
+    ) -> Vec<RawApiEvent> {
+        self.inner
+            .lock()
+            .expect("engine event log lock poisoned")
+            .iter()
+            .filter(|event| {
+                event.sequence.map(|s| s > since).unwrap_or(false) && matches_filter(event, filter)
+            })
+            .take(limit)
+            .cloned()
+            .collect()
+    }
+
+    /// Highest sequence number currently in the log, or 0 if empty.
+    pub fn latest_sequence(&self) -> u64 {
+        self.inner
+            .lock()
+            .expect("engine event log lock poisoned")
+            .back()
+            .and_then(|e| e.sequence)
+            .unwrap_or(0)
     }
 
     fn push(&self, mut event: RawApiEvent) {
@@ -247,6 +406,7 @@ fn api_outcome(outcome: SessionOutcome) -> FlowOutcome {
         SessionOutcome::ChainedRelayed => FlowOutcome::ChainedRelayed,
         SessionOutcome::Blocked => FlowOutcome::Blocked,
         SessionOutcome::Failed => FlowOutcome::Failed,
+        SessionOutcome::Cancelled => FlowOutcome::Cancelled,
     }
 }
 

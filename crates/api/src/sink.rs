@@ -1,7 +1,9 @@
-use std::collections::HashSet;
 use std::io::Write;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde::Serialize;
 use crate::{ApiError, ApiErrorCode, ApiResult, EventSink, PublishResult, RawApiEvent};
 
 pub struct CallbackEventSink<F> {
@@ -104,5 +106,340 @@ fn io_error(error: std::io::Error) -> ApiError {
         message: "failed to write event sink output".to_owned(),
         field_path: None,
         cause: Some(error.to_string()),
+    }
+}
+
+// ── MemorySink ───────────────────────────────────────────────────────
+
+/// An in-memory event sink that collects events into a `Vec`.
+/// Useful for testing and debugging.
+#[derive(Debug)]
+pub struct MemorySink {
+    name: String,
+    buffer: Mutex<Vec<RawApiEvent>>,
+}
+
+impl MemorySink {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            buffer: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Drain all collected events.
+    pub fn drain(&self) -> Vec<RawApiEvent> {
+        self.buffer
+            .lock()
+            .expect("memory sink lock poisoned")
+            .drain(..)
+            .collect()
+    }
+
+    /// Take a snapshot of collected events without draining.
+    pub fn snapshot(&self) -> Vec<RawApiEvent> {
+        self.buffer
+            .lock()
+            .expect("memory sink lock poisoned")
+            .clone()
+    }
+
+    pub fn len(&self) -> usize {
+        self.buffer.lock().expect("memory sink lock poisoned").len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.buffer
+            .lock()
+            .expect("memory sink lock poisoned")
+            .is_empty()
+    }
+}
+
+impl EventSink for MemorySink {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn publish(&self, event: &RawApiEvent) -> ApiResult<PublishResult> {
+        self.buffer
+            .lock()
+            .expect("memory sink lock poisoned")
+            .push(event.clone());
+        Ok(PublishResult::delivered())
+    }
+}
+
+// ── SinkManager ──────────────────────────────────────────────────────
+
+/// Per-sink delivery status snapshot.
+#[derive(Debug, Clone, Serialize)]
+pub struct SinkStatus {
+    pub name: String,
+    pub total_delivered: u64,
+    pub total_failed: u64,
+    pub last_success_at_unix_ms: Option<u64>,
+    pub last_failure_at_unix_ms: Option<u64>,
+    pub last_error: Option<String>,
+}
+
+/// Coordinates multiple `EventSink` instances with delivery tracking.
+///
+/// Events are delivered to all configured sinks in parallel. A sink that
+/// returns a non-retryable failure is skipped; retryable failures are
+/// returned to the caller for retry logic.
+pub struct SinkManager {
+    sinks: Vec<ManagedSink>,
+    stats: Vec<SinkStats>,
+}
+
+struct SinkStats {
+    delivered: AtomicU64,
+    failed: AtomicU64,
+    last_success: Mutex<Option<u64>>,
+    last_failure: Mutex<Option<u64>>,
+    last_error: Mutex<Option<String>>,
+}
+
+impl SinkStats {
+    fn new() -> Self {
+        Self {
+            delivered: AtomicU64::new(0),
+            failed: AtomicU64::new(0),
+            last_success: Mutex::new(None),
+            last_failure: Mutex::new(None),
+            last_error: Mutex::new(None),
+        }
+    }
+}
+
+impl Default for SinkManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+struct ManagedSink {
+    sink: Box<dyn EventSink + Send + Sync>,
+    filter: Option<Vec<String>>,
+}
+
+impl SinkManager {
+    pub fn new() -> Self {
+        Self {
+            sinks: Vec::new(),
+            stats: Vec::new(),
+        }
+    }
+
+    /// Register a sink that accepts all event types.
+    pub fn register(&mut self, sink: Box<dyn EventSink + Send + Sync>) {
+        self.sinks.push(ManagedSink {
+            sink,
+            filter: None,
+        });
+        self.stats.push(SinkStats::new());
+    }
+
+    /// Register a sink that only receives events whose `event_type` is in
+    /// the provided allow-list.
+    pub fn register_filtered(
+        &mut self,
+        sink: Box<dyn EventSink + Send + Sync>,
+        event_types: Vec<String>,
+    ) {
+        self.sinks.push(ManagedSink {
+            sink,
+            filter: Some(event_types),
+        });
+        self.stats.push(SinkStats::new());
+    }
+
+    /// Snapshot delivery status for all sinks.
+    pub fn status(&self) -> Vec<SinkStatus> {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        self.sinks
+            .iter()
+            .zip(self.stats.iter())
+            .map(|(managed, stat)| SinkStatus {
+                name: managed.sink.name().to_owned(),
+                total_delivered: stat.delivered.load(Ordering::Relaxed),
+                total_failed: stat.failed.load(Ordering::Relaxed),
+                last_success_at_unix_ms: *stat.last_success.lock().unwrap(),
+                last_failure_at_unix_ms: *stat.last_failure.lock().unwrap(),
+                last_error: stat.last_error.lock().unwrap().clone(),
+            })
+            .collect()
+    }
+
+    /// Publish an event to all configured sinks.
+    ///
+    /// Returns per-sink results.  Non-retryable failures are logged and
+    /// dropped; retryable failures are returned so the caller can retry.
+    pub fn publish(&self, event: &RawApiEvent) -> Vec<(String, PublishResult)> {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        self.sinks
+            .iter()
+            .zip(self.stats.iter())
+            .filter(|(managed, _)| accepts(managed, event))
+            .map(|(managed, stat)| {
+                let result = managed.sink.publish(event);
+                match &result {
+                    Ok(r) if r.delivered => {
+                        stat.delivered.fetch_add(1, Ordering::Relaxed);
+                        *stat.last_success.lock().unwrap() = Some(now_ms);
+                        *stat.last_error.lock().unwrap() = None;
+                    }
+                    Ok(r) => {
+                        stat.failed.fetch_add(1, Ordering::Relaxed);
+                        *stat.last_failure.lock().unwrap() = Some(now_ms);
+                        *stat.last_error.lock().unwrap() = r.message.clone();
+                    }
+                    Err(e) => {
+                        stat.failed.fetch_add(1, Ordering::Relaxed);
+                        *stat.last_failure.lock().unwrap() = Some(now_ms);
+                        *stat.last_error.lock().unwrap() = Some(e.to_string());
+                    }
+                }
+                match result {
+                    Ok(r) => (managed.sink.name().to_owned(), r),
+                    Err(e) => (
+                        managed.sink.name().to_owned(),
+                        PublishResult {
+                            delivered: false,
+                            retryable: false,
+                            message: Some(e.to_string()),
+                        },
+                    ),
+                }
+            })
+            .collect()
+    }
+
+    /// Flush all sinks.  Errors are silently ignored (individual sink
+    /// implementations handle their own error logging).
+    pub fn flush_all(&self) {
+        for managed in &self.sinks {
+            let _ = managed.sink.flush();
+        }
+    }
+
+    pub fn sink_count(&self) -> usize {
+        self.sinks.len()
+    }
+}
+
+// ── RotatingFileSink ─────────────────────────────────────────────────
+
+/// A JSON-line event sink that rotates files by size.
+///
+/// When the current file exceeds `max_bytes`, it is renamed to
+/// `<path>.1`, `<path>.1` to `<path>.2`, and so on up to `max_files`.
+/// A new file is then created for subsequent writes.
+pub struct RotatingFileSink {
+    name: String,
+    path: std::path::PathBuf,
+    max_bytes: u64,
+    max_files: usize,
+    writer: Mutex<RotatingWriter>,
+}
+
+struct RotatingWriter {
+    file: std::fs::File,
+    bytes_written: u64,
+}
+
+impl RotatingFileSink {
+    pub fn new(
+        name: impl Into<String>,
+        path: impl Into<std::path::PathBuf>,
+        max_bytes: u64,
+        max_files: usize,
+    ) -> ApiResult<Self> {
+        let path = path.into();
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to open rotating sink file: {e}")))?;
+        let metadata = file.metadata().map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to stat sink file: {e}")))?;
+
+        Ok(Self {
+            name: name.into(),
+            path,
+            max_bytes,
+            max_files,
+            writer: Mutex::new(RotatingWriter {
+                file,
+                bytes_written: metadata.len(),
+            }),
+        })
+    }
+
+    fn rotate(&self, writer: &mut RotatingWriter) -> ApiResult<()> {
+        // Rename existing rotated files: .2 -> .3, .1 -> .2, current -> .1
+        for i in (1..self.max_files).rev() {
+            let src = if i == 1 {
+                self.path.clone()
+            } else {
+                self.path.with_extension(format!("{}", i - 1))
+            };
+            let dst = self.path.with_extension(format!("{i}"));
+            if src.exists() {
+                let _ = std::fs::rename(&src, &dst);
+            }
+        }
+
+        // Open a fresh file.
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to reopen rotating sink: {e}")))?;
+
+        writer.file = file;
+        writer.bytes_written = 0;
+        Ok(())
+    }
+}
+
+impl EventSink for RotatingFileSink {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn publish(&self, event: &RawApiEvent) -> ApiResult<PublishResult> {
+        let mut writer = self.writer.lock().map_err(|_| {
+            ApiError::new(ApiErrorCode::Internal, "rotating sink lock poisoned")
+        })?;
+
+        let line = serde_json::to_vec(event).map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to serialize event: {e}")))?;
+        let frame = [line.as_slice(), b"\n"].concat();
+
+        if writer.bytes_written + frame.len() as u64 > self.max_bytes {
+            self.rotate(&mut writer)?;
+        }
+
+        use std::io::Write;
+        writer.file.write_all(&frame).map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to write rotating sink: {e}")))?;
+        writer.file.flush().map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to flush rotating sink: {e}")))?;
+        writer.bytes_written += frame.len() as u64;
+
+        Ok(PublishResult::delivered())
+    }
+}
+
+fn accepts(managed: &ManagedSink, event: &RawApiEvent) -> bool {
+    match &managed.filter {
+        None => true,
+        Some(types) => types.is_empty() || types.iter().any(|t| t == &event.event_type),
     }
 }

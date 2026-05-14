@@ -88,6 +88,9 @@ impl Proxy {
         let grpc_config = inbound.protocol.vless_grpc().cloned();
         let h2_config = inbound.protocol.vless_h2().cloned();
         let http_upgrade_config = inbound.protocol.vless_http_upgrade().cloned();
+        let split_http_config = inbound.protocol.vless_split_http().cloned();
+        let split_http_registry: Option<crate::transport::SplitHttpRegistry> =
+            split_http_config.as_ref().map(|_| crate::transport::SplitHttpRegistry::new());
         let fallback_config = inbound.protocol.vless_fallback().cloned();
         let mut connections = JoinSet::new();
 
@@ -124,6 +127,8 @@ impl Proxy {
                     let grpc_config = grpc_config.clone();
                     let h2_config = h2_config.clone();
                     let http_upgrade_config = http_upgrade_config.clone();
+                    let split_http_config = split_http_config.clone();
+                    let split_http_registry = split_http_registry.clone();
                     let fallback_config = fallback_config.clone();
 
                     connections.spawn(async move {
@@ -148,7 +153,7 @@ impl Proxy {
                                                     inbound_tag.as_str(), &vless_users,
                                                     ws_config.as_ref(), grpc_config.as_ref(),
                                                     h2_config.as_ref(),
-                                                    http_upgrade_config.as_ref(), fallback_config.as_ref(),
+                                                    split_http_config.as_ref(), split_http_registry.as_ref(), http_upgrade_config.as_ref(), fallback_config.as_ref(),
                                                 ).await,
                                                 Err(error) => Err(error.into()),
                                             };
@@ -180,7 +185,7 @@ impl Proxy {
                                             inbound_tag.as_str(), &vless_users,
                                             ws_config.as_ref(), grpc_config.as_ref(),
                                             h2_config.as_ref(),
-                                            http_upgrade_config.as_ref(), fallback_config.as_ref(),
+                                            split_http_config.as_ref(), split_http_registry.as_ref(), http_upgrade_config.as_ref(), fallback_config.as_ref(),
                                         ).await,
                                         Err(error) => Err(error.into()),
                                     }
@@ -192,7 +197,7 @@ impl Proxy {
                                             inbound_tag.as_str(), &vless_users,
                                             ws_config.as_ref(), grpc_config.as_ref(),
                                             h2_config.as_ref(),
-                                            http_upgrade_config.as_ref(), fallback_config.as_ref(),
+                                            split_http_config.as_ref(), split_http_registry.as_ref(), http_upgrade_config.as_ref(), fallback_config.as_ref(),
                                         ).await,
                                         Err(error) => Err(error.into()),
                                     }
@@ -209,6 +214,8 @@ impl Proxy {
                                                 ws_config.as_ref(),
                                                 grpc_config.as_ref(),
                                             h2_config.as_ref(),
+                                            split_http_config.as_ref(),
+                                            split_http_registry.as_ref(),
                                             http_upgrade_config.as_ref(),
                                             fallback_config.as_ref(),
                                             )
@@ -226,6 +233,7 @@ impl Proxy {
                                         ws_config.as_ref(),
                                         grpc_config.as_ref(),
                                         h2_config.as_ref(),
+                                        split_http_config.as_ref(),
                                         http_upgrade_config.as_ref(),
                                         fallback_config.as_ref(),
                                     )
@@ -367,11 +375,21 @@ impl Proxy {
         grpc_config: Option<&zero_config::GrpcConfig>,
         h2_config: Option<&zero_config::H2Config>,
         http_upgrade_config: Option<&zero_config::HttpUpgradeConfig>,
+        split_http_config: Option<&zero_config::SplitHttpConfig>,
+        split_http_registry: Option<&crate::transport::SplitHttpRegistry>,
         fallback: Option<&zero_config::FallbackConfig>,
     ) -> Result<(), EngineError>
     where
         S: ClientStream + 'static,
     {
+        if let (Some(cfg), Some(reg)) = (split_http_config, split_http_registry) {
+            match crate::transport::accept_split_http(stream, cfg, reg).await? {
+                Some(split_stream) => {
+                    return self.handle_vless_client(split_stream, inbound_tag, users, fallback).await;
+                }
+                None => return Ok(()), // consumed by partner connection
+            }
+        }
         if let Some(cfg) = http_upgrade_config {
             let upg_stream = crate::transport::accept_http_upgrade(stream, cfg).await?;
             return self.handle_vless_client(upg_stream, inbound_tag, users, fallback).await;
@@ -383,9 +401,27 @@ impl Proxy {
                     .await
             }
             (None, Some(grpc), None) => {
-                let grpc_stream = crate::transport::accept_grpc(stream, &grpc.service_names).await?;
-                self.handle_vless_client(grpc_stream, inbound_tag, users, fallback)
-                    .await
+                let engine = self.clone();
+                let tag = inbound_tag.to_owned();
+                let service_names = grpc.service_names.clone();
+                let users_clone = users.to_vec();
+                let fb_clone = fallback.cloned();
+                return crate::transport::serve_grpc(
+                    stream,
+                    &service_names,
+                    move |grpc_stream| {
+                        let engine = engine.clone();
+                        let tag = tag.clone();
+                        let users = users_clone.clone();
+                        let fb = fb_clone.clone();
+                        async move {
+                            engine
+                                .handle_vless_client(grpc_stream, &tag, &users, fb.as_ref())
+                                .await
+                        }
+                    },
+                )
+                .await;
             }
             (None, None, Some(h2)) => {
                 let h2_stream = crate::transport::accept_h2(stream, h2).await?;
@@ -500,7 +536,12 @@ impl Proxy {
                                     0, target, port, zero_core::Network::Tcp,
                                     zero_core::ProtocolType::Vless,
                                 );
-                                self.prepare_session(&mut session, inbound_tag);
+                                if let Err(reason) = self.prepare_session(&mut session, inbound_tag) {
+                                    tracing::warn!(reason = %reason.message, "vless mux flow blocked by hook");
+                                    let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
+                                    let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
+                                    continue;
+                                }
                                 let action = self.route_decision(&session.target);
                                 let Ok(resolved) = self.resolve_outbound(action) else {
                                     let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
@@ -825,7 +866,13 @@ impl Proxy {
             zero_core::Network::Udp,
             zero_core::ProtocolType::Vless,
         );
-        self.prepare_session(&mut session, inbound_tag);
+        if let Err(reason) = self.prepare_session(&mut session, inbound_tag) {
+            tracing::warn!(reason = %reason.message, "vless udp flow blocked by hook");
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                reason.message,
+            ));
+        }
         let mut session_handle = self.track_session(session.id);
         self.record_session_inbound_rx(session.id, packet.len() as u64);
 
@@ -874,6 +921,7 @@ impl Proxy {
                 grpc,
                 h2,
                 http_upgrade,
+                split_http,
                 quic,
                 ..
             } => {
@@ -887,6 +935,7 @@ impl Proxy {
                     grpc,
                     h2,
                     http_upgrade,
+                    split_http,
                     quic,
                 };
 
