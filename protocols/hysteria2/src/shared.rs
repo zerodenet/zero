@@ -41,12 +41,6 @@ pub fn parse_auth_response(data: &[u8]) -> Result<(), Error> {
             if data.len() < 3 {
                 return Err(Error::Protocol("hysteria2: truncated auth error"));
             }
-            let msg_len = u16::from_be_bytes([data[1], data[2]]) as usize;
-            let msg = if data.len() >= 3 + msg_len {
-                String::from_utf8_lossy(&data[3..3 + msg_len]).into_owned()
-            } else {
-                String::from("unknown error")
-            };
             Err(Error::Protocol("hysteria2 auth rejected"))
         }
         _ => Err(Error::Protocol("hysteria2: unknown auth response type")),

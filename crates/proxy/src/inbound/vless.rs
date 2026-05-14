@@ -880,7 +880,7 @@ impl Proxy {
                 session.outbound_tag = Some(tag.to_owned());
                 self.set_session_outbound(&session);
 
-                let transport = crate::outbound::vless::VlessUdpTransport {
+                let transport = VlessUdpTransport {
                     tls,
                     reality,
                     ws,

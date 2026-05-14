@@ -24,7 +24,6 @@ impl Hysteria2Inbound {
     }
 
     /// Validate client authentication using HMAC-SHA256(password, salt).
-    #[cfg(feature = "quic")]
     pub fn validate_auth(
         &self,
         hmac: &[u8; 32],
@@ -35,7 +34,7 @@ impl Hysteria2Inbound {
             .validate_password(hmac, salt)
             .ok_or_else(|| Error::Protocol("hysteria2: authentication failed"))?;
 
-        let mut auth = SessionAuth::new("hysteria2");
+        let auth = SessionAuth::new("hysteria2");
         let mut session = Session::new(
             0,
             zero_core::Address::Domain(String::new()),

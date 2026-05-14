@@ -233,6 +233,8 @@ impl MuxClient {
     }
 
     fn encrypt_payload_c2s(&mut self, sid: u16, data: &[u8]) -> Vec<u8> {
+        #[cfg(not(feature = "reality"))]
+        let _ = sid;
         #[cfg(feature = "reality")]
         if sid != MUX_STREAM_NEW {
             if let Some(ref mut crypto) = self.crypto {
@@ -328,6 +330,8 @@ impl MuxServer {
     }
 
     fn encrypt_payload_s2c(&mut self, sid: u16, data: &[u8]) -> Vec<u8> {
+        #[cfg(not(feature = "reality"))]
+        let _ = sid;
         #[cfg(feature = "reality")]
         if sid != MUX_STREAM_NEW {
             if let Some(ref mut crypto) = self.crypto {

@@ -1,6 +1,5 @@
 // Hysteria2 outbound protocol — outbound.rs
 
-#[cfg(feature = "quic")]
 use crate::shared::build_tcp_connect_header;
 use zero_core::{Error, ProtocolType, Session};
 use zero_traits::AsyncSocket;
@@ -41,7 +40,6 @@ impl Hysteria2Outbound {
     }
 
     /// Send a TCP connect request on a new stream.
-    #[cfg(feature = "quic")]
     pub async fn send_tcp_connect<S: AsyncSocket>(
         &self,
         stream: &mut S,
@@ -55,7 +53,6 @@ impl Hysteria2Outbound {
     }
 
     /// Read the TCP connect response.
-    #[cfg(feature = "quic")]
     pub async fn read_connect_response<S: AsyncSocket>(
         &self,
         stream: &mut S,
@@ -69,12 +66,6 @@ impl Hysteria2Outbound {
             return Err(Error::Io("hysteria2: EOF reading connect response"));
         }
         if buf[0] != 0x01 {
-            let err_msg = if n >= 3 {
-                let msg_len = u16::from_be_bytes([buf[1], buf[2]]) as usize;
-                alloc::string::String::from_utf8_lossy(&buf[3..(3 + msg_len).min(n)]).into_owned()
-            } else {
-                alloc::string::String::from("unknown")
-            };
             return Err(Error::Protocol("hysteria2: connect rejected"));
         }
         Ok(())
