@@ -30,6 +30,10 @@ pub enum Command {
     Events {
         socket_path: Option<String>,
     },
+    Reload {
+        config_path: String,
+        socket_path: Option<String>,
+    },
     Help,
 }
 
@@ -63,6 +67,7 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
             config_path: DEFAULT_CONFIG_PATH.to_owned(),
             status_listen: None,
             control_socket: None,
+            ipc_hook_socket: None,
         });
     };
 
@@ -77,6 +82,7 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
         "events" => {
             parse_client_command(args.collect(), |socket_path| Command::Events { socket_path })
         }
+        "reload" => parse_reload(args.collect()),
         "help" | "--help" | "-h" => Ok(Command::Help),
         _ if first.starts_with('-') => Err(CliError::new(format!(
             "unknown option `{first}`\n\n{}",
@@ -89,6 +95,7 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
                     config_path: first,
                     status_listen: None,
                     control_socket: None,
+                    ipc_hook_socket: None,
                 })
             } else {
                 Err(CliError::new(format!(
@@ -110,6 +117,7 @@ pub fn usage() -> &'static str {
   zero flows [--socket PATH]
   zero policies [--socket PATH]
   zero events [--socket PATH]
+  zero reload [CONFIG_PATH] [--socket PATH]
   zero help
 
 Examples:
@@ -119,7 +127,8 @@ Examples:
   zero select proxy direct
   zero flows
   zero policies
-  zero events"
+  zero events
+  zero reload examples/v0.0.1/basic.json"
 }
 
 fn parse_run(args: Vec<String>) -> Result<Command, CliError> {
@@ -255,6 +264,42 @@ fn parse_select(args: Vec<String>) -> Result<Command, CliError> {
     Ok(Command::Select {
         policy_tag: positional.remove(0),
         target_tag: positional.remove(0),
+        socket_path,
+    })
+}
+
+fn parse_reload(args: Vec<String>) -> Result<Command, CliError> {
+    let mut config_path = None;
+    let mut socket_path = None;
+    let mut iter = args.into_iter();
+
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--socket" => {
+                socket_path = Some(iter.next().ok_or_else(|| {
+                    CliError::new("`--socket` requires a path argument")
+                })?);
+            }
+            _ if arg.starts_with('-') => {
+                return Err(CliError::new(format!(
+                    "unknown option `{arg}`\n\n{}",
+                    usage()
+                )));
+            }
+            _ => {
+                if config_path.is_some() {
+                    return Err(CliError::new(format!(
+                        "`reload` accepts at most one config path\n\n{}",
+                        usage()
+                    )));
+                }
+                config_path = Some(arg);
+            }
+        }
+    }
+
+    Ok(Command::Reload {
+        config_path: config_path.unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_owned()),
         socket_path,
     })
 }

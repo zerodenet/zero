@@ -378,15 +378,10 @@ impl Proxy {
         let (target, port) = parse_tcp_connect_header(&header_buf[..n])?;
 
         let mut session = Session::new(0, target.clone(), port, Network::Tcp, ProtocolType::Hysteria2);
-        if let Err(reason) = self.prepare_session(&mut session, inbound_tag) {
-            tracing::warn!(reason = %reason.message, "hysteria2 flow blocked by hook");
-            let err = build_connect_error(&reason.message);
-            let _ = AsyncSocket::write_all(&mut stream, &err).await;
-            return Ok(());
-        }
+        self.prepare_session(&mut session, inbound_tag);
 
         let action = self.route_decision(&session.target);
-        let Ok(resolved) = self.resolve_outbound(action) else {
+        let Ok(resolved) = self.resolve_outbound(&action) else {
             let err = build_connect_error("no route");
             let _ = AsyncSocket::write_all(&mut stream, &err).await;
             return Ok(());

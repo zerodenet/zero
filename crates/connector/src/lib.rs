@@ -10,4 +10,4 @@ mod registry;
 pub use dispatcher::{spawn_event_dispatcher, EventDispatcherHandle, EventDispatcherOptions};
 pub use error::{ConnectorError, ConnectorResult};
 #[cfg(feature = "panel-connector")]
-pub use panel::{spawn_panel_connector, PanelConnectorHandle};
+pub use panel::{spawn_push_connector, PushConnectorHandle};

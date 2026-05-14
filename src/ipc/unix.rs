@@ -1,6 +1,3 @@
-pub mod client;
-pub mod protocol;
-
 use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -16,7 +13,7 @@ use zero_api::{
 };
 use zero_engine::EngineHandle;
 
-use protocol::{serialize_frame, IpcRequest, IpcResponse};
+use super::protocol::{serialize_frame, IpcRequest, IpcResponse};
 
 /// Default control socket path relative to $HOME.
 pub const DEFAULT_SOCKET_REL_PATH: &str = ".zero/control.sock";
@@ -223,7 +220,7 @@ async fn handle_ipc_connection(stream: UnixStream, handle: EngineHandle) -> io::
                         let blocking = tokio::task::spawn_blocking(move || {
                             while let Some(event) = subscriber.recv() {
                                 let value =
-                                    serde_json::to_value(&protocol::IpcEvent::Event {
+                                    serde_json::to_value(&super::protocol::IpcEvent::Event {
                                         event_type: event.event_type.clone(),
                                         event_id: event.event_id.clone(),
                                         occurred_at_unix_ms: event.occurred_at_unix_ms,
@@ -320,6 +317,11 @@ fn parse_command(method: &str, params: &serde_json::Value) -> Result<CommandRequ
         }
         "config.validate" => Ok(CommandRequest::ConfigValidate(
             zero_api::ConfigValidateCommand {
+                config: params.clone(),
+            },
+        )),
+        "config.apply" => Ok(CommandRequest::ConfigApply(
+            zero_api::ConfigApplyCommand {
                 config: params.clone(),
             },
         )),

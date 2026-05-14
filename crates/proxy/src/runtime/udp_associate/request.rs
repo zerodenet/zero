@@ -49,10 +49,7 @@ impl Proxy {
             Network::Udp,
             ProtocolType::Socks5,
         );
-        if let Err(reason) = self.prepare_session(&mut session, context.inbound_tag) {
-            tracing::warn!(reason = %reason.message, "socks5 udp flow blocked by hook");
-            return Ok(());
-        }
+        self.prepare_session(&mut session, context.inbound_tag);
         let mut session_handle = self.track_session(session.id);
         let started_at = Instant::now();
         self.record_session_inbound_traffic(session.id, *context.pending_control_traffic);
@@ -60,7 +57,7 @@ impl Proxy {
         self.record_session_inbound_rx(session.id, packet.len() as u64);
 
         let action = self.route_decision(&session.target);
-        let resolved = match self.resolve_outbound(action) {
+        let resolved = match self.resolve_outbound(&action) {
             Ok(resolved) => resolved,
             Err(error) => {
                 let record = session_handle.finish(SessionOutcome::Failed);

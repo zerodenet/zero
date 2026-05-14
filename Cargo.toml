@@ -75,6 +75,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 zero-api = { path = "crates/api" }
+zero-config = { path = "crates/config" }
 zero-engine = { path = "crates/engine", default-features = false }
 zero-proxy = { path = "crates/proxy", default-features = false }
 zero-connector = { path = "crates/connector", optional = true, default-features = false }

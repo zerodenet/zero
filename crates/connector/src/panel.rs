@@ -4,7 +4,7 @@ use serde::Serialize;
 use tokio::sync::oneshot;
 use tracing::{debug, info, warn};
 use zero_api::{CommandRequest, CommandService, PolicySelectCommand};
-use zero_config::PanelApiConfig;
+use zero_config::PushConfig;
 
 use crate::{ConnectorError, ConnectorResult};
 
@@ -23,12 +23,12 @@ use crate::{ConnectorError, ConnectorResult};
 /// ```json
 /// {"command_id":"cmd-1","ok":true,"result":{...}}
 /// ```
-pub struct PanelConnectorHandle {
+pub struct PushConnectorHandle {
     shutdown: Option<oneshot::Sender<()>>,
     task: tokio::task::JoinHandle<()>,
 }
 
-impl PanelConnectorHandle {
+impl PushConnectorHandle {
     pub async fn shutdown(mut self) {
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
@@ -40,15 +40,15 @@ impl PanelConnectorHandle {
 /// Spawn the panel connector if the panel config is enabled.
 ///
 /// Returns `None` when `config.enabled()` is false.
-pub fn spawn_panel_connector<C>(
-    config: &PanelApiConfig,
+pub fn spawn_push_connector<C>(
+    config: &PushConfig,
     command_service: C,
     uptime_seconds: impl Fn() -> u64 + Send + Sync + 'static,
     active_flows: impl Fn() -> usize + Send + Sync + 'static,
     bytes_up: impl Fn() -> u64 + Send + Sync + 'static,
     bytes_down: impl Fn() -> u64 + Send + Sync + 'static,
     version: &str,
-) -> ConnectorResult<Option<PanelConnectorHandle>>
+) -> ConnectorResult<Option<PushConnectorHandle>>
 where
     C: CommandService + Clone + Send + Sync + 'static,
 {
@@ -96,7 +96,7 @@ where
         "panel connector started"
     );
 
-    Ok(Some(PanelConnectorHandle {
+    Ok(Some(PushConnectorHandle {
         shutdown: Some(shutdown_tx),
         task,
     }))

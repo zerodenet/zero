@@ -35,23 +35,13 @@ impl Proxy {
     where
         S: ClientStream,
     {
-        if let Err(reason) = self.prepare_session(&mut session, inbound_tag) {
-            tracing::warn!(
-                flow_id = session.id,
-                reason = %reason.message,
-                "flow blocked by hook"
-            );
-            return Err(EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionRefused,
-                std::io::Error::other(reason.message),
-            )));
-        }
+        self.prepare_session(&mut session, inbound_tag);
         let mut session_handle = self.track_session(session.id);
         let started_at = Instant::now();
         self.record_session_inbound_traffic(session.id, client.drain_traffic());
 
         let action = self.route_decision(&session.target);
-        let resolved = match self.resolve_outbound(action) {
+        let resolved = match self.resolve_outbound(&action) {
             Ok(resolved) => resolved,
             Err(error) => {
                 let record = session_handle.finish(SessionOutcome::Failed);

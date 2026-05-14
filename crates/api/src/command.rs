@@ -7,6 +7,8 @@ use crate::Permission;
 pub enum CommandRequest {
     #[serde(rename = "config.validate")]
     ConfigValidate(ConfigValidateCommand),
+    #[serde(rename = "config.apply")]
+    ConfigApply(ConfigApplyCommand),
     #[serde(rename = "flows.close")]
     FlowClose(FlowCloseCommand),
     #[serde(rename = "policies.select")]
@@ -20,7 +22,7 @@ pub enum CommandRequest {
 impl CommandRequest {
     pub fn required_permission(&self) -> Permission {
         match self {
-            Self::ConfigValidate(_) => Permission::Config,
+            Self::ConfigValidate(_) | Self::ConfigApply(_) => Permission::Config,
             Self::FlowClose(_) | Self::PolicySelect(_) | Self::PolicyProbe(_) => {
                 Permission::Control
             }
@@ -63,6 +65,11 @@ pub struct PolicySelectCommand {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PolicyProbeCommand {
     pub policy_tag: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigApplyCommand {
+    pub config: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

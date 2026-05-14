@@ -28,7 +28,7 @@ use super::view::PlanView;
 pub struct Engine {
     pub(crate) config: Arc<RuntimeConfig>,
     pub(crate) plan: Arc<EnginePlan>,
-    pub(crate) router: Arc<RuleSet>,
+    pub(crate) router: Arc<std::sync::Mutex<Arc<RuleSet>>>,
     next_session_id: Arc<AtomicU64>,
     session_registry: Arc<SessionRegistry>,
     completed_sessions: Arc<CompletedSessionHistory>,
@@ -40,27 +40,27 @@ pub struct Engine {
     udp_upstream_idle_timeout: Duration,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RouteDecision<'a> {
-    Route(&'a str),
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RouteDecision {
+    Route(String),
     Direct,
     Reject,
 }
 
-impl<'a> RouteDecision<'a> {
+impl RouteDecision {
     fn to_owned(self) -> RouteAction {
         match self {
-            Self::Route(tag) => RouteAction::Route(tag.to_owned()),
+            Self::Route(tag) => RouteAction::Route(tag),
             Self::Direct => RouteAction::Direct,
             Self::Reject => RouteAction::Reject,
         }
     }
 }
 
-impl<'a> From<&'a RouteAction> for RouteDecision<'a> {
-    fn from(value: &'a RouteAction) -> Self {
+impl From<&RouteAction> for RouteDecision {
+    fn from(value: &RouteAction) -> Self {
         match value {
-            RouteAction::Route(tag) => Self::Route(tag),
+            RouteAction::Route(tag) => Self::Route(tag.clone()),
             RouteAction::Direct => Self::Direct,
             RouteAction::Reject => Self::Reject,
         }
@@ -69,7 +69,9 @@ impl<'a> From<&'a RouteAction> for RouteDecision<'a> {
 
 impl Engine {
     pub fn new(config: RuntimeConfig) -> Result<Self, EngineError> {
-        let router = Arc::new(config.route.compile(config.source_dir())?);
+        let router = Arc::new(std::sync::Mutex::new(Arc::new(
+            config.route.compile(config.source_dir())?,
+        )));
         let plan = Arc::new(EnginePlan::build(&config)?);
         let udp_upstream_idle_timeout =
             Duration::from_secs(config.runtime.udp_upstream_idle_timeout_seconds);
@@ -166,17 +168,24 @@ impl Engine {
         self.route_decision(address).to_owned()
     }
 
-    pub fn route_decision<'a>(&'a self, address: &Address) -> RouteDecision<'a> {
+    pub fn route_decision(&self, address: &Address) -> RouteDecision {
         match &self.config.mode {
-            ModeConfig::Rule => self.router.decide_ref(address).into(),
+            ModeConfig::Rule => {
+                let action = self.router.lock().expect("router lock poisoned").decide(address);
+                match action {
+                    RouteAction::Route(tag) => RouteDecision::Route(tag),
+                    RouteAction::Direct => RouteDecision::Direct,
+                    RouteAction::Reject => RouteDecision::Reject,
+                }
+            }
             ModeConfig::Direct => RouteDecision::Direct,
-            ModeConfig::Global { outbound } => RouteDecision::Route(outbound.as_str()),
+            ModeConfig::Global { outbound } => RouteDecision::Route(outbound.clone()),
         }
     }
 
     pub fn resolve_route_decision<'a>(
         &'a self,
-        action: RouteDecision<'a>,
+        action: RouteDecision,
     ) -> Result<ResolvedOutbound<'a>, EngineError> {
         match action {
             RouteDecision::Direct => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Direct {
@@ -185,7 +194,7 @@ impl Engine {
             RouteDecision::Reject => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Block {
                 tag: None,
             })),
-            RouteDecision::Route(tag) => self.resolve_target(tag),
+            RouteDecision::Route(tag) => self.resolve_target(&tag),
         }
     }
 
@@ -208,7 +217,7 @@ impl Engine {
         self.plan.target(target_id).map(|target| target.tag())
     }
 
-    fn resolve_target<'a>(&'a self, tag: &'a str) -> Result<ResolvedOutbound<'a>, EngineError> {
+    fn resolve_target<'a>(&'a self, tag: &str) -> Result<ResolvedOutbound<'a>, EngineError> {
         let Some(target_id) = self.plan.target_id(tag) else {
             return Err(EngineError::MissingRouteTarget {
                 tag: tag.to_owned(),
@@ -255,13 +264,28 @@ impl Engine {
         self.event_log.push_stats_sampled(&snapshot);
     }
 
-    /// Emit `flow.updated` events for all currently active sessions.
-    /// Emit an `engine.warning` event. Call this from anywhere in the
-    /// proxy to surface non-fatal issues to consumers.
+    /// Hot-reload routing rules from a new configuration.
+    ///
+    /// The route rules are recompiled and swapped atomically.  The
+    /// outbound group definitions and plan are NOT updated — those
+    /// require a restart.  A `config.changed` event is emitted.
+    pub fn reload_router(&self, new_config: &RuntimeConfig) -> Result<(), EngineError> {
+        let new_router = Arc::new(new_config.route.compile(new_config.source_dir())?);
+        let mut guard = self.router.lock().expect("router lock poisoned");
+        *guard = new_router;
+        drop(guard);
+
+        self.event_log.push_config_changed();
+        info!("route rules hot-reloaded");
+        Ok(())
+    }
+
+    /// Emit an `engine.warning` event.
     pub fn emit_warning(&self, code: &str, message: &str) {
         self.event_log.push_warning(code, message);
     }
 
+    /// Emit `flow.updated` events for all currently active sessions.
     pub fn push_flow_updates(&self) {
         for session in self.active_sessions() {
             self.event_log.push_flow_updated(&session);
@@ -344,11 +368,7 @@ impl Engine {
             .update_urltest(group_id, selected, latency_ms, members);
     }
 
-    pub fn prepare_session(
-        &self,
-        session: &mut Session,
-        inbound_tag: &str,
-    ) -> Result<(), super::hook::BlockReason> {
+    pub fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         session.id = self.next_session_id.fetch_add(1, Ordering::Relaxed);
@@ -372,7 +392,11 @@ impl Engine {
                     reason = %reason.message,
                     "flow blocked by hook"
                 );
-                return Err(reason);
+                // Immediately finish as cancelled so the tracker won't
+                // try to relay a non-existent session.
+                self.stats
+                    .record_finish(super::stats::SessionOutcome::Cancelled);
+                return;
             }
         }
 
@@ -380,7 +404,6 @@ impl Engine {
             .insert(session, self.config.mode.kind());
         self.stats.record_start();
         self.event_log.push_flow_started(session, self.config.mode.kind());
-        Ok(())
     }
 
     pub fn set_session_outbound(&self, session: &Session) {

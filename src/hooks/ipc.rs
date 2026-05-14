@@ -198,9 +198,10 @@ fn clone_stream(stream: &IpcStream) -> io::Result<IpcStream> {
 }
 
 #[cfg(unix)]
-fn is_alive(stream: &IpcStream) -> bool {
-    stream.set_read_timeout(Some(Duration::ZERO)).is_ok()
-        && stream.peek(&mut [0u8; 1]).is_ok()
+fn is_alive(_stream: &IpcStream) -> bool {
+    // Unix socket connections are cheap to recreate; don't bother with
+    // liveness checking.  Always reconnect.
+    false
 }
 
 #[cfg(unix)]

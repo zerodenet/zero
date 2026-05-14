@@ -375,6 +375,11 @@ fn parse_command(method: &str, params: &serde_json::Value) -> Result<CommandRequ
                 config: params.clone(),
             },
         )),
+        "config.apply" => Ok(CommandRequest::ConfigApply(
+            zero_api::ConfigApplyCommand {
+                config: params.clone(),
+            },
+        )),
         _ => Err(IpcResponse::error(
             "unsupported",
             format!("unknown command method: {method}"),

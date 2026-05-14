@@ -3,12 +3,23 @@
 use std::net::TcpListener as StdTcpListener;
 use std::net::UdpSocket as StdUdpSocket;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::OnceLock;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::time::{sleep, Duration};
 use zero_proxy::{Proxy as Engine, RunningProxy as RunningEngine};
+
+static RUSTLS_READY: OnceLock<()> = OnceLock::new();
+
+fn ensure_rustls() {
+    RUSTLS_READY.get_or_init(|| {
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("rustls ring provider");
+    });
+}
 
 static NEXT_TCP_PORT: AtomicUsize = AtomicUsize::new(30000);
 static NEXT_UDP_PORT: AtomicUsize = AtomicUsize::new(40000);
@@ -46,6 +57,7 @@ pub async fn wait_for(description: &str, mut predicate: impl FnMut() -> bool) {
 }
 
 pub fn spawn_engine(engine: Engine) -> RunningEngine {
+    ensure_rustls();
     engine.spawn()
 }
 

@@ -13,8 +13,8 @@ pub mod webhook;
 pub use auth::{AuthContext, Permission};
 pub use capabilities::{AdapterCapability, ApiCapabilities, SinkCapability};
 pub use command::{
-    CommandRequest, CommandResponse, ConfigValidateCommand, DiagnosticsProbeTargetCommand,
-    FlowCloseCommand, PolicyProbeCommand, PolicySelectCommand,
+    CommandRequest, CommandResponse, ConfigApplyCommand, ConfigValidateCommand,
+    DiagnosticsProbeTargetCommand, FlowCloseCommand, PolicyProbeCommand, PolicySelectCommand,
 };
 pub use error::{ApiError, ApiErrorCode};
 pub use event::{event_type, ApiEvent, EventFilter, PublishResult};

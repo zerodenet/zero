@@ -96,6 +96,23 @@ impl EngineEventLog {
         self.push(event);
     }
 
+    pub fn push_config_changed(&self) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let payload = json!({
+            "changed_at_unix_ms": now_ms,
+        });
+        let event = ApiEvent::new(
+            format!("config-{}", now_ms),
+            event_type::CONFIG_CHANGED,
+            now_ms,
+            payload,
+        );
+        self.push(event);
+    }
+
     pub fn push_warning(&self, code: &str, message: &str) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)

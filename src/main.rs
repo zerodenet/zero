@@ -54,6 +54,10 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
         cli::Command::Flows { socket_path } => flows_command(socket_path.as_deref())?,
         cli::Command::Policies { socket_path } => policies_command(socket_path.as_deref())?,
         cli::Command::Events { socket_path } => events_command(socket_path.as_deref())?,
+        cli::Command::Reload {
+            config_path,
+            socket_path,
+        } => reload_command(&config_path, socket_path.as_deref())?,
         cli::Command::Help => println!("{}", cli::usage()),
     }
 
@@ -77,7 +81,7 @@ async fn run_command(
         }) as std::sync::Arc<dyn Fn(&str, &str) + Send + Sync>)
     };
     let hook_chain =
-        hooks::build_hook_chain(ipc_hook_socket, engine.config(), warning_handler);
+        hooks::build_hook_chain(ipc_hook_socket, &engine.config().api, warning_handler);
     let engine = if !hook_chain.is_empty() {
         engine.with_flow_hook_chain(hook_chain)
     } else {
@@ -94,7 +98,7 @@ async fn run_command(
     tracing::info!(config = %config_path, "loaded proxy configuration");
 
     // IPC server always starts (not feature-gated).
-    let ipc_socket_path = ipc::resolve_socket_path(control_socket)?;
+    let ipc_socket_path = ipc::resolve_ipc_path(control_socket)?;
     let ipc_server =
         ipc::spawn_ipc_server(engine_handle.clone(), &ipc_socket_path).await?;
 
@@ -116,12 +120,12 @@ async fn run_command(
 
     let running = proxy.spawn();
     let stats_sampler = spawn_stats_sampler(engine.clone());
-    let panel_connector = spawn_panel_connector_if_configured(&engine)?;
+    let push_connector = spawn_push_connector_if_configured(&engine)?;
 
     wait_for_shutdown_signal().await;
 
     stats_sampler.abort();
-    shutdown_panel_connector(panel_connector).await;
+    shutdown_push_connector(push_connector).await;
 
     shutdown_event_dispatcher(event_dispatcher).await;
     ipc_server.shutdown().await?;
@@ -269,10 +273,10 @@ async fn shutdown_event_dispatcher(dispatcher: Option<zero_connector::EventDispa
 async fn shutdown_event_dispatcher(_dispatcher: Option<EventDispatcherUnavailable>) {}
 
 #[cfg(feature = "panel-connector")]
-fn spawn_panel_connector_if_configured(
+fn spawn_push_connector_if_configured(
     engine: &Engine,
-) -> Result<Option<zero_connector::PanelConnectorHandle>, Box<dyn Error>> {
-    let config = &engine.config().api.panel;
+) -> Result<Option<zero_connector::PushConnectorHandle>, Box<dyn Error>> {
+    let config = &engine.config().push;
     if !config.enabled() {
         return Ok(None);
     }
@@ -280,7 +284,7 @@ fn spawn_panel_connector_if_configured(
     let engine_clone = engine.clone();
     let version = env!("CARGO_PKG_VERSION").to_owned();
 
-    let handle = zero_connector::spawn_panel_connector(
+    let handle = zero_connector::spawn_push_connector(
         config,
         engine_clone,
         {
@@ -317,12 +321,12 @@ fn spawn_panel_connector_if_configured(
 }
 
 #[cfg(not(feature = "panel-connector"))]
-fn spawn_panel_connector_if_configured(
+fn spawn_push_connector_if_configured(
     engine: &Engine,
-) -> Result<Option<PanelConnectorUnavailable>, Box<dyn Error>> {
-    if engine.config().api.panel.enabled() {
+) -> Result<Option<PushConnectorUnavailable>, Box<dyn Error>> {
+    if engine.config().push.enabled() {
         return Err(std::io::Error::other(
-            "`api.panel` requires Cargo feature `panel-connector`",
+            "`push` requires Cargo feature `panel-connector`",
         )
         .into());
     }
@@ -330,8 +334,8 @@ fn spawn_panel_connector_if_configured(
 }
 
 #[cfg(feature = "panel-connector")]
-async fn shutdown_panel_connector(
-    connector: Option<zero_connector::PanelConnectorHandle>,
+async fn shutdown_push_connector(
+    connector: Option<zero_connector::PushConnectorHandle>,
 ) {
     if let Some(c) = connector {
         c.shutdown().await;
@@ -339,12 +343,12 @@ async fn shutdown_panel_connector(
 }
 
 #[cfg(not(feature = "panel-connector"))]
-async fn shutdown_panel_connector(
-    _connector: Option<PanelConnectorUnavailable>,
+async fn shutdown_push_connector(
+    _connector: Option<PushConnectorUnavailable>,
 ) {}
 
 #[cfg(not(feature = "panel-connector"))]
-struct PanelConnectorUnavailable;
+struct PushConnectorUnavailable;
 
 #[cfg(not(feature = "event-dispatcher"))]
 struct EventDispatcherUnavailable;
@@ -355,7 +359,7 @@ fn resolve_socket(socket_path: Option<&str>) -> Result<String, Box<dyn Error>> {
     if let Some(path) = socket_path {
         return Ok(path.to_owned());
     }
-    let path = ipc::default_socket_path().ok_or_else(|| {
+    let path = ipc::default_ipc_path().ok_or_else(|| {
         std::io::Error::other(
             "cannot find control socket: $HOME is not set. Use --socket to specify a path.",
         )
@@ -521,6 +525,34 @@ fn spawn_stats_sampler(engine: Engine) -> tokio::task::JoinHandle<()> {
             }
         }
     })
+}
+
+fn reload_command(
+    config_path: &str,
+    socket_path: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
+    let socket = resolve_socket(socket_path)?;
+    let config_str = std::fs::read_to_string(config_path)?;
+    let config_value: serde_json::Value =
+        serde_json::from_str(&config_str).map_err(std::io::Error::other)?;
+
+    let request = crate::ipc::protocol::IpcRequest::Command {
+        method: "config.apply".to_owned(),
+        params: config_value,
+    };
+    let response = ipc::client::send_request(&socket, &request)?;
+    if response.ok {
+        println!("config applied: route rules hot-reloaded");
+    } else {
+        let msg = response
+            .error
+            .as_ref()
+            .map(|e| e.message.as_str())
+            .unwrap_or("unknown error");
+        eprintln!("error: {msg}");
+        process::exit(1);
+    }
+    Ok(())
 }
 
 fn init_tracing() {

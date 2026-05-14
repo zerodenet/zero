@@ -2,9 +2,10 @@ use serde::Serialize;
 use serde_json::json;
 use zero_api::{
     AdapterCapability, ApiCapabilities, ApiError, ApiErrorCode, CommandRequest, CommandResponse,
-    CommandService, ConfigValidateCommand, EventFilter, EventSource, FlowFilter, FlowGetQuery,
-    FlowListQuery, Network as ApiNetwork, Permission, PoliciesQuery, PolicyGetQuery, QueryRequest,
-    QueryResponse, QueryService, RawApiEvent, SinkCapability, Snapshot,
+    CommandService, ConfigApplyCommand, ConfigValidateCommand, EventFilter, EventSource,
+    FlowFilter, FlowGetQuery, FlowListQuery, Network as ApiNetwork, Permission, PoliciesQuery,
+    PolicyGetQuery, QueryRequest, QueryResponse, QueryService, RawApiEvent, SinkCapability,
+    Snapshot,
 };
 use zero_config::RuntimeConfig;
 
@@ -109,6 +110,7 @@ fn execute_engine_command(
 ) -> zero_api::ApiResult<CommandResponse> {
     match command {
         CommandRequest::ConfigValidate(command) => validate_config_command(command),
+        CommandRequest::ConfigApply(command) => apply_config_command(engine, command),
         CommandRequest::PolicySelect(command) => {
             engine
                 .set_selector_target(&command.policy_tag, &command.target_tag)
@@ -148,6 +150,22 @@ fn execute_engine_command(
             "`diagnostics.probe_target` is not implemented yet",
         )),
     }
+}
+
+fn apply_config_command(
+    engine: &Engine,
+    command: ConfigApplyCommand,
+) -> zero_api::ApiResult<CommandResponse> {
+    let raw = serde_json::to_string(&command.config).map_err(to_internal_error)?;
+    let new_config = RuntimeConfig::parse(&raw).map_err(config_error_to_api)?;
+    engine
+        .reload_router(&new_config)
+        .map_err(engine_error_to_api)?;
+
+    Ok(CommandResponse {
+        accepted: true,
+        result: Some(json!({ "applied": true, "scope": "routes" })),
+    })
 }
 
 fn validate_config_command(command: ConfigValidateCommand) -> zero_api::ApiResult<CommandResponse> {

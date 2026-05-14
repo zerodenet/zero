@@ -1,22 +1,21 @@
 use zero_core::Session;
 use zero_engine::{
-    BlockReason, EngineError, ResolvedOutbound, RouteDecision, SessionHandle, TargetId,
-    UrlTestMemberState,
+    EngineError, ResolvedOutbound, RouteDecision, SessionHandle, TargetId, UrlTestMemberState,
 };
 
 use crate::runtime::Proxy;
 use crate::transport::StreamTraffic;
 
 impl Proxy {
-    pub(crate) fn route_decision<'a>(&'a self, address: &zero_core::Address) -> RouteDecision<'a> {
+    pub(crate) fn route_decision(&self, address: &zero_core::Address) -> RouteDecision {
         self.engine.route_decision(address)
     }
 
     pub(crate) fn resolve_outbound<'a>(
         &'a self,
-        action: RouteDecision<'a>,
+        action: &RouteDecision,
     ) -> Result<ResolvedOutbound<'a>, EngineError> {
-        self.engine.resolve_route_decision(action)
+        self.engine.resolve_route_decision(action.clone())
     }
 
     pub(crate) fn resolve_target_id<'a>(
@@ -49,12 +48,8 @@ impl Proxy {
             .update_urltest_state(group_id, selected, latency_ms, members);
     }
 
-    pub(crate) fn prepare_session(
-        &self,
-        session: &mut Session,
-        inbound_tag: &str,
-    ) -> Result<(), BlockReason> {
-        self.engine.prepare_session(session, inbound_tag)
+    pub(crate) fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {
+        self.engine.prepare_session(session, inbound_tag);
     }
 
     pub(crate) fn set_session_outbound(&self, session: &Session) {
