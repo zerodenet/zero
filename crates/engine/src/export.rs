@@ -166,11 +166,11 @@ impl Engine {
                 .outbound_groups
                 .iter()
                 .map(|group| {
-                    let group_id = self
-                        .plan
+                    let plan = self.plan();
+                    let group_id = plan
                         .target_id(group.tag())
                         .expect("engine plan should resolve outbound group");
-                    OutboundGroupExport::new(&self.plan, &self.outbound_group_state, group_id)
+                    OutboundGroupExport::new(&plan, &self.outbound_group_state, group_id)
                 })
                 .collect(),
         }
@@ -324,6 +324,16 @@ impl OutboundGroupExport {
                         .collect(),
                 }
             }
+            TargetKind::Relay(relay) => Self {
+                tag: group.tag().to_owned(),
+                kind: "relay".to_owned(),
+                outbounds: view.target_tags(relay.chain()),
+                selected: relay.chain().first().map(|id| view.target_tag_owned(*id)),
+                latency_ms: None,
+                last_checked_unix_ms: None,
+                effective_chains,
+                urltest_members: Vec::new(),
+            },
             TargetKind::Outbound(_) => {
                 unreachable!("outbound group export requires a group target")
             }

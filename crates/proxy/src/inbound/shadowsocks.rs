@@ -190,11 +190,12 @@ impl Proxy {
                         let mut session = Session::new(0, target.clone(), port, Network::Udp, ProtocolType::Shadowsocks);
                         self.prepare_session(&mut session, inbound_tag);
                         let action = self.route_decision(&session.target);
-                        let Ok(resolved) = self.resolve_outbound(&action) else { continue };
+                        let Ok((resolved, _plan)) = self.resolve_outbound(&action) else { continue };
 
                         // Check if resolved to SS chain outbound
                         let leaf = match &resolved {
                             zero_engine::ResolvedOutbound::Single(c) => c,
+                            zero_engine::ResolvedOutbound::Relay { .. } => continue,
                             zero_engine::ResolvedOutbound::Fallback { candidates } => {
                                 let Some(first) = candidates.first() else { continue };
                                 first
@@ -362,6 +363,7 @@ impl Proxy {
                 crate::transport::EstablishedTcpOutbound::Socks5 { upstream, .. } => upstream,
                 crate::transport::EstablishedTcpOutbound::Hysteria2 { upstream, .. } => upstream,
                 crate::transport::EstablishedTcpOutbound::Shadowsocks { upstream, .. } => upstream,
+                crate::transport::EstablishedTcpOutbound::Relay { upstream } => upstream,
                 crate::transport::EstablishedTcpOutbound::Block { .. } => return Ok(()),
             },
             Err(_e) => {

@@ -52,6 +52,17 @@ impl OutboundGroupConfig {
 
                 Ok(())
             }
+            OutboundGroupKind::Relay { proxies } => {
+                if proxies.len() < 2 {
+                    return Err(ConfigError::InvalidOutboundGroup(
+                        "`relay` group requires at least 2 proxies".to_owned(),
+                    ));
+                }
+                for proxy in proxies {
+                    validate_group_member_tag("relay", proxy, target_tags)?;
+                }
+                Ok(())
+            }
         }
     }
 }

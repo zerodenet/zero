@@ -21,9 +21,8 @@ impl Proxy {
         group_id: TargetId,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
-        let group = self
-            .engine()
-            .plan()
+        let plan = self.engine().plan();
+        let group = plan
             .target(group_id)
             .expect("engine plan should resolve urltest group");
         let TargetKind::UrlTest(urltest) = group.kind() else {
@@ -80,10 +79,8 @@ impl Proxy {
     }
 
     async fn refresh_urltest_group(&self, group_id: TargetId, probe: &UrlTestProbe) {
-        let group = self
-            .engine()
-            .plan()
-            .target(group_id)
+        let plan = self.engine().plan();
+        let group = plan.target(group_id)
             .expect("engine plan should resolve urltest group");
         let TargetKind::UrlTest(urltest) = group.kind() else {
             return;
@@ -94,9 +91,9 @@ impl Proxy {
         let mut member_states = Vec::with_capacity(urltest.members().len());
 
         for member_id in urltest.members() {
-            let member = self.target_tag(*member_id).unwrap_or("<unknown>");
+            let member = self.target_tag(*member_id).unwrap_or_else(|| "<unknown>".to_owned());
             let effective_chains = self.resolve_target_chains(*member_id);
-            let Some(candidate) = self.resolve_target_id(*member_id) else {
+            let Some((candidate, _plan)) = self.resolve_target_id(*member_id) else {
                 member_states.push(UrlTestMemberState {
                     member_id: *member_id,
                     healthy: false,
@@ -158,14 +155,14 @@ impl Proxy {
         else {
             return;
         };
-        let selected_tag = self.target_tag(selected).unwrap_or("<unknown>");
+        let selected_tag = self.target_tag(selected).unwrap_or_else(|| "<unknown>".to_owned());
         let previous_tag = previous.and_then(|target| self.target_tag(target));
 
         let latency_ms = best
             .as_ref()
             .and_then(|probe| (probe.outbound_id == selected).then_some(probe.latency_ms));
         self.update_urltest_state(group_id, selected, latency_ms, member_states);
-        log_urltest_group_target_changed(group_tag, previous_tag, selected_tag, latency_ms);
+        log_urltest_group_target_changed(group_tag, previous_tag.as_deref(), &selected_tag, latency_ms);
 
         if best.is_none() {
             warn!(
@@ -183,6 +180,12 @@ impl Proxy {
     ) -> Result<u64, EngineError> {
         match candidate {
             ResolvedOutbound::Single(candidate) => self.probe_leaf_outbound(candidate, probe).await,
+            ResolvedOutbound::Relay { .. } => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "relay chain cannot be used as a urltest member",
+                )))
+            }
             ResolvedOutbound::Fallback { candidates } => {
                 let mut last_error = None;
 

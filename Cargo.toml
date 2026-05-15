@@ -54,6 +54,7 @@ members = [
     "protocols/hysteria2",
     "protocols/shadowsocks",
     "crates/engine",
+    "crates/ffi",
 ]
 resolver = "2"
 
@@ -67,6 +68,7 @@ homepage = "https://zerodenet.org"
 
 [workspace.dependencies]
 ipnet = { version = "2.11", features = ["serde"] }
+maxminddb = "0.24"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
@@ -81,6 +83,7 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+ureq = { version = "2", default-features = false, features = ["tls"] }
 zero-api = { path = "crates/api" }
 zero-config = { path = "crates/config" }
 zero-engine = { path = "crates/engine", default-features = false }

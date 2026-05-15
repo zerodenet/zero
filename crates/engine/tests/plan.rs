@@ -150,7 +150,7 @@ fn engine_exposes_compiled_plan() {
     let TargetKind::Selector(selector_group) = selector.kind() else {
         panic!("proxy should compile as a selector group");
     };
-    assert_eq!(plan_tag(plan, selector_group.initial_member()), "block");
+    assert_eq!(plan_tag(&plan, selector_group.initial_member()), "block");
     assert_eq!(plan.selector_groups(), &[selector_id]);
 }
 

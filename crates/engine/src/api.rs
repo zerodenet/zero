@@ -159,7 +159,7 @@ fn apply_config_command(
     let raw = serde_json::to_string(&command.config).map_err(to_internal_error)?;
     let new_config = RuntimeConfig::parse(&raw).map_err(config_error_to_api)?;
     engine
-        .reload_router(&new_config)
+        .reload_config(&new_config)
         .map_err(engine_error_to_api)?;
 
     Ok(CommandResponse {

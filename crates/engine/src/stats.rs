@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 
@@ -23,6 +24,9 @@ pub struct EngineStats {
     udp_upstream_recv_failures: AtomicU64,
     udp_upstream_packets_sent: AtomicU64,
     udp_upstream_packets_received: AtomicU64,
+    bytes_up: AtomicU64,
+    bytes_down: AtomicU64,
+    per_outbound: Mutex<HashMap<String, PerOutboundStats>>,
 }
 
 impl EngineStats {
@@ -30,7 +34,32 @@ impl EngineStats {
         Arc::new(Self::default())
     }
 
+    /// Record completed flow traffic — global + per-outbound.
+    pub fn record_traffic(&self, outbound_tag: Option<&str>, bytes_up: u64, bytes_down: u64) {
+        self.bytes_up.fetch_add(bytes_up, Ordering::Relaxed);
+        self.bytes_down.fetch_add(bytes_down, Ordering::Relaxed);
+        if let Some(tag) = outbound_tag {
+            let mut map = self.per_outbound.lock().expect("per-outbound lock poisoned");
+            let entry = map.entry(tag.to_owned()).or_default();
+            entry.flows.fetch_add(1, Ordering::Relaxed);
+            entry.bytes_up.fetch_add(bytes_up, Ordering::Relaxed);
+            entry.bytes_down.fetch_add(bytes_down, Ordering::Relaxed);
+        }
+    }
+
     pub fn snapshot(&self) -> EngineStatsSnapshot {
+        let per_outbound = self
+            .per_outbound
+            .lock()
+            .expect("per-outbound lock poisoned")
+            .iter()
+            .map(|(tag, s)| (tag.clone(), OutboundStatsSnapshot {
+                flows: s.flows.load(Ordering::Relaxed),
+                bytes_up: s.bytes_up.load(Ordering::Relaxed),
+                bytes_down: s.bytes_down.load(Ordering::Relaxed),
+            }))
+            .collect();
+
         EngineStatsSnapshot {
             total_started: self.total_started.load(Ordering::Relaxed),
             active_sessions: self.active_sessions.load(Ordering::Relaxed),
@@ -39,6 +68,9 @@ impl EngineStats {
             blocked_sessions: self.blocked_sessions.load(Ordering::Relaxed),
             direct_sessions: self.direct_sessions.load(Ordering::Relaxed),
             chained_sessions: self.chained_sessions.load(Ordering::Relaxed),
+            bytes_up: self.bytes_up.load(Ordering::Relaxed),
+            bytes_down: self.bytes_down.load(Ordering::Relaxed),
+            per_outbound,
             udp_upstream: UdpUpstreamStatsSnapshot {
                 active_associations: self
                     .udp_upstream_active_associations
@@ -176,7 +208,7 @@ impl SessionOutcome {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 pub struct EngineStatsSnapshot {
     pub total_started: u64,
     pub active_sessions: u64,
@@ -185,7 +217,25 @@ pub struct EngineStatsSnapshot {
     pub blocked_sessions: u64,
     pub direct_sessions: u64,
     pub chained_sessions: u64,
+    /// Aggregated bytes per direction (server-facing).
+    pub bytes_up: u64,
+    pub bytes_down: u64,
+    pub per_outbound: Vec<(String, OutboundStatsSnapshot)>,
     pub udp_upstream: UdpUpstreamStatsSnapshot,
+}
+
+#[derive(Debug, Default)]
+struct PerOutboundStats {
+    flows: AtomicU64,
+    bytes_up: AtomicU64,
+    bytes_down: AtomicU64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+pub struct OutboundStatsSnapshot {
+    pub flows: u64,
+    pub bytes_up: u64,
+    pub bytes_down: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]

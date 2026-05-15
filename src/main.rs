@@ -15,6 +15,7 @@ mod http_adapter;
 mod hooks;
 mod ipc;
 mod output;
+mod rule_set_fetch;
 
 #[tokio::main]
 async fn main() {
@@ -73,7 +74,12 @@ async fn run_command(
     control_socket: Option<&str>,
     ipc_hook_socket: Option<&str>,
 ) -> Result<(), Box<dyn Error>> {
-    let proxy = Proxy::from_path(config_path)?;
+    let mut config = zero_config::RuntimeConfig::load_from_path(config_path)?;
+    rule_set_fetch::pre_fetch_rule_sets(
+        &mut config.route.rule_sets,
+        config.source_dir.as_deref(),
+    );
+    let proxy = Proxy::from_engine(zero_engine::Engine::new(config)?)?;
     let engine = proxy.engine().clone();
 
     // Build hook chain from config/cli options.

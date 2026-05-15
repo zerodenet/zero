@@ -36,4 +36,6 @@ pub use runtime::Engine;
 pub use runtime::RouteDecision;
 pub use session_lifecycle::SessionHandle;
 pub use session_registry::ActiveSession;
-pub use stats::{EngineStatsSnapshot, SessionOutcome, UdpUpstreamStatsSnapshot};
+pub use stats::{
+    EngineStatsSnapshot, OutboundStatsSnapshot, SessionOutcome, UdpUpstreamStatsSnapshot,
+};

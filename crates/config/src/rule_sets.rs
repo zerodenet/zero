@@ -66,7 +66,9 @@ fn load_rule_set_source(
     base_dir: Option<&Path>,
 ) -> Result<String, ConfigError> {
     match rule_set.source_type {
-        RuleSetSourceType::File => {
+        RuleSetSourceType::File | RuleSetSourceType::Url => {
+            // URL sources are pre-fetched to local cache before compile,
+            // so `path` already points to a local file.
             let resolved = resolve_rule_set_path(&rule_set.path, base_dir);
             fs::read_to_string(&resolved).map_err(|source| ConfigError::ReadRuleSet {
                 path: resolved.display().to_string(),

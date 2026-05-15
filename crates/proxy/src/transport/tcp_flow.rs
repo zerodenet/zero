@@ -128,6 +128,20 @@ impl Proxy {
                 })
                 .await
             }
+            Ok(EstablishedTcpOutbound::Relay { upstream }) => {
+                self.send_tcp_success_response(inbound_protocol, &mut client)
+                    .await?;
+                self.relay_tcp_session(TcpRelayContext {
+                    client,
+                    upstream,
+                    session,
+                    session_handle,
+                    outcome: SessionOutcome::ChainedRelayed,
+                    started_at,
+                    upstream_endpoint: None,
+                })
+                .await
+            }
             Err(failure) => {
                 self.send_tcp_upstream_failure_response(inbound_protocol, &mut client)
                     .await;

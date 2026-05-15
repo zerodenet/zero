@@ -27,7 +27,7 @@ use super::view::PlanView;
 #[derive(Debug, Clone)]
 pub struct Engine {
     pub(crate) config: Arc<RuntimeConfig>,
-    pub(crate) plan: Arc<EnginePlan>,
+    pub(crate) plan: Arc<std::sync::Mutex<Arc<EnginePlan>>>,
     pub(crate) router: Arc<std::sync::Mutex<Arc<RuleSet>>>,
     next_session_id: Arc<AtomicU64>,
     session_registry: Arc<SessionRegistry>,
@@ -72,13 +72,16 @@ impl Engine {
         let router = Arc::new(std::sync::Mutex::new(Arc::new(
             config.route.compile(config.source_dir())?,
         )));
-        let plan = Arc::new(EnginePlan::build(&config)?);
+        let plan = Arc::new(std::sync::Mutex::new(Arc::new(
+            EnginePlan::build(&config)?,
+        )));
+        let plan_inner = plan.lock().expect("plan lock poisoned").clone();
         let udp_upstream_idle_timeout =
             Duration::from_secs(config.runtime.udp_upstream_idle_timeout_seconds);
         let outbound_group_state = OutboundGroupStateStore::shared();
 
-        for &group_id in plan.selector_groups() {
-            let group = plan
+        for &group_id in plan_inner.selector_groups() {
+            let group = plan_inner
                 .target(group_id)
                 .expect("engine plan should resolve selector group");
             let TargetKind::Selector(selector) = group.kind() else {
@@ -87,8 +90,8 @@ impl Engine {
             outbound_group_state.initialize_selector(group_id, selector.initial_member());
         }
 
-        for &group_id in plan.urltest_groups() {
-            let group = plan
+        for &group_id in plan_inner.urltest_groups() {
+            let group = plan_inner
                 .target(group_id)
                 .expect("engine plan should resolve urltest group");
             let TargetKind::UrlTest(urltest) = group.kind() else {
@@ -133,8 +136,8 @@ impl Engine {
         self.config.as_ref()
     }
 
-    pub fn plan(&self) -> &EnginePlan {
-        self.plan.as_ref()
+    pub fn plan(&self) -> Arc<EnginePlan> {
+        self.plan.lock().expect("plan lock poisoned").clone()
     }
 
     pub fn with_udp_upstream_idle_timeout(mut self, timeout: Duration) -> Self {
@@ -183,51 +186,76 @@ impl Engine {
         }
     }
 
-    pub fn resolve_route_decision<'a>(
-        &'a self,
+    pub fn resolve_route_decision(
+        &self,
         action: RouteDecision,
-    ) -> Result<ResolvedOutbound<'a>, EngineError> {
+    ) -> Result<(ResolvedOutbound<'static>, Option<Arc<EnginePlan>>), EngineError> {
         match action {
-            RouteDecision::Direct => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Direct {
-                tag: None,
-            })),
-            RouteDecision::Reject => Ok(ResolvedOutbound::Single(ResolvedLeafOutbound::Block {
-                tag: None,
-            })),
-            RouteDecision::Route(tag) => self.resolve_target(&tag),
+            RouteDecision::Direct => Ok((
+                ResolvedOutbound::Single(ResolvedLeafOutbound::Direct { tag: None }),
+                None,
+            )),
+            RouteDecision::Reject => Ok((
+                ResolvedOutbound::Single(ResolvedLeafOutbound::Block { tag: None }),
+                None,
+            )),
+            RouteDecision::Route(tag) => {
+                let (resolved, plan) = self.resolve_target(&tag)?;
+                Ok((resolved, Some(plan)))
+            }
         }
     }
 
-    pub fn resolve_route_action<'a>(
-        &'a self,
-        action: &'a RouteAction,
-    ) -> Result<ResolvedOutbound<'a>, EngineError> {
+    pub fn resolve_route_action(
+        &self,
+        action: &RouteAction,
+    ) -> Result<(ResolvedOutbound<'static>, Option<Arc<EnginePlan>>), EngineError> {
         self.resolve_route_decision(action.into())
     }
 
-    pub fn resolve_target_id<'a>(&'a self, target_id: TargetId) -> Option<ResolvedOutbound<'a>> {
-        resolve_target_id(&self.plan, &self.outbound_group_state, target_id)
+    pub fn resolve_target_id(
+        &self,
+        target_id: TargetId,
+    ) -> Option<(ResolvedOutbound<'static>, Arc<EnginePlan>)> {
+        let plan = self.plan();
+        // SAFETY: plan is returned in the tuple.  The resolved outbound
+        // borrows from data inside `plan`, which stays alive as long as
+        // the caller holds the returned `Arc<EnginePlan>`.
+        let resolved: ResolvedOutbound<'static> =
+            unsafe { std::mem::transmute(resolve_target_id(&plan, &self.outbound_group_state, target_id)?) };
+        Some((resolved, plan))
     }
 
     pub fn resolve_target_chains(&self, target_id: TargetId) -> Vec<Vec<TargetId>> {
-        resolve_target_chains(&self.plan, &self.outbound_group_state, target_id)
+        let plan = self.plan();
+        resolve_target_chains(&plan, &self.outbound_group_state, target_id)
     }
 
-    pub fn target_tag(&self, target_id: TargetId) -> Option<&str> {
-        self.plan.target(target_id).map(|target| target.tag())
+    pub fn target_tag(&self, target_id: TargetId) -> Option<String> {
+        let plan = self.plan();
+        plan.target(target_id).map(|target| target.tag().to_owned())
     }
 
-    fn resolve_target<'a>(&'a self, tag: &str) -> Result<ResolvedOutbound<'a>, EngineError> {
-        let Some(target_id) = self.plan.target_id(tag) else {
+    fn resolve_target(
+        &self,
+        tag: &str,
+    ) -> Result<(ResolvedOutbound<'static>, Arc<EnginePlan>), EngineError> {
+        let plan = self.plan();
+        let Some(target_id) = plan.target_id(tag) else {
             return Err(EngineError::MissingRouteTarget {
                 tag: tag.to_owned(),
             });
         };
-
-        self.resolve_target_id(target_id)
-            .ok_or_else(|| EngineError::MissingRouteTarget {
-                tag: tag.to_owned(),
-            })
+        // SAFETY: plan is returned alongside, keeping data alive.
+        let resolved: ResolvedOutbound<'static> = unsafe {
+            std::mem::transmute(
+                resolve_target_id(&plan, &self.outbound_group_state, target_id)
+                    .ok_or_else(|| EngineError::MissingRouteTarget {
+                        tag: tag.to_owned(),
+                    })?,
+            )
+        };
+        Ok((resolved, plan))
     }
 
     pub fn stats_snapshot(&self) -> EngineStatsSnapshot {
@@ -264,19 +292,29 @@ impl Engine {
         self.event_log.push_stats_sampled(&snapshot);
     }
 
-    /// Hot-reload routing rules from a new configuration.
+    /// Hot-reload route rules and outbound group definitions.
     ///
-    /// The route rules are recompiled and swapped atomically.  The
-    /// outbound group definitions and plan are NOT updated — those
-    /// require a restart.  A `config.changed` event is emitted.
-    pub fn reload_router(&self, new_config: &RuntimeConfig) -> Result<(), EngineError> {
+    /// Both the router and plan are rebuilt from the new config and
+    /// swapped atomically.  Active connections keep using the old plan
+    /// via their held `Arc<EnginePlan>`.  A `config.changed` event is
+    /// emitted.
+    pub fn reload_config(&self, new_config: &RuntimeConfig) -> Result<(), EngineError> {
         let new_router = Arc::new(new_config.route.compile(new_config.source_dir())?);
-        let mut guard = self.router.lock().expect("router lock poisoned");
-        *guard = new_router;
-        drop(guard);
+        let new_plan = Arc::new(EnginePlan::build(new_config)?);
+
+        // Atomically swap router.
+        {
+            let mut guard = self.router.lock().expect("router lock poisoned");
+            *guard = new_router;
+        }
+        // Atomically swap plan.
+        {
+            let mut guard = self.plan.lock().expect("plan lock poisoned");
+            *guard = new_plan;
+        }
 
         self.event_log.push_config_changed();
-        info!("route rules hot-reloaded");
+        info!("config hot-reloaded");
         Ok(())
     }
 
@@ -297,14 +335,13 @@ impl Engine {
         group_tag: &str,
         target_tag: &str,
     ) -> Result<(), EngineError> {
-        let group_id =
-            self.plan
-                .target_id(group_tag)
-                .ok_or_else(|| EngineError::SelectorGroupNotFound {
-                    tag: group_tag.to_owned(),
-                })?;
-        let group = self
-            .plan
+        let plan = self.plan();
+        let group_id = plan
+            .target_id(group_tag)
+            .ok_or_else(|| EngineError::SelectorGroupNotFound {
+                tag: group_tag.to_owned(),
+            })?;
+        let group = plan
             .target(group_id)
             .expect("engine plan should resolve selector group");
         let TargetKind::Selector(selector) = group.kind() else {
@@ -312,20 +349,19 @@ impl Engine {
                 tag: group_tag.to_owned(),
             });
         };
-        let target_id =
-            self.plan
-                .target_id(target_tag)
-                .ok_or_else(|| EngineError::SelectorTargetNotFound {
-                    group_tag: group_tag.to_owned(),
-                    target_tag: target_tag.to_owned(),
-                })?;
+        let target_id = plan
+            .target_id(target_tag)
+            .ok_or_else(|| EngineError::SelectorTargetNotFound {
+                group_tag: group_tag.to_owned(),
+                target_tag: target_tag.to_owned(),
+            })?;
         if !selector.contains_member(target_id) {
             return Err(EngineError::SelectorTargetNotFound {
                 group_tag: group_tag.to_owned(),
                 target_tag: target_tag.to_owned(),
             });
         }
-        let view = PlanView::new(&self.plan);
+        let view = PlanView::new(&plan);
 
         let previous = self
             .outbound_group_state
@@ -482,6 +518,11 @@ impl Engine {
     ) -> Option<CompletedSessionRecord> {
         let record = self.session_registry.finish(session_id, outcome)?;
         self.stats.record_finish(outcome);
+        self.stats.record_traffic(
+            record.outbound_tag.as_deref(),
+            record.bytes_up,
+            record.bytes_down,
+        );
         self.completed_sessions.push(record.clone());
         self.event_log
             .push_flow_completed(&record, |tag| self.outbound_protocol_for_tag(tag));

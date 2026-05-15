@@ -159,6 +159,19 @@ impl EnginePlan {
                         interval: Duration::from_secs(*interval_seconds),
                     })
                 }
+                OutboundGroupKind::Relay { proxies } => {
+                    if proxies.len() < 2 {
+                        return Err(EngineError::InvalidPlan {
+                            message: format!(
+                                "relay group `{}` requires at least 2 proxies",
+                                group.tag()
+                            ),
+                        });
+                    }
+                    TargetKind::Relay(RelayGroupPlan {
+                        chain: resolve_members(proxies, &targets_by_tag)?,
+                    })
+                }
             };
 
             targets.push(TargetNode {
@@ -214,6 +227,7 @@ pub enum TargetKind {
     Selector(SelectorGroupPlan),
     Fallback(FallbackGroupPlan),
     UrlTest(UrlTestGroupPlan),
+    Relay(RelayGroupPlan),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -310,6 +324,19 @@ impl UrlTestGroupPlan {
 
     pub fn interval(&self) -> Duration {
         self.interval
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelayGroupPlan {
+    /// Ordered chain of proxy target IDs.  Each hop's TCP stream is
+    /// established through the previous hop's connection.
+    pub chain: Box<[TargetId]>,
+}
+
+impl RelayGroupPlan {
+    pub fn chain(&self) -> &[TargetId] {
+        &self.chain
     }
 }
 

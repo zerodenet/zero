@@ -57,6 +57,11 @@ pub enum ResolvedOutbound<'a> {
     Fallback {
         candidates: Vec<ResolvedLeafOutbound<'a>>,
     },
+    /// Chain of proxies connected sequentially.  Each hop's connection
+    /// is established through the previous hop's TCP stream.
+    Relay {
+        chain: Vec<ResolvedLeafOutbound<'a>>,
+    },
 }
 
 pub(crate) fn resolve_target_id<'a>(
@@ -99,6 +104,18 @@ fn resolve_target_inner<'a>(
                 .selector_selected_target(target_id)
                 .unwrap_or_else(|| selector.initial_member());
             resolve_target_inner(plan, outbound_group_state, selected, stack)
+        }
+        TargetKind::Relay(relay) => {
+            let mut chain = Vec::with_capacity(relay.chain().len());
+            for &member_id in relay.chain() {
+                let resolved =
+                    resolve_target_inner(plan, outbound_group_state, member_id, stack)?;
+                match resolved {
+                    ResolvedOutbound::Single(leaf) => chain.push(leaf),
+                    _ => return None,
+                }
+            }
+            Some(ResolvedOutbound::Relay { chain })
         }
         TargetKind::Fallback(fallback) => {
             let mut candidates = Vec::new();
@@ -206,6 +223,7 @@ fn append_candidates<'a>(
     match resolved {
         ResolvedOutbound::Single(candidate) => candidates.push(candidate),
         ResolvedOutbound::Fallback { candidates: nested } => candidates.extend(nested),
+        ResolvedOutbound::Relay { .. } => {} // relay inside fallback is not meaningful
     }
 }
 
@@ -239,6 +257,14 @@ fn resolve_target_chains_inner(
                 resolve_target_chains_inner(plan, outbound_group_state, *member_id, stack)
             })
             .collect(),
+        TargetKind::Relay(relay) => {
+            // Relay chains go through all proxies in order.
+            let mut full_chain = stack.clone();
+            for &member_id in relay.chain() {
+                full_chain.push(member_id);
+            }
+            vec![full_chain]
+        }
         TargetKind::UrlTest(urltest) => {
             let selected = outbound_group_state
                 .selected_target(target_id)

@@ -15,7 +15,36 @@ impl RouteConfig {
             rules.push(rule.compile(&compiled_rule_sets)?);
         }
 
-        Ok(RuleSet::new(rules, self.final_action.compile()))
+        if let Some(ref path) = self.geoip_database {
+            let resolved = resolve_path(path, base_dir);
+            let data = std::fs::read(&resolved).map_err(|source| {
+                ConfigError::InvalidRuleSet(format!(
+                    "failed to read geoip database at {}: {source}",
+                    resolved.display()
+                ))
+            })?;
+            let reader = maxminddb::Reader::from_source(data).map_err(|e| {
+                ConfigError::InvalidRuleSet(format!("invalid geoip database: {e}"))
+            })?;
+            Ok(RuleSet::with_geoip(
+                rules,
+                self.final_action.compile(),
+                std::sync::Arc::new(reader),
+            ))
+        } else {
+            Ok(RuleSet::new(rules, self.final_action.compile()))
+        }
+    }
+}
+
+fn resolve_path(path: &str, base_dir: Option<&Path>) -> std::path::PathBuf {
+    let candidate = std::path::Path::new(path);
+    if candidate.is_absolute() {
+        return candidate.to_path_buf();
+    }
+    match base_dir {
+        Some(base_dir) => base_dir.join(candidate),
+        None => candidate.to_path_buf(),
     }
 }
 
@@ -41,6 +70,10 @@ impl RuleConditionConfig {
                 validate_domain_values(values)?;
                 Ok(RuleCondition::Domain(values.clone()))
             }
+            Self::DomainKeyword { values } => {
+                validate_domain_values(values)?;
+                Ok(RuleCondition::DomainKeyword(values.clone()))
+            }
             Self::Ip { values } => {
                 if values.is_empty() {
                     return Err(ConfigError::InvalidRuleCondition(
@@ -54,6 +87,14 @@ impl RuleConditionConfig {
                 .get(tag)
                 .cloned()
                 .ok_or_else(|| ConfigError::UndefinedRuleSetTag { tag: tag.clone() }),
+            Self::GeoIp { values } => {
+                if values.is_empty() {
+                    return Err(ConfigError::InvalidRuleCondition(
+                        "`geoip` condition requires at least one country code".to_owned(),
+                    ));
+                }
+                Ok(RuleCondition::GeoIp(values.clone()))
+            }
             Self::And { items } => {
                 compile_nested_condition("and", items, compiled_rule_sets, RuleCondition::And)
             }

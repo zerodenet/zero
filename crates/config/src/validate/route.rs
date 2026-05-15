@@ -40,6 +40,18 @@ impl RouteRuleSetConfig {
                     ));
                 }
             }
+            RuleSetSourceType::Url => {
+                if self.url.as_ref().map_or(true, |u| u.trim().is_empty()) {
+                    return Err(ConfigError::InvalidRuleSet(
+                        "`url` rule set requires a non-empty `url`".to_owned(),
+                    ));
+                }
+                if self.path.trim().is_empty() {
+                    return Err(ConfigError::InvalidRuleSet(
+                        "`url` rule set requires a non-empty `path` for cache".to_owned(),
+                    ));
+                }
+            }
         }
 
         Ok(())
@@ -90,11 +102,25 @@ impl RuleConditionConfig {
                         "`rule-set` condition requires a non-empty `tag`".to_owned(),
                     ));
                 }
-
                 if !rule_set_tags.contains(tag) {
                     return Err(ConfigError::UndefinedRuleSetTag { tag: tag.clone() });
                 }
-
+                Ok(())
+            }
+            Self::DomainKeyword { values } => {
+                if values.is_empty() {
+                    return Err(ConfigError::InvalidRuleCondition(
+                        "`domain-keyword` condition requires at least one value".to_owned(),
+                    ));
+                }
+                Ok(())
+            }
+            Self::GeoIp { values } => {
+                if values.is_empty() {
+                    return Err(ConfigError::InvalidRuleCondition(
+                        "`geoip` condition requires at least one country code".to_owned(),
+                    ));
+                }
                 Ok(())
             }
             Self::And { items } => validate_nested_condition("and", items, rule_set_tags),

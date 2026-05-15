@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use zero_core::Session;
 use zero_engine::{
-    EngineError, ResolvedOutbound, RouteDecision, SessionHandle, TargetId, UrlTestMemberState,
+    EngineError, EnginePlan, ResolvedOutbound, RouteDecision, SessionHandle, TargetId,
+    UrlTestMemberState,
 };
 
 use crate::runtime::Proxy;
@@ -11,17 +14,17 @@ impl Proxy {
         self.engine.route_decision(address)
     }
 
-    pub(crate) fn resolve_outbound<'a>(
-        &'a self,
+    pub(crate) fn resolve_outbound(
+        &self,
         action: &RouteDecision,
-    ) -> Result<ResolvedOutbound<'a>, EngineError> {
+    ) -> Result<(ResolvedOutbound<'static>, Option<Arc<EnginePlan>>), EngineError> {
         self.engine.resolve_route_decision(action.clone())
     }
 
-    pub(crate) fn resolve_target_id<'a>(
-        &'a self,
+    pub(crate) fn resolve_target_id(
+        &self,
         target_id: TargetId,
-    ) -> Option<ResolvedOutbound<'a>> {
+    ) -> Option<(ResolvedOutbound<'static>, Arc<EnginePlan>)> {
         self.engine.resolve_target_id(target_id)
     }
 
@@ -29,7 +32,7 @@ impl Proxy {
         self.engine.resolve_target_chains(target_id)
     }
 
-    pub(crate) fn target_tag(&self, target_id: TargetId) -> Option<&str> {
+    pub(crate) fn target_tag(&self, target_id: TargetId) -> Option<String> {
         self.engine.target_tag(target_id)
     }
 

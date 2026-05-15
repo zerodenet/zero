@@ -551,6 +551,7 @@ impl Proxy {
                                         EstablishedTcpOutbound::Socks5 { upstream, .. } => upstream,
                                         EstablishedTcpOutbound::Hysteria2 { upstream, .. } => upstream,
                                         EstablishedTcpOutbound::Shadowsocks { upstream, .. } => upstream,
+                                        EstablishedTcpOutbound::Relay { upstream } => upstream,
                                         EstablishedTcpOutbound::Block { .. } => {
                                             let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
                                             let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
@@ -868,13 +869,18 @@ impl Proxy {
         self.record_session_inbound_rx(session.id, packet.len() as u64);
 
         let action = self.route_decision(&session.target);
-        let resolved = self.resolve_outbound(&action)?;
-        crate::logging::log_session_accepted(&session, &action, self.config.mode.kind());
+        let (resolved, _plan) = self.resolve_outbound(&action)?;
         crate::logging::log_session_accepted(&session, &action, self.config.mode.kind());
 
         let candidate = match resolved {
             zero_engine::ResolvedOutbound::Single(candidate) => candidate,
             zero_engine::ResolvedOutbound::Fallback { mut candidates } => candidates.remove(0),
+            zero_engine::ResolvedOutbound::Relay { .. } => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "relay not supported for VLESS UDP",
+                )))
+            }
         };
 
         match candidate {

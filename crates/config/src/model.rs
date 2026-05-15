@@ -717,6 +717,7 @@ impl OutboundGroupConfig {
                 .or_else(|| outbounds.first().map(String::as_str)),
             OutboundGroupKind::Fallback { outbounds } => outbounds.first().map(String::as_str),
             OutboundGroupKind::UrlTest { outbounds, .. } => outbounds.first().map(String::as_str),
+            OutboundGroupKind::Relay { proxies } => proxies.first().map(String::as_str),
         }
     }
 }
@@ -741,6 +742,8 @@ pub enum OutboundGroupKind {
         #[serde(default = "default_urltest_interval_seconds")]
         interval_seconds: u64,
     },
+    #[serde(rename = "relay")]
+    Relay { proxies: Vec<String> },
 }
 
 impl OutboundGroupKind {
@@ -749,6 +752,7 @@ impl OutboundGroupKind {
             Self::Selector { outbounds, .. }
             | Self::Fallback { outbounds }
             | Self::UrlTest { outbounds, .. } => outbounds,
+            Self::Relay { proxies } => proxies,
         }
     }
 }
@@ -795,6 +799,9 @@ pub struct RouteConfig {
     pub rules: Vec<RouteRuleConfig>,
     #[serde(rename = "final")]
     pub final_action: RouteActionConfig,
+    /// Path to a GeoLite2-Country.mmdb file for the `geoip` condition.
+    #[serde(default)]
+    pub geoip_database: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -803,7 +810,14 @@ pub struct RouteRuleSetConfig {
     pub tag: String,
     #[serde(rename = "type")]
     pub source_type: RuleSetSourceType,
+    /// Path to a local file, or fallback cache path for URL sources.
     pub path: String,
+    /// URL to fetch the rule set from (required when type = "url").
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Re-fetch interval in seconds (default 86400 = 24h).
+    #[serde(default = "default_rule_set_update_interval")]
+    pub update_interval_seconds: u64,
     pub format: RuleSetFormatConfig,
 }
 
@@ -817,6 +831,8 @@ impl RouteRuleSetConfig {
 pub enum RuleSetSourceType {
     #[serde(rename = "file")]
     File,
+    #[serde(rename = "url")]
+    Url,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -825,6 +841,10 @@ pub enum RuleSetFormatConfig {
     DomainList,
     #[serde(rename = "cidr-list")]
     CidrList,
+}
+
+fn default_rule_set_update_interval() -> u64 {
+    86400
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -839,10 +859,14 @@ pub struct RouteRuleConfig {
 pub enum RuleConditionConfig {
     #[serde(rename = "domain")]
     Domain { values: Vec<String> },
+    #[serde(rename = "domain-keyword")]
+    DomainKeyword { values: Vec<String> },
     #[serde(rename = "ip")]
     Ip { values: Vec<IpNet> },
     #[serde(rename = "rule-set")]
     RuleSet { tag: String },
+    #[serde(rename = "geoip")]
+    GeoIp { values: Vec<String> },
     #[serde(rename = "and")]
     And { items: Vec<RuleConditionConfig> },
     #[serde(rename = "or")]

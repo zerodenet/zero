@@ -58,7 +58,7 @@ impl Proxy {
 
         let action = self.route_decision(&session.target);
         let resolved = match self.resolve_outbound(&action) {
-            Ok(resolved) => resolved,
+            Ok((resolved, _plan)) => resolved,
             Err(error) => {
                 let record = session_handle.finish(SessionOutcome::Failed);
                 log_session_failed(
@@ -77,6 +77,12 @@ impl Proxy {
         let candidates = match resolved {
             ResolvedOutbound::Single(candidate) => vec![candidate],
             ResolvedOutbound::Fallback { candidates } => candidates,
+            ResolvedOutbound::Relay { .. } => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "relay chain not supported for UDP flows",
+                )))
+            }
         };
         let is_fallback = candidates.len() > 1;
         let mut last_failure = None;
