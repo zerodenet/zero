@@ -2,7 +2,6 @@ use std::env;
 use std::error::Error;
 use std::process;
 
-use tracing_subscriber::EnvFilter;
 use zero_api::{
     CommandRequest, FlowListQuery, PoliciesQuery, PolicySelectCommand, QueryRequest, QueryService,
 };
@@ -15,11 +14,16 @@ mod error_report;
 mod http_adapter;
 mod hooks;
 mod ipc;
+mod logging;
 mod output;
 
 #[tokio::main]
 async fn main() {
-    init_tracing();
+    // Parse CLI args to find the config path, then initialise tracing
+    // from `runtime.log` before any other work so all logs are captured.
+    let args: Vec<String> = env::args().collect();
+    let config_path = cli::config_path_from_args(&args);
+    init_tracing_from_config(&config_path);
 
     if let Err(error) = try_main().await {
         error_report::print_error(error.as_ref());
@@ -89,6 +93,14 @@ async fn run_command(
     };
 
     let engine_handle = EngineHandle::new(engine.clone());
+
+    // Bridge tracing warn/error → engine.warning events.
+    {
+        let e = engine.clone();
+        logging::set_warning_sink(move |code: &str, msg: &str| {
+            e.emit_warning(code, msg);
+        });
+    }
 
     #[cfg(not(feature = "status-api"))]
     ensure_status_api_not_configured(&engine, status_listen)?;
@@ -514,6 +526,22 @@ fn events_command(socket_path: Option<&str>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Early-parse the configuration file to extract `runtime.log` and
+/// initialise the tracing subscriber before any meaningful work.
+fn init_tracing_from_config(config_path: &str) {
+    let log_config = std::fs::read_to_string(config_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|v| v.get("runtime")?.get("log").cloned())
+        .and_then(|v| serde_json::from_value::<zero_config::LogConfig>(v).ok())
+        .unwrap_or_else(|| {
+            // Fallback: stderr only, respect RUST_LOG or default to info.
+            zero_config::LogConfig::default()
+        });
+
+    logging::init_tracing(&log_config);
+}
+
 fn spawn_stats_sampler(engine: Engine) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut stats_tick = tokio::time::interval(std::time::Duration::from_secs(30));
@@ -555,14 +583,3 @@ fn reload_command(
     Ok(())
 }
 
-fn init_tracing() {
-    let filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
-        .expect("valid tracing filter");
-
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
-        .compact()
-        .try_init();
-}

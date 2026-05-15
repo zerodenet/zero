@@ -105,14 +105,55 @@ impl Proxy {
                 .into(),
                 upstream: None,
             }),
-            ResolvedLeafOutbound::Shadowsocks { .. } => Err(UdpCandidateFailure {
-                stage: "udp_shadowsocks_outbound",
-                error: zero_core::Error::Unsupported(
-                    "SS UDP chaining is handled via Shadowsocks inbound, not SOCKS5 UDP associate",
-                )
-                .into(),
-                upstream: None,
-            }),
+            ResolvedLeafOutbound::Shadowsocks {
+                tag,
+                server,
+                port,
+                password,
+                cipher,
+                ..
+            } => {
+                #[cfg(feature = "outbound-shadowsocks")]
+                {
+                    let sent = crate::outbound::shadowsocks::send_ss_udp_packet(
+                        server,
+                        port,
+                        password,
+                        cipher,
+                        &context.session.target,
+                        context.session.port,
+                        context.payload,
+                    )
+                    .await
+                    .map_err(|error| UdpCandidateFailure {
+                        stage: "udp_ss_encrypt_send",
+                        error,
+                        upstream: Some((server.to_owned(), port)),
+                    })?;
+
+                    Ok(UdpCandidateStart::Flow {
+                        outbound: UdpFlowOutbound::Shadowsocks {
+                            tag: tag.to_owned(),
+                            server: server.to_owned(),
+                            port,
+                            password: password.to_owned(),
+                            cipher: cipher.to_owned(),
+                        },
+                        outbound_tx_bytes: sent as u64,
+                    })
+                }
+                #[cfg(not(feature = "outbound-shadowsocks"))]
+                {
+                    Err(UdpCandidateFailure {
+                        stage: "udp_shadowsocks_outbound",
+                        error: zero_core::Error::Unsupported(
+                            "Shadowsocks UDP outbound requires Cargo feature `outbound-shadowsocks`",
+                        )
+                        .into(),
+                        upstream: None,
+                    })
+                }
+            }
         }
     }
 

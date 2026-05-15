@@ -3,6 +3,52 @@ use std::fmt;
 
 pub const DEFAULT_CONFIG_PATH: &str = "examples/v0.0.1/basic.json";
 
+/// Extract the config file path from raw CLI arguments for early
+/// initialisation of the tracing subscriber.
+pub fn config_path_from_args(args: &[String]) -> String {
+    let mut iter = args.iter().skip(1);
+    let Some(first) = iter.next() else {
+        return DEFAULT_CONFIG_PATH.to_owned();
+    };
+    match first.as_str() {
+        "run" => {
+            let mut path = None;
+            let mut iter = iter;
+            while let Some(arg) = iter.next() {
+                match arg.as_str() {
+                    "--status-listen" | "--control-socket" | "--ipc-hook-socket" => {
+                        iter.next();
+                    }
+                    a if a.starts_with('-') => {}
+                    _ => path = Some(arg.clone()),
+                }
+            }
+            path.unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_owned())
+        }
+        "status" | "reload" => {
+            let mut path = None;
+            let mut iter = iter;
+            while let Some(arg) = iter.next() {
+                match arg.as_str() {
+                    "--json" | "--socket" => {
+                        if arg == "--socket" {
+                            iter.next();
+                        }
+                    }
+                    a if a.starts_with('-') => {}
+                    _ => path = Some(arg.clone()),
+                }
+            }
+            path.unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_owned())
+        }
+        "help" | "--help" | "-h" | "select" | "flows" | "policies" | "events" => {
+            DEFAULT_CONFIG_PATH.to_owned()
+        }
+        _ if first.starts_with('-') => DEFAULT_CONFIG_PATH.to_owned(),
+        _ => first.clone(),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Run {

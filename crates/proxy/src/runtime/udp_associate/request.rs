@@ -239,7 +239,7 @@ impl Proxy {
                                 &error,
                                 upstream
                                     .as_ref()
-                                    .map(|(server, port): &(String, u16)| (server.as_str(), *port)),
+                                    .map(|(s, p): &(String, u16)| (s.as_str(), *p)),
                             );
                         } else {
                             log_session_failed(
@@ -250,12 +250,68 @@ impl Proxy {
                                 &error,
                                 upstream
                                     .as_ref()
-                                    .map(|(server, port): &(String, u16)| (server.as_str(), *port)),
+                                    .map(|(s, p): &(String, u16)| (s.as_str(), *p)),
                             );
                         }
                         return Err(error);
                     }
                 }
+            }
+            #[cfg(feature = "outbound-shadowsocks")]
+            UdpFlowOutbound::Shadowsocks {
+                tag: _,
+                server,
+                port,
+                password,
+                cipher,
+            } => {
+                use crate::outbound::shadowsocks::send_ss_udp_packet;
+                match send_ss_udp_packet(
+                    server.as_str(),
+                    *port,
+                    password.as_str(),
+                    cipher.as_str(),
+                    &flow.session.target,
+                    flow.session.port,
+                    payload,
+                )
+                .await
+                {
+                    Ok(sent) => {
+                        self.record_session_outbound_tx(flow.session.id, sent as u64);
+                    }
+                    Err(error) => {
+                        let msg = error.to_string();
+                        if let Some(completed) = context.udp_flows.finish(
+                            &flow.session.target,
+                            flow.session.port,
+                            SessionOutcome::Failed,
+                        ) {
+                            log_session_failed(
+                                &flow.session,
+                                Some(&completed.record),
+                                "udp_ss_send",
+                                started_at.elapsed(),
+                                &EngineError::Io(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    msg.as_str(),
+                                )),
+                                None,
+                            );
+                        }
+                        return Err(EngineError::Io(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            msg.as_str(),
+                        )));
+                    }
+                }
+            }
+            #[cfg(not(feature = "outbound-shadowsocks"))]
+            UdpFlowOutbound::Shadowsocks { .. } => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Shadowsocks UDP outbound requires feature `outbound-shadowsocks`",
+                )));
             }
         }
 
