@@ -43,6 +43,7 @@ members = [
     "crates/api",
     "crates/config",
     "crates/connector",
+    "crates/logging",
     "crates/proxy",
     "crates/router",
     "crates/platform/tokio",
@@ -79,10 +80,10 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-tracing-appender.workspace = true
 tracing-subscriber.workspace = true
 zero-api = { path = "crates/api" }
 zero-config = { path = "crates/config" }
 zero-engine = { path = "crates/engine", default-features = false }
+zero-logging = { path = "crates/logging" }
 zero-proxy = { path = "crates/proxy", default-features = false }
 zero-connector = { path = "crates/connector", optional = true, default-features = false }

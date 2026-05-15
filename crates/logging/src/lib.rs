@@ -1,4 +1,6 @@
-//! Structured logging — non-blocking, split output, event bridge, rate-limited.
+//! Structured logging for Zero — non-blocking, split output, event bridge,
+//! rate-limited.  Works in any binary, not tied to the CLI layer, usable
+//! from any crate that depends on `zero-logging`.
 
 use std::fs;
 use std::io::{self, Write};
@@ -65,7 +67,7 @@ pub fn init_tracing(config: &LogConfig) {
         layers.push(Box::new(file_layer));
     }
 
-    tracing_subscriber::registry().with(layers).init();
+    let _ = tracing_subscriber::registry().with(layers).try_init();
 }
 
 /// Callback that receives every `warn` / `error` log line so it can be
@@ -79,9 +81,6 @@ pub fn set_warning_sink(f: impl Fn(&str, &str) + Send + Sync + 'static) {
 
 // ── Warning bridge ────────────────────────────────────────────────────
 
-/// A tracing layer that captures `warn` / `error` events and forwards
-/// them to `WARNING_SINK` (if set).  Also drains any cached warnings
-/// from before the sink was registered.
 struct WarningBridgeLayer;
 
 impl<S: tracing::Subscriber> Layer<S> for WarningBridgeLayer {

@@ -14,7 +14,6 @@ mod error_report;
 mod http_adapter;
 mod hooks;
 mod ipc;
-mod logging;
 mod output;
 
 #[tokio::main]
@@ -97,7 +96,7 @@ async fn run_command(
     // Bridge tracing warn/error → engine.warning events.
     {
         let e = engine.clone();
-        logging::set_warning_sink(move |code: &str, msg: &str| {
+        zero_logging::set_warning_sink(move |code: &str, msg: &str| {
             e.emit_warning(code, msg);
         });
     }
@@ -539,7 +538,7 @@ fn init_tracing_from_config(config_path: &str) {
             zero_config::LogConfig::default()
         });
 
-    logging::init_tracing(&log_config);
+    zero_logging::init_tracing(&log_config);
 }
 
 fn spawn_stats_sampler(engine: Engine) -> tokio::task::JoinHandle<()> {
