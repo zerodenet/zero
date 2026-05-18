@@ -2,9 +2,7 @@ use std::env;
 use std::error::Error;
 use std::process;
 
-use zero_api::{
-    CommandRequest, FlowListQuery, PoliciesQuery, PolicySelectCommand, QueryRequest, QueryService,
-};
+use zero_api::{FlowListQuery, PoliciesQuery, QueryRequest};
 use zero_engine::{Engine, EngineHandle};
 use zero_proxy::Proxy;
 

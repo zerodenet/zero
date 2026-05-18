@@ -21,10 +21,15 @@ Zero 是一个用 Rust 编写的网络代理内核，当前版本 `v0.0.2`。`v0
 
 ### 路由与出站组
 - `mode = rule | global | direct`
-- `selector` / `fallback` / `urltest` 出站组
-- `group -> group` 嵌套
-- 运行时 selector 切换
-- 基于域名、CIDR 和外置 `rule_sets` 的静态路由
+- `domain` / `domain-keyword` / `ip` / `geoip` 规则条件 + `and` / `or` 组合
+- `rule-set` 本地文件 + URL 远程拉取（自动缓存）
+- `selector` / `fallback` / `urltest` / `relay` 出站组
+- 规则 + 分组热重载（不重启）
+
+### Shadowsocks 协议特性
+- AEAD 加解密：aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305
+- 2022-blake3 密码派生
+- TCP + UDP 双向
 
 ### VLESS 协议特性
 - 9 种传输层：TCP / TLS / Reality / WebSocket / gRPC (MultiMode) / H2 / HTTPUpgrade / QUIC / SplitHTTP
@@ -35,11 +40,23 @@ Zero 是一个用 Rust 编写的网络代理内核，当前版本 `v0.0.2`。`v0
 - Fallback（ALPN + 非 TLS 双路回落）
 
 ### 控制面
-- HTTP API（`/api/v1/*`，Bearer Token / mTLS 认证）
-- IPC Unix socket（JSON 协议，CLI 和外部工具接入）
-- CLI：`zero status` / `select` / `flows` / `policies` / `events` / `reload`
-- 事件系统（EventSource / EventSink）
-- Panel push connector（心跳上报 + 命令拉取）
+Zero 提供三通道控制面接入：
+
+| 通道 | 传输 | 认证 | 适用 |
+|------|------|------|------|
+| **HTTP** | `127.0.0.1:9090` | Bearer Token | 远程调试、Web 面板 |
+| **IPC** | `~/.zero/control.sock` / `\\.\pipe\zero-control` | 文件权限 | 本地 GUI、CLI |
+| **CLI** | IPC 自动发现 | 文件权限 | 终端运维 |
+
+能力矩阵：
+- **查询**：`/api/v1/capabilities` / `health` / `config` / `runtime` / `stats` / `flows` / `policies`
+- **命令**：`policies.select` / `policies.probe` / `flows.close` / `config.apply`
+- **事件流**：SSE（`/api/v1/events/stream`，支持 `Last-Event-ID` 断点续传）
+- **事件投递**：File（JSON-line 轮转）/ Webhook / Memory / Callback
+- **Hook 扩展**：FlowHook trait，IPC 外部进程决策
+- **节点上报**：Push connector（心跳 + 远程命令）
+
+GUI 接入指南：[docs/guides/gui-integration.md](docs/guides/gui-integration.md)
 
 ### 嵌入
 - `zero-ffi` crate：`cdylib` + `staticlib`，C 兼容接口，供 Go/Python/移动端嵌入
@@ -113,8 +130,14 @@ docs/                         文档
 
 ## 文档入口
 
+**使用者：**
+- [快速开始](docs/guides/quickstart.md)
+- [GUI 接入指南](docs/guides/gui-integration.md)
+- [控制面 API 参考](docs/control-plane-api/README.md)
 - [配置说明](docs/project/config.md)
-- [模式和节点组](docs/project/modes-and-groups.md)
+
+**开发者：**
+- [架构说明](docs/project/architecture.md)
 - [日志说明](docs/project/logging.md)
-- [控制面路线图](docs/control-plane/)
+- [控制面设计](docs/control-plane/README.md)
 - [版本索引](docs/versions/README.md)
