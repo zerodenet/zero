@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
-use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeServer};
+use tokio::net::windows::named_pipe::{ClientOptions, ServerOptions};
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use tracing::{debug, error, info, warn};
@@ -48,16 +48,16 @@ pub fn resolve_ipc_path(explicit: Option<&str>) -> io::Result<PathBuf> {
 
 pub async fn spawn_ipc_server(
     engine_handle: EngineHandle,
-    pipe_name: &str,
+    pipe_name: &std::path::Path,
 ) -> io::Result<IpcServerHandle> {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
-    let pipe = pipe_name.to_owned();
+    let pipe = pipe_name.to_string_lossy().to_string();
 
     let task = tokio::spawn(async move {
         run_ipc_server(&pipe, engine_handle, shutdown_rx).await
     });
 
-    info!(pipe = %pipe_name, "ipc server ready");
+    info!(pipe = %pipe_name.display(), "ipc server ready");
 
     Ok(IpcServerHandle {
         shutdown: Some(shutdown_tx),
@@ -74,7 +74,7 @@ async fn run_ipc_server(
 
     loop {
         // Create a new pipe instance for the next client.
-        let mut server = match NamedPipeServer::new(pipe_name) {
+        let mut server = match ServerOptions::new().create(pipe_name) {
             Ok(s) => s,
             Err(e) => {
                 error!(pipe = %pipe_name, error = %e, "failed to create named pipe");
