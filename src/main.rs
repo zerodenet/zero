@@ -60,6 +60,15 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
             config_path,
             socket_path,
         } => reload_command(&config_path, socket_path.as_deref())?,
+        cli::Command::Version => {
+            println!("zero {}", env!("CARGO_PKG_VERSION"));
+            println!("build: {}", env!("ZERO_BUILD_TIME"));
+            if let Some(hash) = option_env!("ZERO_GIT_DESCRIBE") {
+                println!("git: {hash}");
+            } else if let Some(hash) = option_env!("ZERO_GIT_HASH") {
+                println!("git: {hash}");
+            }
+        }
         cli::Command::Help => println!("{}", cli::usage()),
     }
 

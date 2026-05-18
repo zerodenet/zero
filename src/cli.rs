@@ -41,7 +41,7 @@ pub fn config_path_from_args(args: &[String]) -> String {
             }
             path.unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_owned())
         }
-        "help" | "--help" | "-h" | "select" | "flows" | "policies" | "events" => {
+        "help" | "--help" | "-h" | "version" | "--version" | "-V" | "select" | "flows" | "policies" | "events" => {
             DEFAULT_CONFIG_PATH.to_owned()
         }
         _ if first.starts_with('-') => DEFAULT_CONFIG_PATH.to_owned(),
@@ -80,6 +80,7 @@ pub enum Command {
         config_path: String,
         socket_path: Option<String>,
     },
+    Version,
     Help,
 }
 
@@ -129,6 +130,7 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
             parse_client_command(args.collect(), |socket_path| Command::Events { socket_path })
         }
         "reload" => parse_reload(args.collect()),
+        "version" | "--version" | "-V" => Ok(Command::Version),
         "help" | "--help" | "-h" => Ok(Command::Help),
         _ if first.starts_with('-') => Err(CliError::new(format!(
             "unknown option `{first}`\n\n{}",
@@ -164,6 +166,7 @@ pub fn usage() -> &'static str {
   zero policies [--socket PATH]
   zero events [--socket PATH]
   zero reload [CONFIG_PATH] [--socket PATH]
+  zero version
   zero help
 
 Examples:
