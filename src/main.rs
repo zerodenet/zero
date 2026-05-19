@@ -383,6 +383,16 @@ fn resolve_socket(socket_path: Option<&str>) -> Result<String, Box<dyn Error>> {
     if let Some(path) = socket_path {
         return Ok(path.to_owned());
     }
+    // 1. Try {exe_dir}/control.sock (next to the binary).
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let sibling = dir.join("control.sock");
+            if sibling.exists() {
+                return Ok(sibling.display().to_string());
+            }
+        }
+    }
+    // 2. Fall back to $HOME/.zero/control.sock.
     let path = ipc::default_ipc_path().ok_or_else(|| {
         std::io::Error::other(
             "cannot find control socket: $HOME is not set. Use --socket to specify a path.",

@@ -4,7 +4,7 @@ pub mod protocol;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]
-mod windows;
+pub(crate) mod windows;
 
 // Re-export platform-specific items.
 #[cfg(unix)]
@@ -14,5 +14,6 @@ pub use unix::{
 };
 #[cfg(windows)]
 pub use windows::{
-    default_ipc_path, resolve_ipc_path, spawn_ipc_server, IpcServerHandle,
+    default_socket_path as default_ipc_path, resolve_socket_path as resolve_ipc_path,
+    spawn_ipc_server, IpcServerHandle,
 };

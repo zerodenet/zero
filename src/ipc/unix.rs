@@ -41,10 +41,19 @@ pub fn default_socket_path() -> Option<PathBuf> {
     Some(home.join(DEFAULT_SOCKET_REL_PATH))
 }
 
-/// Resolve the socket path: explicit path, or config path, or default.
+/// Resolve the socket path in order of precedence:
+///
+/// 1. Explicit path from CLI `--control-socket`.
+/// 2. `{exe_dir}/control.sock` — sibling to the executable.
+/// 3. `$HOME/.zero/control.sock` — global fallback.
 pub fn resolve_socket_path(explicit: Option<&str>) -> io::Result<PathBuf> {
     if let Some(path) = explicit {
         return Ok(PathBuf::from(path));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            return Ok(dir.join("control.sock"));
+        }
     }
     default_socket_path().ok_or_else(|| {
         io::Error::new(

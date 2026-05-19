@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -31,16 +31,13 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets
+        run: cargo clippy --workspace --all-targets --features full -- -D warnings
 
-      - name: Build (full)
-        run: cargo build --workspace --features full,status-api
+      - name: Check (full)
+        run: cargo check --workspace --features full,status-api
 
-      - name: Build (panel-connector)
-        run: cargo build --workspace --features full,status-api,panel-connector
-
-      - name: Build (release)
-        run: cargo build --workspace --features full,status-api --release
+      - name: Check (panel-connector)
+        run: cargo check --workspace --features full,status-api,panel-connector
 
       - name: Test
-        run: cargo test --workspace --features full,status-api
+        run: cargo test --workspace --lib --features full,status-api

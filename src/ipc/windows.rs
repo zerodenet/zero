@@ -1,7 +1,8 @@
 //! Windows Named Pipe IPC server and client.
 //!
-//! Uses `\\.\pipe\zero-control` as the default pipe path.
-//! Protocol is identical to the Unix variant (JSON-line framing).
+//! Named Pipes live in the `\\.\pipe\` namespace — they are not filesystem
+//! objects, so the path is always the well-known `\\.\pipe\zero-control`
+//! unless overridden via CLI.
 
 use std::io;
 use std::path::PathBuf;
@@ -35,11 +36,11 @@ impl IpcServerHandle {
     }
 }
 
-pub fn default_ipc_path() -> Option<PathBuf> {
+pub fn default_socket_path() -> Option<PathBuf> {
     Some(PathBuf::from(PIPE_NAME))
 }
 
-pub fn resolve_ipc_path(explicit: Option<&str>) -> io::Result<PathBuf> {
+pub fn resolve_socket_path(explicit: Option<&str>) -> io::Result<PathBuf> {
     if let Some(path) = explicit {
         return Ok(PathBuf::from(path));
     }
@@ -48,16 +49,16 @@ pub fn resolve_ipc_path(explicit: Option<&str>) -> io::Result<PathBuf> {
 
 pub async fn spawn_ipc_server(
     engine_handle: EngineHandle,
-    pipe_name: &std::path::Path,
+    pipe_path: &std::path::Path,
 ) -> io::Result<IpcServerHandle> {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
-    let pipe = pipe_name.to_string_lossy().to_string();
+    let pipe = pipe_path.to_string_lossy().to_string();
 
     let task = tokio::spawn(async move {
         run_ipc_server(&pipe, engine_handle, shutdown_rx).await
     });
 
-    info!(pipe = %pipe_name.display(), "ipc server ready");
+    info!(pipe = %pipe_path.display(), "ipc server ready");
 
     Ok(IpcServerHandle {
         shutdown: Some(shutdown_tx),
@@ -73,12 +74,10 @@ async fn run_ipc_server(
     let mut connections = JoinSet::new();
 
     loop {
-        // Create a new pipe instance for the next client.
         let mut server = match ServerOptions::new().create(pipe_name) {
             Ok(s) => s,
             Err(e) => {
                 error!(pipe = %pipe_name, error = %e, "failed to create named pipe");
-                // Short backoff before retry.
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
@@ -94,7 +93,6 @@ async fn run_ipc_server(
 
                 let handle = handle.clone();
                 connections.spawn(async move {
-                    // NamedPipeServer implements AsyncRead + AsyncWrite
                     if let Err(error) = handle_ipc_connection(server, handle).await {
                         if is_transient_disconnect(&error) {
                             debug!(error = %error, "ipc connection closed early");
@@ -310,7 +308,6 @@ pub fn stream_events(
 }
 
 fn open_pipe_client(pipe_name: &str) -> io::Result<std::fs::File> {
-    // On Windows, named pipes are accessible via the filesystem.
     std::fs::OpenOptions::new()
         .read(true)
         .write(true)
