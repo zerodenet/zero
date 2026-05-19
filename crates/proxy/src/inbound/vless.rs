@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -92,6 +93,8 @@ impl Proxy {
         let split_http_registry: Option<crate::transport::SplitHttpRegistry> =
             split_http_config.as_ref().map(|_| crate::transport::SplitHttpRegistry::new());
         let fallback_config = inbound.protocol.vless_fallback().cloned();
+        let vless_users: Arc<[zero_config::VlessUserConfig]> =
+            inbound.protocol.vless_users().into();
         let mut connections = JoinSet::new();
 
         info!(
@@ -120,7 +123,7 @@ impl Proxy {
                     let (stream, remote_addr) = accept_result?;
                     let engine = self.clone();
                     let inbound_tag = inbound.tag.clone();
-                    let vless_users = inbound.protocol.vless_users().to_vec();
+                    let vless_users = Arc::clone(&vless_users);
                     let tls_acceptor = tls_acceptor.clone();
                     let reality_config = reality_config.clone();
                     let ws_config = ws_config.clone();
@@ -309,7 +312,8 @@ impl Proxy {
                         Ok(quic_stream) => {
                             let engine = self.clone();
                             let inbound_tag = inbound.tag.clone();
-                            let vless_users = inbound.protocol.vless_users().to_vec();
+                            let vless_users: Arc<[zero_config::VlessUserConfig]> =
+                                inbound.protocol.vless_users().into();
                             let fallback_config = fallback_config.clone();
 
                             connections.spawn(async move {
@@ -405,7 +409,7 @@ impl Proxy {
                 let engine = self.clone();
                 let tag = inbound_tag.to_owned();
                 let service_names = grpc.service_names.clone();
-                let users_clone = users.to_vec();
+                let users_arc: Arc<[VlessUserConfig]> = users.into();
                 let fb_clone = fallback.cloned();
                 return crate::transport::serve_grpc(
                     stream,
@@ -413,7 +417,7 @@ impl Proxy {
                     move |grpc_stream| {
                         let engine = engine.clone();
                         let tag = tag.clone();
-                        let users = users_clone.clone();
+                        let users = Arc::clone(&users_arc);
                         let fb = fb_clone.clone();
                         async move {
                             engine

@@ -217,12 +217,10 @@ impl VlessUdpOutboundManager {
 
                 // Spawn response reader task
                 self.response_tasks.spawn(async move {
-                    loop {
-                        let payload = recv_rx.recv().await
-                            .ok_or_else(|| EngineError::Io(std::io::Error::other("upstream channel closed")))?;
+                    let payload = recv_rx.recv().await
+                        .ok_or_else(|| EngineError::Io(std::io::Error::other("upstream channel closed")))?;
 
-                        return Ok((target, port, payload, Some(session_id)));
-                    }
+                    Ok((target, port, payload, Some(session_id)))
                 });
 
                 Ok(())

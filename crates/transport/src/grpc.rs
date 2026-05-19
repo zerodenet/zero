@@ -288,7 +288,6 @@ fn build_grpc_stream(
 
     // Read relay: h2 recv_stream → gRPC frame parse → mpsc
     tokio::spawn(async move {
-        use h2::RecvStream;
         let mut frame_buf = Vec::new();
         let mut header_buf = [0u8; GRPC_HEADER_LEN];
         let mut header_pos = 0;
@@ -387,8 +386,8 @@ impl AsyncRead for GrpcStream {
 
 impl AsyncWrite for GrpcStream {
     fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         if self.write_closed {

@@ -10,10 +10,10 @@ pub(crate) mod windows;
 #[cfg(unix)]
 pub use unix::{
     default_socket_path as default_ipc_path, resolve_socket_path as resolve_ipc_path,
-    spawn_ipc_server, IpcServerHandle,
+    spawn_ipc_server,
 };
 #[cfg(windows)]
 pub use windows::{
     default_socket_path as default_ipc_path, resolve_socket_path as resolve_ipc_path,
-    spawn_ipc_server, IpcServerHandle,
+    spawn_ipc_server,
 };

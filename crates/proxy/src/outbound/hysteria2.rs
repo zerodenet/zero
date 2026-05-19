@@ -2,6 +2,9 @@
 //!
 //! Provides UDP upstream establishment and management for chained
 //! Hysteria2 connections, following the same pattern as VLESS.
+//!
+//! TODO: wire UDP relay (establish_hysteria2_udp_upstream, etc.)
+#![allow(dead_code)]
 
 use std::collections::HashMap;
 use std::sync::Arc;

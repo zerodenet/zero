@@ -180,11 +180,9 @@ where
     // AEAD payload = 1(pad_len) + pad_len + 2(plain_len) + plain + 16(tag)
     // Minimum: 1 + 0 + 2 + 0 + 16 = 19, Maximum: 1 + 31 + 2 + 255 + 16 = 305
     let mut buf = Vec::with_capacity(320);
-    let mut total_read = 0usize;
 
     // First read enough to get pad_len (1 byte)
     ensure_read(stream, &mut buf, 1).await?;
-    total_read = buf.len();
 
     let pad_len = buf[0] as usize;
     if pad_len > 31 {
@@ -195,7 +193,6 @@ where
     let header_needed = pad_len + 2;
     if buf.len() < 1 + header_needed {
         ensure_read(stream, &mut buf, 1 + header_needed).await?;
-        total_read = buf.len();
     }
 
     let plain_len = u16::from_be_bytes([buf[1 + pad_len], buf[1 + pad_len + 1]]) as usize;

@@ -1,5 +1,7 @@
 //! Concrete `ProtocolAdapter` implementations for each compiled-in protocol.
 
+use std::sync::Arc;
+
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 
 use super::protocol_adapter::ProtocolAdapter;
@@ -12,6 +14,7 @@ macro_rules! protocol_adapter {
         inbound: $inbound_pat:pat,
         outbound: $outbound_pat:pat
     ) => {
+        #[derive(Debug)]
         pub(crate) struct $struct_name;
 
         impl ProtocolAdapter for $struct_name {
@@ -62,20 +65,20 @@ protocol_adapter!(TrojanAdapter, proto: "trojan", feature: "inbound-trojan",
 
 /// Build and return the protocol registry with all compiled-in adapters.
 pub(crate) fn build_registry() -> super::protocol_adapter::ProtocolRegistry {
-    let mut r = super::protocol_adapter::ProtocolRegistry::new(Vec::new());
+    let mut r = super::protocol_adapter::ProtocolRegistry::default();
 
     #[cfg(feature = "inbound-socks5")]
-    r.register(Box::new(Socks5Adapter));
+    r.register(Arc::new(Socks5Adapter));
     #[cfg(feature = "inbound-http-connect")]
-    r.register(Box::new(HttpConnectAdapter));
+    r.register(Arc::new(HttpConnectAdapter));
     #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
-    r.register(Box::new(VlessAdapter));
+    r.register(Arc::new(VlessAdapter));
     #[cfg(any(feature = "inbound-hysteria2", feature = "outbound-hysteria2"))]
-    r.register(Box::new(Hysteria2Adapter));
+    r.register(Arc::new(Hysteria2Adapter));
     #[cfg(any(feature = "inbound-shadowsocks", feature = "outbound-shadowsocks"))]
-    r.register(Box::new(ShadowsocksAdapter));
+    r.register(Arc::new(ShadowsocksAdapter));
     #[cfg(any(feature = "inbound-trojan", feature = "outbound-trojan"))]
-    r.register(Box::new(TrojanAdapter));
+    r.register(Arc::new(TrojanAdapter));
 
     r
 }

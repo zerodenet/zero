@@ -22,7 +22,7 @@ pub(super) fn validate_inbound_protocol(
             grpc,
             h2,
             http_upgrade,
-            fallback,
+            fallback: _,
             quic,
             split_http: _,
         } => {

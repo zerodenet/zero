@@ -41,7 +41,9 @@ use zero_traits::AsyncSocket;
 /// The second connection to arrive takes the first's stream and wakes it.
 struct SplitHttpPending {
     stream: Box<dyn Any + Send>,
+    #[allow(dead_code)]
     notify: oneshot::Sender<()>,
+    #[allow(dead_code)]
     created: Instant,
 }
 
@@ -254,7 +256,7 @@ where
     let (method, session_id) = parse_method_and_session(&buf[..head_end])?;
     validate_path(&buf[..head_end], config.path.as_str())?;
 
-    let expected = config.path.as_str();
+    let _expected = config.path.as_str();
 
     match method.as_str() {
         "POST" => {
@@ -345,7 +347,7 @@ where
     W: Unpin,
 {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
@@ -444,7 +446,7 @@ where
     R: Unpin,
 {
     fn poll_write(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
@@ -483,7 +485,7 @@ where
     }
 
     fn poll_shutdown(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
         let this = self.get_mut();

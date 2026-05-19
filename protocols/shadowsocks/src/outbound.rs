@@ -1,6 +1,9 @@
 // Shadowsocks outbound protocol — outbound.rs
 
-use zero_core::{Error, ProtocolType, Session};
+use zero_core::ProtocolType;
+#[cfg(feature = "crypto")]
+use zero_core::{Error, Session};
+#[cfg(feature = "crypto")]
 use zero_traits::AsyncSocket;
 
 /// Shadowsocks outbound handler.

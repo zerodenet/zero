@@ -5,8 +5,19 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+
+/// Global lock to serialize port allocation and zero process startup.
+/// Prevents TOCTOU port races when tests run in parallel.
+static PORT_LOCK: Mutex<()> = Mutex::new(());
+
+/// Acquire the global port lock. Tests that spawn zero must hold this lock
+/// from port allocation through process startup confirmation.
+pub fn acquire_port_lock() -> std::sync::MutexGuard<'static, ()> {
+    PORT_LOCK.lock().expect("port lock poisoned")
+}
 
 pub fn config_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/v0.0.1/basic.json")
@@ -20,7 +31,7 @@ pub fn free_port() -> u16 {
 }
 
 pub fn wait_for_port(port: u16) {
-    for _ in 0..60 {
+    for _ in 0..120 {
         if TcpStream::connect(("127.0.0.1", port)).is_ok() {
             return;
         }

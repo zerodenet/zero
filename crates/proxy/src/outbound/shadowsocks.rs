@@ -6,7 +6,6 @@ use std::net::SocketAddr;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use tokio::net::UdpSocket;
-use tokio::sync::Notify;
 use zero_core::Address;
 use zero_engine::EngineError;
 use zero_protocol_shadowsocks::{

@@ -8,12 +8,13 @@ use std::thread;
 use std::time::Duration;
 
 use support::{
-    free_port, http_get, http_post, http_post_json, remove_temp_file, wait_for_port,
-    write_temp_config,
+    acquire_port_lock, free_port, http_get, http_post, http_post_json, remove_temp_file,
+    wait_for_port, write_temp_config,
 };
 
 #[test]
 fn local_status_listener_exposes_live_runtime_view() {
+    let _lock = acquire_port_lock();
     let socks_port = free_port();
     let status_port = free_port();
     let echo_port = free_port();
@@ -146,6 +147,7 @@ fn local_status_listener_exposes_live_runtime_view() {
 
 #[test]
 fn local_status_listener_can_switch_selector_group() {
+    let _lock = acquire_port_lock();
     let socks_port = free_port();
     let status_port = free_port();
     let echo_port = free_port();
@@ -290,6 +292,7 @@ fn local_status_listener_can_switch_selector_group() {
 
 #[test]
 fn local_status_commands_endpoint_selects_policy() {
+    let _lock = acquire_port_lock();
     let socks_port = free_port();
     let status_port = free_port();
 
@@ -377,6 +380,7 @@ fn local_status_commands_endpoint_selects_policy() {
 
 #[test]
 fn configured_control_api_requires_api_key() {
+    let _lock = acquire_port_lock();
     let socks_port = free_port();
     let status_port = free_port();
 

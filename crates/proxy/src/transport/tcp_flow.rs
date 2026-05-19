@@ -13,6 +13,7 @@ use zero_engine::SessionHandle;
 use zero_engine::SessionOutcome;
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub(crate) enum TcpInboundProtocol {
     #[cfg(feature = "inbound-socks5")]
     Socks5,
@@ -176,8 +177,8 @@ impl Proxy {
         let session_id = context.session.id;
         self.record_session_inbound_traffic(session_id, context.client.drain_traffic());
         let client = context.client.into_inner();
-        let upload_engine = self.clone();
-        let download_engine = self.clone();
+        let upload_engine = self.engine().clone();
+        let download_engine = self.engine().clone();
 
         match relay_bidirectional_metered(
             client,

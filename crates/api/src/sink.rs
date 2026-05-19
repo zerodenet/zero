@@ -257,7 +257,7 @@ impl SinkManager {
 
     /// Snapshot delivery status for all sinks.
     pub fn status(&self) -> Vec<SinkStatus> {
-        let now_ms = SystemTime::now()
+        let _now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;

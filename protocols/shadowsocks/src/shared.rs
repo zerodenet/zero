@@ -3,7 +3,6 @@
 // SIP003 AEAD ciphers: aes-128-gcm, aes-256-gcm, chacha20-poly1305.
 
 use alloc::string::String;
-use alloc::vec;
 use alloc::vec::Vec;
 
 use zero_core::{Address, Error};

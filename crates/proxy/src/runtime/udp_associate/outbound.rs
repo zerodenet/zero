@@ -105,6 +105,7 @@ impl Proxy {
                 .into(),
                 upstream: None,
             }),
+            #[allow(unused_variables)]
             ResolvedLeafOutbound::Shadowsocks {
                 tag,
                 server,

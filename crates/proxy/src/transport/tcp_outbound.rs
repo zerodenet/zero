@@ -283,7 +283,7 @@ impl Proxy {
             zero_core::ProtocolType::Unknown,
         );
 
-        let mut outbound = self.establish_tcp_candidate(&session_for_next, first).await?;
+        let outbound = self.establish_tcp_candidate(&session_for_next, first).await?;
         let mut stream = match outbound {
             EstablishedTcpOutbound::Direct { upstream, .. }
             | EstablishedTcpOutbound::Socks5 { upstream, .. }

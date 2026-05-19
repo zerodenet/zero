@@ -63,14 +63,6 @@ impl Proxy {
         self.engine.track_session(session_id)
     }
 
-    pub(crate) fn record_session_upload(&self, session_id: u64, bytes: u64) {
-        self.engine.record_session_upload(session_id, bytes);
-    }
-
-    pub(crate) fn record_session_download(&self, session_id: u64, bytes: u64) {
-        self.engine.record_session_download(session_id, bytes);
-    }
-
     pub(crate) fn record_session_inbound_rx(&self, session_id: u64, bytes: u64) {
         self.engine.record_session_inbound_rx(session_id, bytes);
     }

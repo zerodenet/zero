@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// A simple sliding-window rate limiter.
 ///
@@ -70,12 +70,15 @@ impl Default for ApiRateLimiters {
 
 impl ApiRateLimiters {
     /// Disable a limiter by setting its cap to u64::MAX.
+    #[allow(dead_code)]
     pub fn disable_query_limit(&mut self) {
         self.query.max_per_second = u64::MAX;
     }
+    #[allow(dead_code)]
     pub fn disable_command_limit(&mut self) {
         self.command.max_per_second = u64::MAX;
     }
+    #[allow(dead_code)]
     pub fn disable_sse_limit(&mut self) {
         self.sse_connections.max_per_second = u64::MAX;
     }

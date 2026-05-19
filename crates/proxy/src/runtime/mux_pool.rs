@@ -66,10 +66,10 @@ impl MuxConnectionPool {
         };
 
         let key = PoolKey {
-            server: server.clone(),
+            server,
             port,
             uuid: *id,
-            transport: transport.clone(),
+            transport,
         };
 
         let conn = {

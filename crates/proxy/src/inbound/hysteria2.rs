@@ -15,7 +15,7 @@ use zero_traits::DnsResolver;
 use zero_protocol_hysteria2::{
     build_auth_error, build_auth_ok, build_connect_error, build_connect_ok,
     build_udp_datagram, parse_auth_frame, parse_tcp_connect_header, parse_udp_datagram,
-    verify_hmac, Hysteria2UdpPacket,
+    verify_hmac,
 };
 use crate::transport::Hysteria2Stream;
 use zero_traits::AsyncSocket;
@@ -253,7 +253,7 @@ impl Proxy {
     async fn hysteria2_datagram_loop(
         conn: Arc<quinn::Connection>,
         udp_socket: Arc<tokio::net::UdpSocket>,
-        inbound_tag: &str,
+        _inbound_tag: &str,
         resolver: zero_platform_tokio::TokioResolver,
     ) -> Result<(), EngineError> {
         let mut buf = [0u8; 65536];
@@ -335,7 +335,7 @@ impl Proxy {
                             // Find session mapping for this response
                             // For now, use a simple approach: echo back to session 1
                             // Full implementation would look up session from map
-                            if let Some(((local_addr, sid), (_, ref target, port))) =
+                            if let Some(((_local_addr, sid), (_, ref target, port))) =
                                 session_map.iter().find(|((la, _), _)| la == &sender)
                             {
                                 if let Ok(dg) = build_udp_datagram(

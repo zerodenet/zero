@@ -6,12 +6,14 @@ use std::net::TcpListener;
 use std::thread;
 
 use support::{
-    create_temp_dir, free_port, http_connect_tunnel, remove_temp_dir, remove_temp_file,
-    socks5_connect, socks5_connect_ipv4, spawn_zero, stop_child, wait_for_port, write_temp_config,
+    acquire_port_lock, create_temp_dir, free_port, http_connect_tunnel, remove_temp_dir,
+    remove_temp_file, socks5_connect, socks5_connect_ipv4, spawn_zero, stop_child, wait_for_port,
+    write_temp_config,
 };
 
 #[test]
 fn zero_binary_relays_tcp_through_socks5_direct() {
+    let _lock = acquire_port_lock();
     let proxy_port = free_port();
     let echo_port = free_port();
 
@@ -52,6 +54,7 @@ fn zero_binary_relays_tcp_through_socks5_direct() {
 
 #[test]
 fn zero_binary_relays_tcp_through_http_connect() {
+    let _lock = acquire_port_lock();
     let proxy_port = free_port();
     let echo_port = free_port();
 
@@ -92,6 +95,7 @@ fn zero_binary_relays_tcp_through_http_connect() {
 
 #[test]
 fn zero_binary_relays_tcp_through_chained_socks5_outbound() {
+    let _lock = acquire_port_lock();
     let outer_port = free_port();
     let upstream_port = free_port();
     let echo_port = free_port();
@@ -170,6 +174,7 @@ fn zero_binary_relays_tcp_through_chained_socks5_outbound() {
 
 #[test]
 fn zero_binary_applies_file_backed_rule_sets() {
+    let _lock = acquire_port_lock();
     let project_dir = create_temp_dir("proxy-smoke-rule-sets");
     let rules_dir = project_dir.join("rules");
     fs::create_dir_all(&rules_dir).expect("create rules dir");

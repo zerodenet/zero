@@ -72,7 +72,7 @@ where
             )));
         }
         total += n;
-        if let Some(head_end) = find_header_end(&buf[..total]) {
+        if find_header_end(&buf[..total]).is_some() {
             let status = parse_status(&buf[..total]).ok_or_else(|| {
                 EngineError::Io(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -127,7 +127,7 @@ where
             )));
         }
         total += n;
-        if let Some(head_end) = find_header_end(&buf[..total]) {
+        if find_header_end(&buf[..total]).is_some() {
             let req_path = parse_request_path(&buf[..total]);
             let expected = config.path.as_str();
             if req_path.as_deref() != Some(expected) {

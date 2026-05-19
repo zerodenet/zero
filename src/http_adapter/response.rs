@@ -35,6 +35,7 @@ impl<T: Serialize> ApiResponse<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn ok_with_id(request_id: Option<String>, result: T) -> Self {
         Self {
             api_version: zero_api::API_VERSION,

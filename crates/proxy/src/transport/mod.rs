@@ -18,7 +18,7 @@ pub(crate) use tcp_relay::*;
 #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
 pub(crate) use zero_transport::vless_transport::VlessTransportConnector;
 #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
-pub(crate) use zero_transport::grpc::{accept_grpc, serve_grpc};
+pub(crate) use zero_transport::grpc::serve_grpc;
 #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
 pub(crate) use zero_transport::h2::accept_h2;
 #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]

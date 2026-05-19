@@ -118,7 +118,7 @@ where
     Ok(info)
 }
 
-fn parse_extensions(ext_data: &[u8], mut consumed: Vec<u8>) -> ClientHelloInfo {
+fn parse_extensions(ext_data: &[u8], consumed: Vec<u8>) -> ClientHelloInfo {
     let mut sni = None;
     let mut alpn = Vec::new();
     let mut offset = 0;

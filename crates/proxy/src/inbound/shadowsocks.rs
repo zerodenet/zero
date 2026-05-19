@@ -16,7 +16,7 @@ use zero_engine::EngineError;
 use zero_protocol_shadowsocks::{CipherKind, ShadowsocksInbound};
 
 use crate::runtime::{bind_listener, Proxy};
-use crate::transport::{MeteredStream, TcpRelayStream};
+use crate::transport::MeteredStream;
 
 use super::super::logging::log_listener_connection_error;
 
@@ -485,7 +485,6 @@ async fn resolve_socket_addr(
     port: u16,
     resolver: &impl zero_traits::DnsResolver,
 ) -> Option<SocketAddr> {
-    use zero_traits::DnsResolver;
     match addr {
         Address::Ipv4(b) => Some(SocketAddr::new(
             std::net::IpAddr::V4(std::net::Ipv4Addr::new(b[0], b[1], b[2], b[3])),

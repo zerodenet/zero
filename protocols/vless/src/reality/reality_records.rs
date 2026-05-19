@@ -13,7 +13,6 @@ use super::common::{
     CONTENT_TYPE_HANDSHAKE, MAX_TLS_CIPHERTEXT_LEN, MAX_TLS_PLAINTEXT_LEN, TLS_RECORD_HEADER_SIZE,
 };
 use super::reality_aead::AeadKey;
-use super::reality_cipher_suite::CipherSuite;
 
 /// Encrypts plaintext into TLS 1.3 records.
 ///

@@ -7,7 +7,7 @@ use zero_traits::AsyncSocket;
 use crate::flow::{flow_from_byte, flow_read_request, is_aead_flow};
 use crate::mux::MuxServer;
 use crate::shared::{
-    read_addon, read_address, read_exact, CMD_MUX, CMD_TCP, CMD_UDP, VLESS_VERSION,
+    read_address, read_exact, CMD_MUX, CMD_TCP, CMD_UDP, VLESS_VERSION,
 };
 
 #[derive(Debug, Default, Clone, Copy)]

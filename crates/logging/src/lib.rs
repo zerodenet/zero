@@ -34,6 +34,7 @@ pub fn init_tracing(config: &LogConfig) {
     };
 
     let stderr_layer = tracing_subscriber::fmt::layer()
+        .with_writer(std::io::stderr)
         .with_target(false)
         .compact()
         .with_filter(rate_filter)
