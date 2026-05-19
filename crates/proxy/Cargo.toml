@@ -72,6 +72,20 @@ outbound-shadowsocks = [
     "zero-protocol-shadowsocks/crypto",
     "zero-protocol-shadowsocks/blake3",
 ]
+inbound-trojan = [
+    "zero-transport/tls",
+    "dep:ring",
+    "dep:zero-protocol-trojan",
+    "zero-protocol-trojan/crypto",
+    "dep:tokio-rustls"
+]
+outbound-trojan = [
+    "zero-transport/tls",
+    "dep:ring",
+    "dep:zero-protocol-trojan",
+    "zero-protocol-trojan/crypto",
+    "dep:tokio-rustls"
+]
 
 [dependencies]
 quinn = { version = "0.11", default-features = false, features = ["rustls-ring"], optional = true }
@@ -79,6 +93,7 @@ ring = { version = "0.17", optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"], optional = true }
 tokio.workspace = true
 tracing.workspace = true
+tokio-rustls = { version = "0.26", optional = true }
 zero-config = { path = "../config" }
 zero-core = { path = "../core" }
 zero-engine = { path = "../engine" }
@@ -88,6 +103,7 @@ zero-protocol-socks5 = { path = "../../protocols/socks5", optional = true }
 zero-protocol-vless = { path = "../../protocols/vless", optional = true, default-features = false }
 zero-protocol-hysteria2 = { path = "../../protocols/hysteria2", optional = true, default-features = false }
 zero-protocol-shadowsocks = { path = "../../protocols/shadowsocks", optional = true, default-features = false }
+zero-protocol-trojan = { path = "../../protocols/trojan", optional = true, default-features = false }
 zero-traits = { path = "../traits" }
 zero-transport = { path = "../transport", optional = true, features = ["vless"] }
 
@@ -96,7 +112,6 @@ futures-util = "0.3"
 rcgen = "0.14"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde_json.workspace = true
-tokio-rustls = "0.26"
 tokio-tungstenite = "0.23"
 tracing-subscriber.workspace = true
 zero-api = { path = "../api" }

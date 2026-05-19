@@ -294,6 +294,10 @@ impl Proxy {
                         .map_err(EngineError::from)?
                         .into()
                 }
+        ResolvedLeafOutbound::Trojan { .. } => return Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "trojan cannot be a urltest member",
+        ))),
             };
 
             socket

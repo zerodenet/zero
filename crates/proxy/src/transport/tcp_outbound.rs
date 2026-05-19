@@ -40,6 +40,12 @@ pub(crate) enum EstablishedTcpOutbound {
         port: u16,
         upstream: TcpRelayStream,
     },
+    Trojan {
+        tag: String,
+        server: String,
+        port: u16,
+        upstream: TcpRelayStream,
+    },
     Relay {
         upstream: TcpRelayStream,
     },
@@ -226,6 +232,31 @@ impl Proxy {
                     }),
                 }
             }
+            ResolvedLeafOutbound::Trojan {
+                tag,
+                server,
+                port,
+                password,
+                sni,
+                insecure,
+            } => {
+                match self
+                    .connect_via_trojan_upstream(session, server, port, password, sni, insecure)
+                    .await
+                {
+                    Ok(upstream) => Ok(EstablishedTcpOutbound::Trojan {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        upstream,
+                    }),
+                    Err(error) => Err(TcpOutboundFailure {
+                        stage: "connect_upstream_trojan",
+                        error,
+                        upstream_endpoint: Some((server.to_owned(), port)),
+                    }),
+                }
+            }
         }
     }
 
@@ -259,6 +290,7 @@ impl Proxy {
             | EstablishedTcpOutbound::Vless { upstream, .. }
             | EstablishedTcpOutbound::Hysteria2 { upstream, .. }
             | EstablishedTcpOutbound::Shadowsocks { upstream, .. }
+            | EstablishedTcpOutbound::Trojan { upstream, .. }
             | EstablishedTcpOutbound::Relay { upstream } => upstream,
             EstablishedTcpOutbound::Block { .. } => {
                 return Err(TcpOutboundFailure {
@@ -361,6 +393,15 @@ async fn send_hop_protocol_request(
                 .await
                 .map_err(|e| EngineError::Io(std::io::Error::other(e)))
         }
+        #[cfg(feature = "outbound-trojan")]
+        ResolvedLeafOutbound::Trojan { password, .. } => {
+            proxy
+                .protocols
+                .trojan_outbound
+                .send_request(stream, session, password)
+                .await
+                .map_err(|e| EngineError::Io(std::io::Error::other(e)))
+        }
         _ => Err(EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "relay hop protocol not supported or disabled",
@@ -374,7 +415,8 @@ fn hop_addr(hop: &ResolvedLeafOutbound<'_>) -> zero_core::Address {
         ResolvedLeafOutbound::Socks5 { server, .. }
         | ResolvedLeafOutbound::Vless { server, .. }
         | ResolvedLeafOutbound::Hysteria2 { server, .. }
-        | ResolvedLeafOutbound::Shadowsocks { server, .. } => Address::Domain(server.to_string()),
+        | ResolvedLeafOutbound::Shadowsocks { server, .. }
+        | ResolvedLeafOutbound::Trojan { server, .. } => Address::Domain(server.to_string()),
         _ => Address::Domain("unknown".to_owned()),
     }
 }
@@ -384,7 +426,8 @@ fn hop_port(hop: &ResolvedLeafOutbound<'_>) -> u16 {
         ResolvedLeafOutbound::Socks5 { port, .. }
         | ResolvedLeafOutbound::Vless { port, .. }
         | ResolvedLeafOutbound::Hysteria2 { port, .. }
-        | ResolvedLeafOutbound::Shadowsocks { port, .. } => *port,
+        | ResolvedLeafOutbound::Shadowsocks { port, .. }
+        | ResolvedLeafOutbound::Trojan { port, .. } => *port,
         _ => 0,
     }
 }

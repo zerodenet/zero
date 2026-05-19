@@ -7,11 +7,13 @@
     allow(dead_code, unused_imports, unused_variables, unreachable_code)
 )]
 
+mod adapters;
 mod groups;
 mod inbound;
 mod inventory;
 mod logging;
 mod outbound;
+mod protocol_adapter;
 mod runtime;
 mod transport;
 

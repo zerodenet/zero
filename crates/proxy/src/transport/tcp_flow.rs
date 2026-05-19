@@ -112,6 +112,12 @@ impl Proxy {
                 server,
                 port,
                 upstream,
+            })
+            | Ok(EstablishedTcpOutbound::Trojan {
+                tag,
+                server,
+                port,
+                upstream,
             }) => {
                 session.outbound_tag = Some(tag);
                 self.set_session_outbound(&session);

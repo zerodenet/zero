@@ -599,6 +599,7 @@ impl Engine {
                 zero_config::OutboundProtocolConfig::Vless { .. } => "vless",
                 zero_config::OutboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
                 zero_config::OutboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
+                zero_config::OutboundProtocolConfig::Trojan { .. } => "trojan",
             })
     }
 }

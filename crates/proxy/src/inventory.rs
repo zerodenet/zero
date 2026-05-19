@@ -22,6 +22,10 @@ use zero_protocol_hysteria2::Hysteria2Outbound;
 use zero_protocol_shadowsocks::ShadowsocksInbound;
 #[cfg(feature = "outbound-shadowsocks")]
 use zero_protocol_shadowsocks::ShadowsocksOutbound;
+#[cfg(feature = "inbound-trojan")]
+use zero_protocol_trojan::TrojanInbound;
+#[cfg(feature = "outbound-trojan")]
+use zero_protocol_trojan::TrojanOutbound;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ProtocolInventory {
@@ -43,6 +47,10 @@ pub struct ProtocolInventory {
     pub shadowsocks_inbound: ShadowsocksInbound,
     #[cfg(feature = "outbound-shadowsocks")]
     pub shadowsocks_outbound: ShadowsocksOutbound,
+    #[cfg(feature = "inbound-trojan")]
+    pub trojan_inbound: TrojanInbound,
+    #[cfg(feature = "outbound-trojan")]
+    pub trojan_outbound: TrojanOutbound,
     pub(crate) direct_outbound: DirectConnector,
 }
 
@@ -68,6 +76,9 @@ impl ProtocolInventory {
         if cfg!(feature = "inbound-shadowsocks") {
             protocols.push("shadowsocks");
         }
+        if cfg!(feature = "inbound-trojan") {
+            protocols.push("trojan");
+        }
 
         protocols
     }
@@ -86,6 +97,9 @@ impl ProtocolInventory {
         }
         if cfg!(feature = "outbound-shadowsocks") {
             protocols.push("shadowsocks");
+        }
+        if cfg!(feature = "outbound-trojan") {
+            protocols.push("trojan");
         }
 
         protocols
@@ -129,6 +143,7 @@ impl ProtocolInventory {
             InboundProtocolConfig::Vless { .. } => cfg!(feature = "inbound-vless"),
             InboundProtocolConfig::Hysteria2 { .. } => cfg!(feature = "inbound-hysteria2"),
             InboundProtocolConfig::Shadowsocks { .. } => cfg!(feature = "inbound-shadowsocks"),
+            InboundProtocolConfig::Trojan { .. } => cfg!(feature = "inbound-trojan"),
         }
     }
 
@@ -139,6 +154,7 @@ impl ProtocolInventory {
             OutboundProtocolConfig::Vless { .. } => cfg!(feature = "outbound-vless"),
             OutboundProtocolConfig::Hysteria2 { .. } => cfg!(feature = "outbound-hysteria2"),
             OutboundProtocolConfig::Shadowsocks { .. } => cfg!(feature = "outbound-shadowsocks"),
+            OutboundProtocolConfig::Trojan { .. } => cfg!(feature = "outbound-trojan"),
         }
     }
 }
@@ -151,6 +167,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::Vless { .. } => "vless",
         InboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
         InboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
+        InboundProtocolConfig::Trojan { .. } => "trojan",
     }
 }
 
@@ -162,6 +179,7 @@ fn inbound_protocol_feature(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::Vless { .. } => "inbound-vless",
         InboundProtocolConfig::Hysteria2 { .. } => "inbound-hysteria2",
         InboundProtocolConfig::Shadowsocks { .. } => "inbound-shadowsocks",
+        InboundProtocolConfig::Trojan { .. } => "inbound-trojan",
     }
 }
 
@@ -173,6 +191,7 @@ fn outbound_protocol_name(protocol: &OutboundProtocolConfig) -> &'static str {
         OutboundProtocolConfig::Vless { .. } => "vless",
         OutboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
         OutboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
+        OutboundProtocolConfig::Trojan { .. } => "trojan",
     }
 }
 
@@ -185,5 +204,6 @@ fn outbound_protocol_feature(protocol: &OutboundProtocolConfig) -> &'static str 
         OutboundProtocolConfig::Vless { .. } => "outbound-vless",
         OutboundProtocolConfig::Hysteria2 { .. } => "outbound-hysteria2",
         OutboundProtocolConfig::Shadowsocks { .. } => "outbound-shadowsocks",
+        OutboundProtocolConfig::Trojan { .. } => "outbound-trojan",
     }
 }

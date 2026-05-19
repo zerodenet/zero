@@ -145,6 +145,9 @@ pub struct ApiConfig {
     /// Flow hooks executed in registration order.
     #[serde(default)]
     pub hooks: Vec<HookConfig>,
+    /// Node push for heartbeat and command polling.
+    #[serde(default)]
+    pub push: PushConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -331,6 +334,24 @@ pub enum InboundProtocolConfig {
         #[serde(default = "default_ss_cipher")]
         cipher: String,
     },
+    #[serde(rename = "trojan")]
+    Trojan {
+        password: String,
+        #[serde(default)]
+        sni: Option<String>,
+        #[serde(default)]
+        tls: Option<TlsConfig>,
+    },
+}
+
+impl InboundProtocolConfig {
+    pub fn tls_config(&self) -> Option<&TlsConfig> {
+        match self {
+            Self::Vless { tls, .. } => tls.as_ref(),
+            Self::Trojan { tls, .. } => tls.as_ref(),
+            _ => None,
+        }
+    }
 }
 
 fn default_ss_cipher() -> String {
@@ -342,7 +363,7 @@ impl InboundProtocolConfig {
         match self {
             Self::Socks5 { users } => users,
             Self::Mixed { socks5_users } => socks5_users,
-            Self::HttpConnect | Self::Vless { .. } | Self::Hysteria2 { .. } | Self::Shadowsocks { .. } => &[],
+            Self::HttpConnect | Self::Vless { .. } | Self::Hysteria2 { .. } | Self::Shadowsocks { .. } | Self::Trojan { .. } => &[],
         }
     }
 
@@ -690,6 +711,16 @@ pub enum OutboundProtocolConfig {
         password: String,
         #[serde(default = "default_ss_cipher")]
         cipher: String,
+    },
+    #[serde(rename = "trojan")]
+    Trojan {
+        server: String,
+        port: u16,
+        password: String,
+        #[serde(default)]
+        sni: Option<String>,
+        #[serde(default)]
+        insecure: bool,
     },
 }
 

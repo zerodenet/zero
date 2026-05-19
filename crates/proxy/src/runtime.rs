@@ -310,6 +310,26 @@ impl Proxy {
                     })
                 }
             }
+            InboundProtocolConfig::Trojan { .. } => {
+                #[cfg(feature = "inbound-trojan")]
+                {
+                    let proxy = self.clone();
+                    let inbound = inbound.clone();
+                    let shutdown = shutdown_rx.clone();
+                    listeners
+                        .spawn(async move { proxy.run_trojan_listener(inbound, shutdown).await });
+                    Ok(())
+                }
+                #[cfg(not(feature = "inbound-trojan"))]
+                {
+                    Err(EngineError::CompiledFeatureDisabled {
+                        kind: "inbound",
+                        tag: inbound.tag.clone(),
+                        protocol: "trojan",
+                        feature: "inbound-trojan",
+                    })
+                }
+            }
         }
     }
 }

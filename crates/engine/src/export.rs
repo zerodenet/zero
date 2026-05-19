@@ -251,6 +251,12 @@ impl From<&OutboundConfig> for OutboundExport {
                 server: Some(server.clone()),
                 port: Some(*port),
             },
+            OutboundProtocolConfig::Trojan { server, port, .. } => Self {
+                tag: outbound.tag.clone(),
+                protocol: "trojan".to_owned(),
+                server: Some(server.clone()),
+                port: Some(*port),
+            },
         }
     }
 }
@@ -463,6 +469,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::Vless { .. } => "vless",
         InboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
         InboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
+        InboundProtocolConfig::Trojan { .. } => "trojan",
     }
 }
 
@@ -473,6 +480,7 @@ fn protocol_name(protocol: ProtocolType) -> &'static str {
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Shadowsocks => "shadowsocks",
+        ProtocolType::Trojan => "trojan",
         ProtocolType::Unknown => "unknown",
     }
 }

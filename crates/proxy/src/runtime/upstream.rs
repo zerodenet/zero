@@ -255,4 +255,60 @@ impl Proxy {
             feature: "outbound-shadowsocks",
         })
     }
+
+    #[cfg(feature = "outbound-trojan")]
+    pub(crate) async fn connect_via_trojan_upstream(
+        &self,
+        session: &Session,
+        server: &str,
+        port: u16,
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+    ) -> Result<TcpRelayStream, EngineError> {
+        let upstream = self
+            .protocols
+            .direct_outbound
+            .connect_host(server, port, &self.resolver)
+            .await?;
+        let tls_config = ClientTlsConfig {
+            server_name: sni.map(|s| s.to_owned()),
+            disable_sni: false,
+            ca_cert_path: None,
+            insecure,
+            alpn: vec![],
+        };
+        let tls_stream = zero_transport::tls::connect_tls_upstream(
+            upstream,
+            &tls_config,
+            self.config.source_dir(),
+            server,
+        )
+        .await?;
+        let mut metered = crate::transport::MeteredStream::new(TcpRelayStream::new(tls_stream));
+        self.protocols
+            .trojan_outbound
+            .send_request(&mut metered, session, password)
+            .await?;
+        self.record_session_outbound_traffic(session.id, metered.drain_traffic());
+        Ok(metered.into_inner())
+    }
+
+    #[cfg(not(feature = "outbound-trojan"))]
+    pub(crate) async fn connect_via_trojan_upstream(
+        &self,
+        _session: &Session,
+        _server: &str,
+        _port: u16,
+        _password: &str,
+        _sni: Option<&str>,
+        _insecure: bool,
+    ) -> Result<TcpRelayStream, EngineError> {
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "outbound",
+            tag: "trojan-upstream".to_owned(),
+            protocol: "trojan",
+            feature: "outbound-trojan",
+        })
+    }
 }

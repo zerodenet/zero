@@ -141,6 +141,7 @@ fn protocol_name(protocol: ProtocolType) -> &'static str {
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Shadowsocks => "shadowsocks",
+        ProtocolType::Trojan => "trojan",
         ProtocolType::Unknown => "unknown",
     }
 }

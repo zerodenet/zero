@@ -103,6 +103,19 @@ impl EnginePlan {
                     password: password.clone(),
                     cipher: cipher.clone(),
                 })),
+                OutboundProtocolConfig::Trojan {
+                    server,
+                    port,
+                    password,
+                    sni,
+                    insecure,
+                } => TargetKind::Outbound(Box::new(OutboundTarget::Trojan {
+                    server: server.clone(),
+                    port: *port,
+                    password: password.clone(),
+                    sni: sni.clone(),
+                    insecure: *insecure,
+                })),
             };
 
             targets.push(TargetNode {
@@ -267,6 +280,13 @@ pub enum OutboundTarget {
         port: u16,
         password: String,
         cipher: String,
+    },
+    Trojan {
+        server: String,
+        port: u16,
+        password: String,
+        sni: Option<String>,
+        insecure: bool,
     },
 }
 

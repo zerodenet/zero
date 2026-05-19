@@ -10,7 +10,7 @@ use rustls::{ClientConfig, RootCertStore};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
-use tokio_rustls::TlsAcceptor;
+pub use tokio_rustls::TlsAcceptor;
 use tokio_rustls::TlsConnector;
 use zero_config::ClientTlsConfig;
 use zero_config::TlsConfig;

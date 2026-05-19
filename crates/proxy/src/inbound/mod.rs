@@ -10,3 +10,5 @@ mod vless;
 mod hysteria2;
 #[cfg(feature = "inbound-shadowsocks")]
 mod shadowsocks;
+#[cfg(feature = "inbound-trojan")]
+mod trojan;

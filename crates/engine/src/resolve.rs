@@ -49,6 +49,14 @@ pub enum ResolvedLeafOutbound<'a> {
         password: &'a str,
         cipher: &'a str,
     },
+    Trojan {
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        password: &'a str,
+        sni: Option<&'a str>,
+        insecure: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -212,6 +220,20 @@ fn resolve_leaf_outbound<'a>(
             port: *port,
             password,
             cipher,
+        },
+        OutboundTarget::Trojan {
+            server,
+            port,
+            password,
+            sni,
+            insecure,
+        } => ResolvedLeafOutbound::Trojan {
+            tag,
+            server,
+            port: *port,
+            password,
+            sni: sni.as_deref(),
+            insecure: *insecure,
         },
     }
 }

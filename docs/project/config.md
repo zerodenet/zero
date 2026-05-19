@@ -12,7 +12,9 @@
   },
   "api": {
     "event_sinks": [],
-    "control": { "enabled": false }
+    "control": { "enabled": false },
+    "hooks": [],
+    "push": {}
   },
   "mode": { "type": "rule" },
   "route": {
@@ -124,6 +126,9 @@ POST /api/v1/selectors/{group}/{target}
 - `http`，兼容别名
 - `mixed`，同端口识别 `socks5` 和 `http-connect`
 - `vless`，当前支持 TCP/TLS/WS/WSS，Reality raw TCP 出站和入站第一阶段
+- `hysteria2`，支持 TCP 流和 UDP 数据报转发
+- `shadowsocks`，支持 AEAD cipher（chacha20-ietf-poly1305 等）
+- `trojan`，TLS + SHA224 密码认证，支持 TCP 流
 
 `mixed` 不是外部协议，而是“同端口多协议入站”的配置入口。
 
@@ -235,6 +240,74 @@ WebSocket 可以和 TLS 同时使用（WSS）：
 }
 ```
 
+### Hysteria2 入站
+
+Hysteria2 入站通过 QUIC 承载 TCP 流和 UDP 数据报。服务端需要证书：
+
+```json
+{
+  "tag": "hysteria2-in",
+  "listen": { "address": "0.0.0.0", "port": 443 },
+  "protocol": {
+    "type": "hysteria2",
+    "password": "your-secret-password",
+    "cert_path": "certs/fullchain.pem",
+    "key_path": "certs/privkey.pem"
+  }
+}
+```
+
+Hysteria2 配置字段说明：
+- `password`：必填，客户端认证密码
+- `cert_path`：可选，TLS 证书路径
+- `key_path`：可选，TLS 私钥路径
+
+### Shadowsocks 入站
+
+Shadowsocks 入站使用 AEAD cipher 进行加密传输：
+
+```json
+{
+  "tag": "ss-in",
+  "listen": { "address": "127.0.0.1", "port": 8388 },
+  "protocol": {
+    "type": "shadowsocks",
+    "password": "your-secret-password",
+    "cipher": "chacha20-ietf-poly1305"
+  }
+}
+```
+
+Shadowsocks 配置字段说明：
+- `password`：必填，加密密码
+- `cipher`：可选，加密算法，默认 `chacha20-ietf-poly1305`
+
+### Trojan 入站
+
+Trojan 入站需要 TLS，在 TLS 隧道内进行密码认证后转发目标地址：
+
+```json
+{
+  "tag": "trojan-in",
+  "listen": { "address": "0.0.0.0", "port": 443 },
+  "protocol": {
+    "type": "trojan",
+    "password": "your-secret-password",
+    "tls": {
+      "cert_path": "certs/fullchain.pem",
+      "key_path": "certs/privkey.pem"
+    }
+  }
+}
+```
+
+Trojan 入站配置字段说明：
+- `password`：必填，认证密码（SHA224 哈希后比对）
+- `sni`：可选，TLS SNI 值
+- `tls`：必填，TLS 证书配置
+  - `cert_path`：证书文件路径
+  - `key_path`：私钥文件路径
+
 ## 出站
 
 ```json
@@ -254,6 +327,9 @@ WebSocket 可以和 TLS 同时使用（WSS）：
 - `block`
 - `socks5`
 - `vless`
+- `hysteria2`
+- `shadowsocks`
+- `trojan`
 
 SOCKS5 出站默认 no-auth。连接需要认证的上游时配置 `username` 和 `password`：
 
@@ -379,6 +455,77 @@ WebSocket 可以和 TLS 同时使用（WSS）：
 WebSocket 配置字段说明：
 - `path`：WebSocket 握手路径，不能为空
 - `headers`：可选，自定义 HTTP 头，不能包含 `Host`、`Connection`、`Upgrade`、`Sec-WebSocket-*` 等握手必需头
+
+### Hysteria2 出站
+
+连接上游 Hysteria2 节点，通过 QUIC 承载 TCP 和 UDP：
+
+```json
+{
+  "tag": "hysteria2-chain",
+  "protocol": {
+    "type": "hysteria2",
+    "server": "example.com",
+    "port": 443,
+    "password": "your-secret-password",
+    "insecure": true
+  }
+}
+```
+
+Hysteria2 出站配置字段说明：
+- `server`：必填，上游服务器地址
+- `port`：必填，上游端口，必须大于 0
+- `password`：必填，认证密码
+- `insecure`：可选，跳过证书校验，默认 `false`
+
+### Shadowsocks 出站
+
+连接上游 Shadowsocks 节点：
+
+```json
+{
+  "tag": "ss-chain",
+  "protocol": {
+    "type": "shadowsocks",
+    "server": "example.com",
+    "port": 8388,
+    "password": "your-secret-password",
+    "cipher": "chacha20-ietf-poly1305"
+  }
+}
+```
+
+Shadowsocks 出站配置字段说明：
+- `server`：必填，上游服务器地址
+- `port`：必填，上游端口，必须大于 0
+- `password`：必填，加密密码
+- `cipher`：可选，加密算法，默认 `chacha20-ietf-poly1305`
+
+### Trojan 出站
+
+连接上游 Trojan 节点，通过 TLS 隧道进行密码认证后转发：
+
+```json
+{
+  "tag": "trojan-chain",
+  "protocol": {
+    "type": "trojan",
+    "server": "example.com",
+    "port": 443,
+    "password": "your-secret-password",
+    "sni": "example.com",
+    "insecure": false
+  }
+}
+```
+
+Trojan 出站配置字段说明：
+- `server`：必填，上游服务器地址
+- `port`：必填，上游端口，必须大于 0
+- `password`：必填，认证密码（SHA224 哈希后发送）
+- `sni`：可选，TLS SNI，默认使用 `server`
+- `insecure`：可选，跳过证书校验，默认 `false`
 
 UDP 当前只支持 `direct`、`block` 和上游 `socks5`，暂不支持上游 `vless`。
 
@@ -590,6 +737,9 @@ POST /selectors/proxy/direct
 - `rule-set` 条件引用的 `tag` 必须存在
 - `urltest.url` 当前必须是 `http://`
 - `urltest.interval_seconds` 必须大于 `0`
+- Hysteria2 入站的 `password` 不能为空；出站的 `server` 不能为空，`port` 必须大于 `0`
+- Shadowsocks 入站和出站的 `password` 不能为空
+- Trojan 入站必须配置 `tls` 且 `cert_path` 和 `key_path` 不能为空，`password` 不能为空；出站的 `server` 不能为空，`port` 必须大于 `0`，`password` 不能为空
 
 ## 示例
 
@@ -609,3 +759,6 @@ POST /selectors/proxy/direct
 - [vless-ws.json](../../examples/v0.0.2/vless-ws.json)
 - [chained-vless-tls.json](../../examples/v0.0.2/chained-vless-tls.json)
 - [chained-vless-reality.json](../../examples/v0.0.2/chained-vless-reality.json)
+- [hysteria2.json](../../examples/v0.1.0/hysteria2.json)
+- [shadowsocks.json](../../examples/v0.1.0/shadowsocks.json)
+- [trojan.json](../../examples/v0.1.0/trojan.json)

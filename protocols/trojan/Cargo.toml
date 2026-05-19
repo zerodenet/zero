@@ -1,0 +1,18 @@
+[package]
+name = "zero-protocol-trojan"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = []
+crypto = ["dep:ring", "dep:sha2"]
+
+[dependencies]
+ring = { version = "0.17", optional = true }
+sha2 = { version = "0.10", optional = true }
+zero-core = { path = "../../crates/core" }
+zero-traits = { path = "../../crates/traits" }

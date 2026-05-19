@@ -551,6 +551,7 @@ impl Proxy {
                                         EstablishedTcpOutbound::Socks5 { upstream, .. } => upstream,
                                         EstablishedTcpOutbound::Hysteria2 { upstream, .. } => upstream,
                                         EstablishedTcpOutbound::Shadowsocks { upstream, .. } => upstream,
+                                        EstablishedTcpOutbound::Trojan { upstream, .. } => upstream,
                                         EstablishedTcpOutbound::Relay { upstream } => upstream,
                                         EstablishedTcpOutbound::Block { .. } => {
                                             let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);

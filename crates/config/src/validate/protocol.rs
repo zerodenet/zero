@@ -93,6 +93,10 @@ pub(super) fn validate_inbound_protocol(
             validate_inbound_optional_non_empty("shadowsocks password", password)?;
             Ok(())
         }
+        InboundProtocolConfig::Trojan { password, sni: _, tls: _ } => {
+            validate_inbound_optional_non_empty("trojan password", password)?;
+            Ok(())
+        }
     }
 }
 
@@ -188,6 +192,16 @@ pub(super) fn validate_outbound_protocol(
             cipher: _,
         } => {
             validate_outbound_endpoint("shadowsocks", server, *port)?;
+            Ok(())
+        }
+        OutboundProtocolConfig::Trojan {
+            server,
+            port,
+            password: _,
+            sni: _,
+            insecure: _,
+        } => {
+            validate_outbound_endpoint("trojan", server, *port)?;
             Ok(())
         }
         OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => Ok(()),
