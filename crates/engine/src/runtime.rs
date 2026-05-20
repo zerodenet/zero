@@ -26,9 +26,10 @@ use super::view::PlanView;
 
 #[derive(Debug, Clone)]
 pub struct Engine {
-    pub(crate) config: Arc<RuntimeConfig>,
+    pub(crate) config: Arc<std::sync::RwLock<Arc<RuntimeConfig>>>,
     pub(crate) plan: Arc<std::sync::Mutex<Arc<EnginePlan>>>,
     pub(crate) router: Arc<std::sync::Mutex<Arc<RuleSet>>>,
+    mode: Arc<std::sync::Mutex<ModeConfig>>,
     next_session_id: Arc<AtomicU64>,
     session_registry: Arc<SessionRegistry>,
     completed_sessions: Arc<CompletedSessionHistory>,
@@ -111,8 +112,10 @@ impl Engine {
         info!(version = env!("CARGO_PKG_VERSION"), "engine started");
         event_log.push_engine_started(env!("CARGO_PKG_VERSION"));
 
+        let mode = Arc::new(std::sync::Mutex::new(config.mode.clone()));
         Ok(Self {
-            config: Arc::new(config),
+            config: Arc::new(std::sync::RwLock::new(Arc::new(config))),
+            mode,
             plan,
             router,
             next_session_id: Arc::new(AtomicU64::new(1)),
@@ -132,8 +135,8 @@ impl Engine {
         Self::new(config)
     }
 
-    pub fn config(&self) -> &RuntimeConfig {
-        self.config.as_ref()
+    pub fn config(&self) -> Arc<RuntimeConfig> {
+        self.config.read().expect("config lock poisoned").clone()
     }
 
     pub fn plan(&self) -> Arc<EnginePlan> {
@@ -164,17 +167,30 @@ impl Engine {
     }
 
     pub fn mode_kind(&self) -> &'static str {
-        self.config.mode.kind()
+        self.mode.lock().expect("mode lock poisoned").kind()
+    }
+
+    pub fn current_mode(&self) -> ModeConfig {
+        self.mode.lock().expect("mode lock poisoned").clone()
+    }
+
+    /// Atomically switch the global proxy mode at runtime.
+    pub fn set_mode(&self, new_mode: ModeConfig) {
+        let mut mode = self.mode.lock().expect("mode lock poisoned");
+        *mode = new_mode.clone();
+        self.event_log.push_config_changed();
+        info!(mode = new_mode.kind(), "proxy mode switched");
     }
 
     pub fn route_for(&self, address: &Address) -> RouteAction {
-        self.route_decision(address).to_owned()
+        self.route_decision(address, None).to_owned()
     }
 
-    pub fn route_decision(&self, address: &Address) -> RouteDecision {
-        match &self.config.mode {
+    pub fn route_decision(&self, address: &Address, sni: Option<&str>) -> RouteDecision {
+        let mode = self.mode.lock().expect("mode lock poisoned").clone();
+        match &mode {
             ModeConfig::Rule => {
-                let action = self.router.lock().expect("router lock poisoned").decide(address);
+                let action = self.router.lock().expect("router lock poisoned").decide(address, sni);
                 match action {
                     RouteAction::Route(tag) => RouteDecision::Route(tag),
                     RouteAction::Direct => RouteDecision::Direct,
@@ -298,19 +314,26 @@ impl Engine {
     /// swapped atomically.  Active connections keep using the old plan
     /// via their held `Arc<EnginePlan>`.  A `config.changed` event is
     /// emitted.
-    pub fn reload_config(&self, new_config: &RuntimeConfig) -> Result<(), EngineError> {
+    pub fn reload_config(&self, new_config: RuntimeConfig) -> Result<(), EngineError> {
         let new_router = Arc::new(new_config.route.compile(new_config.source_dir())?);
-        let new_plan = Arc::new(EnginePlan::build(new_config)?);
+        let new_plan = Arc::new(EnginePlan::build(&new_config)?);
 
-        // Atomically swap router.
+        // Atomically swap router, plan, mode, and config.
         {
             let mut guard = self.router.lock().expect("router lock poisoned");
             *guard = new_router;
         }
-        // Atomically swap plan.
         {
             let mut guard = self.plan.lock().expect("plan lock poisoned");
             *guard = new_plan;
+        }
+        {
+            let mut guard = self.mode.lock().expect("mode lock poisoned");
+            *guard = new_config.mode.clone();
+        }
+        {
+            let mut guard = self.config.write().expect("config lock poisoned");
+            *guard = Arc::new(new_config);
         }
 
         self.event_log.push_config_changed();
@@ -419,7 +442,7 @@ impl Engine {
         if let Some(ref hook) = self.flow_hook {
             let ctx = super::hook::FlowContext::from_session(
                 session,
-                self.config.mode.kind(),
+                self.mode.lock().expect("mode lock poisoned").kind(),
                 now_ms,
             );
             if let Err(reason) = hook.on_flow_start(&ctx) {
@@ -437,9 +460,9 @@ impl Engine {
         }
 
         self.session_registry
-            .insert(session, self.config.mode.kind());
+            .insert(session, self.mode.lock().expect("mode lock poisoned").kind());
         self.stats.record_start();
-        self.event_log.push_flow_started(session, self.config.mode.kind());
+        self.event_log.push_flow_started(session, self.mode.lock().expect("mode lock poisoned").kind());
     }
 
     pub fn set_session_outbound(&self, session: &Session) {
@@ -588,7 +611,7 @@ impl Engine {
             return Some("block");
         }
 
-        self.config
+        self.config()
             .outbounds
             .iter()
             .find(|outbound| outbound.tag == tag)

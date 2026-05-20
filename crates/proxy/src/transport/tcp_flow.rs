@@ -38,13 +38,14 @@ impl Proxy {
     where
         S: ClientStream,
     {
-        self.prepare_session(&mut session, inbound_tag);
+        let source_addr = client.peer_addr().ok();
+        self.prepare_session(&mut session, inbound_tag, source_addr);
         let mut session_handle = self.track_session(session.id);
         let started_at = Instant::now();
         self.record_session_inbound_traffic(session.id, client.drain_traffic());
 
         self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session.target);
+                let action = self.route_decision(&session);
         let resolved = match self.resolve_outbound(&action) {
             Ok(resolved) => resolved,
             Err(error) => {

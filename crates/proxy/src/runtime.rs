@@ -44,11 +44,12 @@ impl Proxy {
 
     pub fn from_engine(engine: Engine) -> Result<Self, EngineError> {
         let protocols = ProtocolInventory::default();
-        protocols.validate_config(engine.config())?;
-        let dns = DnsSystem::build(engine.config().runtime.dns.as_ref())
+        let config = engine.config();
+        protocols.validate_config(&config)?;
+        let dns = DnsSystem::build(config.runtime.dns.as_ref())
             .map_err(EngineError::Io)?;
         Ok(Self {
-            config: Arc::new(engine.config().clone()),
+            config,
             engine,
             resolver: Arc::new(dns),
             protocols,

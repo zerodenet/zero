@@ -9,7 +9,7 @@ fn routes_domain_suffix_to_reject() {
     }];
     let ruleset = RuleSet::new(rules, RouteAction::Direct);
 
-    let action = ruleset.decide(&Address::Domain("api.blocked.example".to_owned()));
+    let action = ruleset.decide(&Address::Domain("api.blocked.example".to_owned()), None);
 
     assert_eq!(action, RouteAction::Reject);
 }
@@ -22,7 +22,7 @@ fn borrowed_decision_reuses_ruleset_action() {
     }];
     let ruleset = RuleSet::new(rules, RouteAction::Direct);
 
-    let action = ruleset.decide_ref(&Address::Domain("api.blocked.example".to_owned()));
+    let action = ruleset.decide_ref(&Address::Domain("api.blocked.example".to_owned()), None);
 
     assert_eq!(action, &RouteAction::Reject);
 }

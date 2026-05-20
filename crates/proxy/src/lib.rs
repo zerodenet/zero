@@ -13,6 +13,7 @@ mod inbound;
 mod inventory;
 mod logging;
 mod outbound;
+mod process_lookup;
 mod protocol_adapter;
 mod runtime;
 mod transport;

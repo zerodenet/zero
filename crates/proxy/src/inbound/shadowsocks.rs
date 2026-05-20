@@ -188,9 +188,9 @@ impl Proxy {
 
                         // Route decision
                         let mut session = Session::new(0, target.clone(), port, Network::Udp, ProtocolType::Shadowsocks);
-                        self.prepare_session(&mut session, inbound_tag);
+                        self.prepare_session(&mut session, inbound_tag, None);
                         self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session.target);
+                let action = self.route_decision(&session);
                         let Ok((resolved, _plan)) = self.resolve_outbound(&action) else { continue };
 
                         // Check if resolved to SS chain outbound
@@ -351,9 +351,9 @@ impl Proxy {
         self.record_session_inbound_traffic(session.id, metered.drain_traffic());
 
         // Route
-        self.prepare_session(&mut session, inbound_tag);
+        self.prepare_session(&mut session, inbound_tag, None);
         self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session.target);
+                let action = self.route_decision(&session);
         let Ok(resolved) = self.resolve_outbound(&action) else {
             return Ok(());
         };

@@ -81,7 +81,7 @@ impl Proxy {
             Network::Udp,
             ProtocolType::Socks5,
         );
-        self.prepare_session(&mut session, context.inbound_tag);
+        self.prepare_session(&mut session, context.inbound_tag, None);
         let mut session_handle = self.track_session(session.id);
         let started_at = Instant::now();
         self.record_session_inbound_traffic(session.id, *context.pending_control_traffic);
@@ -89,7 +89,7 @@ impl Proxy {
         self.record_session_inbound_rx(session.id, packet.len() as u64);
 
         self.resolve_fake_ip_target(&mut session).await;
-        let action = self.route_decision(&session.target);
+        let action = self.route_decision(&session);
         let resolved = match self.resolve_outbound(&action) {
             Ok((resolved, _plan)) => resolved,
             Err(error) => {

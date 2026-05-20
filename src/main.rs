@@ -21,7 +21,7 @@ async fn main() {
     // from `runtime.log` before any other work so all logs are captured.
     let args: Vec<String> = env::args().collect();
     let config_path = cli::config_path_from_args(&args);
-    init_tracing_from_config(&config_path);
+    init_tracing_from_config(config_path.as_deref().unwrap_or(""));
 
     if let Err(error) = try_main().await {
         error_report::print_error(error.as_ref());
@@ -60,6 +60,35 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
             config_path,
             socket_path,
         } => reload_command(&config_path, socket_path.as_deref())?,
+        cli::Command::Mode { mode, outbound, socket_path } => {
+            let socket = resolve_socket(socket_path.as_deref())?;
+            let request = crate::ipc::protocol::IpcRequest::Command {
+                method: "mode.set".to_owned(),
+                params: serde_json::json!({
+                    "mode": mode,
+                    "outbound": outbound,
+                }),
+            };
+            match ipc::client::send_request(&socket, &request) {
+                Ok(resp) => {
+                    if resp.ok {
+                        let what = if let Some(ref o) = outbound {
+                            format!("global → {o}")
+                        } else {
+                            mode.clone()
+                        };
+                        println!("mode switched to {what}");
+                    } else {
+                        let msg = resp.error.map(|e| e.message).unwrap_or_default();
+                        eprintln!("error: {msg}");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    process::exit(1);
+                }
+            }
+        }
         cli::Command::Validate { config_path } => {
             match zero_config::RuntimeConfig::load_from_path(&config_path) {
                 Ok(config) => {
@@ -469,7 +498,9 @@ fn status_command(
     }
 
     // Fallback: offline mode, read config directly.
-    let path = config_path.unwrap_or(cli::DEFAULT_CONFIG_PATH);
+    let path = config_path.ok_or_else(|| {
+        std::io::Error::other("no config path provided and no socket available")
+    })?;
     let proxy = Proxy::from_path(path)?;
     let status = proxy.export_status();
 
@@ -610,7 +641,7 @@ fn reload_command(
     };
     let response = ipc::client::send_request(&socket, &request)?;
     if response.ok {
-        println!("config applied: route rules hot-reloaded");
+        println!("config applied");
     } else {
         let msg = response
             .error

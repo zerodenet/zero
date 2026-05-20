@@ -71,9 +71,12 @@ impl<S> ClientStream for MeteredStream<S>
 where
     S: ClientStream,
 {
-    #[cfg(feature = "inbound-socks5")]
     fn local_addr(&self) -> std::io::Result<std::net::SocketAddr> {
         self.inner.local_addr()
+    }
+
+    fn peer_addr(&self) -> std::io::Result<std::net::SocketAddr> {
+        self.inner.peer_addr()
     }
 }
 

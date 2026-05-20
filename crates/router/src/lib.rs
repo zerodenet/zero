@@ -10,6 +10,7 @@ pub enum RuleCondition {
     DomainKeyword(Vec<String>),
     Ip(Vec<IpNet>),
     GeoIp(Vec<String>),
+    Sni(Vec<String>),
     And(Vec<RuleCondition>),
     Or(Vec<RuleCondition>),
 }
@@ -65,22 +66,23 @@ impl RuleSet {
         }
     }
 
-    pub fn decide_ref(&self, address: &Address) -> &RouteAction {
+    pub fn decide_ref(&self, address: &Address, sni: Option<&str>) -> &RouteAction {
         self.rules
             .iter()
-            .find(|rule| condition_matches(&rule.condition, address, self.geoip_db.as_deref()))
+            .find(|rule| condition_matches(&rule.condition, address, sni, self.geoip_db.as_deref()))
             .map(|rule| &rule.action)
             .unwrap_or(&self.final_action)
     }
 
-    pub fn decide(&self, address: &Address) -> RouteAction {
-        self.decide_ref(address).clone()
+    pub fn decide(&self, address: &Address, sni: Option<&str>) -> RouteAction {
+        self.decide_ref(address, sni).clone()
     }
 }
 
 fn condition_matches(
     condition: &RuleCondition,
     address: &Address,
+    sni: Option<&str>,
     geoip_db: Option<&maxminddb::Reader<Vec<u8>>>,
 ) -> bool {
     match condition {
@@ -114,12 +116,18 @@ fn condition_matches(
             }
             _ => false,
         },
+        RuleCondition::Sni(patterns) => match sni {
+            Some(sni) => patterns
+                .iter()
+                .any(|pattern| domain_matches(pattern, sni)),
+            None => false,
+        },
         RuleCondition::And(conditions) => conditions
             .iter()
-            .all(|c| condition_matches(c, address, geoip_db)),
+            .all(|c| condition_matches(c, address, sni, geoip_db)),
         RuleCondition::Or(conditions) => conditions
             .iter()
-            .any(|c| condition_matches(c, address, geoip_db)),
+            .any(|c| condition_matches(c, address, sni, geoip_db)),
     }
 }
 

@@ -7,7 +7,7 @@ use zero_api::{
     PolicyGetQuery, QueryRequest, QueryResponse, QueryService, RawApiEvent, SinkCapability,
     Snapshot,
 };
-use zero_config::RuntimeConfig;
+use zero_config::{ModeConfig, RuntimeConfig};
 
 use super::completed_sessions::CompletedSessionRecord;
 use super::error::EngineError;
@@ -149,6 +149,29 @@ fn execute_engine_command(
             ApiErrorCode::Unsupported,
             "`diagnostics.probe_target` is not implemented yet",
         )),
+        CommandRequest::ModeSet(cmd) => {
+            let mode = match cmd.mode.as_str() {
+                "rule" => ModeConfig::Rule,
+                "direct" => ModeConfig::Direct,
+                "global" => {
+                    let outbound = cmd.outbound.ok_or_else(|| {
+                        ApiError::new(
+                            ApiErrorCode::InvalidArgument,
+                            "mode `global` requires `outbound` field",
+                        )
+                    })?;
+                    ModeConfig::Global { outbound }
+                }
+                other => {
+                    return Err(ApiError::new(
+                        ApiErrorCode::InvalidArgument,
+                        format!("unknown mode `{other}`; expected `rule`, `direct`, or `global`"),
+                    ));
+                }
+            };
+            engine.set_mode(mode);
+            Ok(CommandResponse::accepted())
+        }
     }
 }
 
@@ -159,12 +182,12 @@ fn apply_config_command(
     let raw = serde_json::to_string(&command.config).map_err(to_internal_error)?;
     let new_config = RuntimeConfig::parse(&raw).map_err(config_error_to_api)?;
     engine
-        .reload_config(&new_config)
+        .reload_config(new_config)
         .map_err(engine_error_to_api)?;
 
     Ok(CommandResponse {
         accepted: true,
-        result: Some(json!({ "applied": true, "scope": "routes" })),
+        result: Some(json!({ "applied": true })),
     })
 }
 

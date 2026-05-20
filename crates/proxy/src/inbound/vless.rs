@@ -137,36 +137,27 @@ impl Proxy {
                     connections.spawn(async move {
                         let result = match (tls_acceptor, reality_config) {
                             (Some(acceptor), None) => {
-                                // Only peek ClientHello when ALPN fallback is configured
-                                let needs_peek = fallback_config.as_ref()
-                                    .and_then(|fb| fb.alpn.as_ref())
-                                    .is_some();
+                                // Always peek ClientHello to extract SNI for routing.
+                                // Also used for ALPN-based fallback when configured.
+                                let mut raw = stream.into_inner();
+                                let hello = match crate::transport::tls_hello::peek_client_hello(
+                                    &mut raw,
+                                ).await {
+                                    Ok(h) => Some(h),
+                                    Err(_) => None,
+                                };
 
-                                if needs_peek {
-                                    let mut raw = stream.into_inner();
-                                    let hello = match crate::transport::tls_hello::peek_client_hello(
-                                        &mut raw,
-                                    ).await {
-                                        Ok(h) => h,
-                                        Err(_) => {
-                                            // Not valid TLS — fall through to direct accept
-                                            return match acceptor.accept(raw).await {
-                                                Ok(tls_stream) => engine.handle_vless_stream(
-                                                    InboundTlsStream::new(tls_stream),
-                                                    inbound_tag.as_str(), &vless_users,
-                                                    ws_config.as_ref(), grpc_config.as_ref(),
-                                                    h2_config.as_ref(),
-                                                    split_http_config.as_ref(), split_http_registry.as_ref(), http_upgrade_config.as_ref(), fallback_config.as_ref(),
-                                                ).await,
-                                                Err(error) => Err(error.into()),
-                                            };
-                                        }
-                                    };
+                                if let Some(hello) = hello {
+                                    // Check ALPN fallback match
+                                    let alpn_match = fallback_config.as_ref()
+                                        .and_then(|fb| fb.alpn.as_ref().zip(Some(fb)))
+                                        .and_then(|(expected, fb)| {
+                                            hello.alpn.iter()
+                                                .find(|a| *a == expected)
+                                                .map(|_| fb)
+                                        });
 
-                                    // Check ALPN match
-                                    let fb = fallback_config.as_ref().unwrap();
-                                    let expected_alpn = fb.alpn.as_ref().unwrap();
-                                    if hello.alpn.iter().any(|a| a == expected_alpn) {
+                                    if let Some(fb) = alpn_match {
                                         let mut upstream = engine.protocols.direct_outbound
                                             .connect_host(&fb.server, fb.port, &engine.resolver)
                                             .await?;
@@ -178,7 +169,9 @@ impl Proxy {
                                         ).await;
                                     }
 
-                                    // ALPN didn't match — continue with TLS accept, replay bytes
+                                    // Continue with TLS accept, replay bytes.
+                                    // Pass SNI to the protocol handler for routing.
+                                    let sni = hello.sni;
                                     let prefixed = PrefixedSocket::from_prefix(
                                         TokioSocket::new(raw), hello.consumed,
                                     );
@@ -189,18 +182,20 @@ impl Proxy {
                                             ws_config.as_ref(), grpc_config.as_ref(),
                                             h2_config.as_ref(),
                                             split_http_config.as_ref(), split_http_registry.as_ref(), http_upgrade_config.as_ref(), fallback_config.as_ref(),
+                                            sni,
                                         ).await,
                                         Err(error) => Err(error.into()),
                                     }
                                 } else {
-                                    // No ALPN fallback — direct TLS accept
-                                    match acceptor.accept(stream.into_inner()).await {
+                                    // Not valid TLS — direct TLS accept without peek
+                                    match acceptor.accept(raw).await {
                                         Ok(tls_stream) => engine.handle_vless_stream(
                                             InboundTlsStream::new(tls_stream),
                                             inbound_tag.as_str(), &vless_users,
                                             ws_config.as_ref(), grpc_config.as_ref(),
                                             h2_config.as_ref(),
                                             split_http_config.as_ref(), split_http_registry.as_ref(), http_upgrade_config.as_ref(), fallback_config.as_ref(),
+                                            None,
                                         ).await,
                                         Err(error) => Err(error.into()),
                                     }
@@ -221,6 +216,7 @@ impl Proxy {
                                             split_http_registry.as_ref(),
                                             http_upgrade_config.as_ref(),
                                             fallback_config.as_ref(),
+                                            None,
                                             )
                                             .await
                                     }
@@ -240,6 +236,7 @@ impl Proxy {
                                         split_http_registry.as_ref(),
                                         http_upgrade_config.as_ref(),
                                         fallback_config.as_ref(),
+                                        None,
                                     )
                                     .await
                             }
@@ -322,6 +319,7 @@ impl Proxy {
                                         quic_stream,
                                         inbound_tag.as_str(),
                                         &vless_users, fallback_config.as_ref(),
+                                        None,
                                     )
                                     .await;
 
@@ -383,6 +381,7 @@ impl Proxy {
         split_http_registry: Option<&crate::transport::SplitHttpRegistry>,
         http_upgrade_config: Option<&zero_config::HttpUpgradeConfig>,
         fallback: Option<&zero_config::FallbackConfig>,
+        sni: Option<String>,
     ) -> Result<(), EngineError>
     where
         S: ClientStream + 'static,
@@ -390,19 +389,19 @@ impl Proxy {
         if let (Some(cfg), Some(reg)) = (split_http_config, split_http_registry) {
             match crate::transport::accept_split_http(stream, cfg, reg).await? {
                 Some(split_stream) => {
-                    return self.handle_vless_client(split_stream, inbound_tag, users, fallback).await;
+                    return self.handle_vless_client(split_stream, inbound_tag, users, fallback, sni).await;
                 }
                 None => return Ok(()), // consumed by partner connection
             }
         }
         if let Some(cfg) = http_upgrade_config {
             let upg_stream = crate::transport::accept_http_upgrade(stream, cfg).await?;
-            return self.handle_vless_client(upg_stream, inbound_tag, users, fallback).await;
+            return self.handle_vless_client(upg_stream, inbound_tag, users, fallback, sni).await;
         }
         match (ws_config, grpc_config, h2_config) {
             (Some(ws), None, None) => {
                 let ws_stream = accept_ws(stream, &ws.path).await?;
-                self.handle_vless_client(ws_stream, inbound_tag, users, fallback)
+                self.handle_vless_client(ws_stream, inbound_tag, users, fallback, sni)
                     .await
             }
             (None, Some(grpc), None) => {
@@ -421,7 +420,7 @@ impl Proxy {
                         let fb = fb_clone.clone();
                         async move {
                             engine
-                                .handle_vless_client(grpc_stream, &tag, &users, fb.as_ref())
+                                .handle_vless_client(grpc_stream, &tag, &users, fb.as_ref(), None)
                                 .await
                         }
                     },
@@ -430,10 +429,10 @@ impl Proxy {
             }
             (None, None, Some(h2)) => {
                 let h2_stream = crate::transport::accept_h2(stream, h2).await?;
-                self.handle_vless_client(h2_stream, inbound_tag, users, fallback)
+                self.handle_vless_client(h2_stream, inbound_tag, users, fallback, sni)
                     .await
             }
-            (None, None, None) => self.handle_vless_client(stream, inbound_tag, users, fallback).await,
+            (None, None, None) => self.handle_vless_client(stream, inbound_tag, users, fallback, sni).await,
             _ => Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "vless inbound: ws, grpc, and h2 are mutually exclusive",
@@ -447,6 +446,7 @@ impl Proxy {
         inbound_tag: &str,
         users: &[VlessUserConfig],
         fallback: Option<&zero_config::FallbackConfig>,
+        sni: Option<String>,
     ) -> Result<(), EngineError>
     where
         S: ClientStream,
@@ -459,7 +459,7 @@ impl Proxy {
             .accept_tcp_with_auth_and_id(&mut metered, &auth)
             .await;
 
-        let (session, uuid) = match result {
+        let (mut session, uuid) = match result {
             Ok(x) => x,
             Err(auth_error) => {
                 if let Some(fb) = fallback {
@@ -472,6 +472,8 @@ impl Proxy {
 
         let (inner_stream, _head) = metered.into_inner().into_parts();
         let client = MeteredStream::new(inner_stream);
+
+        session.sni = sni;
 
         if zero_protocol_vless::VlessInbound::is_mux_session(&session) {
             self.handle_vless_mux_session(client, inbound_tag, uuid)
@@ -541,9 +543,9 @@ impl Proxy {
                                     0, target, port, zero_core::Network::Tcp,
                                     zero_core::ProtocolType::Vless,
                                 );
-                                self.prepare_session(&mut session, inbound_tag);
+                                self.prepare_session(&mut session, inbound_tag, None);
                                 self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session.target);
+                let action = self.route_decision(&session);
                                 let Ok(resolved) = self.resolve_outbound(&action) else {
                                     let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
                                     let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
@@ -870,12 +872,12 @@ impl Proxy {
             zero_core::Network::Udp,
             zero_core::ProtocolType::Vless,
         );
-        self.prepare_session(&mut session, inbound_tag);
+        self.prepare_session(&mut session, inbound_tag, None);
         let mut session_handle = self.track_session(session.id);
         self.record_session_inbound_rx(session.id, packet.len() as u64);
 
         self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session.target);
+                let action = self.route_decision(&session);
         let (resolved, _plan) = self.resolve_outbound(&action)?;
         crate::logging::log_session_accepted(&session, &action, self.config.mode.kind());
 

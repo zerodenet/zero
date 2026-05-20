@@ -46,6 +46,16 @@ pub struct Session {
     pub network: Network,
     pub protocol: ProtocolType,
     pub auth: Option<SessionAuth>,
+    /// TLS Server Name Indication from ClientHello, if peeked.
+    pub sni: Option<String>,
+    /// Client's source IP, if available from the inbound listener.
+    pub source_ip: Option<Address>,
+    /// Client's source port, if available.
+    pub source_port: Option<u16>,
+    /// Local process ID that initiated this connection (Linux only).
+    pub process_id: Option<u32>,
+    /// Local process name (Linux only).
+    pub process_name: Option<String>,
 }
 
 impl Session {
@@ -65,6 +75,11 @@ impl Session {
             network,
             protocol,
             auth: None,
+            sni: None,
+            source_ip: None,
+            source_port: None,
+            process_id: None,
+            process_name: None,
         }
     }
 }

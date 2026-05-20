@@ -334,6 +334,11 @@ fn parse_command(method: &str, params: &serde_json::Value) -> Result<CommandRequ
                 config: params.clone(),
             },
         )),
+        "mode.set" => Ok(CommandRequest::ModeSet(
+            serde_json::from_value(params.clone()).map_err(|e| {
+                IpcResponse::error("invalid_argument", &e.to_string())
+            })?,
+        )),
         _ => Err(IpcResponse::error(
             "unsupported",
             format!("unknown command method: {method}"),

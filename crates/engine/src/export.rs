@@ -146,25 +146,13 @@ pub struct SessionAuthExport {
 
 impl Engine {
     pub fn export_config(&self) -> EngineConfigExport {
+        let config = self.config();
         EngineConfigExport {
-            mode: ModeExport::from(&self.config.mode),
-            rule_count: self.config.route.rules.len(),
-            inbounds: self
-                .config
-                .inbounds
-                .iter()
-                .map(InboundExport::from)
-                .collect(),
-            outbounds: self
-                .config
-                .outbounds
-                .iter()
-                .map(OutboundExport::from)
-                .collect(),
-            outbound_groups: self
-                .config
-                .outbound_groups
-                .iter()
+            mode: ModeExport::from(&config.mode),
+            rule_count: config.route.rules.len(),
+            inbounds: config.inbounds.iter().map(InboundExport::from).collect(),
+            outbounds: config.outbounds.iter().map(OutboundExport::from).collect(),
+            outbound_groups: config.outbound_groups.iter()
                 .map(|group| {
                     let plan = self.plan();
                     let group_id = plan

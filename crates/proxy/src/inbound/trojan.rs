@@ -88,10 +88,10 @@ impl Proxy {
         let mut sock = TlsStream(tls);
         let accept = TrojanInbound.accept(&mut sock, &[password.to_owned()]).await?;
         let mut session: Session = accept.session;
-        self.prepare_session(&mut session, tag);
+        self.prepare_session(&mut session, tag, None);
         // Route + outbound + relay.
         self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session.target);
+                let action = self.route_decision(&session);
         let (resolved, _plan) = self.resolve_outbound(&action)?;
         let outbound = self.establish_tcp_outbound(&session, (resolved, _plan)).await
             .map_err(|f| EngineError::Io(io::Error::new(io::ErrorKind::Other, f.error)))?;

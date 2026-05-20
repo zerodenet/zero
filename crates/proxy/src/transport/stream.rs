@@ -40,6 +40,10 @@ impl ClientStream for PrefixedSocket {
     fn local_addr(&self) -> io::Result<SocketAddr> {
         self.inner.local_addr()
     }
+
+    fn peer_addr(&self) -> io::Result<std::net::SocketAddr> {
+        self.inner.peer_addr()
+    }
 }
 
 

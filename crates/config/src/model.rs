@@ -902,6 +902,8 @@ pub enum RuleConditionConfig {
     RuleSet { tag: String },
     #[serde(rename = "geoip")]
     GeoIp { values: Vec<String> },
+    #[serde(rename = "sni")]
+    Sni { values: Vec<String> },
     #[serde(rename = "and")]
     And { items: Vec<RuleConditionConfig> },
     #[serde(rename = "or")]

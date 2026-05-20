@@ -123,6 +123,14 @@ impl RuleConditionConfig {
                 }
                 Ok(())
             }
+            Self::Sni { values } => {
+                if values.is_empty() {
+                    return Err(ConfigError::InvalidRuleCondition(
+                        "`sni` condition requires at least one domain pattern".to_owned(),
+                    ));
+                }
+                Ok(())
+            }
             Self::And { items } => validate_nested_condition("and", items, rule_set_tags),
             Self::Or { items } => validate_nested_condition("or", items, rule_set_tags),
         }

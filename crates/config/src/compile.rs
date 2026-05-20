@@ -95,6 +95,10 @@ impl RuleConditionConfig {
                 }
                 Ok(RuleCondition::GeoIp(values.clone()))
             }
+            Self::Sni { values } => {
+                validate_domain_values(values)?;
+                Ok(RuleCondition::Sni(values.clone()))
+            }
             Self::And { items } => {
                 compile_nested_condition("and", items, compiled_rule_sets, RuleCondition::And)
             }

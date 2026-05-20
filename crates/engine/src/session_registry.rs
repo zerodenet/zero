@@ -123,6 +123,8 @@ struct ActiveSessionEntry {
     outbound_rx_bytes: AtomicU64,
     outbound_tx_bytes: AtomicU64,
     throughput_sampler: TrafficSampler,
+    process_id: Option<u32>,
+    process_name: Option<String>,
 }
 
 impl ActiveSessionEntry {
@@ -149,6 +151,8 @@ impl ActiveSessionEntry {
             outbound_rx_bytes: AtomicU64::new(0),
             outbound_tx_bytes: AtomicU64::new(0),
             throughput_sampler: TrafficSampler::new(started_at_unix_ms),
+            process_id: session.process_id,
+            process_name: session.process_name.clone(),
         }
     }
 
@@ -241,8 +245,8 @@ impl ActiveSessionEntry {
             outbound_tx_bytes: self.outbound_tx_bytes.load(Ordering::Relaxed),
             throughput_up_bps: throughput.up_bps,
             throughput_down_bps: throughput.down_bps,
-            process_id: None,
-            process_name: None,
+            process_id: self.process_id,
+            process_name: self.process_name.clone(),
         }
     }
 
@@ -276,8 +280,8 @@ impl ActiveSessionEntry {
             inbound_tx_bytes: self.inbound_tx_bytes.load(Ordering::Relaxed),
             outbound_rx_bytes: self.outbound_rx_bytes.load(Ordering::Relaxed),
             outbound_tx_bytes: self.outbound_tx_bytes.load(Ordering::Relaxed),
-            process_id: None,
-            process_name: None,
+            process_id: self.process_id,
+            process_name: self.process_name.clone(),
             outcome,
         }
     }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use zero_core::Session;
+use zero_core::{Address, Session};
 use zero_engine::{
     EngineError, EnginePlan, ResolvedOutbound, RouteDecision, SessionHandle, TargetId,
     UrlTestMemberState,
@@ -10,8 +10,8 @@ use crate::runtime::Proxy;
 use crate::transport::StreamTraffic;
 
 impl Proxy {
-    pub(crate) fn route_decision(&self, address: &zero_core::Address) -> RouteDecision {
-        self.engine.route_decision(address)
+    pub(crate) fn route_decision(&self, session: &zero_core::Session) -> RouteDecision {
+        self.engine.route_decision(&session.target, session.sni.as_deref())
     }
 
     pub(crate) fn resolve_outbound(
@@ -51,8 +51,28 @@ impl Proxy {
             .update_urltest_state(group_id, selected, latency_ms, members);
     }
 
-    pub(crate) fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {
+    pub(crate) fn prepare_session(
+        &self,
+        session: &mut Session,
+        inbound_tag: &str,
+        source_addr: Option<std::net::SocketAddr>,
+    ) {
+        if let Some(addr) = source_addr {
+            session.source_ip = Some(match addr.ip() {
+                std::net::IpAddr::V4(v4) => Address::Ipv4(v4.octets()),
+                std::net::IpAddr::V6(v6) => Address::Ipv6(v6.octets()),
+            });
+            session.source_port = Some(addr.port());
+        }
         self.engine.prepare_session(session, inbound_tag);
+
+        // Resolve local process identity from the client's source address.
+        if let Some(addr) = source_addr {
+            if let Some(info) = crate::process_lookup::lookup_process(addr) {
+                session.process_id = Some(info.pid);
+                session.process_name = Some(info.name);
+            }
+        }
     }
 
     /// If the session target is a fake IP, replace it with the real domain

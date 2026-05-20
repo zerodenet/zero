@@ -378,10 +378,10 @@ impl Proxy {
         let (target, port) = parse_tcp_connect_header(&header_buf[..n])?;
 
         let mut session = Session::new(0, target.clone(), port, Network::Tcp, ProtocolType::Hysteria2);
-        self.prepare_session(&mut session, inbound_tag);
+        self.prepare_session(&mut session, inbound_tag, None);
 
         self.resolve_fake_ip_target(&mut session).await;
-        let action = self.route_decision(&session.target);
+        let action = self.route_decision(&session);
         let Ok(resolved) = self.resolve_outbound(&action) else {
             let err = build_connect_error("no route");
             let _ = AsyncSocket::write_all(&mut stream, &err).await;

@@ -214,11 +214,20 @@ pub trait ClientStream:
     fn local_addr(&self) -> io::Result<SocketAddr> {
         Err(io::Error::new(io::ErrorKind::Unsupported, "ClientStream: local_addr not available"))
     }
+
+    /// The remote (peer) socket address, if available.
+    fn peer_addr(&self) -> io::Result<SocketAddr> {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "ClientStream: peer_addr not available"))
+    }
 }
 
 impl ClientStream for TokioSocket {
     fn local_addr(&self) -> io::Result<SocketAddr> {
         self.local_addr()
+    }
+
+    fn peer_addr(&self) -> io::Result<SocketAddr> {
+        self.peer_addr()
     }
 }
 

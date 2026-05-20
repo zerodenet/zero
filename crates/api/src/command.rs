@@ -17,6 +17,8 @@ pub enum CommandRequest {
     PolicyProbe(PolicyProbeCommand),
     #[serde(rename = "diagnostics.probe_target")]
     DiagnosticsProbeTarget(DiagnosticsProbeTargetCommand),
+    #[serde(rename = "mode.set")]
+    ModeSet(ModeSetCommand),
 }
 
 impl CommandRequest {
@@ -26,7 +28,7 @@ impl CommandRequest {
             Self::FlowClose(_) | Self::PolicySelect(_) | Self::PolicyProbe(_) => {
                 Permission::Control
             }
-            Self::DiagnosticsProbeTarget(_) => Permission::Admin,
+            Self::DiagnosticsProbeTarget(_) | Self::ModeSet(_) => Permission::Admin,
         }
     }
 }
@@ -75,4 +77,13 @@ pub struct ConfigApplyCommand {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticsProbeTargetCommand {
     pub target_tag: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModeSetCommand {
+    /// One of: "rule", "global", "direct"
+    pub mode: String,
+    /// Required when mode is "global" — the outbound tag to route all traffic to.
+    #[serde(default)]
+    pub outbound: Option<String>,
 }

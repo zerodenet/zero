@@ -1,51 +1,38 @@
 use std::error::Error;
 use std::fmt;
 
-pub const DEFAULT_CONFIG_PATH: &str = "examples/v0.0.1/basic.json";
-
 /// Extract the config file path from raw CLI arguments for early
-/// initialisation of the tracing subscriber.
-pub fn config_path_from_args(args: &[String]) -> String {
+/// initialisation of the tracing subscriber. Returns `None` for
+/// commands that don't need a config file.
+pub fn config_path_from_args(args: &[String]) -> Option<&str> {
     let mut iter = args.iter().skip(1);
     let Some(first) = iter.next() else {
-        return DEFAULT_CONFIG_PATH.to_owned();
+        return None;
     };
     match first.as_str() {
-        "run" => {
-            let mut path = None;
-            let mut iter = iter;
-            while let Some(arg) = iter.next() {
-                match arg.as_str() {
-                    "--status-listen" | "--control-socket" | "--ipc-hook-socket" => {
-                        iter.next();
-                    }
-                    a if a.starts_with('-') => {}
-                    _ => path = Some(arg.clone()),
+        "run" | "validate" | "reload" => {
+            for arg in iter {
+                if arg == "--status-listen" || arg == "--control-socket" || arg == "--ipc-hook-socket" || arg == "--socket" || arg == "--json" {
+                    continue;
                 }
+                if arg.starts_with('-') { continue; }
+                return Some(arg);
             }
-            path.unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_owned())
+            None
         }
-        "status" | "reload" => {
-            let mut path = None;
-            let mut iter = iter;
+        "status" => {
             while let Some(arg) = iter.next() {
-                match arg.as_str() {
-                    "--json" | "--socket" => {
-                        if arg == "--socket" {
-                            iter.next();
-                        }
-                    }
-                    a if a.starts_with('-') => {}
-                    _ => path = Some(arg.clone()),
-                }
+                if arg == "--socket" { iter.next(); continue; }
+                if arg.starts_with('-') { continue; }
+                return Some(arg);
             }
-            path.unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_owned())
+            None
         }
-        "help" | "--help" | "-h" | "version" | "--version" | "-V" | "select" | "flows" | "policies" | "events" => {
-            DEFAULT_CONFIG_PATH.to_owned()
-        }
-        _ if first.starts_with('-') => DEFAULT_CONFIG_PATH.to_owned(),
-        _ => first.clone(),
+        // Commands that talk to a running daemon via IPC — no config needed.
+        "select" | "flows" | "policies" | "events" | "version" | "mode"
+        | "help" | "--help" | "-h" | "--version" | "-V" => None,
+        _ if first.starts_with('-') => None,
+        _ => Some(first),
     }
 }
 
@@ -83,6 +70,11 @@ pub enum Command {
     Validate {
         config_path: String,
     },
+    Mode {
+        mode: String,
+        outbound: Option<String>,
+        socket_path: Option<String>,
+    },
     Version,
     Help,
 }
@@ -113,13 +105,11 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
     let _ = args.next(); // skip program name
 
     let Some(first) = args.next() else {
-        return Ok(Command::Run {
-            config_path: DEFAULT_CONFIG_PATH.to_owned(),
-            status_listen: None,
-            control_socket: None,
-            ipc_hook_socket: None,
-        });
+        return Err(CliError::new("no command specified".to_owned()));
     };
+    if first == "--help" || first == "-h" {
+        return Ok(Command::Help);
+    }
 
     match first.as_str() {
         "run" => parse_run(args.collect()),
@@ -134,55 +124,42 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
         }
         "reload" => parse_reload(args.collect()),
         "validate" => parse_validate(args.collect()),
+        "mode" => parse_mode(args.collect()),
         "version" | "--version" | "-V" => Ok(Command::Version),
         "help" | "--help" | "-h" => Ok(Command::Help),
         _ if first.starts_with('-') => Err(CliError::new(format!(
             "unknown option `{first}`\n\n{}",
             usage()
         ))),
-        _ => {
-            let remaining = args.collect::<Vec<_>>();
-            if remaining.is_empty() {
-                Ok(Command::Run {
-                    config_path: first,
-                    status_listen: None,
-                    control_socket: None,
-                    ipc_hook_socket: None,
-                })
-            } else {
-                Err(CliError::new(format!(
-                    "unexpected extra arguments after config path\n\n{}",
-                    usage()
-                )))
-            }
-        }
+        _ => Err(CliError::new(format!(
+            "unknown command `{first}`\n\n{}",
+            usage()
+        ))),
     }
 }
 
 pub fn usage() -> &'static str {
     "Usage:
-  zero
-  zero [CONFIG_PATH]
-  zero run [--status-listen HOST:PORT] [--control-socket PATH] [CONFIG_PATH]
-  zero status [--json] [--socket PATH] [CONFIG_PATH]
-  zero select <policy> <target> [--socket PATH]
+  zero run [--status-listen HOST:PORT] [--control-socket PATH] CONFIG
+  zero status [--json] [--socket PATH] [CONFIG]
+  zero select <group> <target> [--socket PATH]
   zero flows [--socket PATH]
   zero policies [--socket PATH]
   zero events [--socket PATH]
-  zero reload [CONFIG_PATH] [--socket PATH]
-  zero validate [CONFIG_PATH]
+  zero reload CONFIG [--socket PATH]
+  zero validate CONFIG
+  zero mode <rule|direct|global> [outbound] [--socket PATH]
   zero version
   zero help
 
 Examples:
-  zero
-  zero run examples/v0.0.1/basic.json
-  zero run --status-listen 127.0.0.1:9090 --control-socket /tmp/zero.sock
+  zero run config.json
+  zero run --status-listen 127.0.0.1:9090 config.json
   zero select proxy direct
+  zero status
   zero flows
-  zero policies
   zero events
-  zero reload examples/v0.0.1/basic.json"
+  zero reload config.json"
 }
 
 fn parse_run(args: Vec<String>) -> Result<Command, CliError> {
@@ -239,8 +216,14 @@ fn parse_run(args: Vec<String>) -> Result<Command, CliError> {
         }
     }
 
+    let config_path = config_path.ok_or_else(|| {
+        CliError::new(format!(
+            "`run` requires a config file path\n\n{}",
+            usage()
+        ))
+    })?;
     Ok(Command::Run {
-        config_path: config_path.unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_owned()),
+        config_path,
         status_listen,
         control_socket,
         ipc_hook_socket,
@@ -327,8 +310,54 @@ fn parse_validate(args: Vec<String>) -> Result<Command, CliError> {
         .into_iter()
         .filter(|a| !a.starts_with('-'))
         .next()
-        .unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_owned());
+        .ok_or_else(|| {
+            CliError::new(format!(
+                "`validate` requires a config file path\n\n{}",
+                usage()
+            ))
+        })?;
     Ok(Command::Validate { config_path })
+}
+
+fn parse_mode(args: Vec<String>) -> Result<Command, CliError> {
+    let mut mode = None;
+    let mut outbound = None;
+    let mut socket_path = None;
+    let mut iter = args.into_iter();
+
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--socket" => {
+                socket_path = Some(iter.next().ok_or_else(|| {
+                    CliError::new("`--socket` requires a path argument")
+                })?);
+            }
+            a if a.starts_with('-') => {
+                return Err(CliError::new(format!("unknown option `{a}`\n\n{}", usage())));
+            }
+            _ => {
+                if mode.is_none() {
+                    mode = Some(arg);
+                } else if outbound.is_none() {
+                    outbound = Some(arg);
+                } else {
+                    return Err(CliError::new(format!(
+                        "unexpected argument `{arg}`\n\n{}",
+                        usage()
+                    )));
+                }
+            }
+        }
+    }
+
+    let mode = mode.ok_or_else(|| {
+        CliError::new(format!(
+            "mode is required (rule, direct, or global <outbound>)\n\n{}",
+            usage()
+        ))
+    })?;
+
+    Ok(Command::Mode { mode, outbound, socket_path })
 }
 
 fn parse_reload(args: Vec<String>) -> Result<Command, CliError> {
@@ -361,8 +390,14 @@ fn parse_reload(args: Vec<String>) -> Result<Command, CliError> {
         }
     }
 
+    let config_path = config_path.ok_or_else(|| {
+        CliError::new(format!(
+            "`reload` requires a config file path\n\n{}",
+            usage()
+        ))
+    })?;
     Ok(Command::Reload {
-        config_path: config_path.unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_owned()),
+        config_path,
         socket_path,
     })
 }
