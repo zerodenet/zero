@@ -60,6 +60,24 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
             config_path,
             socket_path,
         } => reload_command(&config_path, socket_path.as_deref())?,
+        cli::Command::Validate { config_path } => {
+            match zero_config::RuntimeConfig::load_from_path(&config_path) {
+                Ok(config) => {
+                    let proxy = Proxy::from_engine(zero_engine::Engine::new(config)?)?;
+                    println!(
+                        "config valid: {} inbounds, {} outbounds, {} groups, {} rules",
+                        proxy.config().inbounds.len(),
+                        proxy.config().outbounds.len(),
+                        proxy.config().outbound_groups.len(),
+                        proxy.config().route.rules.len(),
+                    );
+                }
+                Err(e) => {
+                    error_report::print_error(&e);
+                    process::exit(1);
+                }
+            }
+        }
         cli::Command::Version => {
             println!("zero {}", env!("CARGO_PKG_VERSION"));
             println!("build: {}", env!("ZERO_BUILD_TIME"));

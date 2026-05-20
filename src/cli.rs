@@ -80,6 +80,9 @@ pub enum Command {
         config_path: String,
         socket_path: Option<String>,
     },
+    Validate {
+        config_path: String,
+    },
     Version,
     Help,
 }
@@ -130,6 +133,7 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
             parse_client_command(args.collect(), |socket_path| Command::Events { socket_path })
         }
         "reload" => parse_reload(args.collect()),
+        "validate" => parse_validate(args.collect()),
         "version" | "--version" | "-V" => Ok(Command::Version),
         "help" | "--help" | "-h" => Ok(Command::Help),
         _ if first.starts_with('-') => Err(CliError::new(format!(
@@ -166,6 +170,7 @@ pub fn usage() -> &'static str {
   zero policies [--socket PATH]
   zero events [--socket PATH]
   zero reload [CONFIG_PATH] [--socket PATH]
+  zero validate [CONFIG_PATH]
   zero version
   zero help
 
@@ -315,6 +320,15 @@ fn parse_select(args: Vec<String>) -> Result<Command, CliError> {
         target_tag: positional.remove(0),
         socket_path,
     })
+}
+
+fn parse_validate(args: Vec<String>) -> Result<Command, CliError> {
+    let config_path = args
+        .into_iter()
+        .filter(|a| !a.starts_with('-'))
+        .next()
+        .unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_owned());
+    Ok(Command::Validate { config_path })
 }
 
 fn parse_reload(args: Vec<String>) -> Result<Command, CliError> {

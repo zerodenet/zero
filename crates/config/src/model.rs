@@ -155,7 +155,7 @@ pub struct ApiConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum EventSinkConfig {
     #[serde(rename = "jsonl", alias = "file")]
     JsonLines {
@@ -219,7 +219,7 @@ pub struct ControlApiConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum HookConfig {
     #[serde(rename = "ipc")]
     Ipc {
@@ -288,7 +288,7 @@ pub struct ListenConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum InboundProtocolConfig {
     #[serde(rename = "socks5")]
     Socks5 {
@@ -657,7 +657,7 @@ impl OutboundConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum OutboundProtocolConfig {
     #[serde(rename = "direct")]
     Direct,
@@ -758,7 +758,7 @@ impl OutboundGroupConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum OutboundGroupKind {
     #[serde(rename = "selector")]
     Selector {
@@ -797,7 +797,7 @@ const fn default_urltest_interval_seconds() -> u64 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum ModeConfig {
     #[default]
     #[serde(rename = "rule")]
@@ -890,7 +890,7 @@ pub struct RouteRuleConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum RuleConditionConfig {
     #[serde(rename = "domain")]
     Domain { values: Vec<String> },
@@ -909,7 +909,7 @@ pub enum RuleConditionConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum RouteActionConfig {
     #[serde(rename = "direct")]
     Direct,

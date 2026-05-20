@@ -16,27 +16,33 @@ impl RuntimeConfig {
     pub fn validate(&self) -> Result<(), ConfigError> {
         let mut inbound_tags = HashSet::new();
         let mut inbound_listens = HashSet::new();
-        for inbound in &self.inbounds {
-            validate_tag("inbound", &inbound.tag, &mut inbound_tags)?;
+        for (i, inbound) in self.inbounds.iter().enumerate() {
+            validate_tag("inbound", &inbound.tag, &mut inbound_tags)
+                .map_err(|e| ConfigError::InvalidInbound(format!("inbounds[{i}]: {e}")))?;
             validate_inbound_listen(
                 &mut inbound_listens,
                 &inbound.listen.address,
                 inbound.listen.port,
-            )?;
-            validate_inbound_protocol(&inbound.protocol)?;
+            )
+            .map_err(|e| ConfigError::InvalidInbound(format!("inbounds[{i}] `{}`: {e}", inbound.tag)))?;
+            validate_inbound_protocol(&inbound.protocol)
+                .map_err(|e| ConfigError::InvalidInbound(format!("inbounds[{i}] `{}`: {e}", inbound.tag)))?;
         }
 
         let mut outbound_tags = HashSet::new();
         let mut route_target_tags = HashSet::new();
-        for outbound in &self.outbounds {
-            validate_tag("outbound", &outbound.tag, &mut outbound_tags)?;
-            validate_outbound_protocol(&outbound.protocol)?;
+        for (i, outbound) in self.outbounds.iter().enumerate() {
+            validate_tag("outbound", &outbound.tag, &mut outbound_tags)
+                .map_err(|e| ConfigError::InvalidOutbound(format!("outbounds[{i}]: {e}")))?;
+            validate_outbound_protocol(&outbound.protocol)
+                .map_err(|e| ConfigError::InvalidOutbound(format!("outbounds[{i}] `{}`: {e}", outbound.tag)))?;
             validate_route_target_tag(outbound.tag(), &mut route_target_tags)?;
         }
 
         let mut outbound_group_tags = HashSet::new();
-        for group in &self.outbound_groups {
-            validate_tag("outbound group", &group.tag, &mut outbound_group_tags)?;
+        for (i, group) in self.outbound_groups.iter().enumerate() {
+            validate_tag("outbound group", &group.tag, &mut outbound_group_tags)
+                .map_err(|e| ConfigError::InvalidOutboundGroup(format!("outbound_groups[{i}]: {e}")))?;
             validate_route_target_tag(group.tag(), &mut route_target_tags)?;
         }
 
