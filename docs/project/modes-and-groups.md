@@ -4,14 +4,16 @@
 
 - `mode = rule | global | direct`
 - `selector`
-- `selector` 运行时切换
+- `selector` 运行时切换（IPC + CLI + HTTP）
+- `mode` 运行时切换（`zero mode rule|direct|global <outbound>`）
 - `fallback`
 - `group -> group`
 - `urltest`
+- `reload` 热加载（route + mode + DNS 热换，inbounds/outbounds 需重启）
 
 还没落地的部分：
 
-- 更复杂的健康检查调度
+- Inbounds/outbounds 热切换
 
 目标很简单：入站尽量固定，节点尽量都放在出站里，真正变化的是“当前怎么选出站”。
 
@@ -24,13 +26,27 @@
 
 ## mode
 
-建议至少有三种：
+支持三种模式，可运行时切换：
 
 - `direct`：全部直连
 - `global`：全部走某个指定组或节点
-- `rule`：先看规则，没命中再走默认组或节点
+- `rule`：先看规则，没命中再走 `route.final`
 
-这里的 `global` 和 `rule` 都是内核能力，不是客户端自己做转发。
+模式在启动时从配置文件读取，启动后可通过多种方式热切换：
+
+```bash
+zero mode rule              # CLI
+zero mode direct            # 全部直连
+zero mode global proxy      # 全局走 proxy 出站
+```
+
+IPC 等价命令：
+
+```json
+{ "method": "mode.set", "params": { "mode": "global", "outbound": "proxy" } }
+```
+
+切换即时生效，所有新连接立刻使用新模式。
 
 ## outbound_groups
 
@@ -46,7 +62,25 @@
 
 这三类组的成员现在都可以引用另一个组。运行时会递归解析，配置阶段会拦掉循环引用。
 
-客户端只负责改“当前选哪个”或“当前 mode 是什么”。真正的选择逻辑、健康检查和最终出站决策都在内核里。
+### 默认选择逻辑
+
+Selector 组优先级：
+
+```
+selected > default > outbounds[0]
+```
+
+| 配置 | 行为 |
+|------|------|
+| `”selected”: “node-b”` | 启动即用 node-b |
+| `”default”: “node-c”`（无 selected） | 启动用 node-c，切换后不再回头 |
+| 都不配 | 用 `outbounds` 数组第一个 |
+
+`default` 仅用于初始值——一旦通过 API/CLI 切换过，`default` 就不再生效。`selected` 是持久选择，重启后依然生效。
+
+Fallback 和 UrlTest 固定从 `outbounds[0]` 开始。
+
+客户端只负责改”当前选哪个”或”当前 mode 是什么”。真正的选择逻辑、健康检查和最终出站决策都在内核里。
 
 当前本地最小控制入口复用了 `--status-listen`，支持：
 

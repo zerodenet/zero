@@ -686,11 +686,14 @@ POST /selectors/proxy/direct
 
 当前条件：
 
-- `domain`
-- `ip`
-- `rule-set`
-- `and`
-- `or`
+- `domain`：域名匹配，支持 `example.com` 精确和 `*.example.com` 通配
+- `domain-keyword`：域名包含关键词即匹配
+- `ip`：CIDR 匹配
+- `rule-set`：引用外部规则集文件
+- `geoip`：MaxMind GeoLite2-Country mmdb 国家代码匹配
+- `sni`：TLS ClientHello SNI 域名匹配（语法同 domain）
+- `and`：所有子条件同时满足
+- `or`：任一子条件满足
 
 当前动作：
 
@@ -797,6 +800,34 @@ POST /selectors/proxy/direct
 - Hysteria2 入站的 `password` 不能为空；出站的 `server` 不能为空，`port` 必须大于 `0`
 - Shadowsocks 入站和出站的 `password` 不能为空
 - Trojan 入站必须配置 `tls` 且 `cert_path` 和 `key_path` 不能为空，`password` 不能为空；出站的 `server` 不能为空，`port` 必须大于 `0`，`password` 不能为空
+
+## 运行时管理
+
+### 模式切换
+
+启动后的模式可通过 CLI、IPC 或 HTTP API 热切换，无需重启：
+
+```bash
+zero mode rule              # 切回规则匹配
+zero mode direct            # 全部直连
+zero mode global proxy      # 全局走指定出站
+```
+
+### 热加载
+
+`zero reload <config>` 重新加载配置文件。以下变更即时生效：
+
+- route rules、mode、DNS 配置 — 热替换
+- outbound_groups 调整 — 热替换
+- inbounds/outbounds 增删改 — 需重启
+
+### Selector 切换
+
+```bash
+zero select <group-tag> <target-tag>
+```
+
+等效 HTTP API：`POST /api/v1/selectors/{group}/{target}`
 
 ## 示例
 
