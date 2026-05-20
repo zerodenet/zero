@@ -43,7 +43,8 @@ impl Proxy {
         let started_at = Instant::now();
         self.record_session_inbound_traffic(session.id, client.drain_traffic());
 
-        let action = self.route_decision(&session.target);
+        self.resolve_fake_ip_target(&mut session).await;
+                let action = self.route_decision(&session.target);
         let resolved = match self.resolve_outbound(&action) {
             Ok(resolved) => resolved,
             Err(error) => {

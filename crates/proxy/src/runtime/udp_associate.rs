@@ -95,6 +95,7 @@ impl Proxy {
                                 pending_control_traffic: &mut pending_control_traffic,
                                 upstream_association: &mut upstream_association,
                                 upstream_idle_deadline: &mut upstream_idle_deadline,
+                                client_addr: client_udp_addr,
                             },
                         )
                         .await {

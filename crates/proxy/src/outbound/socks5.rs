@@ -56,7 +56,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
         let control = proxy
             .protocols
             .direct_outbound
-            .connect_host(server, port, &proxy.resolver)
+            .connect_host(server, port, proxy.resolver.as_ref())
             .await?;
         let mut control = MeteredStream::new(control);
         let (relay_address, relay_port) = proxy
@@ -78,7 +78,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
             .resolve_address(
                 &relay_address,
                 relay_port,
-                &proxy.resolver,
+                proxy.resolver.as_ref(),
                 "failed to resolve upstream socks5 udp relay",
             )
             .await?;

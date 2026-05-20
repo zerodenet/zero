@@ -8,7 +8,13 @@
   "outbounds": [],
   "outbound_groups": [],
   "runtime": {
-    "udp_upstream_idle_timeout_seconds": 30
+    "udp_upstream_idle_timeout_seconds": 30,
+    "dns": {
+      "servers": [{ "type": "system" }],
+      "cache": { "max_entries": 256 },
+      "routes": [],
+      "fake_ip": null
+    }
   },
   "api": {
     "event_sinks": [],
@@ -34,6 +40,57 @@
 - 默认：`30`
 - 单位：秒
 - 约束：必须大于 `0`
+
+### DNS
+
+`runtime.dns` 是可选的 DNS 子系统配置。省略时退回到系统解析器，行为不变。
+
+```json
+{
+  "dns": {
+    "servers": [
+      { "type": "system" },
+      { "type": "udp", "address": "8.8.8.8", "port": 53 }
+    ],
+    "cache": { "max_entries": 512, "max_ttl_seconds": 300 },
+    "routes": [
+      { "domain": "*.internal.local", "server": "system" },
+      { "domain": "*.google.com", "server": "1" }
+    ],
+    "fake_ip": {
+      "cidr": "198.18.0.0/15",
+      "ttl_seconds": 86400,
+      "exclude_domains": ["*.local"]
+    }
+  }
+}
+```
+
+**servers** — 有序 DNS 服务器列表。解析时并发查询全部，取最快响应。
+
+| 类型 | 字段 | 说明 |
+|------|------|------|
+| `system` | — | 操作系统解析器 (getaddrinfo) |
+| `udp` | `address`, `port` | 纯 UDP DNS，默认端口 53 |
+| `doh` | `url`, `server_name` | DNS-over-HTTPS (v2) |
+| `dot` | `address`, `port`, `server_name` | DNS-over-TLS (v2)，默认端口 853 |
+
+**cache** — TTL 基础 LRU 缓存。
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `max_entries` | `256` | 最大缓存条目数 |
+| `max_ttl_seconds` | — | TTL 上限，省略则使用 DNS 记录 TTL |
+
+**routes** — 域名→服务器路由。`domain` 支持精确匹配 (`example.com`) 和通配 (`*.example.com`)。`server` 为 `"system"` 或 servers 数组索引 (`"0"`, `"1"`)。
+
+**fake_ip** — 透明代理的核心。对匹配域名返回假 IP，维护域名↔假 IP 映射，连接时反向还原真实域名做路由。
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `cidr` | — | 假 IP 池 CIDR，推荐 `198.18.0.0/15` |
+| `ttl_seconds` | `86400` | 假 IP 分配有效期 |
+| `exclude_domains` | `[]` | 排除域名，走真实 DNS |
 
 ## api
 

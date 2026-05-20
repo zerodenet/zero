@@ -210,7 +210,7 @@ impl Proxy {
             let conn_dg = conn.clone();
             let udp_dg = udp.clone();
             let inbound_tag = inbound_tag.to_owned();
-            let resolver = self.resolver;
+            let resolver = Arc::clone(&self.resolver);
             stream_tasks.spawn(async move {
                 Self::hysteria2_datagram_loop(conn_dg, udp_dg, &inbound_tag, resolver).await
             });
@@ -254,7 +254,7 @@ impl Proxy {
         conn: Arc<quinn::Connection>,
         udp_socket: Arc<tokio::net::UdpSocket>,
         _inbound_tag: &str,
-        resolver: zero_platform_tokio::TokioResolver,
+        resolver: Arc<zero_dns::DnsSystem>,
     ) -> Result<(), EngineError> {
         let mut buf = [0u8; 65536];
         let mut session_map: std::collections::HashMap<
@@ -380,6 +380,7 @@ impl Proxy {
         let mut session = Session::new(0, target.clone(), port, Network::Tcp, ProtocolType::Hysteria2);
         self.prepare_session(&mut session, inbound_tag);
 
+        self.resolve_fake_ip_target(&mut session).await;
         let action = self.route_decision(&session.target);
         let Ok(resolved) = self.resolve_outbound(&action) else {
             let err = build_connect_error("no route");

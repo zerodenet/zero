@@ -90,7 +90,8 @@ impl Proxy {
         let mut session: Session = accept.session;
         self.prepare_session(&mut session, tag);
         // Route + outbound + relay.
-        let action = self.route_decision(&session.target);
+        self.resolve_fake_ip_target(&mut session).await;
+                let action = self.route_decision(&session.target);
         let (resolved, _plan) = self.resolve_outbound(&action)?;
         let outbound = self.establish_tcp_outbound(&session, (resolved, _plan)).await
             .map_err(|f| EngineError::Io(io::Error::new(io::ErrorKind::Other, f.error)))?;

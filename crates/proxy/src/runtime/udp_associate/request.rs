@@ -1,8 +1,9 @@
 use std::time::Instant;
 
-use zero_core::{Network, ProtocolType, Session};
+use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::{EngineError, ResolvedOutbound, SessionOutcome};
 use zero_protocol_socks5::parse_udp_packet;
+use zero_traits::DnsResolver;
 
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
 use crate::runtime::Proxy;
@@ -21,6 +22,37 @@ impl Proxy {
         context: UdpRequestContext<'_>,
     ) -> Result<(), EngineError> {
         let udp_packet = parse_udp_packet(packet)?;
+
+        // ── DNS interception ─────────────────────────────────────────
+        // Intercept UDP packets to port 53 with a domain target.
+        // Resolve locally through DnsSystem and reply directly.
+        if udp_packet.port == 53 {
+            if let Address::Domain(ref domain) = udp_packet.target {
+                if let Some(client_addr) = context.client_addr {
+                    match self.resolver.resolve(domain).await {
+                        Ok(ips) => {
+                            let dns_resp = zero_dns::udp::build_dns_response(
+                                &udp_packet.payload,
+                                &ips,
+                            );
+                            if !dns_resp.is_empty() {
+                                let frame = zero_protocol_socks5::build_udp_packet(
+                                    &udp_packet.target,
+                                    udp_packet.port,
+                                    &dns_resp,
+                                )?;
+                                let _ = context.relay.send_to_addr(&frame, client_addr).await;
+                            }
+                        }
+                        Err(_) => {
+                            // Resolution failed — silently drop.
+                            // The client's stub resolver will retry.
+                        }
+                    }
+                    return Ok(());
+                }
+            }
+        }
 
         if let Some(flow) = context
             .udp_flows
@@ -56,6 +88,7 @@ impl Proxy {
         *context.pending_control_traffic = StreamTraffic::default();
         self.record_session_inbound_rx(session.id, packet.len() as u64);
 
+        self.resolve_fake_ip_target(&mut session).await;
         let action = self.route_decision(&session.target);
         let resolved = match self.resolve_outbound(&action) {
             Ok((resolved, _plan)) => resolved,

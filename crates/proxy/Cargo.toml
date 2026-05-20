@@ -86,6 +86,8 @@ outbound-trojan = [
     "zero-protocol-trojan/crypto",
     "dep:tokio-rustls"
 ]
+dns-udp = ["zero-dns/udp"]
+dns-cache = []
 
 [dependencies]
 quinn = { version = "0.11", default-features = false, features = ["rustls-ring"], optional = true }
@@ -96,6 +98,7 @@ tracing.workspace = true
 tokio-rustls = { version = "0.26", optional = true }
 zero-config = { path = "../config" }
 zero-core = { path = "../core" }
+zero-dns = { path = "../dns" }
 zero-engine = { path = "../engine" }
 zero-platform-tokio = { path = "../platform/tokio" }
 zero-protocol-http-connect = { path = "../../protocols/http-connect", optional = true }

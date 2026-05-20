@@ -107,6 +107,91 @@ fn validate_runtime(runtime: &RuntimeOptionsConfig) -> Result<(), ConfigError> {
         ));
     }
 
+    if let Some(dns) = &runtime.dns {
+        validate_dns_config(dns)?;
+    }
+
+    Ok(())
+}
+
+fn validate_dns_config(dns: &crate::DnsConfig) -> Result<(), ConfigError> {
+    let num_servers = dns.servers.len();
+    for (i, server) in dns.servers.iter().enumerate() {
+        match server {
+            crate::DnsServerConfig::Udp { address, .. } if address.trim().is_empty() => {
+                return Err(ConfigError::InvalidDns(format!(
+                    "dns server {i}: udp address must not be empty"
+                )));
+            }
+            crate::DnsServerConfig::Dot { address, .. } if address.trim().is_empty() => {
+                return Err(ConfigError::InvalidDns(format!(
+                    "dns server {i}: dot address must not be empty"
+                )));
+            }
+            crate::DnsServerConfig::Doh { url, .. } if url.trim().is_empty() => {
+                return Err(ConfigError::InvalidDns(format!(
+                    "dns server {i}: doh url must not be empty"
+                )));
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(cache) = &dns.cache {
+        if cache.max_entries == 0 {
+            return Err(ConfigError::InvalidDns(
+                "`dns.cache.max_entries` must be greater than 0".to_owned(),
+            ));
+        }
+    }
+
+    if let Some(fake_ip) = &dns.fake_ip {
+        let cidr: Result<ipnet::IpNet, _> = fake_ip.cidr.parse();
+        match cidr {
+            Ok(net) => {
+                if net.prefix_len() > 30 {
+                    return Err(ConfigError::InvalidDns(
+                        "`dns.fake_ip.cidr` must be at least /30 (4 addresses)".to_owned(),
+                    ));
+                }
+            }
+            Err(_) => {
+                return Err(ConfigError::InvalidDns(format!(
+                    "`dns.fake_ip.cidr` is not a valid CIDR: {}",
+                    fake_ip.cidr
+                )));
+            }
+        }
+        if fake_ip.ttl_seconds == 0 {
+            return Err(ConfigError::InvalidDns(
+                "`dns.fake_ip.ttl_seconds` must be greater than 0".to_owned(),
+            ));
+        }
+    }
+
+    for (i, route) in dns.routes.iter().enumerate() {
+        if route.domain.trim().is_empty() {
+            return Err(ConfigError::InvalidDns(format!(
+                "dns route {i}: domain must not be empty"
+            )));
+        }
+        if route.server != "system" {
+            if let Ok(idx) = route.server.parse::<usize>() {
+                if idx >= num_servers {
+                    return Err(ConfigError::InvalidDns(format!(
+                        "dns route {i}: server index {idx} out of range (0-{})",
+                        num_servers.saturating_sub(1)
+                    )));
+                }
+            } else {
+                return Err(ConfigError::InvalidDns(format!(
+                    "dns route {i}: server must be \"system\" or a number (0-{})",
+                    num_servers.saturating_sub(1)
+                )));
+            }
+        }
+    }
+
     Ok(())
 }
 

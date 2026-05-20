@@ -164,7 +164,7 @@ impl MuxConnectionPool {
         let socket = proxy
             .protocols
             .direct_outbound
-            .connect_host(&key.server, key.port, &proxy.resolver)
+            .connect_host(&key.server, key.port, proxy.resolver.as_ref())
             .await?;
 
         let connector = crate::transport::VlessTransportConnector::new(

@@ -216,7 +216,7 @@ impl Proxy {
                 ResolvedLeafOutbound::Direct { .. } => self
                     .protocols
                     .direct_outbound
-                    .connect_host(probe.host.as_str(), probe.port, &self.resolver)
+                    .connect_host(probe.host.as_str(), probe.port, self.resolver.as_ref())
                     .await
                     .map_err(EngineError::from)?
                     .into(),
@@ -289,7 +289,7 @@ impl Proxy {
                     server, port, ..
                 } => {
                     self.protocols.direct_outbound
-                        .connect_host(server, port, &self.resolver)
+                        .connect_host(server, port, self.resolver.as_ref())
                         .await
                         .map_err(EngineError::from)?
                         .into()

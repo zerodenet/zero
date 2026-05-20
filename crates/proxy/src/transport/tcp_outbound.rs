@@ -97,7 +97,7 @@ impl Proxy {
                 match self
                     .protocols
                     .direct_outbound
-                    .connect(session, &self.resolver)
+                    .connect(session, self.resolver.as_ref())
                     .await
                 {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Direct {

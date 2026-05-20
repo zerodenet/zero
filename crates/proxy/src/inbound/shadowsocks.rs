@@ -189,7 +189,8 @@ impl Proxy {
                         // Route decision
                         let mut session = Session::new(0, target.clone(), port, Network::Udp, ProtocolType::Shadowsocks);
                         self.prepare_session(&mut session, inbound_tag);
-                        let action = self.route_decision(&session.target);
+                        self.resolve_fake_ip_target(&mut session).await;
+                let action = self.route_decision(&session.target);
                         let Ok((resolved, _plan)) = self.resolve_outbound(&action) else { continue };
 
                         // Check if resolved to SS chain outbound
@@ -248,7 +249,7 @@ impl Proxy {
                             }
                         } else {
                             // Direct: forward to target
-                            let target_addr = resolve_socket_addr(&target, port, &self.resolver).await;
+                            let target_addr = resolve_socket_addr(&target, port, self.resolver.as_ref()).await;
                             let Some(target_addr) = target_addr else { continue };
                             direct_sessions.insert(client_addr, (target.clone(), port));
                             let _ = relay_socket.send_to(payload, target_addr).await;
@@ -351,7 +352,8 @@ impl Proxy {
 
         // Route
         self.prepare_session(&mut session, inbound_tag);
-        let action = self.route_decision(&session.target);
+        self.resolve_fake_ip_target(&mut session).await;
+                let action = self.route_decision(&session.target);
         let Ok(resolved) = self.resolve_outbound(&action) else {
             return Ok(());
         };

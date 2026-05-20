@@ -17,4 +17,5 @@ pub use model::{
     SplitHttpConfig,
     RuntimeOptionsConfig, Socks5UserConfig, TlsConfig, VlessUserConfig, WebSocketConfig,
     LogConfig, LogFileConfig, LogRateLimit,
+    DnsConfig, DnsServerConfig, DnsCacheConfig, DnsRouteConfig, FakeIpConfig,
 };

@@ -1,7 +1,8 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use zero_core::{Address, Error, Session};
-use zero_platform_tokio::{TokioResolver, TokioSocket};
+use zero_dns::DnsSystem;
+use zero_platform_tokio::TokioSocket;
 use zero_traits::{DnsResolver, IpAddress};
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -19,7 +20,7 @@ impl DirectConnector {
     pub(crate) async fn connect(
         &self,
         session: &Session,
-        resolver: &TokioResolver,
+        resolver: &DnsSystem,
     ) -> Result<TokioSocket, Error> {
         let addr = self.resolve_target_addr(session, resolver).await?;
 
@@ -31,7 +32,7 @@ impl DirectConnector {
     pub(crate) async fn resolve_target_addr(
         &self,
         session: &Session,
-        resolver: &TokioResolver,
+        resolver: &DnsSystem,
     ) -> Result<SocketAddr, Error> {
         self.validate(session)?;
 
@@ -48,7 +49,7 @@ impl DirectConnector {
         &self,
         host: &str,
         port: u16,
-        resolver: &TokioResolver,
+        resolver: &DnsSystem,
     ) -> Result<TokioSocket, Error> {
         if port == 0 {
             return Err(Error::Config("target port is required"));
@@ -65,7 +66,7 @@ impl DirectConnector {
         &self,
         address: &Address,
         port: u16,
-        resolver: &TokioResolver,
+        resolver: &DnsSystem,
         error_message: &'static str,
     ) -> Result<SocketAddr, Error> {
         match address {
@@ -86,7 +87,7 @@ fn socket_addr_from_ip(ip: IpAddress, port: u16) -> SocketAddr {
 async fn resolve_host(
     host: &str,
     port: u16,
-    resolver: &TokioResolver,
+    resolver: &DnsSystem,
     error_message: &'static str,
 ) -> Result<SocketAddr, Error> {
     let resolved = resolver

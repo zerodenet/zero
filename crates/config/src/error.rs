@@ -48,4 +48,6 @@ pub enum ConfigError {
     UndefinedRouteTargetTag { tag: String },
     #[error("route references undefined rule set tag `{tag}`")]
     UndefinedRuleSetTag { tag: String },
+    #[error("invalid dns config: {0}")]
+    InvalidDns(String),
 }

@@ -19,7 +19,7 @@ impl Proxy {
                 let target_addr = self
                     .protocols
                     .direct_outbound
-                    .resolve_target_addr(context.session, &self.resolver)
+                    .resolve_target_addr(context.session, self.resolver.as_ref())
                     .await
                     .map_err(|error| UdpCandidateFailure {
                         stage: "resolve_udp_target",

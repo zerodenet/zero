@@ -37,7 +37,7 @@ impl Proxy {
         let upstream = self
             .protocols
             .direct_outbound
-            .connect_host(server, port, &self.resolver)
+            .connect_host(server, port, self.resolver.as_ref())
             .await?;
         let mut upstream = MeteredStream::new(upstream);
 
@@ -112,7 +112,7 @@ impl Proxy {
         let socket = self
             .protocols
             .direct_outbound
-            .connect_host(upstream.server, upstream.port, &self.resolver)
+            .connect_host(upstream.server, upstream.port, self.resolver.as_ref())
             .await?;
 
         let connector = crate::transport::VlessTransportConnector::new(
@@ -222,7 +222,7 @@ impl Proxy {
         let upstream = self
             .protocols
             .direct_outbound
-            .connect_host(server, port, &self.resolver)
+            .connect_host(server, port, self.resolver.as_ref())
             .await?;
         let mut metered = crate::transport::MeteredStream::new(upstream);
         let cipher_kind = CipherKind::from_str(cipher).ok_or_else(|| {
@@ -269,7 +269,7 @@ impl Proxy {
         let upstream = self
             .protocols
             .direct_outbound
-            .connect_host(server, port, &self.resolver)
+            .connect_host(server, port, self.resolver.as_ref())
             .await?;
         let tls_config = ClientTlsConfig {
             server_name: sni.map(|s| s.to_owned()),

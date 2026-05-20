@@ -9,7 +9,8 @@ use tokio::task::{JoinHandle, JoinSet};
 use tracing::{info, warn};
 use zero_config::{InboundConfig, InboundProtocolConfig, RuntimeConfig};
 use zero_engine::{Engine, EngineError};
-use zero_platform_tokio::{TokioListener, TokioResolver};
+use zero_dns::DnsSystem;
+use zero_platform_tokio::TokioListener;
 
 use crate::inventory::ProtocolInventory;
 use crate::runtime::mux_pool::MuxConnectionPool;
@@ -26,7 +27,7 @@ pub(crate) use udp_associate::sessions::UdpFlowOutbound;
 pub struct Proxy {
     engine: Engine,
     pub(crate) config: Arc<RuntimeConfig>,
-    pub(crate) resolver: TokioResolver,
+    pub(crate) resolver: Arc<DnsSystem>,
     pub(crate) protocols: ProtocolInventory,
     pub(crate) mux_pool: MuxConnectionPool,
 }
@@ -44,10 +45,12 @@ impl Proxy {
     pub fn from_engine(engine: Engine) -> Result<Self, EngineError> {
         let protocols = ProtocolInventory::default();
         protocols.validate_config(engine.config())?;
+        let dns = DnsSystem::build(engine.config().runtime.dns.as_ref())
+            .map_err(EngineError::Io)?;
         Ok(Self {
             config: Arc::new(engine.config().clone()),
             engine,
-            resolver: TokioResolver,
+            resolver: Arc::new(dns),
             protocols,
             mux_pool: MuxConnectionPool::new(),
         })

@@ -542,7 +542,8 @@ impl Proxy {
                                     zero_core::ProtocolType::Vless,
                                 );
                                 self.prepare_session(&mut session, inbound_tag);
-                                let action = self.route_decision(&session.target);
+                                self.resolve_fake_ip_target(&mut session).await;
+                let action = self.route_decision(&session.target);
                                 let Ok(resolved) = self.resolve_outbound(&action) else {
                                     let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
                                     let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
@@ -873,7 +874,8 @@ impl Proxy {
         let mut session_handle = self.track_session(session.id);
         self.record_session_inbound_rx(session.id, packet.len() as u64);
 
-        let action = self.route_decision(&session.target);
+        self.resolve_fake_ip_target(&mut session).await;
+                let action = self.route_decision(&session.target);
         let (resolved, _plan) = self.resolve_outbound(&action)?;
         crate::logging::log_session_accepted(&session, &action, self.config.mode.kind());
 
@@ -1013,7 +1015,7 @@ impl Proxy {
         let mut upstream = self
             .protocols
             .direct_outbound
-            .connect_host(&fallback.server, fallback.port, &self.resolver)
+            .connect_host(&fallback.server, fallback.port, self.resolver.as_ref())
             .await?;
 
         if !head.is_empty() {

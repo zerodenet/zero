@@ -123,7 +123,7 @@ pub async fn establish_vless_udp_upstream(
     let socket = proxy
         .protocols
         .direct_outbound
-        .connect_host(server, port, &proxy.resolver)
+        .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
 
     let stream: TcpRelayStream = match transport {

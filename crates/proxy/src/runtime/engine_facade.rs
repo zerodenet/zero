@@ -55,6 +55,21 @@ impl Proxy {
         self.engine.prepare_session(session, inbound_tag);
     }
 
+    /// If the session target is a fake IP, replace it with the real domain
+    /// so routing sees the original domain name.
+    pub(crate) async fn resolve_fake_ip_target(&self, session: &mut Session) {
+        use zero_core::Address;
+        use zero_traits::IpAddress;
+        let ip = match &session.target {
+            Address::Ipv4(octets) => IpAddress::V4(*octets),
+            Address::Ipv6(octets) => IpAddress::V6(*octets),
+            _ => return,
+        };
+        if let Some(domain) = self.resolver.lookup_fake_ip(&ip).await {
+            session.target = Address::Domain(domain);
+        }
+    }
+
     pub(crate) fn set_session_outbound(&self, session: &Session) {
         self.engine.set_session_outbound(session);
     }

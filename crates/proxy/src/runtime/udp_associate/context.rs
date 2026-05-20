@@ -24,6 +24,8 @@ pub(super) struct UdpRequestContext<'a> {
     pub(super) pending_control_traffic: &'a mut StreamTraffic,
     pub(super) upstream_association: &'a mut Option<ActiveUpstreamSocks5UdpAssociation>,
     pub(super) upstream_idle_deadline: &'a mut Option<TokioInstant>,
+    /// The UDP socket address of the SOCKS5 client, if known.
+    pub(super) client_addr: Option<std::net::SocketAddr>,
 }
 
 pub(super) struct ExistingUdpFlowContext<'a> {

@@ -16,7 +16,7 @@ pub async fn resolve_udp_target(
     proxy
         .protocols
         .direct_outbound
-        .resolve_target_addr(session, &proxy.resolver)
+        .resolve_target_addr(session, proxy.resolver.as_ref())
         .await
         .map_err(Into::into)
 }
