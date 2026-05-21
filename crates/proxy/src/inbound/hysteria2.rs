@@ -27,8 +27,13 @@ impl Proxy {
         inbound: InboundConfig,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
-        let password = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Hysteria2 { password, .. } => password.clone(),
+        let (password, up_bps, down_bps) = match &inbound.protocol {
+            zero_config::InboundProtocolConfig::Hysteria2 {
+                password,
+                up_bps,
+                down_bps,
+                ..
+            } => (password.clone(), *up_bps, *down_bps),
             _ => {
                 return Err(EngineError::Io(io::Error::new(
                     io::ErrorKind::InvalidInput,
@@ -86,7 +91,7 @@ impl Proxy {
 
                             connections.spawn(async move {
                                 if let Err(error) = engine.handle_hysteria2_connection(
-                                    conn, inbound_tag.as_str(), &password,
+                                    conn, inbound_tag.as_str(), &password, up_bps, down_bps,
                                 ).await {
                                     error!(error = %error, "hysteria2 connection error");
                                 }
@@ -133,6 +138,8 @@ impl Proxy {
         conn: quinn::Connection,
         inbound_tag: &str,
         password: &str,
+        up_bps: Option<u64>,
+        down_bps: Option<u64>,
     ) -> Result<(), EngineError> {
         // Derive salt from TLS keying material
         let mut salt = [0u8; 32];
@@ -224,8 +231,9 @@ impl Proxy {
                         Ok((send, recv)) => {
                             let engine = self.clone();
                             let tag = inbound_tag.to_owned();
+                            let pw = password.to_owned();
                             stream_tasks.spawn(async move {
-                                engine.handle_hysteria2_tcp_stream(send, recv, &tag).await
+                                engine.handle_hysteria2_tcp_stream(send, recv, &tag, &pw, up_bps, down_bps).await
                             });
                         }
                         Err(e) => {
@@ -362,6 +370,9 @@ impl Proxy {
         send: quinn::SendStream,
         recv: quinn::RecvStream,
         inbound_tag: &str,
+        password: &str,
+        up_bps: Option<u64>,
+        down_bps: Option<u64>,
     ) -> Result<(), EngineError> {
         let mut stream = Hysteria2Stream::new(send, recv);
 
@@ -383,6 +394,13 @@ impl Proxy {
             Network::Tcp,
             ProtocolType::Hysteria2,
         );
+        let mut sa = zero_core::SessionAuth::new("hysteria2");
+        sa.principal_key = Some(password.to_owned());
+        sa.up_bps = up_bps;
+        sa.down_bps = down_bps;
+        session.apply_auth(sa);
+        let rate_up = session.up_bps;
+        let rate_down = session.down_bps;
         self.prepare_session(&mut session, inbound_tag, None);
 
         self.resolve_fake_ip_target(&mut session).await;
@@ -422,15 +440,18 @@ impl Proxy {
             .await
             .map_err(|_| EngineError::Io(io::Error::other("write connect ok")))?;
 
-        // Bidirectional relay
-        let (mut up_read, mut up_write) = tokio::io::split(upstream);
-        let (mut down_read, mut down_write) = tokio::io::split(stream);
+        // Bidirectional relay with rate limiting.
+        let (up_read, up_write) = tokio::io::split(upstream);
+        let (down_read, down_write) = tokio::io::split(stream);
 
-        let upload =
-            tokio::spawn(async move { tokio::io::copy(&mut down_read, &mut up_write).await });
-        let download =
-            tokio::spawn(async move { tokio::io::copy(&mut up_read, &mut down_write).await });
-
+        // down_read → up_write = upload (client → proxy → upstream)
+        // up_read → down_write = download (upstream → proxy → client)
+        let upload = tokio::spawn(async move {
+            let _ = crate::transport::copy_one_way(down_read, up_write, |_| {}, rate_up).await;
+        });
+        let download = tokio::spawn(async move {
+            let _ = crate::transport::copy_one_way(up_read, down_write, |_| {}, rate_down).await;
+        });
         let _ = tokio::try_join!(upload, download);
         Ok(())
     }

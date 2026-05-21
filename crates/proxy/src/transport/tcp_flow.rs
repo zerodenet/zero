@@ -7,7 +7,7 @@ use super::super::runtime::Proxy;
 use super::metered::MeteredStream;
 use super::stream::{ClientStream, TcpRelayStream};
 use super::tcp_outbound::EstablishedTcpOutbound;
-use super::tcp_relay::relay_bidirectional_metered;
+use super::tcp_relay::relay_bidirectional_metered_throttled;
 use zero_engine::EngineError;
 use zero_engine::SessionHandle;
 use zero_engine::SessionOutcome;
@@ -177,16 +177,20 @@ impl Proxy {
         S: ClientStream,
     {
         let session_id = context.session.id;
+        let up_bps = context.session.up_bps;
+        let down_bps = context.session.down_bps;
         self.record_session_inbound_traffic(session_id, context.client.drain_traffic());
         let client = context.client.into_inner();
         let upload_engine = self.engine().clone();
         let download_engine = self.engine().clone();
 
-        match relay_bidirectional_metered(
+        match relay_bidirectional_metered_throttled(
             client,
             context.upstream,
             move |bytes| upload_engine.record_session_upload(session_id, bytes),
             move |bytes| download_engine.record_session_download(session_id, bytes),
+            up_bps,
+            down_bps,
         )
         .await
         {

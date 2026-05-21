@@ -50,6 +50,37 @@
 
 ## 剩余工作（低优先级，渐进推进）
 
+### 协议 handler 统一 — `ProtocolAcceptor` trait
+
+**问题：** 所有协议的"路由 → 出站 → relay"后半段完全相同时，6 个协议 handler 各自独立实现 relay 逻辑（Trojan/SS/H2 各自写了 `io::copy` / `io::split`）。加一个新字段（如 `up_bps`/`down_bps`）需要在每一条 relay 路径上分别处理。
+
+**目标：**
+
+```rust
+trait ProtocolAcceptor {
+    async fn accept(&self, stream) -> (Session, ClientStream);
+}
+
+async fn serve_connection(stream, acceptor: impl ProtocolAcceptor, engine) {
+    let (session, client) = acceptor.accept(stream).await;
+    // session 上已有 target, auth, rate_limits
+    engine.prepare_session(&mut session);
+    let action = engine.route_decision(&session);
+    let upstream = engine.establish_outbound(&session, action);
+    engine.relay(client, upstream, session.rate_limits);
+}
+```
+
+**难点：** Shadowsocks 的 AEAD relay 和 Hysteria2 的 QUIC stream relay 不是标准 TCP relay，统一需要抽象 `BidirectionalRelay` trait 或 adapter。
+
+**收益：** 加新协议只需实现 `accept`；加新字段（限速、连接计数等）改一次 `serve_connection` 即全局生效。
+
+**规模：** ~600 行的重构，跨 ~5 个文件。建议在加下一个协议之前做。
+
+### 限速配置架构 — SessionAuth.apply_auth
+
+**现状：** `Session::apply_auth(sa)` 是唯一注入点，所有协议的 `principal_key`、`up_bps`、`down_bps` 在此汇合。`SessionAuth` 是`配置 → Session` 的载体。以后加用户级配置字段，只需改 `SessionAuth` 和 `apply_auth`。
+
 ### groups/ 并入 engine（389 行）
 
 `crates/proxy/src/groups/urltest.rs` 逻辑可移入 engine：

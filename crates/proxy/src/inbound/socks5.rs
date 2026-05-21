@@ -164,4 +164,19 @@ impl Socks5PasswordAuth for ConfiguredSocks5PasswordAuth<'_> {
             .iter()
             .any(|user| user.username == username && user.password == password)
     }
+
+    fn principal_key_for(&self, username: &str) -> Option<String> {
+        self.users
+            .iter()
+            .find(|user| user.username == username)
+            .and_then(|user| user.principal_key.clone())
+    }
+
+    fn rate_limit_for(&self, username: &str) -> (Option<u64>, Option<u64>) {
+        self.users
+            .iter()
+            .find(|user| user.username == username)
+            .map(|user| (user.up_bps, user.down_bps))
+            .unwrap_or((None, None))
+    }
 }

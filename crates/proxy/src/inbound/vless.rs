@@ -477,11 +477,13 @@ impl Proxy {
 
         session.sni = sni;
 
+        let auth = session.auth.clone();
+
         if zero_protocol_vless::VlessInbound::is_mux_session(&session) {
-            self.handle_vless_mux_session(client, inbound_tag, uuid)
+            self.handle_vless_mux_session(client, inbound_tag, uuid, &auth)
                 .await
         } else if session.network == zero_core::Network::Udp {
-            self.handle_vless_udp_session(client, inbound_tag, session)
+            self.handle_vless_udp_session(client, inbound_tag, session, &auth)
                 .await
         } else {
             self.handle_tcp_session(client, inbound_tag, session, TcpInboundProtocol::Vless)
@@ -503,6 +505,7 @@ impl Proxy {
         mut client: MeteredStream<S>,
         inbound_tag: &str,
         uuid: [u8; 16],
+        auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError>
     where
         S: ClientStream,
@@ -545,6 +548,9 @@ impl Proxy {
                                     0, target, port, zero_core::Network::Tcp,
                                     zero_core::ProtocolType::Vless,
                                 );
+                                if let Some(ref a) = auth {
+                                    session.apply_auth(a.clone());
+                                }
                                 self.prepare_session(&mut session, inbound_tag, None);
                                 self.resolve_fake_ip_target(&mut session).await;
                 let action = self.route_decision(&session);
@@ -669,7 +675,8 @@ impl Proxy {
         &self,
         mut client: MeteredStream<S>,
         inbound_tag: &str,
-        _session: zero_core::Session,
+        session: zero_core::Session,
+        auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError>
     where
         S: ClientStream,
@@ -678,7 +685,7 @@ impl Proxy {
             .vless_inbound
             .send_response(&mut client)
             .await?;
-        self.record_session_inbound_traffic(_session.id, client.drain_traffic());
+        self.record_session_inbound_traffic(session.id, client.drain_traffic());
 
         let udp_socket = TokioDatagramSocket::bind("0.0.0.0:0").await?;
         let mut last_activity = TokioInstant::now();
@@ -719,6 +726,7 @@ impl Proxy {
                                 &mut udp_flows,
                                 &udp_socket,
                                 &mut vless_manager,
+                                &auth,
                             ).await {
                                 warn!(
                                     error = %error,
@@ -836,6 +844,7 @@ impl Proxy {
         udp_flows: &mut UdpSessionFlows,
         udp_socket: &TokioDatagramSocket,
         vless_manager: &mut crate::outbound::vless::VlessUdpOutboundManager,
+        auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError> {
         use zero_protocol_vless::parse_udp_packet;
 
@@ -871,6 +880,7 @@ impl Proxy {
             zero_core::Network::Udp,
             zero_core::ProtocolType::Vless,
         );
+        session.auth = auth.clone();
         self.prepare_session(&mut session, inbound_tag, None);
         let mut session_handle = self.track_session(session.id);
         self.record_session_inbound_rx(session.id, packet.len() as u64);
@@ -1174,6 +1184,8 @@ impl VlessUserStore for ConfiguredVlessUsers<'_> {
                 Some(VlessUser {
                     credential_id: user.credential_id.clone(),
                     principal_key: user.principal_key.clone(),
+                    up_bps: user.up_bps,
+                    down_bps: user.down_bps,
                     flow,
                 })
             } else {

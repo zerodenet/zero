@@ -37,12 +37,14 @@ impl Proxy {
         inbound: InboundConfig,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
-        let (password, tls_cfg) = match &inbound.protocol {
+        let (password, tls_cfg, up_bps, down_bps) = match &inbound.protocol {
             zero_config::InboundProtocolConfig::Trojan {
                 password,
                 sni: _,
                 tls,
-            } => (password.clone(), tls.clone()),
+                up_bps,
+                down_bps,
+            } => (password.clone(), tls.clone(), *up_bps, *down_bps),
             _ => {
                 return Err(EngineError::Io(io::Error::new(
                     io::ErrorKind::InvalidInput,
@@ -69,8 +71,9 @@ impl Proxy {
                 r = listener.accept() => {
                     let (s, peer) = match r { Ok(v) => v, Err(e) => { error!(%e, "accept"); continue; } };
                     let p = self.clone(); let t = tag.clone(); let pw = password.clone(); let a = acceptor.clone();
+                    let up = up_bps; let down = down_bps;
                     conns.spawn(async move {
-                        if let Err(e) = p.serve_trojan(s, &t, &pw, &a).await {
+                        if let Err(e) = p.serve_trojan(s, &t, &pw, &a, up, down).await {
                             if !matches!(&e, EngineError::Io(io) if matches!(io.kind(),
                                 io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset | io::ErrorKind::BrokenPipe))
                             { warn!(?peer, %e, "trojan failed"); }
@@ -93,6 +96,8 @@ impl Proxy {
         tag: &str,
         password: &str,
         acceptor: &crate::transport::TlsAcceptor,
+        up_bps: Option<u64>,
+        down_bps: Option<u64>,
     ) -> Result<(), EngineError> {
         let raw: TcpRelayStream = socket.into();
         // TLS accept.
@@ -106,6 +111,11 @@ impl Proxy {
             .accept(&mut sock, &[password.to_owned()])
             .await?;
         let mut session: Session = accept.session;
+        let mut sa = zero_core::SessionAuth::new("trojan");
+        sa.principal_key = Some(password.to_owned());
+        sa.up_bps = up_bps;
+        sa.down_bps = down_bps;
+        session.apply_auth(sa);
         self.prepare_session(&mut session, tag, None);
         // Route + outbound + relay.
         self.resolve_fake_ip_target(&mut session).await;
@@ -130,11 +140,13 @@ impl Proxy {
                 )));
             }
         };
-        crate::transport::relay_bidirectional_metered(
+        crate::transport::relay_bidirectional_metered_throttled(
             TcpRelayStream::new(sock.0),
             upstream,
             |_| {},
             |_| {},
+            up_bps,
+            down_bps,
         )
         .await
         .map_err(|e| EngineError::Io(e))?;

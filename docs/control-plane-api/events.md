@@ -133,7 +133,58 @@
 
 ### flow.completed
 
-与 `flow.started` 同结构，`timing` 包含 `ended_at_unix_ms` 和 `duration_ms`，`traffic` 包含最终流量统计，`outcome` 为最终结果。
+flow 终结事件，是流量统计和计费的核心数据来源。
+
+> **时间戳说明**：事件信封上层的 `occurred_at_unix_ms` 记录 flow 结束时间；payload 内 `timing.started_at_unix_ms` / `ended_at_unix_ms` / `duration_ms` 提供完整时间窗口。
+
+```json
+{
+  "flow_id": "42",
+  "network": "tcp",
+  "inbound": { "tag": "socks5", "protocol": "socks5" },
+  "auth": { "scheme": "socks5", "credential_id": null, "principal_key": "user-001", "attributes": {} },
+  "target": { "host": "example.com", "port": 443 },
+  "route": { "mode": "rule", "target": null },
+  "policy": null,
+  "outbound": { "tag": "server-a", "protocol": "vless" },
+  "traffic": {
+    "bytes_up": 1024000,
+    "bytes_down": 5120000,
+    "inbound_rx_bytes": 1024000,
+    "inbound_tx_bytes": 5120000,
+    "outbound_rx_bytes": 5120000,
+    "outbound_tx_bytes": 1024000,
+    "packets_up": null,
+    "packets_down": null
+  },
+  "timing": {
+    "started_at_unix_ms": 1713499988000,
+    "ended_at_unix_ms": 1713500000000,
+    "duration_ms": 12000
+  },
+  "outcome": "direct-relayed"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `flow_id` | flow 唯一标识 |
+| `network` | `tcp` 或 `udp` |
+| `inbound.tag` | 入站 tag |
+| `inbound.protocol` | 入站协议 |
+| `auth.principal_key` | 用户标识（面板按此聚合计费） |
+| `target.host` | 目标地址 |
+| `target.port` | 目标端口 |
+| `traffic.bytes_up` | 上行字节数（用户→代理） |
+| `traffic.bytes_down` | 下行字节数（代理→用户） |
+| `traffic.inbound_rx_bytes` | 入站方向接收字节 |
+| `traffic.inbound_tx_bytes` | 入站方向发送字节 |
+| `traffic.outbound_rx_bytes` | 出站方向接收字节 |
+| `traffic.outbound_tx_bytes` | 出站方向发送字节 |
+| `timing.started_at_unix_ms` | 连接建立时间（毫秒） |
+| `timing.ended_at_unix_ms` | 连接结束时间（毫秒） |
+| `timing.duration_ms` | 持续时长（毫秒） |
+| `outcome` | 最终结果（见下表） |
 
 outcome 值：
 

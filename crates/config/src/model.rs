@@ -336,12 +336,20 @@ pub enum InboundProtocolConfig {
         cert_path: Option<String>,
         #[serde(default)]
         key_path: Option<String>,
+        #[serde(default)]
+        up_bps: Option<u64>,
+        #[serde(default)]
+        down_bps: Option<u64>,
     },
     #[serde(rename = "shadowsocks")]
     Shadowsocks {
         password: String,
         #[serde(default = "default_ss_cipher")]
         cipher: String,
+        #[serde(default)]
+        up_bps: Option<u64>,
+        #[serde(default)]
+        down_bps: Option<u64>,
     },
     #[serde(rename = "trojan")]
     Trojan {
@@ -350,6 +358,10 @@ pub enum InboundProtocolConfig {
         sni: Option<String>,
         #[serde(default)]
         tls: Option<TlsConfig>,
+        #[serde(default)]
+        up_bps: Option<u64>,
+        #[serde(default)]
+        down_bps: Option<u64>,
     },
 }
 
@@ -456,6 +468,12 @@ impl InboundProtocolConfig {
 pub struct Socks5UserConfig {
     pub username: String,
     pub password: String,
+    #[serde(default)]
+    pub principal_key: Option<String>,
+    #[serde(default)]
+    pub up_bps: Option<u64>,
+    #[serde(default)]
+    pub down_bps: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -468,6 +486,10 @@ pub struct VlessUserConfig {
     pub credential_id: Option<String>,
     #[serde(default)]
     pub principal_key: Option<String>,
+    #[serde(default)]
+    pub up_bps: Option<u64>,
+    #[serde(default)]
+    pub down_bps: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

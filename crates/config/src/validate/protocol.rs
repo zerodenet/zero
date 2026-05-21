@@ -94,6 +94,7 @@ pub(super) fn validate_inbound_protocol(
             password,
             cert_path,
             key_path,
+            ..
         } => {
             validate_inbound_optional_non_empty("hysteria2 password", password)?;
             if cert_path.is_some() != key_path.is_some() {
@@ -112,6 +113,7 @@ pub(super) fn validate_inbound_protocol(
         InboundProtocolConfig::Shadowsocks {
             password,
             cipher: _,
+            ..
         } => {
             validate_inbound_optional_non_empty("shadowsocks password", password)?;
             Ok(())
@@ -120,6 +122,7 @@ pub(super) fn validate_inbound_protocol(
             password,
             sni: _,
             tls: _,
+            ..
         } => {
             validate_inbound_optional_non_empty("trojan password", password)?;
             Ok(())

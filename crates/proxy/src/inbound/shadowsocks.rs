@@ -26,10 +26,13 @@ impl Proxy {
         inbound: InboundConfig,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
-        let (password, cipher_str) = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Shadowsocks { password, cipher } => {
-                (password.clone(), cipher.clone())
-            }
+        let (password, cipher_str, up_bps, down_bps) = match &inbound.protocol {
+            zero_config::InboundProtocolConfig::Shadowsocks {
+                password,
+                cipher,
+                up_bps,
+                down_bps,
+            } => (password.clone(), cipher.clone(), *up_bps, *down_bps),
             _ => {
                 return Err(EngineError::Io(io::Error::new(
                     io::ErrorKind::InvalidInput,
@@ -99,7 +102,7 @@ impl Proxy {
 
                     connections.spawn(async move {
                         if let Err(error) = engine.handle_shadowsocks_connection(
-                            stream, inbound_tag.as_str(), &password, cipher,
+                            stream, inbound_tag.as_str(), &password, cipher, up_bps, down_bps,
                         ).await {
                             log_listener_connection_error(
                                 "shadowsocks",
@@ -192,6 +195,9 @@ impl Proxy {
 
                         // Route decision
                         let mut session = Session::new(0, target.clone(), port, Network::Udp, ProtocolType::Shadowsocks);
+                        let mut sa = zero_core::SessionAuth::new("shadowsocks");
+                        sa.principal_key = Some(password.to_owned());
+                        session.auth = Some(sa);
                         self.prepare_session(&mut session, inbound_tag, None);
                         self.resolve_fake_ip_target(&mut session).await;
                 let action = self.route_decision(&session);
@@ -368,6 +374,8 @@ impl Proxy {
         inbound_tag: &str,
         password: &str,
         cipher: CipherKind,
+        up_bps: Option<u64>,
+        down_bps: Option<u64>,
     ) -> Result<(), EngineError>
     where
         S: crate::transport::ClientStream + Send + 'static,
@@ -379,6 +387,12 @@ impl Proxy {
 
         let mut session = accept.session;
         self.record_session_inbound_traffic(session.id, metered.drain_traffic());
+
+        let mut sa = zero_core::SessionAuth::new("shadowsocks");
+        sa.principal_key = Some(password.to_owned());
+        sa.up_bps = up_bps;
+        sa.down_bps = down_bps;
+        session.apply_auth(sa);
 
         // Route
         self.prepare_session(&mut session, inbound_tag, None);
@@ -419,8 +433,10 @@ impl Proxy {
         let key_up = key.clone();
         let key_down = key;
 
-        let upload = tokio::spawn(ss_decrypt_upload(client_read, up_write, cipher, key_up));
-        let download = tokio::spawn(ss_encrypt_download(up_read, client_write, cipher, key_down));
+        let up_bps = session.up_bps;
+        let down_bps = session.down_bps;
+        let upload = tokio::spawn(ss_decrypt_upload(client_read, up_write, cipher, key_up, up_bps));
+        let download = tokio::spawn(ss_encrypt_download(up_read, client_write, cipher, key_down, down_bps));
 
         let _ = tokio::try_join!(upload, download);
         Ok(())
@@ -434,9 +450,12 @@ async fn ss_decrypt_upload(
     mut upstream: impl AsyncWrite + Unpin + Send + 'static,
     cipher: CipherKind,
     key: Vec<u8>,
+    rate_bps: Option<u64>,
 ) -> Result<(), ()> {
     let mut nonce: u64 = 1; // nonce 0 was the first chunk (handled in accept)
     let mut len_buf = [0u8; 2];
+    let mut total = 0_u64;
+    let start = std::time::Instant::now();
     loop {
         if client.read_exact(&mut len_buf).await.is_err() {
             break;
@@ -451,9 +470,12 @@ async fn ss_decrypt_upload(
         }
         match ShadowsocksInbound::decrypt_chunk(cipher, &key, &mut nonce, &chunk) {
             Ok(plain) => {
+                let n = plain.len() as u64;
                 if upstream.write_all(&plain).await.is_err() {
                     break;
                 }
+                total += n;
+                throttle(total, start, rate_bps).await;
             }
             Err(_) => break,
         }
@@ -469,17 +491,23 @@ async fn ss_encrypt_download(
     mut client: impl AsyncWrite + Unpin,
     cipher: CipherKind,
     key: Vec<u8>,
+    rate_bps: Option<u64>,
 ) -> Result<(), ()> {
     let mut nonce: u64 = 0;
     let mut buf = [0u8; 16384];
+    let mut total = 0_u64;
+    let start = std::time::Instant::now();
     loop {
         match upstream.read(&mut buf).await {
             Ok(0) => break,
             Ok(n) => match ShadowsocksInbound::encrypt_chunk(cipher, &key, &mut nonce, &buf[..n]) {
                 Ok(encrypted) => {
+                    let n = encrypted.len() as u64;
                     if client.write_all(&encrypted).await.is_err() {
                         break;
                     }
+                    total += n;
+                    throttle(total, start, rate_bps).await;
                 }
                 Err(_) => break,
             },
@@ -538,6 +566,22 @@ async fn resolve_socket_addr(
                 }
             };
             Some(addr)
+        }
+    }
+}
+
+async fn throttle(total: u64, start: std::time::Instant, rate_bps: Option<u64>) {
+    if let Some(bps) = rate_bps {
+        if bps > 0 {
+            let elapsed = start.elapsed();
+            let allowed = (elapsed.as_secs_f64() * bps as f64) as u64;
+            if total > allowed {
+                let deficit = total - allowed;
+                let wait = std::time::Duration::from_secs_f64(deficit as f64 / bps as f64);
+                if wait > std::time::Duration::from_millis(1) {
+                    tokio::time::sleep(wait).await;
+                }
+            }
         }
     }
 }

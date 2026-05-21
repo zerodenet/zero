@@ -28,6 +28,15 @@ pub struct Socks5UdpAssociateRequest {
 pub trait Socks5PasswordAuth {
     fn required(&self) -> bool;
     fn verify(&self, username: &str, password: &str) -> bool;
+    /// Returns the principal_key for a successfully authenticated user.
+    /// Defaults to the username if not overridden.
+    fn principal_key_for(&self, username: &str) -> Option<String> {
+        Some(String::from(username))
+    }
+    /// Returns `(up_bps, down_bps)` for the authenticated user.
+    fn rate_limit_for(&self, _username: &str) -> (Option<u64>, Option<u64>) {
+        (None, None)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -78,8 +87,20 @@ impl Socks5Inbound {
         S: AsyncSocket,
         A: Socks5PasswordAuth,
     {
-        negotiate_method(stream, auth).await?;
-        read_request(stream).await
+        let username = negotiate_method(stream, auth).await?;
+        let mut request = read_request(stream).await?;
+        if let (Some(ref name), Socks5Request::Connect(ref mut session)) =
+            (username.as_ref(), &mut request)
+        {
+            let pk = auth.principal_key_for(name);
+            let (up, down) = auth.rate_limit_for(name);
+            let mut sa = zero_core::SessionAuth::new("socks5");
+            sa.principal_key = pk;
+            sa.up_bps = up;
+            sa.down_bps = down;
+            session.apply_auth(sa);
+        }
+        Ok(request)
     }
 
     pub async fn send_response<S>(&self, stream: &mut S, reply: Socks5Reply) -> Result<(), Error>
@@ -135,7 +156,7 @@ impl Socks5Inbound {
     }
 }
 
-async fn negotiate_method<S, A>(stream: &mut S, auth: &A) -> Result<(), Error>
+async fn negotiate_method<S, A>(stream: &mut S, auth: &A) -> Result<Option<String>, Error>
 where
     S: AsyncSocket,
     A: Socks5PasswordAuth,
@@ -171,10 +192,10 @@ where
         .map_err(|_| Error::Io("failed to write SOCKS5 auth negotiation response"))?;
 
     if selected_method == METHOD_USERNAME_PASSWORD {
-        authenticate_username_password(stream, auth).await?;
+        return authenticate_username_password(stream, auth).await;
     }
 
-    Ok(())
+    Ok(None)
 }
 
 fn select_method(methods: &[u8], password_required: bool) -> u8 {
@@ -193,7 +214,10 @@ fn select_method(methods: &[u8], password_required: bool) -> u8 {
     }
 }
 
-async fn authenticate_username_password<S, A>(stream: &mut S, auth: &A) -> Result<(), Error>
+async fn authenticate_username_password<S, A>(
+    stream: &mut S,
+    auth: &A,
+) -> Result<Option<String>, Error>
 where
     S: AsyncSocket,
     A: Socks5PasswordAuth,
@@ -242,7 +266,7 @@ where
         .map_err(|_| Error::Io("failed to write SOCKS5 username/password auth response"))?;
 
     if accepted {
-        Ok(())
+        Ok(Some(username))
     } else {
         Err(Error::Unsupported(
             "SOCKS5 username/password authentication failed",

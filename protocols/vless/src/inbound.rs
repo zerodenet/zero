@@ -15,6 +15,8 @@ pub struct VlessInbound;
 pub struct VlessUser {
     pub credential_id: Option<String>,
     pub principal_key: Option<String>,
+    pub up_bps: Option<u64>,
+    pub down_bps: Option<u64>,
     pub flow: Option<&'static str>,
 }
 
@@ -23,6 +25,8 @@ impl VlessUser {
         Self {
             credential_id: None,
             principal_key: None,
+            up_bps: None,
+            down_bps: None,
             flow: None,
         }
     }
@@ -63,7 +67,9 @@ impl VlessInbound {
             let mut sa = SessionAuth::new("vless");
             sa.credential_id = user.credential_id;
             sa.principal_key = user.principal_key;
-            session.auth = Some(sa);
+            sa.up_bps = user.up_bps;
+            sa.down_bps = user.down_bps;
+            session.apply_auth(sa);
             Ok((session, id))
         }
         #[cfg(not(feature = "reality"))]
@@ -75,7 +81,9 @@ impl VlessInbound {
             let mut sa = SessionAuth::new("vless");
             sa.credential_id = user.credential_id;
             sa.principal_key = user.principal_key;
-            session.auth = Some(sa);
+            sa.up_bps = user.up_bps;
+            sa.down_bps = user.down_bps;
+            session.apply_auth(sa);
             Ok((session, id))
         }
     }
