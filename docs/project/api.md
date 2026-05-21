@@ -352,15 +352,19 @@ sink 的共同要求：
 - `config.validate`
   - 已实现。校验一份配置输入，不改变运行中状态；虽然不产生状态变更，但它表达的是提交前的写入意图，放在 command 侧更清晰
 - `flows.close`
-  - 预留。主动关闭某个活动 flow
+  - 已实现。主动关闭某个活动 flow
 - `policies.select`
   - 已实现。切换 `selector` 当前成员
 - `policies.probe`
-  - 预留。触发 `urltest` 立即探测
+  - 已实现。触发 `urltest` 立即探测
+- `diagnostics.probe_target`
+  - 已实现。对指定出站做 TCP 可达性探测
+- `diagnostics.dns_lookup`
+  - 已实现。解析域名
+- `diagnostics.trace_route`
+  - 已实现。查看路由规则匹配结果
 
-首批不做完整热重载。后续如果引入热重载，应走 staged apply：validate、plan、apply、rollback。
-
-`flows.close` 是写操作，需要单独权限。当前返回 `unsupported`，后续需要先给活动 flow 增加可控关闭句柄，再接入该命令。
+热重载已实现，覆盖路由规则、出站组/出站、运行模式、入站 listener、DNS 配置。通过 `config.apply` 命令触发，走 staged apply：validate → plan rebuild → atomic swap → proxy reconciliation。
 
 现有 `POST /selectors/{group}/{target}` 对应长期能力里的 `policies.select`。HTTP 控制面同时提供 `POST /api/v1/commands`，请求体示例：
 
@@ -387,31 +391,23 @@ sink 的共同要求：
 
 ### Diagnostics
 
-- `logs.tail`
-  - 订阅结构化日志流
-- `diagnostics.get`
-  - 返回当前诊断摘要
 - `diagnostics.probe_target`
-  - 对某个 target 做一次受控探测
+  - 已实现。对指定出站做 TCP 可达性探测
+- `diagnostics.dns_lookup`
+  - 已实现。解析域名
+- `diagnostics.trace_route`
+  - 已实现。查看路由规则匹配结果
 
-诊断方法容易变成高权限入口，默认应只在本地控制面开放。
+## 鉴权
 
-## 权限模型
+内核采用简单的 Bearer Token 鉴权，不做细粒度权限隔离：
 
-控制面至少需要这些权限范围：
+- 未配置 token（本地 `127.0.0.1` 监听）：所有端点无鉴权
+- 已配置 token：请求须携带 `Authorization: Bearer <token>`，通过后全部端点可用
 
-- `read`
-  - 查看配置视图、状态、统计、flow 和 policy
-- `control`
-  - 切换 policy、关闭 flow、触发探测
-- `config`
-  - 校验、提交和应用配置
-- `admin`
-  - 关闭进程、修改监听、安全设置和高级诊断
+IPC 本地 socket 依赖文件权限（`0o600`），连接即视为已鉴权。
 
-本地 IPC 可以依赖文件权限或 named pipe ACL，但仍应在协议层保留权限概念，便于未来远程管理和多客户端。
-
-HTTP/HTTPS、gRPC 或远程二进制传输必须显式配置认证。默认不应该开启远程可写控制面。
+权限隔离应在上层面板/网关实现。内核只负责"认证通过与否"的二元判断。
 
 ## 错误模型
 

@@ -56,7 +56,8 @@ impl UdpDnsResolver {
 }
 
 /// Build a minimal DNS query message.
-fn build_query(domain: &str, qtype: u16) -> Vec<u8> {
+#[allow(dead_code)]
+pub(crate) fn build_query(domain: &str, qtype: u16) -> Vec<u8> {
     use std::sync::atomic::{AtomicU16, Ordering};
     static DNS_ID: AtomicU16 = AtomicU16::new(1);
     let mut buf = Vec::with_capacity(64);
@@ -83,7 +84,8 @@ fn build_query(domain: &str, qtype: u16) -> Vec<u8> {
 }
 
 /// Parse IP addresses from a DNS response's answer section.
-fn parse_response(data: &[u8], qtype: u16) -> io::Result<Vec<IpAddress>> {
+#[allow(dead_code)]
+pub(crate) fn parse_response(data: &[u8], qtype: u16) -> io::Result<Vec<IpAddress>> {
     if data.len() < 12 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,

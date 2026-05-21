@@ -158,8 +158,19 @@ Flow 生命周期钩子，按数组顺序执行。
 | `events` | string[] | `[]` | 事件类型白名单 |
 | `api_key` | string | — | 请求头 `Authorization: Bearer {key}` |
 | `api_key_env` | string | — | 从环境变量读取 |
+| `allow_insecure` | bool | `false` | 跳过 TLS 证书校验（仅测试用） |
 
 投递失败自动重试（指数退避 2s→4s→8s→...→64s，最多 6 次）。
+
+## `api.dead_letter_path`
+
+死信队列文件路径。超出最大重试次数的事件不会丢弃，而是写入此文件持久化。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `dead_letter_path` | string | 死信 JSON Lines 文件路径，不设置则事件最终丢弃 |
+
+死信文件格式：每行一个 JSON，包含 `dead_lettered_at_unix_ms` 和 `original_event`。
 
 ### 投递状态查询
 

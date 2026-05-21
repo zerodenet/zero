@@ -4,7 +4,7 @@
 
 - 稳定前缀：`/api/v1/`
 - 兼容端点（已废弃，v0.2.0 移除）：`/status`、`/runtime`、`/config`、`POST /selectors/{group}/{target}`
-- 认证：`Authorization: Bearer <api_key>`（未配置 api_key 时跳过）
+- 认证：`Authorization: Bearer <token>` 或 `X-Zero-Api-Key: <token>`（未配置时无认证模式，默认所有权限）
 - CORS：所有端点返回 `Access-Control-Allow-Origin: *`
 - 限流：Query 100/s，Command 10/s，SSE 5 并发
 
@@ -29,7 +29,7 @@
   "ok": false,
   "result": null,
   "error": {
-    "code": "not_found",
+    "code": "not-found",
     "message": "Policy not found",
     "field_path": "policy_tag",
     "details": null
@@ -37,14 +37,14 @@
 }
 ```
 
-错误码：
+错误码（kebab-case，与 JSON serde 格式一致）：
 
 | code | HTTP | 说明 |
 |------|------|------|
-| `not_found` | 404 | 资源不存在 |
-| `invalid_argument` | 400 | 参数无效 |
-| `permission_denied` | 403 | 认证失败 |
-| `feature_disabled` | 501 | 功能未编译 |
+| `not-found` | 404 | 资源不存在 |
+| `invalid-argument` | 400 | 参数无效 |
+| `permission-denied` | 403 | 权限不足 |
+| `feature-disabled` | 501 | 功能未编译 |
 | `conflict` | 409 | 状态冲突 |
 | `unsupported` | 501 | 不支持的操作 |
 | `internal` | 500 | 内部错误 |
@@ -189,7 +189,75 @@ Response：
 { "valid": true }
 ```
 
-错误：`invalid_argument` — 配置无效（cause 字段包含详情）
+错误：`invalid-argument` — 配置无效（cause 字段包含详情）
+
+#### diagnostics.probe_target
+
+对指定出站做一次 TCP 可达性探测。
+
+Params：`target_tag` (string)
+
+Response：
+```json
+{
+  "target_tag": "server-a",
+  "server": "1.2.3.4",
+  "port": 443,
+  "reachable": true,
+  "latency_ms": 12
+}
+```
+
+错误：`not-found` — target 不存在
+
+权限：`admin`
+
+#### diagnostics.dns_lookup
+
+解析域名。
+
+Params：`hostname` (string)
+
+Response：
+```json
+{
+  "hostname": "example.com",
+  "resolved_addresses": ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"],
+  "count": 2
+}
+```
+
+权限：`admin`
+
+#### diagnostics.trace_route
+
+查看路由规则对指定目标的匹配结果。
+
+Params：`target` (string), `port` (number), `protocol` (string, 可选，默认 `"tcp"`)
+
+Response：
+```json
+{
+  "target": "1.1.1.1",
+  "port": 443,
+  "protocol": "tcp",
+  "effective_mode": "rule",
+  "route_action": { "route": "proxy" }
+}
+```
+
+权限：`admin`
+
+---
+
+## 鉴权
+
+内核采用简单的 Bearer Token 鉴权，不做细粒度权限隔离：
+
+- **未配置 token**（本地监听 `127.0.0.1`）：所有端点无鉴权，全部可用
+- **已配置 token**：所有请求必须携带 `Authorization: Bearer <token>` 或 `X-Zero-Api-Key: <token>`，认证通过后全部端点可用
+
+这是一个内核，不是多租户 SaaS。权限隔离应在上层面板/网关实现，不应侵入内核。
 
 ---
 

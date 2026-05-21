@@ -36,10 +36,12 @@
 | `engine.started` | 进程启动 | 启动时 1 次 |
 | `engine.stopped` | 进程停止 | 停止时 1 次 |
 | `engine.warning` | 非致命异常 | 按需 |
+| `config.changed` | 配置热重载完成 | 按需 |
 | `flow.started` | flow 建立 | 每个新连接 |
 | `flow.updated` | 活动 flow 流量快照 | 每 10s / flow |
 | `flow.completed` | flow 结束/被关闭/被阻断 | 每个结束的 flow |
 | `policy.selected` | selector 切换 | 按需 |
+| `policy.probe.completed` | urltest 完成一轮探测 | 按探测间隔 |
 | `stats.sampled` | 统计采样 | 每 30s |
 
 ---
@@ -52,6 +54,27 @@
 {
   "version": "0.0.2",
   "started_at_unix_ms": 1713500000000
+}
+```
+
+### engine.stopped
+
+```json
+{
+  "stopped_at_unix_ms": 1713503600000,
+  "reason": "signal"
+}
+```
+
+| reason | 说明 |
+|--------|------|
+| `signal` | 收到 SIGINT/SIGTERM 信号 |
+
+### config.changed
+
+```json
+{
+  "changed_at_unix_ms": 1713501000000
 }
 ```
 
@@ -130,6 +153,22 @@ outcome 值：
   "policy_kind": "selector",
   "selected": "server-a",
   "previous": "direct"
+}
+```
+
+### policy.probe.completed
+
+urltest 探测完成后发射，包含每个成员的探测结果。
+
+```json
+{
+  "policy_tag": "auto",
+  "selected": "server-b",
+  "members": [
+    { "target_tag": "server-a", "healthy": true, "latency_ms": 120, "error": null },
+    { "target_tag": "server-b", "healthy": true, "latency_ms": 85, "error": null },
+    { "target_tag": "server-c", "healthy": false, "latency_ms": null, "error": "connection refused" }
+  ]
 }
 ```
 

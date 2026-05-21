@@ -10,8 +10,8 @@ homepage.workspace = true
 [features]
 default = []
 udp = []
-doh = []
-dot = []
+doh = ["dep:reqwest"]
+dot = ["dep:tokio-rustls", "dep:rustls"]
 
 [dependencies]
 ipnet.workspace = true
@@ -20,3 +20,10 @@ tracing.workspace = true
 zero-config = { path = "../config" }
 zero-platform-tokio = { path = "../platform/tokio" }
 zero-traits = { path = "../traits" }
+
+# DoH
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"], optional = true }
+
+# DoT
+tokio-rustls = { version = "0.26", default-features = false, optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"], optional = true }
