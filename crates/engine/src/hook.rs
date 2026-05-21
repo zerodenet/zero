@@ -70,9 +70,7 @@ impl FlowContext {
         }
     }
 
-    pub fn from_completed(
-        record: &super::completed_sessions::CompletedSessionRecord,
-    ) -> Self {
+    pub fn from_completed(record: &super::completed_sessions::CompletedSessionRecord) -> Self {
         Self {
             flow_id: record.id,
             inbound_tag: record.inbound_tag.clone(),
@@ -166,9 +164,8 @@ impl FlowHookChain {
 impl FlowHook for FlowHookChain {
     fn on_flow_start(&self, ctx: &FlowContext) -> Result<(), BlockReason> {
         for hook in &self.hooks {
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                hook.on_flow_start(ctx)
-            }));
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| hook.on_flow_start(ctx)));
             match result {
                 Ok(Ok(())) => {}
                 Ok(Err(reason)) => return Err(reason),

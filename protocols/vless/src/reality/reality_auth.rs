@@ -193,5 +193,3 @@ pub fn get_current_timestamp() -> u32 {
         .expect("Time went backwards")
         .as_secs() as u32
 }
-
-

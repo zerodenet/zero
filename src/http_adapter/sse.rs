@@ -70,10 +70,7 @@ pub async fn run_sse_stream(
                 }
                 last_event_at = std::time::Instant::now();
             } else if last_event_at.elapsed() >= heartbeat_interval {
-                if event_tx
-                    .send(SseItem::Heartbeat)
-                    .is_err()
-                {
+                if event_tx.send(SseItem::Heartbeat).is_err() {
                     break;
                 }
                 last_event_at = std::time::Instant::now();

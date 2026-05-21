@@ -61,10 +61,7 @@ impl GrpcStream {
 
 // ── client (outbound) connect ──
 
-pub async fn connect_grpc<S>(
-    stream: S,
-    service_names: &[String],
-) -> Result<GrpcStream, EngineError>
+pub async fn connect_grpc<S>(stream: S, service_names: &[String]) -> Result<GrpcStream, EngineError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -150,7 +147,10 @@ where
         };
 
         let path = request.uri().path().to_owned();
-        if !expected_services.iter().any(|s| s.as_str() == path.as_str()) {
+        if !expected_services
+            .iter()
+            .any(|s| s.as_str() == path.as_str())
+        {
             let mut resp = Response::new(());
             *resp.status_mut() = http::StatusCode::NOT_FOUND;
             let mut respond = respond;
@@ -274,10 +274,7 @@ fn build_grpc_stream(
                 let mut frame = Vec::with_capacity(GRPC_HEADER_LEN + chunk.len());
                 frame.extend_from_slice(&header);
                 frame.extend_from_slice(chunk);
-                if send_stream
-                    .send_data(Bytes::from(frame), false)
-                    .is_err()
-                {
+                if send_stream.send_data(Bytes::from(frame), false).is_err() {
                     return;
                 }
             }
@@ -419,7 +416,10 @@ impl AsyncWrite for GrpcStream {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
         if self.write_closed {
             return Poll::Ready(Ok(()));
         }

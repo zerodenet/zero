@@ -81,7 +81,13 @@ fn spawn_vless_udp_relay(
         }
     });
 
-    (VlessUdpUpstream { session_id, send_tx }, recv_rx)
+    (
+        VlessUdpUpstream {
+            session_id,
+            send_tx,
+        },
+        recv_rx,
+    )
 }
 
 /// Establishes a VLESS UDP upstream connection with optional transport encryption.
@@ -210,15 +216,18 @@ impl VlessUdpOutboundManager {
             &id,
             &initial_payload,
             transport,
-        ).await {
+        )
+        .await
+        {
             Ok((upstream, mut recv_rx)) => {
                 let session_id = upstream.session_id;
                 self.upstreams.insert(key, upstream);
 
                 // Spawn response reader task
                 self.response_tasks.spawn(async move {
-                    let payload = recv_rx.recv().await
-                        .ok_or_else(|| EngineError::Io(std::io::Error::other("upstream channel closed")))?;
+                    let payload = recv_rx.recv().await.ok_or_else(|| {
+                        EngineError::Io(std::io::Error::other("upstream channel closed"))
+                    })?;
 
                     Ok((target, port, payload, Some(session_id)))
                 });
@@ -230,10 +239,15 @@ impl VlessUdpOutboundManager {
     }
 
     /// Poll for next response
-    pub async fn next_response(&mut self) -> Option<Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>> {
+    pub async fn next_response(
+        &mut self,
+    ) -> Option<Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>> {
         self.response_tasks.join_next().await.map(|res| match res {
             Ok(inner) => inner,
-            Err(e) => Err(EngineError::Io(std::io::Error::other(format!("upstream task failed: {}", e)))),
+            Err(e) => Err(EngineError::Io(std::io::Error::other(format!(
+                "upstream task failed: {}",
+                e
+            )))),
         })
     }
 }

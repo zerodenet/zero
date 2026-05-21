@@ -14,6 +14,7 @@ pub struct WebhookEventSinkConfig {
     pub url: String,
     pub headers: BTreeMap<String, String>,
     pub timeout: Duration,
+    pub allow_insecure: bool,
 }
 
 impl WebhookEventSinkConfig {
@@ -22,6 +23,7 @@ impl WebhookEventSinkConfig {
             url: url.into(),
             headers: BTreeMap::new(),
             timeout: DEFAULT_TIMEOUT,
+            allow_insecure: false,
         }
     }
 
@@ -32,6 +34,11 @@ impl WebhookEventSinkConfig {
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    pub fn with_allow_insecure(mut self, allow: bool) -> Self {
+        self.allow_insecure = allow;
         self
     }
 }
@@ -51,10 +58,11 @@ impl WebhookEventSink {
     pub fn with_config(config: WebhookEventSinkConfig) -> ApiResult<Self> {
         let url = parse_webhook_url(&config.url)?;
         let headers = parse_headers(&config.headers)?;
-        let client = Client::builder()
-            .timeout(config.timeout)
-            .build()
-            .map_err(client_error)?;
+        let mut builder = Client::builder().timeout(config.timeout);
+        if config.allow_insecure {
+            builder = builder.danger_accept_invalid_certs(true);
+        }
+        let client = builder.build().map_err(client_error)?;
 
         Ok(Self {
             client,

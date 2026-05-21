@@ -8,9 +8,9 @@ use zero_proxy::Proxy;
 
 mod cli;
 mod error_report;
+mod hooks;
 #[cfg(feature = "status-api")]
 mod http_adapter;
-mod hooks;
 mod ipc;
 mod output;
 mod rule_set_fetch;
@@ -36,13 +36,15 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
             status_listen,
             control_socket,
             ipc_hook_socket,
-        } => run_command(
-            &config_path,
-            status_listen.as_deref(),
-            control_socket.as_deref(),
-            ipc_hook_socket.as_deref(),
-        )
-        .await?,
+        } => {
+            run_command(
+                &config_path,
+                status_listen.as_deref(),
+                control_socket.as_deref(),
+                ipc_hook_socket.as_deref(),
+            )
+            .await?
+        }
         cli::Command::Status {
             config_path,
             json,
@@ -60,7 +62,11 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
             config_path,
             socket_path,
         } => reload_command(&config_path, socket_path.as_deref())?,
-        cli::Command::Mode { mode, outbound, socket_path } => {
+        cli::Command::Mode {
+            mode,
+            outbound,
+            socket_path,
+        } => {
             let socket = resolve_socket(socket_path.as_deref())?;
             let request = crate::ipc::protocol::IpcRequest::Command {
                 method: "mode.set".to_owned(),
@@ -129,10 +135,7 @@ async fn run_command(
     ipc_hook_socket: Option<&str>,
 ) -> Result<(), Box<dyn Error>> {
     let mut config = zero_config::RuntimeConfig::load_from_path(config_path)?;
-    rule_set_fetch::pre_fetch_rule_sets(
-        &mut config.route.rule_sets,
-        config.source_dir.as_deref(),
-    );
+    rule_set_fetch::pre_fetch_rule_sets(&mut config.route.rule_sets, config.source_dir.as_deref());
     let proxy = Proxy::from_engine(zero_engine::Engine::new(config)?)?;
     let engine = proxy.engine().clone();
 
@@ -141,7 +144,8 @@ async fn run_command(
         let engine = engine.clone();
         Some(std::sync::Arc::new(move |code: &str, msg: &str| {
             engine.emit_warning(code, msg);
-        }) as std::sync::Arc<dyn Fn(&str, &str) + Send + Sync>)
+        })
+            as std::sync::Arc<dyn Fn(&str, &str) + Send + Sync>)
     };
     let hook_chain =
         hooks::build_hook_chain(ipc_hook_socket, &engine.config().api, warning_handler);
@@ -170,20 +174,12 @@ async fn run_command(
 
     // IPC server always starts (not feature-gated).
     let ipc_socket_path = ipc::resolve_ipc_path(control_socket)?;
-    let ipc_server =
-        ipc::spawn_ipc_server(engine_handle.clone(), &ipc_socket_path).await?;
+    let ipc_server = ipc::spawn_ipc_server(engine_handle.clone(), &ipc_socket_path).await?;
 
     #[cfg(feature = "status-api")]
     let http_server = {
         if let Some(status) = status_server_spec(&engine, status_listen)? {
-            Some(
-                http_adapter::spawn_http_server(
-                    engine_handle,
-                    &status.listen,
-                    status.auth,
-                )
-                .await?,
-            )
+            Some(http_adapter::spawn_http_server(engine_handle, &status.listen, status.auth).await?)
         } else {
             None
         }
@@ -194,6 +190,10 @@ async fn run_command(
     let push_connector = spawn_push_connector_if_configured(&engine)?;
 
     wait_for_shutdown_signal().await;
+
+    engine.push_engine_stopped("signal");
+    // Allow the event dispatcher a brief window to flush the event.
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     stats_sampler.abort();
     shutdown_push_connector(push_connector).await;
@@ -248,7 +248,7 @@ fn status_server_spec(
 
     Ok(Some(StatusServerSpec {
         listen: format!("{}:{}", listen.address, listen.port),
-        auth: Some(http_adapter::HttpServerAuth::new(key)),
+        auth: Some(http_adapter::HttpServerAuth::single_admin(key)),
     }))
 }
 
@@ -325,12 +325,7 @@ fn spawn_event_dispatcher_if_configured(
         return Ok(None);
     }
 
-    Err(
-        std::io::Error::other(
-            "`api.event_sinks` requires Cargo feature `event-dispatcher`",
-        )
-        .into(),
-    )
+    Err(std::io::Error::other("`api.event_sinks` requires Cargo feature `event-dispatcher`").into())
 }
 
 #[cfg(feature = "event-dispatcher")]
@@ -396,27 +391,22 @@ fn spawn_push_connector_if_configured(
     engine: &Engine,
 ) -> Result<Option<PushConnectorUnavailable>, Box<dyn Error>> {
     if engine.config().push.enabled() {
-        return Err(std::io::Error::other(
-            "`push` requires Cargo feature `panel-connector`",
-        )
-        .into());
+        return Err(
+            std::io::Error::other("`push` requires Cargo feature `panel-connector`").into(),
+        );
     }
     Ok(None)
 }
 
 #[cfg(feature = "panel-connector")]
-async fn shutdown_push_connector(
-    connector: Option<zero_connector::PushConnectorHandle>,
-) {
+async fn shutdown_push_connector(connector: Option<zero_connector::PushConnectorHandle>) {
     if let Some(c) = connector {
         c.shutdown().await;
     }
 }
 
 #[cfg(not(feature = "panel-connector"))]
-async fn shutdown_push_connector(
-    _connector: Option<PushConnectorUnavailable>,
-) {}
+async fn shutdown_push_connector(_connector: Option<PushConnectorUnavailable>) {}
 
 #[cfg(not(feature = "panel-connector"))]
 struct PushConnectorUnavailable;
@@ -498,9 +488,8 @@ fn status_command(
     }
 
     // Fallback: offline mode, read config directly.
-    let path = config_path.ok_or_else(|| {
-        std::io::Error::other("no config path provided and no socket available")
-    })?;
+    let path = config_path
+        .ok_or_else(|| std::io::Error::other("no config path provided and no socket available"))?;
     let proxy = Proxy::from_path(path)?;
     let status = proxy.export_status();
 
@@ -626,10 +615,7 @@ fn spawn_stats_sampler(engine: Engine) -> tokio::task::JoinHandle<()> {
     })
 }
 
-fn reload_command(
-    config_path: &str,
-    socket_path: Option<&str>,
-) -> Result<(), Box<dyn Error>> {
+fn reload_command(config_path: &str, socket_path: Option<&str>) -> Result<(), Box<dyn Error>> {
     let socket = resolve_socket(socket_path)?;
     let config_str = std::fs::read_to_string(config_path)?;
     let config_value: serde_json::Value =
@@ -653,4 +639,3 @@ fn reload_command(
     }
     Ok(())
 }
-

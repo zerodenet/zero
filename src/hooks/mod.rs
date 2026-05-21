@@ -25,10 +25,7 @@ pub fn build_hook_chain(
     // Config-based hooks (only if no CLI override for IPC).
     for hook_cfg in &api_config.hooks {
         match hook_cfg {
-            HookConfig::Ipc {
-                socket,
-                timeout_ms,
-            } => {
+            HookConfig::Ipc { socket, timeout_ms } => {
                 if ipc_socket.is_none() {
                     push_ipc_hook(&mut chain, socket, *timeout_ms, &on_warning);
                 }

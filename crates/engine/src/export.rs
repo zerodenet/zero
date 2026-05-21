@@ -6,7 +6,7 @@ use zero_core::{Address, Network, ProtocolType};
 
 use super::completed_sessions::CompletedSessionRecord;
 use super::groups::OutboundGroupStateStore;
-use super::plan::{EnginePlan, TargetId, TargetKind};
+use super::plan::{EnginePlan, TargetId};
 use super::resolve::resolve_target_chains;
 use super::runtime::Engine;
 use super::session_registry::ActiveSession;
@@ -152,7 +152,9 @@ impl Engine {
             rule_count: config.route.rules.len(),
             inbounds: config.inbounds.iter().map(InboundExport::from).collect(),
             outbounds: config.outbounds.iter().map(OutboundExport::from).collect(),
-            outbound_groups: config.outbound_groups.iter()
+            outbound_groups: config
+                .outbound_groups
+                .iter()
                 .map(|group| {
                     let plan = self.plan();
                     let group_id = plan
@@ -267,8 +269,8 @@ impl OutboundGroupExport {
         let effective_chains =
             view.render_target_chains(&resolve_target_chains(plan, state, group_id));
 
-        match group.kind() {
-            TargetKind::Selector(selector) => Self {
+        if let Some(selector) = group.as_selector() {
+            Self {
                 tag: group.tag().to_owned(),
                 kind: "selector".to_owned(),
                 outbounds: view.target_tags(selector.members()),
@@ -280,8 +282,9 @@ impl OutboundGroupExport {
                 last_checked_unix_ms: None,
                 effective_chains,
                 urltest_members: Vec::new(),
-            },
-            TargetKind::Fallback(fallback) => Self {
+            }
+        } else if let Some(fallback) = group.as_fallback() {
+            Self {
                 tag: group.tag().to_owned(),
                 kind: "fallback".to_owned(),
                 outbounds: view.target_tags(fallback.members()),
@@ -293,32 +296,32 @@ impl OutboundGroupExport {
                 last_checked_unix_ms: None,
                 effective_chains,
                 urltest_members: Vec::new(),
-            },
-            TargetKind::UrlTest(urltest) => {
-                let runtime = state.urltest_state(group_id);
-                Self {
-                    tag: group.tag().to_owned(),
-                    kind: "urltest".to_owned(),
-                    outbounds: view.target_tags(urltest.members()),
-                    selected: runtime
-                        .as_ref()
-                        .map(|current| view.target_tag_owned(current.selected))
-                        .or_else(|| Some(view.target_tag_owned(urltest.initial_member()))),
-                    latency_ms: runtime.as_ref().and_then(|current| current.latency_ms),
-                    last_checked_unix_ms: runtime
-                        .as_ref()
-                        .and_then(|current| current.last_checked_unix_ms),
-                    effective_chains,
-                    urltest_members: urltest
-                        .members()
-                        .iter()
-                        .map(|member_id| {
-                            UrlTestMemberExport::new(plan, *member_id, runtime.as_ref())
-                        })
-                        .collect(),
-                }
             }
-            TargetKind::Relay(relay) => Self {
+        } else if let Some(urltest) = group.as_urltest() {
+            let runtime = state.urltest_state(group_id);
+            Self {
+                tag: group.tag().to_owned(),
+                kind: "urltest".to_owned(),
+                outbounds: view.target_tags(urltest.members()),
+                selected: runtime
+                    .as_ref()
+                    .map(|current| view.target_tag_owned(current.selected))
+                    .or_else(|| Some(view.target_tag_owned(urltest.initial_member()))),
+                latency_ms: runtime.as_ref().and_then(|current| current.latency_ms),
+                last_checked_unix_ms: runtime
+                    .as_ref()
+                    .and_then(|current| current.last_checked_unix_ms),
+                effective_chains,
+                urltest_members: urltest
+                    .members()
+                    .iter()
+                    .map(|member_id| {
+                        UrlTestMemberExport::new(plan, *member_id, runtime.as_ref())
+                    })
+                    .collect(),
+            }
+        } else if let Some(relay) = group.as_relay() {
+            Self {
                 tag: group.tag().to_owned(),
                 kind: "relay".to_owned(),
                 outbounds: view.target_tags(relay.chain()),
@@ -327,10 +330,9 @@ impl OutboundGroupExport {
                 last_checked_unix_ms: None,
                 effective_chains,
                 urltest_members: Vec::new(),
-            },
-            TargetKind::Outbound(_) => {
-                unreachable!("outbound group export requires a group target")
             }
+        } else {
+            unreachable!("outbound group export requires a group target")
         }
     }
 }

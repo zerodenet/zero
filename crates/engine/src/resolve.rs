@@ -116,8 +116,7 @@ fn resolve_target_inner<'a>(
         TargetKind::Relay(relay) => {
             let mut chain = Vec::with_capacity(relay.chain().len());
             for &member_id in relay.chain() {
-                let resolved =
-                    resolve_target_inner(plan, outbound_group_state, member_id, stack)?;
+                let resolved = resolve_target_inner(plan, outbound_group_state, member_id, stack)?;
                 match resolved {
                     ResolvedOutbound::Single(leaf) => chain.push(leaf),
                     _ => return None,

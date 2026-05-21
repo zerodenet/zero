@@ -255,5 +255,3 @@ impl std::ops::Index<std::ops::RangeTo<usize>> for SlideBuffer {
         &self.data[self.start..self.start + range.end]
     }
 }
-
-

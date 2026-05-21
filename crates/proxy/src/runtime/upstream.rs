@@ -187,8 +187,7 @@ impl Proxy {
         port: u16,
         password: &str,
     ) -> Result<TcpRelayStream, EngineError> {
-        let connector =
-            crate::transport::Hysteria2Connector::new(server, port, password);
+        let connector = crate::transport::Hysteria2Connector::new(server, port, password);
         let stream = connector.connect(session).await?;
         Ok(TcpRelayStream::new(stream))
     }

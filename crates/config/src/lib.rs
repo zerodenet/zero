@@ -6,16 +6,13 @@ mod validate;
 
 pub use error::ConfigError;
 pub use model::{
-    ApiConfig, ClientTlsConfig, ControlApiConfig, EventSinkConfig, FallbackConfig, GrpcConfig,
-    H2Config, HookConfig, HttpUpgradeConfig, InboundConfig, InboundProtocolConfig,
-    InboundRealityConfig, ListenConfig,
-    ModeConfig,
-    OutboundConfig, OutboundGroupConfig, OutboundGroupKind, OutboundProtocolConfig, PushConfig,
-    QuicConfig,
+    ApiConfig, ClientTlsConfig, ControlApiConfig, DnsCacheConfig, DnsConfig, DnsRouteConfig,
+    DnsServerConfig, EventSinkConfig, FakeIpConfig, FallbackConfig, GrpcConfig, H2Config,
+    HookConfig, HttpUpgradeConfig, InboundConfig, InboundProtocolConfig, InboundRealityConfig,
+    ListenConfig, LogConfig, LogFileConfig, LogRateLimit, ModeConfig, OutboundConfig,
+    OutboundGroupConfig, OutboundGroupKind, OutboundProtocolConfig, PushConfig, QuicConfig,
     RealityConfig, RouteActionConfig, RouteConfig, RouteRuleConfig, RouteRuleSetConfig,
     RuleConditionConfig, RuleSetFormatConfig, RuleSetSourceType, RuntimeConfig,
-    SplitHttpConfig,
-    RuntimeOptionsConfig, Socks5UserConfig, TlsConfig, VlessUserConfig, WebSocketConfig,
-    LogConfig, LogFileConfig, LogRateLimit,
-    DnsConfig, DnsServerConfig, DnsCacheConfig, DnsRouteConfig, FakeIpConfig,
+    RuntimeOptionsConfig, Socks5UserConfig, SplitHttpConfig, TlsConfig, VlessUserConfig,
+    WebSocketConfig,
 };

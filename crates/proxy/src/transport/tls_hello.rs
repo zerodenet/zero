@@ -37,9 +37,7 @@ impl From<io::Error> for HelloError {
 /// Reads and buffers the TLS record + handshake headers and extension data.
 /// On success the caller can replay `info.consumed` to whichever path is
 /// chosen (TLS acceptor or fallback).
-pub(crate) async fn peek_client_hello<R>(
-    reader: &mut R,
-) -> Result<ClientHelloInfo, HelloError>
+pub(crate) async fn peek_client_hello<R>(reader: &mut R) -> Result<ClientHelloInfo, HelloError>
 where
     R: tokio::io::AsyncRead + Unpin,
 {
@@ -137,12 +135,9 @@ fn parse_extensions(ext_data: &[u8], consumed: Vec<u8>) -> ClientHelloInfo {
             0x0000 => {
                 // SNI: [list_len(2)][type(1)][len(2)][name(N)]
                 if ext_bytes.len() >= 5 && ext_bytes[2] == 0x00 {
-                    let name_len =
-                        u16::from_be_bytes([ext_bytes[3], ext_bytes[4]]) as usize;
+                    let name_len = u16::from_be_bytes([ext_bytes[3], ext_bytes[4]]) as usize;
                     if 5 + name_len <= ext_bytes.len() {
-                        if let Ok(name) =
-                            std::str::from_utf8(&ext_bytes[5..5 + name_len])
-                        {
+                        if let Ok(name) = std::str::from_utf8(&ext_bytes[5..5 + name_len]) {
                             sni = Some(name.to_owned());
                         }
                     }
@@ -151,15 +146,13 @@ fn parse_extensions(ext_data: &[u8], consumed: Vec<u8>) -> ClientHelloInfo {
             0x0010 => {
                 // ALPN: [alpn_ext_len(2)][proto_list_len(2)][len(1)][proto(N)]...
                 if ext_bytes.len() >= 4 {
-                    let list_len =
-                        u16::from_be_bytes([ext_bytes[2], ext_bytes[3]]) as usize;
+                    let list_len = u16::from_be_bytes([ext_bytes[2], ext_bytes[3]]) as usize;
                     let mut pos = 4;
                     while pos + 1 <= ext_bytes.len() && pos < 4 + list_len {
                         let proto_len = ext_bytes[pos] as usize;
                         pos += 1;
                         if pos + proto_len <= ext_bytes.len() {
-                            if let Ok(proto) =
-                                std::str::from_utf8(&ext_bytes[pos..pos + proto_len])
+                            if let Ok(proto) = std::str::from_utf8(&ext_bytes[pos..pos + proto_len])
                             {
                                 alpn.push(proto.to_owned());
                             }
@@ -200,11 +193,7 @@ where
     Ok(())
 }
 
-async fn skip_exact<R>(
-    reader: &mut R,
-    buf: &mut Vec<u8>,
-    len: usize,
-) -> Result<(), HelloError>
+async fn skip_exact<R>(reader: &mut R, buf: &mut Vec<u8>, len: usize) -> Result<(), HelloError>
 where
     R: tokio::io::AsyncRead + Unpin,
 {

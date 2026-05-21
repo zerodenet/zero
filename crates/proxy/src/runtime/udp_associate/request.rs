@@ -31,10 +31,8 @@ impl Proxy {
                 if let Some(client_addr) = context.client_addr {
                     match self.resolver.resolve(domain).await {
                         Ok(ips) => {
-                            let dns_resp = zero_dns::udp::build_dns_response(
-                                &udp_packet.payload,
-                                &ips,
-                            );
+                            let dns_resp =
+                                zero_dns::udp::build_dns_response(&udp_packet.payload, &ips);
                             if !dns_resp.is_empty() {
                                 let frame = zero_protocol_socks5::build_udp_packet(
                                     &udp_packet.target,
@@ -356,5 +354,4 @@ impl Proxy {
 
         Ok(())
     }
-
 }

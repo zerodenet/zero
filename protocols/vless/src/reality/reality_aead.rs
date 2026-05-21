@@ -188,5 +188,3 @@ pub fn decrypt_tls13_record(
 ) -> io::Result<Vec<u8>> {
     AeadKey::new(cipher_suite, key)?.open(ciphertext, iv, seq, aad)
 }
-
-

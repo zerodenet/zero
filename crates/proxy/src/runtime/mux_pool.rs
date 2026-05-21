@@ -42,6 +42,13 @@ impl MuxConnectionPool {
         }
     }
 
+    /// Drop all cached connections.  Call after a config reload that may
+    /// have changed upstream server addresses or credentials.
+    pub fn evict_all(&self) {
+        let mut guard = self.pool.lock().expect("mux pool lock poisoned");
+        guard.clear();
+    }
+
     pub async fn open_stream(
         &self,
         proxy: &Proxy,
@@ -177,9 +184,7 @@ impl MuxConnectionPool {
             None,
             proxy.config.source_dir(),
         );
-        let stream: TcpRelayStream = connector
-            .connect(socket, &key.server, key.port)
-            .await?;
+        let stream: TcpRelayStream = connector.connect(socket, &key.server, key.port).await?;
 
         let mut metered = MeteredStream::new(stream);
         let _mux = proxy
@@ -194,10 +199,9 @@ impl MuxConnectionPool {
 
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
-        let crypto: Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>> =
-            Some(Arc::new(Mutex::new(zero_protocol_vless::MuxCrypto::new(
-                &key.uuid,
-            ))));
+        let crypto: Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>> = Some(Arc::new(
+            Mutex::new(zero_protocol_vless::MuxCrypto::new(&key.uuid)),
+        ));
 
         // Write relay: frames → TCP
         tokio::spawn(async move {

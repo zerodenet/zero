@@ -1,11 +1,10 @@
 // Shadowsocks inbound protocol — inbound.rs
 
-
+#[cfg(feature = "crypto")]
+use alloc::vec::Vec;
 use zero_core::ProtocolType;
 #[cfg(feature = "crypto")]
 use zero_core::{Error, Network, Session};
-#[cfg(feature = "crypto")]
-use alloc::vec::Vec;
 
 /// Shadowsocks inbound handler.
 #[derive(Debug, Default, Clone, Copy)]

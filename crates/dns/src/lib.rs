@@ -28,13 +28,16 @@ use system::TokioSystemResolver;
 ///
 /// Implements [`DnsResolver`] so it can be passed directly to
 /// `DirectConnector` and all upstream handlers.
+///
+/// Inner state is under a read-write lock so DNS config can be
+/// hot-reloaded without restarting the proxy.
 pub struct DnsSystem {
-    inner: DnsSystemInner,
+    inner: std::sync::RwLock<DnsSystemInner>,
 }
 
 impl fmt::Debug for DnsSystem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.inner {
+        match &*self.inner.read().expect("dns system lock poisoned") {
             DnsSystemInner::System(_) => f.debug_tuple("System").finish(),
             DnsSystemInner::Configured { servers, .. } => f
                 .debug_struct("Configured")
@@ -56,19 +59,30 @@ enum DnsSystemInner {
     },
 }
 
+/// Snapshot of the fields needed for an async `resolve()` call.
+/// Extracted from the lock so we don't hold it across await points.
+struct ResolveSnapshot {
+    servers: Vec<Arc<ResolverBackend>>,
+    router: DnsRouter,
+    cache: Option<DnsCache>,
+    fake_ip: Option<Arc<FakeIpAllocator>>,
+}
+
 impl DnsSystem {
     /// Build a `DnsSystem` from optional config.
     pub fn build(config: Option<&DnsConfig>) -> io::Result<Self> {
+        Ok(Self {
+            inner: std::sync::RwLock::new(Self::build_inner(config)?),
+        })
+    }
+
+    fn build_inner(config: Option<&DnsConfig>) -> io::Result<DnsSystemInner> {
         let Some(cfg) = config else {
-            return Ok(Self {
-                inner: DnsSystemInner::System(TokioSystemResolver),
-            });
+            return Ok(DnsSystemInner::System(TokioSystemResolver));
         };
 
         if cfg.servers.is_empty() {
-            return Ok(Self {
-                inner: DnsSystemInner::System(TokioSystemResolver),
-            });
+            return Ok(DnsSystemInner::System(TokioSystemResolver));
         }
 
         let mut servers: Vec<Arc<ResolverBackend>> = Vec::with_capacity(cfg.servers.len());
@@ -86,24 +100,59 @@ impl DnsSystem {
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
             .map(Arc::new);
 
-        Ok(Self {
-            inner: DnsSystemInner::Configured {
-                servers,
-                router,
-                cache,
-                fake_ip,
-            },
+        Ok(DnsSystemInner::Configured {
+            servers,
+            router,
+            cache,
+            fake_ip,
         })
+    }
+
+    /// Hot-reload DNS configuration.
+    ///
+    /// In-flight resolutions continue using the old inner state until they
+    /// complete; new resolutions see the updated config immediately.
+    pub fn reload(&self, config: Option<&DnsConfig>) -> io::Result<()> {
+        let new_inner = Self::build_inner(config)?;
+        let mut guard = self.inner.write().expect("dns system lock poisoned");
+        *guard = new_inner;
+        Ok(())
     }
 
     /// Reverse lookup: fake IP → real domain.
     /// Used before route_decision to restore the original target domain.
     pub async fn lookup_fake_ip(&self, ip: &IpAddress) -> Option<String> {
-        match &self.inner {
+        let fake_ip = {
+            let guard = self.inner.read().expect("dns system lock poisoned");
+            match &*guard {
+                DnsSystemInner::Configured {
+                    fake_ip: Some(alloc), ..
+                } => Some(Arc::clone(alloc)),
+                _ => None,
+            }
+        };
+        match fake_ip {
+            Some(alloc) => alloc.lookup(ip).await,
+            None => None,
+        }
+    }
+
+    /// Take a snapshot of the current inner state for an async resolve.
+    fn snapshot(&self) -> Option<ResolveSnapshot> {
+        let guard = self.inner.read().expect("dns system lock poisoned");
+        match &*guard {
+            DnsSystemInner::System(_) => None,
             DnsSystemInner::Configured {
-                fake_ip: Some(alloc), ..
-            } => alloc.lookup(ip).await,
-            _ => None,
+                servers,
+                router,
+                cache,
+                fake_ip,
+            } => Some(ResolveSnapshot {
+                servers: servers.clone(),
+                router: router.clone(),
+                cache: cache.clone(),
+                fake_ip: fake_ip.clone(),
+            }),
         }
     }
 }
@@ -112,57 +161,63 @@ impl DnsResolver for DnsSystem {
     type Error = io::Error;
 
     async fn resolve(&self, domain: &str) -> Result<Vec<IpAddress>, Self::Error> {
-        match &self.inner {
-            DnsSystemInner::System(r) => r.resolve(domain).await,
-            DnsSystemInner::Configured {
-                servers,
-                router,
-                cache,
-                fake_ip,
-            } => {
-                // Fake IP path: return synthetic IP instead of real resolution.
-                if let Some(alloc) = fake_ip {
-                    if !alloc.is_excluded(domain) {
-                        if let Some(ip) = alloc.alloc(domain).await {
-                            return Ok(vec![ip]);
-                        }
+        let snapshot = match self.snapshot() {
+            Some(s) => s,
+            None => {
+                // System resolver fallback — extract the resolver from
+                // the lock, drop the guard, then await.
+                let sys_resolver = {
+                    let guard = self.inner.read().expect("dns system lock poisoned");
+                    match &*guard {
+                        DnsSystemInner::System(r) => r.clone(),
+                        _ => TokioSystemResolver,
                     }
-                }
-
-                // 1. Check cache.
-                if let Some(c) = cache {
-                    if let Some(ips) = c.get(domain).await {
-                        return Ok(ips);
-                    }
-                }
-
-                // 2. Route → primary index, reorder so primary is first.
-                let primary = router.route(domain);
-                let ordered = {
-                    let n = servers.len();
-                    let mut v: Vec<Arc<ResolverBackend>> = Vec::with_capacity(n);
-                    if primary < n {
-                        v.push(Arc::clone(&servers[primary]));
-                    }
-                    for i in 0..n {
-                        if i != primary {
-                            v.push(Arc::clone(&servers[i]));
-                        }
-                    }
-                    v
                 };
+                return sys_resolver.resolve(domain).await;
+            }
+        };
 
-                // 3. Race all backends concurrently, take first success.
-                let result = race_resolve(domain, &ordered).await;
-
-                // 4. Cache on success (default TTL 300s).
-                if let (Some(c), Ok(ref ips)) = (cache, &result) {
-                    c.put(domain.to_owned(), ips.clone(), 300).await;
+        // Fake IP path: return synthetic IP instead of real resolution.
+        if let Some(alloc) = &snapshot.fake_ip {
+            if !alloc.is_excluded(domain) {
+                if let Some(ip) = alloc.alloc(domain).await {
+                    return Ok(vec![ip]);
                 }
-
-                result
             }
         }
+
+        // 1. Check cache.
+        if let Some(ref c) = snapshot.cache {
+            if let Some(ips) = c.get(domain).await {
+                return Ok(ips);
+            }
+        }
+
+        // 2. Route → primary index, reorder so primary is first.
+        let primary = snapshot.router.route(domain);
+        let ordered = {
+            let n = snapshot.servers.len();
+            let mut v: Vec<Arc<ResolverBackend>> = Vec::with_capacity(n);
+            if primary < n {
+                v.push(Arc::clone(&snapshot.servers[primary]));
+            }
+            for i in 0..n {
+                if i != primary {
+                    v.push(Arc::clone(&snapshot.servers[i]));
+                }
+            }
+            v
+        };
+
+        // 3. Race all backends concurrently, take first success.
+        let result = race_resolve(domain, &ordered).await;
+
+        // 4. Cache on success (default TTL 300s).
+        if let (Some(c), Ok(ref ips)) = (&snapshot.cache, &result) {
+            c.put(domain.to_owned(), ips.clone(), 300).await;
+        }
+
+        result
     }
 }
 

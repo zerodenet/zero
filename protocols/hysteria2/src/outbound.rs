@@ -53,10 +53,7 @@ impl Hysteria2Outbound {
     }
 
     /// Read the TCP connect response.
-    pub async fn read_connect_response<S: AsyncSocket>(
-        &self,
-        stream: &mut S,
-    ) -> Result<(), Error> {
+    pub async fn read_connect_response<S: AsyncSocket>(&self, stream: &mut S) -> Result<(), Error> {
         let mut buf = [0u8; 256];
         let n = stream
             .read(&mut buf)

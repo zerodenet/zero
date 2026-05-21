@@ -17,8 +17,8 @@ use zero_config::TlsConfig;
 use zero_platform_tokio::TokioSocket;
 use zero_traits::AsyncSocket;
 
-use zero_platform_tokio::ClientStream;
 use zero_engine::EngineError;
+use zero_platform_tokio::ClientStream;
 
 #[derive(Debug)]
 struct InsecureCertVerifier;

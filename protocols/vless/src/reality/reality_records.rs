@@ -316,5 +316,3 @@ fn make_record_header(ciphertext_len: usize) -> [u8; TLS_RECORD_HEADER_SIZE] {
         (ciphertext_len & 0xff) as u8,
     ]
 }
-
-

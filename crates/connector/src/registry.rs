@@ -64,8 +64,10 @@ fn build_event_sink(
             source_id,
             api_key,
             api_key_env,
-            ..
-        } => build_webhook_sink(tag, url, events, source_id, api_key, api_key_env),
+            allow_insecure,
+        } => build_webhook_sink(
+            tag, url, events, source_id, api_key, api_key_env, *allow_insecure,
+        ),
     }
 }
 
@@ -121,12 +123,15 @@ fn build_webhook_sink(
     source_id: &Option<String>,
     api_key: &Option<String>,
     api_key_env: &Option<String>,
+    allow_insecure: bool,
 ) -> ConnectorResult<ConfiguredEventSink> {
     let key = resolve_api_key(api_key, api_key_env)?;
-    let sink = zero_api::WebhookEventSink::with_config(
-        zero_api::WebhookEventSinkConfig::new(url.to_owned())
-            .with_header("authorization", format!("Bearer {key}")),
-    )?;
+    let mut config = zero_api::WebhookEventSinkConfig::new(url.to_owned())
+        .with_header("authorization", format!("Bearer {key}"));
+    if allow_insecure {
+        config = config.with_allow_insecure(true);
+    }
+    let sink = zero_api::WebhookEventSink::with_config(config)?;
 
     Ok(ConfiguredEventSink {
         tag: tag.to_owned(),
@@ -144,6 +149,7 @@ fn build_webhook_sink(
     _source_id: &Option<String>,
     _api_key: &Option<String>,
     _api_key_env: &Option<String>,
+    _allow_insecure: bool,
 ) -> ConnectorResult<ConfiguredEventSink> {
     Err(ConnectorError::FeatureDisabled {
         feature: "panel-connector",

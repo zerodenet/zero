@@ -54,7 +54,9 @@ impl fmt::Debug for ProtocolRegistry {
 
 impl Default for ProtocolRegistry {
     fn default() -> Self {
-        Self { adapters: Vec::new() }
+        Self {
+            adapters: Vec::new(),
+        }
     }
 }
 
@@ -90,7 +92,10 @@ impl ProtocolRegistry {
     }
 
     /// Validate that every inbound in the config has a compiled-in adapter.
-    pub fn validate_inbounds(&self, configs: &[zero_config::InboundConfig]) -> Result<(), EngineError> {
+    pub fn validate_inbounds(
+        &self,
+        configs: &[zero_config::InboundConfig],
+    ) -> Result<(), EngineError> {
         for inbound in configs {
             if !self.supports_inbound(&inbound.protocol) {
                 let name = self.inbound_protocol_label(&inbound.protocol);
@@ -106,7 +111,10 @@ impl ProtocolRegistry {
     }
 
     /// Validate that every outbound in the config has a compiled-in adapter.
-    pub fn validate_outbounds(&self, configs: &[zero_config::OutboundConfig]) -> Result<(), EngineError> {
+    pub fn validate_outbounds(
+        &self,
+        configs: &[zero_config::OutboundConfig],
+    ) -> Result<(), EngineError> {
         for outbound in configs {
             if !self.supports_outbound(&outbound.protocol) {
                 let name = self.outbound_protocol_label(&outbound.protocol);
@@ -122,15 +130,15 @@ impl ProtocolRegistry {
     }
 
     pub fn supports_inbound(&self, config: &InboundProtocolConfig) -> bool {
-        self.adapters
-            .iter()
-            .any(|a| a.supports_inbound(config))
+        self.adapters.iter().any(|a| a.supports_inbound(config))
             || matches!(config, InboundProtocolConfig::Mixed { .. })
     }
 
     pub fn supports_outbound(&self, config: &OutboundProtocolConfig) -> bool {
-        matches!(config, OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block)
-            || self.adapters.iter().any(|a| a.supports_outbound(config))
+        matches!(
+            config,
+            OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block
+        ) || self.adapters.iter().any(|a| a.supports_outbound(config))
     }
 
     /// Human-readable label for an inbound protocol config.

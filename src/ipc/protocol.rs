@@ -12,9 +12,7 @@ pub enum IpcRequest {
         params: serde_json::Value,
     },
     /// Subscribe to events (keeps the connection open).
-    Subscribe {
-        events: Option<Vec<String>>,
-    },
+    Subscribe { events: Option<Vec<String>> },
     /// Ping to verify the connection is alive.
     Ping,
 }
@@ -40,9 +38,7 @@ pub enum IpcEvent {
         payload: serde_json::Value,
     },
     /// Server is shutting down.
-    Goodbye {
-        message: String,
-    },
+    Goodbye { message: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

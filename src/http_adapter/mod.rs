@@ -12,6 +12,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use tracing::{debug, error, info, warn};
+use zero_api::{AuthContext, Permission};
 use zero_engine::EngineHandle;
 
 use router::{HttpRequest, RouteResult};
@@ -25,14 +26,42 @@ pub struct HttpServerHandle {
     task: tokio::task::JoinHandle<io::Result<()>>,
 }
 
+/// A single token entry parsed from configuration.
+#[derive(Debug, Clone)]
+struct TokenEntry {
+    name: String,
+    key: String,
+    permissions: Vec<Permission>,
+}
+
+/// Multi-token authentication store for the HTTP API.
+///
+/// If `tokens` is empty (no auth configured), all requests are treated as
+/// admin — this preserves backward compatibility with local-only setups.
 #[derive(Debug, Clone)]
 pub struct HttpServerAuth {
-    api_key: String,
+    tokens: Vec<TokenEntry>,
 }
 
 impl HttpServerAuth {
-    pub fn new(api_key: String) -> Self {
-        Self { api_key }
+    /// Create an auth store with a single admin-scoped key (legacy mode).
+    pub fn single_admin(api_key: String) -> Self {
+        Self {
+            tokens: vec![TokenEntry {
+                name: "default".to_owned(),
+                key: api_key,
+                permissions: vec![
+                    Permission::Read,
+                    Permission::Control,
+                    Permission::Config,
+                    Permission::Admin,
+                ],
+            }],
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.tokens.is_empty()
     }
 }
 
@@ -123,7 +152,8 @@ async fn serve_connection(
 ) -> io::Result<()> {
     let request = read_request(&mut stream).await?;
 
-    if !is_authorized(&request, auth) {
+    let auth_ctx = authenticate(&request, auth);
+    if auth_ctx.permissions.is_empty() {
         return write_response(
             &mut stream,
             "HTTP/1.1 401 Unauthorized\r\n",
@@ -148,10 +178,8 @@ async fn serve_connection(
         .await;
     }
 
-    match router::route(&request, &handle) {
-        RouteResult::Respond(status, body) => {
-            write_response(&mut stream, &status, &body).await
-        }
+    match router::route(&request, &handle, &auth_ctx) {
+        RouteResult::Respond(status, body) => write_response(&mut stream, &status, &body).await,
         RouteResult::Sse {
             subscriber,
             catch_up,
@@ -268,23 +296,87 @@ fn content_length(headers: &[(String, String)]) -> io::Result<usize> {
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid content-length"))
 }
 
-fn is_authorized(request: &HttpRequest, auth: Option<&HttpServerAuth>) -> bool {
+/// Authenticate the HTTP request and return an `AuthContext`.
+///
+/// - No auth configured → admin access (backward compatible).
+/// - Valid token → permissions from the matching token entry.
+/// - Invalid / missing token → empty permissions (handler gates will reject).
+fn authenticate(request: &HttpRequest, auth: Option<&HttpServerAuth>) -> AuthContext {
     let Some(auth) = auth else {
-        return true;
+        return AuthContext {
+            subject: None,
+            permissions: vec![
+                Permission::Read,
+                Permission::Control,
+                Permission::Config,
+                Permission::Admin,
+            ],
+        };
     };
-    let bearer = format!("Bearer {}", auth.api_key);
 
-    request.headers.iter().any(|(name, value)| {
-        (name.eq_ignore_ascii_case("authorization") && value == &bearer)
-            || (name.eq_ignore_ascii_case("x-zero-api-key") && value == &auth.api_key)
-    })
+    if auth.is_empty() {
+        return AuthContext {
+            subject: None,
+            permissions: vec![
+                Permission::Read,
+                Permission::Control,
+                Permission::Config,
+                Permission::Admin,
+            ],
+        };
+    }
+
+    // Look for a Bearer token or X-Zero-Api-Key header.
+    let presented = request
+        .headers
+        .iter()
+        .find_map(|(name, value)| {
+            if name.eq_ignore_ascii_case("authorization") {
+                value.strip_prefix("Bearer ").map(|t| t.to_owned())
+            } else if name.eq_ignore_ascii_case("x-zero-api-key") {
+                Some(value.clone())
+            } else {
+                None
+            }
+        });
+
+    let Some(token) = presented else {
+        return AuthContext {
+            subject: None,
+            permissions: vec![],
+        };
+    };
+
+    // Constant-time comparison to avoid timing side-channels.
+    for entry in &auth.tokens {
+        let match_len = entry.key.len().min(token.len());
+        let eq = {
+            use std::cmp::Ordering;
+            entry.key.as_bytes()[..match_len]
+                .iter()
+                .zip(token.as_bytes()[..match_len].iter())
+                .fold(Ordering::Equal, |acc, (a, b)| match (acc, a.cmp(b)) {
+                    (Ordering::Equal, Ordering::Equal) => Ordering::Equal,
+                    _ => Ordering::Less,
+                })
+                == Ordering::Equal
+                && entry.key.len() == token.len()
+        };
+        if eq {
+            return AuthContext {
+                subject: Some(entry.name.clone()),
+                permissions: entry.permissions.clone(),
+            };
+        }
+    }
+
+    AuthContext {
+        subject: None,
+        permissions: vec![],
+    }
 }
 
-async fn write_response(
-    stream: &mut TcpStream,
-    status_line: &str,
-    body: &[u8],
-) -> io::Result<()> {
+async fn write_response(stream: &mut TcpStream, status_line: &str, body: &[u8]) -> io::Result<()> {
     let headers = format!(
         "{status_line}\
         Content-Type: application/json\r\n\

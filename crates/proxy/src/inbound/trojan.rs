@@ -38,13 +38,24 @@ impl Proxy {
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
         let (password, tls_cfg) = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Trojan { password, sni: _, tls } => {
-                (password.clone(), tls.clone())
+            zero_config::InboundProtocolConfig::Trojan {
+                password,
+                sni: _,
+                tls,
+            } => (password.clone(), tls.clone()),
+            _ => {
+                return Err(EngineError::Io(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "trojan config",
+                )))
             }
-            _ => return Err(EngineError::Io(io::Error::new(io::ErrorKind::InvalidInput, "trojan config"))),
         };
-        let tls_cfg = tls_cfg
-            .ok_or_else(|| EngineError::Io(io::Error::new(io::ErrorKind::InvalidInput, "trojan requires TLS")))?;
+        let tls_cfg = tls_cfg.ok_or_else(|| {
+            EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "trojan requires TLS",
+            ))
+        })?;
         let acceptor = crate::transport::build_tls_acceptor(&tls_cfg, self.config.source_dir())?;
         let listener = bind_listener(&inbound).await?;
         let tag = inbound.tag.clone();
@@ -77,23 +88,32 @@ impl Proxy {
     }
 
     async fn serve_trojan(
-        &self, socket: impl Into<TcpRelayStream>, tag: &str, password: &str,
+        &self,
+        socket: impl Into<TcpRelayStream>,
+        tag: &str,
+        password: &str,
         acceptor: &crate::transport::TlsAcceptor,
     ) -> Result<(), EngineError> {
         let raw: TcpRelayStream = socket.into();
         // TLS accept.
-        let tls = acceptor.accept(raw).await
+        let tls = acceptor
+            .accept(raw)
+            .await
             .map_err(|e| EngineError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
         // Trojan protocol auth.
         let mut sock = TlsStream(tls);
-        let accept = TrojanInbound.accept(&mut sock, &[password.to_owned()]).await?;
+        let accept = TrojanInbound
+            .accept(&mut sock, &[password.to_owned()])
+            .await?;
         let mut session: Session = accept.session;
         self.prepare_session(&mut session, tag, None);
         // Route + outbound + relay.
         self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session);
+        let action = self.route_decision(&session);
         let (resolved, _plan) = self.resolve_outbound(&action)?;
-        let outbound = self.establish_tcp_outbound(&session, (resolved, _plan)).await
+        let outbound = self
+            .establish_tcp_outbound(&session, (resolved, _plan))
+            .await
             .map_err(|f| EngineError::Io(io::Error::new(io::ErrorKind::Other, f.error)))?;
         let upstream = match outbound {
             crate::transport::EstablishedTcpOutbound::Direct { upstream, .. } => upstream,
@@ -104,12 +124,19 @@ impl Proxy {
             crate::transport::EstablishedTcpOutbound::Trojan { upstream, .. } => upstream,
             crate::transport::EstablishedTcpOutbound::Relay { upstream } => upstream,
             crate::transport::EstablishedTcpOutbound::Block { .. } => {
-                return Err(EngineError::Io(io::Error::new(io::ErrorKind::ConnectionRefused, "blocked")));
+                return Err(EngineError::Io(io::Error::new(
+                    io::ErrorKind::ConnectionRefused,
+                    "blocked",
+                )));
             }
         };
         crate::transport::relay_bidirectional_metered(
-            TcpRelayStream::new(sock.0), upstream, |_| {}, |_| {},
-        ).await
+            TcpRelayStream::new(sock.0),
+            upstream,
+            |_| {},
+            |_| {},
+        )
+        .await
         .map_err(|e| EngineError::Io(e))?;
         Ok(())
     }

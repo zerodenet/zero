@@ -1,6 +1,7 @@
 //! TTL-based DNS cache with simple eviction.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::Mutex;
@@ -13,23 +14,37 @@ struct CacheEntry {
 }
 
 pub(crate) struct DnsCache {
+    inner: Arc<DnsCacheInner>,
+}
+
+struct DnsCacheInner {
     map: Mutex<HashMap<String, CacheEntry>>,
     max_entries: usize,
     max_ttl: Option<Duration>,
 }
 
+impl Clone for DnsCache {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
 impl DnsCache {
     pub(crate) fn new(config: &DnsCacheConfig) -> Self {
         Self {
-            map: Mutex::new(HashMap::new()),
-            max_entries: config.max_entries,
-            max_ttl: config.max_ttl_seconds.map(Duration::from_secs),
+            inner: Arc::new(DnsCacheInner {
+                map: Mutex::new(HashMap::new()),
+                max_entries: config.max_entries,
+                max_ttl: config.max_ttl_seconds.map(Duration::from_secs),
+            }),
         }
     }
 
     /// Look up domain in cache. Returns `None` on miss or expiry.
     pub(crate) async fn get(&self, domain: &str) -> Option<Vec<IpAddress>> {
-        let map = self.map.lock().await;
+        let map = self.inner.map.lock().await;
         let entry = map.get(domain)?;
         if entry.expires_at <= Instant::now() {
             return None;
@@ -40,12 +55,12 @@ impl DnsCache {
     /// Store a resolution in the cache.
     pub(crate) async fn put(&self, domain: String, ips: Vec<IpAddress>, ttl_seconds: u64) {
         let effective_ttl = self
-            .max_ttl
+            .inner.max_ttl
             .map(|max| max.min(Duration::from_secs(ttl_seconds)))
             .unwrap_or(Duration::from_secs(ttl_seconds));
 
-        let mut map = self.map.lock().await;
-        if map.len() >= self.max_entries {
+        let mut map = self.inner.map.lock().await;
+        if map.len() >= self.inner.max_entries {
             self.evict(&mut map);
         }
         map.insert(
@@ -61,7 +76,7 @@ impl DnsCache {
     fn evict(&self, map: &mut HashMap<String, CacheEntry>) {
         let now = Instant::now();
         map.retain(|_, v| v.expires_at > now);
-        if map.len() >= self.max_entries {
+        if map.len() >= self.inner.max_entries {
             // Simple: remove the oldest half by insertion order approximation.
             let to_remove = map.len() / 2;
             let keys: Vec<String> = map.keys().take(to_remove).cloned().collect();
@@ -70,5 +85,4 @@ impl DnsCache {
             }
         }
     }
-
 }

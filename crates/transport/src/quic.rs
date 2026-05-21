@@ -53,18 +53,18 @@ pub async fn connect_quic(
     transport.max_idle_timeout(Some(std::time::Duration::from_secs(30).try_into().unwrap()));
     client_cfg.transport_config(Arc::new(transport));
 
-    let bind_addr = "0.0.0.0:0".parse::<std::net::SocketAddr>().map_err(|e| {
-        EngineError::Io(io::Error::other(format!("quic bind addr: {e}")))
-    })?;
+    let bind_addr = "0.0.0.0:0"
+        .parse::<std::net::SocketAddr>()
+        .map_err(|e| EngineError::Io(io::Error::other(format!("quic bind addr: {e}"))))?;
 
     let mut endpoint = quinn::Endpoint::client(bind_addr)
         .map_err(|e| EngineError::Io(io::Error::other(format!("quic endpoint: {e}"))))?;
 
     endpoint.set_default_client_config(client_cfg);
 
-    let server_addr = format!("{server_name}:{port}").parse::<std::net::SocketAddr>().map_err(|e| {
-        EngineError::Io(io::Error::other(format!("quic addr parse: {e}")))
-    })?;
+    let server_addr = format!("{server_name}:{port}")
+        .parse::<std::net::SocketAddr>()
+        .map_err(|e| EngineError::Io(io::Error::other(format!("quic addr parse: {e}"))))?;
 
     let conn = endpoint
         .connect(server_addr, server_name)
@@ -237,21 +237,24 @@ impl AsyncWrite for QuicStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.send).poll_write(cx, buf).map_err(|e| io::Error::other(e))
+        Pin::new(&mut self.send)
+            .poll_write(cx, buf)
+            .map_err(|e| io::Error::other(e))
     }
 
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.send).poll_flush(cx).map_err(|e| io::Error::other(e))
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.send)
+            .poll_flush(cx)
+            .map_err(|e| io::Error::other(e))
     }
 
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.send).poll_shutdown(cx).map_err(|e| io::Error::other(e))
+        Pin::new(&mut self.send)
+            .poll_shutdown(cx)
+            .map_err(|e| io::Error::other(e))
     }
 }
 

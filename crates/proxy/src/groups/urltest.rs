@@ -11,8 +11,8 @@ use super::super::runtime::upstream::VlessUpstream;
 use super::super::transport::TcpRelayStream;
 use super::super::{logging::log_urltest_group_target_changed, runtime::Proxy};
 use zero_engine::{
-    EngineError, ProbeTrigger, ResolvedLeafOutbound, ResolvedOutbound, TargetId, TargetKind,
-    UrlTestMemberState,
+    EngineError, PolicyProbeCompletedPayload, PolicyProbeMember, ProbeTrigger,
+    ResolvedLeafOutbound, ResolvedOutbound, TargetId, UrlTestMemberState,
 };
 
 impl Proxy {
@@ -25,7 +25,7 @@ impl Proxy {
         let group = plan
             .target(group_id)
             .expect("engine plan should resolve urltest group");
-        let TargetKind::UrlTest(urltest) = group.kind() else {
+        let Some(urltest) = group.as_urltest() else {
             return Ok(());
         };
         let group_tag = group.tag().to_owned();
@@ -71,18 +71,17 @@ impl Proxy {
             }
         }
 
-        self.engine()
-            .probe_trigger_registry()
-            .remove(&group_tag);
+        self.engine().probe_trigger_registry().remove(&group_tag);
         info!(group_tag = %group_tag, "urltest group stopped");
         Ok(())
     }
 
     async fn refresh_urltest_group(&self, group_id: TargetId, probe: &UrlTestProbe) {
         let plan = self.engine().plan();
-        let group = plan.target(group_id)
+        let group = plan
+            .target(group_id)
             .expect("engine plan should resolve urltest group");
-        let TargetKind::UrlTest(urltest) = group.kind() else {
+        let Some(urltest) = group.as_urltest() else {
             return;
         };
         let group_tag = group.tag();
@@ -91,7 +90,9 @@ impl Proxy {
         let mut member_states = Vec::with_capacity(urltest.members().len());
 
         for member_id in urltest.members() {
-            let member = self.target_tag(*member_id).unwrap_or_else(|| "<unknown>".to_owned());
+            let member = self
+                .target_tag(*member_id)
+                .unwrap_or_else(|| "<unknown>".to_owned());
             let effective_chains = self.resolve_target_chains(*member_id);
             let Some((candidate, _plan)) = self.resolve_target_id(*member_id) else {
                 member_states.push(UrlTestMemberState {
@@ -155,14 +156,47 @@ impl Proxy {
         else {
             return;
         };
-        let selected_tag = self.target_tag(selected).unwrap_or_else(|| "<unknown>".to_owned());
+        let selected_tag = self
+            .target_tag(selected)
+            .unwrap_or_else(|| "<unknown>".to_owned());
         let previous_tag = previous.and_then(|target| self.target_tag(target));
 
         let latency_ms = best
             .as_ref()
             .and_then(|probe| (probe.outbound_id == selected).then_some(probe.latency_ms));
+
+        let probe_members: Vec<PolicyProbeMember> = member_states
+            .iter()
+            .map(|state| {
+                let tag = self
+                    .target_tag(state.member_id)
+                    .unwrap_or_else(|| "<unknown>".to_owned());
+                PolicyProbeMember {
+                    target_tag: tag,
+                    healthy: state.healthy,
+                    latency_ms: state.latency_ms,
+                    error: state.last_error.clone(),
+                }
+            })
+            .collect();
+
         self.update_urltest_state(group_id, selected, latency_ms, member_states);
-        log_urltest_group_target_changed(group_tag, previous_tag.as_deref(), &selected_tag, latency_ms);
+
+        self.engine().push_policy_probe_completed(
+            group_tag,
+            PolicyProbeCompletedPayload {
+                policy_tag: group_tag.to_owned(),
+                selected: Some(selected_tag.clone()),
+                members: probe_members,
+            },
+        );
+
+        log_urltest_group_target_changed(
+            group_tag,
+            previous_tag.as_deref(),
+            &selected_tag,
+            latency_ms,
+        );
 
         if best.is_none() {
             warn!(
@@ -278,26 +312,23 @@ impl Proxy {
                     )
                     .await?
                 }
-                ResolvedLeafOutbound::Hysteria2 {
-                    server, port, ..
-                } => {
-                    let quic_stream =
-                        crate::transport::connect_quic(server, port, true).await?;
+                ResolvedLeafOutbound::Hysteria2 { server, port, .. } => {
+                    let quic_stream = crate::transport::connect_quic(server, port, true).await?;
                     TcpRelayStream::new(quic_stream)
                 }
-                ResolvedLeafOutbound::Shadowsocks {
-                    server, port, ..
-                } => {
-                    self.protocols.direct_outbound
-                        .connect_host(server, port, self.resolver.as_ref())
-                        .await
-                        .map_err(EngineError::from)?
-                        .into()
+                ResolvedLeafOutbound::Shadowsocks { server, port, .. } => self
+                    .protocols
+                    .direct_outbound
+                    .connect_host(server, port, self.resolver.as_ref())
+                    .await
+                    .map_err(EngineError::from)?
+                    .into(),
+                ResolvedLeafOutbound::Trojan { .. } => {
+                    return Err(EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::Unsupported,
+                        "trojan cannot be a urltest member",
+                    )))
                 }
-        ResolvedLeafOutbound::Trojan { .. } => return Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "trojan cannot be a urltest member",
-        ))),
             };
 
             socket

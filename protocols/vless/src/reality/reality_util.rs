@@ -443,5 +443,3 @@ pub fn negotiate_cipher_suite(
     }
     None
 }
-
-

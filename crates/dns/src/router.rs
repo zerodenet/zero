@@ -3,6 +3,7 @@
 use zero_config::DnsRouteConfig;
 
 /// A compiled DNS route rule.
+#[derive(Clone)]
 enum DnsRoutePattern {
     /// Exact domain match, e.g. `"example.com"`.
     Exact(String),
@@ -20,6 +21,7 @@ impl DnsRoutePattern {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct DnsRouter {
     /// Ordered rules: (pattern, server_index). First match wins.
     rules: Vec<(DnsRoutePattern, usize)>,

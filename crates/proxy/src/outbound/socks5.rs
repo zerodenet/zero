@@ -64,10 +64,12 @@ impl ActiveUpstreamSocks5UdpAssociation {
             .socks5_outbound
             .establish_udp_association_with_auth(
                 &mut control,
-                auth.map(|(username, password)| zero_protocol_socks5::Socks5OutboundAuth {
-                    username,
-                    password,
-                }),
+                auth.map(
+                    |(username, password)| zero_protocol_socks5::Socks5OutboundAuth {
+                        username,
+                        password,
+                    },
+                ),
             )
             .await?;
         proxy.record_session_outbound_traffic(session_id, control.drain_traffic());
@@ -134,7 +136,12 @@ impl ActiveUpstreamSocks5UdpAssociation {
         }
     }
 
-    pub async fn send_packet(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, EngineError> {
+    pub async fn send_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
         match self.relay.send_packet(target, port, payload).await {
             Ok(sent) => Ok(sent),
             Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
@@ -195,7 +202,10 @@ pub async fn ensure_socks5_udp_association(
         &association.tag,
         &association.server,
         association.port,
-        association.auth.as_ref().map(|(u, p)| (u.as_str(), p.as_str())),
+        association
+            .auth
+            .as_ref()
+            .map(|(u, p)| (u.as_str(), p.as_str())),
         session_id,
     )
     .await

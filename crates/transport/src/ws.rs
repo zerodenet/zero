@@ -25,10 +25,7 @@ impl<S> WebSocketSocket<S> {
     }
 }
 
-pub async fn accept_ws<S>(
-    stream: S,
-    expected_path: &str,
-) -> Result<WebSocketSocket<S>, EngineError>
+pub async fn accept_ws<S>(stream: S, expected_path: &str) -> Result<WebSocketSocket<S>, EngineError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {

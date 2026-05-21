@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
-use zero_api::{EventFilter, EventSource, RawApiEvent};
+use zero_api::{DeadLetterSink, EventFilter, EventSource, RawApiEvent};
 use zero_config::ApiConfig;
 
 use crate::registry::{build_event_sinks, ConfiguredEventSink};
@@ -55,6 +55,9 @@ where
 {
     let (init_tx, init_rx) = mpsc::sync_channel(1);
     let (shutdown_tx, shutdown_rx) = mpsc::channel();
+
+    let dead_letter_path = api.dead_letter_path.clone();
+
     let task = tokio::task::spawn_blocking(move || {
         let sinks = match build_event_sinks(&api, source_dir.as_deref()) {
             Ok(sinks) => sinks,
@@ -64,13 +67,25 @@ where
             }
         };
 
-        if sinks.is_empty() {
+        if sinks.is_empty() && dead_letter_path.is_none() {
             let _ = init_tx.send(Ok(false));
             return;
         }
 
+        let dead_letter = dead_letter_path
+            .and_then(|p| match DeadLetterSink::new(&p) {
+                Ok(dl) => {
+                    debug!(path = %p, "dead-letter sink enabled");
+                    Some(dl)
+                }
+                Err(e) => {
+                    warn!(path = %p, error = %e.message, "failed to create dead-letter sink");
+                    None
+                }
+            });
+
         let _ = init_tx.send(Ok(true));
-        run_event_dispatcher(source, sinks, options, shutdown_rx);
+        run_event_dispatcher(source, sinks, options, shutdown_rx, dead_letter);
     });
 
     if !init_rx
@@ -91,6 +106,7 @@ fn run_event_dispatcher<S>(
     sinks: Vec<ConfiguredEventSink>,
     options: EventDispatcherOptions,
     shutdown: mpsc::Receiver<()>,
+    dead_letter: Option<DeadLetterSink>,
 ) where
     S: EventSource<Stream = Vec<RawApiEvent>> + Send + Sync + 'static,
 {
@@ -98,7 +114,12 @@ fn run_event_dispatcher<S>(
     let mut pending = VecDeque::new();
 
     loop {
-        retry_pending(&sinks, &mut pending, options.max_retry_attempts);
+        retry_pending(
+            &sinks,
+            &mut pending,
+            options.max_retry_attempts,
+            dead_letter.as_ref(),
+        );
         match source.subscribe(EventFilter::default()) {
             Ok(events) => {
                 for event in events {
@@ -163,6 +184,7 @@ fn retry_pending(
     sinks: &[ConfiguredEventSink],
     pending: &mut VecDeque<PendingDelivery>,
     max_attempts: u32,
+    dead_letter: Option<&DeadLetterSink>,
 ) {
     let now = Instant::now();
     let len = pending.len();
@@ -183,6 +205,9 @@ fn retry_pending(
                 event_id = %delivery.event.event_id,
                 "dropping pending event for missing sink"
             );
+            if let Some(dl) = dead_letter {
+                let _ = dl.publish(&delivery.event);
+            }
             continue;
         };
 
@@ -194,26 +219,36 @@ fn retry_pending(
                 delivery.next_due = Instant::now() + retry_delay(delivery.attempts);
                 pending.push_back(delivery);
             }
-            Ok(result) => warn!(
-                sink = %sink.tag,
-                event_id = %delivery.event.event_id,
-                attempts = delivery.attempts,
-                message = ?result.message,
-                "event delivery moved to dead-letter state"
-            ),
+            Ok(result) => {
+                warn!(
+                    sink = %sink.tag,
+                    event_id = %delivery.event.event_id,
+                    attempts = delivery.attempts,
+                    message = ?result.message,
+                    "event delivery moved to dead-letter state"
+                );
+                if let Some(dl) = dead_letter {
+                    let _ = dl.publish(&delivery.event);
+                }
+            }
             Err(error) if delivery.attempts < max_attempts => {
                 delivery.attempts += 1;
                 delivery.message = Some(error.to_string());
                 delivery.next_due = Instant::now() + retry_delay(delivery.attempts);
                 pending.push_back(delivery);
             }
-            Err(error) => warn!(
-                sink = %sink.tag,
-                event_id = %delivery.event.event_id,
-                attempts = delivery.attempts,
-                error = %error,
-                "event delivery moved to dead-letter state"
-            ),
+            Err(error) => {
+                warn!(
+                    sink = %sink.tag,
+                    event_id = %delivery.event.event_id,
+                    attempts = delivery.attempts,
+                    error = %error,
+                    "event delivery moved to dead-letter state"
+                );
+                if let Some(dl) = dead_letter {
+                    let _ = dl.publish(&delivery.event);
+                }
+            }
         }
     }
 }

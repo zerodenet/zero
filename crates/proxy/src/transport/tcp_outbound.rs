@@ -65,9 +65,7 @@ impl Proxy {
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
         let (resolved, _plan) = resolved;
         match resolved {
-            ResolvedOutbound::Relay { chain } => {
-                self.establish_relay_chain(session, chain).await
-            }
+            ResolvedOutbound::Relay { chain } => self.establish_relay_chain(session, chain).await,
             ResolvedOutbound::Single(candidate) => {
                 self.establish_tcp_candidate(session, candidate).await
             }
@@ -197,7 +195,10 @@ impl Proxy {
                 password,
                 ..
             } => {
-                match self.connect_via_hysteria2_upstream(session, server, port, password).await {
+                match self
+                    .connect_via_hysteria2_upstream(session, server, port, password)
+                    .await
+                {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Hysteria2 {
                         tag: tag.to_owned(),
                         server: server.to_owned(),
@@ -218,7 +219,10 @@ impl Proxy {
                 password,
                 cipher,
             } => {
-                match self.connect_via_shadowsocks_upstream(session, server, port, password, cipher).await {
+                match self
+                    .connect_via_shadowsocks_upstream(session, server, port, password, cipher)
+                    .await
+                {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Shadowsocks {
                         tag: tag.to_owned(),
                         server: server.to_owned(),
@@ -283,7 +287,9 @@ impl Proxy {
             zero_core::ProtocolType::Unknown,
         );
 
-        let outbound = self.establish_tcp_candidate(&session_for_next, first).await?;
+        let outbound = self
+            .establish_tcp_candidate(&session_for_next, first)
+            .await?;
         let mut stream = match outbound {
             EstablishedTcpOutbound::Direct { upstream, .. }
             | EstablishedTcpOutbound::Socks5 { upstream, .. }
@@ -346,20 +352,23 @@ async fn send_hop_protocol_request(
 ) -> Result<(), EngineError> {
     match hop {
         #[cfg(feature = "outbound-socks5")]
-        ResolvedLeafOutbound::Socks5 { username, password, .. } => {
-            proxy
-                .protocols
-                .socks5_outbound
-                .establish_tunnel_with_auth(
-                    stream,
-                    session,
-                    username.zip(*password).map(|(u, p)| {
-                        zero_protocol_socks5::Socks5OutboundAuth { username: u, password: p }
+        ResolvedLeafOutbound::Socks5 {
+            username, password, ..
+        } => proxy
+            .protocols
+            .socks5_outbound
+            .establish_tunnel_with_auth(
+                stream,
+                session,
+                username
+                    .zip(*password)
+                    .map(|(u, p)| zero_protocol_socks5::Socks5OutboundAuth {
+                        username: u,
+                        password: p,
                     }),
-                )
-                .await
-                .map_err(|e| EngineError::Io(std::io::Error::other(e)))
-        }
+            )
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(e))),
         #[cfg(feature = "outbound-vless")]
         ResolvedLeafOutbound::Vless { id, flow, .. } => {
             let uuid = zero_protocol_vless::parse_uuid(id)?;
@@ -380,7 +389,9 @@ async fn send_hop_protocol_request(
             }
         }
         #[cfg(feature = "outbound-shadowsocks")]
-        ResolvedLeafOutbound::Shadowsocks { password, cipher, .. } => {
+        ResolvedLeafOutbound::Shadowsocks {
+            password, cipher, ..
+        } => {
             use zero_protocol_shadowsocks::{CipherKind, ShadowsocksOutbound};
             let kind = CipherKind::from_str(cipher).ok_or_else(|| {
                 EngineError::Io(std::io::Error::new(
@@ -394,14 +405,12 @@ async fn send_hop_protocol_request(
                 .map_err(|e| EngineError::Io(std::io::Error::other(e)))
         }
         #[cfg(feature = "outbound-trojan")]
-        ResolvedLeafOutbound::Trojan { password, .. } => {
-            proxy
-                .protocols
-                .trojan_outbound
-                .send_request(stream, session, password)
-                .await
-                .map_err(|e| EngineError::Io(std::io::Error::other(e)))
-        }
+        ResolvedLeafOutbound::Trojan { password, .. } => proxy
+            .protocols
+            .trojan_outbound
+            .send_request(stream, session, password)
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(e))),
         _ => Err(EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "relay hop protocol not supported or disabled",

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -19,15 +19,13 @@ use zero_protocol_vless::{VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
 use crate::outbound::direct::{resolve_udp_target, send_direct_udp_packet};
-use crate::runtime::udp_associate::sessions::UdpSessionFlows;
 use crate::outbound::vless::VlessUdpTransport;
+use crate::runtime::udp_associate::sessions::UdpSessionFlows;
 use crate::runtime::{log_completed_udp_flow, UdpFlowOutbound};
 
 use super::super::logging::log_listener_connection_error;
 use super::super::runtime::{bind_listener, Proxy};
-use super::super::transport::{
-    accept_ws, build_tls_acceptor, InboundTlsStream, PrefixedSocket,
-};
+use super::super::transport::{accept_ws, build_tls_acceptor, InboundTlsStream, PrefixedSocket};
 use crate::transport::{
     relay_bidirectional_metered, ClientStream, EstablishedTcpOutbound, MeteredStream,
     TcpInboundProtocol, TcpRelayStream,
@@ -90,8 +88,9 @@ impl Proxy {
         let h2_config = inbound.protocol.vless_h2().cloned();
         let http_upgrade_config = inbound.protocol.vless_http_upgrade().cloned();
         let split_http_config = inbound.protocol.vless_split_http().cloned();
-        let split_http_registry: Option<crate::transport::SplitHttpRegistry> =
-            split_http_config.as_ref().map(|_| crate::transport::SplitHttpRegistry::new());
+        let split_http_registry: Option<crate::transport::SplitHttpRegistry> = split_http_config
+            .as_ref()
+            .map(|_| crate::transport::SplitHttpRegistry::new());
         let fallback_config = inbound.protocol.vless_fallback().cloned();
         let vless_users: Arc<[zero_config::VlessUserConfig]> =
             inbound.protocol.vless_users().into();
@@ -389,14 +388,18 @@ impl Proxy {
         if let (Some(cfg), Some(reg)) = (split_http_config, split_http_registry) {
             match crate::transport::accept_split_http(stream, cfg, reg).await? {
                 Some(split_stream) => {
-                    return self.handle_vless_client(split_stream, inbound_tag, users, fallback, sni).await;
+                    return self
+                        .handle_vless_client(split_stream, inbound_tag, users, fallback, sni)
+                        .await;
                 }
                 None => return Ok(()), // consumed by partner connection
             }
         }
         if let Some(cfg) = http_upgrade_config {
             let upg_stream = crate::transport::accept_http_upgrade(stream, cfg).await?;
-            return self.handle_vless_client(upg_stream, inbound_tag, users, fallback, sni).await;
+            return self
+                .handle_vless_client(upg_stream, inbound_tag, users, fallback, sni)
+                .await;
         }
         match (ws_config, grpc_config, h2_config) {
             (Some(ws), None, None) => {
@@ -410,21 +413,17 @@ impl Proxy {
                 let service_names = grpc.service_names.clone();
                 let users_arc: Arc<[VlessUserConfig]> = users.into();
                 let fb_clone = fallback.cloned();
-                return crate::transport::serve_grpc(
-                    stream,
-                    &service_names,
-                    move |grpc_stream| {
-                        let engine = engine.clone();
-                        let tag = tag.clone();
-                        let users = Arc::clone(&users_arc);
-                        let fb = fb_clone.clone();
-                        async move {
-                            engine
-                                .handle_vless_client(grpc_stream, &tag, &users, fb.as_ref(), None)
-                                .await
-                        }
-                    },
-                )
+                return crate::transport::serve_grpc(stream, &service_names, move |grpc_stream| {
+                    let engine = engine.clone();
+                    let tag = tag.clone();
+                    let users = Arc::clone(&users_arc);
+                    let fb = fb_clone.clone();
+                    async move {
+                        engine
+                            .handle_vless_client(grpc_stream, &tag, &users, fb.as_ref(), None)
+                            .await
+                    }
+                })
                 .await;
             }
             (None, None, Some(h2)) => {
@@ -432,7 +431,10 @@ impl Proxy {
                 self.handle_vless_client(h2_stream, inbound_tag, users, fallback, sni)
                     .await
             }
-            (None, None, None) => self.handle_vless_client(stream, inbound_tag, users, fallback, sni).await,
+            (None, None, None) => {
+                self.handle_vless_client(stream, inbound_tag, users, fallback, sni)
+                    .await
+            }
             _ => Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "vless inbound: ws, grpc, and h2 are mutually exclusive",
@@ -846,10 +848,7 @@ impl Proxy {
             self.record_session_inbound_rx(handle.session_id, packet.len() as u64);
 
             let _ = handle.send_tx.send(udp_packet.payload.clone()).await;
-            self.record_session_outbound_tx(
-                handle.session_id,
-                udp_packet.payload.len() as u64,
-            );
+            self.record_session_outbound_tx(handle.session_id, udp_packet.payload.len() as u64);
             return Ok(());
         }
 
@@ -877,7 +876,7 @@ impl Proxy {
         self.record_session_inbound_rx(session.id, packet.len() as u64);
 
         self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session);
+        let action = self.route_decision(&session);
         let (resolved, _plan) = self.resolve_outbound(&action)?;
         crate::logging::log_session_accepted(&session, &action, self.config.mode.kind());
 
@@ -995,11 +994,16 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let metered_client = MeteredStream::new(client);
         let metered_upstream = MeteredStream::new(upstream);
-        let result = relay_bidirectional_metered(metered_client, metered_upstream, |_| {}, |_| {}).await;
+        let result =
+            relay_bidirectional_metered(metered_client, metered_upstream, |_| {}, |_| {}).await;
         match result {
             Ok(_) => Ok(()),
-            Err(e) if e.kind() == io::ErrorKind::NotConnected
-                || e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+            Err(e)
+                if e.kind() == io::ErrorKind::NotConnected
+                    || e.kind() == io::ErrorKind::BrokenPipe =>
+            {
+                Ok(())
+            }
             Err(e) => Err(EngineError::Io(e)),
         }
     }
@@ -1027,18 +1031,17 @@ impl Proxy {
         let metered_client = MeteredStream::new(client_stream);
         let metered_upstream = MeteredStream::new(upstream);
 
-        let result = relay_bidirectional_metered(
-            metered_client,
-            metered_upstream,
-            |_| {},
-            |_| {},
-        )
-        .await;
+        let result =
+            relay_bidirectional_metered(metered_client, metered_upstream, |_| {}, |_| {}).await;
 
         match result {
             Ok(_) => Ok(()),
-            Err(e) if e.kind() == io::ErrorKind::NotConnected
-                || e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+            Err(e)
+                if e.kind() == io::ErrorKind::NotConnected
+                    || e.kind() == io::ErrorKind::BrokenPipe =>
+            {
+                Ok(())
+            }
             Err(e) => Err(EngineError::Io(e)),
         }
     }
@@ -1055,50 +1058,84 @@ struct RecordingStream<S> {
 
 impl<S> RecordingStream<S> {
     fn new(inner: S) -> Self {
-        Self { inner, recorded: Vec::with_capacity(128) }
+        Self {
+            inner,
+            recorded: Vec::with_capacity(128),
+        }
     }
     fn into_parts(self) -> (S, Vec<u8>) {
         (self.inner, self.recorded)
     }
 }
 
-impl<S> AsyncRead for RecordingStream<S> where S: AsyncRead + Unpin {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+impl<S> AsyncRead for RecordingStream<S>
+where
+    S: AsyncRead + Unpin,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
         let prev = buf.filled().len();
         let result = Pin::new(&mut self.inner).poll_read(cx, buf);
         if let Poll::Ready(Ok(())) = &result {
             let n = buf.filled().len() - prev;
-            if n > 0 { self.recorded.extend_from_slice(&buf.filled()[prev..]); }
+            if n > 0 {
+                self.recorded.extend_from_slice(&buf.filled()[prev..]);
+            }
         }
         result
     }
 }
 
-impl<S> AsyncWrite for RecordingStream<S> where S: AsyncWrite + Unpin {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+impl<S> AsyncWrite for RecordingStream<S>
+where
+    S: AsyncWrite + Unpin,
+{
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
         Pin::new(&mut self.inner).poll_write(cx, buf)
     }
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.inner).poll_flush(cx)
     }
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 }
 
-impl<S> AsyncSocket for RecordingStream<S> where S: AsyncSocket<Error = io::Error> + Send + Sync {
+impl<S> AsyncSocket for RecordingStream<S>
+where
+    S: AsyncSocket<Error = io::Error> + Send + Sync,
+{
     type Error = io::Error;
     async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         let n = self.inner.read(buf).await?;
         self.recorded.extend_from_slice(&buf[..n]);
         Ok(n)
     }
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> { self.inner.write_all(buf).await }
-    async fn shutdown(&mut self) -> Result<(), Self::Error> { self.inner.shutdown().await }
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        self.inner.write_all(buf).await
+    }
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        self.inner.shutdown().await
+    }
 }
 
-impl<S> ClientStream for RecordingStream<S> where S: ClientStream + Send + Sync {
-    fn local_addr(&self) -> io::Result<SocketAddr> { self.inner.local_addr() }
+impl<S> ClientStream for RecordingStream<S>
+where
+    S: ClientStream + Send + Sync,
+{
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.inner.local_addr()
+    }
 }
 
 async fn upgrade_vless_reality_server<S>(

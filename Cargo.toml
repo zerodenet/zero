@@ -23,10 +23,8 @@ full = [
     "inbound-trojan",
     "outbound-trojan",
     "dns-udp",
-    "dns-cache",
 ]
 dns-udp = ["zero-proxy/dns-udp"]
-dns-cache = ["zero-proxy/dns-cache"]
 inbound-socks5 = ["zero-proxy/inbound-socks5"]
 inbound-http-connect = ["zero-proxy/inbound-http-connect"]
 inbound-mixed = ["zero-proxy/inbound-mixed"]

@@ -336,5 +336,3 @@ pub fn strip_content_type_with_padding(plaintext: &mut Vec<u8>) -> io::Result<u8
     plaintext.truncate(valid_len);
     Ok(content_type)
 }
-
-

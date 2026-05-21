@@ -5,7 +5,7 @@ use zero_api::{
     CommandService, ConfigApplyCommand, ConfigValidateCommand, EventFilter, EventSource,
     FlowFilter, FlowGetQuery, FlowListQuery, Network as ApiNetwork, Permission, PoliciesQuery,
     PolicyGetQuery, QueryRequest, QueryResponse, QueryService, RawApiEvent, SinkCapability,
-    Snapshot,
+    SinkStatusSnapshot, Snapshot,
 };
 use zero_config::{ModeConfig, RuntimeConfig};
 
@@ -101,6 +101,7 @@ fn query_engine(
                 "udp_upstream": view.stats.udp_upstream,
             }),
         ),
+        QueryRequest::Sinks(_) => Ok(QueryResponse::Sinks(SinkStatusSnapshot::default())),
     }
 }
 
@@ -145,10 +146,34 @@ fn execute_engine_command(
                 Err(error) => Err(engine_error_to_api(error)),
             }
         }
-        CommandRequest::DiagnosticsProbeTarget(_) => Err(ApiError::new(
-            ApiErrorCode::Unsupported,
-            "`diagnostics.probe_target` is not implemented yet",
-        )),
+        CommandRequest::DiagnosticsProbeTarget(cmd) => {
+            match engine.probe_target(&cmd.target_tag) {
+                Ok(result) => Ok(CommandResponse {
+                    accepted: true,
+                    result: Some(result),
+                }),
+                Err(error) => Err(engine_error_to_api(error)),
+            }
+        }
+        CommandRequest::DiagnosticsDnsLookup(cmd) => {
+            match engine.dns_lookup(&cmd.hostname) {
+                Ok(result) => Ok(CommandResponse {
+                    accepted: true,
+                    result: Some(result),
+                }),
+                Err(error) => Err(engine_error_to_api(error)),
+            }
+        }
+        CommandRequest::DiagnosticsTraceRoute(cmd) => {
+            let protocol = cmd.protocol.as_deref().unwrap_or("tcp");
+            match engine.trace_route(&cmd.target, cmd.port, protocol) {
+                Ok(result) => Ok(CommandResponse {
+                    accepted: true,
+                    result: Some(result),
+                }),
+                Err(error) => Err(engine_error_to_api(error)),
+            }
+        }
         CommandRequest::ModeSet(cmd) => {
             let mode = match cmd.mode.as_str() {
                 "rule" => ModeConfig::Rule,
@@ -415,14 +440,12 @@ fn engine_error_to_api(error: EngineError) -> ApiError {
                 cause: Some(error.to_string()),
             }
         }
-        EngineError::Io(ref io_err) if io_err.kind() == std::io::ErrorKind::NotFound => {
-            ApiError {
-                code: ApiErrorCode::NotFound,
-                message: io_err.to_string(),
-                field_path: Some("flow_id".to_owned()),
-                cause: Some(error.to_string()),
-            }
-        }
+        EngineError::Io(ref io_err) if io_err.kind() == std::io::ErrorKind::NotFound => ApiError {
+            code: ApiErrorCode::NotFound,
+            message: io_err.to_string(),
+            field_path: Some("flow_id".to_owned()),
+            cause: Some(error.to_string()),
+        },
         EngineError::Io(_) => ApiError {
             code: ApiErrorCode::InvalidArgument,
             message: error.to_string(),

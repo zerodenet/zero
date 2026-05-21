@@ -56,8 +56,16 @@ where
         return Ok(None);
     }
 
-    let url = config.url.as_deref().expect("panel url required").to_owned();
-    let node_id = config.node_id.as_deref().expect("panel node_id required").to_owned();
+    let url = config
+        .url
+        .as_deref()
+        .expect("panel url required")
+        .to_owned();
+    let node_id = config
+        .node_id
+        .as_deref()
+        .expect("panel node_id required")
+        .to_owned();
     let api_key = resolve_api_key(&config.api_key, &config.api_key_env)?;
     let heartbeat_interval = Duration::from_secs(config.heartbeat_interval_seconds);
     let pull_commands = config.pull_commands;
@@ -249,7 +257,10 @@ async fn execute_panel_command(service: &impl CommandService, cmd: &serde_json::
         return;
     };
 
-    let params = cmd.get("params").cloned().unwrap_or(serde_json::Value::Null);
+    let params = cmd
+        .get("params")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
 
     let request = match method {
         "policies.select" => {

@@ -59,7 +59,9 @@ impl Proxy {
                     tag: tag.to_owned(),
                     server: server.to_owned(),
                     port,
-                    auth: username.zip(password).map(|(u, p)| (u.to_owned(), p.to_owned())),
+                    auth: username
+                        .zip(password)
+                        .map(|(u, p)| (u.to_owned(), p.to_owned())),
                 };
 
                 let sent = send_socks5_udp_packet(
@@ -99,10 +101,8 @@ impl Proxy {
             }),
             ResolvedLeafOutbound::Hysteria2 { .. } => Err(UdpCandidateFailure {
                 stage: "udp_hysteria2_outbound",
-                error: zero_core::Error::Unsupported(
-                    "Hysteria2 UDP outbound not yet implemented",
-                )
-                .into(),
+                error: zero_core::Error::Unsupported("Hysteria2 UDP outbound not yet implemented")
+                    .into(),
                 upstream: None,
             }),
             #[allow(unused_variables)]

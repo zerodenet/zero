@@ -6,8 +6,8 @@ use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zero_api::{
     event_type, ApiEvent, AuthInfo, EndpointRef, EventFilter, FlowEventPayload, FlowOutcome,
-    FlowTiming, Network as ApiNetwork, PolicyDecision, PolicySelectedPayload, RawApiEvent,
-    RouteDecision, TargetAddress, TrafficStats,
+    FlowTiming, Network as ApiNetwork, PolicyDecision, PolicyProbeCompletedPayload,
+    PolicySelectedPayload, RawApiEvent, RouteDecision, TargetAddress, TrafficStats,
 };
 use zero_core::{Address, Network, ProtocolType, Session};
 
@@ -52,13 +52,15 @@ impl EngineEventLog {
         self.push(event);
     }
 
-    #[allow(dead_code)]
-    pub fn push_engine_stopped(&self) {
+    pub fn push_engine_stopped(&self, reason: &str) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        let payload = json!({ "stopped_at_unix_ms": now_ms });
+        let payload = json!({
+            "stopped_at_unix_ms": now_ms,
+            "reason": reason,
+        });
         let event = ApiEvent::new(
             format!("engine-stop-{}", now_ms),
             event_type::ENGINE_STOPPED,
@@ -90,6 +92,26 @@ impl EngineEventLog {
         let event = ApiEvent::new(
             format!("policy-select-{}-{}", policy_tag, now_ms),
             event_type::POLICY_SELECTED,
+            now_ms,
+            payload,
+        );
+        self.push(event);
+    }
+
+    pub fn push_policy_probe_completed(
+        &self,
+        policy_tag: &str,
+        payload: PolicyProbeCompletedPayload,
+    ) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let payload = serde_json::to_value(payload)
+            .expect("policy probe completed event payload should be serializable");
+        let event = ApiEvent::new(
+            format!("probe-{}-{}", policy_tag, now_ms),
+            event_type::POLICY_PROBE_COMPLETED,
             now_ms,
             payload,
         );
@@ -136,8 +158,8 @@ impl EngineEventLog {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        let payload = serde_json::to_value(stats)
-            .expect("stats sampled payload should be serializable");
+        let payload =
+            serde_json::to_value(stats).expect("stats sampled payload should be serializable");
         let event = ApiEvent::new(
             format!("stats-{}", now_ms),
             event_type::STATS_SAMPLED,
@@ -225,12 +247,7 @@ impl EngineEventLog {
         let payload = serde_json::to_value(payload)
             .expect("flow started event payload should be serializable");
         let mut event = ApiEvent::new(
-            format!(
-                "{}:{}:{}",
-                event_type::FLOW_STARTED,
-                session.id,
-                now_ms,
-            ),
+            format!("{}:{}:{}", event_type::FLOW_STARTED, session.id, now_ms,),
             event_type::FLOW_STARTED,
             now_ms,
             payload,
@@ -261,12 +278,7 @@ impl EngineEventLog {
     /// Return events with `sequence > since` that match the filter.
     ///
     /// Used for SSE `Last-Event-ID` / `?since=` resumption.
-    pub fn events_since(
-        &self,
-        since: u64,
-        limit: usize,
-        filter: &EventFilter,
-    ) -> Vec<RawApiEvent> {
+    pub fn events_since(&self, since: u64, limit: usize, filter: &EventFilter) -> Vec<RawApiEvent> {
         self.inner
             .lock()
             .expect("engine event log lock poisoned")

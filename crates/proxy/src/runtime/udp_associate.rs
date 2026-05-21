@@ -19,12 +19,12 @@ mod outbound;
 mod request;
 pub(crate) mod sessions;
 
+use crate::outbound::socks5::{ActiveUpstreamSocks5UdpAssociation, UpstreamAssociationCloseReason};
 use context::UdpRequestContext;
 use helpers::{
     address_from_socket_addr, log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };
 use sessions::UdpSessionFlows;
-use crate::outbound::socks5::{ActiveUpstreamSocks5UdpAssociation, UpstreamAssociationCloseReason};
 
 impl Proxy {
     pub(crate) async fn handle_socks5_udp_associate<S>(

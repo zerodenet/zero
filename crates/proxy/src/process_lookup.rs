@@ -42,7 +42,10 @@ fn find_socket_inode(addr: SocketAddr) -> Option<u64> {
         std::net::IpAddr::V4(v4) => {
             let octets = v4.octets();
             // /proc/net/tcp uses little-endian hex for IP
-            format!("{:02X}{:02X}{:02X}{:02X}", octets[3], octets[2], octets[1], octets[0])
+            format!(
+                "{:02X}{:02X}{:02X}{:02X}",
+                octets[3], octets[2], octets[1], octets[0]
+            )
         }
         std::net::IpAddr::V6(_) => return None, // v6 is in /proc/net/tcp6, skip for now
     };
@@ -79,7 +82,9 @@ fn find_process_by_inode(target_inode: u64) -> Option<ProcessInfo> {
         let entry = entry.ok()?;
         let pid_str = entry.file_name();
         let pid: u32 = pid_str.to_str()?.parse().ok()?;
-        if pid == 0 { continue; }
+        if pid == 0 {
+            continue;
+        }
 
         // Check /proc/<pid>/fd/ for socket links
         let fd_dir = match std::fs::read_dir(format!("/proc/{pid}/fd")) {

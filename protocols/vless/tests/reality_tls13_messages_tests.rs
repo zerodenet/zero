@@ -1,5 +1,5 @@
-use zero_protocol_vless::reality::common::*;
 use zero_protocol_vless::reality::common::CONTENT_TYPE_HANDSHAKE;
+use zero_protocol_vless::reality::common::*;
 use zero_protocol_vless::reality::reality_tls13_messages::*;
 
 #[test]

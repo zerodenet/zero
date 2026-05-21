@@ -264,10 +264,12 @@ where
             if let Some(pending) = reg.remove(&session_id) {
                 drop(reg);
                 // GET was waiting — we're the second connection, we win
-                let mut get_stream = *pending
-                    .stream
-                    .downcast::<S>()
-                    .map_err(|_| EngineError::Io(io::Error::new(io::ErrorKind::InvalidData, "split-http: type mismatch")))?;
+                let mut get_stream = *pending.stream.downcast::<S>().map_err(|_| {
+                    EngineError::Io(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "split-http: type mismatch",
+                    ))
+                })?;
                 write_get_response(&mut get_stream).await?;
                 Ok(Some(SplitHttpPairedStream::new(io, get_stream)))
             } else {
@@ -301,10 +303,12 @@ where
                 drop(reg);
                 // POST was waiting — we're the second, we win
                 write_get_response(&mut io).await?;
-                let post_stream = *pending
-                    .stream
-                    .downcast::<S>()
-                    .map_err(|_| EngineError::Io(io::Error::new(io::ErrorKind::InvalidData, "split-http: type mismatch")))?;
+                let post_stream = *pending.stream.downcast::<S>().map_err(|_| {
+                    EngineError::Io(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "split-http: type mismatch",
+                    ))
+                })?;
                 // reader = post_stream (upload), writer = io (download)
                 Ok(Some(SplitHttpPairedStream::new(post_stream, io)))
             } else {
@@ -484,10 +488,7 @@ where
         inner.poll_flush(cx)
     }
 
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         let this = self.get_mut();
         if this.write_finished {
             return Poll::Ready(Ok(()));

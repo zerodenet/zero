@@ -35,7 +35,10 @@ struct AllocatorInner {
 impl FakeIpAllocator {
     /// Parse the CIDR and build the allocator.
     pub fn new(config: &FakeIpConfig) -> Result<Self, String> {
-        let net: ipnet::IpNet = config.cidr.parse().map_err(|e| format!("invalid cidr: {e}"))?;
+        let net: ipnet::IpNet = config
+            .cidr
+            .parse()
+            .map_err(|e| format!("invalid cidr: {e}"))?;
         let base = match net.addr() {
             std::net::IpAddr::V4(v4) => u32::from_be_bytes(v4.octets()),
             std::net::IpAddr::V6(_) => return Err("fake ip only supports IPv4 CIDR".into()),
@@ -98,18 +101,34 @@ impl FakeIpAllocator {
                 match inner.reverse.get(&octets) {
                     None => {
                         // Free — use it.
-                        inner.forward.insert(domain.to_owned(), IpAddress::V4(octets));
-                        inner.reverse.insert(octets, (domain.to_owned(), Instant::now() + self.ttl));
-                        inner.next_ip = if ip + 1 > broadcast - 1 { inner.base + 1 } else { ip + 1 };
+                        inner
+                            .forward
+                            .insert(domain.to_owned(), IpAddress::V4(octets));
+                        inner
+                            .reverse
+                            .insert(octets, (domain.to_owned(), Instant::now() + self.ttl));
+                        inner.next_ip = if ip + 1 > broadcast - 1 {
+                            inner.base + 1
+                        } else {
+                            ip + 1
+                        };
                         return Some(IpAddress::V4(octets));
                     }
                     Some((_, expires)) if *expires <= Instant::now() => {
                         // Expired — reclaim.
                         let old_domain = inner.reverse.remove(&octets).unwrap().0;
                         inner.forward.remove(&old_domain);
-                        inner.forward.insert(domain.to_owned(), IpAddress::V4(octets));
-                        inner.reverse.insert(octets, (domain.to_owned(), Instant::now() + self.ttl));
-                        inner.next_ip = if ip + 1 > broadcast - 1 { inner.base + 1 } else { ip + 1 };
+                        inner
+                            .forward
+                            .insert(domain.to_owned(), IpAddress::V4(octets));
+                        inner
+                            .reverse
+                            .insert(octets, (domain.to_owned(), Instant::now() + self.ttl));
+                        inner.next_ip = if ip + 1 > broadcast - 1 {
+                            inner.base + 1
+                        } else {
+                            ip + 1
+                        };
                         return Some(IpAddress::V4(octets));
                     }
                     Some(_) => { /* in use, skip */ }

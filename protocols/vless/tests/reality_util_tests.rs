@@ -20,7 +20,9 @@ fn test_extract_client_random() {
     client_hello[5] = 0x01;
     client_hello[9] = 0x03;
     client_hello[10] = 0x03;
-    for i in 0..32 { client_hello[11 + i] = (i + 1) as u8; }
+    for i in 0..32 {
+        client_hello[11 + i] = (i + 1) as u8;
+    }
     let random = extract_client_random(&client_hello).unwrap();
     for (index, byte) in random.iter().enumerate() {
         assert_eq!(*byte, (index + 1) as u8);

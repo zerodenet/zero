@@ -343,5 +343,3 @@ pub fn write_record_header(record_type: u8, length: u16) -> Vec<u8> {
     header.extend_from_slice(&length.to_be_bytes());
     header
 }
-
-

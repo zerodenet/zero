@@ -76,7 +76,9 @@ impl Proxy {
             let password = password.clone();
             let inbound_tag_clone = inbound.tag.clone();
             connections.spawn(async move {
-                engine.ss_udp_relay_loop(udp, &inbound_tag_clone, &password, cipher).await
+                engine
+                    .ss_udp_relay_loop(udp, &inbound_tag_clone, &password, cipher)
+                    .await
             });
         }
 
@@ -146,9 +148,9 @@ impl Proxy {
         };
 
         let mut buf = [0u8; 65536];
-        let relay_socket = UdpSocket::bind("0.0.0.0:0").await.map_err(|e| {
-            EngineError::Io(io::Error::other(format!("ss udp relay socket: {e}")))
-        })?;
+        let relay_socket = UdpSocket::bind("0.0.0.0:0")
+            .await
+            .map_err(|e| EngineError::Io(io::Error::other(format!("ss udp relay socket: {e}"))))?;
 
         // Direct sessions: client_addr → (target_addr, port)
         let mut direct_sessions: std::collections::HashMap<SocketAddr, (Address, u16)> =
@@ -159,8 +161,10 @@ impl Proxy {
             (String, u16),
             (std::sync::Arc<UdpSocket>, CipherKind, String),
         > = std::collections::HashMap::new();
-        let mut chained_clients: std::collections::HashMap<SocketAddr, (String, u16, Address, u16)> =
-            std::collections::HashMap::new();
+        let mut chained_clients: std::collections::HashMap<
+            SocketAddr,
+            (String, u16, Address, u16),
+        > = std::collections::HashMap::new();
 
         let mut recv_buf = [0u8; 65536];
         let mut chain_buf = [0u8; 65536];
@@ -291,7 +295,10 @@ impl Proxy {
 
     /// Poll all chained SS upstream sockets for responses, decrypt, and forward to clients.
     async fn ss_chain_recv_any(
-        upstreams: &std::collections::HashMap<(String, u16), (std::sync::Arc<UdpSocket>, CipherKind, String)>,
+        upstreams: &std::collections::HashMap<
+            (String, u16),
+            (std::sync::Arc<UdpSocket>, CipherKind, String),
+        >,
         clients: &mut std::collections::HashMap<SocketAddr, (String, u16, Address, u16)>,
         out_socket: &UdpSocket,
         inbound_cipher: CipherKind,
@@ -301,29 +308,52 @@ impl Proxy {
         for (sock, chain_cipher, chain_pwd) in upstreams.values() {
             let Ok(n) = sock.try_recv(buf) else { continue };
             let salt_len = chain_cipher.salt_len();
-            if n < salt_len + chain_cipher.tag_len() { continue; }
+            if n < salt_len + chain_cipher.tag_len() {
+                continue;
+            }
             let salt = &buf[..salt_len];
             let encrypted = &buf[salt_len..n];
 
-            let Ok(key) = ss_derive_key(*chain_cipher, chain_pwd.as_bytes(), salt) else { continue };
+            let Ok(key) = ss_derive_key(*chain_cipher, chain_pwd.as_bytes(), salt) else {
+                continue;
+            };
             let nonce = [0u8; 12];
-            let Ok(plain) = zero_protocol_shadowsocks::aead_decrypt_udp(*chain_cipher, &key, &nonce, encrypted) else { continue };
-            let Ok((_, _, payload_offset)) = zero_protocol_shadowsocks::parse_target_data(&plain) else { continue };
+            let Ok(plain) =
+                zero_protocol_shadowsocks::aead_decrypt_udp(*chain_cipher, &key, &nonce, encrypted)
+            else {
+                continue;
+            };
+            let Ok((_, _, payload_offset)) = zero_protocol_shadowsocks::parse_target_data(&plain)
+            else {
+                continue;
+            };
             let payload = &plain[payload_offset..];
 
             // Find the client for this response (simplified: forward to first matching client)
-            let client_addr = clients.iter()
-                .find(|(_, (s, p, _, _))| {
-                    upstreams.contains_key(&(s.clone(), *p))
-                })
+            let client_addr = clients
+                .iter()
+                .find(|(_, (s, p, _, _))| upstreams.contains_key(&(s.clone(), *p)))
                 .map(|(c, _)| *c);
-            let Some(client_addr) = client_addr else { continue };
+            let Some(client_addr) = client_addr else {
+                continue;
+            };
 
             let mut resp_salt = vec![0u8; inbound_cipher.salt_len()];
             use ring::rand::SecureRandom;
             let _ = ring::rand::SystemRandom::new().fill(&mut resp_salt);
-            let Ok(resp_key) = ss_derive_key(inbound_cipher, inbound_password.as_bytes(), &resp_salt) else { continue };
-            let Ok(resp_enc) = zero_protocol_shadowsocks::aead_encrypt_udp(inbound_cipher, &resp_key, &nonce, payload) else { continue };
+            let Ok(resp_key) =
+                ss_derive_key(inbound_cipher, inbound_password.as_bytes(), &resp_salt)
+            else {
+                continue;
+            };
+            let Ok(resp_enc) = zero_protocol_shadowsocks::aead_encrypt_udp(
+                inbound_cipher,
+                &resp_key,
+                &nonce,
+                payload,
+            ) else {
+                continue;
+            };
 
             let mut resp = resp_salt;
             resp.extend_from_slice(&resp_enc);
@@ -353,7 +383,7 @@ impl Proxy {
         // Route
         self.prepare_session(&mut session, inbound_tag, None);
         self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session);
+        let action = self.route_decision(&session);
         let Ok(resolved) = self.resolve_outbound(&action) else {
             return Ok(());
         };
@@ -445,16 +475,14 @@ async fn ss_encrypt_download(
     loop {
         match upstream.read(&mut buf).await {
             Ok(0) => break,
-            Ok(n) => {
-                match ShadowsocksInbound::encrypt_chunk(cipher, &key, &mut nonce, &buf[..n]) {
-                    Ok(encrypted) => {
-                        if client.write_all(&encrypted).await.is_err() {
-                            break;
-                        }
+            Ok(n) => match ShadowsocksInbound::encrypt_chunk(cipher, &key, &mut nonce, &buf[..n]) {
+                Ok(encrypted) => {
+                    if client.write_all(&encrypted).await.is_err() {
+                        break;
                     }
-                    Err(_) => break,
                 }
-            }
+                Err(_) => break,
+            },
             Err(_) => break,
         }
     }
@@ -473,7 +501,11 @@ fn addr_to_socket(addr: &Address, port: u16) -> Option<SocketAddr> {
     }
 }
 
-fn ss_derive_key(cipher: CipherKind, password: &[u8], salt: &[u8]) -> Result<Vec<u8>, zero_core::Error> {
+fn ss_derive_key(
+    cipher: CipherKind,
+    password: &[u8],
+    salt: &[u8],
+) -> Result<Vec<u8>, zero_core::Error> {
     use zero_protocol_shadowsocks::derive_key;
     if cipher.is_blake3() {
         zero_protocol_shadowsocks::derive_key_blake3(password, salt, cipher.key_len())
@@ -492,16 +524,18 @@ async fn resolve_socket_addr(
             std::net::IpAddr::V4(std::net::Ipv4Addr::new(b[0], b[1], b[2], b[3])),
             port,
         )),
-        Address::Ipv6(b) => Some(SocketAddr::new(
-            std::net::IpAddr::V6((*b).into()),
-            port,
-        )),
+        Address::Ipv6(b) => Some(SocketAddr::new(std::net::IpAddr::V6((*b).into()), port)),
         Address::Domain(domain) => {
             let ips = resolver.resolve(domain).await.ok()?;
             let ip = ips.first()?;
             let addr = match ip {
-                zero_traits::IpAddress::V4(b) => SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(b[0], b[1], b[2], b[3])), port),
-                zero_traits::IpAddress::V6(b) => SocketAddr::new(std::net::IpAddr::V6((*b).into()), port),
+                zero_traits::IpAddress::V4(b) => SocketAddr::new(
+                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(b[0], b[1], b[2], b[3])),
+                    port,
+                ),
+                zero_traits::IpAddress::V6(b) => {
+                    SocketAddr::new(std::net::IpAddr::V6((*b).into()), port)
+                }
             };
             Some(addr)
         }

@@ -58,8 +58,7 @@ mod imp {
             if line.is_empty() {
                 continue;
             }
-            let value: serde_json::Value =
-                serde_json::from_str(&line).map_err(io::Error::other)?;
+            let value: serde_json::Value = serde_json::from_str(&line).map_err(io::Error::other)?;
             on_event(value);
         }
         Ok(())

@@ -52,32 +52,35 @@ pub async fn send_ss_udp_packet(
         ))
     })?;
 
-    let target_data = build_target_data(target, target_port, payload).map_err(|e| {
-        EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
-    })?;
+    let target_data = build_target_data(target, target_port, payload)
+        .map_err(|e| EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?;
 
     let mut salt = vec![0u8; cipher_kind.salt_len()];
     use ring::rand::SecureRandom;
     ring::rand::SystemRandom::new()
         .fill(&mut salt)
-        .map_err(|_| EngineError::Io(std::io::Error::new(std::io::ErrorKind::Other, "ss: random failed")))?;
+        .map_err(|_| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "ss: random failed",
+            ))
+        })?;
 
     let key = derive_key(password.as_bytes(), &salt, cipher_kind.key_len())
         .map_err(|e| EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?;
 
     let nonce = [0u8; 12];
-    let encrypted = aead_encrypt_udp(cipher_kind, &key, &nonce, &target_data).map_err(|e| {
-        EngineError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
-    })?;
+    let encrypted = aead_encrypt_udp(cipher_kind, &key, &nonce, &target_data)
+        .map_err(|e| EngineError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
 
     let upstream = ensure_upstream(server, port, password, cipher_kind);
 
-    let target_addr: SocketAddr = format!("{server}:{port}")
-        .parse()
-        .map_err(|_| EngineError::Io(std::io::Error::new(
+    let target_addr: SocketAddr = format!("{server}:{port}").parse().map_err(|_| {
+        EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!("invalid ss upstream address: {server}:{port}"),
-        )))?;
+        ))
+    })?;
 
     let mut packet = salt;
     packet.extend_from_slice(&encrypted);
@@ -98,7 +101,12 @@ pub fn drain_all_responses() -> Vec<SsDecrypted> {
     let upstreams = SS_UPSTREAMS.lock().expect("ss upstream lock poisoned");
     let mut all = Vec::new();
     for up in upstreams.values() {
-        all.extend(up.pending.lock().expect("ss pending lock poisoned").drain(..));
+        all.extend(
+            up.pending
+                .lock()
+                .expect("ss pending lock poisoned")
+                .drain(..),
+        );
     }
     all
 }
@@ -119,8 +127,7 @@ fn ensure_upstream(
 
     let socket = {
         let sock = UdpSocket::from_std(
-            std::net::UdpSocket::bind("0.0.0.0:0")
-                .expect("ss: failed to bind outbound UDP socket"),
+            std::net::UdpSocket::bind("0.0.0.0:0").expect("ss: failed to bind outbound UDP socket"),
         )
         .expect("ss: failed to create tokio UDP socket");
         Arc::new(sock)
@@ -156,7 +163,11 @@ async fn recv_relay(upstream: Arc<SsUpstream>) {
             continue;
         }
 
-        let Ok(key) = derive_key(upstream.password.as_bytes(), &packet[..salt_len], upstream.cipher.key_len()) else {
+        let Ok(key) = derive_key(
+            upstream.password.as_bytes(),
+            &packet[..salt_len],
+            upstream.cipher.key_len(),
+        ) else {
             continue;
         };
         let nonce = [0u8; 12];
@@ -167,10 +178,14 @@ async fn recv_relay(upstream: Arc<SsUpstream>) {
             continue;
         };
 
-        upstream.pending.lock().expect("ss pending lock poisoned").push_back(SsDecrypted {
-            target,
-            port: target_port,
-            payload: plain[payload_offset..].to_vec(),
-        });
+        upstream
+            .pending
+            .lock()
+            .expect("ss pending lock poisoned")
+            .push_back(SsDecrypted {
+                target,
+                port: target_port,
+                payload: plain[payload_offset..].to_vec(),
+            });
     }
 }

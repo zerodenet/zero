@@ -138,7 +138,11 @@ impl FlowHook for IpcFlowHook {
 
         match self.send_recv(&request) {
             Ok(response) => {
-                if response.get("allow").and_then(|v| v.as_bool()).unwrap_or(true) {
+                if response
+                    .get("allow")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true)
+                {
                     Ok(())
                 } else {
                     let code = response

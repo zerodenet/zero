@@ -78,5 +78,3 @@ impl<'a> Write for RealityWriter<'a> {
         Ok(())
     }
 }
-
-

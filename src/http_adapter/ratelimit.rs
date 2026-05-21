@@ -61,8 +61,8 @@ pub struct ApiRateLimiters {
 impl Default for ApiRateLimiters {
     fn default() -> Self {
         Self {
-            query: RateLimiter::new(100),  // 100 req/s
-            command: RateLimiter::new(10), // 10 req/s
+            query: RateLimiter::new(100),         // 100 req/s
+            command: RateLimiter::new(10),        // 10 req/s
             sse_connections: RateLimiter::new(5), // 5 concurrent
         }
     }

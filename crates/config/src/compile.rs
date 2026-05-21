@@ -23,9 +23,8 @@ impl RouteConfig {
                     resolved.display()
                 ))
             })?;
-            let reader = maxminddb::Reader::from_source(data).map_err(|e| {
-                ConfigError::InvalidRuleSet(format!("invalid geoip database: {e}"))
-            })?;
+            let reader = maxminddb::Reader::from_source(data)
+                .map_err(|e| ConfigError::InvalidRuleSet(format!("invalid geoip database: {e}")))?;
             Ok(RuleSet::with_geoip(
                 rules,
                 self.final_action.compile(),

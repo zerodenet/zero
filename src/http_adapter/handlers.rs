@@ -1,7 +1,7 @@
 use std::io;
 
 use zero_api::{
-    ApiError, ApiErrorCode, CommandRequest, CommandService, EventFilter, EventSource,
+    ApiError, ApiErrorCode, AuthContext, CommandRequest, CommandService, EventFilter, EventSource,
     FlowGetQuery, FlowListQuery, PolicySelectCommand, QueryRequest, QueryResponse, QueryService,
 };
 use zero_engine::EngineHandle;
@@ -77,7 +77,11 @@ pub fn events_snapshot(handle: &EngineHandle) -> io::Result<Vec<u8>> {
 }
 
 /// Handle POST /api/v1/commands.
-pub fn commands(handle: &EngineHandle, body: &[u8]) -> Result<Vec<u8>, (&'static str, Vec<u8>)> {
+pub fn commands(
+    handle: &EngineHandle,
+    body: &[u8],
+    auth_ctx: &AuthContext,
+) -> Result<Vec<u8>, (&'static str, Vec<u8>)> {
     let command = serde_json::from_slice::<CommandRequest>(body).map_err(|error| {
         let api_error = ApiError {
             code: ApiErrorCode::InvalidArgument,
@@ -86,10 +90,20 @@ pub fn commands(handle: &EngineHandle, body: &[u8]) -> Result<Vec<u8>, (&'static
             cause: Some(error.to_string()),
         };
         let status = api_error_status(&api_error);
-        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::error(&api_error))
-            .unwrap_or_default();
+        let body =
+            serde_json::to_vec_pretty(&ApiResponse::<()>::error(&api_error)).unwrap_or_default();
         (status, body)
     })?;
+
+    // Enforce permission check.
+    let required = command.required_permission();
+    if !auth_ctx.allows(required) {
+        let error = ApiError::permission_denied(required);
+        let status = api_error_status(&error);
+        let body =
+            serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error)).unwrap_or_default();
+        return Err((status, body));
+    }
 
     match handle.execute(command) {
         Ok(response) => {
@@ -98,8 +112,8 @@ pub fn commands(handle: &EngineHandle, body: &[u8]) -> Result<Vec<u8>, (&'static
         }
         Err(error) => {
             let status = api_error_status(&error);
-            let body = serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error))
-                .unwrap_or_default();
+            let body =
+                serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error)).unwrap_or_default();
             Err((status, body))
         }
     }
@@ -138,10 +152,7 @@ pub fn events_stream(
     handle: &EngineHandle,
     query: &str,
     headers: &[(String, String)],
-) -> Result<
-    (zero_engine::EventSubscriber, Vec<zero_api::RawApiEvent>),
-    (&'static str, Vec<u8>),
-> {
+) -> Result<(zero_engine::EventSubscriber, Vec<zero_api::RawApiEvent>), (&'static str, Vec<u8>)> {
     let mut filter = EventFilter::default();
     if let Some(types) = parse_query_param(query, "types") {
         filter.event_types = types.split(',').map(|t| t.trim().to_owned()).collect();

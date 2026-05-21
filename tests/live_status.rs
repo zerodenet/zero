@@ -103,8 +103,14 @@ fn local_status_listener_exposes_live_runtime_view() {
     let runtime: serde_json::Value =
         serde_json::from_str(runtime_body).expect("parse runtime json");
     assert_eq!(runtime["result"]["stats"]["active_sessions"], 1);
-    assert_eq!(runtime["result"]["active_sessions"][0]["inbound_tag"], "socks-in");
-    assert_eq!(runtime["result"]["active_sessions"][0]["outbound_tag"], "direct");
+    assert_eq!(
+        runtime["result"]["active_sessions"][0]["inbound_tag"],
+        "socks-in"
+    );
+    assert_eq!(
+        runtime["result"]["active_sessions"][0]["outbound_tag"],
+        "direct"
+    );
     assert_eq!(runtime["result"]["active_sessions"][0]["network"], "tcp");
     assert_eq!(runtime["result"]["active_sessions"][0]["mode"], "rule");
 
@@ -113,7 +119,10 @@ fn local_status_listener_exposes_live_runtime_view() {
     let config_json: serde_json::Value =
         serde_json::from_str(config_body).expect("parse config json");
     assert_eq!(config_json["result"]["rule_count"], 0);
-    assert_eq!(config_json["result"]["inbounds"][0]["listen_port"], socks_port);
+    assert_eq!(
+        config_json["result"]["inbounds"][0]["listen_port"],
+        socks_port
+    );
 
     let status_response = http_get(status_port, "/status");
     let status_body = status_response.split("\r\n\r\n").nth(1).expect("http body");
@@ -218,7 +227,10 @@ fn local_status_listener_can_switch_selector_group() {
     let initial_body = initial_config.split("\r\n\r\n").nth(1).expect("http body");
     let initial_json: serde_json::Value =
         serde_json::from_str(initial_body).expect("parse config json");
-    assert_eq!(initial_json["result"]["outbound_groups"][0]["selected"], "block");
+    assert_eq!(
+        initial_json["result"]["outbound_groups"][0]["selected"],
+        "block"
+    );
 
     let mut blocked = TcpStream::connect(("127.0.0.1", socks_port)).expect("connect socks5");
     blocked

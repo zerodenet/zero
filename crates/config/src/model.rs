@@ -152,6 +152,11 @@ pub struct ApiConfig {
     /// Node push for heartbeat and command polling.
     #[serde(default)]
     pub push: PushConfig,
+    /// Path to dead-letter queue file for failed event deliveries.
+    /// When set, events that exhaust retry attempts are persisted here
+    /// as JSON lines instead of being silently dropped.
+    #[serde(default)]
+    pub dead_letter_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -367,7 +372,11 @@ impl InboundProtocolConfig {
         match self {
             Self::Socks5 { users } => users,
             Self::Mixed { socks5_users } => socks5_users,
-            Self::HttpConnect | Self::Vless { .. } | Self::Hysteria2 { .. } | Self::Shadowsocks { .. } | Self::Trojan { .. } => &[],
+            Self::HttpConnect
+            | Self::Vless { .. }
+            | Self::Hysteria2 { .. }
+            | Self::Shadowsocks { .. }
+            | Self::Trojan { .. } => &[],
         }
     }
 

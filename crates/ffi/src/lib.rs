@@ -179,7 +179,9 @@ pub unsafe extern "C" fn zero_execute(
 #[no_mangle]
 pub unsafe extern "C" fn zero_free_string(s: *mut c_char) {
     if !s.is_null() {
-        unsafe { let _ = CString::from_raw(s); }
+        unsafe {
+            let _ = CString::from_raw(s);
+        }
     }
 }
 

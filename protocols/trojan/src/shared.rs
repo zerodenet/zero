@@ -33,28 +33,29 @@ pub async fn read_password<S: AsyncSocket>(stream: &mut S) -> Result<String, Err
 }
 
 /// Write password hash + CRLF to a stream.
-pub async fn write_password<S: AsyncSocket>(
-    stream: &mut S,
-    password: &str,
-) -> Result<(), Error> {
+pub async fn write_password<S: AsyncSocket>(stream: &mut S, password: &str) -> Result<(), Error> {
     #[cfg(feature = "crypto")]
     {
         use sha2::{Digest, Sha224};
         let hash = hex::encode(&Sha224::digest(password.as_bytes()));
-        stream.write_all(hash.as_bytes()).await.map_err(|_| Error::Io("trojan: write failed"))?;
+        stream
+            .write_all(hash.as_bytes())
+            .await
+            .map_err(|_| Error::Io("trojan: write failed"))?;
     }
     #[cfg(not(feature = "crypto"))]
     {
         let _ = password;
         return Err(Error::Unsupported("trojan: crypto feature not enabled"));
     }
-    stream.write_all(CRLF).await.map_err(|_| Error::Io("trojan: write failed"))
+    stream
+        .write_all(CRLF)
+        .await
+        .map_err(|_| Error::Io("trojan: write failed"))
 }
 
 /// Read command byte + address + port + CRLF.
-pub async fn read_request<S: AsyncSocket>(
-    stream: &mut S,
-) -> Result<(u8, Address, u16), Error> {
+pub async fn read_request<S: AsyncSocket>(stream: &mut S) -> Result<(u8, Address, u16), Error> {
     let mut head = [0u8; 1]; // cmd
     read_exact(stream, &mut head).await?;
     let cmd = head[0];
@@ -77,9 +78,15 @@ pub async fn write_request<S: AsyncSocket>(
     addr: &Address,
     port: u16,
 ) -> Result<(), Error> {
-    stream.write_all(&[cmd]).await.map_err(|_| Error::Io("trojan: write failed"))?;
+    stream
+        .write_all(&[cmd])
+        .await
+        .map_err(|_| Error::Io("trojan: write failed"))?;
     write_address(stream, addr, port).await?;
-    stream.write_all(CRLF).await.map_err(|_| Error::Io("trojan: write failed"))
+    stream
+        .write_all(CRLF)
+        .await
+        .map_err(|_| Error::Io("trojan: write failed"))
 }
 
 /// Read socks5-style address + port.
@@ -125,23 +132,44 @@ async fn write_address<S: AsyncSocket>(
 ) -> Result<(), Error> {
     match addr {
         Address::Ipv4(bytes) => {
-            stream.write_all(&[ATYP_IPV4]).await.map_err(|_| Error::Io("trojan: write failed"))?;
-            stream.write_all(bytes).await.map_err(|_| Error::Io("trojan: write failed"))?;
+            stream
+                .write_all(&[ATYP_IPV4])
+                .await
+                .map_err(|_| Error::Io("trojan: write failed"))?;
+            stream
+                .write_all(bytes)
+                .await
+                .map_err(|_| Error::Io("trojan: write failed"))?;
         }
         Address::Ipv6(bytes) => {
-            stream.write_all(&[ATYP_IPV6]).await.map_err(|_| Error::Io("trojan: write failed"))?;
-            stream.write_all(bytes).await.map_err(|_| Error::Io("trojan: write failed"))?;
+            stream
+                .write_all(&[ATYP_IPV6])
+                .await
+                .map_err(|_| Error::Io("trojan: write failed"))?;
+            stream
+                .write_all(bytes)
+                .await
+                .map_err(|_| Error::Io("trojan: write failed"))?;
         }
         Address::Domain(domain) => {
             let b = domain.as_bytes();
             if b.is_empty() || b.len() > 255 {
                 return Err(Error::Protocol("trojan: domain too long"));
             }
-            stream.write_all(&[ATYP_DOMAIN, b.len() as u8]).await.map_err(|_| Error::Io("trojan: write failed"))?;
-            stream.write_all(b).await.map_err(|_| Error::Io("trojan: write failed"))?;
+            stream
+                .write_all(&[ATYP_DOMAIN, b.len() as u8])
+                .await
+                .map_err(|_| Error::Io("trojan: write failed"))?;
+            stream
+                .write_all(b)
+                .await
+                .map_err(|_| Error::Io("trojan: write failed"))?;
         }
     }
-    stream.write_all(&port.to_be_bytes()).await.map_err(|_| Error::Io("trojan: write failed"))
+    stream
+        .write_all(&port.to_be_bytes())
+        .await
+        .map_err(|_| Error::Io("trojan: write failed"))
 }
 
 async fn read_exact<S: AsyncSocket>(stream: &mut S, buf: &mut [u8]) -> Result<(), Error> {

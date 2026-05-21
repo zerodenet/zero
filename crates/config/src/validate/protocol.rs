@@ -41,13 +41,28 @@ pub(super) fn validate_inbound_protocol(
             }
             if ws.is_some() && reality.is_some() {
                 return Err(ConfigError::InvalidInbound(
-                    "`vless` inbound `reality` currently supports raw TCP only, not `ws`"
-                        .to_owned(),
+                    "`vless` inbound `reality` supports raw TCP only, not `ws`".to_owned(),
                 ));
             }
             if grpc.is_some() && reality.is_some() {
                 return Err(ConfigError::InvalidInbound(
-                    "`vless` inbound `reality` does not support `grpc`".to_owned(),
+                    "`vless` inbound `reality` supports raw TCP only, not `grpc`".to_owned(),
+                ));
+            }
+            if h2.is_some() && reality.is_some() {
+                return Err(ConfigError::InvalidInbound(
+                    "`vless` inbound `reality` supports raw TCP only, not `h2`".to_owned(),
+                ));
+            }
+            if http_upgrade.is_some() && reality.is_some() {
+                return Err(ConfigError::InvalidInbound(
+                    "`vless` inbound `reality` supports raw TCP only, not `http_upgrade`"
+                        .to_owned(),
+                ));
+            }
+            if quic.is_some() && reality.is_some() {
+                return Err(ConfigError::InvalidInbound(
+                    "`vless` inbound `reality` supports raw TCP only, not `quic`".to_owned(),
                 ));
             }
             if let Some(ws) = ws {
@@ -56,8 +71,8 @@ pub(super) fn validate_inbound_protocol(
             }
             if let Some(grpc) = grpc {
                 for name in &grpc.service_names {
-    validate_inbound_optional_non_empty("vless grpc.service_name", name)?;
-}
+                    validate_inbound_optional_non_empty("vless grpc.service_name", name)?;
+                }
             }
             if let Some(h2) = h2 {
                 validate_inbound_optional_non_empty("vless h2.path", &h2.path)?;
@@ -81,6 +96,11 @@ pub(super) fn validate_inbound_protocol(
             key_path,
         } => {
             validate_inbound_optional_non_empty("hysteria2 password", password)?;
+            if cert_path.is_some() != key_path.is_some() {
+                return Err(ConfigError::InvalidInbound(
+                    "hysteria2 tls requires both cert_path and key_path, or neither".to_owned(),
+                ));
+            }
             if let Some(cert_path) = cert_path {
                 validate_inbound_optional_non_empty("hysteria2 cert_path", cert_path)?;
             }
@@ -89,11 +109,18 @@ pub(super) fn validate_inbound_protocol(
             }
             Ok(())
         }
-        InboundProtocolConfig::Shadowsocks { password, cipher: _ } => {
+        InboundProtocolConfig::Shadowsocks {
+            password,
+            cipher: _,
+        } => {
             validate_inbound_optional_non_empty("shadowsocks password", password)?;
             Ok(())
         }
-        InboundProtocolConfig::Trojan { password, sni: _, tls: _ } => {
+        InboundProtocolConfig::Trojan {
+            password,
+            sni: _,
+            tls: _,
+        } => {
             validate_inbound_optional_non_empty("trojan password", password)?;
             Ok(())
         }
@@ -145,13 +172,28 @@ pub(super) fn validate_outbound_protocol(
             }
             if ws.is_some() && reality.is_some() {
                 return Err(ConfigError::InvalidOutbound(
-                    "`vless` outbound `reality` currently supports raw TCP only, not `ws`"
-                        .to_owned(),
+                    "`vless` outbound `reality` supports raw TCP only, not `ws`".to_owned(),
                 ));
             }
             if grpc.is_some() && reality.is_some() {
                 return Err(ConfigError::InvalidOutbound(
-                    "`vless` outbound `reality` does not support `grpc`".to_owned(),
+                    "`vless` outbound `reality` supports raw TCP only, not `grpc`".to_owned(),
+                ));
+            }
+            if h2.is_some() && reality.is_some() {
+                return Err(ConfigError::InvalidOutbound(
+                    "`vless` outbound `reality` supports raw TCP only, not `h2`".to_owned(),
+                ));
+            }
+            if http_upgrade.is_some() && reality.is_some() {
+                return Err(ConfigError::InvalidOutbound(
+                    "`vless` outbound `reality` supports raw TCP only, not `http_upgrade`"
+                        .to_owned(),
+                ));
+            }
+            if quic.is_some() && reality.is_some() {
+                return Err(ConfigError::InvalidOutbound(
+                    "`vless` outbound `reality` supports raw TCP only, not `quic`".to_owned(),
                 ));
             }
             if let Some(ws) = ws {
@@ -160,14 +202,17 @@ pub(super) fn validate_outbound_protocol(
             }
             if let Some(grpc) = grpc {
                 for name in &grpc.service_names {
-    validate_outbound_optional_non_empty("vless grpc.service_name", name)?;
-}
+                    validate_outbound_optional_non_empty("vless grpc.service_name", name)?;
+                }
             }
             if let Some(h2) = h2 {
                 validate_outbound_optional_non_empty("vless h2.path", &h2.path)?;
             }
             if let Some(http_upgrade) = http_upgrade {
-                validate_outbound_optional_non_empty("vless http_upgrade.path", &http_upgrade.path)?;
+                validate_outbound_optional_non_empty(
+                    "vless http_upgrade.path",
+                    &http_upgrade.path,
+                )?;
             }
             if let Some(quic) = quic {
                 if let Some(server_name) = &quic.server_name {

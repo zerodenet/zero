@@ -5,6 +5,8 @@ pub mod h2;
 #[cfg(feature = "http-upgrade")]
 pub mod http_upgrade;
 #[cfg(feature = "quic")]
+pub mod hysteria2_quic;
+#[cfg(feature = "quic")]
 pub mod quic;
 #[cfg(feature = "split-http")]
 pub mod split_http;
@@ -14,5 +16,3 @@ pub mod tls;
 pub mod vless_transport;
 #[cfg(feature = "ws")]
 pub mod ws;
-#[cfg(feature = "quic")]
-pub mod hysteria2_quic;

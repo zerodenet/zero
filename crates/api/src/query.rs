@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{ApiCapabilities, Network, Permission};
+use crate::{ApiCapabilities, Network, Permission, SinkStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum QueryRequest {
@@ -15,6 +15,7 @@ pub enum QueryRequest {
     Policies(PoliciesQuery),
     Policy(PolicyGetQuery),
     Diagnostics(DiagnosticsQuery),
+    Sinks(SinksQuery),
 }
 
 impl QueryRequest {
@@ -35,6 +36,7 @@ pub enum QueryResponse {
     Policies(Snapshot),
     Policy(Snapshot),
     Diagnostics(Snapshot),
+    Sinks(SinkStatusSnapshot),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,6 +59,9 @@ pub struct PoliciesQuery;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticsQuery;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SinksQuery;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FlowListQuery {
@@ -91,4 +96,9 @@ pub struct HealthSnapshot {
     pub engine_version: String,
     pub started_at_unix_ms: Option<u64>,
     pub healthy: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SinkStatusSnapshot {
+    pub sinks: Vec<SinkStatus>,
 }

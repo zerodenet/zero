@@ -14,7 +14,7 @@ use super::error::EngineError;
 use super::event_log::EngineEventLog;
 use super::groups::{OutboundGroupStateStore, UrlTestGroupState, UrlTestMemberState};
 use super::hook::{FlowHook, FlowHookChain};
-use super::plan::{EnginePlan, TargetId, TargetKind};
+use super::plan::{EnginePlan, TargetId};
 use super::probe_trigger::ProbeTriggerRegistry;
 use super::resolve::{
     resolve_target_chains, resolve_target_id, ResolvedLeafOutbound, ResolvedOutbound,
@@ -39,6 +39,9 @@ pub struct Engine {
     pub(crate) probe_trigger_registry: Arc<ProbeTriggerRegistry>,
     flow_hook: Option<Arc<FlowHookChain>>,
     udp_upstream_idle_timeout: Duration,
+    /// Reload notification channel: wakes the proxy's main loop when
+    /// `reload_config` atomically swaps the plan / router / config.
+    reload_notify: Arc<std::sync::Mutex<Vec<std::sync::mpsc::Sender<()>>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,9 +76,7 @@ impl Engine {
         let router = Arc::new(std::sync::Mutex::new(Arc::new(
             config.route.compile(config.source_dir())?,
         )));
-        let plan = Arc::new(std::sync::Mutex::new(Arc::new(
-            EnginePlan::build(&config)?,
-        )));
+        let plan = Arc::new(std::sync::Mutex::new(Arc::new(EnginePlan::build(&config)?)));
         let plan_inner = plan.lock().expect("plan lock poisoned").clone();
         let udp_upstream_idle_timeout =
             Duration::from_secs(config.runtime.udp_upstream_idle_timeout_seconds);
@@ -85,7 +86,7 @@ impl Engine {
             let group = plan_inner
                 .target(group_id)
                 .expect("engine plan should resolve selector group");
-            let TargetKind::Selector(selector) = group.kind() else {
+            let Some(selector) = group.as_selector() else {
                 continue;
             };
             outbound_group_state.initialize_selector(group_id, selector.initial_member());
@@ -95,7 +96,7 @@ impl Engine {
             let group = plan_inner
                 .target(group_id)
                 .expect("engine plan should resolve urltest group");
-            let TargetKind::UrlTest(urltest) = group.kind() else {
+            let Some(urltest) = group.as_urltest() else {
                 continue;
             };
             if !urltest.members().is_empty() {
@@ -127,6 +128,7 @@ impl Engine {
             probe_trigger_registry: ProbeTriggerRegistry::shared(),
             flow_hook: None,
             udp_upstream_idle_timeout,
+            reload_notify: Arc::new(std::sync::Mutex::new(Vec::new())),
         })
     }
 
@@ -190,7 +192,11 @@ impl Engine {
         let mode = self.mode.lock().expect("mode lock poisoned").clone();
         match &mode {
             ModeConfig::Rule => {
-                let action = self.router.lock().expect("router lock poisoned").decide(address, sni);
+                let action = self
+                    .router
+                    .lock()
+                    .expect("router lock poisoned")
+                    .decide(address, sni);
                 match action {
                     RouteAction::Route(tag) => RouteDecision::Route(tag),
                     RouteAction::Direct => RouteDecision::Direct,
@@ -237,8 +243,13 @@ impl Engine {
         // SAFETY: plan is returned in the tuple.  The resolved outbound
         // borrows from data inside `plan`, which stays alive as long as
         // the caller holds the returned `Arc<EnginePlan>`.
-        let resolved: ResolvedOutbound<'static> =
-            unsafe { std::mem::transmute(resolve_target_id(&plan, &self.outbound_group_state, target_id)?) };
+        let resolved: ResolvedOutbound<'static> = unsafe {
+            std::mem::transmute(resolve_target_id(
+                &plan,
+                &self.outbound_group_state,
+                target_id,
+            )?)
+        };
         Some((resolved, plan))
     }
 
@@ -265,10 +276,11 @@ impl Engine {
         // SAFETY: plan is returned alongside, keeping data alive.
         let resolved: ResolvedOutbound<'static> = unsafe {
             std::mem::transmute(
-                resolve_target_id(&plan, &self.outbound_group_state, target_id)
-                    .ok_or_else(|| EngineError::MissingRouteTarget {
+                resolve_target_id(&plan, &self.outbound_group_state, target_id).ok_or_else(
+                    || EngineError::MissingRouteTarget {
                         tag: tag.to_owned(),
-                    })?,
+                    },
+                )?,
             )
         };
         Ok((resolved, plan))
@@ -290,12 +302,7 @@ impl Engine {
         self.event_log.snapshot(filter)
     }
 
-    pub fn events_since(
-        &self,
-        since: u64,
-        limit: usize,
-        filter: &EventFilter,
-    ) -> Vec<RawApiEvent> {
+    pub fn events_since(&self, since: u64, limit: usize, filter: &EventFilter) -> Vec<RawApiEvent> {
         self.event_log.events_since(since, limit, filter)
     }
 
@@ -306,6 +313,11 @@ impl Engine {
     pub fn push_stats_sampled(&self) {
         let snapshot = self.stats_snapshot();
         self.event_log.push_stats_sampled(&snapshot);
+    }
+
+    /// Emit an `engine.stopped` event during graceful shutdown.
+    pub fn push_engine_stopped(&self, reason: &str) {
+        self.event_log.push_engine_stopped(reason);
     }
 
     /// Hot-reload route rules and outbound group definitions.
@@ -338,7 +350,41 @@ impl Engine {
 
         self.event_log.push_config_changed();
         info!("config hot-reloaded");
+
+        // Wake every subscriber so the proxy layer can reconcile listeners.
+        let notify = self
+            .reload_notify
+            .lock()
+            .expect("reload notify lock poisoned");
+        for tx in notify.iter() {
+            let _ = tx.send(());
+        }
+
         Ok(())
+    }
+
+    /// Subscribe to reload notifications.
+    ///
+    /// Returns a receiver that gets a unit value each time `reload_config`
+    /// completes successfully.  The subscriber should re-read the new
+    /// config from `self.config()`.
+    pub fn subscribe_reload(&self) -> std::sync::mpsc::Receiver<()> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.reload_notify
+            .lock()
+            .expect("reload notify lock poisoned")
+            .push(tx);
+        rx
+    }
+
+    /// Emit a `policy.probe.completed` event.
+    pub fn push_policy_probe_completed(
+        &self,
+        policy_tag: &str,
+        payload: zero_api::PolicyProbeCompletedPayload,
+    ) {
+        self.event_log
+            .push_policy_probe_completed(policy_tag, payload);
     }
 
     /// Emit an `engine.warning` event.
@@ -359,25 +405,25 @@ impl Engine {
         target_tag: &str,
     ) -> Result<(), EngineError> {
         let plan = self.plan();
-        let group_id = plan
-            .target_id(group_tag)
-            .ok_or_else(|| EngineError::SelectorGroupNotFound {
-                tag: group_tag.to_owned(),
-            })?;
+        let group_id =
+            plan.target_id(group_tag)
+                .ok_or_else(|| EngineError::SelectorGroupNotFound {
+                    tag: group_tag.to_owned(),
+                })?;
         let group = plan
             .target(group_id)
             .expect("engine plan should resolve selector group");
-        let TargetKind::Selector(selector) = group.kind() else {
+        let Some(selector) = group.as_selector() else {
             return Err(EngineError::SelectorGroupTypeMismatch {
                 tag: group_tag.to_owned(),
             });
         };
-        let target_id = plan
-            .target_id(target_tag)
-            .ok_or_else(|| EngineError::SelectorTargetNotFound {
-                group_tag: group_tag.to_owned(),
-                target_tag: target_tag.to_owned(),
-            })?;
+        let target_id =
+            plan.target_id(target_tag)
+                .ok_or_else(|| EngineError::SelectorTargetNotFound {
+                    group_tag: group_tag.to_owned(),
+                    target_tag: target_tag.to_owned(),
+                })?;
         if !selector.contains_member(target_id) {
             return Err(EngineError::SelectorTargetNotFound {
                 group_tag: group_tag.to_owned(),
@@ -393,12 +439,8 @@ impl Engine {
             .or_else(|| Some(view.target_tag_owned(selector.initial_member())));
         self.outbound_group_state
             .update_selector(group_id, target_id);
-        self.event_log.push_policy_selected(
-            group_tag,
-            "selector",
-            target_tag,
-            previous.as_deref(),
-        );
+        self.event_log
+            .push_policy_selected(group_tag, "selector", target_tag, previous.as_deref());
         info!(
             group_tag = group_tag,
             previous = previous.as_deref().unwrap_or("-"),
@@ -459,10 +501,15 @@ impl Engine {
             }
         }
 
-        self.session_registry
-            .insert(session, self.mode.lock().expect("mode lock poisoned").kind());
+        self.session_registry.insert(
+            session,
+            self.mode.lock().expect("mode lock poisoned").kind(),
+        );
         self.stats.record_start();
-        self.event_log.push_flow_started(session, self.mode.lock().expect("mode lock poisoned").kind());
+        self.event_log.push_flow_started(
+            session,
+            self.mode.lock().expect("mode lock poisoned").kind(),
+        );
     }
 
     pub fn set_session_outbound(&self, session: &Session) {
@@ -564,6 +611,129 @@ impl Engine {
         SessionHandle::new(self.clone(), session_id)
     }
 
+    /// Resolve a hostname via DNS and return the resolved addresses.
+    pub fn dns_lookup(&self, hostname: &str) -> Result<serde_json::Value, EngineError> {
+        use std::net::ToSocketAddrs;
+
+        let addr_str = format!("{hostname}:0");
+        let addrs: Vec<String> = addr_str
+            .to_socket_addrs()
+            .map_err(|e| {
+                EngineError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+            })?
+            .map(|a| a.ip().to_string())
+            .collect();
+
+        Ok(serde_json::json!({
+            "hostname": hostname,
+            "resolved_addresses": addrs,
+            "count": addrs.len(),
+        }))
+    }
+
+    /// Walk the routing rules and return the ones that would match the given
+    /// target tuple (host, port, protocol).
+    pub fn trace_route(
+        &self,
+        target: &str,
+        port: u16,
+        protocol: &str,
+    ) -> Result<serde_json::Value, EngineError> {
+        let address = match target.parse::<std::net::IpAddr>() {
+            Ok(std::net::IpAddr::V4(v4)) => {
+                zero_core::Address::Ipv4(v4.octets())
+            }
+            Ok(std::net::IpAddr::V6(v6)) => {
+                zero_core::Address::Ipv6(v6.octets())
+            }
+            Err(_) => zero_core::Address::Domain(target.to_owned()),
+        };
+
+        let router = self.router.lock().expect("router lock poisoned");
+        let action = router.decide(&address, None);
+
+        let mode = self.mode_kind();
+
+        Ok(serde_json::json!({
+            "target": target,
+            "port": port,
+            "protocol": protocol,
+            "effective_mode": mode,
+            "route_action": match action {
+                zero_router::RouteAction::Route(tag) => serde_json::json!({"route": tag}),
+                zero_router::RouteAction::Direct => serde_json::json!("direct"),
+                zero_router::RouteAction::Reject => serde_json::json!("reject"),
+            },
+        }))
+    }
+
+    /// Test TCP reachability of a target outbound by performing a short
+    /// connect from the proxy's own network stack.
+    pub fn probe_target(
+        &self,
+        target_tag: &str,
+    ) -> Result<serde_json::Value, EngineError> {
+        use std::net::{TcpStream, ToSocketAddrs};
+
+        let plan = self.plan();
+        let Some(target_id) = plan.target_id(target_tag) else {
+            return Err(EngineError::SelectorGroupNotFound {
+                tag: target_tag.to_owned(),
+            });
+        };
+        let Some((resolved, _plan)) = self.resolve_target_id(target_id) else {
+            return Err(EngineError::SelectorGroupNotFound {
+                tag: target_tag.to_owned(),
+            });
+        };
+
+        // Extract server:port from the resolved target.
+        let (host, port) = match &resolved {
+            crate::ResolvedOutbound::Single(leaf) => extract_target_addr(leaf),
+            crate::ResolvedOutbound::Fallback { candidates } => {
+                match candidates.first() {
+                    Some(c) => extract_target_addr(c),
+                    None => (None, None),
+                }
+            }
+            crate::ResolvedOutbound::Relay { .. } => (None, None),
+        };
+
+        let (Some(host), Some(port)) = (host, port) else {
+            return Ok(serde_json::json!({
+                "target_tag": target_tag,
+                "reachable": false,
+                "error": "outbound has no probeable fixed server",
+            }));
+        };
+
+        let addr = format!("{host}:{port}");
+        let started = std::time::Instant::now();
+
+        // Short timeout blocking connect.
+        let addr = addr
+            .to_socket_addrs()
+            .ok()
+            .and_then(|mut a| a.next());
+        let reachable = addr
+            .map(|a| {
+                TcpStream::connect_timeout(&a, std::time::Duration::from_secs(2)).is_ok()
+            })
+            .unwrap_or(false);
+
+        Ok(serde_json::json!({
+            "target_tag": target_tag,
+            "server": host,
+            "port": port,
+            "reachable": reachable,
+            "latency_ms": if reachable {
+                Some(started.elapsed().as_millis() as u64)
+            } else {
+                None
+            },
+        }))
+    }
+
     /// Force-close an active flow by its flow id.
     ///
     /// Returns `Ok(())` if the flow was found and closed, or an error if
@@ -576,12 +746,11 @@ impl Engine {
     ///
     /// Returns an error if the policy is not found or is not a urltest group.
     pub fn trigger_urltest_probe(&self, policy_tag: &str) -> Result<(), EngineError> {
-        let trigger =
-            self.probe_trigger_registry
-                .get(policy_tag)
-                .ok_or_else(|| EngineError::SelectorGroupNotFound {
-                    tag: policy_tag.to_owned(),
-                })?;
+        let trigger = self.probe_trigger_registry.get(policy_tag).ok_or_else(|| {
+            EngineError::SelectorGroupNotFound {
+                tag: policy_tag.to_owned(),
+            }
+        })?;
         trigger.trigger();
         Ok(())
     }
@@ -624,5 +793,21 @@ impl Engine {
                 zero_config::OutboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
                 zero_config::OutboundProtocolConfig::Trojan { .. } => "trojan",
             })
+    }
+}
+
+/// Extract a `(server, port)` pair from a resolved leaf outbound.
+fn extract_target_addr(leaf: &crate::ResolvedLeafOutbound<'_>) -> (Option<String>, Option<u16>) {
+    match leaf {
+        crate::ResolvedLeafOutbound::Direct { .. } | crate::ResolvedLeafOutbound::Block { .. } => {
+            (None, None)
+        }
+        crate::ResolvedLeafOutbound::Socks5 { server, port, .. }
+        | crate::ResolvedLeafOutbound::Vless { server, port, .. }
+        | crate::ResolvedLeafOutbound::Hysteria2 { server, port, .. }
+        | crate::ResolvedLeafOutbound::Shadowsocks { server, port, .. }
+        | crate::ResolvedLeafOutbound::Trojan { server, port, .. } => {
+            (Some(server.to_string()), Some(*port))
+        }
     }
 }

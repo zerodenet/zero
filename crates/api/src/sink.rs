@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
 use crate::{ApiError, ApiErrorCode, ApiResult, EventSink, PublishResult, RawApiEvent};
+use serde::{Deserialize, Serialize};
 
 pub struct CallbackEventSink<F> {
     name: String,
@@ -173,7 +173,7 @@ impl EventSink for MemorySink {
 // ── SinkManager ──────────────────────────────────────────────────────
 
 /// Per-sink delivery status snapshot.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SinkStatus {
     pub name: String,
     pub total_delivered: u64,
@@ -234,10 +234,7 @@ impl SinkManager {
 
     /// Register a sink that accepts all event types.
     pub fn register(&mut self, sink: Box<dyn EventSink + Send + Sync>) {
-        self.sinks.push(ManagedSink {
-            sink,
-            filter: None,
-        });
+        self.sinks.push(ManagedSink { sink, filter: None });
         self.stats.push(SinkStats::new());
     }
 
@@ -369,8 +366,18 @@ impl RotatingFileSink {
             .create(true)
             .append(true)
             .open(&path)
-            .map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to open rotating sink file: {e}")))?;
-        let metadata = file.metadata().map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to stat sink file: {e}")))?;
+            .map_err(|e| {
+                ApiError::new(
+                    ApiErrorCode::Internal,
+                    format!("failed to open rotating sink file: {e}"),
+                )
+            })?;
+        let metadata = file.metadata().map_err(|e| {
+            ApiError::new(
+                ApiErrorCode::Internal,
+                format!("failed to stat sink file: {e}"),
+            )
+        })?;
 
         Ok(Self {
             name: name.into(),
@@ -403,7 +410,12 @@ impl RotatingFileSink {
             .create(true)
             .append(true)
             .open(&self.path)
-            .map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to reopen rotating sink: {e}")))?;
+            .map_err(|e| {
+                ApiError::new(
+                    ApiErrorCode::Internal,
+                    format!("failed to reopen rotating sink: {e}"),
+                )
+            })?;
 
         writer.file = file;
         writer.bytes_written = 0;
@@ -417,11 +429,17 @@ impl EventSink for RotatingFileSink {
     }
 
     fn publish(&self, event: &RawApiEvent) -> ApiResult<PublishResult> {
-        let mut writer = self.writer.lock().map_err(|_| {
-            ApiError::new(ApiErrorCode::Internal, "rotating sink lock poisoned")
-        })?;
+        let mut writer = self
+            .writer
+            .lock()
+            .map_err(|_| ApiError::new(ApiErrorCode::Internal, "rotating sink lock poisoned"))?;
 
-        let line = serde_json::to_vec(event).map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to serialize event: {e}")))?;
+        let line = serde_json::to_vec(event).map_err(|e| {
+            ApiError::new(
+                ApiErrorCode::Internal,
+                format!("failed to serialize event: {e}"),
+            )
+        })?;
         let frame = [line.as_slice(), b"\n"].concat();
 
         if writer.bytes_written + frame.len() as u64 > self.max_bytes {
@@ -429,8 +447,18 @@ impl EventSink for RotatingFileSink {
         }
 
         use std::io::Write;
-        writer.file.write_all(&frame).map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to write rotating sink: {e}")))?;
-        writer.file.flush().map_err(|e| ApiError::new(ApiErrorCode::Internal, format!("failed to flush rotating sink: {e}")))?;
+        writer.file.write_all(&frame).map_err(|e| {
+            ApiError::new(
+                ApiErrorCode::Internal,
+                format!("failed to write rotating sink: {e}"),
+            )
+        })?;
+        writer.file.flush().map_err(|e| {
+            ApiError::new(
+                ApiErrorCode::Internal,
+                format!("failed to flush rotating sink: {e}"),
+            )
+        })?;
         writer.bytes_written += frame.len() as u64;
 
         Ok(PublishResult::delivered())
@@ -441,5 +469,112 @@ fn accepts(managed: &ManagedSink, event: &RawApiEvent) -> bool {
     match &managed.filter {
         None => true,
         Some(types) => types.is_empty() || types.iter().any(|t| t == &event.event_type),
+    }
+}
+
+// ── DeadLetterSink ────────────────────────────────────────────────────
+
+/// A persistent sink that writes failed deliveries to a JSON-line file.
+///
+/// When events exhaust retry attempts in the event dispatcher, they are
+/// written here so they are never silently lost.  The file can be replayed
+/// or inspected offline.
+pub struct DeadLetterSink {
+    name: String,
+    path: std::path::PathBuf,
+    writer: Mutex<std::fs::File>,
+}
+
+impl DeadLetterSink {
+    pub fn new(path: impl Into<std::path::PathBuf>) -> ApiResult<Self> {
+        let path = path.into();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ApiError::new(
+                    ApiErrorCode::Internal,
+                    format!("failed to create dead-letter directory: {e}"),
+                )
+            })?;
+        }
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| {
+                ApiError::new(
+                    ApiErrorCode::Internal,
+                    format!("failed to open dead-letter file `{}`: {e}", path.display()),
+                )
+            })?;
+        Ok(Self {
+            name: "dead-letter".to_owned(),
+            path,
+            writer: Mutex::new(file),
+        })
+    }
+
+    /// Number of bytes written to the dead-letter file.
+    pub fn size_bytes(&self) -> ApiResult<u64> {
+        self.writer
+            .lock()
+            .map_err(|_| ApiError::new(ApiErrorCode::Internal, "dead-letter lock poisoned"))
+            .and_then(|f| {
+                f.metadata()
+                    .map(|m| m.len())
+                    .map_err(|e| {
+                        ApiError::new(
+                            ApiErrorCode::Internal,
+                            format!("failed to stat dead-letter file: {e}"),
+                        )
+                    })
+            })
+    }
+}
+
+impl std::fmt::Debug for DeadLetterSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeadLetterSink")
+            .field("name", &self.name)
+            .field("path", &self.path)
+            .finish()
+    }
+}
+
+impl EventSink for DeadLetterSink {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn publish(&self, event: &RawApiEvent) -> ApiResult<PublishResult> {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let envelope = serde_json::json!({
+            "dead_lettered_at_unix_ms": now_ms,
+            "original_event": event,
+        });
+
+        let mut line = serde_json::to_vec(&envelope).map_err(|e| {
+            ApiError::new(
+                ApiErrorCode::Internal,
+                format!("dead-letter serialization: {e}"),
+            )
+        })?;
+        line.push(b'\n');
+
+        let mut f = self.writer.lock().map_err(|_| {
+            ApiError::new(ApiErrorCode::Internal, "dead-letter lock poisoned")
+        })?;
+        f.write_all(&line).map_err(|e| {
+            ApiError::new(
+                ApiErrorCode::Internal,
+                format!("dead-letter write: {e}"),
+            )
+        })?;
+        f.flush().ok();
+
+        Ok(PublishResult::delivered())
     }
 }

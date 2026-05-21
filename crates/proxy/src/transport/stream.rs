@@ -19,7 +19,6 @@ pub(crate) struct PrefixedSocket {
 }
 
 impl PrefixedSocket {
-    
     pub(crate) fn from_byte(inner: TokioSocket, first: u8) -> Self {
         Self {
             prefix: vec![first],
@@ -46,7 +45,6 @@ impl ClientStream for PrefixedSocket {
     }
 }
 
-
 impl AsyncSocket for PrefixedSocket {
     type Error = io::Error;
 
@@ -71,7 +69,6 @@ impl AsyncSocket for PrefixedSocket {
     }
 }
 
-
 impl AsyncRead for PrefixedSocket {
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -93,7 +90,6 @@ impl AsyncRead for PrefixedSocket {
         Pin::new(&mut self.inner).poll_read(cx, buf)
     }
 }
-
 
 impl AsyncWrite for PrefixedSocket {
     fn poll_write(

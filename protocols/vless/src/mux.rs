@@ -211,7 +211,12 @@ impl MuxClient {
     }
 
     /// Write data to a stream.
-    pub async fn write_data<S>(&mut self, stream: &mut S, sid: u16, data: &[u8]) -> Result<(), Error>
+    pub async fn write_data<S>(
+        &mut self,
+        stream: &mut S,
+        sid: u16,
+        data: &[u8],
+    ) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
@@ -238,7 +243,9 @@ impl MuxClient {
         #[cfg(feature = "reality")]
         if sid != MUX_STREAM_NEW {
             if let Some(ref mut crypto) = self.crypto {
-                return crypto.encrypt_c2s(sid, data).unwrap_or_else(|_| data.to_vec());
+                return crypto
+                    .encrypt_c2s(sid, data)
+                    .unwrap_or_else(|_| data.to_vec());
             }
         }
         data.to_vec()
@@ -317,7 +324,12 @@ impl MuxServer {
     }
 
     /// Write data to a stream.
-    pub async fn write_data<S>(&mut self, stream: &mut S, sid: u16, data: &[u8]) -> Result<(), Error>
+    pub async fn write_data<S>(
+        &mut self,
+        stream: &mut S,
+        sid: u16,
+        data: &[u8],
+    ) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
@@ -335,7 +347,9 @@ impl MuxServer {
         #[cfg(feature = "reality")]
         if sid != MUX_STREAM_NEW {
             if let Some(ref mut crypto) = self.crypto {
-                return crypto.encrypt_s2c(sid, data).unwrap_or_else(|_| data.to_vec());
+                return crypto
+                    .encrypt_s2c(sid, data)
+                    .unwrap_or_else(|_| data.to_vec());
             }
         }
         data.to_vec()

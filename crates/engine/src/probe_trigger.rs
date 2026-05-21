@@ -10,9 +10,7 @@ pub struct ProbeTrigger {
 
 impl ProbeTrigger {
     pub fn new(f: impl Fn() + Send + Sync + 'static) -> Self {
-        Self {
-            inner: Arc::new(f),
-        }
+        Self { inner: Arc::new(f) }
     }
 
     pub fn trigger(&self) {

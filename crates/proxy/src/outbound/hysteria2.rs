@@ -56,20 +56,16 @@ fn spawn_hysteria2_udp_relay(
         let mut pkt_id: u16 = 0;
 
         // Send initial payload
-        if let Ok(dg) = build_udp_datagram(h2_sid, pkt_id, &target_send, port, &initial_payload)
-        {
+        if let Ok(dg) = build_udp_datagram(h2_sid, pkt_id, &target_send, port, &initial_payload) {
             if conn_send.send_datagram(dg.into()).is_ok() {
-                proxy_send
-                    .record_session_outbound_tx(session_id, initial_payload.len() as u64);
+                proxy_send.record_session_outbound_tx(session_id, initial_payload.len() as u64);
             }
         }
         pkt_id = pkt_id.wrapping_add(1);
 
         // Send subsequent payloads
         while let Some(payload) = send_rx.recv().await {
-            let Ok(dg) =
-                build_udp_datagram(h2_sid, pkt_id, &target_send, port, &payload)
-            else {
+            let Ok(dg) = build_udp_datagram(h2_sid, pkt_id, &target_send, port, &payload) else {
                 break;
             };
             if conn_send.send_datagram(dg.into()).is_err() {
@@ -100,7 +96,13 @@ fn spawn_hysteria2_udp_relay(
         }
     });
 
-    (Hysteria2UdpUpstream { session_id, send_tx }, recv_rx)
+    (
+        Hysteria2UdpUpstream {
+            session_id,
+            send_tx,
+        },
+        recv_rx,
+    )
 }
 
 // ── Establishment ──
@@ -189,14 +191,9 @@ impl Hysteria2UdpOutboundManager {
                 self.upstreams.insert(key, upstream);
 
                 self.response_tasks.spawn(async move {
-                    let payload = recv_rx
-                        .recv()
-                        .await
-                        .ok_or_else(|| {
-                            EngineError::Io(std::io::Error::other(
-                                "hysteria2 upstream channel closed",
-                            ))
-                        })?;
+                    let payload = recv_rx.recv().await.ok_or_else(|| {
+                        EngineError::Io(std::io::Error::other("hysteria2 upstream channel closed"))
+                    })?;
                     Ok((target, port, payload, Some(session_id)))
                 });
 

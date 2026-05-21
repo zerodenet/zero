@@ -229,8 +229,50 @@ impl TargetNode {
         &self.tag
     }
 
+    /// Return the raw kind.  Prefer the `as_*` / `is_*` query methods
+    /// below; use this only when exhaustive matching is required (e.g. in
+    /// `resolve.rs`).
     pub fn kind(&self) -> &TargetKind {
         &self.kind
+    }
+
+    pub fn is_outbound(&self) -> bool {
+        matches!(self.kind, TargetKind::Outbound(_))
+    }
+
+    pub fn as_outbound(&self) -> Option<&OutboundTarget> {
+        match &self.kind {
+            TargetKind::Outbound(o) => Some(o),
+            _ => None,
+        }
+    }
+
+    pub fn as_selector(&self) -> Option<&SelectorGroupPlan> {
+        match &self.kind {
+            TargetKind::Selector(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_fallback(&self) -> Option<&FallbackGroupPlan> {
+        match &self.kind {
+            TargetKind::Fallback(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    pub fn as_urltest(&self) -> Option<&UrlTestGroupPlan> {
+        match &self.kind {
+            TargetKind::UrlTest(u) => Some(u),
+            _ => None,
+        }
+    }
+
+    pub fn as_relay(&self) -> Option<&RelayGroupPlan> {
+        match &self.kind {
+            TargetKind::Relay(r) => Some(r),
+            _ => None,
+        }
     }
 }
 

@@ -18,10 +18,18 @@ macro_rules! protocol_adapter {
         pub(crate) struct $struct_name;
 
         impl ProtocolAdapter for $struct_name {
-            fn name(&self) -> &'static str { $proto_name }
-            fn feature_name(&self) -> &'static str { $feature }
-            fn has_inbound(&self) -> bool { cfg!(feature = $feature) }
-            fn has_outbound(&self) -> bool { cfg!(feature = $feature) }
+            fn name(&self) -> &'static str {
+                $proto_name
+            }
+            fn feature_name(&self) -> &'static str {
+                $feature
+            }
+            fn has_inbound(&self) -> bool {
+                cfg!(feature = $feature)
+            }
+            fn has_outbound(&self) -> bool {
+                cfg!(feature = $feature)
+            }
 
             fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
                 matches!(c, $inbound_pat)

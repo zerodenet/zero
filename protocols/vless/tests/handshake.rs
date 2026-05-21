@@ -3,8 +3,7 @@ use std::collections::VecDeque;
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_protocol_vless::{
     build_udp_packet, build_udp_packet_v2, format_uuid, parse_udp_packet, parse_udp_packet_v2,
-    parse_uuid, VlessInbound, VlessOutbound,
-    VlessUser, VlessUserStore,
+    parse_uuid, VlessInbound, VlessOutbound, VlessUser, VlessUserStore,
 };
 use zero_traits::AsyncSocket;
 
@@ -255,9 +254,9 @@ fn parse_udp_v2_with_address() {
     // [marker:2][flags:1(0x01)][port:2][atyp ipv4:1][addr:4][payload]
     let mut packet = vec![
         0x00, 0x00, // v2 marker
-        0x01,       // flags: has address
+        0x01, // flags: has address
         0x00, 0x35, // port 53
-        0x01,       // ipv4
+        0x01, // ipv4
         8, 8, 8, 8,
     ];
     packet.extend_from_slice(b"dns query v2");
@@ -273,7 +272,7 @@ fn parse_udp_v2_without_address_reuse_cache() {
     // [marker:2][flags:1(0x00)][payload]
     let mut packet = vec![
         0x00, 0x00, // v2 marker
-        0x00,       // flags: no address
+        0x00, // flags: no address
     ];
     packet.extend_from_slice(b"reuse address");
 
@@ -288,7 +287,10 @@ fn parse_udp_v2_without_address_reuse_cache() {
 fn parse_udp_v2_without_address_fails_without_cache() {
     let packet = vec![0x00, 0x00, 0x00, b'x'];
     let err = parse_udp_packet_v2(&packet, None, None).unwrap_err();
-    assert!(err.to_string().contains("cached"), "expected cache error, got: {err}");
+    assert!(
+        err.to_string().contains("cached"),
+        "expected cache error, got: {err}"
+    );
 }
 
 #[test]

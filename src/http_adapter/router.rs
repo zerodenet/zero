@@ -1,8 +1,10 @@
 use std::io;
 
+use zero_api::{AuthContext, Permission};
 use zero_engine::EngineHandle;
 
 use super::handlers;
+use super::response::{api_error_status, ApiResponse};
 
 /// A parsed HTTP request ready for routing.
 pub struct HttpRequest {
@@ -21,8 +23,8 @@ pub enum RouteResult {
     },
 }
 
-/// Route the request to the appropriate handler.
-pub fn route(request: &HttpRequest, handle: &EngineHandle) -> RouteResult {
+/// Route the request to the appropriate handler, enforcing permissions.
+pub fn route(request: &HttpRequest, handle: &EngineHandle, auth_ctx: &AuthContext) -> RouteResult {
     let (method, path) = (request.method.as_str(), request.path.as_str());
 
     // Normalize away the /api/v1 prefix so we can match both forms.
@@ -31,50 +33,63 @@ pub fn route(request: &HttpRequest, handle: &EngineHandle) -> RouteResult {
 
     // Handle CORS preflight.
     if method == "OPTIONS" {
-        return RouteResult::Respond(
-            "HTTP/1.1 204 No Content\r\n".to_owned(),
-            Vec::new(),
-        );
+        return RouteResult::Respond("HTTP/1.1 204 No Content\r\n".to_owned(), Vec::new());
     }
 
     match (method, api_path) {
         (m, p) if p.starts_with("/api/v1/") => match (m, p) {
             // ── /api/v1/* ──────────────────────────────────────────
-            ("GET", "/api/v1/capabilities") => json_response(handlers::capabilities(handle)),
-            ("GET", "/api/v1/health") => json_response(handlers::health(handle)),
-            ("GET", "/api/v1/config") => json_response(handlers::config(handle)),
-            ("GET", "/api/v1/runtime") => json_response(handlers::runtime(handle)),
-            ("GET", "/api/v1/stats") => json_response(handlers::stats(handle)),
-            ("GET", "/api/v1/flows") => json_response(handlers::flows_list(handle, query)),
-            ("POST", "/api/v1/commands") => command_response(handlers::commands(handle, &request.body)),
+            ("GET", "/api/v1/capabilities") => {
+                read_json(handlers::capabilities(handle), auth_ctx)
+            }
+            ("GET", "/api/v1/health") => read_json(handlers::health(handle), auth_ctx),
+            ("GET", "/api/v1/config") => read_json(handlers::config(handle), auth_ctx),
+            ("GET", "/api/v1/runtime") => read_json(handlers::runtime(handle), auth_ctx),
+            ("GET", "/api/v1/stats") => read_json(handlers::stats(handle), auth_ctx),
+            ("GET", "/api/v1/flows") => read_json(handlers::flows_list(handle, query), auth_ctx),
+            ("POST", "/api/v1/commands") => {
+                command_permission(handlers::commands(handle, &request.body, auth_ctx))
+            }
             ("GET", "/api/v1/events/stream") => {
+                if let Some(denied) = require_permission(auth_ctx, Permission::Read) {
+                    return denied;
+                }
                 match handlers::events_stream(handle, query, &request.headers) {
                     Ok((subscriber, catch_up)) => RouteResult::Sse { subscriber, catch_up },
                     Err((status, body)) => RouteResult::Respond(status.to_owned(), body),
                 }
             }
-            ("GET", "/api/v1/events") => json_response(handlers::events_snapshot(handle)),
+            ("GET", "/api/v1/events") => {
+                read_json(handlers::events_snapshot(handle), auth_ctx)
+            }
             _ if path_segments(p) == 3 && p.starts_with("/api/v1/flows/") => {
                 let flow_id = &p["/api/v1/flows/".len()..];
-                json_response(handlers::flow_get(handle, flow_id))
+                read_json(handlers::flow_get(handle, flow_id), auth_ctx)
             }
-            ("GET", "/api/v1/policies") => json_response(handlers::policies_list(handle)),
+            ("GET", "/api/v1/policies") => {
+                read_json(handlers::policies_list(handle), auth_ctx)
+            }
             _ if path_segments(p) == 3 && p.starts_with("/api/v1/policies/") => {
                 let policy_tag = &p["/api/v1/policies/".len()..];
-                json_response(handlers::policy_get(handle, policy_tag))
+                read_json(handlers::policy_get(handle, policy_tag), auth_ctx)
             }
             _ => not_found_response(),
         },
 
         // ── compatibility endpoints ───────────────────────────────
-        ("GET", "/status") => json_response(handlers::runtime(handle)),
-        ("GET", "/config") => json_response(handlers::config(handle)),
-        ("GET", "/runtime") => json_response(handlers::runtime(handle)),
-        ("GET", "/events") => json_response(handlers::events_snapshot(handle)),
-        ("POST", "/commands") => command_response(handlers::commands(handle, &request.body)),
+        ("GET", "/status") => read_json(handlers::runtime(handle), auth_ctx),
+        ("GET", "/config") => read_json(handlers::config(handle), auth_ctx),
+        ("GET", "/runtime") => read_json(handlers::runtime(handle), auth_ctx),
+        ("GET", "/events") => read_json(handlers::events_snapshot(handle), auth_ctx),
+        ("POST", "/commands") => {
+            command_permission(handlers::commands(handle, &request.body, auth_ctx))
+        }
         ("POST", p) if path_segments(p) == 3 && p.starts_with("/selectors/") => {
             match parse_selector_path(p) {
                 Some((group, target)) => {
+                    if let Some(denied) = require_permission(auth_ctx, Permission::Control) {
+                        return denied;
+                    }
                     command_response(handlers::selector_update(handle, group, target))
                 }
                 None => not_found_response(),
@@ -83,6 +98,13 @@ pub fn route(request: &HttpRequest, handle: &EngineHandle) -> RouteResult {
         _ if method == "GET" => not_found_response(),
         _ => method_not_allowed_response(),
     }
+}
+
+fn read_json(result: io::Result<Vec<u8>>, auth_ctx: &AuthContext) -> RouteResult {
+    if let Some(denied) = require_permission(auth_ctx, Permission::Read) {
+        return denied;
+    }
+    json_response(result)
 }
 
 fn json_response(result: io::Result<Vec<u8>>) -> RouteResult {
@@ -102,6 +124,26 @@ fn command_response(result: Result<Vec<u8>, (&'static str, Vec<u8>)>) -> RouteRe
     match result {
         Ok(body) => RouteResult::Respond("HTTP/1.1 200 OK\r\n".to_owned(), body),
         Err((status, body)) => RouteResult::Respond(status.to_owned(), body),
+    }
+}
+
+fn command_permission(result: Result<Vec<u8>, (&'static str, Vec<u8>)>) -> RouteResult {
+    match result {
+        Ok(body) => RouteResult::Respond("HTTP/1.1 200 OK\r\n".to_owned(), body),
+        Err((status, body)) => RouteResult::Respond(status.to_owned(), body),
+    }
+}
+
+/// Return a 403 response if the auth context lacks the required permission.
+fn require_permission(auth_ctx: &AuthContext, required: Permission) -> Option<RouteResult> {
+    if auth_ctx.allows(required) {
+        None
+    } else {
+        let error = zero_api::ApiError::permission_denied(required);
+        let status = api_error_status(&error);
+        let body =
+            serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error)).unwrap_or_default();
+        Some(RouteResult::Respond(status.to_owned(), body))
     }
 }
 

@@ -45,7 +45,7 @@ impl Proxy {
         self.record_session_inbound_traffic(session.id, client.drain_traffic());
 
         self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session);
+        let action = self.route_decision(&session);
         let resolved = match self.resolve_outbound(&action) {
             Ok(resolved) => resolved,
             Err(error) => {

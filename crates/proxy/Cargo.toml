@@ -87,7 +87,6 @@ outbound-trojan = [
     "dep:tokio-rustls"
 ]
 dns-udp = ["zero-dns/udp"]
-dns-cache = []
 
 [dependencies]
 quinn = { version = "0.11", default-features = false, features = ["rustls-ring"], optional = true }

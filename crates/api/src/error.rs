@@ -51,12 +51,13 @@ pub enum ApiErrorCode {
 
 impl ApiErrorCode {
     /// Stable string code used in JSON error responses.
+    /// Returns kebab-case, matching the serde wire format.
     pub fn as_code_str(&self) -> &'static str {
         match self {
-            Self::NotFound => "not_found",
-            Self::InvalidArgument => "invalid_argument",
-            Self::PermissionDenied => "permission_denied",
-            Self::FeatureDisabled => "feature_disabled",
+            Self::NotFound => "not-found",
+            Self::InvalidArgument => "invalid-argument",
+            Self::PermissionDenied => "permission-denied",
+            Self::FeatureDisabled => "feature-disabled",
             Self::Conflict => "conflict",
             Self::Unsupported => "unsupported",
             Self::Internal => "internal",

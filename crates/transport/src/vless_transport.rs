@@ -17,8 +17,8 @@ use std::io;
 
 use zero_platform_tokio::TransportConnector;
 
-use zero_protocol_vless::{upgrade_reality_client, RealityClientOptions};
 use crate::{grpc, h2, http_upgrade, split_http, tls, ws};
+use zero_protocol_vless::{upgrade_reality_client, RealityClientOptions};
 
 /// Wrap a raw TCP socket with the configured VLESS transport layer.
 ///
@@ -46,18 +46,17 @@ pub async fn build_vless_outbound_transport(
                     tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
                 match TokioSocket::connect_addr(peer).await {
                     Ok(get_socket) => {
-                        let get_stream = match tls::connect_tls_upstream(
-                            get_socket, tls, source_dir, server,
-                        )
-                        .await
-                        {
-                            Ok(s) => s,
-                            Err(e) => {
-                                // GET TLS connect failed — drop POST on the floor
-                                drop(post_stream);
-                                return Err(e);
-                            }
-                        };
+                        let get_stream =
+                            match tls::connect_tls_upstream(get_socket, tls, source_dir, server)
+                                .await
+                            {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    // GET TLS connect failed — drop POST on the floor
+                                    drop(post_stream);
+                                    return Err(e);
+                                }
+                            };
                         TcpRelayStream::new(
                             split_http::connect_split_http(post_stream, get_stream, cfg).await?,
                         )
@@ -73,15 +72,13 @@ pub async fn build_vless_outbound_transport(
                 }
             }
             None => {
-                let get_socket = TokioSocket::connect_addr(peer)
-                    .await
-                    .map_err(|e| EngineError::Io(io::Error::new(
+                let get_socket = TokioSocket::connect_addr(peer).await.map_err(|e| {
+                    EngineError::Io(io::Error::new(
                         io::ErrorKind::ConnectionRefused,
                         format!("split-http: failed to open GET connection: {e}"),
-                    )))?;
-                TcpRelayStream::new(
-                    split_http::connect_split_http(socket, get_socket, cfg).await?,
-                )
+                    ))
+                })?;
+                TcpRelayStream::new(split_http::connect_split_http(socket, get_socket, cfg).await?)
             }
         };
         return Ok(stream);
@@ -102,50 +99,40 @@ pub async fn build_vless_outbound_transport(
     match (tls_config, reality, ws_config, grpc_config, h2_config) {
         // ── gRPC ──
         (Some(tls), None, None, Some(grpc), None) => {
-            let tls_stream =
-                tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
-            let grpc_stream =
-                grpc::connect_grpc(tls_stream, &grpc.service_names).await?;
+            let tls_stream = tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
+            let grpc_stream = grpc::connect_grpc(tls_stream, &grpc.service_names).await?;
             Ok(TcpRelayStream::new(grpc_stream))
         }
         (None, None, None, Some(grpc), None) => {
-            let grpc_stream =
-                grpc::connect_grpc(socket, &grpc.service_names).await?;
+            let grpc_stream = grpc::connect_grpc(socket, &grpc.service_names).await?;
             Ok(TcpRelayStream::new(grpc_stream))
         }
 
         // ── H2 ──
         (Some(tls), None, None, None, Some(h2_config)) => {
-            let tls_stream =
-                tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
-            let h2_stream =
-                h2::connect_h2(tls_stream, h2_config, server, port).await?;
+            let tls_stream = tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
+            let h2_stream = h2::connect_h2(tls_stream, h2_config, server, port).await?;
             Ok(TcpRelayStream::new(h2_stream))
         }
         (None, None, None, None, Some(h2_config)) => {
-            let h2_stream =
-                h2::connect_h2(socket, h2_config, server, port).await?;
+            let h2_stream = h2::connect_h2(socket, h2_config, server, port).await?;
             Ok(TcpRelayStream::new(h2_stream))
         }
 
         // ── WebSocket ──
         (Some(tls), None, Some(ws), None, None) => {
-            let tls_stream =
-                tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
-            let ws_stream =
-                ws::connect_ws(tls_stream, ws, server, port).await?;
+            let tls_stream = tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
+            let ws_stream = ws::connect_ws(tls_stream, ws, server, port).await?;
             Ok(TcpRelayStream::new(ws_stream))
         }
         (None, None, Some(ws), None, None) => {
-            let ws_stream =
-                ws::connect_ws(socket, ws, server, port).await?;
+            let ws_stream = ws::connect_ws(socket, ws, server, port).await?;
             Ok(TcpRelayStream::new(ws_stream))
         }
 
         // ── TLS only ──
         (Some(tls), None, None, None, None) => {
-            let tls_stream =
-                tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
+            let tls_stream = tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
             Ok(TcpRelayStream::new(tls_stream))
         }
 

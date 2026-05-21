@@ -4,6 +4,7 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::transport::Hysteria2Stream;
 use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -11,14 +12,12 @@ use tracing::{error, info, warn};
 use zero_config::InboundConfig;
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
-use zero_traits::DnsResolver;
 use zero_protocol_hysteria2::{
-    build_auth_error, build_auth_ok, build_connect_error, build_connect_ok,
-    build_udp_datagram, parse_auth_frame, parse_tcp_connect_header, parse_udp_datagram,
-    verify_hmac,
+    build_auth_error, build_auth_ok, build_connect_error, build_connect_ok, build_udp_datagram,
+    parse_auth_frame, parse_tcp_connect_header, parse_udp_datagram, verify_hmac,
 };
-use crate::transport::Hysteria2Stream;
 use zero_traits::AsyncSocket;
+use zero_traits::DnsResolver;
 
 use crate::runtime::Proxy;
 
@@ -39,15 +38,15 @@ impl Proxy {
         };
 
         let cert_path = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Hysteria2 { cert_path, .. } => {
-                cert_path.clone().unwrap_or_else(|| "certs/fullchain.pem".to_string())
-            }
+            zero_config::InboundProtocolConfig::Hysteria2 { cert_path, .. } => cert_path
+                .clone()
+                .unwrap_or_else(|| "certs/fullchain.pem".to_string()),
             _ => "certs/fullchain.pem".to_string(),
         };
         let key_path = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Hysteria2 { key_path, .. } => {
-                key_path.clone().unwrap_or_else(|| "certs/privkey.pem".to_string())
-            }
+            zero_config::InboundProtocolConfig::Hysteria2 { key_path, .. } => key_path
+                .clone()
+                .unwrap_or_else(|| "certs/privkey.pem".to_string()),
             _ => "certs/privkey.pem".to_string(),
         };
 
@@ -151,7 +150,9 @@ impl Proxy {
         let (send, recv) = match conn.accept_bi().await {
             Ok(stream) => stream,
             Err(e) => {
-                return Err(EngineError::Io(io::Error::other(format!("accept auth stream: {e}"))));
+                return Err(EngineError::Io(io::Error::other(format!(
+                    "accept auth stream: {e}"
+                ))));
             }
         };
 
@@ -257,10 +258,8 @@ impl Proxy {
         resolver: Arc<zero_dns::DnsSystem>,
     ) -> Result<(), EngineError> {
         let mut buf = [0u8; 65536];
-        let mut session_map: std::collections::HashMap<
-            (SocketAddr, u16),
-            (u16, Address, u16),
-        > = std::collections::HashMap::new();
+        let mut session_map: std::collections::HashMap<(SocketAddr, u16), (u16, Address, u16)> =
+            std::collections::HashMap::new();
 
         loop {
             select! {
@@ -377,7 +376,13 @@ impl Proxy {
 
         let (target, port) = parse_tcp_connect_header(&header_buf[..n])?;
 
-        let mut session = Session::new(0, target.clone(), port, Network::Tcp, ProtocolType::Hysteria2);
+        let mut session = Session::new(
+            0,
+            target.clone(),
+            port,
+            Network::Tcp,
+            ProtocolType::Hysteria2,
+        );
         self.prepare_session(&mut session, inbound_tag, None);
 
         self.resolve_fake_ip_target(&mut session).await;
@@ -421,12 +426,10 @@ impl Proxy {
         let (mut up_read, mut up_write) = tokio::io::split(upstream);
         let (mut down_read, mut down_write) = tokio::io::split(stream);
 
-        let upload = tokio::spawn(async move {
-            tokio::io::copy(&mut down_read, &mut up_write).await
-        });
-        let download = tokio::spawn(async move {
-            tokio::io::copy(&mut up_read, &mut down_write).await
-        });
+        let upload =
+            tokio::spawn(async move { tokio::io::copy(&mut down_read, &mut up_write).await });
+        let download =
+            tokio::spawn(async move { tokio::io::copy(&mut up_read, &mut down_write).await });
 
         let _ = tokio::try_join!(upload, download);
         Ok(())

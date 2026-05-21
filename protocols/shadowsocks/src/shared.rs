@@ -45,7 +45,10 @@ impl CipherKind {
     }
 
     pub fn is_blake3(&self) -> bool {
-        matches!(self, Self::Blake3Aes128Gcm | Self::Blake3Aes256Gcm | Self::Blake3Chacha20Poly1305)
+        matches!(
+            self,
+            Self::Blake3Aes128Gcm | Self::Blake3Aes256Gcm | Self::Blake3Chacha20Poly1305
+        )
     }
 
     pub fn from_str(s: &str) -> Option<Self> {
@@ -307,8 +310,14 @@ mod tests {
 
     #[test]
     fn test_cipher_kind_from_str() {
-        assert_eq!(CipherKind::from_str("aes-128-gcm"), Some(CipherKind::Aes128Gcm));
-        assert_eq!(CipherKind::from_str("aes-256-gcm"), Some(CipherKind::Aes256Gcm));
+        assert_eq!(
+            CipherKind::from_str("aes-128-gcm"),
+            Some(CipherKind::Aes128Gcm)
+        );
+        assert_eq!(
+            CipherKind::from_str("aes-256-gcm"),
+            Some(CipherKind::Aes256Gcm)
+        );
         assert_eq!(
             CipherKind::from_str("chacha20-ietf-poly1305"),
             Some(CipherKind::Chacha20Poly1305)

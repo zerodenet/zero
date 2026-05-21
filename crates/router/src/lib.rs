@@ -93,9 +93,11 @@ fn condition_matches(
             _ => false,
         },
         RuleCondition::DomainKeyword(keywords) => match address {
-            Address::Domain(domain) => keywords
-                .iter()
-                .any(|kw| domain.to_ascii_lowercase().contains(&kw.to_ascii_lowercase())),
+            Address::Domain(domain) => keywords.iter().any(|kw| {
+                domain
+                    .to_ascii_lowercase()
+                    .contains(&kw.to_ascii_lowercase())
+            }),
             _ => false,
         },
         RuleCondition::Ip(networks) => match address_to_ip(address) {
@@ -117,9 +119,7 @@ fn condition_matches(
             _ => false,
         },
         RuleCondition::Sni(patterns) => match sni {
-            Some(sni) => patterns
-                .iter()
-                .any(|pattern| domain_matches(pattern, sni)),
+            Some(sni) => patterns.iter().any(|pattern| domain_matches(pattern, sni)),
             None => false,
         },
         RuleCondition::And(conditions) => conditions

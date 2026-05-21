@@ -330,5 +330,3 @@ where
         _ => Err(Error::Unsupported("VLESS address type is not supported")),
     }
 }
-
-

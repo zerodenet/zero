@@ -39,3 +39,4 @@ pub use session_registry::ActiveSession;
 pub use stats::{
     EngineStatsSnapshot, OutboundStatsSnapshot, SessionOutcome, UdpUpstreamStatsSnapshot,
 };
+pub use zero_api::{PolicyProbeCompletedPayload, PolicyProbeMember};

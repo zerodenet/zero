@@ -39,7 +39,10 @@ impl EngineStats {
         self.bytes_up.fetch_add(bytes_up, Ordering::Relaxed);
         self.bytes_down.fetch_add(bytes_down, Ordering::Relaxed);
         if let Some(tag) = outbound_tag {
-            let mut map = self.per_outbound.lock().expect("per-outbound lock poisoned");
+            let mut map = self
+                .per_outbound
+                .lock()
+                .expect("per-outbound lock poisoned");
             let entry = map.entry(tag.to_owned()).or_default();
             entry.flows.fetch_add(1, Ordering::Relaxed);
             entry.bytes_up.fetch_add(bytes_up, Ordering::Relaxed);
@@ -53,11 +56,16 @@ impl EngineStats {
             .lock()
             .expect("per-outbound lock poisoned")
             .iter()
-            .map(|(tag, s)| (tag.clone(), OutboundStatsSnapshot {
-                flows: s.flows.load(Ordering::Relaxed),
-                bytes_up: s.bytes_up.load(Ordering::Relaxed),
-                bytes_down: s.bytes_down.load(Ordering::Relaxed),
-            }))
+            .map(|(tag, s)| {
+                (
+                    tag.clone(),
+                    OutboundStatsSnapshot {
+                        flows: s.flows.load(Ordering::Relaxed),
+                        bytes_up: s.bytes_up.load(Ordering::Relaxed),
+                        bytes_down: s.bytes_down.load(Ordering::Relaxed),
+                    },
+                )
+            })
             .collect();
 
         EngineStatsSnapshot {

@@ -39,21 +39,24 @@ impl AsyncWrite for Hysteria2Stream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.send).poll_write(cx, buf).map_err(|e| io::Error::other(e))
+        Pin::new(&mut self.send)
+            .poll_write(cx, buf)
+            .map_err(|e| io::Error::other(e))
     }
 
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.send).poll_flush(cx).map_err(|e| io::Error::other(e))
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.send)
+            .poll_flush(cx)
+            .map_err(|e| io::Error::other(e))
     }
 
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.send).poll_shutdown(cx).map_err(|e| io::Error::other(e))
+        Pin::new(&mut self.send)
+            .poll_shutdown(cx)
+            .map_err(|e| io::Error::other(e))
     }
 }
 
@@ -80,8 +83,7 @@ use std::sync::Arc;
 use zero_core::Session;
 use zero_engine::EngineError;
 use zero_protocol_hysteria2::{
-    build_auth_frame, build_tcp_connect_header, derive_salt, parse_auth_response,
-    sign_hmac,
+    build_auth_frame, build_tcp_connect_header, derive_salt, parse_auth_response, sign_hmac,
 };
 
 /// Establishes a Hysteria2 outbound connection.
@@ -114,19 +116,20 @@ impl Hysteria2Connector {
             .with_no_client_auth();
         tls_config.alpn_protocols = vec![b"hysteria2".to_vec()];
 
-        let quic_cfg = quinn::crypto::rustls::QuicClientConfig::try_from(tls_config)
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 tls cfg: {e}"))))?;
+        let quic_cfg =
+            quinn::crypto::rustls::QuicClientConfig::try_from(tls_config).map_err(|e| {
+                EngineError::Io(std::io::Error::other(format!("hysteria2 tls cfg: {e}")))
+            })?;
 
         let mut client_cfg = quinn::ClientConfig::new(Arc::new(quic_cfg));
         let mut transport = quinn::TransportConfig::default();
-        transport.max_idle_timeout(Some(
-            std::time::Duration::from_secs(30).try_into().unwrap(),
-        ));
+        transport.max_idle_timeout(Some(std::time::Duration::from_secs(30).try_into().unwrap()));
         transport.datagram_receive_buffer_size(Some(65536));
         client_cfg.transport_config(Arc::new(transport));
 
-        let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap())
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 endpoint: {e}"))))?;
+        let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap()).map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!("hysteria2 endpoint: {e}")))
+        })?;
         endpoint.set_default_client_config(client_cfg);
 
         let server_addr = format!("{}:{}", self.server, self.port)
@@ -137,27 +140,34 @@ impl Hysteria2Connector {
             .connect(server_addr, &self.server)
             .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connect: {e}"))))?
             .await
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connection: {e}"))))?;
+            .map_err(|e| {
+                EngineError::Io(std::io::Error::other(format!("hysteria2 connection: {e}")))
+            })?;
 
         // HMAC auth
         let salt = derive_salt(&server_addr.to_string(), &self.password);
         let hmac_bytes = sign_hmac(&self.password, &salt);
 
-        let (mut send, mut recv) = conn
-            .open_bi()
-            .await
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}"))))?;
+        let (mut send, mut recv) = conn.open_bi().await.map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}")))
+        })?;
 
         let auth_frame = build_auth_frame(&hmac_bytes);
-        send.write_all(&auth_frame).await.map_err(|e| EngineError::Io(e.into()))?;
+        send.write_all(&auth_frame)
+            .await
+            .map_err(|e| EngineError::Io(e.into()))?;
 
         let mut resp_buf = [0u8; 32];
-        let n = recv.read(&mut resp_buf)
+        let n = recv
+            .read(&mut resp_buf)
             .await
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 auth read: {e}"))))?
+            .map_err(|e| {
+                EngineError::Io(std::io::Error::other(format!("hysteria2 auth read: {e}")))
+            })?
             .unwrap_or(0);
-        parse_auth_response(&resp_buf[..n])
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 auth failed: {e}"))))?;
+        parse_auth_response(&resp_buf[..n]).map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!("hysteria2 auth failed: {e}")))
+        })?;
 
         drop(send);
         drop(recv);
@@ -169,21 +179,28 @@ impl Hysteria2Connector {
     pub async fn connect(&self, session: &Session) -> Result<Hysteria2Stream, EngineError> {
         let conn = self.connect_raw().await?;
 
-        let (mut send, mut recv) = conn
-            .open_bi()
-            .await
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}"))))?;
+        let (mut send, mut recv) = conn.open_bi().await.map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}")))
+        })?;
 
         // TCP connect
-        let connect_header = build_tcp_connect_header(&session.target, session.port)
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connect header: {e}"))))?;
-        send.write_all(&connect_header).await.map_err(|e| EngineError::Io(e.into()))?;
+        let connect_header =
+            build_tcp_connect_header(&session.target, session.port).map_err(|e| {
+                EngineError::Io(std::io::Error::other(format!(
+                    "hysteria2 connect header: {e}"
+                )))
+            })?;
+        send.write_all(&connect_header)
+            .await
+            .map_err(|e| EngineError::Io(e.into()))?;
         send.flush().await.map_err(|e| EngineError::Io(e.into()))?;
 
         let mut ok_buf = [0u8; 1];
-        recv.read_exact(&mut ok_buf)
-            .await
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connect read: {e}"))))?;
+        recv.read_exact(&mut ok_buf).await.map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!(
+                "hysteria2 connect read: {e}"
+            )))
+        })?;
         if ok_buf[0] != 0x01 {
             return Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::ConnectionRefused,
@@ -200,21 +217,27 @@ struct SkipVerify;
 
 impl rustls::client::danger::ServerCertVerifier for SkipVerify {
     fn verify_server_cert(
-        &self, _: &rustls::pki_types::CertificateDer<'_>,
+        &self,
+        _: &rustls::pki_types::CertificateDer<'_>,
         _: &[rustls::pki_types::CertificateDer<'_>],
         _: &rustls::pki_types::ServerName<'_>,
-        _: &[u8], _: rustls::pki_types::UnixTime,
+        _: &[u8],
+        _: rustls::pki_types::UnixTime,
     ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
         Ok(rustls::client::danger::ServerCertVerified::assertion())
     }
     fn verify_tls12_signature(
-        &self, _: &[u8], _: &rustls::pki_types::CertificateDer<'_>,
+        &self,
+        _: &[u8],
+        _: &rustls::pki_types::CertificateDer<'_>,
         _: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
         Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
     }
     fn verify_tls13_signature(
-        &self, _: &[u8], _: &rustls::pki_types::CertificateDer<'_>,
+        &self,
+        _: &[u8],
+        _: &rustls::pki_types::CertificateDer<'_>,
         _: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
         Ok(rustls::client::danger::HandshakeSignatureValid::assertion())

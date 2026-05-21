@@ -11,7 +11,8 @@ use crate::transport::StreamTraffic;
 
 impl Proxy {
     pub(crate) fn route_decision(&self, session: &zero_core::Session) -> RouteDecision {
-        self.engine.route_decision(&session.target, session.sni.as_deref())
+        self.engine
+            .route_decision(&session.target, session.sni.as_deref())
     }
 
     pub(crate) fn resolve_outbound(

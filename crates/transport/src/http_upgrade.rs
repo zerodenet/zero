@@ -31,10 +31,7 @@ pub async fn connect_http_upgrade<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let host = config
-        .host
-        .as_deref()
-        .unwrap_or("localhost");
+    let host = config.host.as_deref().unwrap_or("localhost");
     let path = config.path.as_str();
 
     let req = Request::builder()
@@ -184,7 +181,10 @@ where
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.inner).poll_flush(cx)
     }
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 }
@@ -252,7 +252,11 @@ fn write_http_request(buf: &mut Vec<u8>, req: &Request<()>) {
     let mut s = String::with_capacity(256);
     s.push_str(&format!("{} {} HTTP/1.1\r\n", req.method().as_str(), path));
     for (name, value) in req.headers() {
-        s.push_str(&format!("{}: {}\r\n", name.as_str(), value.to_str().unwrap_or("")));
+        s.push_str(&format!(
+            "{}: {}\r\n",
+            name.as_str(),
+            value.to_str().unwrap_or("")
+        ));
     }
     s.push_str("\r\n");
     buf.extend_from_slice(s.as_bytes());

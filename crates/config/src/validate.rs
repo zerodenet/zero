@@ -24,9 +24,12 @@ impl RuntimeConfig {
                 &inbound.listen.address,
                 inbound.listen.port,
             )
-            .map_err(|e| ConfigError::InvalidInbound(format!("inbounds[{i}] `{}`: {e}", inbound.tag)))?;
-            validate_inbound_protocol(&inbound.protocol)
-                .map_err(|e| ConfigError::InvalidInbound(format!("inbounds[{i}] `{}`: {e}", inbound.tag)))?;
+            .map_err(|e| {
+                ConfigError::InvalidInbound(format!("inbounds[{i}] `{}`: {e}", inbound.tag))
+            })?;
+            validate_inbound_protocol(&inbound.protocol).map_err(|e| {
+                ConfigError::InvalidInbound(format!("inbounds[{i}] `{}`: {e}", inbound.tag))
+            })?;
         }
 
         let mut outbound_tags = HashSet::new();
@@ -34,15 +37,17 @@ impl RuntimeConfig {
         for (i, outbound) in self.outbounds.iter().enumerate() {
             validate_tag("outbound", &outbound.tag, &mut outbound_tags)
                 .map_err(|e| ConfigError::InvalidOutbound(format!("outbounds[{i}]: {e}")))?;
-            validate_outbound_protocol(&outbound.protocol)
-                .map_err(|e| ConfigError::InvalidOutbound(format!("outbounds[{i}] `{}`: {e}", outbound.tag)))?;
+            validate_outbound_protocol(&outbound.protocol).map_err(|e| {
+                ConfigError::InvalidOutbound(format!("outbounds[{i}] `{}`: {e}", outbound.tag))
+            })?;
             validate_route_target_tag(outbound.tag(), &mut route_target_tags)?;
         }
 
         let mut outbound_group_tags = HashSet::new();
         for (i, group) in self.outbound_groups.iter().enumerate() {
-            validate_tag("outbound group", &group.tag, &mut outbound_group_tags)
-                .map_err(|e| ConfigError::InvalidOutboundGroup(format!("outbound_groups[{i}]: {e}")))?;
+            validate_tag("outbound group", &group.tag, &mut outbound_group_tags).map_err(|e| {
+                ConfigError::InvalidOutboundGroup(format!("outbound_groups[{i}]: {e}"))
+            })?;
             validate_route_target_tag(group.tag(), &mut route_target_tags)?;
         }
 
@@ -155,10 +160,15 @@ fn validate_dns_config(dns: &crate::DnsConfig) -> Result<(), ConfigError> {
         let cidr: Result<ipnet::IpNet, _> = fake_ip.cidr.parse();
         match cidr {
             Ok(net) => {
-                if net.prefix_len() > 30 {
-                    return Err(ConfigError::InvalidDns(
-                        "`dns.fake_ip.cidr` must be at least /30 (4 addresses)".to_owned(),
-                    ));
+                let (min_prefix, label) = match net {
+                    ipnet::IpNet::V4(_) => (30, "/30 (4 addresses)"),
+                    ipnet::IpNet::V6(_) => (120, "/120 (256 addresses)"),
+                };
+                if net.prefix_len() > min_prefix {
+                    return Err(ConfigError::InvalidDns(format!(
+                        "`dns.fake_ip.cidr` prefix length is too large for a fake IP pool; \
+                         minimum is {label}",
+                    )));
                 }
             }
             Err(_) => {

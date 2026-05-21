@@ -85,7 +85,10 @@ fn build_query(domain: &str, qtype: u16) -> Vec<u8> {
 /// Parse IP addresses from a DNS response's answer section.
 fn parse_response(data: &[u8], qtype: u16) -> io::Result<Vec<IpAddress>> {
     if data.len() < 12 {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "dns response too short"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "dns response too short",
+        ));
     }
 
     let qdcount = u16::from_be_bytes([data[4], data[5]]);
@@ -156,7 +159,7 @@ pub fn build_dns_response(query: &[u8], ips: &[IpAddress]) -> Vec<u8> {
     // Set QR bit (response) and clear RA/RCODE
     response[2] = 0x81; // QR=1, OPCODE=0, AA=0, TC=0, RD=1
     response[3] = 0x80; // RA=1, Z=0, RCODE=0
-    // ANCOUNT = number of IPs
+                        // ANCOUNT = number of IPs
     let ancount = ips.len() as u16;
     response[6] = (ancount >> 8) as u8;
     response[7] = ancount as u8;
@@ -242,9 +245,8 @@ mod tests {
             0x00, 0x01, 0x00, 0x01, // QD=1, AN=1
             0x00, 0x00, 0x00, 0x00, // NS=0, AR=0
             // Question: example.com A IN
-            0x07, b'e', b'x', b'a', b'm', b'p', b'l', b'e',
-            0x03, b'c', b'o', b'm', 0x00,
-            0x00, 0x01, // TYPE A
+            0x07, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 0x03, b'c', b'o', b'm', 0x00, 0x00,
+            0x01, // TYPE A
             0x00, 0x01, // CLASS IN
             // Answer
             0xc0, 0x0c, // name pointer
@@ -262,12 +264,9 @@ mod tests {
     #[test]
     fn parse_empty_response() {
         let response = [
-            0x00, 0x01, 0x81, 0x80,
-            0x00, 0x01, 0x00, 0x00, // ANCOUNT=0
-            0x00, 0x00, 0x00, 0x00,
-            0x07, b'e', b'x', b'a', b'm', b'p', b'l', b'e',
-            0x03, b'c', b'o', b'm', 0x00,
-            0x00, 0x01, 0x00, 0x01,
+            0x00, 0x01, 0x81, 0x80, 0x00, 0x01, 0x00, 0x00, // ANCOUNT=0
+            0x00, 0x00, 0x00, 0x00, 0x07, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 0x03, b'c',
+            b'o', b'm', 0x00, 0x00, 0x01, 0x00, 0x01,
         ];
         let ips = parse_response(&response, 0x0001).unwrap();
         assert!(ips.is_empty());

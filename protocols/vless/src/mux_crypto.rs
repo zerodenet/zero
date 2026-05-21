@@ -172,5 +172,3 @@ impl hkdf::KeyType for MuxKeyLen {
         AEAD_KEY_LEN
     }
 }
-
-

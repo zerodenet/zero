@@ -17,6 +17,10 @@ pub enum CommandRequest {
     PolicyProbe(PolicyProbeCommand),
     #[serde(rename = "diagnostics.probe_target")]
     DiagnosticsProbeTarget(DiagnosticsProbeTargetCommand),
+    #[serde(rename = "diagnostics.dns_lookup")]
+    DiagnosticsDnsLookup(DiagnosticsDnsLookupCommand),
+    #[serde(rename = "diagnostics.trace_route")]
+    DiagnosticsTraceRoute(DiagnosticsTraceRouteCommand),
     #[serde(rename = "mode.set")]
     ModeSet(ModeSetCommand),
 }
@@ -28,7 +32,10 @@ impl CommandRequest {
             Self::FlowClose(_) | Self::PolicySelect(_) | Self::PolicyProbe(_) => {
                 Permission::Control
             }
-            Self::DiagnosticsProbeTarget(_) | Self::ModeSet(_) => Permission::Admin,
+            Self::DiagnosticsProbeTarget(_)
+            | Self::DiagnosticsDnsLookup(_)
+            | Self::DiagnosticsTraceRoute(_)
+            | Self::ModeSet(_) => Permission::Admin,
         }
     }
 }
@@ -86,4 +93,17 @@ pub struct ModeSetCommand {
     /// Required when mode is "global" — the outbound tag to route all traffic to.
     #[serde(default)]
     pub outbound: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosticsDnsLookupCommand {
+    pub hostname: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosticsTraceRouteCommand {
+    pub target: String,
+    pub port: u16,
+    #[serde(default)]
+    pub protocol: Option<String>,
 }

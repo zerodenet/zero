@@ -12,25 +12,37 @@ pub fn config_path_from_args(args: &[String]) -> Option<&str> {
     match first.as_str() {
         "run" | "validate" | "reload" => {
             for arg in iter {
-                if arg == "--status-listen" || arg == "--control-socket" || arg == "--ipc-hook-socket" || arg == "--socket" || arg == "--json" {
+                if arg == "--status-listen"
+                    || arg == "--control-socket"
+                    || arg == "--ipc-hook-socket"
+                    || arg == "--socket"
+                    || arg == "--json"
+                {
                     continue;
                 }
-                if arg.starts_with('-') { continue; }
+                if arg.starts_with('-') {
+                    continue;
+                }
                 return Some(arg);
             }
             None
         }
         "status" => {
             while let Some(arg) = iter.next() {
-                if arg == "--socket" { iter.next(); continue; }
-                if arg.starts_with('-') { continue; }
+                if arg == "--socket" {
+                    iter.next();
+                    continue;
+                }
+                if arg.starts_with('-') {
+                    continue;
+                }
                 return Some(arg);
             }
             None
         }
         // Commands that talk to a running daemon via IPC — no config needed.
-        "select" | "flows" | "policies" | "events" | "version" | "mode"
-        | "help" | "--help" | "-h" | "--version" | "-V" => None,
+        "select" | "flows" | "policies" | "events" | "version" | "mode" | "help" | "--help"
+        | "-h" | "--version" | "-V" => None,
         _ if first.starts_with('-') => None,
         _ => Some(first),
     }
@@ -115,13 +127,15 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
         "run" => parse_run(args.collect()),
         "status" => parse_status(args.collect()),
         "select" => parse_select(args.collect()),
-        "flows" => parse_client_command(args.collect(), |socket_path| Command::Flows { socket_path }),
-        "policies" => {
-            parse_client_command(args.collect(), |socket_path| Command::Policies { socket_path })
+        "flows" => {
+            parse_client_command(args.collect(), |socket_path| Command::Flows { socket_path })
         }
-        "events" => {
-            parse_client_command(args.collect(), |socket_path| Command::Events { socket_path })
-        }
+        "policies" => parse_client_command(args.collect(), |socket_path| Command::Policies {
+            socket_path,
+        }),
+        "events" => parse_client_command(args.collect(), |socket_path| Command::Events {
+            socket_path,
+        }),
         "reload" => parse_reload(args.collect()),
         "validate" => parse_validate(args.collect()),
         "mode" => parse_mode(args.collect()),
@@ -217,10 +231,7 @@ fn parse_run(args: Vec<String>) -> Result<Command, CliError> {
     }
 
     let config_path = config_path.ok_or_else(|| {
-        CliError::new(format!(
-            "`run` requires a config file path\n\n{}",
-            usage()
-        ))
+        CliError::new(format!("`run` requires a config file path\n\n{}", usage()))
     })?;
     Ok(Command::Run {
         config_path,
@@ -240,9 +251,10 @@ fn parse_status(args: Vec<String>) -> Result<Command, CliError> {
         match arg.as_str() {
             "--json" => json = true,
             "--socket" => {
-                socket_path = Some(iter.next().ok_or_else(|| {
-                    CliError::new("`--socket` requires a path argument")
-                })?);
+                socket_path = Some(
+                    iter.next()
+                        .ok_or_else(|| CliError::new("`--socket` requires a path argument"))?,
+                );
             }
             _ if arg.starts_with('-') => {
                 return Err(CliError::new(format!(
@@ -277,9 +289,10 @@ fn parse_select(args: Vec<String>) -> Result<Command, CliError> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--socket" => {
-                socket_path = Some(iter.next().ok_or_else(|| {
-                    CliError::new("`--socket` requires a path argument")
-                })?);
+                socket_path = Some(
+                    iter.next()
+                        .ok_or_else(|| CliError::new("`--socket` requires a path argument"))?,
+                );
             }
             _ if arg.starts_with('-') => {
                 return Err(CliError::new(format!(
@@ -328,12 +341,16 @@ fn parse_mode(args: Vec<String>) -> Result<Command, CliError> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--socket" => {
-                socket_path = Some(iter.next().ok_or_else(|| {
-                    CliError::new("`--socket` requires a path argument")
-                })?);
+                socket_path = Some(
+                    iter.next()
+                        .ok_or_else(|| CliError::new("`--socket` requires a path argument"))?,
+                );
             }
             a if a.starts_with('-') => {
-                return Err(CliError::new(format!("unknown option `{a}`\n\n{}", usage())));
+                return Err(CliError::new(format!(
+                    "unknown option `{a}`\n\n{}",
+                    usage()
+                )));
             }
             _ => {
                 if mode.is_none() {
@@ -357,7 +374,11 @@ fn parse_mode(args: Vec<String>) -> Result<Command, CliError> {
         ))
     })?;
 
-    Ok(Command::Mode { mode, outbound, socket_path })
+    Ok(Command::Mode {
+        mode,
+        outbound,
+        socket_path,
+    })
 }
 
 fn parse_reload(args: Vec<String>) -> Result<Command, CliError> {
@@ -368,9 +389,10 @@ fn parse_reload(args: Vec<String>) -> Result<Command, CliError> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--socket" => {
-                socket_path = Some(iter.next().ok_or_else(|| {
-                    CliError::new("`--socket` requires a path argument")
-                })?);
+                socket_path = Some(
+                    iter.next()
+                        .ok_or_else(|| CliError::new("`--socket` requires a path argument"))?,
+                );
             }
             _ if arg.starts_with('-') => {
                 return Err(CliError::new(format!(
@@ -412,9 +434,10 @@ fn parse_client_command(
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--socket" => {
-                socket_path = Some(iter.next().ok_or_else(|| {
-                    CliError::new("`--socket` requires a path argument")
-                })?);
+                socket_path = Some(
+                    iter.next()
+                        .ok_or_else(|| CliError::new("`--socket` requires a path argument"))?,
+                );
             }
             _ if arg.starts_with('-') => {
                 return Err(CliError::new(format!(

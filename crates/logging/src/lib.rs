@@ -94,11 +94,7 @@ impl<S: tracing::Subscriber> Layer<S> for WarningBridgeLayer {
         if !matches!(*meta.level(), tracing::Level::WARN | tracing::Level::ERROR) {
             return;
         }
-        let code = meta
-            .target()
-            .split("::")
-            .last()
-            .unwrap_or(meta.target());
+        let code = meta.target().split("::").last().unwrap_or(meta.target());
         let mut message = String::new();
         let mut visitor = MessageVisitor(&mut message);
         event.record(&mut visitor);
@@ -165,7 +161,10 @@ impl RateLimiter {
 
 fn now_secs() -> u64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    START.get_or_init(std::time::Instant::now).elapsed().as_secs()
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs()
 }
 
 // ── Rotating file writer ──────────────────────────────────────────────
@@ -189,7 +188,13 @@ impl RotatingWriter {
             .append(true)
             .open(&path)?;
         let written = file.metadata()?.len();
-        Ok(Self { path, max_bytes, max_files, file, written })
+        Ok(Self {
+            path,
+            max_bytes,
+            max_files,
+            file,
+            written,
+        })
     }
 
     fn rotate(&mut self) -> io::Result<()> {
@@ -204,7 +209,10 @@ impl RotatingWriter {
                 let _ = fs::rename(&src, &dst);
             }
         }
-        self.file = fs::OpenOptions::new().create(true).append(true).open(&self.path)?;
+        self.file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
         self.written = 0;
         Ok(())
     }

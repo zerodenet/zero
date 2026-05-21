@@ -10,8 +10,13 @@ async fn deferred_vless_response_discards_header_before_payload() {
         .write_all(&[
             VLESS_VERSION,
             0x03,
-            b'a', b'b', b'c',
-            b'p', b'o', b'n', b'g',
+            b'a',
+            b'b',
+            b'c',
+            b'p',
+            b'o',
+            b'n',
+            b'g',
         ])
         .await
         .expect("write response");

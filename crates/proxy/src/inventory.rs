@@ -8,14 +8,6 @@ use crate::transport::DirectConnector;
 
 #[cfg(feature = "inbound-http-connect")]
 use zero_protocol_http_connect::HttpConnectInbound;
-#[cfg(feature = "inbound-socks5")]
-use zero_protocol_socks5::Socks5Inbound;
-#[cfg(feature = "outbound-socks5")]
-use zero_protocol_socks5::Socks5Outbound;
-#[cfg(feature = "inbound-vless")]
-use zero_protocol_vless::VlessInbound;
-#[cfg(feature = "outbound-vless")]
-use zero_protocol_vless::VlessOutbound;
 #[cfg(feature = "inbound-hysteria2")]
 use zero_protocol_hysteria2::Hysteria2Inbound;
 #[cfg(feature = "outbound-hysteria2")]
@@ -24,10 +16,18 @@ use zero_protocol_hysteria2::Hysteria2Outbound;
 use zero_protocol_shadowsocks::ShadowsocksInbound;
 #[cfg(feature = "outbound-shadowsocks")]
 use zero_protocol_shadowsocks::ShadowsocksOutbound;
+#[cfg(feature = "inbound-socks5")]
+use zero_protocol_socks5::Socks5Inbound;
+#[cfg(feature = "outbound-socks5")]
+use zero_protocol_socks5::Socks5Outbound;
 #[cfg(feature = "inbound-trojan")]
 use zero_protocol_trojan::TrojanInbound;
 #[cfg(feature = "outbound-trojan")]
 use zero_protocol_trojan::TrojanOutbound;
+#[cfg(feature = "inbound-vless")]
+use zero_protocol_vless::VlessInbound;
+#[cfg(feature = "outbound-vless")]
+use zero_protocol_vless::VlessOutbound;
 
 #[derive(Debug, Clone)]
 pub struct ProtocolInventory {

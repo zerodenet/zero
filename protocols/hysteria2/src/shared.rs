@@ -93,7 +93,9 @@ pub fn parse_tcp_connect_header(data: &[u8]) -> Result<(Address, u16), Error> {
     }
     let addr_len = u16::from_be_bytes([data[1], data[2]]) as usize;
     if data.len() < 3 + addr_len + 2 {
-        return Err(Error::Protocol("hysteria2: truncated address in connect header"));
+        return Err(Error::Protocol(
+            "hysteria2: truncated address in connect header",
+        ));
     }
     let addr = decode_address(&data[3..3 + addr_len])?;
     let port = u16::from_be_bytes([data[3 + addr_len], data[3 + addr_len + 1]]);
@@ -186,8 +188,8 @@ fn decode_address(data: &[u8]) -> Result<Address, Error> {
             if data.len() < 2 + len {
                 return Err(Error::Protocol("hysteria2: truncated domain"));
             }
-            let domain =
-                String::from_utf8(data[2..2 + len].to_vec()).map_err(|_| Error::Protocol("hysteria2: invalid domain UTF-8"))?;
+            let domain = String::from_utf8(data[2..2 + len].to_vec())
+                .map_err(|_| Error::Protocol("hysteria2: invalid domain UTF-8"))?;
             Ok(Address::Domain(domain))
         }
         _ => Err(Error::Unsupported("hysteria2: unknown address type")),

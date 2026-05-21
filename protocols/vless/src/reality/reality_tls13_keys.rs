@@ -381,5 +381,3 @@ pub fn compute_finished_verify_data(
 
     Ok(verify_data)
 }
-
-

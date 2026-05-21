@@ -39,6 +39,7 @@ export default defineConfig({
           text: '设计',
           items: [
             { text: '架构', link: '/project/architecture' },
+            { text: '编译参数', link: '/project/features' },
             { text: '日志', link: '/project/logging' },
             { text: '生命周期', link: '/project/lifecycle' },
             { text: '定位', link: '/project/positioning' },

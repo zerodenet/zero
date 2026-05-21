@@ -14,7 +14,8 @@ pub use auth::{AuthContext, Permission};
 pub use capabilities::{AdapterCapability, ApiCapabilities, SinkCapability};
 pub use command::{
     CommandRequest, CommandResponse, ConfigApplyCommand, ConfigValidateCommand,
-    DiagnosticsProbeTargetCommand, FlowCloseCommand, PolicyProbeCommand, PolicySelectCommand,
+    DiagnosticsDnsLookupCommand, DiagnosticsProbeTargetCommand, DiagnosticsTraceRouteCommand,
+    FlowCloseCommand, PolicyProbeCommand, PolicySelectCommand,
 };
 pub use error::{ApiError, ApiErrorCode};
 pub use event::{event_type, ApiEvent, EventFilter, PublishResult};
@@ -26,10 +27,11 @@ pub use flow::{
 pub use query::{
     CapabilitiesQuery, ConfigQuery, DiagnosticsQuery, FlowFilter, FlowGetQuery, FlowListQuery,
     HealthQuery, HealthSnapshot, PoliciesQuery, PolicyGetQuery, QueryRequest, QueryResponse,
-    RuntimeQuery, Snapshot, StatsQuery,
+    RuntimeQuery, SinkStatusSnapshot, SinksQuery, Snapshot, StatsQuery,
 };
 pub use sink::{
-    CallbackEventSink, JsonLineEventSink, MemorySink, RotatingFileSink, SinkManager, SinkStatus,
+    CallbackEventSink, DeadLetterSink, JsonLineEventSink, MemorySink, RotatingFileSink,
+    SinkManager, SinkStatus,
 };
 pub use traits::{ApiAuth, ApiCodec, CommandService, EventSink, EventSource, QueryService};
 #[cfg(feature = "webhook")]

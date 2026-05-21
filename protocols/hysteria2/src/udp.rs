@@ -65,13 +65,19 @@ pub fn parse_udp_datagram(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
             }
             let len = data[5] as usize;
             if data.len() < 6 + len + 2 {
-                return Err(Error::Protocol("hysteria2: truncated domain payload in datagram"));
+                return Err(Error::Protocol(
+                    "hysteria2: truncated domain payload in datagram",
+                ));
             }
             let domain = String::from_utf8(data[6..6 + len].to_vec())
                 .map_err(|_| Error::Protocol("hysteria2: invalid domain UTF-8"))?;
             (Address::Domain(domain), 6 + len)
         }
-        _ => return Err(Error::Unsupported("hysteria2: unknown address type in datagram")),
+        _ => {
+            return Err(Error::Unsupported(
+                "hysteria2: unknown address type in datagram",
+            ))
+        }
     };
     if data.len() < addr_end + 2 {
         return Err(Error::Protocol("hysteria2: truncated port in datagram"));

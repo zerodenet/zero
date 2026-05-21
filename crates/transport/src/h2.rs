@@ -99,10 +99,7 @@ where
 
 // ── server (inbound) accept ──
 
-pub async fn accept_h2<S>(
-    stream: S,
-    h2_config: &H2Config,
-) -> Result<H2Stream, EngineError>
+pub async fn accept_h2<S>(stream: S, h2_config: &H2Config) -> Result<H2Stream, EngineError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -235,12 +232,10 @@ impl AsyncWrite for H2Stream {
         match self.write_tx.try_send(buf.to_vec()) {
             Ok(()) => Poll::Ready(Ok(buf.len())),
             Err(mpsc::error::TrySendError::Full(_)) => Poll::Ready(Ok(buf.len())),
-            Err(mpsc::error::TrySendError::Closed(_)) => {
-                Poll::Ready(Err(io::Error::new(
-                    io::ErrorKind::BrokenPipe,
-                    "h2 write side closed",
-                )))
-            }
+            Err(mpsc::error::TrySendError::Closed(_)) => Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "h2 write side closed",
+            ))),
         }
     }
 
