@@ -26,7 +26,7 @@ use crate::logging::log_listener_connection_error;
 use crate::runtime::bind_listener;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
-use crate::transport::{MeteredStream, TcpRelayStream};
+use crate::transport::{MeteredStream, RateLimiter, TcpRelayStream};
 
 // ── Client stream wrapper (carries AEAD key + first-chunk payload) ────
 
@@ -113,6 +113,7 @@ impl InboundProtocol for ShadowsocksInboundHandler {
     }
 
     /// Custom AEAD-framed relay: decrypt upload, encrypt download.
+    /// Rate limiting uses the kernel's `RateLimiter` (unified GCRA).
     async fn relay(
         &self,
         client: SsClientStream,
@@ -127,13 +128,15 @@ impl InboundProtocol for ShadowsocksInboundHandler {
             let _ = up_write.write_all(&client.remaining).await;
         }
 
-        let key = client.key;
-        let upload = tokio::spawn(ss_decrypt_upload(
-            client_read, up_write, self.cipher, key.clone(), up_bps,
-        ));
-        let download = tokio::spawn(ss_encrypt_download(
-            up_read, client_write, self.cipher, key, down_bps,
-        ));
+        let key_up = client.key.clone();
+        let key_down = client.key;
+        let cipher = self.cipher;
+        let upload = tokio::spawn(async move {
+            let _ = ss_decrypt_upload(client_read, up_write, cipher, key_up, up_bps).await;
+        });
+        let download = tokio::spawn(async move {
+            let _ = ss_encrypt_download(up_read, client_write, cipher, key_down, down_bps).await;
+        });
 
         let _ = tokio::try_join!(upload, download);
         Ok(())
@@ -280,10 +283,11 @@ async fn ss_decrypt_upload(
     key: Vec<u8>,
     rate_bps: Option<u64>,
 ) -> Result<(), ()> {
+    let mut limiter = rate_bps
+        .filter(|b| *b > 0)
+        .map(|b| RateLimiter::new(b));
     let mut nonce: u64 = 1;
     let mut len_buf = [0u8; 2];
-    let mut total = 0_u64;
-    let start = std::time::Instant::now();
     loop {
         if client.read_exact(&mut len_buf).await.is_err() {
             break;
@@ -298,12 +302,15 @@ async fn ss_decrypt_upload(
         }
         match ShadowsocksInbound::decrypt_chunk(cipher, &key, &mut nonce, &chunk) {
             Ok(plain) => {
-                let n = plain.len() as u64;
+                // Wait for rate-limit tokens before writing (kernel GCRA).
+                if let Some(ref mut lim) = limiter {
+                    while let Err(wait) = lim.check_n(plain.len() as u64) {
+                        tokio::time::sleep(wait).await;
+                    }
+                }
                 if upstream.write_all(&plain).await.is_err() {
                     break;
                 }
-                total += n;
-                throttle(total, start, rate_bps).await;
             }
             Err(_) => break,
         }
@@ -319,21 +326,25 @@ async fn ss_encrypt_download(
     key: Vec<u8>,
     rate_bps: Option<u64>,
 ) -> Result<(), ()> {
+    let mut limiter = rate_bps
+        .filter(|b| *b > 0)
+        .map(|b| RateLimiter::new(b));
     let mut nonce: u64 = 0;
     let mut buf = [0u8; 16384];
-    let mut total = 0_u64;
-    let start = std::time::Instant::now();
     loop {
         match upstream.read(&mut buf).await {
             Ok(0) => break,
             Ok(n) => match ShadowsocksInbound::encrypt_chunk(cipher, &key, &mut nonce, &buf[..n]) {
                 Ok(encrypted) => {
-                    let n = encrypted.len() as u64;
+                    // Wait for rate-limit tokens before writing (kernel GCRA).
+                    if let Some(ref mut lim) = limiter {
+                        while let Err(wait) = lim.check_n(encrypted.len() as u64) {
+                            tokio::time::sleep(wait).await;
+                        }
+                    }
                     if client.write_all(&encrypted).await.is_err() {
                         break;
                     }
-                    total += n;
-                    throttle(total, start, rate_bps).await;
                 }
                 Err(_) => break,
             },
@@ -342,22 +353,6 @@ async fn ss_encrypt_download(
     }
     let _ = client.shutdown().await;
     Ok(())
-}
-
-async fn throttle(total: u64, start: std::time::Instant, rate_bps: Option<u64>) {
-    if let Some(bps) = rate_bps {
-        if bps > 0 {
-            let elapsed = start.elapsed();
-            let allowed = (elapsed.as_secs_f64() * bps as f64) as u64;
-            if total > allowed {
-                let deficit = total - allowed;
-                let wait = std::time::Duration::from_secs_f64(deficit as f64 / bps as f64);
-                if wait > std::time::Duration::from_millis(1) {
-                    tokio::time::sleep(wait).await;
-                }
-            }
-        }
-    }
 }
 
 // ── UDP relay (kept as Proxy method for now) ────────────────────────────
