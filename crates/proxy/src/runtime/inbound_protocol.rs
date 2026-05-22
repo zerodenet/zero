@@ -6,7 +6,7 @@
 //! owns connection counting, rate limiting, routing, metering, and session
 //! lifecycle — protocol handlers never touch those directly.
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -116,12 +116,23 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
             // Protocol reply before relay
             protocol.send_ok(&mut client).await?;
 
-            let relay_result = protocol
-                .relay(client, result.upstream, session.up_bps, session.down_bps)
-                .await;
+            // ── Kernel primitive: idle timeout ──
+            let idle_secs = proxy
+                .config
+                .inbounds
+                .iter()
+                .find(|i| i.tag == inbound_tag)
+                .and_then(|i| i.idle_timeout_secs)
+                .unwrap_or(300); // kernel default: 5 min
+
+            let relay_result = tokio::time::timeout(
+                Duration::from_secs(idle_secs),
+                protocol.relay(client, result.upstream, session.up_bps, session.down_bps),
+            )
+            .await;
 
             match relay_result {
-                Ok(()) => {
+                Ok(Ok(())) => {
                     if let Some(record) = handle.finish(outcome) {
                         log_session_finished(
                             &record,
@@ -132,7 +143,7 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
                     }
                     Ok(())
                 }
-                Err(error) => {
+                Ok(Err(error)) => {
                     let record = handle.finish(SessionOutcome::Failed);
                     log_session_failed(
                         &session,
@@ -145,6 +156,18 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
                             .map(|(s, p)| (s.as_str(), *p)),
                     );
                     Err(error)
+                }
+                Err(_elapsed) => {
+                    // Idle timeout — clean finish, not an error.
+                    if let Some(record) = handle.finish(outcome) {
+                        log_session_finished(
+                            &record,
+                            upstream_endpoint
+                                .as_ref()
+                                .map(|(s, p)| (s.as_str(), *p)),
+                        );
+                    }
+                    Ok(())
                 }
             }
         }

@@ -283,6 +283,9 @@ pub struct InboundConfig {
     pub tag: String,
     pub listen: ListenConfig,
     pub protocol: InboundProtocolConfig,
+    /// TCP idle timeout in seconds.  Kernel default is 300 (5 min).
+    #[serde(default)]
+    pub idle_timeout_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
