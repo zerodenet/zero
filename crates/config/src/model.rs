@@ -947,6 +947,8 @@ pub enum RuleConditionConfig {
     Domain { values: Vec<String> },
     #[serde(rename = "domain-keyword")]
     DomainKeyword { values: Vec<String> },
+    #[serde(rename = "domain-regex")]
+    DomainRegex { values: Vec<String> },
     #[serde(rename = "ip")]
     Ip { values: Vec<IpNet> },
     #[serde(rename = "rule-set")]

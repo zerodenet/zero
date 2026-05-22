@@ -73,6 +73,18 @@ impl RuleConditionConfig {
                 validate_domain_values(values)?;
                 Ok(RuleCondition::DomainKeyword(values.clone()))
             }
+            Self::DomainRegex { values } => {
+                let compiled: Result<Vec<_>, _> = values
+                    .iter()
+                    .map(|p| zero_router::CompiledRegex::new(p.clone()))
+                    .collect();
+                match compiled {
+                    Ok(regexes) => Ok(RuleCondition::DomainRegex(regexes)),
+                    Err(e) => Err(ConfigError::InvalidRuleCondition(format!(
+                        "invalid regex pattern: {e}"
+                    ))),
+                }
+            }
             Self::Ip { values } => {
                 if values.is_empty() {
                     return Err(ConfigError::InvalidRuleCondition(

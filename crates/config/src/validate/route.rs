@@ -115,6 +115,14 @@ impl RuleConditionConfig {
                 }
                 Ok(())
             }
+            Self::DomainRegex { values } => {
+                if values.is_empty() {
+                    return Err(ConfigError::InvalidRuleCondition(
+                        "`domain-regex` condition requires at least one pattern".to_owned(),
+                    ));
+                }
+                Ok(())
+            }
             Self::GeoIp { values } => {
                 if values.is_empty() {
                     return Err(ConfigError::InvalidRuleCondition(

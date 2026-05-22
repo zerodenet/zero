@@ -4,10 +4,43 @@ use std::sync::Arc;
 use ipnet::IpNet;
 use zero_core::Address;
 
+/// Wrapper around compiled regex — compares by original pattern string.
+#[derive(Clone)]
+pub struct CompiledRegex {
+    pattern: String,
+    re: Arc<regex::Regex>,
+}
+
+impl std::fmt::Debug for CompiledRegex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompiledRegex")
+            .field("pattern", &self.pattern)
+            .finish()
+    }
+}
+
+impl PartialEq for CompiledRegex {
+    fn eq(&self, other: &Self) -> bool {
+        self.pattern == other.pattern
+    }
+}
+
+impl Eq for CompiledRegex {}
+
+impl CompiledRegex {
+    pub fn new(pattern: String) -> Result<Self, regex::Error> {
+        Ok(Self {
+            re: Arc::new(regex::Regex::new(&pattern)?),
+            pattern,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuleCondition {
     Domain(Vec<String>),
     DomainKeyword(Vec<String>),
+    DomainRegex(Vec<CompiledRegex>),
     Ip(Vec<IpNet>),
     GeoIp(Vec<String>),
     Sni(Vec<String>),
@@ -98,6 +131,10 @@ fn condition_matches(
                     .to_ascii_lowercase()
                     .contains(&kw.to_ascii_lowercase())
             }),
+            _ => false,
+        },
+        RuleCondition::DomainRegex(patterns) => match address {
+            Address::Domain(domain) => patterns.iter().any(|re| re.re.is_match(domain)),
             _ => false,
         },
         RuleCondition::Ip(networks) => match address_to_ip(address) {
