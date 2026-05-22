@@ -70,7 +70,20 @@ impl Proxy {
         session: &Session,
         candidate: ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        match candidate {
+        // ── Kernel primitive: circuit breaker ──
+        // Check health before connecting (skip for Direct / Block).
+        let chained_tag = extract_chained_tag(&candidate);
+        if let Some(ref tag) = chained_tag {
+            if let Err(e) = self.check_outbound_health(tag) {
+                return Err(TcpOutboundFailure {
+                    stage: "health_check",
+                    error: e,
+                    upstream_endpoint: None,
+                });
+            }
+        }
+
+        let result = match candidate {
             ResolvedLeafOutbound::Direct { tag } => {
                 match self
                     .protocols
@@ -241,7 +254,17 @@ impl Proxy {
                     }),
                 }
             }
+        };
+
+        // ── Record health after connection attempt ──
+        if let Some(ref tag) = chained_tag {
+            match &result {
+                Ok(_) => self.record_outbound_success(tag),
+                Err(_) => self.record_outbound_failure(tag),
+            }
         }
+
+        result
     }
 
     /// Connect through a relay chain sequentially.
@@ -390,6 +413,19 @@ async fn send_hop_protocol_request(
             std::io::ErrorKind::Unsupported,
             "relay hop protocol not supported or disabled",
         ))),
+    }
+}
+
+/// Extract the outbound tag for health tracking.
+/// Returns None for Direct and Block (always healthy).
+fn extract_chained_tag(candidate: &ResolvedLeafOutbound<'_>) -> Option<String> {
+    match candidate {
+        ResolvedLeafOutbound::Direct { .. } | ResolvedLeafOutbound::Block { .. } => None,
+        ResolvedLeafOutbound::Socks5 { tag, .. } => Some(tag.to_string()),
+        ResolvedLeafOutbound::Vless { tag, .. } => Some(tag.to_string()),
+        ResolvedLeafOutbound::Hysteria2 { tag, .. } => Some(tag.to_string()),
+        ResolvedLeafOutbound::Shadowsocks { tag, .. } => Some(tag.to_string()),
+        ResolvedLeafOutbound::Trojan { tag, .. } => Some(tag.to_string()),
     }
 }
 

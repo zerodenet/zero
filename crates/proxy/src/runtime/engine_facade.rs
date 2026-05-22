@@ -190,4 +190,16 @@ impl Proxy {
     pub(crate) fn udp_upstream_idle_timeout(&self) -> std::time::Duration {
         self.engine.udp_upstream_idle_timeout()
     }
+
+    pub(crate) fn check_outbound_health(&self, tag: &str) -> Result<(), EngineError> {
+        self.engine.check_outbound_health(tag)
+    }
+
+    pub(crate) fn record_outbound_failure(&self, tag: &str) {
+        self.engine.record_outbound_failure(tag);
+    }
+
+    pub(crate) fn record_outbound_success(&self, tag: &str) {
+        self.engine.record_outbound_success(tag);
+    }
 }

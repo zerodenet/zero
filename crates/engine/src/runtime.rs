@@ -14,6 +14,7 @@ use super::error::EngineError;
 use super::event_log::EngineEventLog;
 use super::groups::{OutboundGroupStateStore, UrlTestGroupState, UrlTestMemberState};
 use super::hook::{FlowHook, FlowHookChain};
+use super::outbound_health::OutboundHealth;
 use super::plan::{EnginePlan, TargetId};
 use super::probe_trigger::ProbeTriggerRegistry;
 use super::resolve::{
@@ -38,6 +39,7 @@ pub struct Engine {
     pub(crate) outbound_group_state: Arc<OutboundGroupStateStore>,
     pub(crate) probe_trigger_registry: Arc<ProbeTriggerRegistry>,
     flow_hook: Option<Arc<FlowHookChain>>,
+    pub(crate) outbound_health: Arc<OutboundHealth>,
     udp_upstream_idle_timeout: Duration,
     /// Reload notification channel: wakes the proxy's main loop when
     /// `reload_config` atomically swaps the plan / router / config.
@@ -126,6 +128,7 @@ impl Engine {
             stats: EngineStats::shared(),
             outbound_group_state,
             probe_trigger_registry: ProbeTriggerRegistry::shared(),
+            outbound_health: Arc::new(OutboundHealth::new()),
             flow_hook: None,
             udp_upstream_idle_timeout,
             reload_notify: Arc::new(std::sync::Mutex::new(Vec::new())),
@@ -609,6 +612,21 @@ impl Engine {
 
     pub fn track_session(&self, session_id: u64) -> SessionHandle {
         SessionHandle::new(self.clone(), session_id)
+    }
+
+    /// Check whether an outbound is healthy enough to accept connections.
+    pub fn check_outbound_health(&self, tag: &str) -> Result<(), EngineError> {
+        self.outbound_health.check(tag)
+    }
+
+    /// Record a failed connection attempt to an outbound.
+    pub fn record_outbound_failure(&self, tag: &str) {
+        self.outbound_health.record_failure(tag);
+    }
+
+    /// Clear health state for an outbound after a successful connection.
+    pub fn record_outbound_success(&self, tag: &str) {
+        self.outbound_health.record_success(tag);
     }
 
     /// Resolve a hostname via DNS and return the resolved addresses.

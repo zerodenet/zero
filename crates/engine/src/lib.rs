@@ -6,6 +6,7 @@ mod export;
 mod groups;
 mod handle;
 mod hook;
+mod outbound_health;
 mod plan;
 mod probe_trigger;
 mod resolve;

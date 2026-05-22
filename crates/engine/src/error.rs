@@ -42,4 +42,6 @@ pub enum EngineError {
         group_tag: String,
         target_tag: String,
     },
+    #[error("outbound `{tag}` is temporarily unhealthy")]
+    UnhealthyOutbound { tag: String },
 }
