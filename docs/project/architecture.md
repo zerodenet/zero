@@ -1,87 +1,150 @@
-# 分层
+# Architecture
 
-当前仓库按下面几层看就够了。
+The repository can be understood as the following layers.
 
-## 应用层
+## Application Layer
 
-- 根包 `zero`
+- Root crate `zero`
 - `zero-api`
 
-负责参数、配置文件路径、进程启动和状态输出。
+Responsible for CLI arguments, config file paths, process startup, and status output.
 
-控制面和观测模型以 Zero 自有规范为准。Clash、sing-box、Xray 等外部生态只作为设计参考；兼容能力应放在 adapter、gateway 或额外工具里，不反向约束内核和长期 API。
+The control plane and observability model follow Zero's own conventions. External ecosystems like Clash, sing-box, and Xray are treated as design references only; compatibility shims belong in adapters, gateways, or external tooling and should not constrain the kernel or long-term API.
 
-`zero-api` 负责定义对外控制、观测和事件导出能力，不等同于 HTTP 服务，也不按传输形态拆散能力。HTTP/HTTPS、本地 IPC、file、gRPC、二进制帧、Rust API 和 FFI 都应作为 trait 实现或 feature-gated adapter/sink 挂到同一套核心能力上。
+`zero-api` defines external control, observation, and event export capabilities. It is not synonymous with the HTTP service, nor are capabilities split along transport lines. HTTP/HTTPS, local IPC, file, gRPC, binary framing, Rust API, and FFI all attach to the same core capability set as trait implementations or feature-gated adapters/sinks.
 
-## 配置、决策和状态层
+## Configuration, Decision, and State Layer
 
 - `zero-config`
 - `zero-engine`
 - `zero-router`
 
-`zero-config` 只管配置模型和解析。`zero-router` 只管规则匹配。`zero-engine` 只管配置到可执行计划的编译、路由决策、目标解析、模式和组状态、会话、统计、事件和状态导出。
+`zero-config` owns configuration models and parsing. `zero-router` owns rule matching. `zero-engine` owns compilation of config into executable plans, routing decisions, target resolution, mode and group state, sessions, statistics, events, and state export.
 
-像 `direct / global / rule` 这种模式语义、`selector / urltest / fallback` 这种出站组语义，也属于这层，不属于客户端。
+Mode semantics (`direct / global / rule`) and outbound group semantics (`selector / urltest / fallback`) also belong to this layer, not the client.
 
-`zero-engine` 不绑定 Tokio，不启动监听，不持有协议实现，也不直接建立 socket 连接。`direct` / `block` 在这一层只是内建目标语义；实际网络执行由代理运行层完成。
+`zero-engine` is not bound to Tokio, does not start listeners, does not hold protocol implementations, and does not directly establish socket connections. `direct` / `block` are built-in target semantics within this layer; actual network execution is performed by the proxy runtime layer.
 
-`zero-engine` 当前按决策边界处理：
+`zero-engine` currently operates across decision boundaries:
 
 - `RuntimeConfig`
-  - 来自 `zero-config` 的输入
+  - Input from `zero-config`
 - `EnginePlan`
-  - 面向不可变执行结构
+  - Immutable execution structures
 - `EngineState`
-  - 面向运行时可变状态
+  - Mutable runtime state, including `OutboundHealth` (circuit breaker)
 - `view`
-  - 面向 `status` / 导出 / 日志里的 tag 渲染
+  - Tag rendering for `status` / export / logging
 
-热路径优先读 plan/state，并尽量沿借用边界传递引用；只有控制面和展示面才回到字符串 tag。
+The hot path prefers reading plan/state and passing references along borrow boundaries; only the control plane and display surface go back to string tags.
 
-## 代理运行层
+## Proxy Runtime Layer
 
 - `zero-proxy`
 
-`zero-proxy` 负责把 `zero-engine` 的决策结果变成真实代理运行：
+`zero-proxy` translates `zero-engine` decisions into real proxy execution:
 
-- 启动入站监听
-- 调用具体协议实现完成握手和封包
-- 建立 direct 或上游出站连接
-- 运行 TCP relay、UDP association、TLS 和 urltest 探测任务
-- 校验当前构建是否编译了配置引用的协议 feature
+- Starts inbound listeners
+- Invokes protocol implementations for handshake and framing
+- Establishes direct or upstream outbound connections
+- Runs TCP relay, UDP association, TLS, urltest probing, and circuit breaker health checks
+- Validates that the current build has compiled the protocol features referenced by config
 
-这一层可以依赖 Tokio 后端、协议 crate 和 `zero-engine`。它不重新解释配置语义，也不维护另一套模式、组或路由状态。
+This layer may depend on the Tokio backend, protocol crates, and `zero-engine`. It does not re-interpret config semantics or maintain a separate set of mode, group, or route state.
 
-## 协议层
+### InboundProtocol trait and `serve_inbound()` kernel pipeline
+
+As of v0.0.4, all TCP protocol inbound handlers are unified through a single trait and a single kernel entry point.
+
+**`InboundProtocol` trait** -- the protocol-server boundary:
+
+```rust
+#[async_trait]
+pub trait InboundProtocol: Send + Sync {
+    type ClientStream: AsyncRead + AsyncWrite + Unpin + Send;
+
+    async fn accept(&self, stream: TcpRelayStream) -> Result<(Session, Self::ClientStream), EngineError>;
+
+    async fn send_ok(&self, client: &mut Self::ClientStream) -> Result<(), EngineError>;
+
+    async fn send_blocked(&self, client: &mut Self::ClientStream) -> Result<(), EngineError>;
+
+    async fn send_upstream_failure(&self, client: &mut Self::ClientStream) -> Result<(), EngineError>;
+
+    async fn relay(&self, client: Self::ClientStream, upstream: TcpRelayStream,
+                   up_bps: Option<u64>, down_bps: Option<u64>) -> Result<(), EngineError>;
+}
+```
+
+**Protocol implementors** (SOCKS5, HTTP CONNECT, VLESS, Hysteria2, Shadowsocks, Trojan) only implement this trait. Each handler provides:
+
+- `accept` -- authenticate and extract the target address into a `Session`
+- `send_ok` -- notify the client that the tunnel is established (protocol-specific response)
+- `send_blocked` -- notify the client the request was blocked (protocol-specific error)
+- `send_upstream_failure` -- notify the client the upstream is unreachable
+- `relay` -- bidirectional relay; default is raw TCP `io::copy` with optional rate limiting; override for AEAD-framed (Shadowsocks) or QUIC-stream (Hysteria2) relays
+
+**`serve_inbound()`** is the single kernel entry point for ALL TCP protocols. Protocol handlers never touch the engine, config, or resolver directly. The function owns every protocol-agnostic capability:
+
+1. **URL rewrite** -- applies `route.url_rewrite` rules to rewrite the session target domain before routing
+2. **Kernel rate limits** -- applies per-inbound defaults from config (`up_bps` / `down_bps`); per-user limits set during `accept` take priority
+3. **Session preparation** -- `prepare_session` (engine-side metadata)
+4. **Route and establish** -- `route_and_establish_tcp` (condition matching + outbound connection)
+5. **Protocol reply** -- `send_ok` / `send_blocked` / `send_upstream_failure` as appropriate
+6. **Idle timeout** -- wraps relay in `tokio::time::timeout` using `InboundConfig.idle_timeout_secs` (default 300s)
+7. **Session lifecycle** -- track / finish with `SessionOutcome`, structured logging
+
+Adding a new cross-cutting capability only requires changing `serve_inbound()` -- protocol handlers remain unaffected.
+
+### Kernel primitive: circuit breaker
+
+`zero-engine` maintains `OutboundHealth` per outbound tag. Before connecting to any outbound, `establish_tcp_candidate` checks health via `check_outbound_health()`. If 5 failures accumulate within a 30-second sliding window, the outbound is quarantined for 60 seconds. After quarantine, one probe connection is allowed; success clears the unhealthy state, failure resets the cooldown.
+
+## Protocol Layer
 
 - `zero-core`
 - `protocols/*`
 
-`zero-core` 放通用类型和接口。具体协议放在 `protocols/*`。
+`zero-core` holds common types and interfaces. Specific protocols live under `protocols/*`.
 
-协议层按 feature 接入 `zero-proxy`。核心决策层始终编译，协议和控制面按需选择性编译，避免把嵌入式场景不需要的模块一起带进去。
+Protocols are feature-gated into `zero-proxy`. The core decision layer always compiles; protocols and control plane capabilities are selectively compiled, avoiding pulling modules not needed for embedded scenarios.
 
-## 抽象层
+## Transport Layer
+
+- `zero-transport`
+
+Unified transport abstractions: TLS, WebSocket, gRPC, H2, HTTPUpgrade, QUIC, SplitHTTP, Hysteria2 QUIC, VLESS transport. Also contains the shared `RateLimiter` (GCRA) used by the kernel relay path.
+
+## Support Crates
+
+- `zero-api` -- control plane API types
+- `zero-connector` -- event dispatcher connectors (JSONL sink, webhook, push)
+- `zero-crypto` -- crypto utilities (Reality, TLS)
+- `zero-logging` -- structured logging
+- `zero-web` -- web utilities (WebSocket)
+- `zero-ffi` -- C-compatible embedded interface
+
+## Abstraction Layer
 
 - `zero-traits`
 
-只放 I/O、DNS 之类的抽象，不绑具体运行时。
+I/O, DNS, and similar abstractions, not bound to a specific runtime.
 
-## 平台层
+## Platform Layer
 
 - `zero-platform-tokio`
-- 其他预留平台目录
+- Reserved directories for other platforms
 
-当前只有 Tokio 后端是落地的。
+Currently only the Tokio backend is implemented.
 
-## 依赖方向
+## Dependency Direction
 
-只允许往下依赖：
+Top-down only:
 
-- `zero` 可以依赖 `config`、`engine`、`proxy`
-- `proxy` 可以依赖 `engine`、`config`、`protocols/*`、平台层
-- `engine` 可以依赖 `config`、`router`、`core` 和 `api`
-- `protocols/*` 可以依赖 `core`
-- `core` 可以依赖 `traits`
+- `zero` may depend on `config`, `engine`, `proxy`
+- `proxy` may depend on `engine`, `config`, `protocols/*`, platform layer
+- `engine` may depend on `config`, `router`, `core`, and `api`
+- `protocols/*` may depend on `core`
+- `core` may depend on `traits`
 
-不要反过来。
+No reverse dependencies.

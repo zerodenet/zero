@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Zero is a network proxy kernel written in Rust. Workspace version is `0.0.2` but the codebase is approaching `v0.1.0` feature-complete.
+Zero is a network proxy kernel written in Rust at workspace version `0.0.4`.
 
 **Inbound protocols:**
 - `SOCKS5` (no-auth, CONNECT + UDP ASSOCIATE)
@@ -144,11 +144,39 @@ core → traits
 ### Proxy Crate Structure (`crates/proxy/src/`)
 
 ```
-inbound/          # Inbound handlers: socks5, vless, http_connect, mixed, hysteria2, shadowsocks, trojan
+inbound/          # Protocol handler structs implementing InboundProtocol trait
+                  #   socks5, vless, http_connect, mixed, hysteria2, shadowsocks, trojan
+                  #   Each provides handshake (accept), client responses (send_ok/send_blocked/send_upstream_failure), and relay
 outbound/         # Outbound implementations: direct, socks5, vless, hysteria2, shadowsocks, trojan
-runtime/          # Protocol-agnostic runtime: UDP associate sessions/context, flow tracking
-transport/        # Low-level I/O: meter, tcp_flow
+runtime/          # Protocol-agnostic runtime
+                  #   inbound_protocol.rs — InboundProtocol trait + serve_inbound() unified pipeline entry point
+                  #   tcp_outbound.rs — route_and_establish_tcp, establish_tcp_outbound (with circuit breaker)
+                  #   udp_helpers.rs / vless_udp.rs — shared UDP types moved from outbound/
+                  #   engine_facade.rs, udp_associate.rs / udp_associate/, mux_pool.rs, upstream.rs
+transport/        # Low-level I/O
+                  #   tcp_relay.rs — RateLimiter (GCRA), RateLimitedWriter, relay_bidirectional_metered_throttled, copy_one_way
+                  #   tcp_outbound.rs — data types only: TcpRouteResult, EstablishedTcpOutbound, extract_tcp_stream
+                  #   tcp_flow.rs — only is_block_error remains
+                  #   metered.rs, stream.rs, direct.rs, tls_hello.rs
 ```
+
+### v0.0.4 Kernel Primitives
+
+- **Unified TCP pipeline:** All TCP protocols share a single `serve_inbound()` entry point in `runtime/inbound_protocol.rs`. Protocol handlers in `inbound/*.rs` implement the `InboundProtocol` trait:
+  - `accept()` — protocol handshake, returns `(Session, ClientStream)`
+  - `send_ok()` / `send_blocked()` / `send_upstream_failure()` — client-facing responses
+  - `relay()` — bidirectional data forwarding (default: raw TCP relay with rate limiting; overridable for AEAD/QUIC relays)
+- **Rate limiting:** GCRA-based `RateLimiter` and `RateLimitedWriter` in `transport/tcp_relay.rs`. `relay_bidirectional_metered_throttled` and `copy_one_way` integrate metering plus throttling without blocking sleeps.
+- **Circuit breaker:** `engine/src/outbound_health.rs` — tracks connection failures per outbound tag; quarantines unhealthy outbounds (5 failures in 30s window, 60s cooldown) with probe-based recovery.
+- **Idle timeout:** Per-inbound `idle_timeout_secs` enforced in `serve_inbound()` via `tokio::time::timeout` wrapping the relay phase (kernel default: 300s).
+- **URL rewrite:** Domain rewriting (`from` exact / `from_regex` pattern → `to` substitution) applied in `apply_url_rewrite()` before routing.
+- **Per-user rate limiting:** `Session::apply_auth()` is the single injection point; `SessionAuth` carries per-user `up_bps`/`down_bps` applied during protocol accept.
+
+### Deleted in v0.0.4
+
+- `handle_tcp_session` — replaced by the generic `serve_inbound()`
+- `TcpInboundProtocol` enum — no longer needed; protocols implement `InboundProtocol` trait directly
+- `runtime/tcp_flow.rs` — deleted; only `is_block_error` moved to `transport/tcp_flow.rs`
 
 ### Key Architecture Principles
 - **Kernel separation** — `zero-engine` is completely protocol-agnostic

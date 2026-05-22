@@ -46,42 +46,29 @@
 - 删除 `mod engine` 中间层，lib.rs 直接声明所有子模块
 - 全项目唯一有 `src/<crate-name>/` 嵌套的 crate 已修复
 
+### 6. 协议 handler 统一 — InboundProtocol trait ✅
+
+- `InboundProtocol` trait (`crates/proxy/src/runtime/inbound_protocol.rs`)
+  - `accept()` — 协议握手，返回 `(Session, ClientStream)`
+  - `send_ok()` / `send_blocked()` / `send_upstream_failure()` — 客户端响应
+  - `relay()` — 双向转发（默认 TCP relay，可覆盖为 AEAD/QUIC）
+- `serve_inbound()` — 所有 TCP 协议的单一内核管道入口
+  - 拥有：URL 改写、速率限制、路由、出站建立、会话跟踪、空闲超时、结构化日志
+  - 加新协议只需实现 `InboundProtocol` trait；加新横切能力只改 `serve_inbound` 一处
+- 6 个协议 handler（`inbound/*.rs`）全部实现 `InboundProtocol`
+- 删除 `handle_tcp_session`、`TcpInboundProtocol` 枚举、`runtime/tcp_flow.rs`
+
+### 7. 限速架构 — per-user rate limiting ✅
+
+- `Session::apply_auth(sa)` 是唯一注入点，所有协议的 `principal_key`、`up_bps`、`down_bps` 在此汇合
+- GCRA 算法 `RateLimiter` + `RateLimitedWriter` 替代 sleep-based 限速
+- `SessionAuth` 是 `配置 → Session` 的载体，以后加用户级配置字段只需改 `SessionAuth` 和 `apply_auth`
+
 ---
 
 ## 剩余工作（低优先级，渐进推进）
 
-### 协议 handler 统一 — `ProtocolAcceptor` trait
-
-**问题：** 所有协议的"路由 → 出站 → relay"后半段完全相同时，6 个协议 handler 各自独立实现 relay 逻辑（Trojan/SS/H2 各自写了 `io::copy` / `io::split`）。加一个新字段（如 `up_bps`/`down_bps`）需要在每一条 relay 路径上分别处理。
-
-**目标：**
-
-```rust
-trait ProtocolAcceptor {
-    async fn accept(&self, stream) -> (Session, ClientStream);
-}
-
-async fn serve_connection(stream, acceptor: impl ProtocolAcceptor, engine) {
-    let (session, client) = acceptor.accept(stream).await;
-    // session 上已有 target, auth, rate_limits
-    engine.prepare_session(&mut session);
-    let action = engine.route_decision(&session);
-    let upstream = engine.establish_outbound(&session, action);
-    engine.relay(client, upstream, session.rate_limits);
-}
-```
-
-**难点：** Shadowsocks 的 AEAD relay 和 Hysteria2 的 QUIC stream relay 不是标准 TCP relay，统一需要抽象 `BidirectionalRelay` trait 或 adapter。
-
-**收益：** 加新协议只需实现 `accept`；加新字段（限速、连接计数等）改一次 `serve_connection` 即全局生效。
-
-**规模：** ~600 行的重构，跨 ~5 个文件。建议在加下一个协议之前做。
-
-### 限速配置架构 — SessionAuth.apply_auth
-
-**现状：** `Session::apply_auth(sa)` 是唯一注入点，所有协议的 `principal_key`、`up_bps`、`down_bps` 在此汇合。`SessionAuth` 是`配置 → Session` 的载体。以后加用户级配置字段，只需改 `SessionAuth` 和 `apply_auth`。
-
-### groups/ 并入 engine（389 行）
+### groups/ 并入 engine
 
 `crates/proxy/src/groups/urltest.rs` 逻辑可移入 engine：
 - urltest 延迟探测 + 出站选择本质是路由决策，属于 engine 职责

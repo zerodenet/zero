@@ -1,8 +1,10 @@
-# 配置模型参考
+# Configuration Model Reference
 
-控制面所有配置位于 `api` 键下。
+All control plane configuration lives under the `api` key. This page documents `v0.0.4` API configuration fields.
 
-## 完整示例
+For the full configuration model (inbounds, outbounds, route, runtime), see [config.md](../project/config.md).
+
+## Complete Example
 
 ```json
 {
@@ -43,50 +45,50 @@
 
 ## `api.control`
 
-本地 HTTP 控制接口。
+Local HTTP control interface.
 
-| 字段 | 类型 | 默认 | 说明 |
+| Field | Type | Default | Description |
 |------|------|------|------|
-| `enabled` | bool | `false` | 是否启动 HTTP 控制服务器 |
-| `listen` | object | — | 监听地址，`enabled=true` 时必填 |
-| `listen.address` | string | — | 绑定 IP，`127.0.0.1` 仅本地，`0.0.0.0` 公网 |
-| `listen.port` | u16 | — | 监听端口 |
-| `api_key` | string | — | Bearer token，不设则无认证（仅建议本地使用） |
-| `api_key_env` | string | — | 从环境变量读取 api_key，优先级低于 `api_key` |
+| `enabled` | bool | `false` | Whether to start the HTTP control server |
+| `listen` | object | -- | Listen address; required when `enabled=true` |
+| `listen.address` | string | -- | Bind IP, `127.0.0.1` for local only, `0.0.0.0` for public |
+| `listen.port` | u16 | -- | Listen port |
+| `api_key` | string | -- | Bearer token; no auth if unset (local only recommended) |
+| `api_key_env` | string | -- | Read api_key from env var; lower priority than `api_key` |
 
-**CLI 覆盖**：`--status-listen 127.0.0.1:9090` 优先于配置文件。二者不能同时使用。
+**CLI override**: `--status-listen 127.0.0.1:9090` takes priority over the config file. They cannot be used together.
 
-### 限流
+### Rate Limiting
 
-内建限流，无需配置：
+Built-in rate limiting, no configuration required:
 
-| 类别 | 限制 | 响应 |
+| Category | Limit | Response |
 |------|------|------|
 | Query (GET) | 100 req/s | 429 Too Many Requests |
 | Command (POST) | 10 req/s | 429 Too Many Requests |
-| SSE 并发 | 5 连接 | 429 Too Many Requests |
+| SSE concurrent | 5 connections | 429 Too Many Requests |
 
 ## `api.hooks`
 
-Flow 生命周期钩子，按数组顺序执行。
+Flow lifecycle hooks, executed in array order.
 
 ```json
 { "type": "ipc", "socket": "/run/billing/hook.sock", "timeout_ms": 100 }
 ```
 
-| 字段 | 类型 | 默认 | 说明 |
+| Field | Type | Default | Description |
 |------|------|------|------|
-| `type` | string | — | 钩子类型，当前仅 `"ipc"` |
-| `socket` | string | — | IPC socket 路径 |
-| `timeout_ms` | u64 | `100` | 请求超时（毫秒），超时 fail-open |
+| `type` | string | -- | Hook type, currently only `"ipc"` |
+| `socket` | string | -- | IPC socket path |
+| `timeout_ms` | u64 | `100` | Request timeout in milliseconds; fail-open on timeout |
 
-**CLI 覆盖**：`--ipc-hook-socket /run/billing/hook.sock` 优先于配置文件。
+**CLI override**: `--ipc-hook-socket /run/billing/hook.sock` takes priority over the config file.
 
-钩子协议详见 [hooks.md](./hooks.md)。
+Hook protocol details: see [hooks.md](./hooks.md).
 
 ## `push`
 
-节点主动上报到外部管理端点。接收端可以是面板、监控系统或任意 HTTP 服务。
+Node proactively reports to an external management endpoint. The receiver can be a panel, monitoring system, or any HTTP service.
 
 ```json
 {
@@ -101,23 +103,23 @@ Flow 生命周期钩子，按数组顺序执行。
 }
 ```
 
-| 字段 | 类型 | 默认 | 说明 |
+| Field | Type | Default | Description |
 |------|------|------|------|
-| `url` | string | — | 接收端 URL，设置后启用 push |
-| `node_id` | string | — | 本节点标识 |
-| `api_key` | string | — | 认证密钥 |
-| `api_key_env` | string | — | 从环境变量读取 api_key |
-| `heartbeat_interval_seconds` | u64 | `30` | 心跳间隔 |
-| `pull_commands` | bool | `false` | 是否轮询远程命令 |
-| `command_poll_interval_seconds` | u64 | `10` | 命令轮询间隔 |
+| `url` | string | -- | Receiver URL; push is enabled when set |
+| `node_id` | string | -- | This node's identifier |
+| `api_key` | string | -- | Authentication key |
+| `api_key_env` | string | -- | Read api_key from env var |
+| `heartbeat_interval_seconds` | u64 | `30` | Heartbeat interval |
+| `pull_commands` | bool | `false` | Whether to poll for remote commands |
+| `command_poll_interval_seconds` | u64 | `10` | Command poll interval |
 
-协议详见 [push-connector.md](./push-connector.md)。
+Protocol details: see [push-connector.md](./push-connector.md).
 
 ## `api.event_sinks`
 
-事件投递目标数组。
+Event delivery target array.
 
-### JSON Lines 文件
+### JSON Lines File
 
 ```json
 {
@@ -129,13 +131,13 @@ Flow 生命周期钩子，按数组顺序执行。
 }
 ```
 
-| 字段 | 类型 | 默认 | 说明 |
+| Field | Type | Default | Description |
 |------|------|------|------|
-| `type` | string | — | `"jsonl"` 或别名 `"file"` |
-| `tag` | string | — | 唯一标识 |
-| `path` | string | — | 文件路径，相对路径基于配置目录 |
-| `events` | string[] | `[]` | 事件类型白名单，空=全收 |
-| `source_id` | string | — | 覆盖事件的 source_id |
+| `type` | string | -- | `"jsonl"` or alias `"file"` |
+| `tag` | string | -- | Unique identifier |
+| `path` | string | -- | File path; relative paths resolve against the config directory |
+| `events` | string[] | `[]` | Event type whitelist; empty = accept all |
+| `source_id` | string | -- | Override event source_id |
 
 ### Webhook
 
@@ -150,30 +152,43 @@ Flow 生命周期钩子，按数组顺序执行。
 }
 ```
 
-| 字段 | 类型 | 默认 | 说明 |
+| Field | Type | Default | Description |
 |------|------|------|------|
-| `type` | string | — | `"webhook"` |
-| `tag` | string | — | 唯一标识 |
-| `url` | string | — | 接收端点 |
-| `events` | string[] | `[]` | 事件类型白名单 |
-| `api_key` | string | — | 请求头 `Authorization: Bearer {key}` |
-| `api_key_env` | string | — | 从环境变量读取 |
-| `allow_insecure` | bool | `false` | 跳过 TLS 证书校验（仅测试用） |
+| `type` | string | -- | `"webhook"` |
+| `tag` | string | -- | Unique identifier |
+| `url` | string | -- | Receiver endpoint |
+| `events` | string[] | `[]` | Event type whitelist |
+| `api_key` | string | -- | Request header `Authorization: Bearer {key}` |
+| `api_key_env` | string | -- | Read from env var |
+| `allow_insecure` | bool | `false` | Skip TLS certificate verification (testing only) |
 
-投递失败自动重试（指数退避 2s→4s→8s→...→64s，最多 6 次）。
+Failed deliveries automatically retry (exponential backoff 2s->4s->8s->...->64s, max 6 attempts).
 
 ## `api.dead_letter_path`
 
-死信队列文件路径。超出最大重试次数的事件不会丢弃，而是写入此文件持久化。
+Dead letter queue file path. Events exceeding max retry count are not discarded but written to this file for persistence.
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `dead_letter_path` | string | 死信 JSON Lines 文件路径，不设置则事件最终丢弃 |
+| `dead_letter_path` | string | Dead letter JSON Lines file path; events are eventually discarded if unset |
 
-死信文件格式：每行一个 JSON，包含 `dead_lettered_at_unix_ms` 和 `original_event`。
+Dead letter file format: one JSON object per line, containing `dead_lettered_at_unix_ms` and `original_event`.
 
-### 投递状态查询
+### Delivery Status Query
 
 ```bash
-zero status  # 包含 sink 投递统计
+zero status  # includes sink delivery statistics
 ```
+
+## v0.0.4 Config Additions (non-API)
+
+The following new configuration fields were added in v0.0.4. They live outside the `api` section but are visible via `GET /api/v1/config` and relevant to control plane consumers.
+
+| Field | Location | Description |
+|------|------|------|
+| `idle_timeout_secs` | `inbounds[*]` | TCP relay idle timeout in seconds (default 300) |
+| `url_rewrite` | `route.url_rewrite[]` | Domain rewrite rules (`from` / `from_regex` -> `to`) before routing |
+| `domain-regex` | `route.rules[*].condition` | New condition type matching domains against regex patterns |
+| `up_bps` / `down_bps` | `inbounds[*].protocol` (Hysteria2, Shadowsocks, Trojan) | Per-inbound GCRA rate limits |
+
+For full details, see [config.md](../project/config.md).
