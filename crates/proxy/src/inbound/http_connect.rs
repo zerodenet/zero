@@ -115,10 +115,18 @@ impl Proxy {
                                     .accept_request(&mut metered).await
                                 {
                                     Ok(session) => {
-                                        let _ = serve_inbound(
-                                            &engine, session, metered.into_inner(),
-                                            &handler, &tag, source_addr,
-                                        ).await;
+                                        // Check for HTTP redirect rewrite rules.
+                                        if let Some(resp) = build_redirect_response(
+                                            &engine.config.route.url_rewrite,
+                                            &session,
+                                        ) {
+                                            let _ = metered.write_all(resp.as_bytes()).await;
+                                        } else {
+                                            let _ = serve_inbound(
+                                                &engine, session, metered.into_inner(),
+                                                &handler, &tag, source_addr,
+                                            ).await;
+                                        }
                                     }
                                     Err(CoreError::Unsupported(_)) => {
                                         let _ = handler.http_connect_inbound
@@ -167,6 +175,35 @@ impl Proxy {
         Ok(())
     }
 
+}
+
+/// Check url_rewrite rules for a redirect (with `status_code` set).
+/// Returns the HTTP response string to send, or None if no redirect rule matches.
+fn build_redirect_response(
+    rules: &[zero_config::UrlRewriteRule],
+    session: &Session,
+) -> Option<String> {
+    let domain = match &session.target {
+        zero_core::Address::Domain(d) => d,
+        _ => return None,
+    };
+    for rule in rules {
+        let status = rule.status_code?;
+        let matched = if let Some(ref from) = rule.from {
+            from == domain
+        } else if let Some(ref pattern) = rule.from_regex {
+            regex::Regex::new(pattern).map(|re| re.is_match(domain)).unwrap_or(false)
+        } else {
+            false
+        };
+        if matched {
+            let location = format!("https://{}:{}", rule.to, session.port);
+            return Some(format!(
+                "HTTP/1.1 {status} Found\r\nLocation: {location}\r\nConnection: close\r\n\r\n"
+            ));
+        }
+    }
+    None
 }
 
 fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::net::SocketAddr> {

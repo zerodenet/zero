@@ -13,6 +13,6 @@ pub use model::{
     OutboundGroupConfig, OutboundGroupKind, OutboundProtocolConfig, PushConfig, QuicConfig,
     RealityConfig, RouteActionConfig, RouteConfig, RouteRuleConfig, RouteRuleSetConfig,
     RuleConditionConfig, RuleSetFormatConfig, RuleSetSourceType, RuntimeConfig,
-    RuntimeOptionsConfig, Socks5UserConfig, SplitHttpConfig, TlsConfig, VlessUserConfig,
-    WebSocketConfig,
+    RuntimeOptionsConfig, Socks5UserConfig, SplitHttpConfig, TlsConfig, UrlRewriteRule,
+    VlessUserConfig, WebSocketConfig,
 };

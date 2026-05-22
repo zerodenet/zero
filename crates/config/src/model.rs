@@ -905,6 +905,11 @@ pub struct UrlRewriteRule {
     pub from_regex: Option<String>,
     /// Replacement domain.  Supports `$1`, `$2`, etc. for regex captures.
     pub to: String,
+    /// If set, return an HTTP redirect response (e.g. 302) instead of
+    /// silently rewriting the target.  Only meaningful for HTTP-based
+    /// protocols; SOCKS5 etc. ignore this and silently rewrite.
+    #[serde(default)]
+    pub status_code: Option<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
