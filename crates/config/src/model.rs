@@ -888,6 +888,23 @@ pub struct RouteConfig {
     /// Path to a GeoLite2-Country.mmdb file for the `geoip` condition.
     #[serde(default)]
     pub geoip_database: Option<String>,
+    /// URL rewrite rules applied before routing.
+    #[serde(default)]
+    pub url_rewrite: Vec<UrlRewriteRule>,
+}
+
+/// Domain rewrite rule: `from` or `from_regex` → `to`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UrlRewriteRule {
+    /// Exact domain to match.
+    #[serde(default)]
+    pub from: Option<String>,
+    /// Regex pattern to match against the domain.
+    #[serde(default)]
+    pub from_regex: Option<String>,
+    /// Replacement domain.  Supports `$1`, `$2`, etc. for regex captures.
+    pub to: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

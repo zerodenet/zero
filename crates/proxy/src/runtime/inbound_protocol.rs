@@ -85,9 +85,8 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
     inbound_tag: &str,
     source_addr: Option<std::net::SocketAddr>,
 ) -> Result<(), EngineError> {
-    // ── Kernel capability: connection counting / rate limiting hook ──
-    // Future: check_connection_limit(inbound_tag)?;
-    // Future: acquire_connection_slot(inbound_tag).await?;
+    // ── Kernel primitive: URL rewrite ──
+    apply_url_rewrite(proxy, &mut session);
 
     // Apply kernel rate policy: per-inbound defaults from config.
     // Per-user limits (if any) were already applied during protocol accept
@@ -195,6 +194,37 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
     };
 
     result
+}
+
+/// Apply URL rewrite rules from route config before routing.
+///
+/// Matches session target domain against configured rewrite rules
+/// (exact `from` or `from_regex` patterns) and replaces with `to`.
+fn apply_url_rewrite(proxy: &Proxy, session: &mut Session) {
+    let rules = &proxy.config.route.url_rewrite;
+    if rules.is_empty() {
+        return;
+    }
+    let zero_core::Address::Domain(ref domain) = session.target else {
+        return;
+    };
+    for rule in rules {
+        if let Some(ref from) = rule.from {
+            if from == domain {
+                session.target = zero_core::Address::Domain(rule.to.clone());
+                return;
+            }
+        }
+        if let Some(ref pattern) = &rule.from_regex {
+            if let Ok(re) = regex::Regex::new(pattern) {
+                if re.is_match(domain) {
+                    let result = re.replace(domain, &rule.to);
+                    session.target = zero_core::Address::Domain(result.to_string());
+                    return;
+                }
+            }
+        }
+    }
 }
 
 /// Apply per-inbound rate limits from config as defaults.
