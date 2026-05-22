@@ -18,9 +18,9 @@ use zero_protocol_vless::RealityServerOptions;
 use zero_protocol_vless::{VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
-use crate::outbound::direct::{resolve_udp_target, send_direct_udp_packet};
-use crate::outbound::vless::VlessUdpTransport;
 use crate::runtime::udp_associate::sessions::UdpSessionFlows;
+use crate::runtime::udp_helpers::{resolve_udp_target, send_direct_udp_packet};
+use crate::runtime::vless_udp::{VlessUdpOutboundManager, VlessUdpTransport};
 use crate::runtime::{log_completed_udp_flow, UdpFlowOutbound};
 
 use super::super::logging::log_listener_connection_error;
@@ -28,9 +28,56 @@ use super::super::runtime::{bind_listener, Proxy};
 use super::super::transport::{accept_ws, build_tls_acceptor, InboundTlsStream, PrefixedSocket};
 use crate::transport::{
     relay_bidirectional_metered, ClientStream, EstablishedTcpOutbound, MeteredStream,
-    TcpInboundProtocol, TcpRelayStream,
+    TcpRelayStream,
 };
+use async_trait::async_trait;
 use zero_engine::EngineError;
+
+use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+
+// ── Handler (TCP path only) ─────────────────────────────────────────────
+
+#[derive(Clone)]
+struct VlessInboundHandler {
+    vless_inbound: zero_protocol_vless::VlessInbound,
+}
+
+#[async_trait]
+impl InboundProtocol for VlessInboundHandler {
+    type ClientStream = TcpRelayStream;
+
+    async fn accept(
+        &self,
+        _stream: TcpRelayStream,
+    ) -> Result<(zero_core::Session, Self::ClientStream), EngineError> {
+        // VLESS accept is handled inline by the listener (complex dispatch).
+        Err(EngineError::Io(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "VLESS accept handled by listener",
+        )))
+    }
+
+    async fn send_ok(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        self.vless_inbound
+            .send_response(client)
+            .await
+            .map_err(EngineError::from)
+    }
+
+    async fn send_blocked(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        let _ = AsyncSocket::shutdown(client).await;
+        Ok(())
+    }
+
+    async fn send_upstream_failure(
+        &self,
+        client: &mut TcpRelayStream,
+    ) -> Result<(), EngineError> {
+        let _ = AsyncSocket::shutdown(client).await;
+        Ok(())
+    }
+    // relay uses default
+}
 
 impl Proxy {
     pub(crate) async fn run_vless_listener(
@@ -451,7 +498,7 @@ impl Proxy {
         sni: Option<String>,
     ) -> Result<(), EngineError>
     where
-        S: ClientStream,
+        S: ClientStream + 'static,
     {
         let mut metered = MeteredStream::new(RecordingStream::new(client));
         let auth = ConfiguredVlessUsers { users };
@@ -486,17 +533,19 @@ impl Proxy {
             self.handle_vless_udp_session(client, inbound_tag, session, &auth)
                 .await
         } else {
-            self.handle_tcp_session(client, inbound_tag, session, TcpInboundProtocol::Vless)
-                .await
-        }
-    }
-
-    pub(crate) async fn close_vless_client(
-        &self,
-        client: &mut impl AsyncSocket<Error = std::io::Error>,
-    ) {
-        if let Err(error) = client.shutdown().await {
-            error!(error = %error, "failed to shutdown client socket");
+            let handler = VlessInboundHandler {
+                vless_inbound: self.protocols.vless_inbound,
+            };
+            let source_addr = client.peer_addr().ok();
+            serve_inbound(
+                self,
+                session,
+                TcpRelayStream::new(client.into_inner()),
+                &handler,
+                inbound_tag,
+                source_addr,
+            )
+            .await
         }
     }
 
@@ -691,7 +740,7 @@ impl Proxy {
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
         let mut udp_flows = UdpSessionFlows::default();
-        let mut vless_manager = crate::outbound::vless::VlessUdpOutboundManager::new();
+        let mut vless_manager = VlessUdpOutboundManager::new();
 
         info!(
             inbound_tag = inbound_tag,
@@ -843,7 +892,7 @@ impl Proxy {
         inbound_tag: &str,
         udp_flows: &mut UdpSessionFlows,
         udp_socket: &TokioDatagramSocket,
-        vless_manager: &mut crate::outbound::vless::VlessUdpOutboundManager,
+        vless_manager: &mut VlessUdpOutboundManager,
         auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError> {
         use zero_protocol_vless::parse_udp_packet;

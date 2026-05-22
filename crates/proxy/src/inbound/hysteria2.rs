@@ -1,10 +1,13 @@
-// Hysteria2 inbound — hysteria2.rs
+//! Hysteria2 inbound — QUIC accept, HMAC auth, TCP stream dispatch.
+//!
+//! TCP stream relay uses the `InboundProtocol` trait with a custom relay
+//! that handles QUIC stream I/O (not raw TCP).
 
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::transport::Hysteria2Stream;
+use async_trait::async_trait;
 use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -19,7 +22,79 @@ use zero_protocol_hysteria2::{
 use zero_traits::AsyncSocket;
 use zero_traits::DnsResolver;
 
+use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
+use crate::transport::{copy_one_way, Hysteria2Stream};
+
+// ── Handler for individual TCP streams ─────────────────────────────────
+
+/// Handler for a single Hysteria2 TCP stream (QUIC bi-directional stream).
+///
+/// The QUIC connection lifecycle (auth, datagram loop) is managed by the
+/// listener.  This handler only deals with individual TCP streams.
+#[derive(Clone)]
+pub(crate) struct Hysteria2StreamHandler;
+
+#[async_trait]
+impl InboundProtocol for Hysteria2StreamHandler {
+    type ClientStream = Hysteria2Stream;
+
+    async fn accept(
+        &self,
+        _stream: crate::transport::TcpRelayStream,
+    ) -> Result<(Session, Self::ClientStream), EngineError> {
+        // Hysteria2 accept is handled inline by the listener — this is unused.
+        Err(EngineError::Io(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Hysteria2 accept is handled by the listener",
+        )))
+    }
+
+    async fn send_ok(&self, client: &mut Hysteria2Stream) -> Result<(), EngineError> {
+        let ok = build_connect_ok();
+        AsyncSocket::write_all(client, &ok)
+            .await
+            .map_err(|e| EngineError::Io(io::Error::other(format!("write connect ok: {e}"))))
+    }
+
+    async fn send_blocked(&self, client: &mut Hysteria2Stream) -> Result<(), EngineError> {
+        let err = build_connect_error("blocked");
+        let _ = AsyncSocket::write_all(client, &err).await;
+        Ok(())
+    }
+
+    async fn send_upstream_failure(
+        &self,
+        client: &mut Hysteria2Stream,
+    ) -> Result<(), EngineError> {
+        let err = build_connect_error("outbound failed");
+        let _ = AsyncSocket::write_all(client, &err).await;
+        Ok(())
+    }
+
+    /// QUIC stream relay: `copy_one_way` × 2 (not raw TCP relay).
+    async fn relay(
+        &self,
+        client: Hysteria2Stream,
+        upstream: crate::transport::TcpRelayStream,
+        up_bps: Option<u64>,
+        down_bps: Option<u64>,
+    ) -> Result<(), EngineError> {
+        let (up_read, up_write) = tokio::io::split(upstream);
+        let (down_read, down_write) = tokio::io::split(client);
+
+        let upload = tokio::spawn(async move {
+            let _ = copy_one_way(down_read, up_write, |_| {}, up_bps).await;
+        });
+        let download = tokio::spawn(async move {
+            let _ = copy_one_way(up_read, down_write, |_| {}, down_bps).await;
+        });
+        let _ = tokio::try_join!(upload, download);
+        Ok(())
+    }
+}
+
+// ── Listener (QUIC connection lifecycle) ───────────────────────────────
 
 impl Proxy {
     pub(crate) async fn run_hysteria2_listener(
@@ -27,12 +102,9 @@ impl Proxy {
         inbound: InboundConfig,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
-        let (password, up_bps, down_bps) = match &inbound.protocol {
+        let (password, _up_bps, _down_bps) = match &inbound.protocol {
             zero_config::InboundProtocolConfig::Hysteria2 {
-                password,
-                up_bps,
-                down_bps,
-                ..
+                password, up_bps, down_bps, ..
             } => (password.clone(), *up_bps, *down_bps),
             _ => {
                 return Err(EngineError::Io(io::Error::new(
@@ -64,6 +136,8 @@ impl Proxy {
         )
         .await?;
 
+        let stream_handler = Hysteria2StreamHandler;
+
         let mut connections: JoinSet<Result<(), EngineError>> = JoinSet::new();
 
         info!(
@@ -86,12 +160,14 @@ impl Proxy {
                     match accept_result {
                         Ok(conn) => {
                             let engine = self.clone();
-                            let inbound_tag = inbound.tag.clone();
-                            let password = password.clone();
+                            let tag = inbound.tag.clone();
+                            let pw = password.clone();
+                            let resolver = Arc::clone(&self.resolver);
+                            let handler = stream_handler.clone();
 
                             connections.spawn(async move {
                                 if let Err(error) = engine.handle_hysteria2_connection(
-                                    conn, inbound_tag.as_str(), &password, up_bps, down_bps,
+                                    conn, &tag, &pw, &handler, resolver,
                                 ).await {
                                     error!(error = %error, "hysteria2 connection error");
                                 }
@@ -123,12 +199,7 @@ impl Proxy {
             }
         }
 
-        info!(
-            inbound_tag = %inbound.tag,
-            protocol = "hysteria2",
-            "inbound listener stopped"
-        );
-
+        info!(inbound_tag = %inbound.tag, protocol = "hysteria2", "inbound listener stopped");
         Ok(())
     }
 
@@ -138,8 +209,8 @@ impl Proxy {
         conn: quinn::Connection,
         inbound_tag: &str,
         password: &str,
-        up_bps: Option<u64>,
-        down_bps: Option<u64>,
+        stream_handler: &Hysteria2StreamHandler,
+        resolver: Arc<zero_dns::DnsSystem>,
     ) -> Result<(), EngineError> {
         // Derive salt from TLS keying material
         let mut salt = [0u8; 32];
@@ -179,8 +250,7 @@ impl Proxy {
 
         let client_hmac = parse_auth_frame(&auth_buf[..n])?;
 
-        // Validate HMAC-SHA256(password, salt)
-        if !verify_hmac(&password, &salt, &client_hmac) {
+        if !verify_hmac(password, &salt, &client_hmac) {
             let err_resp = build_auth_error("authentication failed");
             let _ = AsyncSocket::write_all(&mut auth_stream, &err_resp).await;
             return Err(EngineError::Io(io::Error::new(
@@ -189,13 +259,11 @@ impl Proxy {
             )));
         }
 
-        // Auth success
         let ok_resp = build_auth_ok();
         AsyncSocket::write_all(&mut auth_stream, &ok_resp)
             .await
             .map_err(|e| EngineError::Io(io::Error::other(format!("write auth ok: {e}"))))?;
 
-        // Drop auth stream — it's no longer used
         drop(auth_stream);
 
         info!(inbound_tag, "hysteria2 auth success");
@@ -209,7 +277,6 @@ impl Proxy {
             }
         };
 
-        // Accept and dispatch streams + datagrams
         let mut stream_tasks = JoinSet::new();
         let conn = Arc::new(conn);
 
@@ -217,10 +284,9 @@ impl Proxy {
         if let Some(ref udp) = udp_socket {
             let conn_dg = conn.clone();
             let udp_dg = udp.clone();
-            let inbound_tag = inbound_tag.to_owned();
-            let resolver = Arc::clone(&self.resolver);
+            let tag = inbound_tag.to_owned();
             stream_tasks.spawn(async move {
-                Self::hysteria2_datagram_loop(conn_dg, udp_dg, &inbound_tag, resolver).await
+                Self::hysteria2_datagram_loop(conn_dg, udp_dg, &tag, resolver).await
             });
         }
 
@@ -231,9 +297,30 @@ impl Proxy {
                         Ok((send, recv)) => {
                             let engine = self.clone();
                             let tag = inbound_tag.to_owned();
-                            let pw = password.to_owned();
+                            let handler = stream_handler.clone();
                             stream_tasks.spawn(async move {
-                                engine.handle_hysteria2_tcp_stream(send, recv, &tag, &pw, up_bps, down_bps).await
+                                // Inline accept: parse connect header, build session
+                                let mut stream = Hysteria2Stream::new(send, recv);
+                                let mut header_buf = [0u8; 512];
+                                let n = match AsyncSocket::read(&mut stream, &mut header_buf).await {
+                                    Ok(0) => return Ok(()),
+                                    Ok(n) => n,
+                                    Err(_) => return Ok(()),
+                                };
+
+                                let (target, port) = match parse_tcp_connect_header(&header_buf[..n]) {
+                                    Ok(v) => v,
+                                    Err(_) => return Ok(()),
+                                };
+
+                                let session = Session::new(
+                                    0, target, port, Network::Tcp, ProtocolType::Hysteria2,
+                                );
+
+                                let _ = serve_inbound(
+                                    &engine, session, stream, &handler, &tag, None,
+                                ).await;
+                                Ok(())
                             });
                         }
                         Err(e) => {
@@ -257,8 +344,7 @@ impl Proxy {
         Ok(())
     }
 
-    /// Datagram forwarding loop: receive datagrams from client, forward to local UDP,
-    /// and send responses back.
+    /// Datagram forwarding loop (unchanged).
     async fn hysteria2_datagram_loop(
         conn: Arc<quinn::Connection>,
         udp_socket: Arc<tokio::net::UdpSocket>,
@@ -271,7 +357,6 @@ impl Proxy {
 
         loop {
             select! {
-                // Incoming datagram from client
                 dg = conn.read_datagram() => {
                     match dg {
                         Ok(data) => {
@@ -316,7 +401,6 @@ impl Proxy {
                                     }
                                 };
 
-                                // Track session for response routing
                                 let local_addr = udp_socket.local_addr().unwrap_or_else(|_| "0.0.0.0:0".parse().unwrap());
                                 session_map.insert(
                                     (local_addr, pkt.session_id),
@@ -334,14 +418,9 @@ impl Proxy {
                         }
                     }
                 }
-
-                // Response from local UDP target
                 recv = udp_socket.recv_from(&mut buf) => {
                     match recv {
                         Ok((n, sender)) => {
-                            // Find session mapping for this response
-                            // For now, use a simple approach: echo back to session 1
-                            // Full implementation would look up session from map
                             if let Some(((_local_addr, sid), (_, ref target, port))) =
                                 session_map.iter().find(|((la, _), _)| la == &sender)
                             {
@@ -361,98 +440,6 @@ impl Proxy {
             }
         }
 
-        Ok(())
-    }
-
-    /// Handle a single Hysteria2 TCP stream: parse connect header, route, relay.
-    async fn handle_hysteria2_tcp_stream(
-        &self,
-        send: quinn::SendStream,
-        recv: quinn::RecvStream,
-        inbound_tag: &str,
-        password: &str,
-        up_bps: Option<u64>,
-        down_bps: Option<u64>,
-    ) -> Result<(), EngineError> {
-        let mut stream = Hysteria2Stream::new(send, recv);
-
-        // Read connect header
-        let mut header_buf = [0u8; 512];
-        let n = AsyncSocket::read(&mut stream, &mut header_buf)
-            .await
-            .map_err(|_| EngineError::Io(io::Error::other("read connect header")))?;
-        if n == 0 {
-            return Ok(());
-        }
-
-        let (target, port) = parse_tcp_connect_header(&header_buf[..n])?;
-
-        let mut session = Session::new(
-            0,
-            target.clone(),
-            port,
-            Network::Tcp,
-            ProtocolType::Hysteria2,
-        );
-        let mut sa = zero_core::SessionAuth::new("hysteria2");
-        sa.principal_key = Some(password.to_owned());
-        sa.up_bps = up_bps;
-        sa.down_bps = down_bps;
-        session.apply_auth(sa);
-        let rate_up = session.up_bps;
-        let rate_down = session.down_bps;
-        self.prepare_session(&mut session, inbound_tag, None);
-
-        self.resolve_fake_ip_target(&mut session).await;
-        let action = self.route_decision(&session);
-        let Ok(resolved) = self.resolve_outbound(&action) else {
-            let err = build_connect_error("no route");
-            let _ = AsyncSocket::write_all(&mut stream, &err).await;
-            return Ok(());
-        };
-
-        let upstream = match self.establish_tcp_outbound(&session, resolved).await {
-            Ok(outbound) => match outbound {
-                crate::transport::EstablishedTcpOutbound::Direct { upstream, .. } => upstream,
-                crate::transport::EstablishedTcpOutbound::Vless { upstream, .. } => upstream,
-                crate::transport::EstablishedTcpOutbound::Socks5 { upstream, .. } => upstream,
-                crate::transport::EstablishedTcpOutbound::Hysteria2 { upstream, .. } => upstream,
-                crate::transport::EstablishedTcpOutbound::Shadowsocks { upstream, .. } => upstream,
-                crate::transport::EstablishedTcpOutbound::Trojan { upstream, .. } => upstream,
-                crate::transport::EstablishedTcpOutbound::Relay { upstream } => upstream,
-                crate::transport::EstablishedTcpOutbound::Block { .. } => {
-                    let err = build_connect_error("blocked");
-                    let _ = AsyncSocket::write_all(&mut stream, &err).await;
-                    return Ok(());
-                }
-            },
-            Err(_e) => {
-                warn!("hysteria2 tcp outbound failed");
-                let err = build_connect_error("outbound failed");
-                let _ = AsyncSocket::write_all(&mut stream, &err).await;
-                return Ok(());
-            }
-        };
-
-        // Send connect OK
-        let ok_resp = build_connect_ok();
-        AsyncSocket::write_all(&mut stream, &ok_resp)
-            .await
-            .map_err(|_| EngineError::Io(io::Error::other("write connect ok")))?;
-
-        // Bidirectional relay with rate limiting.
-        let (up_read, up_write) = tokio::io::split(upstream);
-        let (down_read, down_write) = tokio::io::split(stream);
-
-        // down_read → up_write = upload (client → proxy → upstream)
-        // up_read → down_write = download (upstream → proxy → client)
-        let upload = tokio::spawn(async move {
-            let _ = crate::transport::copy_one_way(down_read, up_write, |_| {}, rate_up).await;
-        });
-        let download = tokio::spawn(async move {
-            let _ = crate::transport::copy_one_way(up_read, down_write, |_| {}, rate_down).await;
-        });
-        let _ = tokio::try_join!(upload, download);
         Ok(())
     }
 }

@@ -110,4 +110,22 @@ impl ProtocolInventory {
     pub fn supports_outbound_protocol(&self, protocol: &OutboundProtocolConfig) -> bool {
         self.registry.supports_outbound(protocol)
     }
+
+    pub(crate) fn check_inbound_enabled(
+        &self,
+        protocol: &InboundProtocolConfig,
+        tag: &str,
+    ) -> Result<(), EngineError> {
+        if self.registry.supports_inbound(protocol) {
+            return Ok(());
+        }
+        let label = self.registry.inbound_protocol_label(protocol);
+        let feature = self.registry.inbound_protocol_feature_name(protocol);
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "inbound",
+            tag: tag.to_owned(),
+            protocol: label,
+            feature,
+        })
+    }
 }

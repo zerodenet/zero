@@ -17,9 +17,13 @@ use crate::inventory::ProtocolInventory;
 use crate::runtime::mux_pool::MuxConnectionPool;
 
 mod engine_facade;
+pub(crate) mod inbound_protocol;
 pub(crate) mod mux_pool;
+mod tcp_outbound;
 pub(crate) mod udp_associate;
+pub(crate) mod udp_helpers;
 pub(crate) mod upstream;
+pub(crate) mod vless_udp;
 
 pub(crate) use udp_associate::helpers::log_completed_udp_flow;
 pub(crate) use udp_associate::sessions::UdpFlowOutbound;
@@ -281,135 +285,47 @@ fn spawn_inbound_listener(
     shutdown_rx: watch::Receiver<bool>,
     listeners: &mut JoinSet<Result<(), EngineError>>,
 ) -> Result<(), EngineError> {
-    match inbound.protocol {
+    // Validate via registry — single source of truth for feature gates.
+    proxy
+        .protocols
+        .check_inbound_enabled(&inbound.protocol, &inbound.tag)?;
+
+    let p = proxy.clone();
+    let b = inbound.clone();
+
+    match &b.protocol {
+        #[cfg(feature = "inbound-socks5")]
         InboundProtocolConfig::Socks5 { .. } => {
-            #[cfg(feature = "inbound-socks5")]
-            {
-                let p = proxy.clone();
-                let b = inbound.clone();
-                listeners.spawn(async move { p.run_socks5_listener(b, shutdown_rx).await });
-                return Ok(());
-            }
-            #[cfg(not(feature = "inbound-socks5"))]
-            {
-                return Err(EngineError::CompiledFeatureDisabled {
-                    kind: "inbound",
-                    tag: inbound.tag.clone(),
-                    protocol: "socks5",
-                    feature: "inbound-socks5",
-                });
-            }
+            listeners.spawn(async move { p.run_socks5_listener(b, shutdown_rx).await });
         }
+        #[cfg(feature = "inbound-http-connect")]
         InboundProtocolConfig::HttpConnect => {
-            #[cfg(feature = "inbound-http-connect")]
-            {
-                let p = proxy.clone();
-                let b = inbound.clone();
-                listeners
-                    .spawn(async move { p.run_http_connect_listener(b, shutdown_rx).await });
-                return Ok(());
-            }
-            #[cfg(not(feature = "inbound-http-connect"))]
-            {
-                return Err(EngineError::CompiledFeatureDisabled {
-                    kind: "inbound",
-                    tag: inbound.tag.clone(),
-                    protocol: "http-connect",
-                    feature: "inbound-http-connect",
-                });
-            }
+            listeners.spawn(async move { p.run_http_connect_listener(b, shutdown_rx).await });
         }
+        #[cfg(feature = "inbound-mixed")]
         InboundProtocolConfig::Mixed { .. } => {
-            #[cfg(feature = "inbound-mixed")]
-            {
-                let p = proxy.clone();
-                let b = inbound.clone();
-                listeners.spawn(async move { p.run_mixed_listener(b, shutdown_rx).await });
-                return Ok(());
-            }
-            #[cfg(not(feature = "inbound-mixed"))]
-            {
-                return Err(EngineError::CompiledFeatureDisabled {
-                    kind: "inbound",
-                    tag: inbound.tag.clone(),
-                    protocol: "mixed",
-                    feature: "inbound-mixed",
-                });
-            }
+            listeners.spawn(async move { p.run_mixed_listener(b, shutdown_rx).await });
         }
+        #[cfg(feature = "inbound-vless")]
         InboundProtocolConfig::Vless { .. } => {
-            #[cfg(feature = "inbound-vless")]
-            {
-                let p = proxy.clone();
-                let b = inbound.clone();
-                listeners.spawn(async move { p.run_vless_listener(b, shutdown_rx).await });
-                return Ok(());
-            }
-            #[cfg(not(feature = "inbound-vless"))]
-            {
-                return Err(EngineError::CompiledFeatureDisabled {
-                    kind: "inbound",
-                    tag: inbound.tag.clone(),
-                    protocol: "vless",
-                    feature: "inbound-vless",
-                });
-            }
+            listeners.spawn(async move { p.run_vless_listener(b, shutdown_rx).await });
         }
+        #[cfg(feature = "inbound-hysteria2")]
         InboundProtocolConfig::Hysteria2 { .. } => {
-            #[cfg(feature = "inbound-hysteria2")]
-            {
-                let p = proxy.clone();
-                let b = inbound.clone();
-                listeners.spawn(async move { p.run_hysteria2_listener(b, shutdown_rx).await });
-                return Ok(());
-            }
-            #[cfg(not(feature = "inbound-hysteria2"))]
-            {
-                return Err(EngineError::CompiledFeatureDisabled {
-                    kind: "inbound",
-                    tag: inbound.tag.clone(),
-                    protocol: "hysteria2",
-                    feature: "inbound-hysteria2",
-                });
-            }
+            listeners.spawn(async move { p.run_hysteria2_listener(b, shutdown_rx).await });
         }
+        #[cfg(feature = "inbound-shadowsocks")]
         InboundProtocolConfig::Shadowsocks { .. } => {
-            #[cfg(feature = "inbound-shadowsocks")]
-            {
-                let p = proxy.clone();
-                let b = inbound.clone();
-                listeners.spawn(async move { p.run_shadowsocks_listener(b, shutdown_rx).await });
-                return Ok(());
-            }
-            #[cfg(not(feature = "inbound-shadowsocks"))]
-            {
-                return Err(EngineError::CompiledFeatureDisabled {
-                    kind: "inbound",
-                    tag: inbound.tag.clone(),
-                    protocol: "shadowsocks",
-                    feature: "inbound-shadowsocks",
-                });
-            }
+            listeners.spawn(async move { p.run_shadowsocks_listener(b, shutdown_rx).await });
         }
+        #[cfg(feature = "inbound-trojan")]
         InboundProtocolConfig::Trojan { .. } => {
-            #[cfg(feature = "inbound-trojan")]
-            {
-                let p = proxy.clone();
-                let b = inbound.clone();
-                listeners.spawn(async move { p.run_trojan_listener(b, shutdown_rx).await });
-                return Ok(());
-            }
-            #[cfg(not(feature = "inbound-trojan"))]
-            {
-                return Err(EngineError::CompiledFeatureDisabled {
-                    kind: "inbound",
-                    tag: inbound.tag.clone(),
-                    protocol: "trojan",
-                    feature: "inbound-trojan",
-                });
-            }
+            listeners.spawn(async move { p.run_trojan_listener(b, shutdown_rx).await });
         }
+        #[allow(unreachable_patterns)]
+        _ => unreachable!("registry check above already validated protocol is compiled"),
     }
+    Ok(())
 }
 
 /// Stop removed listeners (via their per-listener shutdown channel),

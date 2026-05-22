@@ -1,17 +1,74 @@
+use async_trait::async_trait;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
-use zero_core::Error as CoreError;
-use zero_platform_tokio::TokioSocket;
-use zero_protocol_http_connect::HttpConnectResponse;
-use zero_traits::AsyncSocket;
-
-use super::super::logging::log_listener_connection_error;
-use super::super::runtime::{bind_listener, Proxy};
-use super::super::transport::ClientStream;
-use super::super::transport::MeteredStream;
-use super::super::transport::TcpInboundProtocol;
+use zero_core::{Error as CoreError, Session};
 use zero_engine::EngineError;
+use zero_protocol_http_connect::{HttpConnectInbound, HttpConnectResponse};
+
+use crate::logging::log_listener_connection_error;
+use crate::runtime::bind_listener;
+use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::Proxy;
+use crate::transport::{MeteredStream, TcpRelayStream};
+
+// ── New trait-based handler ────────────────────────────────────────────
+
+#[derive(Clone)]
+pub(crate) struct HttpConnectInboundHandler {
+    pub(crate) http_connect_inbound: HttpConnectInbound,
+}
+
+impl HttpConnectInboundHandler {
+    pub(crate) fn http_connect_inbound(&self) -> HttpConnectInbound {
+        self.http_connect_inbound
+    }
+}
+
+#[async_trait]
+impl InboundProtocol for HttpConnectInboundHandler {
+    type ClientStream = TcpRelayStream;
+
+    async fn accept(
+        &self,
+        stream: TcpRelayStream,
+    ) -> Result<(Session, Self::ClientStream), EngineError> {
+        let mut metered = MeteredStream::new(stream);
+        match self.http_connect_inbound.accept_request(&mut metered).await {
+            Ok(session) => Ok((session, metered.into_inner())),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    async fn send_ok(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        self.http_connect_inbound
+            .send_response(client, HttpConnectResponse::ConnectionEstablished)
+            .await
+            .map_err(EngineError::from)
+    }
+
+    async fn send_blocked(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        let _ = self
+            .http_connect_inbound
+            .send_response(client, HttpConnectResponse::Forbidden)
+            .await;
+        let _ = AsyncWriteExt::shutdown(client).await;
+        Ok(())
+    }
+
+    async fn send_upstream_failure(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        let _ = self
+            .http_connect_inbound
+            .send_response(client, HttpConnectResponse::BadGateway)
+            .await;
+        let _ = AsyncWriteExt::shutdown(client).await;
+        Ok(())
+    }
+    // relay uses default
+}
+
+// ── Listener ────────────────────────────────────────────────────────────
 
 impl Proxy {
     pub(crate) async fn run_http_connect_listener(
@@ -22,6 +79,10 @@ impl Proxy {
         let listener = bind_listener(&inbound).await?;
         let local_addr = listener.local_addr()?;
         let mut connections = JoinSet::new();
+
+        let handler = HttpConnectInboundHandler {
+            http_connect_inbound: self.protocols.http_connect_inbound,
+        };
 
         info!(
             inbound_tag = %inbound.tag,
@@ -40,23 +101,48 @@ impl Proxy {
                     }
                 }
                 accept_result = listener.accept() => {
-                    let (stream, remote_addr) = accept_result?;
-                    let engine = self.clone();
-                    let inbound_tag = inbound.tag.clone();
-
-                    connections.spawn(async move {
-                        if let Err(error) = engine
-                            .handle_http_connect_connection(stream, inbound_tag.as_str())
-                            .await
-                        {
-                            log_listener_connection_error(
-                                "http-connect",
-                                inbound_tag.as_str(),
-                                &remote_addr,
-                                &error,
-                            );
+                    match accept_result {
+                        Ok((stream, remote_addr)) => {
+                            let engine = self.clone();
+                            let tag = inbound.tag.clone();
+                            let handler = handler.clone();
+                            let source_addr = remote_addr_to_socket(remote_addr);
+                            connections.spawn(async move {
+                                let mut metered = MeteredStream::new(
+                                    TcpRelayStream::from(stream),
+                                );
+                                match handler.http_connect_inbound
+                                    .accept_request(&mut metered).await
+                                {
+                                    Ok(session) => {
+                                        let _ = serve_inbound(
+                                            &engine, session, metered.into_inner(),
+                                            &handler, &tag, source_addr,
+                                        ).await;
+                                    }
+                                    Err(CoreError::Unsupported(_)) => {
+                                        let _ = handler.http_connect_inbound
+                                            .send_response(&mut metered, HttpConnectResponse::MethodNotAllowed)
+                                            .await;
+                                    }
+                                    Err(CoreError::Protocol(_)) => {
+                                        let _ = handler.http_connect_inbound
+                                            .send_response(&mut metered, HttpConnectResponse::BadRequest)
+                                            .await;
+                                    }
+                                    Err(err) => {
+                                        let engine_err = EngineError::from(err);
+                                        log_listener_connection_error(
+                                            "http-connect", &tag, &source_addr, &engine_err,
+                                        );
+                                    }
+                                }
+                            });
                         }
-                    });
+                        Err(e) => {
+                            error!(error = %e, "http-connect: accept error");
+                        }
+                    }
                 }
                 result = connections.join_next(), if !connections.is_empty() => {
                     if let Some(Err(error)) = result {
@@ -77,77 +163,25 @@ impl Proxy {
             }
         }
 
-        info!(
-            inbound_tag = %inbound.tag,
-            protocol = "http-connect",
-            listen = %local_addr,
-            "inbound listener stopped"
-        );
-
+        info!(inbound_tag = %inbound.tag, protocol = "http-connect", listen = %local_addr, "inbound listener stopped");
         Ok(())
     }
 
-    pub(crate) async fn handle_http_connect_connection(
-        &self,
-        client: TokioSocket,
-        inbound_tag: &str,
-    ) -> Result<(), EngineError> {
-        self.handle_http_connect_client(client, inbound_tag).await
-    }
+}
 
-    pub(crate) async fn handle_http_connect_client<S>(
-        &self,
-        client: S,
-        inbound_tag: &str,
-    ) -> Result<(), EngineError>
-    where
-        S: ClientStream,
-    {
-        let mut client = MeteredStream::new(client);
-        let session = match self
-            .protocols
-            .http_connect_inbound
-            .accept_request(&mut client)
-            .await
-        {
-            Ok(session) => session,
-            Err(CoreError::Unsupported(_)) => {
-                self.reply_and_close_http(&mut client, HttpConnectResponse::MethodNotAllowed)
-                    .await;
-                return Ok(());
-            }
-            Err(CoreError::Protocol(_)) => {
-                self.reply_and_close_http(&mut client, HttpConnectResponse::BadRequest)
-                    .await;
-                return Ok(());
-            }
-            Err(error) => return Err(error.into()),
-        };
-        self.handle_tcp_session(
-            client,
-            inbound_tag,
-            session,
-            TcpInboundProtocol::HttpConnect,
-        )
-        .await
-    }
-
-    pub(crate) async fn reply_and_close_http(
-        &self,
-        client: &mut impl AsyncSocket<Error = std::io::Error>,
-        response: HttpConnectResponse,
-    ) {
-        if let Err(error) = self
-            .protocols
-            .http_connect_inbound
-            .send_response(client, response)
-            .await
-        {
-            error!(error = %error, "failed to write http-connect response");
+fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::net::SocketAddr> {
+    addr.and_then(|ip| match ip {
+        zero_traits::IpAddress::V4(octets) => {
+            Some(std::net::SocketAddr::new(
+                std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)),
+                0,
+            ))
         }
-
-        if let Err(error) = client.shutdown().await {
-            error!(error = %error, "failed to shutdown client socket");
+        zero_traits::IpAddress::V6(octets) => {
+            Some(std::net::SocketAddr::new(
+                std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)),
+                0,
+            ))
         }
-    }
+    })
 }

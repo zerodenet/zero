@@ -373,6 +373,23 @@ impl InboundProtocolConfig {
             _ => None,
         }
     }
+
+    /// Global (per-inbound) rate limits. Returns `(up_bps, down_bps)`.
+    /// Per-user limits are handled separately by protocol accept handlers.
+    pub fn rate_limits(&self) -> (Option<u64>, Option<u64>) {
+        match self {
+            Self::Trojan {
+                up_bps, down_bps, ..
+            }
+            | Self::Shadowsocks {
+                up_bps, down_bps, ..
+            }
+            | Self::Hysteria2 {
+                up_bps, down_bps, ..
+            } => (*up_bps, *down_bps),
+            _ => (None, None),
+        }
+    }
 }
 
 fn default_ss_cipher() -> String {

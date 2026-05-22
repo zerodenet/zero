@@ -2,6 +2,7 @@
 
 use std::io;
 
+use async_trait::async_trait;
 use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -12,7 +13,9 @@ use zero_engine::EngineError;
 use zero_protocol_trojan::TrojanInbound;
 use zero_traits::AsyncSocket;
 
-use crate::runtime::{bind_listener, Proxy};
+use crate::runtime::bind_listener;
+use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 /// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
@@ -31,13 +34,70 @@ impl AsyncSocket for TlsStream {
     }
 }
 
+// ── Trait-based handler ────────────────────────────────────────────────
+
+#[derive(Clone)]
+pub(crate) struct TrojanInboundHandler {
+    trojan_inbound: TrojanInbound,
+    password: String,
+    tls_acceptor: crate::transport::TlsAcceptor,
+}
+
+#[async_trait]
+impl InboundProtocol for TrojanInboundHandler {
+    type ClientStream = TcpRelayStream;
+
+    async fn accept(
+        &self,
+        stream: TcpRelayStream,
+    ) -> Result<(Session, Self::ClientStream), EngineError> {
+        // TLS accept
+        let tls = self
+            .tls_acceptor
+            .accept(stream)
+            .await
+            .map_err(|e| EngineError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+        // Trojan protocol auth
+        let mut sock = TlsStream(tls);
+        let accept = self
+            .trojan_inbound
+            .accept(&mut sock, &[self.password.clone()])
+            .await?;
+        let mut session: Session = accept.session;
+        let mut sa = zero_core::SessionAuth::new("trojan");
+        sa.principal_key = Some(self.password.clone());
+        session.apply_auth(sa);
+        Ok((session, TcpRelayStream::new(sock.0)))
+    }
+
+    async fn send_ok(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        // Trojan has no success response
+        Ok(())
+    }
+
+    async fn send_blocked(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        // Trojan has no blocked response — just close
+        Ok(())
+    }
+
+    async fn send_upstream_failure(
+        &self,
+        _client: &mut TcpRelayStream,
+    ) -> Result<(), EngineError> {
+        Ok(())
+    }
+    // relay uses default
+}
+
+// ── Listener ────────────────────────────────────────────────────────────
+
 impl Proxy {
     pub(crate) async fn run_trojan_listener(
         &self,
         inbound: InboundConfig,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
-        let (password, tls_cfg, up_bps, down_bps) = match &inbound.protocol {
+        let (password, tls_cfg, _up_bps, _down_bps) = match &inbound.protocol {
             zero_config::InboundProtocolConfig::Trojan {
                 password,
                 sni: _,
@@ -62,6 +122,12 @@ impl Proxy {
         let listener = bind_listener(&inbound).await?;
         let tag = inbound.tag.clone();
 
+        let handler = TrojanInboundHandler {
+            trojan_inbound: TrojanInbound,
+            password,
+            tls_acceptor: acceptor,
+        };
+
         info!(inbound_tag = %tag, protocol = "trojan", listen = %listener.local_addr()?, "started");
 
         let mut conns = JoinSet::new();
@@ -70,13 +136,26 @@ impl Proxy {
                 _ = shutdown.changed() => { if *shutdown.borrow() { break; } }
                 r = listener.accept() => {
                     let (s, peer) = match r { Ok(v) => v, Err(e) => { error!(%e, "accept"); continue; } };
-                    let p = self.clone(); let t = tag.clone(); let pw = password.clone(); let a = acceptor.clone();
-                    let up = up_bps; let down = down_bps;
+                    let p = self.clone();
+                    let t = tag.clone();
+                    let h = handler.clone();
+                    let source_addr = remote_addr_to_socket(peer);
                     conns.spawn(async move {
-                        if let Err(e) = p.serve_trojan(s, &t, &pw, &a, up, down).await {
-                            if !matches!(&e, EngineError::Io(io) if matches!(io.kind(),
-                                io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset | io::ErrorKind::BrokenPipe))
-                            { warn!(?peer, %e, "trojan failed"); }
+                        match h.accept(s.into()).await {
+                            Ok((session, client)) => {
+                                if let Err(e) = serve_inbound(
+                                    &p, session, client, &h, &t, source_addr,
+                                ).await {
+                                    if !matches!(&e, EngineError::Io(io) if matches!(io.kind(),
+                                        io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset | io::ErrorKind::BrokenPipe))
+                                    { warn!(?source_addr, %e, "trojan failed"); }
+                                }
+                            }
+                            Err(e) => {
+                                if !matches!(&e, EngineError::Io(io) if matches!(io.kind(),
+                                    io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset | io::ErrorKind::BrokenPipe))
+                                { warn!(?source_addr, %e, "trojan auth failed"); }
+                            }
                         }
                     });
                 }
@@ -89,67 +168,17 @@ impl Proxy {
         info!(inbound_tag = %tag, "stopped");
         Ok(())
     }
+}
 
-    async fn serve_trojan(
-        &self,
-        socket: impl Into<TcpRelayStream>,
-        tag: &str,
-        password: &str,
-        acceptor: &crate::transport::TlsAcceptor,
-        up_bps: Option<u64>,
-        down_bps: Option<u64>,
-    ) -> Result<(), EngineError> {
-        let raw: TcpRelayStream = socket.into();
-        // TLS accept.
-        let tls = acceptor
-            .accept(raw)
-            .await
-            .map_err(|e| EngineError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
-        // Trojan protocol auth.
-        let mut sock = TlsStream(tls);
-        let accept = TrojanInbound
-            .accept(&mut sock, &[password.to_owned()])
-            .await?;
-        let mut session: Session = accept.session;
-        let mut sa = zero_core::SessionAuth::new("trojan");
-        sa.principal_key = Some(password.to_owned());
-        sa.up_bps = up_bps;
-        sa.down_bps = down_bps;
-        session.apply_auth(sa);
-        self.prepare_session(&mut session, tag, None);
-        // Route + outbound + relay.
-        self.resolve_fake_ip_target(&mut session).await;
-        let action = self.route_decision(&session);
-        let (resolved, _plan) = self.resolve_outbound(&action)?;
-        let outbound = self
-            .establish_tcp_outbound(&session, (resolved, _plan))
-            .await
-            .map_err(|f| EngineError::Io(io::Error::new(io::ErrorKind::Other, f.error)))?;
-        let upstream = match outbound {
-            crate::transport::EstablishedTcpOutbound::Direct { upstream, .. } => upstream,
-            crate::transport::EstablishedTcpOutbound::Vless { upstream, .. } => upstream,
-            crate::transport::EstablishedTcpOutbound::Socks5 { upstream, .. } => upstream,
-            crate::transport::EstablishedTcpOutbound::Hysteria2 { upstream, .. } => upstream,
-            crate::transport::EstablishedTcpOutbound::Shadowsocks { upstream, .. } => upstream,
-            crate::transport::EstablishedTcpOutbound::Trojan { upstream, .. } => upstream,
-            crate::transport::EstablishedTcpOutbound::Relay { upstream } => upstream,
-            crate::transport::EstablishedTcpOutbound::Block { .. } => {
-                return Err(EngineError::Io(io::Error::new(
-                    io::ErrorKind::ConnectionRefused,
-                    "blocked",
-                )));
-            }
-        };
-        crate::transport::relay_bidirectional_metered_throttled(
-            TcpRelayStream::new(sock.0),
-            upstream,
-            |_| {},
-            |_| {},
-            up_bps,
-            down_bps,
-        )
-        .await
-        .map_err(|e| EngineError::Io(e))?;
-        Ok(())
-    }
+fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::net::SocketAddr> {
+    addr.and_then(|ip| match ip {
+        zero_traits::IpAddress::V4(octets) => Some(std::net::SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)),
+            0,
+        )),
+        zero_traits::IpAddress::V6(octets) => Some(std::net::SocketAddr::new(
+            std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)),
+            0,
+        )),
+    })
 }

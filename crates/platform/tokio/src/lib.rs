@@ -267,6 +267,8 @@ impl From<TokioSocket> for TcpRelayStream {
     }
 }
 
+impl ClientStream for TcpRelayStream {}
+
 impl AsyncSocket for TcpRelayStream {
     type Error = io::Error;
 
