@@ -8,9 +8,24 @@ permissions:
   contents: write
 
 jobs:
+  guard:
+    name: Verify tag is on main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ensure tag points to main
+        run: |
+          if ! git branch -r --contains "$GITHUB_REF" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} is not on main branch"
+            exit 1
+          fi
+
   build:
     name: Build (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
+    needs: guard
     strategy:
       fail-fast: false
       matrix:
