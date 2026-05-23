@@ -22,6 +22,7 @@ pub struct EnginePlan {
     targets_by_tag: HashMap<String, TargetId>,
     selector_groups: Box<[TargetId]>,
     urltest_groups: Box<[TargetId]>,
+    loadbalance_groups: Box<[TargetId]>,
 }
 
 impl EnginePlan {
@@ -30,6 +31,7 @@ impl EnginePlan {
         let mut targets = Vec::with_capacity(targets_by_tag.len());
         let mut selector_groups = Vec::new();
         let mut urltest_groups = Vec::new();
+        let mut loadbalance_groups = Vec::new();
 
         for outbound in &config.outbounds {
             let kind = match &outbound.protocol {
@@ -116,6 +118,23 @@ impl EnginePlan {
                     sni: sni.clone(),
                     insecure: *insecure,
                 })),
+                OutboundProtocolConfig::Vmess {
+                    server,
+                    port,
+                    id,
+                    cipher,
+                    tls,
+                    ws,
+                    grpc,
+                } => TargetKind::Outbound(Box::new(OutboundTarget::Vmess {
+                    server: server.clone(),
+                    port: *port,
+                    id: id.clone(),
+                    cipher: cipher.clone(),
+                    tls: tls.clone(),
+                    ws: ws.clone(),
+                    grpc: grpc.clone(),
+                })),
             };
 
             targets.push(TargetNode {
@@ -185,6 +204,28 @@ impl EnginePlan {
                         chain: resolve_members(proxies, &targets_by_tag)?,
                     })
                 }
+                OutboundGroupKind::LoadBalance {
+                    outbounds,
+                    default: _,
+                    strategy,
+                } => {
+                    loadbalance_groups.push(group_id);
+                    TargetKind::LoadBalance(LoadBalanceGroupPlan {
+                        members: resolve_members(outbounds, &targets_by_tag)?,
+                        strategy: strategy.clone(),
+                        initial_member: target_id_by_tag(
+                            &targets_by_tag,
+                            group
+                                .active_outbound()
+                                .ok_or_else(|| EngineError::InvalidPlan {
+                                    message: format!(
+                                        "loadbalance group `{}` does not have an initial member",
+                                        group.tag()
+                                    ),
+                                })?,
+                        )?,
+                    })
+                }
             };
 
             targets.push(TargetNode {
@@ -198,6 +239,7 @@ impl EnginePlan {
             targets_by_tag,
             selector_groups: selector_groups.into_boxed_slice(),
             urltest_groups: urltest_groups.into_boxed_slice(),
+            loadbalance_groups: loadbalance_groups.into_boxed_slice(),
         })
     }
 
@@ -215,6 +257,10 @@ impl EnginePlan {
 
     pub fn urltest_groups(&self) -> &[TargetId] {
         &self.urltest_groups
+    }
+
+    pub fn loadbalance_groups(&self) -> &[TargetId] {
+        &self.loadbalance_groups
     }
 }
 
@@ -274,6 +320,13 @@ impl TargetNode {
             _ => None,
         }
     }
+
+    pub fn as_loadbalance(&self) -> Option<&LoadBalanceGroupPlan> {
+        match &self.kind {
+            TargetKind::LoadBalance(lb) => Some(lb),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -283,6 +336,7 @@ pub enum TargetKind {
     Fallback(FallbackGroupPlan),
     UrlTest(UrlTestGroupPlan),
     Relay(RelayGroupPlan),
+    LoadBalance(LoadBalanceGroupPlan),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -329,6 +383,15 @@ pub enum OutboundTarget {
         password: String,
         sni: Option<String>,
         insecure: bool,
+    },
+    Vmess {
+        server: String,
+        port: u16,
+        id: String,
+        cipher: String,
+        tls: Option<ClientTlsConfig>,
+        ws: Option<zero_config::WebSocketConfig>,
+        grpc: Option<zero_config::GrpcConfig>,
     },
 }
 
@@ -399,6 +462,31 @@ pub struct RelayGroupPlan {
 impl RelayGroupPlan {
     pub fn chain(&self) -> &[TargetId] {
         &self.chain
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadBalanceGroupPlan {
+    members: Box<[TargetId]>,
+    strategy: zero_config::LoadBalanceStrategy,
+    initial_member: TargetId,
+}
+
+impl LoadBalanceGroupPlan {
+    pub fn members(&self) -> &[TargetId] {
+        &self.members
+    }
+
+    pub fn strategy(&self) -> &zero_config::LoadBalanceStrategy {
+        &self.strategy
+    }
+
+    pub fn initial_member(&self) -> TargetId {
+        self.initial_member
+    }
+
+    pub fn contains_member(&self, target: TargetId) -> bool {
+        self.members.contains(&target)
     }
 }
 

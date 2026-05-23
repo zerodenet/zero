@@ -254,6 +254,33 @@ impl Proxy {
                     }),
                 }
             }
+            ResolvedLeafOutbound::Vmess {
+                tag,
+                server,
+                port,
+                id,
+                cipher,
+                tls,
+                ws,
+                grpc,
+            } => {
+                match self
+                    .connect_via_vmess_upstream(session, server, port, id, cipher, tls, ws, grpc)
+                    .await
+                {
+                    Ok(upstream) => Ok(EstablishedTcpOutbound::Vmess {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        upstream,
+                    }),
+                    Err(error) => Err(TcpOutboundFailure {
+                        stage: "connect_upstream_vmess",
+                        error,
+                        upstream_endpoint: Some((server.to_owned(), port)),
+                    }),
+                }
+            }
         };
 
         // ── Record health after connection attempt ──
@@ -295,6 +322,7 @@ impl Proxy {
             | EstablishedTcpOutbound::Hysteria2 { upstream, .. }
             | EstablishedTcpOutbound::Shadowsocks { upstream, .. }
             | EstablishedTcpOutbound::Trojan { upstream, .. }
+            | EstablishedTcpOutbound::Vmess { upstream, .. }
             | EstablishedTcpOutbound::Relay { upstream } => upstream,
             EstablishedTcpOutbound::Block { .. } => {
                 return Err(TcpOutboundFailure {
@@ -409,6 +437,23 @@ async fn send_hop_protocol_request(
             .send_request(stream, session, password)
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e))),
+        #[cfg(feature = "outbound-vmess")]
+        ResolvedLeafOutbound::Vmess { id, cipher, .. } => {
+            let uuid = zero_protocol_vmess::parse_uuid(id).map_err(|e| {
+                EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+            })?;
+            let vmess_cipher = zero_protocol_vmess::VmessCipher::from_name(cipher)
+                .ok_or_else(|| {
+                    EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("vmess unknown cipher: {cipher}"),
+                    ))
+                })?;
+            zero_protocol_vmess::VmessOutbound
+                .establish_tcp_tunnel(stream, session, &uuid, vmess_cipher)
+                .await
+                .map_err(|e| EngineError::Io(std::io::Error::other(e)))
+        }
         _ => Err(EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "relay hop protocol not supported or disabled",
@@ -426,6 +471,7 @@ fn extract_chained_tag(candidate: &ResolvedLeafOutbound<'_>) -> Option<String> {
         ResolvedLeafOutbound::Hysteria2 { tag, .. } => Some(tag.to_string()),
         ResolvedLeafOutbound::Shadowsocks { tag, .. } => Some(tag.to_string()),
         ResolvedLeafOutbound::Trojan { tag, .. } => Some(tag.to_string()),
+        ResolvedLeafOutbound::Vmess { tag, .. } => Some(tag.to_string()),
     }
 }
 
@@ -436,7 +482,8 @@ fn hop_addr(hop: &ResolvedLeafOutbound<'_>) -> zero_core::Address {
         | ResolvedLeafOutbound::Vless { server, .. }
         | ResolvedLeafOutbound::Hysteria2 { server, .. }
         | ResolvedLeafOutbound::Shadowsocks { server, .. }
-        | ResolvedLeafOutbound::Trojan { server, .. } => Address::Domain(server.to_string()),
+        | ResolvedLeafOutbound::Trojan { server, .. }
+        | ResolvedLeafOutbound::Vmess { server, .. } => Address::Domain(server.to_string()),
         _ => Address::Domain("unknown".to_owned()),
     }
 }
@@ -447,7 +494,8 @@ fn hop_port(hop: &ResolvedLeafOutbound<'_>) -> u16 {
         | ResolvedLeafOutbound::Vless { port, .. }
         | ResolvedLeafOutbound::Hysteria2 { port, .. }
         | ResolvedLeafOutbound::Shadowsocks { port, .. }
-        | ResolvedLeafOutbound::Trojan { port, .. } => *port,
+        | ResolvedLeafOutbound::Trojan { port, .. }
+        | ResolvedLeafOutbound::Vmess { port, .. } => *port,
         _ => 0,
     }
 }

@@ -322,6 +322,10 @@ fn spawn_inbound_listener(
         InboundProtocolConfig::Trojan { .. } => {
             listeners.spawn(async move { p.run_trojan_listener(b, shutdown_rx).await });
         }
+        #[cfg(feature = "inbound-vmess")]
+        InboundProtocolConfig::Vmess { .. } => {
+            listeners.spawn(async move { p.run_vmess_listener(b, shutdown_rx).await });
+        }
         #[allow(unreachable_patterns)]
         _ => unreachable!("registry check above already validated protocol is compiled"),
     }

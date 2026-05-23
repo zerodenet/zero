@@ -255,6 +255,116 @@ impl Proxy {
         })
     }
 
+    #[cfg(feature = "outbound-vmess")]
+    pub(crate) async fn connect_via_vmess_upstream(
+        &self,
+        session: &Session,
+        server: &str,
+        port: u16,
+        id: &str,
+        cipher: &str,
+        tls: Option<&zero_config::ClientTlsConfig>,
+        ws: Option<&zero_config::WebSocketConfig>,
+        grpc: Option<&zero_config::GrpcConfig>,
+    ) -> Result<TcpRelayStream, EngineError> {
+        use zero_protocol_vmess::{parse_uuid, VmessCipher, VmessOutbound};
+
+        let uuid = parse_uuid(id).map_err(|e| {
+            EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+        })?;
+        let vmess_cipher = VmessCipher::from_name(cipher).ok_or_else(|| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("vmess unknown cipher: {cipher}"),
+            ))
+        })?;
+
+        let socket = self
+            .protocols
+            .direct_outbound
+            .connect_host(server, port, self.resolver.as_ref())
+            .await?;
+
+        // Transport stack: gRPC > WS > TLS > raw
+        let stream: TcpRelayStream = match (grpc, ws, tls) {
+            (Some(grpc_cfg), None, Some(tls_cfg)) => {
+                let tls_stream = zero_transport::tls::connect_tls_upstream(
+                    socket,
+                    tls_cfg,
+                    self.config.source_dir(),
+                    server,
+                )
+                .await?;
+                TcpRelayStream::new(
+                    zero_transport::grpc::connect_grpc(tls_stream, &grpc_cfg.service_names)
+                        .await?,
+                )
+            }
+            (Some(grpc_cfg), None, None) => TcpRelayStream::new(
+                zero_transport::grpc::connect_grpc(socket, &grpc_cfg.service_names).await?,
+            ),
+            (None, Some(ws_cfg), Some(tls_cfg)) => {
+                let tls_stream = zero_transport::tls::connect_tls_upstream(
+                    socket,
+                    tls_cfg,
+                    self.config.source_dir(),
+                    server,
+                )
+                .await?;
+                TcpRelayStream::new(
+                    zero_transport::ws::connect_ws(tls_stream, ws_cfg, server, port).await?,
+                )
+            }
+            (None, Some(ws_cfg), None) => TcpRelayStream::new(
+                zero_transport::ws::connect_ws(socket, ws_cfg, server, port).await?,
+            ),
+            (None, None, Some(tls_cfg)) => {
+                let tls_stream = zero_transport::tls::connect_tls_upstream(
+                    socket,
+                    tls_cfg,
+                    self.config.source_dir(),
+                    server,
+                )
+                .await?;
+                TcpRelayStream::new(tls_stream)
+            }
+            (None, None, None) => TcpRelayStream::new(socket),
+            _ => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "vmess: ws, grpc, and tls are mutually exclusive for transport",
+                )))
+            }
+        };
+
+        let mut sock = crate::transport::MeteredStream::new(stream);
+        VmessOutbound
+            .establish_tcp_tunnel(&mut sock, session, &uuid, vmess_cipher)
+            .await?;
+        self.record_session_outbound_traffic(session.id, sock.drain_traffic());
+        Ok(sock.into_inner())
+    }
+
+    #[cfg(not(feature = "outbound-vmess"))]
+    pub(crate) async fn connect_via_vmess_upstream(
+        &self,
+        _session: &Session,
+        _server: &str,
+        _port: u16,
+        _id: &str,
+        _cipher: &str,
+        _tls: Option<&zero_config::ClientTlsConfig>,
+        _ws: Option<&zero_config::WebSocketConfig>,
+        _grpc: Option<&zero_config::GrpcConfig>,
+    ) -> Result<TcpRelayStream, EngineError> {
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "outbound",
+            tag: "vmess-upstream".to_owned(),
+            protocol: "vmess",
+            feature: "outbound-vmess",
+        })
+    }
+
     #[cfg(feature = "outbound-trojan")]
     pub(crate) async fn connect_via_trojan_upstream(
         &self,

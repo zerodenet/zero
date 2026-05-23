@@ -86,6 +86,22 @@ outbound-trojan = [
     "zero-protocol-trojan/crypto",
     "dep:tokio-rustls"
 ]
+inbound-vmess = [
+    "zero-transport/tls",
+    "zero-transport/ws",
+    "zero-transport/grpc",
+    "dep:ring",
+    "dep:zero-protocol-vmess",
+    "dep:tokio-rustls"
+]
+outbound-vmess = [
+    "zero-transport/tls",
+    "zero-transport/ws",
+    "zero-transport/grpc",
+    "dep:ring",
+    "dep:zero-protocol-vmess",
+    "dep:tokio-rustls"
+]
 dns-udp = ["zero-dns/udp"]
 
 [dependencies]
@@ -108,6 +124,7 @@ zero-protocol-vless = { path = "../../protocols/vless", optional = true, default
 zero-protocol-hysteria2 = { path = "../../protocols/hysteria2", optional = true, default-features = false }
 zero-protocol-shadowsocks = { path = "../../protocols/shadowsocks", optional = true, default-features = false }
 zero-protocol-trojan = { path = "../../protocols/trojan", optional = true, default-features = false }
+zero-protocol-vmess = { path = "../../protocols/vmess", optional = true }
 zero-traits = { path = "../traits" }
 zero-transport = { path = "../transport", optional = true, features = ["vless"] }
 

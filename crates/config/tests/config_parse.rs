@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use zero_config::{
-    EventSinkConfig, InboundProtocolConfig, ModeConfig, OutboundGroupKind, OutboundProtocolConfig,
-    RouteActionConfig, RuleConditionConfig, RuntimeConfig,
+    EventSinkConfig, InboundProtocolConfig, LoadBalanceStrategy, ModeConfig, OutboundGroupKind,
+    OutboundProtocolConfig, RouteActionConfig, RuleConditionConfig, RuntimeConfig,
 };
 
 #[test]
@@ -1046,6 +1046,147 @@ fn accepts_urltest_group_type() {
         config.outbound_groups[0].group,
         OutboundGroupKind::UrlTest { .. }
     ));
+}
+
+#[test]
+fn accepts_loadbalance_group_type() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                { "tag": "direct", "protocol": { "type": "direct" } },
+                { "tag": "chain", "protocol": { "type": "socks5", "server": "127.0.0.1", "port": 2080 } }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "proxy",
+                    "type": "loadbalance",
+                    "outbounds": ["chain", "direct"],
+                    "strategy": "round-robin"
+                }
+            ],
+            "mode": { "type": "global", "outbound": "proxy" },
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("config should parse");
+
+    let OutboundGroupKind::LoadBalance {
+        outbounds,
+        default,
+        strategy,
+    } = &config.outbound_groups[0].group
+    else {
+        panic!("expected loadbalance group");
+    };
+    assert_eq!(outbounds.len(), 2);
+    assert!(default.is_none());
+    assert!(matches!(strategy, LoadBalanceStrategy::RoundRobin));
+}
+
+#[test]
+fn loadbalance_group_defaults_to_round_robin_strategy() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                { "tag": "direct", "protocol": { "type": "direct" } },
+                { "tag": "s5", "protocol": { "type": "socks5", "server": "127.0.0.1", "port": 2080 } }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "lb",
+                    "type": "loadbalance",
+                    "outbounds": ["s5", "direct"]
+                }
+            ],
+            "mode": { "type": "global", "outbound": "lb" },
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("config should parse");
+
+    let OutboundGroupKind::LoadBalance { strategy, .. } = &config.outbound_groups[0].group
+    else {
+        panic!("expected loadbalance group");
+    };
+    assert!(matches!(strategy, LoadBalanceStrategy::RoundRobin));
+}
+
+#[test]
+fn accepts_loadbalance_random_strategy() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                { "tag": "direct", "protocol": { "type": "direct" } },
+                { "tag": "s5", "protocol": { "type": "socks5", "server": "127.0.0.1", "port": 2080 } }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "lb",
+                    "type": "loadbalance",
+                    "outbounds": ["s5", "direct"],
+                    "strategy": "random"
+                }
+            ],
+            "mode": { "type": "global", "outbound": "lb" },
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("config should parse");
+
+    let OutboundGroupKind::LoadBalance { strategy, .. } = &config.outbound_groups[0].group
+    else {
+        panic!("expected loadbalance group");
+    };
+    assert!(matches!(strategy, LoadBalanceStrategy::Random));
+}
+
+#[test]
+fn loadbalance_group_with_default() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                { "tag": "direct", "protocol": { "type": "direct" } },
+                { "tag": "s5", "protocol": { "type": "socks5", "server": "127.0.0.1", "port": 2080 } }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "lb",
+                    "type": "loadbalance",
+                    "outbounds": ["s5", "direct"],
+                    "default": "direct"
+                }
+            ],
+            "mode": { "type": "global", "outbound": "lb" },
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert_eq!(
+        config.outbound_groups[0].active_outbound(),
+        Some("direct")
+    );
+}
+
+#[test]
+fn loadbalance_group_requires_defined_member_outbounds() {
+    let result = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                { "tag": "direct", "protocol": { "type": "direct" } }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "lb",
+                    "type": "loadbalance",
+                    "outbounds": ["missing", "direct"]
+                }
+            ],
+            "mode": { "type": "global", "outbound": "lb" },
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    );
+    assert!(result.is_err());
 }
 
 #[test]

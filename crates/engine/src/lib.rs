@@ -28,8 +28,8 @@ pub use groups::{UrlTestGroupState, UrlTestMemberState};
 pub use handle::{EngineHandle, EventSubscriber};
 pub use hook::{BlockReason, FlowContext, FlowHook, FlowHookChain, FlowTraffic};
 pub use plan::{
-    EnginePlan, FallbackGroupPlan, OutboundTarget, SelectorGroupPlan, TargetId, TargetKind,
-    TargetNode, UrlTestGroupPlan,
+    EnginePlan, FallbackGroupPlan, LoadBalanceGroupPlan, OutboundTarget, SelectorGroupPlan,
+    TargetId, TargetKind, TargetNode, UrlTestGroupPlan,
 };
 pub use probe_trigger::{ProbeTrigger, ProbeTriggerRegistry};
 pub use resolve::{ResolvedLeafOutbound, ResolvedOutbound};

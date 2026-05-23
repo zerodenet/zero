@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     ConfigError, InboundProtocolConfig, InboundRealityConfig, OutboundProtocolConfig,
-    RealityConfig, Socks5UserConfig, VlessUserConfig,
+    RealityConfig, Socks5UserConfig, VlessUserConfig, VmessUserConfig,
 };
 
 pub(super) fn validate_inbound_protocol(
@@ -125,6 +125,10 @@ pub(super) fn validate_inbound_protocol(
             ..
         } => {
             validate_inbound_optional_non_empty("trojan password", password)?;
+            Ok(())
+        }
+        InboundProtocolConfig::Vmess { users, .. } => {
+            validate_vmess_users(users)?;
             Ok(())
         }
     }
@@ -252,6 +256,21 @@ pub(super) fn validate_outbound_protocol(
             validate_outbound_endpoint("trojan", server, *port)?;
             Ok(())
         }
+        OutboundProtocolConfig::Vmess {
+            server,
+            port,
+            id,
+            cipher: _,
+            tls: _,
+            ws: _,
+            grpc: _,
+        } => {
+            validate_outbound_endpoint("vmess", server, *port)?;
+            validate_uuid_literal(id).map_err(|m| {
+                ConfigError::InvalidOutbound(format!("`vmess` outbound `id` {m}"))
+            })?;
+            Ok(())
+        }
         OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => Ok(()),
     }
 }
@@ -280,6 +299,31 @@ fn validate_vless_users(users: &[VlessUserConfig]) -> Result<(), ConfigError> {
         }
         if let Some(principal_key) = &user.principal_key {
             validate_inbound_optional_non_empty("vless principal_key", principal_key)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_vmess_users(users: &[VmessUserConfig]) -> Result<(), ConfigError> {
+    if users.is_empty() {
+        return Err(ConfigError::InvalidInbound(
+            "`vmess` inbound requires at least one user".to_owned(),
+        ));
+    }
+
+    let valid_ciphers = ["aes-128-gcm", "aes-256-gcm", "chacha20-poly1305"];
+    for user in users {
+        validate_uuid_literal(&user.id).map_err(|message| {
+            ConfigError::InvalidInbound(format!("`vmess` inbound user `id` {message}"))
+        })?;
+
+        if !valid_ciphers.contains(&user.cipher.as_str()) {
+            return Err(ConfigError::InvalidInbound(format!(
+                "`vmess` inbound cipher `{}` is not valid; expected one of: {}",
+                user.cipher,
+                valid_ciphers.join(", ")
+            )));
         }
     }
 

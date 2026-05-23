@@ -247,6 +247,12 @@ impl From<&OutboundConfig> for OutboundExport {
                 server: Some(server.clone()),
                 port: Some(*port),
             },
+            OutboundProtocolConfig::Vmess { server, port, .. } => Self {
+                tag: outbound.tag.clone(),
+                protocol: "vmess".to_owned(),
+                server: Some(server.clone()),
+                port: Some(*port),
+            },
         }
     }
 }
@@ -326,6 +332,20 @@ impl OutboundGroupExport {
                 kind: "relay".to_owned(),
                 outbounds: view.target_tags(relay.chain()),
                 selected: relay.chain().first().map(|id| view.target_tag_owned(*id)),
+                latency_ms: None,
+                last_checked_unix_ms: None,
+                effective_chains,
+                urltest_members: Vec::new(),
+            }
+        } else if let Some(lb) = group.as_loadbalance() {
+            Self {
+                tag: group.tag().to_owned(),
+                kind: "loadbalance".to_owned(),
+                outbounds: view.target_tags(lb.members()),
+                selected: lb
+                    .members()
+                    .first()
+                    .map(|member_id| view.target_tag_owned(*member_id)),
                 latency_ms: None,
                 last_checked_unix_ms: None,
                 effective_chains,
@@ -460,6 +480,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
         InboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
         InboundProtocolConfig::Trojan { .. } => "trojan",
+        InboundProtocolConfig::Vmess { .. } => "vmess",
     }
 }
 
@@ -471,6 +492,7 @@ fn protocol_name(protocol: ProtocolType) -> &'static str {
         ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Shadowsocks => "shadowsocks",
         ProtocolType::Trojan => "trojan",
+        ProtocolType::Vmess => "vmess",
         ProtocolType::Unknown => "unknown",
     }
 }

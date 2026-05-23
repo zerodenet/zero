@@ -63,6 +63,19 @@ impl OutboundGroupConfig {
                 }
                 Ok(())
             }
+            OutboundGroupKind::LoadBalance {
+                outbounds,
+                default,
+                strategy: _,
+            } => {
+                validate_group_outbounds("loadbalance", outbounds, target_tags)?;
+
+                if let Some(default) = default {
+                    validate_selector_choice("default", default, outbounds)?;
+                }
+
+                Ok(())
+            }
         }
     }
 }

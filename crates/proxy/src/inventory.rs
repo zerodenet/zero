@@ -28,6 +28,10 @@ use zero_protocol_trojan::TrojanOutbound;
 use zero_protocol_vless::VlessInbound;
 #[cfg(feature = "outbound-vless")]
 use zero_protocol_vless::VlessOutbound;
+#[cfg(feature = "inbound-vmess")]
+use zero_protocol_vmess::VmessInbound;
+#[cfg(feature = "outbound-vmess")]
+use zero_protocol_vmess::VmessOutbound;
 
 #[derive(Debug, Clone)]
 pub struct ProtocolInventory {
@@ -53,6 +57,10 @@ pub struct ProtocolInventory {
     pub trojan_inbound: TrojanInbound,
     #[cfg(feature = "outbound-trojan")]
     pub trojan_outbound: TrojanOutbound,
+    #[cfg(feature = "inbound-vmess")]
+    pub vmess_inbound: VmessInbound,
+    #[cfg(feature = "outbound-vmess")]
+    pub vmess_outbound: VmessOutbound,
     pub(crate) direct_outbound: DirectConnector,
     registry: ProtocolRegistry,
 }
@@ -82,6 +90,10 @@ impl Default for ProtocolInventory {
             trojan_inbound: TrojanInbound,
             #[cfg(feature = "outbound-trojan")]
             trojan_outbound: TrojanOutbound,
+            #[cfg(feature = "inbound-vmess")]
+            vmess_inbound: VmessInbound,
+            #[cfg(feature = "outbound-vmess")]
+            vmess_outbound: VmessOutbound,
             direct_outbound: DirectConnector,
             registry: build_registry(),
         }

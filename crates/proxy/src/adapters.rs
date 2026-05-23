@@ -71,6 +71,11 @@ protocol_adapter!(TrojanAdapter, proto: "trojan", feature: "inbound-trojan",
     inbound: InboundProtocolConfig::Trojan { .. },
     outbound: OutboundProtocolConfig::Trojan { .. });
 
+#[cfg(any(feature = "inbound-vmess", feature = "outbound-vmess"))]
+protocol_adapter!(VmessAdapter, proto: "vmess", feature: "inbound-vmess",
+    inbound: InboundProtocolConfig::Vmess { .. },
+    outbound: OutboundProtocolConfig::Vmess { .. });
+
 /// Build and return the protocol registry with all compiled-in adapters.
 pub(crate) fn build_registry() -> super::protocol_adapter::ProtocolRegistry {
     let mut r = super::protocol_adapter::ProtocolRegistry::default();
@@ -87,6 +92,8 @@ pub(crate) fn build_registry() -> super::protocol_adapter::ProtocolRegistry {
     r.register(Arc::new(ShadowsocksAdapter));
     #[cfg(any(feature = "inbound-trojan", feature = "outbound-trojan"))]
     r.register(Arc::new(TrojanAdapter));
+    #[cfg(any(feature = "inbound-vmess", feature = "outbound-vmess"))]
+    r.register(Arc::new(VmessAdapter));
 
     r
 }

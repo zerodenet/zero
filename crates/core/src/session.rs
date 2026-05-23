@@ -16,6 +16,7 @@ pub enum ProtocolType {
     Hysteria2,
     Shadowsocks,
     Trojan,
+    Vmess,
     Unknown,
 }
 

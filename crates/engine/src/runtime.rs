@@ -110,6 +110,10 @@ impl Engine {
             }
         }
 
+        for &group_id in plan_inner.loadbalance_groups() {
+            outbound_group_state.initialize_loadbalance(group_id);
+        }
+
         let event_log = EngineEventLog::shared();
 
         info!(version = env!("CARGO_PKG_VERSION"), "engine started");
@@ -810,6 +814,7 @@ impl Engine {
                 zero_config::OutboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
                 zero_config::OutboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
                 zero_config::OutboundProtocolConfig::Trojan { .. } => "trojan",
+                zero_config::OutboundProtocolConfig::Vmess { .. } => "vmess",
             })
     }
 }
@@ -824,7 +829,8 @@ fn extract_target_addr(leaf: &crate::ResolvedLeafOutbound<'_>) -> (Option<String
         | crate::ResolvedLeafOutbound::Vless { server, port, .. }
         | crate::ResolvedLeafOutbound::Hysteria2 { server, port, .. }
         | crate::ResolvedLeafOutbound::Shadowsocks { server, port, .. }
-        | crate::ResolvedLeafOutbound::Trojan { server, port, .. } => {
+        | crate::ResolvedLeafOutbound::Trojan { server, port, .. }
+        | crate::ResolvedLeafOutbound::Vmess { server, port, .. } => {
             (Some(server.to_string()), Some(*port))
         }
     }

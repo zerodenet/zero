@@ -154,6 +154,42 @@ fn engine_exposes_compiled_plan() {
     assert_eq!(plan.selector_groups(), &[selector_id]);
 }
 
+#[test]
+fn builds_engine_plan_for_loadbalance_group() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                { "tag": "direct", "protocol": { "type": "direct" } },
+                { "tag": "block", "protocol": { "type": "block" } }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "lb",
+                    "type": "loadbalance",
+                    "outbounds": ["direct", "block"],
+                    "strategy": "round-robin"
+                }
+            ],
+            "mode": { "type": "global", "outbound": "lb" },
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("parse config");
+
+    let plan = EnginePlan::build(&config).expect("build engine plan");
+    let lb_id = plan.target_id("lb").expect("find loadbalance target");
+    let lb = plan.target(lb_id).expect("resolve loadbalance target");
+    let TargetKind::LoadBalance(lb_group) = lb.kind() else {
+        panic!("lb should compile as a loadbalance group");
+    };
+    assert_eq!(lb_group.members().len(), 2);
+    assert_eq!(
+        plan_tag(&plan, lb_group.initial_member()),
+        "direct"
+    );
+    assert_eq!(plan.loadbalance_groups(), &[lb_id]);
+}
+
 fn plan_tag(plan: &EnginePlan, target_id: TargetId) -> &str {
     plan.target(target_id).expect("resolve target").tag()
 }

@@ -22,6 +22,8 @@ full = [
     "outbound-shadowsocks",
     "inbound-trojan",
     "outbound-trojan",
+    "inbound-vmess",
+    "outbound-vmess",
     "dns-udp",
 ]
 dns-udp = ["zero-proxy/dns-udp"]
@@ -37,6 +39,8 @@ outbound-socks5 = ["zero-proxy/outbound-socks5"]
 outbound-vless = ["zero-proxy/outbound-vless"]
 outbound-hysteria2 = ["zero-proxy/outbound-hysteria2"]
 outbound-shadowsocks = ["zero-proxy/outbound-shadowsocks"]
+inbound-vmess = ["zero-proxy/inbound-vmess"]
+outbound-vmess = ["zero-proxy/outbound-vmess"]
 status-api = []
 event-dispatcher = ["dep:zero-connector", "zero-connector/event-dispatcher"]
 sink-jsonl = ["event-dispatcher", "zero-connector/sink-jsonl"]
@@ -60,6 +64,7 @@ members = [
     "protocols/hysteria2",
     "protocols/shadowsocks",
     "protocols/trojan",
+    "protocols/vmess",
     "crates/dns",
     "crates/engine",
     "crates/ffi",

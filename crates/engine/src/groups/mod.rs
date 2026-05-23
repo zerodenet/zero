@@ -8,6 +8,7 @@ use super::plan::TargetId;
 pub(crate) struct OutboundGroupStateStore {
     selector: Mutex<HashMap<TargetId, TargetId>>,
     urltest: Mutex<HashMap<TargetId, UrlTestGroupState>>,
+    loadbalance: Mutex<HashMap<TargetId, u64>>,
 }
 
 impl OutboundGroupStateStore {
@@ -107,6 +108,25 @@ impl OutboundGroupStateStore {
             .expect("urltest group state lock poisoned")
             .get(&group_id)
             .map(|state| state.selected)
+    }
+
+    pub(crate) fn initialize_loadbalance(&self, group_id: TargetId) {
+        self.loadbalance
+            .lock()
+            .expect("loadbalance group state lock poisoned")
+            .entry(group_id)
+            .or_insert(0);
+    }
+
+    pub(crate) fn loadbalance_next_pick(&self, group_id: TargetId, member_count: usize) -> usize {
+        let mut map = self
+            .loadbalance
+            .lock()
+            .expect("loadbalance group state lock poisoned");
+        let counter = map.entry(group_id).or_insert(0);
+        let index = *counter as usize % member_count;
+        *counter += 1;
+        index
     }
 }
 

@@ -1,0 +1,20 @@
+[package]
+name = "zero-protocol-vmess"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = []
+
+[dependencies]
+rand = "0.9"
+ring = "0.17"
+zero-core = { path = "../../crates/core" }
+zero-traits = { path = "../../crates/traits" }
+
+[dev-dependencies]
+tokio.workspace = true

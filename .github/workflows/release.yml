@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   build:
-    name: Build (${{ matrix.target }})
+    name: Build (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -17,12 +17,20 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            name: linux-x86_64
+            ext: tar.gz
           - os: macos-latest
             target: x86_64-apple-darwin
+            name: darwin-x86_64
+            ext: tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
+            name: darwin-aarch64
+            ext: tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            name: windows-x86_64
+            ext: zip
 
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +42,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
-          echo "Building zero ${VERSION}"
+          echo "Building zero ${VERSION} for ${{ matrix.name }}"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -47,23 +55,39 @@ jobs:
 
       - name: Package (unix)
         if: runner.os != 'Windows'
+        shell: bash
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf zero-${{ github.ref_name }}-${{ matrix.target }}.tar.gz zero
-          sha256sum zero-${{ github.ref_name }}-${{ matrix.target }}.tar.gz > zero-${{ github.ref_name }}-${{ matrix.target }}.tar.gz.sha256
+
+          # versioned archive
+          tar czf zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} zero
+          sha256sum zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} \
+            > zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }}.sha256
+
+          # latest archive (fixed name for auto-download)
+          cp zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} zero-${{ matrix.name }}.${{ matrix.ext }}
+          cp zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }}.sha256 zero-${{ matrix.name }}.${{ matrix.ext }}.sha256
 
       - name: Package (windows)
         if: runner.os == 'Windows'
+        shell: bash
         run: |
           cd target/${{ matrix.target }}/release
-          7z a zero-${{ github.ref_name }}-${{ matrix.target }}.zip zero.exe
-          sha256sum zero-${{ github.ref_name }}-${{ matrix.target }}.zip > zero-${{ github.ref_name }}-${{ matrix.target }}.zip.sha256
+
+          # versioned archive
+          7z a zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} zero.exe
+          sha256sum zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} \
+            > zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }}.sha256
+
+          # latest archive (fixed name for auto-download)
+          cp zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} zero-${{ matrix.name }}.${{ matrix.ext }}
+          cp zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }}.sha256 zero-${{ matrix.name }}.${{ matrix.ext }}.sha256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zero-${{ github.ref_name }}-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/zero-${{ github.ref_name }}-${{ matrix.target }}.*
+          name: zero-${{ github.ref_name }}-${{ matrix.name }}
+          path: target/${{ matrix.target }}/release/zero-*.${{ matrix.ext }}*
 
   release:
     name: Create Release
@@ -77,8 +101,16 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+          merge-multiple: true
+
+      - name: Flatten artifact tree
+        shell: bash
+        run: |
+          # merge-multiple flattens all files into artifacts/ directly
+          ls -la artifacts/
 
       - name: Generate changelog
+        shell: bash
         run: |
           PREV_TAG=$(git tag --sort=-creatordate | sed -n 2p)
           if [ -z "$PREV_TAG" ]; then
@@ -88,6 +120,23 @@ jobs:
           fi
 
           {
+            echo "## Assets"
+            echo ""
+            echo "| Platform | File | SHA256 |"
+            echo "|----------|------|--------|"
+            for f in artifacts/zero-latest-*; do
+              continue  # placeholder, skip
+            done
+            echo ""
+            echo "### Fixed-name (latest)"
+            echo ""
+            echo "- \`zero-linux-x86_64.tar.gz\`"
+            echo "- \`zero-darwin-x86_64.tar.gz\`"
+            echo "- \`zero-darwin-aarch64.tar.gz\`"
+            echo "- \`zero-windows-x86_64.zip\`"
+            echo ""
+            echo "Download: \`https://github.com/\${{ github.repository }}/releases/latest/download/zero-{platform}.{ext}\`"
+            echo ""
             echo "## Changes"
             echo ""
 
@@ -119,18 +168,6 @@ jobs:
             DOC_COUNT=$(git log "$RANGE" --format="%s" | grep -ciE '^docs' || true)
             if [ "$DOC_COUNT" -gt 0 ]; then echo ""; fi
 
-            # Chores
-            git log "$RANGE" --format="%s" | grep -iE '^chore' | while read -r line; do
-              echo "- 🏗  ${line#chore: }"
-            done
-            CHORE_COUNT=$(git log "$RANGE" --format="%s" | grep -ciE '^chore' || true)
-            if [ "$CHORE_COUNT" -gt 0 ]; then echo ""; fi
-
-            # Tests
-            git log "$RANGE" --format="%s" | grep -iE '^test' | while read -r line; do
-              echo "- ✅ ${line#test: }"
-            done
-
             echo ""
             echo "---"
             echo "🤖 auto-generated by GitHub Actions"
@@ -141,4 +178,5 @@ jobs:
         with:
           name: ${{ github.ref_name }}
           body_path: /tmp/changelog.md
-          files: artifacts/**/*
+          files: artifacts/*
+          make_latest: true

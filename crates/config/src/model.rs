@@ -366,13 +366,24 @@ pub enum InboundProtocolConfig {
         #[serde(default)]
         down_bps: Option<u64>,
     },
+    #[serde(rename = "vmess")]
+    Vmess {
+        users: Vec<VmessUserConfig>,
+        #[serde(default)]
+        tls: Option<TlsConfig>,
+        #[serde(default)]
+        ws: Option<WebSocketConfig>,
+        #[serde(default)]
+        grpc: Option<GrpcConfig>,
+    },
 }
 
 impl InboundProtocolConfig {
     pub fn tls_config(&self) -> Option<&TlsConfig> {
         match self {
-            Self::Vless { tls, .. } => tls.as_ref(),
-            Self::Trojan { tls, .. } => tls.as_ref(),
+            Self::Vless { tls, .. } | Self::Trojan { tls, .. } | Self::Vmess { tls, .. } => {
+                tls.as_ref()
+            }
             _ => None,
         }
     }
@@ -408,7 +419,8 @@ impl InboundProtocolConfig {
             | Self::Vless { .. }
             | Self::Hysteria2 { .. }
             | Self::Shadowsocks { .. }
-            | Self::Trojan { .. } => &[],
+            | Self::Trojan { .. }
+            | Self::Vmess { .. } => &[],
         }
     }
 
@@ -777,6 +789,39 @@ pub enum OutboundProtocolConfig {
         #[serde(default)]
         insecure: bool,
     },
+    #[serde(rename = "vmess")]
+    Vmess {
+        server: String,
+        port: u16,
+        id: String,
+        #[serde(default = "default_vmess_cipher")]
+        cipher: String,
+        #[serde(default)]
+        tls: Option<ClientTlsConfig>,
+        #[serde(default)]
+        ws: Option<WebSocketConfig>,
+        #[serde(default)]
+        grpc: Option<GrpcConfig>,
+    },
+}
+
+fn default_vmess_cipher() -> String {
+    "aes-128-gcm".to_owned()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VmessUserConfig {
+    pub id: String,
+    #[serde(default = "default_vmess_cipher")]
+    pub cipher: String,
+    #[serde(default)]
+    pub credential_id: Option<String>,
+    #[serde(default)]
+    pub principal_key: Option<String>,
+    #[serde(default)]
+    pub up_bps: Option<u64>,
+    #[serde(default)]
+    pub down_bps: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -804,8 +849,19 @@ impl OutboundGroupConfig {
             OutboundGroupKind::Fallback { outbounds } => outbounds.first().map(String::as_str),
             OutboundGroupKind::UrlTest { outbounds, .. } => outbounds.first().map(String::as_str),
             OutboundGroupKind::Relay { proxies } => proxies.first().map(String::as_str),
+            OutboundGroupKind::LoadBalance { outbounds, default, .. } => default
+                .as_deref()
+                .or_else(|| outbounds.first().map(String::as_str)),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum LoadBalanceStrategy {
+    #[default]
+    RoundRobin,
+    Random,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -830,6 +886,14 @@ pub enum OutboundGroupKind {
     },
     #[serde(rename = "relay")]
     Relay { proxies: Vec<String> },
+    #[serde(rename = "loadbalance")]
+    LoadBalance {
+        outbounds: Vec<String>,
+        #[serde(default)]
+        default: Option<String>,
+        #[serde(default)]
+        strategy: LoadBalanceStrategy,
+    },
 }
 
 impl OutboundGroupKind {
@@ -837,7 +901,8 @@ impl OutboundGroupKind {
         match self {
             Self::Selector { outbounds, .. }
             | Self::Fallback { outbounds }
-            | Self::UrlTest { outbounds, .. } => outbounds,
+            | Self::UrlTest { outbounds, .. }
+            | Self::LoadBalance { outbounds, .. } => outbounds,
             Self::Relay { proxies } => proxies,
         }
     }

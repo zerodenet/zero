@@ -1,3 +1,4 @@
+use rand::Rng;
 use zero_config::{ClientTlsConfig, RealityConfig, WebSocketConfig};
 
 use super::groups::OutboundGroupStateStore;
@@ -56,6 +57,16 @@ pub enum ResolvedLeafOutbound<'a> {
         password: &'a str,
         sni: Option<&'a str>,
         insecure: bool,
+    },
+    Vmess {
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        id: &'a str,
+        cipher: &'a str,
+        tls: Option<&'a ClientTlsConfig>,
+        ws: Option<&'a zero_config::WebSocketConfig>,
+        grpc: Option<&'a zero_config::GrpcConfig>,
     },
 }
 
@@ -138,6 +149,37 @@ fn resolve_target_inner<'a>(
                 .selected_target(target_id)
                 .unwrap_or_else(|| urltest.initial_member());
             resolve_target_inner(plan, outbound_group_state, selected, stack)
+        }
+        TargetKind::LoadBalance(lb) => {
+            let member_count = lb.members().len();
+            let index = match lb.strategy() {
+                zero_config::LoadBalanceStrategy::RoundRobin => {
+                    outbound_group_state.loadbalance_next_pick(target_id, member_count)
+                }
+                zero_config::LoadBalanceStrategy::Random => {
+                    rand::rng().random_range(0..member_count)
+                }
+            };
+
+            // Picked member first, remaining members follow in original order.
+            let mut ordered = Vec::with_capacity(member_count);
+            ordered.push(lb.members()[index]);
+            ordered.extend(
+                lb.members()
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| *i != index)
+                    .map(|(_, &member_id)| member_id),
+            );
+
+            let mut candidates = Vec::new();
+            for &member_id in &ordered {
+                let resolved =
+                    resolve_target_inner(plan, outbound_group_state, member_id, stack)?;
+                append_candidates(&mut candidates, resolved);
+            }
+
+            Some(ResolvedOutbound::Fallback { candidates })
         }
     };
 
@@ -234,6 +276,24 @@ fn resolve_leaf_outbound<'a>(
             sni: sni.as_deref(),
             insecure: *insecure,
         },
+        OutboundTarget::Vmess {
+            server,
+            port,
+            id,
+            cipher,
+            tls,
+            ws,
+            grpc,
+        } => ResolvedLeafOutbound::Vmess {
+            tag,
+            server,
+            port: *port,
+            id,
+            cipher,
+            tls: tls.as_ref(),
+            ws: ws.as_ref(),
+            grpc: grpc.as_ref(),
+        },
     }
 }
 
@@ -292,6 +352,13 @@ fn resolve_target_chains_inner(
                 .unwrap_or_else(|| urltest.initial_member());
             resolve_target_chains_inner(plan, outbound_group_state, selected, stack)
         }
+        TargetKind::LoadBalance(lb) => lb
+            .members()
+            .iter()
+            .flat_map(|member_id| {
+                resolve_target_chains_inner(plan, outbound_group_state, *member_id, stack)
+            })
+            .collect(),
     };
     stack.pop();
     chains

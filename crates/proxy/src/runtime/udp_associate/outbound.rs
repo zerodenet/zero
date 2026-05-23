@@ -155,9 +155,10 @@ impl Proxy {
                     })
                 }
             }
-            ResolvedLeafOutbound::Trojan { .. } => Err(UdpCandidateFailure {
-                stage: "trojan",
-                error: zero_core::Error::Unsupported("trojan UDP not supported").into(),
+            ResolvedLeafOutbound::Trojan { .. }
+            | ResolvedLeafOutbound::Vmess { .. } => Err(UdpCandidateFailure {
+                stage: "trojan/vmess",
+                error: zero_core::Error::Unsupported("trojan/vmess UDP not supported").into(),
                 upstream: None,
             }),
         }

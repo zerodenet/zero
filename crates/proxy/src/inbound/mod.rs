@@ -12,3 +12,5 @@ mod socks5;
 mod trojan;
 #[cfg(feature = "inbound-vless")]
 mod vless;
+#[cfg(feature = "inbound-vmess")]
+mod vmess;

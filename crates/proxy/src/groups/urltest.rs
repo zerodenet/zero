@@ -323,10 +323,11 @@ impl Proxy {
                     .await
                     .map_err(EngineError::from)?
                     .into(),
-                ResolvedLeafOutbound::Trojan { .. } => {
+                ResolvedLeafOutbound::Trojan { .. }
+                | ResolvedLeafOutbound::Vmess { .. } => {
                     return Err(EngineError::Io(std::io::Error::new(
                         std::io::ErrorKind::Unsupported,
-                        "trojan cannot be a urltest member",
+                        "trojan/vmess cannot be a urltest member",
                     )))
                 }
             };
