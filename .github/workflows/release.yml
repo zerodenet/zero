@@ -56,7 +56,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml && rm -f Cargo.toml.bak
           echo "Building zero ${VERSION} for ${{ matrix.name }}"
 
       - uses: dtolnay/rust-toolchain@stable
