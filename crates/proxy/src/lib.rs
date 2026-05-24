@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
 #![allow(clippy::cloned_ref_to_slice_refs)]
+#![allow(clippy::collapsible_match)]
 #![cfg_attr(
     not(any(
         feature = "inbound-socks5",
