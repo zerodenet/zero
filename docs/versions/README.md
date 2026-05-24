@@ -20,7 +20,7 @@
 - `v0.0.1` — 最小代理链路、本地/云端使用方式、UDP 和基础观测
 - `v0.0.2` — 出站组能力（selector/fallback/urltest/relay）、事件骨架、VLESS 第一阶段
 - `v0.0.3` — DNS 子系统、事件系统、认证强制执行、配置热重载、零默认配置路径
-- `v0.0.4` — 入站架构重构、GCRA 速率限制、空闲超时、出站熔断、URL 域名重写、domain-regex
+- `v0.0.4` — 入站架构重构、GCRA 速率限制、空闲超时、出站熔断、URL 域名重写、domain-regex、VMess AEAD 协议、Trojan TCP 入站/出站、loadbalance 出站组、gRPC 控制面、配置热写回磁盘
 
 版本规则：
 
