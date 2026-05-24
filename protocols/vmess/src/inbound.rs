@@ -4,9 +4,7 @@ use ring::hmac;
 use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::AsyncSocket;
 
-use crate::shared::{
-    read_exact, AUTH_ID_LEN, CMD_TCP, CMD_UDP, GCM_TAG_LEN, VERSION, VmessCipher,
-};
+use crate::shared::{read_exact, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP, GCM_TAG_LEN, VERSION};
 
 #[derive(Clone)]
 pub struct VmessUser {
@@ -158,11 +156,7 @@ fn compute_auth_id(cmd_key: &[u8], timestamp: u64) -> [u8; 16] {
     result
 }
 
-fn derive_body_key_nonce(
-    cmd_key: &[u8],
-    auth_id: &[u8; 16],
-    key_len: usize,
-) -> (Vec<u8>, Vec<u8>) {
+fn derive_body_key_nonce(cmd_key: &[u8], auth_id: &[u8; 16], key_len: usize) -> (Vec<u8>, Vec<u8>) {
     // body_key = HKDF(cmd_key, salt="VMess Body Key", info=auth_id, len=key_len)
     let body_key = {
         let salt = Salt::new(HKDF_SHA256, b"VMess Body Key");
@@ -235,9 +229,9 @@ fn aead_decrypt(
     let unbound = UnboundKey::new(cipher.aead_algorithm(), key)
         .map_err(|_| Error::Protocol("vmess invalid aead key"))?;
     let nonce = Nonce::assume_unique_for_key(
-        nonce_bytes[..12].try_into().map_err(|_| {
-            Error::Protocol("vmess invalid nonce length")
-        })?,
+        nonce_bytes[..12]
+            .try_into()
+            .map_err(|_| Error::Protocol("vmess invalid nonce length"))?,
     );
     let mut opening_key = OpeningKey::new(unbound, CountingNonce::new(nonce));
     let mut in_out = ciphertext.to_vec();
@@ -256,9 +250,9 @@ fn aead_encrypt(
     let unbound = UnboundKey::new(cipher.aead_algorithm(), key)
         .map_err(|_| Error::Protocol("vmess invalid aead key"))?;
     let nonce = Nonce::assume_unique_for_key(
-        nonce_bytes[..12].try_into().map_err(|_| {
-            Error::Protocol("vmess invalid nonce length")
-        })?,
+        nonce_bytes[..12]
+            .try_into()
+            .map_err(|_| Error::Protocol("vmess invalid nonce length"))?,
     );
     let mut sealing_key = SealingKey::new(unbound, CountingNonce::new(nonce));
     let mut buf = plaintext.to_vec();
@@ -292,16 +286,12 @@ fn parse_command_body(plaintext: &[u8], uuid: &[u8; 16]) -> Result<(u64, Session
     }
 
     let command = plaintext[cmd_start + 1];
-    let port = u16::from_be_bytes(
-        plaintext[cmd_start + 2..cmd_start + 4]
-            .try_into()
-            .unwrap(),
-    );
+    let port = u16::from_be_bytes(plaintext[cmd_start + 2..cmd_start + 4].try_into().unwrap());
     let atyp = plaintext[cmd_start + 4];
 
     // Read address from remaining bytes
     let addr_len = match atyp {
-        0x01 => 4usize,  // IPv4
+        0x01 => 4usize, // IPv4
         0x02 => {
             if plaintext.len() <= cmd_start + 6 {
                 return Err(Error::Protocol("vmess domain address truncated"));
@@ -369,8 +359,7 @@ async fn send_auth_response<S: AsyncSocket>(
     auth_id: &[u8; 16],
     cipher: VmessCipher,
 ) -> Result<(), Error> {
-    let (resp_key, resp_nonce) =
-        derive_response_key_nonce(body_key, auth_id, cipher.key_len());
+    let (resp_key, resp_nonce) = derive_response_key_nonce(body_key, auth_id, cipher.key_len());
 
     // Plaintext: [status:1] = 0x00 (success)
     let plaintext = [0x00u8];

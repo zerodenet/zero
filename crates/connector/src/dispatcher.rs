@@ -72,17 +72,16 @@ where
             return;
         }
 
-        let dead_letter = dead_letter_path
-            .and_then(|p| match DeadLetterSink::new(&p) {
-                Ok(dl) => {
-                    debug!(path = %p, "dead-letter sink enabled");
-                    Some(dl)
-                }
-                Err(e) => {
-                    warn!(path = %p, error = %e.message, "failed to create dead-letter sink");
-                    None
-                }
-            });
+        let dead_letter = dead_letter_path.and_then(|p| match DeadLetterSink::new(&p) {
+            Ok(dl) => {
+                debug!(path = %p, "dead-letter sink enabled");
+                Some(dl)
+            }
+            Err(e) => {
+                warn!(path = %p, error = %e.message, "failed to create dead-letter sink");
+                None
+            }
+        });
 
         let _ = init_tx.send(Ok(true));
         run_event_dispatcher(source, sinks, options, shutdown_rx, dead_letter);

@@ -130,7 +130,9 @@ impl DohDnsResolver {
             .body(msg)
             .send()
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("doh request failed: {e}")))?;
+            .map_err(|e| {
+                io::Error::new(io::ErrorKind::Other, format!("doh request failed: {e}"))
+            })?;
 
         let status = response.status();
         if !status.is_success() {
@@ -140,9 +142,10 @@ impl DohDnsResolver {
             ));
         }
 
-        let body = response.bytes().await.map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, format!("doh read failed: {e}"))
-        })?;
+        let body = response
+            .bytes()
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("doh read failed: {e}")))?;
 
         crate::udp::parse_response(&body, qtype)
     }

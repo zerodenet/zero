@@ -374,8 +374,7 @@ fn reconcile_urltests(
     urltests: &mut JoinSet<Result<(), EngineError>>,
 ) {
     let plan = proxy.engine.plan();
-    let new_ids: Vec<zero_engine::TargetId> =
-        plan.urltest_groups().to_vec();
+    let new_ids: Vec<zero_engine::TargetId> = plan.urltest_groups().to_vec();
 
     // Urltest groups detect shutdown via the watch channel; old
     // ones that are no longer in the plan will exit on their next

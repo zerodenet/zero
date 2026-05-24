@@ -296,8 +296,7 @@ impl Proxy {
                 )
                 .await?;
                 TcpRelayStream::new(
-                    zero_transport::grpc::connect_grpc(tls_stream, &grpc_cfg.service_names)
-                        .await?,
+                    zero_transport::grpc::connect_grpc(tls_stream, &grpc_cfg.service_names).await?,
                 )
             }
             (Some(grpc_cfg), None, None) => TcpRelayStream::new(

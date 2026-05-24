@@ -174,8 +174,7 @@ fn resolve_target_inner<'a>(
 
             let mut candidates = Vec::new();
             for &member_id in &ordered {
-                let resolved =
-                    resolve_target_inner(plan, outbound_group_state, member_id, stack)?;
+                let resolved = resolve_target_inner(plan, outbound_group_state, member_id, stack)?;
                 append_candidates(&mut candidates, resolved);
             }
 

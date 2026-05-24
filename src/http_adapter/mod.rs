@@ -327,18 +327,15 @@ fn authenticate(request: &HttpRequest, auth: Option<&HttpServerAuth>) -> AuthCon
     }
 
     // Look for a Bearer token or X-Zero-Api-Key header.
-    let presented = request
-        .headers
-        .iter()
-        .find_map(|(name, value)| {
-            if name.eq_ignore_ascii_case("authorization") {
-                value.strip_prefix("Bearer ").map(|t| t.to_owned())
-            } else if name.eq_ignore_ascii_case("x-zero-api-key") {
-                Some(value.clone())
-            } else {
-                None
-            }
-        });
+    let presented = request.headers.iter().find_map(|(name, value)| {
+        if name.eq_ignore_ascii_case("authorization") {
+            value.strip_prefix("Bearer ").map(|t| t.to_owned())
+        } else if name.eq_ignore_ascii_case("x-zero-api-key") {
+            Some(value.clone())
+        } else {
+            None
+        }
+    });
 
     let Some(token) = presented else {
         return AuthContext {

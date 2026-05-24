@@ -519,14 +519,12 @@ impl DeadLetterSink {
             .lock()
             .map_err(|_| ApiError::new(ApiErrorCode::Internal, "dead-letter lock poisoned"))
             .and_then(|f| {
-                f.metadata()
-                    .map(|m| m.len())
-                    .map_err(|e| {
-                        ApiError::new(
-                            ApiErrorCode::Internal,
-                            format!("failed to stat dead-letter file: {e}"),
-                        )
-                    })
+                f.metadata().map(|m| m.len()).map_err(|e| {
+                    ApiError::new(
+                        ApiErrorCode::Internal,
+                        format!("failed to stat dead-letter file: {e}"),
+                    )
+                })
             })
     }
 }
@@ -564,14 +562,12 @@ impl EventSink for DeadLetterSink {
         })?;
         line.push(b'\n');
 
-        let mut f = self.writer.lock().map_err(|_| {
-            ApiError::new(ApiErrorCode::Internal, "dead-letter lock poisoned")
-        })?;
+        let mut f = self
+            .writer
+            .lock()
+            .map_err(|_| ApiError::new(ApiErrorCode::Internal, "dead-letter lock poisoned"))?;
         f.write_all(&line).map_err(|e| {
-            ApiError::new(
-                ApiErrorCode::Internal,
-                format!("dead-letter write: {e}"),
-            )
+            ApiError::new(ApiErrorCode::Internal, format!("dead-letter write: {e}"))
         })?;
         f.flush().ok();
 

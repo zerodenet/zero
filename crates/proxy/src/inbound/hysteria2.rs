@@ -63,10 +63,7 @@ impl InboundProtocol for Hysteria2StreamHandler {
         Ok(())
     }
 
-    async fn send_upstream_failure(
-        &self,
-        client: &mut Hysteria2Stream,
-    ) -> Result<(), EngineError> {
+    async fn send_upstream_failure(&self, client: &mut Hysteria2Stream) -> Result<(), EngineError> {
         let err = build_connect_error("outbound failed");
         let _ = AsyncSocket::write_all(client, &err).await;
         Ok(())
@@ -104,7 +101,10 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let (password, _up_bps, _down_bps) = match &inbound.protocol {
             zero_config::InboundProtocolConfig::Hysteria2 {
-                password, up_bps, down_bps, ..
+                password,
+                up_bps,
+                down_bps,
+                ..
             } => (password.clone(), *up_bps, *down_bps),
             _ => {
                 return Err(EngineError::Io(io::Error::new(

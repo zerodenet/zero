@@ -77,10 +77,7 @@ impl InboundProtocol for VmessInboundHandler {
         Ok(())
     }
 
-    async fn send_upstream_failure(
-        &self,
-        _client: &mut TcpRelayStream,
-    ) -> Result<(), EngineError> {
+    async fn send_upstream_failure(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
         Ok(())
     }
 }
@@ -111,10 +108,7 @@ impl InboundProtocol for VmessTransportHandler {
         Ok(())
     }
 
-    async fn send_upstream_failure(
-        &self,
-        _client: &mut TcpRelayStream,
-    ) -> Result<(), EngineError> {
+    async fn send_upstream_failure(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
         Ok(())
     }
 }
@@ -151,9 +145,8 @@ impl Proxy {
         let vmess_users: Vec<VmessUser> = users
             .iter()
             .map(|u| {
-                let uuid = zero_protocol_vmess::parse_uuid(&u.id).map_err(|e| {
-                    EngineError::Io(io::Error::new(io::ErrorKind::InvalidInput, e))
-                })?;
+                let uuid = zero_protocol_vmess::parse_uuid(&u.id)
+                    .map_err(|e| EngineError::Io(io::Error::new(io::ErrorKind::InvalidInput, e)))?;
                 let cipher = VmessCipher::from_name(&u.cipher).ok_or_else(|| {
                     EngineError::Io(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -323,9 +316,13 @@ async fn handle_vmess_grpc(
         let tag = tag.clone();
         async move {
             let result = if users.len() == 1 {
-                vmess.accept_tcp_with_auth(&mut grpc_stream, &users[0]).await
+                vmess
+                    .accept_tcp_with_auth(&mut grpc_stream, &users[0])
+                    .await
             } else {
-                vmess.accept_tcp_with_auth_multi(&mut grpc_stream, &users).await
+                vmess
+                    .accept_tcp_with_auth_multi(&mut grpc_stream, &users)
+                    .await
             };
             match result {
                 Ok(session) => {

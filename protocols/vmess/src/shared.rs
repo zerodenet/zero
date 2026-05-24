@@ -113,9 +113,8 @@ pub(crate) async fn read_address<S: AsyncSocket>(
             let len = len_buf[0] as usize;
             let mut domain = vec![0u8; len];
             read_exact(stream, &mut domain).await?;
-            let s = String::from_utf8(domain).map_err(|_| {
-                Error::Protocol("vmess domain is not valid utf-8")
-            })?;
+            let s = String::from_utf8(domain)
+                .map_err(|_| Error::Protocol("vmess domain is not valid utf-8"))?;
             Ok(Address::Domain(s))
         }
         ATYP_IPV6 => {
@@ -130,15 +129,12 @@ pub(crate) async fn read_address<S: AsyncSocket>(
 pub fn parse_uuid(input: &str) -> Result<[u8; 16], Error> {
     let hex = input.replace('-', "");
     if hex.len() != 32 {
-        return Err(Error::Protocol(
-            "vmess uuid must be 32 hex characters",
-        ));
+        return Err(Error::Protocol("vmess uuid must be 32 hex characters"));
     }
     let mut bytes = [0u8; 16];
     for i in 0..16 {
-        bytes[i] = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).map_err(|_| {
-            Error::Protocol("vmess uuid contains invalid hex characters")
-        })?;
+        bytes[i] = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16)
+            .map_err(|_| Error::Protocol("vmess uuid contains invalid hex characters"))?;
     }
     Ok(bytes)
 }

@@ -80,10 +80,7 @@ impl InboundProtocol for TrojanInboundHandler {
         Ok(())
     }
 
-    async fn send_upstream_failure(
-        &self,
-        _client: &mut TcpRelayStream,
-    ) -> Result<(), EngineError> {
+    async fn send_upstream_failure(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
         Ok(())
     }
     // relay uses default

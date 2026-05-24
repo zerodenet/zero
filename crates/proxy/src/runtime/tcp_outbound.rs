@@ -30,9 +30,7 @@ impl Proxy {
         let outbound = self
             .establish_tcp_outbound(session, (resolved, _plan))
             .await
-            .map_err(|f| {
-                EngineError::Io(io::Error::new(io::ErrorKind::Other, f.error))
-            })?;
+            .map_err(|f| EngineError::Io(io::Error::new(io::ErrorKind::Other, f.error)))?;
         let mut result = extract_tcp_stream(outbound)?;
         result.route_action = action;
         Ok(result)
@@ -363,9 +361,7 @@ impl Proxy {
                 upstream_endpoint: None,
             })?;
 
-        Ok(EstablishedTcpOutbound::Relay {
-            upstream: stream,
-        })
+        Ok(EstablishedTcpOutbound::Relay { upstream: stream })
     }
 }
 
@@ -442,8 +438,8 @@ async fn send_hop_protocol_request(
             let uuid = zero_protocol_vmess::parse_uuid(id).map_err(|e| {
                 EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
             })?;
-            let vmess_cipher = zero_protocol_vmess::VmessCipher::from_name(cipher)
-                .ok_or_else(|| {
+            let vmess_cipher =
+                zero_protocol_vmess::VmessCipher::from_name(cipher).ok_or_else(|| {
                     EngineError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
                         format!("vmess unknown cipher: {cipher}"),

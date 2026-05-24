@@ -656,9 +656,7 @@ impl Engine {
         let addr_str = format!("{hostname}:0");
         let addrs: Vec<String> = addr_str
             .to_socket_addrs()
-            .map_err(|e| {
-                EngineError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
-            })?
+            .map_err(|e| EngineError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
             .map(|a| a.ip().to_string())
             .collect();
 
@@ -678,12 +676,8 @@ impl Engine {
         protocol: &str,
     ) -> Result<serde_json::Value, EngineError> {
         let address = match target.parse::<std::net::IpAddr>() {
-            Ok(std::net::IpAddr::V4(v4)) => {
-                zero_core::Address::Ipv4(v4.octets())
-            }
-            Ok(std::net::IpAddr::V6(v6)) => {
-                zero_core::Address::Ipv6(v6.octets())
-            }
+            Ok(std::net::IpAddr::V4(v4)) => zero_core::Address::Ipv4(v4.octets()),
+            Ok(std::net::IpAddr::V6(v6)) => zero_core::Address::Ipv6(v6.octets()),
             Err(_) => zero_core::Address::Domain(target.to_owned()),
         };
 
@@ -707,10 +701,7 @@ impl Engine {
 
     /// Test TCP reachability of a target outbound by performing a short
     /// connect from the proxy's own network stack.
-    pub fn probe_target(
-        &self,
-        target_tag: &str,
-    ) -> Result<serde_json::Value, EngineError> {
+    pub fn probe_target(&self, target_tag: &str) -> Result<serde_json::Value, EngineError> {
         use std::net::{TcpStream, ToSocketAddrs};
 
         let plan = self.plan();
@@ -728,12 +719,10 @@ impl Engine {
         // Extract server:port from the resolved target.
         let (host, port) = match &resolved {
             crate::ResolvedOutbound::Single(leaf) => extract_target_addr(leaf),
-            crate::ResolvedOutbound::Fallback { candidates } => {
-                match candidates.first() {
-                    Some(c) => extract_target_addr(c),
-                    None => (None, None),
-                }
-            }
+            crate::ResolvedOutbound::Fallback { candidates } => match candidates.first() {
+                Some(c) => extract_target_addr(c),
+                None => (None, None),
+            },
             crate::ResolvedOutbound::Relay { .. } => (None, None),
         };
 
@@ -749,14 +738,9 @@ impl Engine {
         let started = std::time::Instant::now();
 
         // Short timeout blocking connect.
-        let addr = addr
-            .to_socket_addrs()
-            .ok()
-            .and_then(|mut a| a.next());
+        let addr = addr.to_socket_addrs().ok().and_then(|mut a| a.next());
         let reachable = addr
-            .map(|a| {
-                TcpStream::connect_timeout(&a, std::time::Duration::from_secs(2)).is_ok()
-            })
+            .map(|a| TcpStream::connect_timeout(&a, std::time::Duration::from_secs(2)).is_ok())
             .unwrap_or(false);
 
         Ok(serde_json::json!({

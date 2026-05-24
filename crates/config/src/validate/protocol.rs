@@ -266,9 +266,8 @@ pub(super) fn validate_outbound_protocol(
             grpc: _,
         } => {
             validate_outbound_endpoint("vmess", server, *port)?;
-            validate_uuid_literal(id).map_err(|m| {
-                ConfigError::InvalidOutbound(format!("`vmess` outbound `id` {m}"))
-            })?;
+            validate_uuid_literal(id)
+                .map_err(|m| ConfigError::InvalidOutbound(format!("`vmess` outbound `id` {m}")))?;
             Ok(())
         }
         OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => Ok(()),

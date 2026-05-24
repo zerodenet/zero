@@ -66,7 +66,13 @@ fn build_event_sink(
             api_key_env,
             allow_insecure,
         } => build_webhook_sink(
-            tag, url, events, source_id, api_key, api_key_env, *allow_insecure,
+            tag,
+            url,
+            events,
+            source_id,
+            api_key,
+            api_key_env,
+            *allow_insecure,
         ),
     }
 }

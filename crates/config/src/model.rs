@@ -849,7 +849,9 @@ impl OutboundGroupConfig {
             OutboundGroupKind::Fallback { outbounds } => outbounds.first().map(String::as_str),
             OutboundGroupKind::UrlTest { outbounds, .. } => outbounds.first().map(String::as_str),
             OutboundGroupKind::Relay { proxies } => proxies.first().map(String::as_str),
-            OutboundGroupKind::LoadBalance { outbounds, default, .. } => default
+            OutboundGroupKind::LoadBalance {
+                outbounds, default, ..
+            } => default
                 .as_deref()
                 .or_else(|| outbounds.first().map(String::as_str)),
         }

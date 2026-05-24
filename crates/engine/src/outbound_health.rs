@@ -43,7 +43,10 @@ impl OutboundHealth {
     /// allowed).  Returns `Err(EngineError::UnhealthyOutbound)` if the
     /// outbound should be skipped.
     pub fn check(&self, tag: &str) -> Result<(), EngineError> {
-        let unhealthy = self.unhealthy.lock().expect("outbound health lock poisoned");
+        let unhealthy = self
+            .unhealthy
+            .lock()
+            .expect("outbound health lock poisoned");
         if let Some(&quarantined_at) = unhealthy.get(tag) {
             if quarantined_at.elapsed() < QUARANTINE_DURATION {
                 return Err(EngineError::UnhealthyOutbound {
@@ -66,10 +69,12 @@ impl OutboundHealth {
         // Update failure window.
         {
             let mut failures = self.failures.lock().expect("outbound health lock poisoned");
-            let entry = failures.entry(tag.to_owned()).or_insert_with(|| FailureWindow {
-                count: 0,
-                since: now,
-            });
+            let entry = failures
+                .entry(tag.to_owned())
+                .or_insert_with(|| FailureWindow {
+                    count: 0,
+                    since: now,
+                });
             // Reset window if it expired.
             if entry.since.elapsed() > FAILURE_WINDOW {
                 entry.count = 0;
@@ -86,7 +91,10 @@ impl OutboundHealth {
         }
 
         // Mark unhealthy.
-        let mut unhealthy = self.unhealthy.lock().expect("outbound health lock poisoned");
+        let mut unhealthy = self
+            .unhealthy
+            .lock()
+            .expect("outbound health lock poisoned");
         unhealthy.insert(tag.to_owned(), now);
     }
 

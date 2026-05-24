@@ -55,7 +55,8 @@ impl DnsCache {
     /// Store a resolution in the cache.
     pub(crate) async fn put(&self, domain: String, ips: Vec<IpAddress>, ttl_seconds: u64) {
         let effective_ttl = self
-            .inner.max_ttl
+            .inner
+            .max_ttl
             .map(|max| max.min(Duration::from_secs(ttl_seconds)))
             .unwrap_or(Duration::from_secs(ttl_seconds));
 

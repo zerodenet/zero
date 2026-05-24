@@ -100,8 +100,7 @@ pub fn commands(
     if !auth_ctx.allows(required) {
         let error = ApiError::permission_denied(required);
         let status = api_error_status(&error);
-        let body =
-            serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error)).unwrap_or_default();
+        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error)).unwrap_or_default();
         return Err((status, body));
     }
 

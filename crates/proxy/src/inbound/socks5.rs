@@ -46,9 +46,7 @@ impl InboundProtocol for Socks5InboundHandler {
         stream: TcpRelayStream,
     ) -> Result<(Session, Self::ClientStream), EngineError> {
         let mut metered = MeteredStream::new(stream);
-        let auth = ConfiguredSocks5PasswordAuth {
-            users: &self.users,
-        };
+        let auth = ConfiguredSocks5PasswordAuth { users: &self.users };
         match self
             .socks5_inbound
             .accept_command_with_auth(&mut metered, &auth)
@@ -203,7 +201,6 @@ impl Proxy {
         info!(inbound_tag = %inbound.tag, protocol = "socks5", listen = %local_addr, "inbound listener stopped");
         Ok(())
     }
-
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────

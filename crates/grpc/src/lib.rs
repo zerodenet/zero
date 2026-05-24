@@ -43,7 +43,9 @@ pub async fn spawn(
             .add_service(svc)
             .serve_with_incoming_shutdown(
                 tokio_stream::wrappers::TcpListenerStream::new(listener),
-                async { let _ = shutdown_rx.await; },
+                async {
+                    let _ = shutdown_rx.await;
+                },
             )
             .await
         {
@@ -91,16 +93,13 @@ impl Control for ControlService {
         request: Request<QueryRequest>,
     ) -> Result<Response<QueryResponse>, Status> {
         let req = request.into_inner();
-        let query: zero_api::QueryRequest =
-            serde_json::from_slice(&req.payload).map_err(|e| {
-                Status::invalid_argument(format!("query parse error: {e}"))
-            })?;
+        let query: zero_api::QueryRequest = serde_json::from_slice(&req.payload)
+            .map_err(|e| Status::invalid_argument(format!("query parse error: {e}")))?;
         let result = self
             .handle
             .query(query)
             .map_err(|e: zero_api::ApiError| Status::internal(e.to_string()))?;
-        let json =
-            serde_json::to_vec(&result).map_err(|e| Status::internal(e.to_string()))?;
+        let json = serde_json::to_vec(&result).map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(QueryResponse { payload: json }))
     }
 
@@ -109,21 +108,19 @@ impl Control for ControlService {
         request: Request<ExecuteRequest>,
     ) -> Result<Response<ExecuteResponse>, Status> {
         let req = request.into_inner();
-        let cmd: zero_api::CommandRequest =
-            serde_json::from_slice(&req.payload).map_err(|e| {
-                Status::invalid_argument(format!("command parse error: {e}"))
-            })?;
+        let cmd: zero_api::CommandRequest = serde_json::from_slice(&req.payload)
+            .map_err(|e| Status::invalid_argument(format!("command parse error: {e}")))?;
         let result = self
             .handle
             .execute(cmd)
             .map_err(|e: zero_api::ApiError| Status::internal(e.to_string()))?;
-        let json =
-            serde_json::to_vec(&result).map_err(|e| Status::internal(e.to_string()))?;
+        let json = serde_json::to_vec(&result).map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(ExecuteResponse { payload: json }))
     }
 
-    type SubscribeStream =
-        std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<PbEvent, Status>> + Send + 'static>>;
+    type SubscribeStream = std::pin::Pin<
+        Box<dyn futures_core::Stream<Item = Result<PbEvent, Status>> + Send + 'static>,
+    >;
 
     async fn subscribe(
         &self,

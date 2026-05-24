@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use zero_api::{
-    AuthContext, CommandRequest, CommandService,
-    DiagnosticsDnsLookupCommand, DiagnosticsTraceRouteCommand,
-    EventFilter, EventSource, Permission, PolicySelectCommand, QueryService,
+    AuthContext, CommandRequest, CommandService, DiagnosticsDnsLookupCommand,
+    DiagnosticsTraceRouteCommand, EventFilter, EventSource, Permission, PolicySelectCommand,
+    QueryService,
 };
 use zero_engine::EngineHandle;
 
@@ -173,7 +173,8 @@ where
                 let command = parse_command(&method, &params);
                 match command {
                     Ok(ref cmd) if !auth_ctx.allows(cmd.required_permission()) => {
-                        let error = zero_api::ApiError::permission_denied(cmd.required_permission());
+                        let error =
+                            zero_api::ApiError::permission_denied(cmd.required_permission());
                         write_ipc_response(&mut writer, &IpcResponse::from_api_error(&error))
                             .await?;
                     }

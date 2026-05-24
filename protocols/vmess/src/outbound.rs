@@ -4,7 +4,7 @@ use zero_core::{Error, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::shared::{
-    read_exact, write_address, AUTH_ID_LEN, CMD_TCP, GCM_TAG_LEN, VERSION, VmessCipher,
+    read_exact, write_address, VmessCipher, AUTH_ID_LEN, CMD_TCP, GCM_TAG_LEN, VERSION,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -140,12 +140,14 @@ async fn read_response<S: AsyncSocket>(
 // --- Crypto helpers (mirror inbound.rs) ---
 
 fn derive_cmd_key(uuid: &[u8; 16], key_len: usize) -> Vec<u8> {
-    use ring::hkdf::{Salt, HKDF_SHA256, KeyType};
+    use ring::hkdf::{KeyType, Salt, HKDF_SHA256};
     let salt = Salt::new(HKDF_SHA256, b"VMess AEAD KDF");
     let prk = salt.extract(uuid);
     struct Len(usize);
     impl KeyType for Len {
-        fn len(&self) -> usize { self.0 }
+        fn len(&self) -> usize {
+            self.0
+        }
     }
     let empty_info = [b"" as &[u8]];
     let okm = prk.expand(&empty_info, Len(key_len)).expect("hkdf expand");
@@ -163,15 +165,13 @@ fn compute_auth_id(cmd_key: &[u8], timestamp: u64) -> [u8; 16] {
     result
 }
 
-fn derive_body_key_nonce(
-    cmd_key: &[u8],
-    auth_id: &[u8; 16],
-    key_len: usize,
-) -> (Vec<u8>, Vec<u8>) {
-    use ring::hkdf::{Salt, HKDF_SHA256, KeyType};
+fn derive_body_key_nonce(cmd_key: &[u8], auth_id: &[u8; 16], key_len: usize) -> (Vec<u8>, Vec<u8>) {
+    use ring::hkdf::{KeyType, Salt, HKDF_SHA256};
     struct Len(usize);
     impl KeyType for Len {
-        fn len(&self) -> usize { self.0 }
+        fn len(&self) -> usize {
+            self.0
+        }
     }
 
     let body_key = {
@@ -202,10 +202,12 @@ fn derive_response_key_nonce(
     auth_id: &[u8; 16],
     key_len: usize,
 ) -> (Vec<u8>, Vec<u8>) {
-    use ring::hkdf::{Salt, HKDF_SHA256, KeyType};
+    use ring::hkdf::{KeyType, Salt, HKDF_SHA256};
     struct Len(usize);
     impl KeyType for Len {
-        fn len(&self) -> usize { self.0 }
+        fn len(&self) -> usize {
+            self.0
+        }
     }
 
     let resp_key = {

@@ -69,10 +69,7 @@ impl InboundProtocol for VlessInboundHandler {
         Ok(())
     }
 
-    async fn send_upstream_failure(
-        &self,
-        client: &mut TcpRelayStream,
-    ) -> Result<(), EngineError> {
+    async fn send_upstream_failure(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
         let _ = AsyncSocket::shutdown(client).await;
         Ok(())
     }

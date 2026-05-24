@@ -154,12 +154,17 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let (password, cipher_str, _up_bps, _down_bps) = match &inbound.protocol {
             zero_config::InboundProtocolConfig::Shadowsocks {
-                password, cipher, up_bps, down_bps,
+                password,
+                cipher,
+                up_bps,
+                down_bps,
             } => (password.clone(), cipher.clone(), *up_bps, *down_bps),
-            _ => return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "shadowsocks listener requires shadowsocks config",
-            ))),
+            _ => {
+                return Err(EngineError::Io(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "shadowsocks listener requires shadowsocks config",
+                )))
+            }
         };
 
         let cipher = CipherKind::from_str(&cipher_str).ok_or_else(|| {
@@ -173,8 +178,11 @@ impl Proxy {
         let local_addr = listener.local_addr()?;
 
         let udp_socket = match UdpSocket::bind(&format!(
-            "{}:{}", inbound.listen.address, inbound.listen.port
-        )).await {
+            "{}:{}",
+            inbound.listen.address, inbound.listen.port
+        ))
+        .await
+        {
             Ok(s) => Some(Arc::new(s)),
             Err(e) => {
                 warn!(error = %e, "shadowsocks: failed to bind UDP socket, UDP disabled");
@@ -204,9 +212,8 @@ impl Proxy {
             let tag = inbound.tag.clone();
             let password = password.clone();
             let udp = udp.clone();
-            connections.spawn(async move {
-                engine.ss_udp_relay_loop(udp, &tag, &password, cipher).await
-            });
+            connections
+                .spawn(async move { engine.ss_udp_relay_loop(udp, &tag, &password, cipher).await });
         }
 
         loop {
@@ -271,7 +278,6 @@ impl Proxy {
         info!(inbound_tag = %inbound.tag, protocol = "shadowsocks", "listener stopped");
         Ok(())
     }
-
 }
 
 // ── AEAD relay helpers ─────────────────────────────────────────────────
@@ -283,9 +289,7 @@ async fn ss_decrypt_upload(
     key: Vec<u8>,
     rate_bps: Option<u64>,
 ) -> Result<(), ()> {
-    let mut limiter = rate_bps
-        .filter(|b| *b > 0)
-        .map(|b| RateLimiter::new(b));
+    let mut limiter = rate_bps.filter(|b| *b > 0).map(|b| RateLimiter::new(b));
     let mut nonce: u64 = 1;
     let mut len_buf = [0u8; 2];
     loop {
@@ -326,9 +330,7 @@ async fn ss_encrypt_download(
     key: Vec<u8>,
     rate_bps: Option<u64>,
 ) -> Result<(), ()> {
-    let mut limiter = rate_bps
-        .filter(|b| *b > 0)
-        .map(|b| RateLimiter::new(b));
+    let mut limiter = rate_bps.filter(|b| *b > 0).map(|b| RateLimiter::new(b));
     let mut nonce: u64 = 0;
     let mut buf = [0u8; 16384];
     loop {
@@ -503,10 +505,7 @@ impl Proxy {
     }
 
     async fn ss_chain_recv_any(
-        upstreams: &std::collections::HashMap<
-            (String, u16),
-            (Arc<UdpSocket>, CipherKind, String),
-        >,
+        upstreams: &std::collections::HashMap<(String, u16), (Arc<UdpSocket>, CipherKind, String)>,
         clients: &mut std::collections::HashMap<SocketAddr, (String, u16, Address, u16)>,
         out_socket: &UdpSocket,
         inbound_cipher: CipherKind,
@@ -522,24 +521,44 @@ impl Proxy {
             let salt = &buf[..salt_len];
             let encrypted = &buf[salt_len..n];
 
-            let Ok(key) = ss_derive_key(*chain_cipher, chain_pwd.as_bytes(), salt) else { continue };
+            let Ok(key) = ss_derive_key(*chain_cipher, chain_pwd.as_bytes(), salt) else {
+                continue;
+            };
             let nonce = [0u8; 12];
-            let Ok(plain) = zero_protocol_shadowsocks::aead_decrypt_udp(*chain_cipher, &key, &nonce, encrypted) else { continue };
-            let Ok((_, _, payload_offset)) = zero_protocol_shadowsocks::parse_target_data(&plain) else { continue };
+            let Ok(plain) =
+                zero_protocol_shadowsocks::aead_decrypt_udp(*chain_cipher, &key, &nonce, encrypted)
+            else {
+                continue;
+            };
+            let Ok((_, _, payload_offset)) = zero_protocol_shadowsocks::parse_target_data(&plain)
+            else {
+                continue;
+            };
             let payload = &plain[payload_offset..];
 
             let client_addr = clients
                 .iter()
                 .find(|(_, (s, p, _, _))| upstreams.contains_key(&(s.clone(), *p)))
                 .map(|(c, _)| *c);
-            let Some(client_addr) = client_addr else { continue };
+            let Some(client_addr) = client_addr else {
+                continue;
+            };
 
             let mut resp_salt = vec![0u8; inbound_cipher.salt_len()];
             let _ = ring::rand::SystemRandom::new().fill(&mut resp_salt);
-            let Ok(resp_key) = ss_derive_key(inbound_cipher, inbound_password.as_bytes(), &resp_salt) else { continue };
+            let Ok(resp_key) =
+                ss_derive_key(inbound_cipher, inbound_password.as_bytes(), &resp_salt)
+            else {
+                continue;
+            };
             let Ok(resp_enc) = zero_protocol_shadowsocks::aead_encrypt_udp(
-                inbound_cipher, &resp_key, &nonce, payload,
-            ) else { continue };
+                inbound_cipher,
+                &resp_key,
+                &nonce,
+                payload,
+            ) else {
+                continue;
+            };
 
             let mut resp = resp_salt;
             resp.extend_from_slice(&resp_enc);

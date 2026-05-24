@@ -1104,8 +1104,7 @@ fn loadbalance_group_defaults_to_round_robin_strategy() {
     )
     .expect("config should parse");
 
-    let OutboundGroupKind::LoadBalance { strategy, .. } = &config.outbound_groups[0].group
-    else {
+    let OutboundGroupKind::LoadBalance { strategy, .. } = &config.outbound_groups[0].group else {
         panic!("expected loadbalance group");
     };
     assert!(matches!(strategy, LoadBalanceStrategy::RoundRobin));
@@ -1133,8 +1132,7 @@ fn accepts_loadbalance_random_strategy() {
     )
     .expect("config should parse");
 
-    let OutboundGroupKind::LoadBalance { strategy, .. } = &config.outbound_groups[0].group
-    else {
+    let OutboundGroupKind::LoadBalance { strategy, .. } = &config.outbound_groups[0].group else {
         panic!("expected loadbalance group");
     };
     assert!(matches!(strategy, LoadBalanceStrategy::Random));
@@ -1162,10 +1160,7 @@ fn loadbalance_group_with_default() {
     )
     .expect("config should parse");
 
-    assert_eq!(
-        config.outbound_groups[0].active_outbound(),
-        Some("direct")
-    );
+    assert_eq!(config.outbound_groups[0].active_outbound(), Some("direct"));
 }
 
 #[test]

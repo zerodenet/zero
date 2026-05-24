@@ -39,9 +39,7 @@ pub fn route(request: &HttpRequest, handle: &EngineHandle, auth_ctx: &AuthContex
     match (method, api_path) {
         (m, p) if p.starts_with("/api/v1/") => match (m, p) {
             // ── /api/v1/* ──────────────────────────────────────────
-            ("GET", "/api/v1/capabilities") => {
-                read_json(handlers::capabilities(handle), auth_ctx)
-            }
+            ("GET", "/api/v1/capabilities") => read_json(handlers::capabilities(handle), auth_ctx),
             ("GET", "/api/v1/health") => read_json(handlers::health(handle), auth_ctx),
             ("GET", "/api/v1/config") => read_json(handlers::config(handle), auth_ctx),
             ("GET", "/api/v1/runtime") => read_json(handlers::runtime(handle), auth_ctx),
@@ -55,20 +53,19 @@ pub fn route(request: &HttpRequest, handle: &EngineHandle, auth_ctx: &AuthContex
                     return denied;
                 }
                 match handlers::events_stream(handle, query, &request.headers) {
-                    Ok((subscriber, catch_up)) => RouteResult::Sse { subscriber, catch_up },
+                    Ok((subscriber, catch_up)) => RouteResult::Sse {
+                        subscriber,
+                        catch_up,
+                    },
                     Err((status, body)) => RouteResult::Respond(status.to_owned(), body),
                 }
             }
-            ("GET", "/api/v1/events") => {
-                read_json(handlers::events_snapshot(handle), auth_ctx)
-            }
+            ("GET", "/api/v1/events") => read_json(handlers::events_snapshot(handle), auth_ctx),
             _ if path_segments(p) == 3 && p.starts_with("/api/v1/flows/") => {
                 let flow_id = &p["/api/v1/flows/".len()..];
                 read_json(handlers::flow_get(handle, flow_id), auth_ctx)
             }
-            ("GET", "/api/v1/policies") => {
-                read_json(handlers::policies_list(handle), auth_ctx)
-            }
+            ("GET", "/api/v1/policies") => read_json(handlers::policies_list(handle), auth_ctx),
             _ if path_segments(p) == 3 && p.starts_with("/api/v1/policies/") => {
                 let policy_tag = &p["/api/v1/policies/".len()..];
                 read_json(handlers::policy_get(handle, policy_tag), auth_ctx)
@@ -141,8 +138,7 @@ fn require_permission(auth_ctx: &AuthContext, required: Permission) -> Option<Ro
     } else {
         let error = zero_api::ApiError::permission_denied(required);
         let status = api_error_status(&error);
-        let body =
-            serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error)).unwrap_or_default();
+        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error)).unwrap_or_default();
         Some(RouteResult::Respond(status.to_owned(), body))
     }
 }

@@ -135,9 +135,7 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
                     if let Some(record) = handle.finish(outcome) {
                         log_session_finished(
                             &record,
-                            upstream_endpoint
-                                .as_ref()
-                                .map(|(s, p)| (s.as_str(), *p)),
+                            upstream_endpoint.as_ref().map(|(s, p)| (s.as_str(), *p)),
                         );
                     }
                     Ok(())
@@ -150,9 +148,7 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
                         "relay",
                         started_at.elapsed(),
                         &error,
-                        upstream_endpoint
-                            .as_ref()
-                            .map(|(s, p)| (s.as_str(), *p)),
+                        upstream_endpoint.as_ref().map(|(s, p)| (s.as_str(), *p)),
                     );
                     Err(error)
                 }
@@ -161,9 +157,7 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
                     if let Some(record) = handle.finish(outcome) {
                         log_session_finished(
                             &record,
-                            upstream_endpoint
-                                .as_ref()
-                                .map(|(s, p)| (s.as_str(), *p)),
+                            upstream_endpoint.as_ref().map(|(s, p)| (s.as_str(), *p)),
                         );
                     }
                     Ok(())
@@ -232,12 +226,7 @@ fn apply_url_rewrite(proxy: &Proxy, session: &mut Session) {
 /// Per-user limits (applied during protocol accept) take priority —
 /// defaults only fill in if no per-user limit was set.
 fn apply_kernel_rate_limits(proxy: &Proxy, session: &mut Session, inbound_tag: &str) {
-    let Some(cfg) = proxy
-        .config
-        .inbounds
-        .iter()
-        .find(|i| i.tag == inbound_tag)
-    else {
+    let Some(cfg) = proxy.config.inbounds.iter().find(|i| i.tag == inbound_tag) else {
         return;
     };
     let (up, down) = cfg.protocol.rate_limits();

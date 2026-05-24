@@ -146,24 +146,20 @@ fn execute_engine_command(
                 Err(error) => Err(engine_error_to_api(error)),
             }
         }
-        CommandRequest::DiagnosticsProbeTarget(cmd) => {
-            match engine.probe_target(&cmd.target_tag) {
-                Ok(result) => Ok(CommandResponse {
-                    accepted: true,
-                    result: Some(result),
-                }),
-                Err(error) => Err(engine_error_to_api(error)),
-            }
-        }
-        CommandRequest::DiagnosticsDnsLookup(cmd) => {
-            match engine.dns_lookup(&cmd.hostname) {
-                Ok(result) => Ok(CommandResponse {
-                    accepted: true,
-                    result: Some(result),
-                }),
-                Err(error) => Err(engine_error_to_api(error)),
-            }
-        }
+        CommandRequest::DiagnosticsProbeTarget(cmd) => match engine.probe_target(&cmd.target_tag) {
+            Ok(result) => Ok(CommandResponse {
+                accepted: true,
+                result: Some(result),
+            }),
+            Err(error) => Err(engine_error_to_api(error)),
+        },
+        CommandRequest::DiagnosticsDnsLookup(cmd) => match engine.dns_lookup(&cmd.hostname) {
+            Ok(result) => Ok(CommandResponse {
+                accepted: true,
+                result: Some(result),
+            }),
+            Err(error) => Err(engine_error_to_api(error)),
+        },
         CommandRequest::DiagnosticsTraceRoute(cmd) => {
             let protocol = cmd.protocol.as_deref().unwrap_or("tcp");
             match engine.trace_route(&cmd.target, cmd.port, protocol) {

@@ -183,10 +183,7 @@ fn builds_engine_plan_for_loadbalance_group() {
         panic!("lb should compile as a loadbalance group");
     };
     assert_eq!(lb_group.members().len(), 2);
-    assert_eq!(
-        plan_tag(&plan, lb_group.initial_member()),
-        "direct"
-    );
+    assert_eq!(plan_tag(&plan, lb_group.initial_member()), "direct");
     assert_eq!(plan.loadbalance_groups(), &[lb_id]);
 }
 

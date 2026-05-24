@@ -126,7 +126,8 @@ impl DnsSystem {
             let guard = self.inner.read().expect("dns system lock poisoned");
             match &*guard {
                 DnsSystemInner::Configured {
-                    fake_ip: Some(alloc), ..
+                    fake_ip: Some(alloc),
+                    ..
                 } => Some(Arc::clone(alloc)),
                 _ => None,
             }

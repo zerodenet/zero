@@ -321,9 +321,7 @@ impl OutboundGroupExport {
                 urltest_members: urltest
                     .members()
                     .iter()
-                    .map(|member_id| {
-                        UrlTestMemberExport::new(plan, *member_id, runtime.as_ref())
-                    })
+                    .map(|member_id| UrlTestMemberExport::new(plan, *member_id, runtime.as_ref()))
                     .collect(),
             }
         } else if let Some(relay) = group.as_relay() {

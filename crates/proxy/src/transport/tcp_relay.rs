@@ -71,7 +71,6 @@ impl<W: AsyncWrite + Unpin> RateLimitedWriter<W> {
             timer_set: false,
         }
     }
-
 }
 
 impl<W: AsyncWrite + Unpin> AsyncWrite for RateLimitedWriter<W> {
@@ -184,11 +183,7 @@ where
     copy_loop(&mut reader, &mut writer, &mut on_bytes).await
 }
 
-async fn copy_loop<R, W, F>(
-    reader: &mut R,
-    writer: &mut W,
-    on_bytes: &mut F,
-) -> io::Result<u64>
+async fn copy_loop<R, W, F>(reader: &mut R, writer: &mut W, on_bytes: &mut F) -> io::Result<u64>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
