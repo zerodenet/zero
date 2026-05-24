@@ -1,9 +1,10 @@
+use std::io;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tracing::info;
+use tracing::{info, warn};
 use zero_api::{EventFilter, RawApiEvent};
 use zero_config::{ModeConfig, RuntimeConfig};
 use zero_core::{Address, Session};
@@ -44,6 +45,9 @@ pub struct Engine {
     /// Reload notification channel: wakes the proxy's main loop when
     /// `reload_config` atomically swaps the plan / router / config.
     reload_notify: Arc<std::sync::Mutex<Vec<std::sync::mpsc::Sender<()>>>>,
+    /// Source path of the running config.  When set, `reload_config`
+    /// writes the new config back to this path so it survives restarts.
+    config_path: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,12 +140,15 @@ impl Engine {
             flow_hook: None,
             udp_upstream_idle_timeout,
             reload_notify: Arc::new(std::sync::Mutex::new(Vec::new())),
+            config_path: None,
         })
     }
 
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, EngineError> {
-        let config = RuntimeConfig::load_from_path(path)?;
-        Self::new(config)
+        let config = RuntimeConfig::load_from_path(path.as_ref())?;
+        let mut engine = Self::new(config)?;
+        engine.config_path = Some(path.as_ref().to_owned());
+        Ok(engine)
     }
 
     pub fn config(&self) -> Arc<RuntimeConfig> {
@@ -350,13 +357,22 @@ impl Engine {
             let mut guard = self.mode.lock().expect("mode lock poisoned");
             *guard = new_config.mode.clone();
         }
+        let config_for_persist = new_config.clone();
         {
             let mut guard = self.config.write().expect("config lock poisoned");
             *guard = Arc::new(new_config);
         }
 
         self.event_log.push_config_changed();
-        info!("config hot-reloaded");
+
+        // Write the new config back to disk so it survives node restarts.
+        if let Some(ref path) = self.config_path {
+            if let Err(e) = write_config_to_file(path, &config_for_persist) {
+                warn!(%e, path = %path.display(), "failed to persist config after reload");
+            } else {
+                info!(path = %path.display(), "config persisted");
+            }
+        }
 
         // Wake every subscriber so the proxy layer can reconcile listeners.
         let notify = self
@@ -834,4 +850,12 @@ fn extract_target_addr(leaf: &crate::ResolvedLeafOutbound<'_>) -> (Option<String
             (Some(server.to_string()), Some(*port))
         }
     }
+}
+
+fn write_config_to_file(path: &Path, config: &RuntimeConfig) -> Result<(), io::Error> {
+    let json = serde_json::to_string_pretty(config).map_err(|e| {
+        io::Error::new(io::ErrorKind::InvalidData, format!("serialize config: {e}"))
+    })?;
+    std::fs::write(path, json)?;
+    Ok(())
 }

@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package zero.api.v1;
+
+// ── Control plane gRPC service ──────────────────────────────────────────
+//
+// Payload bytes are JSON-encoded, matching the existing HTTP/IPC API.
+// This design preserves full backward compatibility — the gRPC transport
+// wraps the same zero-api types (CommandRequest / QueryRequest / ApiEvent).
+
+service Control {
+  // Issue a read-only query (health, config, stats, flows, policies, etc.).
+  rpc Query(QueryRequest) returns (QueryResponse);
+
+  // Execute a mutating command (config.apply, policies.select, etc.).
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse);
+
+  // Subscribe to server-pushed events (flow.started, policy.selected, etc.).
+  rpc Subscribe(SubscribeRequest) returns (stream Event);
+}
+
+// ── Messages ────────────────────────────────────────────────────────────
+
+message QueryRequest {
+  // Method name, e.g. "health", "stats", "policies", "active-flows".
+  string method = 1;
+  // JSON-encoded query body (parameters, filters, etc.).
+  bytes payload = 2;
+}
+
+message QueryResponse {
+  // JSON-encoded QueryResponse (zero-api::query::QueryResponse).
+  bytes payload = 1;
+}
+
+message ExecuteRequest {
+  // Method name, e.g. "config.validate", "policies.select", "mode.set".
+  string method = 1;
+  // JSON-encoded command body (parameters).
+  bytes payload = 2;
+}
+
+message ExecuteResponse {
+  // JSON-encoded CommandResponse (zero-api::command::CommandResponse).
+  bytes payload = 1;
+}
+
+message SubscribeRequest {
+  // Event types to subscribe to. Empty means all.
+  repeated string event_types = 1;
+}
+
+message Event {
+  // Event type (flow.started, policy.selected, etc.).
+  string event_type = 1;
+  // Unique event identifier.
+  string event_id = 2;
+  // Unix timestamp in milliseconds.
+  uint64 occurred_at = 3;
+  // JSON-encoded event payload.
+  bytes payload = 4;
+}

@@ -45,6 +45,7 @@ status-api = []
 event-dispatcher = ["dep:zero-connector", "zero-connector/event-dispatcher"]
 sink-jsonl = ["event-dispatcher", "zero-connector/sink-jsonl"]
 panel-connector = ["status-api", "event-dispatcher", "zero-connector/panel-connector"]
+grpc-api = ["dep:zero-grpc"]
 
 [workspace]
 members = [
@@ -68,6 +69,7 @@ members = [
     "crates/dns",
     "crates/engine",
     "crates/ffi",
+    "crates/grpc",
 ]
 resolver = "2"
 
@@ -103,3 +105,4 @@ zero-engine = { path = "crates/engine", default-features = false }
 zero-logging = { path = "crates/logging" }
 zero-proxy = { path = "crates/proxy", default-features = false }
 zero-connector = { path = "crates/connector", optional = true, default-features = false }
+zero-grpc = { path = "crates/grpc", optional = true }

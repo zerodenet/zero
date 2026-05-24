@@ -165,7 +165,7 @@ async fn run_command(
         });
     }
 
-    #[cfg(not(feature = "status-api"))]
+    #[cfg(not(any(feature = "status-api", feature = "grpc-api")))]
     ensure_status_api_not_configured(&engine, status_listen)?;
 
     let event_dispatcher = spawn_event_dispatcher_if_configured(&engine)?;
@@ -176,10 +176,33 @@ async fn run_command(
     let ipc_socket_path = ipc::resolve_ipc_path(control_socket)?;
     let ipc_server = ipc::spawn_ipc_server(engine_handle.clone(), &ipc_socket_path).await?;
 
+    #[cfg(any(feature = "status-api", feature = "grpc-api"))]
+    let status_spec = status_server_spec(&engine, status_listen)?;
+
     #[cfg(feature = "status-api")]
     let http_server = {
-        if let Some(status) = status_server_spec(&engine, status_listen)? {
-            Some(http_adapter::spawn_http_server(engine_handle, &status.listen, status.auth).await?)
+        if let Some(ref status) = status_spec {
+            Some(
+                http_adapter::spawn_http_server(
+                    engine_handle.clone(),
+                    &status.listen,
+                    status.auth.clone(),
+                )
+                .await?,
+            )
+        } else {
+            None
+        }
+    };
+
+    #[cfg(feature = "grpc-api")]
+    let grpc_server = {
+        if let Some(ref status) = status_spec {
+            let addr: std::net::SocketAddr = status
+                .grpc_listen
+                .parse()
+                .map_err(|e| std::io::Error::other(format!("gRPC listen address: {e}")))?;
+            Some(zero_grpc::spawn(engine_handle.clone(), addr).await?)
         } else {
             None
         }
@@ -204,18 +227,24 @@ async fn run_command(
     if let Some(s) = http_server {
         s.shutdown().await?;
     }
+    #[cfg(feature = "grpc-api")]
+    if let Some(s) = grpc_server {
+        s.shutdown().await;
+    }
     running.shutdown().await?;
 
     Ok(())
 }
 
-#[cfg(feature = "status-api")]
+#[cfg(any(feature = "status-api", feature = "grpc-api"))]
 struct StatusServerSpec {
     listen: String,
+    grpc_listen: String,
+    #[cfg(feature = "status-api")]
     auth: Option<http_adapter::HttpServerAuth>,
 }
 
-#[cfg(feature = "status-api")]
+#[cfg(any(feature = "status-api", feature = "grpc-api"))]
 fn status_server_spec(
     engine: &Engine,
     cli_listen: Option<&str>,
@@ -232,6 +261,8 @@ fn status_server_spec(
     if let Some(listen) = cli_listen {
         return Ok(Some(StatusServerSpec {
             listen: listen.to_owned(),
+            grpc_listen: next_port(listen),
+            #[cfg(feature = "status-api")]
             auth: None,
         }));
     }
@@ -244,15 +275,34 @@ fn status_server_spec(
         .listen
         .as_ref()
         .expect("config validation requires api.control.listen");
-    let key = config_api_key(control.api_key.as_ref(), control.api_key_env.as_ref())?;
+
+    #[cfg(feature = "status-api")]
+    let auth = {
+        let key = config_api_key(control.api_key.as_ref(), control.api_key_env.as_ref())?;
+        Some(http_adapter::HttpServerAuth::single_admin(key))
+    };
 
     Ok(Some(StatusServerSpec {
         listen: format!("{}:{}", listen.address, listen.port),
-        auth: Some(http_adapter::HttpServerAuth::single_admin(key)),
+        grpc_listen: format!("{}:{}", listen.address, listen.port + 1),
+        #[cfg(feature = "status-api")]
+        auth,
     }))
 }
 
-#[cfg(not(feature = "status-api"))]
+#[cfg(any(feature = "status-api", feature = "grpc-api"))]
+fn next_port(listen: &str) -> String {
+    if let Some(idx) = listen.rfind(':') {
+        let (host, port_str) = listen.split_at(idx + 1);
+        if let Ok(port) = port_str.parse::<u16>() {
+            return format!("{host}{}", port + 1);
+        }
+    }
+    // fallback: append :9091
+    format!("{listen}:9091")
+}
+
+#[cfg(not(any(feature = "status-api", feature = "grpc-api")))]
 fn ensure_status_api_not_configured(
     engine: &Engine,
     cli_listen: Option<&str>,
