@@ -1,5 +1,3 @@
-#![allow(clippy::large_enum_variant)]
-
 mod compile;
 mod error;
 mod model;

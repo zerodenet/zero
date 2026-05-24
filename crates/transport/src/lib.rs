@@ -1,7 +1,3 @@
-#![allow(clippy::too_many_arguments)]
-#![allow(clippy::large_enum_variant)]
-#![allow(clippy::result_large_err)]
-
 #[cfg(feature = "grpc")]
 pub mod grpc;
 #[cfg(feature = "h2")]

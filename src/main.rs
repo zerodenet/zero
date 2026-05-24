@@ -1,6 +1,3 @@
-#![allow(clippy::type_complexity)]
-#![allow(clippy::question_mark)]
-
 use std::env;
 use std::error::Error;
 use std::process;

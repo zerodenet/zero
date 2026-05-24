@@ -1,4 +1,3 @@
-#![allow(clippy::type_complexity)]
 //! Structured logging for Zero — non-blocking, split output, event bridge,
 //! rate-limited.  Works in any binary, not tied to the CLI layer, usable
 //! from any crate that depends on `zero-logging`.
