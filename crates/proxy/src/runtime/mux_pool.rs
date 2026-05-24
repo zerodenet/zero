@@ -194,7 +194,7 @@ impl MuxConnectionPool {
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
 
-        let tcp: TcpRelayStream = metered.into_inner().into();
+        let tcp: TcpRelayStream = metered.into_inner();
         let (tcp_read, tcp_write) = tokio::io::split(tcp);
 
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();

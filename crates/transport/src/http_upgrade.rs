@@ -50,18 +50,13 @@ where
     // Write the request
     let mut req_bytes = Vec::new();
     write_http_request(&mut req_bytes, &req);
-    io.write_all(&req_bytes)
-        .await
-        .map_err(|e| EngineError::Io(e))?;
+    io.write_all(&req_bytes).await.map_err(EngineError::Io)?;
 
     // Read the response
     let mut buf = vec![0u8; 4096];
     let mut total = 0;
     loop {
-        let n = io
-            .read(&mut buf[total..])
-            .await
-            .map_err(|e| EngineError::Io(e))?;
+        let n = io.read(&mut buf[total..]).await.map_err(EngineError::Io)?;
         if n == 0 {
             return Err(EngineError::Io(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
@@ -113,10 +108,7 @@ where
     let mut buf = vec![0u8; 4096];
     let mut total = 0;
     loop {
-        let n = io
-            .read(&mut buf[total..])
-            .await
-            .map_err(|e| EngineError::Io(e))?;
+        let n = io.read(&mut buf[total..]).await.map_err(EngineError::Io)?;
         if n == 0 {
             return Err(EngineError::Io(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
@@ -147,7 +139,7 @@ where
     let resp = "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n";
     io.write_all(resp.as_bytes())
         .await
-        .map_err(|e| EngineError::Io(e))?;
+        .map_err(EngineError::Io)?;
 
     Ok(HttpUpgradeStream { inner: io })
 }

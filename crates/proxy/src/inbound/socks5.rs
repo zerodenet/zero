@@ -128,18 +128,18 @@ impl Proxy {
                             let tag = inbound.tag.clone();
                             let handler = handler.clone();
                             let source_addr = remote_addr
-                                .and_then(|ip| match ip {
+                                .map(|ip| match ip {
                                     zero_traits::IpAddress::V4(octets) => {
-                                        Some(std::net::SocketAddr::new(
+                                        std::net::SocketAddr::new(
                                             std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)),
                                             0,
-                                        ))
+                                        )
                                     }
                                     zero_traits::IpAddress::V6(octets) => {
-                                        Some(std::net::SocketAddr::new(
+                                        std::net::SocketAddr::new(
                                             std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)),
                                             0,
-                                        ))
+                                        )
                                     }
                                 });
                             connections.spawn(async move {

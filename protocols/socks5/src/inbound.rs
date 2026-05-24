@@ -89,7 +89,7 @@ impl Socks5Inbound {
     {
         let username = negotiate_method(stream, auth).await?;
         let mut request = read_request(stream).await?;
-        if let (Some(ref name), Socks5Request::Connect(ref mut session)) =
+        if let (Some(name), Socks5Request::Connect(ref mut session)) =
             (username.as_ref(), &mut request)
         {
             let pk = auth.principal_key_for(name);

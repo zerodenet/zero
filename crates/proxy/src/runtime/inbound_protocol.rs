@@ -62,7 +62,7 @@ pub(crate) trait InboundProtocol: Send + Sync {
         relay_bidirectional_metered_throttled(client, upstream, |_| {}, |_| {}, up_bps, down_bps)
             .await
             .map(|_| ())
-            .map_err(|e| EngineError::Io(e))
+            .map_err(EngineError::Io)
     }
 }
 

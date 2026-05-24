@@ -656,7 +656,7 @@ impl Engine {
         let addr_str = format!("{hostname}:0");
         let addrs: Vec<String> = addr_str
             .to_socket_addrs()
-            .map_err(|e| EngineError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+            .map_err(|e| EngineError::Io(std::io::Error::other(e)))?
             .map(|a| a.ip().to_string())
             .collect();
 

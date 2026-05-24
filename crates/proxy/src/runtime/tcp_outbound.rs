@@ -30,7 +30,7 @@ impl Proxy {
         let outbound = self
             .establish_tcp_outbound(session, (resolved, _plan))
             .await
-            .map_err(|f| EngineError::Io(io::Error::new(io::ErrorKind::Other, f.error)))?;
+            .map_err(|f| EngineError::Io(io::Error::other(f.error)))?;
         let mut result = extract_tcp_stream(outbound)?;
         result.route_action = action;
         Ok(result)

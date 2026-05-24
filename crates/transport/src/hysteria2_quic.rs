@@ -41,13 +41,13 @@ impl AsyncWrite for Hysteria2Stream {
     ) -> Poll<Result<usize, io::Error>> {
         Pin::new(&mut self.send)
             .poll_write(cx, buf)
-            .map_err(|e| io::Error::other(e))
+            .map_err(io::Error::other)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.send)
             .poll_flush(cx)
-            .map_err(|e| io::Error::other(e))
+            .map_err(io::Error::other)
     }
 
     fn poll_shutdown(
@@ -56,7 +56,7 @@ impl AsyncWrite for Hysteria2Stream {
     ) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.send)
             .poll_shutdown(cx)
-            .map_err(|e| io::Error::other(e))
+            .map_err(io::Error::other)
     }
 }
 
@@ -193,7 +193,7 @@ impl Hysteria2Connector {
         send.write_all(&connect_header)
             .await
             .map_err(|e| EngineError::Io(e.into()))?;
-        send.flush().await.map_err(|e| EngineError::Io(e.into()))?;
+        send.flush().await.map_err(EngineError::Io)?;
 
         let mut ok_buf = [0u8; 1];
         recv.read_exact(&mut ok_buf).await.map_err(|e| {

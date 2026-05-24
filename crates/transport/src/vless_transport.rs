@@ -39,7 +39,7 @@ pub async fn build_vless_outbound_transport(
 ) -> Result<TcpRelayStream, EngineError> {
     // ── SplitHTTP (handled first — mutually exclusive with other transports) ──
     if let Some(cfg) = split_http_config {
-        let peer = socket.peer_addr().map_err(|e| EngineError::Io(e))?;
+        let peer = socket.peer_addr().map_err(EngineError::Io)?;
         let stream: TcpRelayStream = match tls_config {
             Some(tls) => {
                 let post_stream =

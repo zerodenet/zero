@@ -321,8 +321,7 @@ fn parse_select(args: Vec<String>) -> Result<Command, CliError> {
 fn parse_validate(args: Vec<String>) -> Result<Command, CliError> {
     let config_path = args
         .into_iter()
-        .filter(|a| !a.starts_with('-'))
-        .next()
+        .find(|a| !a.starts_with('-'))
         .ok_or_else(|| {
             CliError::new(format!(
                 "`validate` requires a config file path\n\n{}",

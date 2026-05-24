@@ -1,5 +1,3 @@
-use std::io::{self, ErrorKind};
-use zero_protocol_vless::reality::common::*;
 use zero_protocol_vless::reality::common::*;
 
 #[test]

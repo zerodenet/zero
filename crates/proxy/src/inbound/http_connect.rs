@@ -208,14 +208,12 @@ fn build_redirect_response(
 }
 
 fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::net::SocketAddr> {
-    addr.and_then(|ip| match ip {
-        zero_traits::IpAddress::V4(octets) => Some(std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)),
-            0,
-        )),
-        zero_traits::IpAddress::V6(octets) => Some(std::net::SocketAddr::new(
-            std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)),
-            0,
-        )),
+    addr.map(|ip| match ip {
+        zero_traits::IpAddress::V4(octets) => {
+            std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)), 0)
+        }
+        zero_traits::IpAddress::V6(octets) => {
+            std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), 0)
+        }
     })
 }

@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "crypto"), no_std)]
 #![allow(async_fn_in_trait)]
+#![allow(clippy::wrong_self_convention)]
 
 extern crate alloc;
 

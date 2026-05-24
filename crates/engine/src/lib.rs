@@ -1,3 +1,6 @@
+#![allow(clippy::large_enum_variant)]
+#![allow(clippy::wrong_self_convention)]
+
 mod api;
 mod completed_sessions;
 mod error;

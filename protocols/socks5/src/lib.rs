@@ -1,5 +1,6 @@
 #![no_std]
 #![allow(async_fn_in_trait)]
+#![allow(clippy::large_enum_variant)]
 
 extern crate alloc;
 

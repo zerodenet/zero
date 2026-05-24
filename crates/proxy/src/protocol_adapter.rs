@@ -39,7 +39,7 @@ pub trait ProtocolAdapter: Send + Sync + fmt::Debug {
 ///
 /// Constructed at proxy startup via `build_registry()`.  Replaces the manual
 /// match arms in `ProtocolInventory::supports_*` and `protocol_name` functions.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ProtocolRegistry {
     adapters: Vec<Arc<dyn ProtocolAdapter>>,
 }
@@ -49,14 +49,6 @@ impl fmt::Debug for ProtocolRegistry {
         f.debug_struct("ProtocolRegistry")
             .field("adapter_count", &self.adapters.len())
             .finish()
-    }
-}
-
-impl Default for ProtocolRegistry {
-    fn default() -> Self {
-        Self {
-            adapters: Vec::new(),
-        }
     }
 }
 

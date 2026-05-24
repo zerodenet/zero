@@ -161,10 +161,7 @@ pub fn decrypt_mux_payload(
         } else {
             c.decrypt_s2c(sid, payload)
         };
-        match result {
-            Ok(pt) => Some(pt),
-            Err(_) => None,
-        }
+        result.ok()
     } else {
         Some(payload.to_vec())
     }

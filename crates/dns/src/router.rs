@@ -16,7 +16,7 @@ impl DnsRoutePattern {
         let domain = domain.to_ascii_lowercase();
         match self {
             Self::Exact(pattern) => pattern.as_str() == domain,
-            Self::Suffix(pattern) => domain == &pattern[1..] || domain.ends_with(pattern.as_str()),
+            Self::Suffix(pattern) => domain == pattern[1..] || domain.ends_with(pattern.as_str()),
         }
     }
 }

@@ -64,7 +64,7 @@ pub async fn read_request<S: AsyncSocket>(stream: &mut S) -> Result<(u8, Address
 
     let mut crlf = [0u8; 2];
     read_exact(stream, &mut crlf).await?;
-    if &crlf != CRLF {
+    if crlf != CRLF {
         return Err(Error::Protocol("trojan: expected CRLF after address"));
     }
 

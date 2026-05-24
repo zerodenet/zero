@@ -148,7 +148,7 @@ fn parse_extensions(ext_data: &[u8], consumed: Vec<u8>) -> ClientHelloInfo {
                 if ext_bytes.len() >= 4 {
                     let list_len = u16::from_be_bytes([ext_bytes[2], ext_bytes[3]]) as usize;
                     let mut pos = 4;
-                    while pos + 1 <= ext_bytes.len() && pos < 4 + list_len {
+                    while pos < ext_bytes.len() && pos < 4 + list_len {
                         let proto_len = ext_bytes[pos] as usize;
                         pos += 1;
                         if pos + proto_len <= ext_bytes.len() {

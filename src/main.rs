@@ -1,3 +1,6 @@
+#![allow(clippy::type_complexity)]
+#![allow(clippy::question_mark)]
+
 use std::env;
 use std::error::Error;
 use std::process;
@@ -21,7 +24,7 @@ async fn main() {
     // from `runtime.log` before any other work so all logs are captured.
     let args: Vec<String> = env::args().collect();
     let config_path = cli::config_path_from_args(&args);
-    init_tracing_from_config(config_path.as_deref().unwrap_or(""));
+    init_tracing_from_config(config_path.unwrap_or(""));
 
     if let Err(error) = try_main().await {
         error_report::print_error(error.as_ref());
@@ -239,6 +242,7 @@ async fn run_command(
 #[cfg(any(feature = "status-api", feature = "grpc-api"))]
 struct StatusServerSpec {
     listen: String,
+    #[cfg(feature = "grpc-api")]
     grpc_listen: String,
     #[cfg(feature = "status-api")]
     auth: Option<http_adapter::HttpServerAuth>,
@@ -261,6 +265,7 @@ fn status_server_spec(
     if let Some(listen) = cli_listen {
         return Ok(Some(StatusServerSpec {
             listen: listen.to_owned(),
+            #[cfg(feature = "grpc-api")]
             grpc_listen: next_port(listen),
             #[cfg(feature = "status-api")]
             auth: None,
@@ -284,13 +289,14 @@ fn status_server_spec(
 
     Ok(Some(StatusServerSpec {
         listen: format!("{}:{}", listen.address, listen.port),
+        #[cfg(feature = "grpc-api")]
         grpc_listen: format!("{}:{}", listen.address, listen.port + 1),
         #[cfg(feature = "status-api")]
         auth,
     }))
 }
 
-#[cfg(any(feature = "status-api", feature = "grpc-api"))]
+#[cfg(feature = "grpc-api")]
 fn next_port(listen: &str) -> String {
     if let Some(idx) = listen.rfind(':') {
         let (host, port_str) = listen.split_at(idx + 1);

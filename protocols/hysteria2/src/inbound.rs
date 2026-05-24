@@ -32,7 +32,7 @@ impl Hysteria2Inbound {
     ) -> Result<Session, Error> {
         store
             .validate_password(hmac, salt)
-            .ok_or_else(|| Error::Protocol("hysteria2: authentication failed"))?;
+            .ok_or(Error::Protocol("hysteria2: authentication failed"))?;
 
         let auth = SessionAuth::new("hysteria2");
         let mut session = Session::new(

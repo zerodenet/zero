@@ -158,7 +158,7 @@ async fn exports_serializable_engine_status_view() {
         })
         .expect("subscribe filtered events");
     assert!(
-        filtered.len() >= 1,
+        !filtered.is_empty(),
         "should have at least 1 flow.completed event"
     );
 

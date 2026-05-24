@@ -1,4 +1,4 @@
-use std::io::{self, BufRead, ErrorKind, Read, Write};
+use std::io::{BufRead, Read, Write};
 use zero_protocol_vless::reality::reality_reader_writer::*;
 use zero_protocol_vless::reality::slide_buffer::SlideBuffer;
 

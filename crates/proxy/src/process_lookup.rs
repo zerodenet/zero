@@ -4,7 +4,6 @@
 //! then scans `/proc/<pid>/fd` to find the owning process.
 //! Other platforms return `None` (process_id and process_name stay empty).
 
-use std::io;
 use std::net::SocketAddr;
 
 /// Process identity resolved from a source address.
@@ -116,7 +115,6 @@ fn find_process_by_inode(target_inode: u64) -> Option<ProcessInfo> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     #[cfg(target_os = "linux")]

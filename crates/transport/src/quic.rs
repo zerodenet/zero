@@ -239,13 +239,13 @@ impl AsyncWrite for QuicStream {
     ) -> Poll<Result<usize, io::Error>> {
         Pin::new(&mut self.send)
             .poll_write(cx, buf)
-            .map_err(|e| io::Error::other(e))
+            .map_err(io::Error::other)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.send)
             .poll_flush(cx)
-            .map_err(|e| io::Error::other(e))
+            .map_err(io::Error::other)
     }
 
     fn poll_shutdown(
@@ -254,7 +254,7 @@ impl AsyncWrite for QuicStream {
     ) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.send)
             .poll_shutdown(cx)
-            .map_err(|e| io::Error::other(e))
+            .map_err(io::Error::other)
     }
 }
 

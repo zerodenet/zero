@@ -128,7 +128,7 @@ where
     let stream_id = u16::from_be_bytes([header[0], header[1]]);
     let length = u16::from_be_bytes([header[2], header[3]]) as usize;
 
-    if length as usize > MUX_MAX_PAYLOAD {
+    if length > MUX_MAX_PAYLOAD {
         return Err(Error::Protocol("MUX frame payload too large"));
     }
 
@@ -153,6 +153,12 @@ pub struct MuxClient {
     next_id: u16,
     #[cfg(feature = "reality")]
     crypto: Option<crate::mux_crypto::MuxCrypto>,
+}
+
+impl Default for MuxClient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MuxClient {
@@ -272,6 +278,12 @@ impl MuxClient {
 pub struct MuxServer {
     #[cfg(feature = "reality")]
     crypto: Option<crate::mux_crypto::MuxCrypto>,
+}
+
+impl Default for MuxServer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MuxServer {

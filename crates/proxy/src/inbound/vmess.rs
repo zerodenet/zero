@@ -55,7 +55,7 @@ impl InboundProtocol for VmessInboundHandler {
             .tls_acceptor
             .accept(stream)
             .await
-            .map_err(|e| EngineError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+            .map_err(|e| EngineError::Io(io::Error::other(e)))?;
         let mut sock = TlsStream(tls);
         let session = if self.users.len() == 1 {
             self.vmess_inbound
@@ -261,7 +261,7 @@ async fn handle_vmess_ws(
         .tls_acceptor
         .accept(stream)
         .await
-        .map_err(|e| EngineError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+        .map_err(|e| EngineError::Io(io::Error::other(e)))?;
 
     let mut ws = crate::transport::accept_ws(tls, &ws_cfg.path).await?;
 
@@ -302,7 +302,7 @@ async fn handle_vmess_grpc(
         .tls_acceptor
         .accept(stream)
         .await
-        .map_err(|e| EngineError::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+        .map_err(|e| EngineError::Io(io::Error::other(e)))?;
 
     let service_names = grpc_cfg.service_names.clone();
     let users = handler.users.clone();
@@ -350,14 +350,12 @@ async fn handle_vmess_grpc(
 }
 
 fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::net::SocketAddr> {
-    addr.and_then(|ip| match ip {
-        zero_traits::IpAddress::V4(octets) => Some(std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)),
-            0,
-        )),
-        zero_traits::IpAddress::V6(octets) => Some(std::net::SocketAddr::new(
-            std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)),
-            0,
-        )),
+    addr.map(|ip| match ip {
+        zero_traits::IpAddress::V4(octets) => {
+            std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)), 0)
+        }
+        zero_traits::IpAddress::V6(octets) => {
+            std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), 0)
+        }
     })
 }

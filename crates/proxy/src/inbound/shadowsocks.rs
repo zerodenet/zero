@@ -289,7 +289,7 @@ async fn ss_decrypt_upload(
     key: Vec<u8>,
     rate_bps: Option<u64>,
 ) -> Result<(), ()> {
-    let mut limiter = rate_bps.filter(|b| *b > 0).map(|b| RateLimiter::new(b));
+    let mut limiter = rate_bps.filter(|b| *b > 0).map(RateLimiter::new);
     let mut nonce: u64 = 1;
     let mut len_buf = [0u8; 2];
     loop {
@@ -330,7 +330,7 @@ async fn ss_encrypt_download(
     key: Vec<u8>,
     rate_bps: Option<u64>,
 ) -> Result<(), ()> {
-    let mut limiter = rate_bps.filter(|b| *b > 0).map(|b| RateLimiter::new(b));
+    let mut limiter = rate_bps.filter(|b| *b > 0).map(RateLimiter::new);
     let mut nonce: u64 = 0;
     let mut buf = [0u8; 16384];
     loop {
@@ -435,7 +435,7 @@ impl Proxy {
 
                         if let Some((server, upstream_port, chain_pwd, chain_cipher_str)) = ss_chain {
                             let chain_key = (server.to_string(), upstream_port);
-                            let chain_cipher = CipherKind::from_str(&chain_cipher_str);
+                            let chain_cipher = CipherKind::from_str(chain_cipher_str);
                             let Some(chain_cipher) = chain_cipher else { continue };
 
                             let upstream_entry = ss_upstreams
@@ -569,15 +569,13 @@ impl Proxy {
 }
 
 fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<SocketAddr> {
-    addr.and_then(|ip| match ip {
-        zero_traits::IpAddress::V4(octets) => Some(SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)),
-            0,
-        )),
-        zero_traits::IpAddress::V6(octets) => Some(SocketAddr::new(
-            std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)),
-            0,
-        )),
+    addr.map(|ip| match ip {
+        zero_traits::IpAddress::V4(octets) => {
+            SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)), 0)
+        }
+        zero_traits::IpAddress::V6(octets) => {
+            SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), 0)
+        }
     })
 }
 

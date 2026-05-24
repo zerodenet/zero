@@ -1,6 +1,4 @@
-use ring::hmac;
-use std::io::{self, ErrorKind};
-use zero_protocol_vless::reality::common::*;
+use std::io::ErrorKind;
 use zero_protocol_vless::reality::reality_aead::*;
 use zero_protocol_vless::reality::reality_cipher_suite::CipherSuite;
 

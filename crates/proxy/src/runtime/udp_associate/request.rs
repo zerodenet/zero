@@ -329,17 +329,11 @@ impl Proxy {
                                 Some(&completed.record),
                                 "udp_ss_send",
                                 started_at.elapsed(),
-                                &EngineError::Io(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    msg.as_str(),
-                                )),
+                                &EngineError::Io(std::io::Error::other(msg.as_str())),
                                 None,
                             );
                         }
-                        return Err(EngineError::Io(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            msg.as_str(),
-                        )));
+                        return Err(EngineError::Io(std::io::Error::other(msg.as_str())));
                     }
                 }
             }

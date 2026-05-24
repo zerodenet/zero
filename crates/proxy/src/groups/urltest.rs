@@ -214,12 +214,10 @@ impl Proxy {
     ) -> Result<u64, EngineError> {
         match candidate {
             ResolvedOutbound::Single(candidate) => self.probe_leaf_outbound(candidate, probe).await,
-            ResolvedOutbound::Relay { .. } => {
-                return Err(EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    "relay chain cannot be used as a urltest member",
-                )))
-            }
+            ResolvedOutbound::Relay { .. } => Err(EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "relay chain cannot be used as a urltest member",
+            ))),
             ResolvedOutbound::Fallback { candidates } => {
                 let mut last_error = None;
 

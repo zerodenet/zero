@@ -140,20 +140,23 @@ impl Control for ControlService {
 
         let (tx, rx) = mpsc::channel::<Result<PbEvent, Status>>(64);
 
-        std::thread::spawn(move || loop {
-            match subscriber.recv() {
-                Some(event) => {
-                    let pb_event = PbEvent {
-                        event_type: event.event_type,
-                        event_id: event.event_id,
-                        occurred_at: event.occurred_at_unix_ms,
-                        payload: serde_json::to_vec(&event.payload).unwrap_or_default(),
-                    };
-                    if tx.blocking_send(Ok(pb_event)).is_err() {
-                        break;
+        std::thread::spawn(move || {
+            #[allow(clippy::while_let_loop)]
+            loop {
+                match subscriber.recv() {
+                    Some(event) => {
+                        let pb_event = PbEvent {
+                            event_type: event.event_type,
+                            event_id: event.event_id,
+                            occurred_at: event.occurred_at_unix_ms,
+                            payload: serde_json::to_vec(&event.payload).unwrap_or_default(),
+                        };
+                        if tx.blocking_send(Ok(pb_event)).is_err() {
+                            break;
+                        }
                     }
+                    None => break,
                 }
-                None => break,
             }
         });
 

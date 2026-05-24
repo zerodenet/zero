@@ -95,7 +95,7 @@ impl DnsSystem {
         let fake_ip = cfg
             .fake_ip
             .as_ref()
-            .map(|c| FakeIpAllocator::new(c))
+            .map(FakeIpAllocator::new)
             .transpose()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
             .map(Arc::new);
@@ -170,7 +170,7 @@ impl DnsResolver for DnsSystem {
                 let sys_resolver = {
                     let guard = self.inner.read().expect("dns system lock poisoned");
                     match &*guard {
-                        DnsSystemInner::System(r) => r.clone(),
+                        DnsSystemInner::System(r) => *r,
                         _ => TokioSystemResolver,
                     }
                 };
@@ -236,7 +236,7 @@ async fn race_resolve(
         tasks.spawn(async move { b.resolve(&d).await });
     }
 
-    let mut last_err = io::Error::new(io::ErrorKind::Other, "no dns backends configured");
+    let mut last_err = io::Error::other("no dns backends configured");
     while let Some(result) = tasks.join_next().await {
         match result {
             Ok(Ok(ips)) => {
@@ -245,7 +245,7 @@ async fn race_resolve(
             }
             Ok(Err(e)) => last_err = e,
             Err(join_err) => {
-                last_err = io::Error::new(io::ErrorKind::Other, join_err.to_string());
+                last_err = io::Error::other(join_err.to_string());
             }
         }
     }

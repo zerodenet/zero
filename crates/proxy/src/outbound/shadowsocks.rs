@@ -59,19 +59,14 @@ pub async fn send_ss_udp_packet(
     use ring::rand::SecureRandom;
     ring::rand::SystemRandom::new()
         .fill(&mut salt)
-        .map_err(|_| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "ss: random failed",
-            ))
-        })?;
+        .map_err(|_| EngineError::Io(std::io::Error::other("ss: random failed")))?;
 
     let key = derive_key(password.as_bytes(), &salt, cipher_kind.key_len())
         .map_err(|e| EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?;
 
     let nonce = [0u8; 12];
     let encrypted = aead_encrypt_udp(cipher_kind, &key, &nonce, &target_data)
-        .map_err(|e| EngineError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
 
     let upstream = ensure_upstream(server, port, password, cipher_kind);
 

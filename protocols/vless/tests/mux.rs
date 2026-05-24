@@ -1,6 +1,5 @@
 use tokio::sync::mpsc;
 
-use zero_core::Address;
 use zero_protocol_vless::{VlessInbound, VlessOutbound, VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 

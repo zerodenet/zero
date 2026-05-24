@@ -41,7 +41,7 @@ impl RouteRuleSetConfig {
                 }
             }
             RuleSetSourceType::Url => {
-                if self.url.as_ref().map_or(true, |u| u.trim().is_empty()) {
+                if self.url.as_ref().is_none_or(|u| u.trim().is_empty()) {
                     return Err(ConfigError::InvalidRuleSet(
                         "`url` rule set requires a non-empty `url`".to_owned(),
                     ));

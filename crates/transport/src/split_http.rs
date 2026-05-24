@@ -161,25 +161,18 @@ where
     let mut post = post_stream;
     let mut req_bytes = Vec::new();
     write_http_request(&mut req_bytes, &post_req);
-    post.write_all(&req_bytes)
-        .await
-        .map_err(|e| EngineError::Io(e))?;
+    post.write_all(&req_bytes).await.map_err(EngineError::Io)?;
 
     // Write GET headers to get_stream and read response
     let mut get = get_stream;
     req_bytes.clear();
     write_http_request(&mut req_bytes, &get_req);
-    get.write_all(&req_bytes)
-        .await
-        .map_err(|e| EngineError::Io(e))?;
+    get.write_all(&req_bytes).await.map_err(EngineError::Io)?;
 
     let mut buf = vec![0u8; 4096];
     let mut total = 0;
     let head_end = loop {
-        let n = get
-            .read(&mut buf[total..])
-            .await
-            .map_err(|e| EngineError::Io(e))?;
+        let n = get.read(&mut buf[total..]).await.map_err(EngineError::Io)?;
         if n == 0 {
             return Err(EngineError::Io(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
@@ -231,10 +224,7 @@ where
     let mut buf = vec![0u8; 4096];
     let mut total = 0;
     let head_end = loop {
-        let n = io
-            .read(&mut buf[total..])
-            .await
-            .map_err(|e| EngineError::Io(e))?;
+        let n = io.read(&mut buf[total..]).await.map_err(EngineError::Io)?;
         if n == 0 {
             return Err(EngineError::Io(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
@@ -598,11 +588,9 @@ fn parse_method_and_session(buf: &[u8]) -> Result<(String, String), EngineError>
         .lines()
         .find_map(|line| {
             let lower = line.to_lowercase();
-            if let Some(val) = lower.strip_prefix("x-session-id:") {
-                Some(val.trim().to_string())
-            } else {
-                None
-            }
+            lower
+                .strip_prefix("x-session-id:")
+                .map(|val| val.trim().to_string())
         })
         .unwrap_or_else(|| "0".to_string());
 
@@ -637,7 +625,7 @@ async fn write_get_response<W: AsyncWrite + Unpin>(writer: &mut W) -> Result<(),
     writer
         .write_all(resp.as_bytes())
         .await
-        .map_err(|e| EngineError::Io(e))
+        .map_err(EngineError::Io)
 }
 
 fn write_http_request(buf: &mut Vec<u8>, req: &Request<()>) {

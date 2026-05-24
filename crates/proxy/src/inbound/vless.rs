@@ -183,12 +183,9 @@ impl Proxy {
                                 // Always peek ClientHello to extract SNI for routing.
                                 // Also used for ALPN-based fallback when configured.
                                 let mut raw = stream.into_inner();
-                                let hello = match crate::transport::tls_hello::peek_client_hello(
+                                let hello = crate::transport::tls_hello::peek_client_hello(
                                     &mut raw,
-                                ).await {
-                                    Ok(h) => Some(h),
-                                    Err(_) => None,
-                                };
+                                ).await.ok();
 
                                 if let Some(hello) = hello {
                                     // Check ALPN fallback match
@@ -773,7 +770,7 @@ impl Proxy {
                                 &mut udp_flows,
                                 &udp_socket,
                                 &mut vless_manager,
-                                &auth,
+                                auth,
                             ).await {
                                 warn!(
                                     error = %error,

@@ -1,5 +1,4 @@
-use ring::hmac;
-use std::io::{self, ErrorKind};
+use std::io::{self};
 use zero_protocol_vless::reality::common::*;
 use zero_protocol_vless::reality::reality_aead::AeadKey;
 use zero_protocol_vless::reality::reality_cipher_suite::CipherSuite;

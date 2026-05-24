@@ -307,9 +307,9 @@ fn parse_udp_v2(
     } else {
         // Address omitted — reuse cached: [marker:2][flags:1][payload]
         let target = cached_target
-            .ok_or_else(|| Error::Protocol("VLESS UDP v2: no cached target"))?
+            .ok_or(Error::Protocol("VLESS UDP v2: no cached target"))?
             .clone();
-        let port = cached_port.ok_or_else(|| Error::Protocol("VLESS UDP v2: no cached port"))?;
+        let port = cached_port.ok_or(Error::Protocol("VLESS UDP v2: no cached port"))?;
         Ok(VlessUdpPacket {
             target,
             port,

@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "reality"), no_std)]
 #![allow(async_fn_in_trait)]
+#![allow(clippy::empty_line_after_doc_comments)]
 
 extern crate alloc;
 

@@ -102,7 +102,7 @@ impl IpcFlowHook {
             let mut guard = self.stream.lock().expect("ipc hook lock poisoned");
             if let Some(stream) = guard.take() {
                 if is_alive(&stream) {
-                    set_timeout(&mut guard.as_mut().unwrap(), Some(self.timeout))?;
+                    set_timeout(guard.as_mut().unwrap(), Some(self.timeout))?;
                     return Ok(stream);
                 }
             }

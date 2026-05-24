@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 //! Structured logging for Zero — non-blocking, split output, event bridge,
 //! rate-limited.  Works in any binary, not tied to the CLI layer, usable
 //! from any crate that depends on `zero-logging`.
@@ -141,15 +142,14 @@ impl RateLimiter {
     fn allow(&self) -> bool {
         let now = now_secs();
         let window = self.window_start.load(Ordering::Relaxed);
-        if now != window {
-            if self
+        if now != window
+            && self
                 .window_start
                 .compare_exchange(window, now, Ordering::Acquire, Ordering::Relaxed)
                 .is_ok()
-            {
-                self.count.store(1, Ordering::Release);
-                return true;
-            }
+        {
+            self.count.store(1, Ordering::Release);
+            return true;
         }
         if self.count.fetch_add(1, Ordering::Acquire) < self.max {
             return true;

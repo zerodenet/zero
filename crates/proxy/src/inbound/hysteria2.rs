@@ -218,10 +218,7 @@ impl Proxy {
             .export_keying_material(&mut salt, b"hysteria2 auth", &[])
             .is_err()
         {
-            return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "quic key export failed",
-            )));
+            return Err(EngineError::Io(io::Error::other("quic key export failed")));
         }
 
         // Wait for auth stream from client
