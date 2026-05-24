@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
-use zero_api::{DeadLetterSink, EventFilter, EventSource, RawApiEvent};
+use zero_api::{DeadLetterSink, EventFilter, EventSink, EventSource, RawApiEvent};
 use zero_config::ApiConfig;
 
 use crate::registry::{build_event_sinks, ConfiguredEventSink};

@@ -65,6 +65,8 @@ impl VlessUserStore for TestUsers {
                 credential_id: Some("node-user-1".to_owned()),
                 principal_key: Some("user:10001".to_owned()),
                 flow: None,
+                up_bps: None,
+                down_bps: None,
             })
         } else {
             None
