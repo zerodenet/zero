@@ -200,8 +200,31 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 - `hysteria2` -- QUIC, TCP streams and UDP datagram forwarding
 - `shadowsocks` -- AEAD cipher (chacha20-ietf-poly1305, aes-128-gcm, aes-256-gcm); 2022-blake3
 - `trojan` -- TLS + SHA224 password auth, TCP streams
+- `direct` -- fixed-target TCP forwarder; accepts raw TCP with no handshake, forwards to a configured outbound
 
 `mixed` is not an external protocol, but a config entry for "same port multi-protocol inbound".
+
+### Direct inbound
+
+`direct` inbound listens on a port, accepts raw TCP connections with no protocol handshake, and forwards all traffic to a configured outbound (node or group). The target address comes from the inbound config rather than the client.
+
+```json
+{
+  "tag": "direct-in",
+  "listen": { "address": "127.0.0.1", "port": 8080 },
+  "protocol": {
+    "type": "direct",
+    "outbound": "proxy",
+    "target": "example.com",
+    "port": 443
+  }
+}
+```
+
+Direct inbound config fields:
+- `outbound` -- required, outbound or outbound group tag to forward traffic through
+- `target` -- optional, target address (IP or domain) for forwarded connections; must be present at runtime (defaults to nothing)
+- `port` -- optional, target port, default `443`
 
 SOCKS5 inbound defaults to no-auth. Configuring `users` enables RFC 1929 username/password:
 

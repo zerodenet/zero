@@ -30,6 +30,7 @@ Each inbound protocol is independently feature-gated and may be trimmed as neede
 | `inbound-hysteria2` | Hysteria2 inbound | QUIC (quinn) |
 | `inbound-shadowsocks` | Shadowsocks inbound | AEAD encryption + 2022-blake3 |
 | `inbound-trojan` | Trojan inbound | TLS |
+| -- | `direct` inbound | Always compiled, no feature gate required (fixed-target forwarder) |
 
 ```bash
 # Trim example: SOCKS5 + HTTP CONNECT only
