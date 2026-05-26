@@ -376,6 +376,14 @@ pub enum InboundProtocolConfig {
         #[serde(default)]
         grpc: Option<GrpcConfig>,
     },
+    #[serde(rename = "direct")]
+    Direct {
+        outbound: String,
+        #[serde(default)]
+        target: Option<String>,
+        #[serde(default)]
+        port: Option<u16>,
+    },
 }
 
 impl InboundProtocolConfig {
@@ -416,6 +424,7 @@ impl InboundProtocolConfig {
             Self::Socks5 { users } => users,
             Self::Mixed { socks5_users } => socks5_users,
             Self::HttpConnect
+            | Self::Direct { .. }
             | Self::Vless { .. }
             | Self::Hysteria2 { .. }
             | Self::Shadowsocks { .. }

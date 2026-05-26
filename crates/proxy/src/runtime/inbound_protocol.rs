@@ -225,7 +225,7 @@ fn apply_url_rewrite(proxy: &Proxy, session: &mut Session) {
 ///
 /// Per-user limits (applied during protocol accept) take priority —
 /// defaults only fill in if no per-user limit was set.
-fn apply_kernel_rate_limits(proxy: &Proxy, session: &mut Session, inbound_tag: &str) {
+pub(crate) fn apply_kernel_rate_limits(proxy: &Proxy, session: &mut Session, inbound_tag: &str) {
     let Some(cfg) = proxy.config.inbounds.iter().find(|i| i.tag == inbound_tag) else {
         return;
     };

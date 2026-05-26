@@ -326,6 +326,9 @@ fn spawn_inbound_listener(
         InboundProtocolConfig::Vmess { .. } => {
             listeners.spawn(async move { p.run_vmess_listener(b, shutdown_rx).await });
         }
+        InboundProtocolConfig::Direct { .. } => {
+            listeners.spawn(async move { p.run_direct_listener(b, shutdown_rx).await });
+        }
         #[allow(unreachable_patterns)]
         _ => unreachable!("registry check above already validated protocol is compiled"),
     }

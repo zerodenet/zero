@@ -76,6 +76,31 @@ protocol_adapter!(VmessAdapter, proto: "vmess", feature: "inbound-vmess",
     inbound: InboundProtocolConfig::Vmess { .. },
     outbound: OutboundProtocolConfig::Vmess { .. });
 
+// Direct inbound is always available (no feature gate).
+#[derive(Debug)]
+pub(crate) struct DirectAdapter;
+
+impl ProtocolAdapter for DirectAdapter {
+    fn name(&self) -> &'static str {
+        "direct"
+    }
+    fn feature_name(&self) -> &'static str {
+        "core"
+    }
+    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
+        matches!(c, InboundProtocolConfig::Direct { .. })
+    }
+    fn supports_outbound(&self, _: &OutboundProtocolConfig) -> bool {
+        false
+    }
+    fn has_inbound(&self) -> bool {
+        true
+    }
+    fn has_outbound(&self) -> bool {
+        false
+    }
+}
+
 /// Build and return the protocol registry with all compiled-in adapters.
 pub(crate) fn build_registry() -> super::protocol_adapter::ProtocolRegistry {
     let mut r = super::protocol_adapter::ProtocolRegistry::default();
@@ -94,6 +119,8 @@ pub(crate) fn build_registry() -> super::protocol_adapter::ProtocolRegistry {
     r.register(Arc::new(TrojanAdapter));
     #[cfg(any(feature = "inbound-vmess", feature = "outbound-vmess"))]
     r.register(Arc::new(VmessAdapter));
+    // Always available.
+    r.register(Arc::new(DirectAdapter));
 
     r
 }

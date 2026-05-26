@@ -479,6 +479,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
         InboundProtocolConfig::Trojan { .. } => "trojan",
         InboundProtocolConfig::Vmess { .. } => "vmess",
+        InboundProtocolConfig::Direct { .. } => "direct",
     }
 }
 

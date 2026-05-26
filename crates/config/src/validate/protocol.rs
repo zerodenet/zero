@@ -131,6 +131,7 @@ pub(super) fn validate_inbound_protocol(
             validate_vmess_users(users)?;
             Ok(())
         }
+        InboundProtocolConfig::Direct { outbound: _, .. } => Ok(()),
     }
 }
 
