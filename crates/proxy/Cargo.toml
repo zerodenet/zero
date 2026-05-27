@@ -126,6 +126,7 @@ zero-protocol-shadowsocks = { path = "../../protocols/shadowsocks", optional = t
 zero-protocol-trojan = { path = "../../protocols/trojan", optional = true, default-features = false }
 zero-protocol-vmess = { path = "../../protocols/vmess", optional = true }
 zero-traits = { path = "../traits" }
+zero-tun = { path = "../tun" }
 zero-transport = { path = "../transport", optional = true, features = ["vless"] }
 
 [dev-dependencies]

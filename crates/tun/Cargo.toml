@@ -1,0 +1,23 @@
+[package]
+name = "zero-tun"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+tokio = { workspace = true, features = ["net", "io-util"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+tokio = { workspace = true, features = ["net", "io-util"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+wintun = "0.4"
+
+[dependencies]
+tokio.workspace = true
+tracing.workspace = true
+zero-traits = { path = "../traits" }

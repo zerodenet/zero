@@ -14,6 +14,7 @@ Zero is a network proxy kernel written in Rust at workspace version `0.0.4`.
 - `Hysteria2` (QUIC, password auth, TCP + UDP)
 - `Shadowsocks` (AEAD: aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305; 2022-blake3; TCP + UDP)
 - `Trojan` (TCP)
+- `TUN` (virtual network interface, no feature gate, always compiled)
 - `direct` (fixed-target forwarder, no feature gate, always compiled)
 
 **Outbound protocols:**
@@ -146,7 +147,7 @@ core → traits
 
 ```
 inbound/          # Protocol handler structs implementing InboundProtocol trait
-                  #   socks5, vless, http_connect, mixed, hysteria2, shadowsocks, trojan, direct
+                  #   socks5, vless, http_connect, mixed, hysteria2, shadowsocks, trojan, direct, tun
                   #   Each provides handshake (accept), client responses (send_ok/send_blocked/send_upstream_failure), and relay
 outbound/         # Outbound implementations: direct, socks5, vless, hysteria2, shadowsocks, trojan
 runtime/          # Protocol-agnostic runtime
@@ -202,7 +203,7 @@ Default: `full,status-api` (all protocols + status API)
 JSON with three top-level sections: `inbounds`, `outbounds`, `route`.
 Route supports `mode` (`rule`/`global`/`direct`), `rules` array, and `final` action.
 
-**Inbound types:** `socks5`, `http-connect`, `http`, `mixed`, `vless`, `hysteria2`, `shadowsocks`, `trojan`, `direct`
+**Inbound types:** `socks5`, `http-connect`, `http`, `mixed`, `vless`, `hysteria2`, `shadowsocks`, `trojan`, `direct`, `tun`
 **Outbound types:** `direct`, `block`, `socks5`, `vless`, `hysteria2`, `shadowsocks`, `trojan`, `selector`, `fallback`, `urltest`, `relay`
 **Route conditions:** `domain`, `domain-keyword`, `ip`, `geoip`, `and`, `or`
 **Route actions:** `direct`, `reject`, `block` (alias), `route`

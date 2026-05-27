@@ -1,6 +1,7 @@
 mod direct;
 #[cfg(feature = "inbound-http-connect")]
 mod http_connect;
+mod tun;
 #[cfg(feature = "inbound-hysteria2")]
 mod hysteria2;
 #[cfg(feature = "inbound-mixed")]

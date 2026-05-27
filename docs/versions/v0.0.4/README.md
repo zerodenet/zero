@@ -2,7 +2,7 @@
 
 这一版继续留在 `v0.0.x` 预发布线，不做正式产品定义。
 
-`v0.0.3` 已经补齐 DNS 子系统（缓存、路由、拦截、Fake IP、DNS-over-HTTPS / DNS-over-TLS）、事件系统、认证强制执行、配置热重载、EnginePlan 收紧和零默认配置路径。`v0.0.4` 完成两件大事：**架构重构**（协议入站管线统一化）和 **四个内核原语补齐**（速率限制、空闲超时、出站熔断、域名重写），外加 `domain-regex` 规则条件。
+`v0.0.3` 已经补齐 DNS 子系统（缓存、路由、拦截、Fake IP、DNS-over-HTTPS / DNS-over-TLS）、事件系统、认证强制执行、配置热重载、EnginePlan 收紧和零默认配置路径。`v0.0.4` 完成两件大事：**架构重构**（协议入站管线统一化）和 **四个内核原语补齐**（速率限制、空闲超时、出站熔断、域名重写），外加 `domain-regex` 规则条件和 **TUN 虚拟网卡**。
 
 ## 要交付什么
 
@@ -58,10 +58,19 @@
 | `url_rewrite` | `RouteConfig` | `Vec<UrlRewriteRule>` | URL 域名重写规则列表 |
 | `DomainRegex` | `RuleConditionConfig` | variant | 正则匹配域名 |
 | `rate_limits()` | `InboundProtocolConfig` | method | 返回该入站的速率限制配置 |
+| `tun` | `InboundProtocolConfig` | variant | TUN 虚拟网卡入站类型 |
+
+### 8. TUN 虚拟网卡
+
+- **`crates/tun/` 新 crate** — 定义 `TunDevice` trait，提供 Linux（ioctl）、macOS（utun socket）、Windows（Wintun）三个平台后端。
+- **`crates/proxy/src/inbound/tun.rs`** — TUN 入站监听器，实现 TCP 状态机，从虚拟网卡读取 IP 数据包、重组 TCP 流，集成到 `serve_inbound()` 统一管线。
+- **Runtime API**: `Proxy::start_tun(name, addr, mask, mtu, tag)` — 创建 TUN 设备并启动数据包读取循环，将识别出的 TCP 连接送入内核代理管线。
+- **无 feature gate**：始终编译，不依赖可选 Cargo feature。
+- **路由集成**：TUN 流量以入站 `tag` 落入路由表，可通过标准路由规则定向到任意出站或出站组。
 
 ## 明确不做什么
 
-- 不在这一版引入新的传输层协议或入站/出站协议。
+- 不在这一版引入新的传输层协议或出站协议。
 - 不做 QUIC 层面的拥塞控制或传输优化。
 - 不扩展熔断器到更复杂的健康检测（心跳、延迟采样等）——当前只按失败次数触发。
 - URL 重写不做路径级别的重写，只做域名级别。

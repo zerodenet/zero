@@ -31,6 +31,7 @@ Each inbound protocol is independently feature-gated and may be trimmed as neede
 | `inbound-shadowsocks` | Shadowsocks inbound | AEAD encryption + 2022-blake3 |
 | `inbound-trojan` | Trojan inbound | TLS |
 | -- | `direct` inbound | Always compiled, no feature gate required (fixed-target forwarder) |
+| -- | `tun` inbound | Always compiled, no feature gate required (virtual network interface: Linux ioctl, macOS utun socket, Windows Wintun) |
 
 ```bash
 # Trim example: SOCKS5 + HTTP CONNECT only
@@ -197,6 +198,29 @@ Token-bucket rate limiting using the Generic Cell Rate Algorithm (GCRA). Limits 
     "password": "secret",
     "up_bps": 10485760,
     "down_bps": 52428800
+  }
+}
+```
+
+## TUN (Virtual Network Interface)
+
+TUN creates a virtual network interface that captures IP packets at Layer 3 and routes them through the proxy kernel. Always compiled, no feature gate required.
+
+- **Crate**: `crates/tun/` — `TunDevice` trait with platform backends for Linux (`ioctl`), macOS (`utun` socket), and Windows (`Wintun`).
+- **Listener**: `crates/proxy/src/inbound/tun.rs` — TCP state machine that processes IP packets from the TUN device, reassembles TCP streams, and integrates with `serve_inbound()`.
+- **Runtime API**: `Proxy::start_tun(name, addr, mask, mtu, tag)` — creates the TUN device and spawns a packet loop that reads IP packets and feeds recognized TCP connections through the kernel pipeline.
+- **Route integration**: TUN traffic lands in the routing table under the inbound's `tag`, so it can be directed to any outbound or outbound group via standard route rules.
+- **Scope**: Captures all IP traffic routed to the TUN interface at the OS level; no protocol handshake required (raw IP packets).
+
+```json
+{
+  "tag": "tun-in",
+  "protocol": {
+    "type": "tun",
+    "name": "utun8",
+    "address": "10.0.0.1",
+    "netmask": "255.255.255.0",
+    "mtu": 1500
   }
 }
 ```
