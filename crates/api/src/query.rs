@@ -16,6 +16,7 @@ pub enum QueryRequest {
     Policy(PolicyGetQuery),
     Diagnostics(DiagnosticsQuery),
     Sinks(SinksQuery),
+    TunStatus(TunStatusQuery),
 }
 
 impl QueryRequest {
@@ -37,6 +38,7 @@ pub enum QueryResponse {
     Policy(Snapshot),
     Diagnostics(Snapshot),
     Sinks(SinkStatusSnapshot),
+    TunStatus(TunStatusSnapshot),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,4 +103,15 @@ pub struct HealthSnapshot {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SinkStatusSnapshot {
     pub sinks: Vec<SinkStatus>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TunStatusQuery;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TunStatusSnapshot {
+    pub running: bool,
+    pub name: Option<String>,
+    pub addr: Option<String>,
+    pub tag: Option<String>,
 }

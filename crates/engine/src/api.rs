@@ -102,6 +102,9 @@ fn query_engine(
             }),
         ),
         QueryRequest::Sinks(_) => Ok(QueryResponse::Sinks(SinkStatusSnapshot::default())),
+        QueryRequest::TunStatus(_) => Ok(QueryResponse::TunStatus(
+            zero_api::TunStatusSnapshot::default(),
+        )),
     }
 }
 
@@ -193,6 +196,10 @@ fn execute_engine_command(
             engine.set_mode(mode);
             Ok(CommandResponse::accepted())
         }
+        CommandRequest::TunStart(_) | CommandRequest::TunStop(_) => Err(ApiError::new(
+            ApiErrorCode::Internal,
+            "TUN commands are handled by the proxy runtime, not the engine",
+        )),
     }
 }
 

@@ -15,7 +15,8 @@ pub use capabilities::{AdapterCapability, ApiCapabilities, SinkCapability};
 pub use command::{
     CommandRequest, CommandResponse, ConfigApplyCommand, ConfigValidateCommand,
     DiagnosticsDnsLookupCommand, DiagnosticsProbeTargetCommand, DiagnosticsTraceRouteCommand,
-    FlowCloseCommand, PolicyProbeCommand, PolicySelectCommand,
+    FlowCloseCommand, ModeSetCommand, PolicyProbeCommand, PolicySelectCommand,
+    TunStartCommand, TunStopCommand,
 };
 pub use error::{ApiError, ApiErrorCode};
 pub use event::{event_type, ApiEvent, EventFilter, PublishResult};
@@ -27,7 +28,8 @@ pub use flow::{
 pub use query::{
     CapabilitiesQuery, ConfigQuery, DiagnosticsQuery, FlowFilter, FlowGetQuery, FlowListQuery,
     HealthQuery, HealthSnapshot, PoliciesQuery, PolicyGetQuery, QueryRequest, QueryResponse,
-    RuntimeQuery, SinkStatusSnapshot, SinksQuery, Snapshot, StatsQuery,
+    RuntimeQuery, SinkStatusSnapshot, SinksQuery, Snapshot, StatsQuery, TunStatusQuery,
+    TunStatusSnapshot,
 };
 pub use sink::{
     CallbackEventSink, DeadLetterSink, JsonLineEventSink, MemorySink, RotatingFileSink,

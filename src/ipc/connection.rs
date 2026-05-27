@@ -11,7 +11,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use zero_api::{
     AuthContext, CommandRequest, CommandService, DiagnosticsDnsLookupCommand,
     DiagnosticsTraceRouteCommand, EventFilter, EventSource, Permission, PolicySelectCommand,
-    QueryService,
+    QueryService, TunStopCommand,
 };
 use zero_engine::EngineHandle;
 
@@ -100,6 +100,11 @@ pub(crate) fn parse_command(
             serde_json::from_value(params.clone())
                 .map_err(|e| IpcResponse::error("invalid_argument", e.to_string()))?,
         )),
+        "tun.start" => Ok(CommandRequest::TunStart(
+            serde_json::from_value(params.clone())
+                .map_err(|e| IpcResponse::error("invalid_argument", e.to_string()))?,
+        )),
+        "tun.stop" => Ok(CommandRequest::TunStop(TunStopCommand)),
         _ => Err(IpcResponse::error(
             "unsupported",
             format!("unknown command method: {method}"),

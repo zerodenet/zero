@@ -23,6 +23,10 @@ pub enum CommandRequest {
     DiagnosticsTraceRoute(DiagnosticsTraceRouteCommand),
     #[serde(rename = "mode.set")]
     ModeSet(ModeSetCommand),
+    #[serde(rename = "tun.start")]
+    TunStart(TunStartCommand),
+    #[serde(rename = "tun.stop")]
+    TunStop(TunStopCommand),
 }
 
 impl CommandRequest {
@@ -35,7 +39,9 @@ impl CommandRequest {
             Self::DiagnosticsProbeTarget(_)
             | Self::DiagnosticsDnsLookup(_)
             | Self::DiagnosticsTraceRoute(_)
-            | Self::ModeSet(_) => Permission::Admin,
+            | Self::ModeSet(_)
+            | Self::TunStart(_)
+            | Self::TunStop(_) => Permission::Admin,
         }
     }
 }
@@ -107,3 +113,21 @@ pub struct DiagnosticsTraceRouteCommand {
     #[serde(default)]
     pub protocol: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TunStartCommand {
+    #[serde(default)]
+    pub name: Option<String>,
+    pub addr: String,
+    #[serde(default = "default_tun_mtu")]
+    pub mtu: u16,
+    #[serde(default = "default_tun_mask")]
+    pub mask: String,
+    pub tag: String,
+}
+
+fn default_tun_mtu() -> u16 { 1500 }
+fn default_tun_mask() -> String { "255.255.255.0".to_owned() }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TunStopCommand;

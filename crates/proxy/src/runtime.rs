@@ -35,6 +35,16 @@ pub struct Proxy {
     pub(crate) resolver: Arc<DnsSystem>,
     pub(crate) protocols: ProtocolInventory,
     pub(crate) mux_pool: MuxConnectionPool,
+    pub(crate) tun_shutdown: Arc<std::sync::Mutex<Option<tokio::sync::watch::Sender<bool>>>>,
+    pub(crate) tun_info: Arc<std::sync::Mutex<Option<TunInfo>>>,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct TunInfo {
+    pub name: String,
+    pub addr: String,
+    pub tag: String,
 }
 
 impl Proxy {
@@ -58,6 +68,8 @@ impl Proxy {
             resolver: Arc::new(dns),
             protocols,
             mux_pool: MuxConnectionPool::new(),
+            tun_shutdown: Arc::new(std::sync::Mutex::new(None)),
+            tun_info: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 

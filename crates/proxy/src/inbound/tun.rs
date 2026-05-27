@@ -16,7 +16,7 @@ use std::task::{Context, Poll};
 
 use async_trait::async_trait;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, watch, Mutex};
 use tokio::task::JoinSet;
 use tracing::{error, info};
 
@@ -25,7 +25,7 @@ use zero_engine::EngineError;
 use zero_tun::TunDevice;
 
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
-use crate::runtime::Proxy;
+use crate::runtime::{Proxy, TunInfo};
 
 // ── Packet parsing ─────────────────────────────────────────────────────
 
@@ -33,7 +33,6 @@ struct Ipv4Info {
     src: Ipv4Addr,
     dst: Ipv4Addr,
     header_len: u16,
-    protocol: u8,
 }
 
 struct TcpInfo {
@@ -44,7 +43,6 @@ struct TcpInfo {
     fin: bool,
     seq: u32,
     data_off: u16,
-    payload_len: u16,
 }
 
 fn parse_ipv4_tcp(buf: &[u8]) -> Option<(Ipv4Info, TcpInfo)> {
@@ -53,14 +51,11 @@ fn parse_ipv4_tcp(buf: &[u8]) -> Option<(Ipv4Info, TcpInfo)> {
     if (ver_ihl >> 4) != 4 { return None; }
     let ihl = (ver_ihl & 0x0f) as u16 * 4;
     if buf.len() < ihl as usize + 20 { return None; }
-    let protocol = buf[9];
-    if protocol != 6 { return None; }
-    let total_len = u16::from_be_bytes([buf[2], buf[3]]) as usize;
+    if buf[9] != 6 { return None; } // TCP only
     let ip = Ipv4Info {
         src: Ipv4Addr::new(buf[12], buf[13], buf[14], buf[15]),
         dst: Ipv4Addr::new(buf[16], buf[17], buf[18], buf[19]),
         header_len: ihl,
-        protocol,
     };
     let tcp_start = ihl as usize;
     let tcp = &buf[tcp_start..];
@@ -74,7 +69,6 @@ fn parse_ipv4_tcp(buf: &[u8]) -> Option<(Ipv4Info, TcpInfo)> {
         fin: (flags & 0x01) != 0,
         seq: u32::from_be_bytes([tcp[4], tcp[5], tcp[6], tcp[7]]),
         data_off,
-        payload_len: total_len.saturating_sub(tcp_start + data_off as usize) as u16,
     };
     Some((ip, tcp_info))
 }
@@ -150,13 +144,21 @@ struct ConnState {
 
 // ── Dispatch loop ─────────────────────────────────────────────────────
 
-async fn tun_loop(proxy: Proxy, mut device: impl TunDevice + 'static, tag: String) {
+async fn tun_loop(
+    proxy: Proxy, device: impl TunDevice + 'static, tag: String,
+    shutdown: watch::Receiver<bool>,
+) {
     let device = Arc::new(Mutex::new(device));
     let connections = Arc::new(Mutex::new(HashMap::<ConnKey, ConnState>::new()));
     let mut buf = vec![0u8; 65536];
     let mut tasks = JoinSet::new();
 
     loop {
+        // Check shutdown
+        if *shutdown.borrow() {
+            info!("tun shutdown requested");
+            break;
+        }
         let n = {
             let mut dev = device.lock().await;
             match dev.read(&mut buf).await {
@@ -217,13 +219,51 @@ async fn tun_loop(proxy: Proxy, mut device: impl TunDevice + 'static, tag: Strin
 
 impl Proxy {
     pub async fn start_tun(
-        &self, name: Option<&str>, _addr: &str, _mask: &str, _mtu: u16, tag: &str,
+        &self, name: Option<&str>, addr: &str, _mask: &str, _mtu: u16, tag: &str,
     ) -> Result<(), EngineError> {
+        // Reject if already running.
+        {
+            let info = self.tun_info.lock().unwrap();
+            if info.is_some() {
+                return Err(EngineError::Io(io::Error::new(
+                    io::ErrorKind::AlreadyExists, "TUN is already running",
+                )));
+            }
+        }
+
         let device = zero_tun::create(name).map_err(EngineError::Io)?;
-        info!(inbound_tag = tag, name = device.name(), "tun device created");
-        let proxy = self.clone(); let t = tag.to_owned();
-        tokio::spawn(async move { tun_loop(proxy, device, t).await; });
+        let dev_name = device.name().to_owned();
+        info!(inbound_tag = tag, name = %dev_name, addr = %addr, "tun device created");
+
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        *self.tun_shutdown.lock().unwrap() = Some(shutdown_tx);
+        *self.tun_info.lock().unwrap() = Some(TunInfo {
+            name: dev_name, addr: addr.to_owned(), tag: tag.to_owned(),
+        });
+
+        let proxy = self.clone();
+        let t = tag.to_owned();
+        tokio::spawn(async move { tun_loop(proxy, device, t, shutdown_rx).await; });
+
         Ok(())
+    }
+
+    pub fn stop_tun(&self) -> Result<(), EngineError> {
+        let mut shutdown = self.tun_shutdown.lock().unwrap();
+        if let Some(tx) = shutdown.take() {
+            let _ = tx.send(true);
+            *self.tun_info.lock().unwrap() = None;
+            Ok(())
+        } else {
+            Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::NotFound, "TUN is not running",
+            )))
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn tun_status(&self) -> Option<TunInfo> {
+        self.tun_info.lock().unwrap().clone()
     }
 }
 

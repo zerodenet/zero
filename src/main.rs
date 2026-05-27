@@ -95,6 +95,54 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
+        cli::Command::TunStart { name, addr, mask, mtu, tag, socket_path } => {
+            let socket = resolve_socket(socket_path.as_deref())?;
+            let req = crate::ipc::protocol::IpcRequest::Command {
+                method: "tun.start".to_owned(),
+                params: serde_json::json!({
+                    "name": name, "addr": addr,
+                    "mask": mask.unwrap_or_else(|| "255.255.255.0".to_owned()),
+                    "mtu": mtu.unwrap_or(1500), "tag": tag,
+                }),
+            };
+            match ipc::client::send_request(&socket, &req) {
+                Ok(resp) if resp.ok => println!("tun started"),
+                Ok(resp) => eprintln!("error: {}", resp.error.map(|e| e.message).unwrap_or_default()),
+                Err(e) => eprintln!("error: {e}"),
+            }
+        }
+        cli::Command::TunStop { socket_path } => {
+            let socket = resolve_socket(socket_path.as_deref())?;
+            let req = crate::ipc::protocol::IpcRequest::Command {
+                method: "tun.stop".to_owned(), params: serde_json::json!({}),
+            };
+            match ipc::client::send_request(&socket, &req) {
+                Ok(resp) if resp.ok => println!("tun stopped"),
+                Ok(resp) => eprintln!("error: {}", resp.error.map(|e| e.message).unwrap_or_default()),
+                Err(e) => eprintln!("error: {e}"),
+            }
+        }
+        cli::Command::TunStatus { socket_path } => {
+            let socket = resolve_socket(socket_path.as_deref())?;
+            let req = crate::ipc::protocol::IpcRequest::Query {
+                request: zero_api::QueryRequest::TunStatus(zero_api::TunStatusQuery),
+            };
+            match ipc::client::send_request(&socket, &req) {
+                Ok(resp) if resp.ok => {
+                    if let Some(v) = resp.result {
+                        let s: zero_api::TunStatusSnapshot = serde_json::from_value(v).unwrap_or_default();
+                        if s.running {
+                            println!("tun: running, name={}, addr={}, tag={}",
+                                s.name.as_deref().unwrap_or("-"),
+                                s.addr.as_deref().unwrap_or("-"),
+                                s.tag.as_deref().unwrap_or("-"));
+                        } else { println!("tun: not running"); }
+                    }
+                }
+                Ok(resp) => eprintln!("error: {}", resp.error.map(|e| e.message).unwrap_or_default()),
+                Err(e) => eprintln!("error: {e}"),
+            }
+        }
         cli::Command::Validate { config_path } => {
             match zero_config::RuntimeConfig::load_from_path(&config_path) {
                 Ok(config) => {

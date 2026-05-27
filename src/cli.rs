@@ -87,6 +87,20 @@ pub enum Command {
         outbound: Option<String>,
         socket_path: Option<String>,
     },
+    TunStart {
+        name: Option<String>,
+        addr: String,
+        mask: Option<String>,
+        mtu: Option<u16>,
+        tag: String,
+        socket_path: Option<String>,
+    },
+    TunStop {
+        socket_path: Option<String>,
+    },
+    TunStatus {
+        socket_path: Option<String>,
+    },
     Version,
     Help,
 }
@@ -139,6 +153,23 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
         "reload" => parse_reload(args.collect()),
         "validate" => parse_validate(args.collect()),
         "mode" => parse_mode(args.collect()),
+        "tun" => {
+            let remaining: Vec<String> = args.collect();
+            match remaining.first().map(|s| s.as_str()) {
+                Some("start") => parse_tun_start(remaining[1..].to_vec()),
+                Some("stop") => parse_client_command(
+                    remaining[1..].to_vec(),
+                    |socket_path| Command::TunStop { socket_path },
+                ),
+                Some("status") => parse_client_command(
+                    remaining[1..].to_vec(),
+                    |socket_path| Command::TunStatus { socket_path },
+                ),
+                _ => Err(CliError::new(
+                    "tun requires subcommand: start, stop, or status".to_owned(),
+                )),
+            }
+        }
         "version" | "--version" | "-V" => Ok(Command::Version),
         "help" | "--help" | "-h" => Ok(Command::Help),
         _ if first.starts_with('-') => Err(CliError::new(format!(
@@ -163,16 +194,19 @@ pub fn usage() -> &'static str {
   zero reload CONFIG [--socket PATH]
   zero validate CONFIG
   zero mode <rule|direct|global> [outbound] [--socket PATH]
+  zero tun start --addr IP --tag TAG [--name NAME] [--mask MASK] [--mtu MTU] [--socket PATH]
+  zero tun stop [--socket PATH]
+  zero tun status [--socket PATH]
   zero version
   zero help
 
 Examples:
   zero run config.json
   zero run --status-listen 127.0.0.1:9090 config.json
+  zero tun start --addr 10.0.0.1 --tag my-tun
+  zero tun status
   zero select proxy direct
   zero status
-  zero flows
-  zero events
   zero reload config.json"
 }
 
@@ -329,6 +363,41 @@ fn parse_validate(args: Vec<String>) -> Result<Command, CliError> {
             ))
         })?;
     Ok(Command::Validate { config_path })
+}
+
+fn parse_tun_start(args: Vec<String>) -> Result<Command, CliError> {
+    let mut name: Option<String> = None;
+    let mut addr: Option<String> = None;
+    let mut mask: Option<String> = None;
+    let mut mtu: Option<u16> = None;
+    let mut tag: Option<String> = None;
+    let mut socket_path: Option<String> = None;
+    let mut iter = args.into_iter();
+
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--name" => name = Some(iter.next().ok_or(CliError::new("--name requires value"))?),
+            "--addr" => addr = Some(iter.next().ok_or(CliError::new("--addr requires value"))?),
+            "--mask" => mask = Some(iter.next().ok_or(CliError::new("--mask requires value"))?),
+            "--mtu" => mtu = Some(
+                iter.next()
+                    .ok_or(CliError::new("--mtu requires value"))?
+                    .parse()
+                    .map_err(|_| CliError::new("--mtu must be a number"))?,
+            ),
+            "--tag" => tag = Some(iter.next().ok_or(CliError::new("--tag requires value"))?),
+            "--socket" => {
+                socket_path = Some(
+                    iter.next().ok_or(CliError::new("--socket requires value"))?,
+                );
+            }
+            a if a.starts_with('-') => return Err(CliError::new(format!("unknown option `{a}`"))),
+            _ => {}
+        }
+    }
+    let addr = addr.ok_or(CliError::new("--addr is required"))?;
+    let tag = tag.ok_or(CliError::new("--tag is required"))?;
+    Ok(Command::TunStart { name, addr, mask, mtu, tag, socket_path })
 }
 
 fn parse_mode(args: Vec<String>) -> Result<Command, CliError> {

@@ -65,6 +65,7 @@
 - **`crates/tun/` 新 crate** — 定义 `TunDevice` trait，提供 Linux（ioctl）、macOS（utun socket）、Windows（Wintun）三个平台后端。
 - **`crates/proxy/src/inbound/tun.rs`** — TUN 入站监听器，实现 TCP 状态机，从虚拟网卡读取 IP 数据包、重组 TCP 流，集成到 `serve_inbound()` 统一管线。
 - **Runtime API**: `Proxy::start_tun(name, addr, mask, mtu, tag)` — 创建 TUN 设备并启动数据包读取循环，将识别出的 TCP 连接送入内核代理管线。
+- **控制面**: `zero tun start --addr IP --tag TAG [--name NAME]` / `stop` / `status` CLI 命令，`CommandRequest::TunStart/TunStop` + `QueryRequest::TunStatus` API 类型。
 - **无 feature gate**：始终编译，不依赖可选 Cargo feature。
 - **路由集成**：TUN 流量以入站 `tag` 落入路由表，可通过标准路由规则定向到任意出站或出站组。
 
