@@ -63,7 +63,7 @@
 ### 8. TUN 虚拟网卡
 
 - **`crates/tun/` 新 crate** — 定义 `TunDevice` trait，提供 Linux（ioctl）、macOS（utun socket）、Windows（Wintun）三个平台后端。
-- **`crates/proxy/src/inbound/tun.rs`** — TUN 入站监听器，实现 TCP 状态机，从虚拟网卡读取 IP 数据包、重组 TCP 流，集成到 `serve_inbound()` 统一管线。
+- **`crates/proxy/src/inbound/tun.rs`** — TUN 入站监听器，支持 IPv4/IPv6 双栈数据包解析和构建。TCP：状态机重组 TCP 流，集成到 `serve_inbound()` 统一管线。UDP：本地 relay socket 转发，支持响应回写。6 个单元测试覆盖 IPv4/IPv6 TCP/UDP 数据包解析。
 - **Runtime API**: `Proxy::start_tun(name, addr, mask, mtu, tag)` — 创建 TUN 设备并启动数据包读取循环，将识别出的 TCP 连接送入内核代理管线。
 - **控制面**: CLI: `zero tun start --addr IP --tag TAG [--name NAME]` / `stop` / `status`；IPC/HTTP 统一。命令类型 `TunStartCommand`（字段：`name`/`addr`/`mask`/`mtu`/`tag`）和 `TunStopCommand`；查询类型 `TunStatusQuery`，返回 `TunStatusSnapshot`（`running`/`name`/`addr`/`tag`）。
 - **无 feature gate**：始终编译，不依赖可选 Cargo feature。

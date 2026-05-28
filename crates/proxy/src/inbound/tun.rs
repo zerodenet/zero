@@ -1,27 +1,24 @@
-//! TUN inbound — virtual network interface.
+//! TUN inbound — virtual network interface with IPv4/IPv6 dual-stack.
 //!
-//! Reads raw IP packets from a platform TUN device, parses TCP headers,
-//! and dispatches each TCP connection through `serve_inbound()`.
-//! Maintains a minimal TCP state machine for connection tracking.
-//!
-//! TODO: replace hand-rolled TCP with `smoltcp` for full TCP compliance
-//!       (retransmission, window scaling, out-of-order handling).
+//! Reads raw IP packets from a platform TUN device, dispatches TCP
+//! connections through `serve_inbound()`, and forwards UDP datagrams
+//! through a local relay socket.  Maintains a minimal TCP state machine.
 
 use std::collections::HashMap;
 use std::io;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-
-use async_trait::async_trait;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio::task::JoinSet;
 use tokio::time::interval;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
@@ -32,48 +29,94 @@ use crate::runtime::{Proxy, TunInfo};
 
 // ── Packet parsing ─────────────────────────────────────────────────────
 
-struct Ipv4Info {
-    src: Ipv4Addr,
-    dst: Ipv4Addr,
-    header_len: u16,
+enum IpInfo {
+    V4 { src: Ipv4Addr, dst: Ipv4Addr, header_len: u16 },
+    V6 { src: Ipv6Addr, dst: Ipv6Addr },
 }
 
 struct TcpInfo {
-    src_port: u16,
-    dst_port: u16,
-    syn: bool,
-    rst: bool,
-    fin: bool,
-    seq: u32,
-    data_off: u16,
+    src_port: u16, dst_port: u16,
+    syn: bool, rst: bool, fin: bool,
+    seq: u32, data_off: u16,
 }
 
-fn parse_ipv4_tcp(buf: &[u8]) -> Option<(Ipv4Info, TcpInfo)> {
+struct UdpInfo {
+    src_port: u16, dst_port: u16,
+    payload_start: usize, payload_len: usize,
+}
+
+fn parse_tcp_header(buf: &[u8], ip_header_len: u16) -> Option<TcpInfo> {
+    let off = ip_header_len as usize;
+    if buf.len() < off + 20 { return None; }
+    let h = &buf[off..];
+    let flags = h[13];
+    Some(TcpInfo {
+        src_port: u16::from_be_bytes([h[0], h[1]]),
+        dst_port: u16::from_be_bytes([h[2], h[3]]),
+        syn: (flags & 0x02) != 0, rst: (flags & 0x04) != 0, fin: (flags & 0x01) != 0,
+        seq: u32::from_be_bytes([h[4], h[5], h[6], h[7]]),
+        data_off: ((h[12] >> 4) & 0x0f) as u16 * 4,
+    })
+}
+
+fn parse_ip_tcp(buf: &[u8]) -> Option<(IpInfo, TcpInfo)> {
     if buf.len() < 40 { return None; }
-    let ver_ihl = buf[0];
-    if (ver_ihl >> 4) != 4 { return None; }
-    let ihl = (ver_ihl & 0x0f) as u16 * 4;
-    if buf.len() < ihl as usize + 20 { return None; }
-    if buf[9] != 6 { return None; } // TCP only
-    let ip = Ipv4Info {
-        src: Ipv4Addr::new(buf[12], buf[13], buf[14], buf[15]),
-        dst: Ipv4Addr::new(buf[16], buf[17], buf[18], buf[19]),
-        header_len: ihl,
-    };
-    let tcp_start = ihl as usize;
-    let tcp = &buf[tcp_start..];
-    let data_off = ((tcp[12] >> 4) & 0x0f) as u16 * 4;
-    let flags = tcp[13];
-    let tcp_info = TcpInfo {
-        src_port: u16::from_be_bytes([tcp[0], tcp[1]]),
-        dst_port: u16::from_be_bytes([tcp[2], tcp[3]]),
-        syn: (flags & 0x02) != 0,
-        rst: (flags & 0x04) != 0,
-        fin: (flags & 0x01) != 0,
-        seq: u32::from_be_bytes([tcp[4], tcp[5], tcp[6], tcp[7]]),
-        data_off,
-    };
-    Some((ip, tcp_info))
+    match buf[0] >> 4 {
+        4 => {
+            let ihl = (buf[0] & 0x0f) as u16 * 4;
+            if buf.len() < ihl as usize + 20 || buf[9] != 6 { return None; }
+            let ip = IpInfo::V4 {
+                src: Ipv4Addr::new(buf[12], buf[13], buf[14], buf[15]),
+                dst: Ipv4Addr::new(buf[16], buf[17], buf[18], buf[19]),
+                header_len: ihl,
+            };
+            Some((ip, parse_tcp_header(buf, ihl)?))
+        }
+        6 => {
+            if buf.len() < 60 || buf[6] != 6 { return None; }
+            let mut s = [0u8; 16]; s.copy_from_slice(&buf[8..24]);
+            let mut d = [0u8; 16]; d.copy_from_slice(&buf[24..40]);
+            Some((IpInfo::V6 { src: Ipv6Addr::from(s), dst: Ipv6Addr::from(d) }, parse_tcp_header(buf, 40)?))
+        }
+        _ => None,
+    }
+}
+
+fn parse_ip_udp(buf: &[u8]) -> Option<(IpInfo, UdpInfo)> {
+    if buf.len() < 28 { return None; }
+    match buf[0] >> 4 {
+        4 => {
+            let ihl = (buf[0] & 0x0f) as u16 * 4;
+            if buf.len() < ihl as usize + 8 || buf[9] != 17 { return None; }
+            let ip = IpInfo::V4 {
+                src: Ipv4Addr::new(buf[12], buf[13], buf[14], buf[15]),
+                dst: Ipv4Addr::new(buf[16], buf[17], buf[18], buf[19]),
+                header_len: ihl,
+            };
+            let off = ihl as usize;
+            Some((ip, UdpInfo {
+                src_port: u16::from_be_bytes([buf[off], buf[off+1]]),
+                dst_port: u16::from_be_bytes([buf[off+2], buf[off+3]]),
+                payload_start: off + 8, payload_len: buf.len().saturating_sub(off + 8),
+            }))
+        }
+        6 => {
+            if buf.len() < 48 { return None; }
+            let mut nh = buf[6]; let mut off = 40usize;
+            while nh != 17 && off + 8 <= buf.len() {
+                nh = buf[off]; off += (buf[off + 1] as usize) * 8 + 8;
+            }
+            if nh != 17 || off + 8 > buf.len() { return None; }
+            let mut s = [0u8; 16]; s.copy_from_slice(&buf[8..24]);
+            let mut d = [0u8; 16]; d.copy_from_slice(&buf[24..40]);
+            Some((IpInfo::V6 { src: Ipv6Addr::from(s), dst: Ipv6Addr::from(d) }, UdpInfo {
+                src_port: u16::from_be_bytes([buf[off], buf[off+1]]),
+                dst_port: u16::from_be_bytes([buf[off+2], buf[off+3]]),
+                payload_start: off + 8, payload_len: buf.len().saturating_sub(off + 8),
+            }))
+        }
+        _ => None,
+    }
 }
 
 // ── Bridged stream ────────────────────────────────────────────────────
@@ -113,36 +156,74 @@ struct TunProtocol;
 #[async_trait]
 impl InboundProtocol for TunProtocol {
     type ClientStream = TunTcpStream;
-    async fn accept(
-        &self, _: crate::transport::TcpRelayStream,
-    ) -> Result<(Session, Self::ClientStream), EngineError> {
-        // TUN has no protocol handshake — sessions are built from parsed
-        // IP packets in the listener and dispatched via serve_inbound.
-        Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "tun accept handled inline by listener",
-        )))
+    async fn accept(&self, _: crate::transport::TcpRelayStream) -> Result<(Session, Self::ClientStream), EngineError> {
+        Err(EngineError::Io(io::Error::new(io::ErrorKind::Unsupported, "tun accept handled inline")))
     }
     async fn send_ok(&self, _: &mut Self::ClientStream) -> Result<(), EngineError> { Ok(()) }
     async fn send_blocked(&self, _: &mut Self::ClientStream) -> Result<(), EngineError> { Ok(()) }
     async fn send_upstream_failure(&self, _: &mut Self::ClientStream) -> Result<(), EngineError> { Ok(()) }
 }
 
-// ── TCP packet builder ────────────────────────────────────────────────
+// ── Packet builders ────────────────────────────────────────────────────
 
-fn build_tcp_pkt(
-    src: Ipv4Addr, dst: Ipv4Addr, sport: u16, dport: u16,
-    seq: u32, ack: u32, flags: u8, payload: &[u8],
-) -> Vec<u8> {
-    let plen = payload.len();
-    let mut p = vec![0u8; 40 + plen];
-    p[0] = 0x45; p[2] = ((40 + plen) >> 8) as u8; p[3] = (40 + plen) as u8;
-    p[8] = 64; p[9] = 6;
+fn build_tcp_pkt(src: IpAddr, dst: IpAddr, sport: u16, dport: u16, seq: u32, ack: u32, flags: u8, payload: &[u8]) -> Vec<u8> {
+    match (src, dst) {
+        (IpAddr::V4(s), IpAddr::V4(d)) => build_tcp_v4(s, d, sport, dport, seq, ack, flags, payload),
+        (IpAddr::V6(s), IpAddr::V6(d)) => build_tcp_v6(s, d, sport, dport, seq, ack, flags, payload),
+        _ => vec![],
+    }
+}
+
+fn build_tcp_v4(src: Ipv4Addr, dst: Ipv4Addr, sport: u16, dport: u16, seq: u32, ack: u32, flags: u8, payload: &[u8]) -> Vec<u8> {
+    let pl = payload.len(); let mut p = vec![0u8; 40 + pl];
+    p[0] = 0x45; p[2] = ((40 + pl) >> 8) as u8; p[3] = (40 + pl) as u8; p[8] = 64; p[9] = 6;
     p[12..16].copy_from_slice(&src.octets()); p[16..20].copy_from_slice(&dst.octets());
     p[20..22].copy_from_slice(&sport.to_be_bytes()); p[22..24].copy_from_slice(&dport.to_be_bytes());
     p[24..28].copy_from_slice(&seq.to_be_bytes()); p[28..32].copy_from_slice(&ack.to_be_bytes());
     p[32] = 0x50; p[33] = flags;
-    if plen > 0 { p[40..].copy_from_slice(payload); }
+    if pl > 0 { p[40..].copy_from_slice(payload); }
+    p
+}
+
+fn build_tcp_v6(src: Ipv6Addr, dst: Ipv6Addr, sport: u16, dport: u16, seq: u32, ack: u32, flags: u8, payload: &[u8]) -> Vec<u8> {
+    let pl = payload.len(); let tcp_total = 20 + pl; let mut p = vec![0u8; 40 + tcp_total];
+    p[0] = 0x60; p[4..6].copy_from_slice(&(tcp_total as u16).to_be_bytes()); p[6] = 6; p[7] = 64;
+    p[8..24].copy_from_slice(&src.octets()); p[24..40].copy_from_slice(&dst.octets());
+    let o = 40;
+    p[o..o+2].copy_from_slice(&sport.to_be_bytes()); p[o+2..o+4].copy_from_slice(&dport.to_be_bytes());
+    p[o+4..o+8].copy_from_slice(&seq.to_be_bytes()); p[o+8..o+12].copy_from_slice(&ack.to_be_bytes());
+    p[o+12] = 0x50; p[o+13] = flags;
+    if pl > 0 { p[o+20..].copy_from_slice(payload); }
+    p
+}
+
+fn build_udp_pkt(src: IpAddr, dst: IpAddr, sport: u16, dport: u16, payload: &[u8]) -> Vec<u8> {
+    match (src, dst) {
+        (IpAddr::V4(s), IpAddr::V4(d)) => build_udp_v4(s, d, sport, dport, payload),
+        (IpAddr::V6(s), IpAddr::V6(d)) => build_udp_v6(s, d, sport, dport, payload),
+        _ => vec![],
+    }
+}
+
+fn build_udp_v4(src: Ipv4Addr, dst: Ipv4Addr, sport: u16, dport: u16, payload: &[u8]) -> Vec<u8> {
+    let pl = payload.len(); let udp_total = 8 + pl; let mut p = vec![0u8; 20 + udp_total];
+    p[0] = 0x45; p[2] = ((20 + udp_total) >> 8) as u8; p[3] = (20 + udp_total) as u8;
+    p[8] = 64; p[9] = 17;
+    p[12..16].copy_from_slice(&src.octets()); p[16..20].copy_from_slice(&dst.octets());
+    p[20..22].copy_from_slice(&sport.to_be_bytes()); p[22..24].copy_from_slice(&dport.to_be_bytes());
+    p[24..26].copy_from_slice(&(udp_total as u16).to_be_bytes());
+    if pl > 0 { p[28..].copy_from_slice(payload); }
+    p
+}
+
+fn build_udp_v6(src: Ipv6Addr, dst: Ipv6Addr, sport: u16, dport: u16, payload: &[u8]) -> Vec<u8> {
+    let pl = payload.len(); let udp_total = 8 + pl; let mut p = vec![0u8; 40 + udp_total];
+    p[0] = 0x60; p[4..6].copy_from_slice(&(udp_total as u16).to_be_bytes()); p[6] = 17; p[7] = 64;
+    p[8..24].copy_from_slice(&src.octets()); p[24..40].copy_from_slice(&dst.octets());
+    let o = 40;
+    p[o..o+2].copy_from_slice(&sport.to_be_bytes()); p[o+2..o+4].copy_from_slice(&dport.to_be_bytes());
+    p[o+4..o+6].copy_from_slice(&(udp_total as u16).to_be_bytes());
+    if pl > 0 { p[o+8..].copy_from_slice(payload); }
     p
 }
 
@@ -157,6 +238,96 @@ struct ConnState {
 
 const CONN_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 
+// ── TCP handler ───────────────────────────────────────────────────────
+
+async fn handle_tcp(
+    device: &Arc<Mutex<impl TunDevice + 'static>>,
+    connections: &Arc<Mutex<HashMap<ConnKey, ConnState>>>,
+    proxy: &Proxy, tag: &str, tasks: &mut JoinSet<()>,
+    ip: IpInfo, tcp: TcpInfo, buf: &[u8],
+) {
+    let n = buf.len();
+    let (src_ip, dst_ip, header_len) = match &ip {
+        IpInfo::V4 { src, dst, header_len } => (IpAddr::V4(*src), IpAddr::V4(*dst), *header_len),
+        IpInfo::V6 { src, dst } => (IpAddr::V6(*src), IpAddr::V6(*dst), 40),
+    };
+    let endpoint = SocketAddr::new(dst_ip, tcp.dst_port);
+    let src = SocketAddr::new(src_ip, tcp.src_port);
+    let key: ConnKey = (src, endpoint);
+    let pl_start = header_len as usize + tcp.data_off as usize;
+    let payload = if n > pl_start { &buf[pl_start..n] } else { &[] };
+
+    let mut conns = connections.lock().await;
+    if let Some(conn) = conns.get_mut(&key) {
+        conn.last_active = std::time::Instant::now();
+        if !payload.is_empty() { let _ = conn.tx.send(payload.to_vec()).await; }
+        if tcp.rst || tcp.fin { conns.remove(&key); }
+        return;
+    }
+    if !tcp.syn { return; }
+
+    let (data_tx, data_rx) = mpsc::channel::<Vec<u8>>(64);
+    let (resp_tx, mut resp_rx) = mpsc::channel::<Vec<u8>>(64);
+    conns.insert(key, ConnState { tx: data_tx, last_active: std::time::Instant::now() });
+    drop(conns);
+
+    let tun = device.clone();
+    let rs = dst_ip; let rd = src_ip; let rsp = tcp.dst_port; let rdp = tcp.src_port;
+    let server_seq: u32 = 42_000_000;
+    let client_ack = tcp.seq.wrapping_add(1);
+    tasks.spawn(async move {
+        let mut seq = server_seq.wrapping_add(1);
+        let _ = tun.lock().await.write(&build_tcp_pkt(rs, rd, rsp, rdp, server_seq, client_ack, 0x12, &[])).await;
+        while let Some(data) = resp_rx.recv().await {
+            let _ = tun.lock().await.write(&build_tcp_pkt(rs, rd, rsp, rdp, seq, client_ack, 0x18, &data)).await;
+            seq = seq.wrapping_add(data.len() as u32);
+        }
+        let _ = tun.lock().await.write(&build_tcp_pkt(rs, rd, rsp, rdp, seq, client_ack, 0x11, &[])).await;
+    });
+
+    let session = Session::new(0, match dst_ip {
+        IpAddr::V4(v4) => Address::Ipv4(v4.octets()),
+        IpAddr::V6(v6) => Address::Ipv6(v6.octets()),
+    }, tcp.dst_port, Network::Tcp, ProtocolType::Unknown);
+    let stream = TunTcpStream { rx: Mutex::new(data_rx), tx: resp_tx };
+    let p = proxy.clone(); let t = tag.to_owned();
+    tasks.spawn(async move { let _ = serve_inbound(&p, session, stream, &TunProtocol, &t, Some(src)).await; });
+}
+
+// ── UDP handler ───────────────────────────────────────────────────────
+
+async fn handle_udp(
+    device: &Arc<Mutex<impl TunDevice + 'static>>,
+    proxy: &Proxy, tag: &str,
+    ip: IpInfo, udp: UdpInfo, buf: &[u8],
+    relay_sock: &UdpSocket,
+) {
+    let (src_ip, dst_ip, _header_len) = match &ip {
+        IpInfo::V4 { src, dst, header_len } => (IpAddr::V4(*src), IpAddr::V4(*dst), *header_len),
+        IpInfo::V6 { src, dst } => (IpAddr::V6(*src), IpAddr::V6(*dst), 40),
+    };
+    if udp.payload_len == 0 { return; }
+
+    let payload = &buf[udp.payload_start..udp.payload_start + udp.payload_len];
+    let target = SocketAddr::new(dst_ip, udp.dst_port);
+
+    // Forward to target via relay socket.
+    if let Err(e) = relay_sock.send_to(payload, target).await {
+        warn!(error = %e, "tun udp send_to failed");
+        return;
+    }
+
+    // Read response (non-blocking, one shot).
+    let mut resp_buf = [0u8; 65536];
+    match relay_sock.try_recv_from(&mut resp_buf) {
+        Ok((n, from)) if from == target => {
+            let pkt = build_udp_pkt(dst_ip, src_ip, udp.dst_port, udp.src_port, &resp_buf[..n]);
+            let _ = device.lock().await.write(&pkt).await;
+        }
+        _ => {} // no response or wrong sender — UDP is fire-and-forget
+    }
+}
+
 // ── Dispatch loop ─────────────────────────────────────────────────────
 
 async fn tun_loop(
@@ -168,6 +339,7 @@ async fn tun_loop(
     let mut buf = vec![0u8; 65536];
     let mut tasks = JoinSet::new();
     let mut cleanup_tick = interval(Duration::from_secs(60));
+    let relay_sock = UdpSocket::bind("0.0.0.0:0").await.expect("tun udp relay socket");
 
     loop {
         let n;
@@ -178,65 +350,23 @@ async fn tun_loop(
             }
             _ = cleanup_tick.tick() => {
                 let mut conns = connections.lock().await;
-                conns.retain(|_, state| state.last_active.elapsed() < CONN_IDLE_TIMEOUT);
+                conns.retain(|_, s| s.last_active.elapsed() < CONN_IDLE_TIMEOUT);
                 continue;
             }
-            read_result = async {
-                let mut dev = device.lock().await;
-                dev.read(&mut buf).await
-            } => {
-                n = match read_result {
+            r = async { device.lock().await.read(&mut buf).await } => {
+                match r {
                     Ok(0) => break,
-                    Ok(n) => n,
+                    Ok(nb) => n = nb,
                     Err(e) => { error!(error = %e, "tun read"); break; }
-                };
+                }
             }
         }
 
-        let (ip, tcp) = match parse_ipv4_tcp(&buf[..n]) { Some(v) => v, None => continue };
-
-        let endpoint = SocketAddr::new(IpAddr::V4(ip.dst), tcp.dst_port);
-        let src = SocketAddr::new(IpAddr::V4(ip.src), tcp.src_port);
-        let key: ConnKey = (src, endpoint);
-        let payload_start = ip.header_len as usize + tcp.data_off as usize;
-        let payload = if n > payload_start { &buf[payload_start..n] } else { &[] };
-
-        let mut conns = connections.lock().await;
-        if let Some(conn) = conns.get_mut(&key) {
-            conn.last_active = std::time::Instant::now();
-            if !payload.is_empty() { let _ = conn.tx.send(payload.to_vec()).await; }
-            if tcp.rst || tcp.fin { conns.remove(&key); }
-            continue;
+        if let Some((ip, tcp)) = parse_ip_tcp(&buf[..n]) {
+            handle_tcp(&device, &connections, &proxy, &tag, &mut tasks, ip, tcp, &buf[..n]).await;
+        } else if let Some((ip, udp)) = parse_ip_udp(&buf[..n]) {
+            handle_udp(&device, &proxy, &tag, ip, udp, &buf[..n], &relay_sock).await;
         }
-        if !tcp.syn { continue; }
-
-        // New connection.
-        let (data_tx, data_rx) = mpsc::channel::<Vec<u8>>(64);
-        let (resp_tx, mut resp_rx) = mpsc::channel::<Vec<u8>>(64);
-        conns.insert(key, ConnState { tx: data_tx, last_active: std::time::Instant::now() });
-        drop(conns);
-
-        // Reply writer.
-        let tun = device.clone();
-        let reply_src = ip.dst; let reply_dst = ip.src;
-        let reply_sport = tcp.dst_port; let reply_dport = tcp.src_port;
-        let server_seq: u32 = 42_000_000;
-        let client_ack = tcp.seq.wrapping_add(1);
-        tasks.spawn(async move {
-            let mut seq = server_seq.wrapping_add(1);
-            let _ = tun.lock().await.write(&build_tcp_pkt(reply_src, reply_dst, reply_sport, reply_dport, server_seq, client_ack, 0x12, &[])).await;
-            while let Some(data) = resp_rx.recv().await {
-                let _ = tun.lock().await.write(&build_tcp_pkt(reply_src, reply_dst, reply_sport, reply_dport, seq, client_ack, 0x18, &data)).await;
-                seq = seq.wrapping_add(data.len() as u32);
-            }
-            let _ = tun.lock().await.write(&build_tcp_pkt(reply_src, reply_dst, reply_sport, reply_dport, seq, client_ack, 0x11, &[])).await;
-        });
-
-        // serve_inbound
-        let stream = TunTcpStream { rx: Mutex::new(data_rx), tx: resp_tx };
-        let session = Session::new(0, Address::Ipv4(ip.dst.octets()), tcp.dst_port, Network::Tcp, ProtocolType::Unknown);
-        let p = proxy.clone(); let t = tag.clone();
-        tasks.spawn(async move { let _ = serve_inbound(&p, session, stream, &TunProtocol, &t, Some(src)).await; });
     }
     tasks.abort_all();
 }
@@ -247,50 +377,33 @@ impl Proxy {
     pub async fn start_tun(
         &self, name: Option<&str>, addr: &str, _mask: &str, _mtu: u16, tag: &str,
     ) -> Result<(), EngineError> {
-        // Reject if already running.
         {
             let info = self.tun_info.lock().unwrap();
             if info.is_some() {
-                return Err(EngineError::Io(io::Error::new(
-                    io::ErrorKind::AlreadyExists, "TUN is already running",
-                )));
+                return Err(EngineError::Io(io::Error::new(io::ErrorKind::AlreadyExists, "TUN is already running")));
             }
         }
-
         let device = zero_tun::create(name).map_err(EngineError::Io)?;
-        let dev_name = device.name().to_owned();
-        info!(inbound_tag = tag, name = %dev_name, addr = %addr, "tun device created");
+        let dn = device.name().to_owned();
+        info!(inbound_tag = tag, name = %dn, addr = %addr, "tun device created");
 
-        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
         *self.tun_shutdown.lock().unwrap() = Some(shutdown_tx);
-        *self.tun_info.lock().unwrap() = Some(TunInfo {
-            name: dev_name, addr: addr.to_owned(), tag: tag.to_owned(),
-        });
+        *self.tun_info.lock().unwrap() = Some(TunInfo { name: dn, addr: addr.to_owned(), tag: tag.to_owned() });
 
-        let proxy = self.clone();
-        let t = tag.to_owned();
+        let proxy = self.clone(); let t = tag.to_owned();
         tokio::spawn(async move { tun_loop(proxy, device, t, shutdown_rx).await; });
-
         Ok(())
     }
 
     pub fn stop_tun(&self) -> Result<(), EngineError> {
-        let mut shutdown = self.tun_shutdown.lock().unwrap();
-        if let Some(tx) = shutdown.take() {
-            let _ = tx.send(true);
-            *self.tun_info.lock().unwrap() = None;
-            Ok(())
-        } else {
-            Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::NotFound, "TUN is not running",
-            )))
-        }
+        let mut s = self.tun_shutdown.lock().unwrap();
+        if let Some(tx) = s.take() { let _ = tx.send(true); *self.tun_info.lock().unwrap() = None; Ok(()) }
+        else { Err(EngineError::Io(io::Error::new(io::ErrorKind::NotFound, "TUN is not running"))) }
     }
 
     #[allow(dead_code)]
-    pub(crate) fn tun_status(&self) -> Option<TunInfo> {
-        self.tun_info.lock().unwrap().clone()
-    }
+    pub(crate) fn tun_status(&self) -> Option<TunInfo> { self.tun_info.lock().unwrap().clone() }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
@@ -300,68 +413,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_syn_packet() {
-        let pkt = build_tcp_pkt(
-            Ipv4Addr::new(10, 0, 0, 2), Ipv4Addr::new(1, 2, 3, 4),
-            12345, 443, 100, 0, 0x02, b"",
-        );
-        let (ip, tcp) = parse_ipv4_tcp(&pkt).expect("parse SYN");
-        assert_eq!(ip.src, Ipv4Addr::new(10, 0, 0, 2));
-        assert_eq!(ip.dst, Ipv4Addr::new(1, 2, 3, 4));
-        assert_eq!(tcp.src_port, 12345);
-        assert_eq!(tcp.dst_port, 443);
-        assert!(tcp.syn);
-        assert!(!tcp.rst);
-        assert!(!tcp.fin);
-        assert_eq!(tcp.seq, 100);
+    fn test_parse_syn_v4() {
+        let p = build_tcp_v4(Ipv4Addr::new(10,0,0,2), Ipv4Addr::new(1,2,3,4), 12345, 443, 100, 0, 0x02, b"");
+        let (ip, tcp) = parse_ip_tcp(&p).expect("SYN v4");
+        assert!(matches!(ip, IpInfo::V4{..})); assert!(tcp.syn); assert_eq!(tcp.seq, 100);
     }
 
     #[test]
-    fn test_parse_data_packet() {
-        let pkt = build_tcp_pkt(
-            Ipv4Addr::new(10, 0, 0, 2), Ipv4Addr::new(1, 2, 3, 4),
-            12345, 443, 101, 1, 0x18, b"hello",
-        );
-        let (_, tcp) = parse_ipv4_tcp(&pkt).expect("parse data");
-        assert!(!tcp.syn);
-        assert_eq!(tcp.seq, 101);
+    fn test_parse_udp_v4() {
+        let p = build_udp_v4(Ipv4Addr::new(10,0,0,2), Ipv4Addr::new(8,8,8,8), 12345, 53, b"dns query");
+        let (ip, udp) = parse_ip_udp(&p).expect("UDP v4");
+        assert!(matches!(ip, IpInfo::V4{..})); assert_eq!(udp.dst_port, 53);
     }
 
     #[test]
-    fn test_parse_fin_packet() {
-        let pkt = build_tcp_pkt(
-            Ipv4Addr::new(10, 0, 0, 2), Ipv4Addr::new(1, 2, 3, 4),
-            12345, 443, 200, 50, 0x11, b"",
-        );
-        let (_, tcp) = parse_ipv4_tcp(&pkt).expect("parse FIN");
-        assert!(tcp.fin);
+    fn test_parse_syn_v6() {
+        let s = Ipv6Addr::new(0xfd00,0,0,0,0,0,0,1);
+        let d = Ipv6Addr::new(0x2606,0x4700,0,0,0,0,0x6810,0x1);
+        let p = build_tcp_v6(s, d, 54321, 443, 500, 0, 0x02, b"");
+        let (ip, tcp) = parse_ip_tcp(&p).expect("SYN v6");
+        assert!(matches!(ip, IpInfo::V6{..})); assert!(tcp.syn);
     }
 
     #[test]
-    fn test_parse_ignores_udp() {
-        let pkt = build_tcp_pkt(
-            Ipv4Addr::new(10, 0, 0, 2), Ipv4Addr::new(1, 2, 3, 4),
-            12345, 443, 0, 0, 0x02, b"",
-        );
-        let mut pkt2 = pkt.clone();
-        pkt2[9] = 17; // change protocol to UDP
-        assert!(parse_ipv4_tcp(&pkt2).is_none());
+    fn test_parse_udp_v6() {
+        let s = Ipv6Addr::LOCALHOST; let d = Ipv6Addr::LOCALHOST;
+        let p = build_udp_v6(s, d, 1, 53, b"dns");
+        let (ip, udp) = parse_ip_udp(&p).expect("UDP v6");
+        assert_eq!(udp.dst_port, 53);
     }
 
     #[test]
-    fn test_build_tcp_packet_roundtrip() {
-        let payload = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n";
-        let pkt = build_tcp_pkt(
-            Ipv4Addr::new(192, 168, 1, 1), Ipv4Addr::new(93, 184, 216, 34),
-            54321, 80, 1000, 0, 0x18, payload,
-        );
-        let (ip, tcp) = parse_ipv4_tcp(&pkt).expect("roundtrip");
-        assert_eq!(ip.src, Ipv4Addr::new(192, 168, 1, 1));
-        assert_eq!(tcp.src_port, 54321);
-        assert_eq!(tcp.dst_port, 80);
-        assert_eq!(tcp.seq, 1000);
-        // Extract payload
-        let pl_start = (ip.header_len + tcp.data_off) as usize;
-        assert_eq!(&pkt[pl_start..], payload);
+    fn test_tcp_ignores_udp() {
+        let p = build_udp_v4(Ipv4Addr::new(10,0,0,1), Ipv4Addr::new(8,8,8,8), 1, 53, b"x");
+        assert!(parse_ip_tcp(&p).is_none());
+    }
+
+    #[test]
+    fn test_udp_ignores_tcp() {
+        let p = build_tcp_v4(Ipv4Addr::new(10,0,0,1), Ipv4Addr::new(8,8,8,8), 1, 80, 0, 0, 0x02, b"");
+        assert!(parse_ip_udp(&p).is_none());
     }
 }

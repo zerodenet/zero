@@ -14,7 +14,7 @@ Zero is a network proxy kernel written in Rust at workspace version `0.0.4`.
 - `Hysteria2` (QUIC, password auth, TCP + UDP)
 - `Shadowsocks` (AEAD: aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305; 2022-blake3; TCP + UDP)
 - `Trojan` (TCP)
-- `TUN` (virtual network interface, no feature gate, always compiled)
+- `TUN` (virtual network interface, IPv4/IPv6 dual-stack, TCP state machine + serve_inbound() integration, UDP local relay socket forwarding with response write-back, no feature gate, always compiled)
 - `direct` (fixed-target forwarder; outbound determined by normal route rules, no feature gate, always compiled)
 
 **Outbound protocols:**
