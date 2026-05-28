@@ -200,13 +200,14 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 - `hysteria2` -- QUIC, TCP streams and UDP datagram forwarding
 - `shadowsocks` -- AEAD cipher (chacha20-ietf-poly1305, aes-128-gcm, aes-256-gcm); 2022-blake3
 - `trojan` -- TLS + SHA224 password auth, TCP streams
-- `direct` -- fixed-target TCP forwarder; accepts raw TCP with no handshake, forwards to a configured outbound
+- `direct` -- fixed-target TCP forwarder; accepts raw TCP with no handshake, outbound determined by normal route rules
+- `tun` -- virtual network interface; started at runtime via CLI/API commands, routes traffic through normal rule matching
 
 `mixed` is not an external protocol, but a config entry for "same port multi-protocol inbound".
 
 ### Direct inbound
 
-`direct` inbound listens on a port, accepts raw TCP connections with no protocol handshake, and forwards all traffic to a configured outbound (node or group). The target address comes from the inbound config rather than the client.
+`direct` inbound listens on a port, accepts raw TCP connections with no protocol handshake, and forwards all traffic through the normal route rules. The target address comes from the inbound config rather than the client. Outbound selection follows the standard routing pipeline -- `mode`, `rules`, `rule_sets`, and `final`.
 
 ```json
 {
@@ -214,7 +215,6 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
   "listen": { "address": "127.0.0.1", "port": 8080 },
   "protocol": {
     "type": "direct",
-    "outbound": "proxy",
     "target": "example.com",
     "port": 443
   }
@@ -222,9 +222,39 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 ```
 
 Direct inbound config fields:
-- `outbound` -- required, outbound or outbound group tag to forward traffic through
 - `target` -- optional, target address (IP or domain) for forwarded connections; must be present at runtime (defaults to nothing)
 - `port` -- optional, target port, default `443`
+
+### TUN inbound
+
+`tun` is a virtual network interface inbound. Unlike other inbounds, it is not declared in the static JSON configuration. Instead, it is started and stopped at runtime via CLI, IPC, or HTTP control plane commands.
+
+```bash
+# Start a TUN device
+zero tun start --addr 10.0.0.1 --mask 255.255.255.0 --tag my-tun --name tun0
+
+# Check TUN status
+zero tun status
+
+# Stop the TUN device
+zero tun stop
+```
+
+HTTP control plane equivalent (via `POST /api/v1/commands`):
+
+```json
+{ "method": "tun.start", "params": { "addr": "10.0.0.1", "mask": "255.255.255.0", "tag": "my-tun", "name": "tun0", "mtu": 1500 } }
+{ "method": "tun.stop" }
+```
+
+TUN start parameters:
+- `addr` -- required, IP address assigned to the virtual interface
+- `mask` -- netmask, default `255.255.255.0`
+- `tag` -- required, inbound tag used for routing decisions; TUN traffic matches route rules by this tag
+- `name` -- optional, OS-level device name (e.g. `tun0`, `utun8`); auto-assigned if omitted
+- `mtu` -- optional, MTU in bytes, default `1500`
+
+Internally, TUN reads raw IP packets from the virtual interface, parses TCP headers (IPv4 currently), maintains a minimal TCP state machine, and dispatches each TCP connection through `serve_inbound()` for unified routing and relay. The implementation is in `crates/proxy/src/inbound/tun.rs` with platform backends in `crates/tun/` (Linux ioctl, macOS utun, Windows Wintun).
 
 SOCKS5 inbound defaults to no-auth. Configuring `users` enables RFC 1929 username/password:
 

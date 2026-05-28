@@ -39,6 +39,45 @@ pub trait TunDevice: AsyncRead + AsyncWrite + Send + Sync + Unpin {
 
     /// Return the interface name (e.g. "utun8", "tun0").
     fn name(&self) -> &str;
+
+    /// Consume the device and return mpsc channel endpoints for
+    /// reading and writing raw IP packets.
+    ///
+    /// Used when the OS owns the TUN lifecycle (iOS `NEPacketTunnelProvider`,
+    /// Android `VpnService`) and the application only sees packet channels.
+    /// Default implementation bridges `AsyncRead`/`AsyncWrite` via spawned tasks.
+    fn into_channels(self) -> io::Result<(tokio::sync::mpsc::Sender<Vec<u8>>, tokio::sync::mpsc::Receiver<Vec<u8>>)>
+    where
+        Self: Sized + 'static,
+    {
+        let (read_tx, read_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(256);
+        let (write_tx, mut write_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(256);
+
+        let dev = std::sync::Arc::new(tokio::sync::Mutex::new(self));
+
+        // Reader: TUN → channel
+        let r = dev.clone();
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; 65536];
+            loop {
+                let n = { let mut d = r.lock().await; tokio::io::AsyncReadExt::read(&mut *d, &mut buf).await };
+                match n {
+                    Ok(0) => break,
+                    Ok(n) => { if read_tx.send(buf[..n].to_vec()).await.is_err() { break; } }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        // Writer: channel → TUN
+        tokio::spawn(async move {
+            while let Some(pkt) = write_rx.recv().await {
+                let _ = tokio::io::AsyncWriteExt::write(&mut *dev.lock().await, &pkt).await;
+            }
+        });
+
+        Ok((write_tx, read_rx))
+    }
 }
 
 // ── Platform backends ─────────────────────────────────────────────────

@@ -378,7 +378,6 @@ pub enum InboundProtocolConfig {
     },
     #[serde(rename = "direct")]
     Direct {
-        outbound: String,
         #[serde(default)]
         target: Option<String>,
         #[serde(default)]

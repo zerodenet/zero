@@ -15,7 +15,7 @@ Zero is a network proxy kernel written in Rust at workspace version `0.0.4`.
 - `Shadowsocks` (AEAD: aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305; 2022-blake3; TCP + UDP)
 - `Trojan` (TCP)
 - `TUN` (virtual network interface, no feature gate, always compiled)
-- `direct` (fixed-target forwarder, no feature gate, always compiled)
+- `direct` (fixed-target forwarder; outbound determined by normal route rules, no feature gate, always compiled)
 
 **Outbound protocols:**
 - `direct` / `block`
@@ -93,7 +93,7 @@ make fmt / check / test / clippy / build / release / run / run-status / status /
 ### Layered Structure (top to bottom)
 
 1. **Application Layer** (`src/`)
-   - Entry point: `src/main.rs` — CLI parsing, commands (`run`, `status`, `select`, `flows`, `policies`, `events`, `reload`, `version`, `help`)
+   - Entry point: `src/main.rs` — CLI parsing, commands (`run`, `status`, `select`, `flows`, `policies`, `events`, `reload`, `tun`, `version`, `help`)
    - `src/cli.rs` — argument parsing
    - `src/ipc/` — IPC client/server, protocol framing, Unix socket + Windows Named Pipe
    - `src/http_adapter.rs` — HTTP status/control endpoint (feature-gated)

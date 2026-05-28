@@ -10,7 +10,7 @@
 
 `v0.0.4` 之前，各协议的 TCP 会话处理散落在 `impl Proxy` 的不同方法里，通过 `TcpInboundProtocol` 枚举分发。入站和出站之间存在跨模块依赖。这一版做了彻底重构：
 
-- **direct inbound（固定目标转发器）** —— 新入站类型，监听端口接受原始 TCP 连接（无协议握手），将所有流量转发到配置的出站。目标地址来自入站配置而非客户端，适合端口转发/流量重定向场景。
+- **direct inbound（固定目标转发器）** —— 新入站类型，监听端口接受原始 TCP 连接（无协议握手）。目标地址来自入站配置而非客户端，出站由正常路由规则决定（`mode`、`rules`、`rule_sets`、`final`），不再作为入站配置字段。适合端口转发/流量重定向场景。
 - **引入 `InboundProtocol` trait** —— 统一协议处理器接口。每个协议实现 `accept`（握手并建立流）、`send_ok`（上游连接成功后的响应）、`send_blocked`（被规则拦截）、`send_upstream_failure`（上游连接失败）和 `relay`（双向数据转发）。协议特有的逻辑全部内聚在各自的 handler 里。
 - **`serve_inbound()` 作为唯一内核入口** —— 所有 TCP 入站协议都经过同一条管线：`accept` -> 路由决策 -> `send_ok` / `send_blocked` / `send_upstream_failure` -> `relay`。速率限制和空闲超时也在这条管线上统一施加。
 - **删除 `handle_tcp_session` 和 `TcpInboundProtocol` 枚举** —— 不再需要 match 分发。
@@ -65,7 +65,7 @@
 - **`crates/tun/` 新 crate** — 定义 `TunDevice` trait，提供 Linux（ioctl）、macOS（utun socket）、Windows（Wintun）三个平台后端。
 - **`crates/proxy/src/inbound/tun.rs`** — TUN 入站监听器，实现 TCP 状态机，从虚拟网卡读取 IP 数据包、重组 TCP 流，集成到 `serve_inbound()` 统一管线。
 - **Runtime API**: `Proxy::start_tun(name, addr, mask, mtu, tag)` — 创建 TUN 设备并启动数据包读取循环，将识别出的 TCP 连接送入内核代理管线。
-- **控制面**: `zero tun start --addr IP --tag TAG [--name NAME]` / `stop` / `status` CLI 命令，`CommandRequest::TunStart/TunStop` + `QueryRequest::TunStatus` API 类型。
+- **控制面**: CLI: `zero tun start --addr IP --tag TAG [--name NAME]` / `stop` / `status`；IPC/HTTP 统一。命令类型 `TunStartCommand`（字段：`name`/`addr`/`mask`/`mtu`/`tag`）和 `TunStopCommand`；查询类型 `TunStatusQuery`，返回 `TunStatusSnapshot`（`running`/`name`/`addr`/`tag`）。
 - **无 feature gate**：始终编译，不依赖可选 Cargo feature。
 - **路由集成**：TUN 流量以入站 `tag` 落入路由表，可通过标准路由规则定向到任意出站或出站组。
 

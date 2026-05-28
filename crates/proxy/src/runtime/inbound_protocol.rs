@@ -79,18 +79,19 @@ pub(crate) trait InboundProtocol: Send + Sync {
 /// Adding a new cross-cutting capability only requires changing THIS function.
 pub(crate) async fn serve_inbound<P: InboundProtocol>(
     proxy: &Proxy,
-    mut session: Session,
-    mut client: P::ClientStream,
+    session: Session,
+    client: P::ClientStream,
     protocol: &P,
     inbound_tag: &str,
     source_addr: Option<std::net::SocketAddr>,
 ) -> Result<(), EngineError> {
+    let mut session = session;
+    let mut client = client;
+
     // ── Kernel primitive: URL rewrite ──
     apply_url_rewrite(proxy, &mut session);
 
     // Apply kernel rate policy: per-inbound defaults from config.
-    // Per-user limits (if any) were already applied during protocol accept
-    // — only fill in if not already set.
     apply_kernel_rate_limits(proxy, &mut session, inbound_tag);
 
     proxy.prepare_session(&mut session, inbound_tag, source_addr);

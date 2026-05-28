@@ -15,9 +15,12 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use async_trait::async_trait;
+use std::time::Duration;
+
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio::task::JoinSet;
+use tokio::time::interval;
 use tracing::{error, info};
 
 use zero_core::{Address, Network, ProtocolType, Session};
@@ -110,7 +113,16 @@ struct TunProtocol;
 #[async_trait]
 impl InboundProtocol for TunProtocol {
     type ClientStream = TunTcpStream;
-    async fn accept(&self, _: crate::transport::TcpRelayStream) -> Result<(Session, Self::ClientStream), EngineError> { unreachable!() }
+    async fn accept(
+        &self, _: crate::transport::TcpRelayStream,
+    ) -> Result<(Session, Self::ClientStream), EngineError> {
+        // TUN has no protocol handshake — sessions are built from parsed
+        // IP packets in the listener and dispatched via serve_inbound.
+        Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "tun accept handled inline by listener",
+        )))
+    }
     async fn send_ok(&self, _: &mut Self::ClientStream) -> Result<(), EngineError> { Ok(()) }
     async fn send_blocked(&self, _: &mut Self::ClientStream) -> Result<(), EngineError> { Ok(()) }
     async fn send_upstream_failure(&self, _: &mut Self::ClientStream) -> Result<(), EngineError> { Ok(()) }
@@ -140,33 +152,47 @@ type ConnKey = (SocketAddr, SocketAddr);
 
 struct ConnState {
     tx: mpsc::Sender<Vec<u8>>,
+    last_active: std::time::Instant,
 }
+
+const CONN_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 
 // ── Dispatch loop ─────────────────────────────────────────────────────
 
 async fn tun_loop(
     proxy: Proxy, device: impl TunDevice + 'static, tag: String,
-    shutdown: watch::Receiver<bool>,
+    mut shutdown: watch::Receiver<bool>,
 ) {
     let device = Arc::new(Mutex::new(device));
     let connections = Arc::new(Mutex::new(HashMap::<ConnKey, ConnState>::new()));
     let mut buf = vec![0u8; 65536];
     let mut tasks = JoinSet::new();
+    let mut cleanup_tick = interval(Duration::from_secs(60));
 
     loop {
-        // Check shutdown
-        if *shutdown.borrow() {
-            info!("tun shutdown requested");
-            break;
-        }
-        let n = {
-            let mut dev = device.lock().await;
-            match dev.read(&mut buf).await {
-                Ok(0) => break,
-                Ok(n) => n,
-                Err(e) => { error!(error = %e, "tun read"); break; }
+        let n;
+        tokio::select! {
+            _ = shutdown.changed() => {
+                if *shutdown.borrow() { info!("tun shutdown requested"); break; }
+                continue;
             }
-        };
+            _ = cleanup_tick.tick() => {
+                let mut conns = connections.lock().await;
+                conns.retain(|_, state| state.last_active.elapsed() < CONN_IDLE_TIMEOUT);
+                continue;
+            }
+            read_result = async {
+                let mut dev = device.lock().await;
+                dev.read(&mut buf).await
+            } => {
+                n = match read_result {
+                    Ok(0) => break,
+                    Ok(n) => n,
+                    Err(e) => { error!(error = %e, "tun read"); break; }
+                };
+            }
+        }
+
         let (ip, tcp) = match parse_ipv4_tcp(&buf[..n]) { Some(v) => v, None => continue };
 
         let endpoint = SocketAddr::new(IpAddr::V4(ip.dst), tcp.dst_port);
@@ -177,6 +203,7 @@ async fn tun_loop(
 
         let mut conns = connections.lock().await;
         if let Some(conn) = conns.get_mut(&key) {
+            conn.last_active = std::time::Instant::now();
             if !payload.is_empty() { let _ = conn.tx.send(payload.to_vec()).await; }
             if tcp.rst || tcp.fin { conns.remove(&key); }
             continue;
@@ -186,7 +213,7 @@ async fn tun_loop(
         // New connection.
         let (data_tx, data_rx) = mpsc::channel::<Vec<u8>>(64);
         let (resp_tx, mut resp_rx) = mpsc::channel::<Vec<u8>>(64);
-        conns.insert(key, ConnState { tx: data_tx });
+        conns.insert(key, ConnState { tx: data_tx, last_active: std::time::Instant::now() });
         drop(conns);
 
         // Reply writer.
@@ -197,7 +224,6 @@ async fn tun_loop(
         let client_ack = tcp.seq.wrapping_add(1);
         tasks.spawn(async move {
             let mut seq = server_seq.wrapping_add(1);
-            // SYN-ACK
             let _ = tun.lock().await.write(&build_tcp_pkt(reply_src, reply_dst, reply_sport, reply_dport, server_seq, client_ack, 0x12, &[])).await;
             while let Some(data) = resp_rx.recv().await {
                 let _ = tun.lock().await.write(&build_tcp_pkt(reply_src, reply_dst, reply_sport, reply_dport, seq, client_ack, 0x18, &data)).await;
