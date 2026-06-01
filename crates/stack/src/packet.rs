@@ -216,6 +216,7 @@ pub fn build_tcp_with_mss(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_tcp_v4_with_mss(
     src: Ipv4Addr, dst: Ipv4Addr,
     sport: u16, dport: u16,
@@ -261,6 +262,7 @@ fn build_tcp_v4_with_mss(
     p
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_tcp_v6_with_mss(
     src: Ipv6Addr, dst: Ipv6Addr,
     sport: u16, dport: u16,

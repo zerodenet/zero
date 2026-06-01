@@ -423,7 +423,7 @@ impl TcpStack for UserTcpStack {
 mod tests {
     use super::*;
     use crate::packet;
-    use std::net::{Ipv4Addr, SocketAddr};
+    use std::net::Ipv4Addr;
 
     const CLIENT_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2));
     const SERVER_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
