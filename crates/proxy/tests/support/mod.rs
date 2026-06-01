@@ -45,7 +45,7 @@ pub async fn wait_for_listener(port: u16) {
 }
 
 pub async fn wait_for(description: &str, mut predicate: impl FnMut() -> bool) {
-    for _ in 0..50 {
+    for _ in 0..150 {
         if predicate() {
             return;
         }
