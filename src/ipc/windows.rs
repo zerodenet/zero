@@ -12,7 +12,7 @@ use tokio::net::windows::named_pipe::{ClientOptions, ServerOptions};
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use tracing::{debug, error, info, warn};
-use zero_engine::EngineHandle;
+use zero_proxy::ProxyHandle;
 
 use super::connection;
 use super::protocol::{serialize_frame, IpcRequest, IpcResponse};
@@ -45,13 +45,13 @@ pub fn resolve_socket_path(explicit: Option<&str>) -> io::Result<PathBuf> {
 }
 
 pub async fn spawn_ipc_server(
-    engine_handle: EngineHandle,
+    handle: ProxyHandle,
     pipe_path: &std::path::Path,
 ) -> io::Result<IpcServerHandle> {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let pipe = pipe_path.to_string_lossy().to_string();
 
-    let task = tokio::spawn(async move { run_ipc_server(&pipe, engine_handle, shutdown_rx).await });
+    let task = tokio::spawn(async move { run_ipc_server(&pipe, handle, shutdown_rx).await });
 
     info!(pipe = %pipe_path.display(), "ipc server ready");
 
@@ -63,7 +63,7 @@ pub async fn spawn_ipc_server(
 
 async fn run_ipc_server(
     pipe_name: &str,
-    handle: EngineHandle,
+    handle: ProxyHandle,
     mut shutdown: oneshot::Receiver<()>,
 ) -> io::Result<()> {
     let mut connections = JoinSet::new();

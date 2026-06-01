@@ -125,6 +125,7 @@ zero-protocol-hysteria2 = { path = "../../protocols/hysteria2", optional = true,
 zero-protocol-shadowsocks = { path = "../../protocols/shadowsocks", optional = true, default-features = false }
 zero-protocol-trojan = { path = "../../protocols/trojan", optional = true, default-features = false }
 zero-protocol-vmess = { path = "../../protocols/vmess", optional = true }
+zero-api = { path = "../api" }
 zero-traits = { path = "../traits" }
 zero-tun = { path = "../tun" }
 zero-stack = { path = "../stack" }
@@ -138,4 +139,3 @@ serde_json.workspace = true
 tokio-rustls = { version = "0.26" }
 tokio-tungstenite = "0.23"
 tracing-subscriber.workspace = true
-zero-api = { path = "../api" }

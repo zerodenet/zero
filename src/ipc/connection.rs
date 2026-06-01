@@ -13,7 +13,7 @@ use zero_api::{
     DiagnosticsTraceRouteCommand, EventFilter, EventSource, Permission, PolicySelectCommand,
     QueryService, TunStopCommand,
 };
-use zero_engine::EngineHandle;
+use zero_proxy::ProxyHandle;
 
 use super::protocol::{serialize_frame, IpcRequest, IpcResponse};
 
@@ -117,7 +117,7 @@ pub(crate) fn parse_command(
 ///
 /// This function is transport-agnostic — it works with any stream that
 /// implements `AsyncRead + AsyncWrite`.
-pub(crate) async fn handle_ipc_connection<S>(stream: S, handle: EngineHandle) -> io::Result<()>
+pub(crate) async fn handle_ipc_connection<S>(stream: S, handle: ProxyHandle) -> io::Result<()>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {

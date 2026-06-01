@@ -4,7 +4,7 @@ use std::process;
 
 use zero_api::{FlowListQuery, PoliciesQuery, QueryRequest};
 use zero_engine::{Engine, EngineHandle};
-use zero_proxy::Proxy;
+use zero_proxy::{Proxy, ProxyHandle};
 
 mod cli;
 mod error_report;
@@ -204,6 +204,7 @@ async fn run_command(
     };
 
     let engine_handle = EngineHandle::new(engine.clone());
+    let ipc_handle = ProxyHandle::new(engine_handle.clone(), proxy.clone());
 
     // Bridge tracing warn/error → engine.warning events.
     {
@@ -222,7 +223,7 @@ async fn run_command(
 
     // IPC server always starts (not feature-gated).
     let ipc_socket_path = ipc::resolve_ipc_path(control_socket)?;
-    let ipc_server = ipc::spawn_ipc_server(engine_handle.clone(), &ipc_socket_path).await?;
+    let ipc_server = ipc::spawn_ipc_server(ipc_handle.clone(), &ipc_socket_path).await?;
 
     #[cfg(any(feature = "status-api", feature = "grpc-api"))]
     let status_spec = status_server_spec(&engine, status_listen)?;

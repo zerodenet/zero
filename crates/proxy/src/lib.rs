@@ -19,4 +19,4 @@ mod runtime;
 mod transport;
 
 pub use inventory::ProtocolInventory;
-pub use runtime::{Proxy, RunningProxy};
+pub use runtime::{Proxy, ProxyHandle, RunningProxy};

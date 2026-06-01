@@ -284,6 +284,106 @@ impl Deref for RunningProxy {
     }
 }
 
+// ── ProxyHandle: IPC command interception ─────────────────────────
+
+/// Wraps [`EngineHandle`] with TUN command interception.
+///
+/// TUN start/stop commands are handled by the proxy runtime,
+/// not the engine.  This wrapper intercepts those commands
+/// before they reach `EngineHandle`.
+#[derive(Clone)]
+pub struct ProxyHandle {
+    inner: zero_engine::EngineHandle,
+    proxy: Proxy,
+}
+
+impl ProxyHandle {
+    pub fn new(inner: zero_engine::EngineHandle, proxy: Proxy) -> Self {
+        Self { inner, proxy }
+    }
+
+    /// Access the underlying EngineHandle.
+    pub fn engine_handle(&self) -> &zero_engine::EngineHandle {
+        &self.inner
+    }
+}
+
+impl zero_api::QueryService for ProxyHandle {
+    fn query(&self, request: zero_api::QueryRequest) -> zero_api::ApiResult<zero_api::QueryResponse> {
+        self.inner.query(request)
+    }
+}
+
+impl zero_api::CommandService for ProxyHandle {
+    fn execute(
+        &self,
+        command: zero_api::CommandRequest,
+    ) -> zero_api::ApiResult<zero_api::CommandResponse> {
+        match &command {
+            zero_api::CommandRequest::TunStart(cmd) => {
+                let proxy = self.proxy.clone();
+                let name = cmd.name.clone();
+                let addr = cmd.addr.clone();
+                let mask = cmd.mask.clone();
+                let mtu = cmd.mtu;
+                let tag = cmd.tag.clone();
+                match tokio::runtime::Handle::try_current() {
+                    Ok(rt) => {
+                        rt.block_on(async move {
+                            proxy
+                                .start_tun(name.as_deref(), &addr, &mask, mtu, &tag)
+                                .await
+                                .map(|_| zero_api::CommandResponse::accepted())
+                                .map_err(|e| zero_api::ApiError::new(
+                                    zero_api::ApiErrorCode::Internal,
+                                    e.to_string(),
+                                ))
+                        })
+                    }
+                    Err(_) => Err(zero_api::ApiError::new(
+                        zero_api::ApiErrorCode::Internal,
+                        "no tokio runtime available for TUN command",
+                    )),
+                }
+            }
+            zero_api::CommandRequest::TunStop(_) => {
+                match tokio::runtime::Handle::try_current() {
+                    Ok(rt) => {
+                        rt.block_on(async move {
+                            self.proxy.stop_tun().map(|_| zero_api::CommandResponse::accepted())
+                                .map_err(|e| zero_api::ApiError::new(
+                                    zero_api::ApiErrorCode::Internal,
+                                    e.to_string(),
+                                ))
+                        })
+                    }
+                    Err(_) => Err(zero_api::ApiError::new(
+                        zero_api::ApiErrorCode::Internal,
+                        "no tokio runtime available for TUN command",
+                    )),
+                }
+            }
+            _ => self.inner.execute(command),
+        }
+    }
+}
+
+impl zero_api::EventSource for ProxyHandle {
+    type Stream = <zero_engine::EngineHandle as zero_api::EventSource>::Stream;
+
+    fn subscribe(&self, filter: zero_api::EventFilter) -> zero_api::ApiResult<Self::Stream> {
+        self.inner.subscribe(filter)
+    }
+
+    fn latest(
+        &self,
+        limit: usize,
+        filter: zero_api::EventFilter,
+    ) -> zero_api::ApiResult<Vec<zero_api::RawApiEvent>> {
+        self.inner.latest(limit, filter)
+    }
+}
+
 pub(crate) async fn bind_listener(inbound: &InboundConfig) -> io::Result<TokioListener> {
     let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
     TokioListener::bind(&listen).await

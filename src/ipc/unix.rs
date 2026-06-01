@@ -6,7 +6,7 @@ use tokio::net::UnixListener;
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use tracing::{debug, error, info, warn};
-use zero_engine::EngineHandle;
+use zero_proxy::ProxyHandle;
 
 use super::connection;
 
@@ -63,7 +63,7 @@ pub fn resolve_socket_path(explicit: Option<&str>) -> io::Result<PathBuf> {
 /// The socket file is created with `0o600` permissions so only the owning
 /// user can connect.  If the socket file already exists it is removed first.
 pub async fn spawn_ipc_server(
-    engine_handle: EngineHandle,
+    handle: ProxyHandle,
     socket_path: &Path,
 ) -> io::Result<IpcServerHandle> {
     if socket_path.exists() {
@@ -84,7 +84,7 @@ pub async fn spawn_ipc_server(
     let path_for_handle = socket_path.to_path_buf();
 
     let task =
-        tokio::spawn(async move { run_ipc_server(listener, engine_handle, shutdown_rx).await });
+        tokio::spawn(async move { run_ipc_server(listener, handle, shutdown_rx).await });
 
     info!(socket = %socket_path.display(), "ipc server ready");
 
@@ -97,7 +97,7 @@ pub async fn spawn_ipc_server(
 
 async fn run_ipc_server(
     listener: UnixListener,
-    handle: EngineHandle,
+    handle: ProxyHandle,
     mut shutdown: oneshot::Receiver<()>,
 ) -> io::Result<()> {
     let mut connections = JoinSet::new();
