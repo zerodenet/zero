@@ -61,6 +61,7 @@ enum TcpState {
     /// Three-way handshake complete, data transfer.
     Established,
     /// Received FIN from client, awaiting teardown.
+    #[allow(dead_code)]
     CloseWait,
 }
 
@@ -241,6 +242,7 @@ pub struct UserTcpStack {
     accept_tx: mpsc::Sender<ReadyConn>,
     accept_rx: Mutex<mpsc::Receiver<ReadyConn>>,
     outbound: mpsc::Sender<Vec<u8>>,
+    #[allow(dead_code)]
     mss: u16,
 }
 

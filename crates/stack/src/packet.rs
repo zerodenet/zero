@@ -176,6 +176,7 @@ pub mod tcp_flags {
 }
 
 /// Build an IPv4/IPv6 + TCP packet with correct checksums.
+#[allow(clippy::too_many_arguments)]
 pub fn build_tcp(
     src: IpAddr,
     dst: IpAddr,
@@ -193,6 +194,7 @@ pub fn build_tcp(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_tcp_v4(
     src: Ipv4Addr, dst: Ipv4Addr,
     sport: u16, dport: u16,
@@ -236,6 +238,7 @@ fn build_tcp_v4(
     p
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_tcp_v6(
     src: Ipv6Addr, dst: Ipv6Addr,
     sport: u16, dport: u16,

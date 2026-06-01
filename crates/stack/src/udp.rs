@@ -12,7 +12,7 @@ use tracing::warn;
 
 use zero_traits::{SocketAddress, UdpStack};
 
-use crate::packet::{self, ParsedUdp};
+use crate::packet::{self};
 
 // ── Queued datagram ───────────────────────────────────────────────────
 

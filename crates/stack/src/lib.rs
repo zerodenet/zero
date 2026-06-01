@@ -46,6 +46,7 @@ use zero_traits::NetworkStack;
 // ── User-space network stack ──────────────────────────────────────────
 
 /// Outbound packet channel type.
+#[allow(dead_code)]
 type Outbound = mpsc::Sender<Vec<u8>>;
 
 /// User-space network stack: TCP termination + UDP forwarding.

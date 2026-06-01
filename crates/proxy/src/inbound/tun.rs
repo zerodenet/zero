@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
+use tokio::io::AsyncReadExt;
 use tokio::sync::{mpsc, watch, Mutex};
 use tracing::{error, info, warn};
 
