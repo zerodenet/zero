@@ -1,0 +1,1 @@
+{"inbounds":[{"tag":"socks-in","listen":{"address":"127.0.0.1","port":1080},"protocol":{"type":"socks5"}}],"outbounds":[{"tag":"direct","protocol":{"type":"direct"}}],"route":{"rules":[],"final":{"type":"direct"}}}
