@@ -109,6 +109,66 @@ Adding a new cross-cutting capability only requires changing `serve_inbound()` -
 
 Protocols are feature-gated into `zero-proxy`. The core decision layer always compiles; protocols and control plane capabilities are selectively compiled, avoiding pulling modules not needed for embedded scenarios.
 
+## Network Stack Layer
+
+- `zero-stack`
+
+Implements the `TcpStack` / `UdpStack` / `NetworkStack` traits (defined in `zero-traits`) to convert between raw IP packets and `AsyncRead + AsyncWrite` streams or datagram I/O.
+
+Two implementations share the same trait:
+
+| Stack | Strategy | TCP termination | Driver needed |
+|-------|----------|-----------------|---------------|
+| `UserNetworkStack` | User-space TCP state machine (`UserTcpStack`) | SYN/SYN-ACK/ACK handshake, seq tracking, MSS negotiation, FIN/RST handling | TUN device |
+| `SystemStack` | OS kernel TCP listener (`SystemTcpStack`) | Delegated to OS kernel | None on Linux/macOS |
+
+The stack is pluggable: the TUN inbound handler consumes `NetworkStack`, so the choice of `UserStack` vs `SystemStack` is a configuration decision — no code changes needed.
+
+### User-space TCP (zero-stack/src/tcp.rs)
+
+`UserTcpStack` maintains a minimal per-connection TCP state machine:
+- **SYN → SYN-ACK (with MSS option)**
+- **ACK → Established → data transfer**
+- **FIN → ACK → CloseWait → FIN-ACK → closed**
+- **RST → immediate teardown**
+
+Payload extraction feeds into the proxy pipeline via mpsc channels. Response packets (SYN-ACK, ACK, FIN) are emitted through an outbound channel → TUN device writer task.
+
+### System TCP (zero-stack/src/system.rs)
+
+`SystemTcpStack` wraps a `tokio::net::TcpListener` — traffic must be redirected to this listener by the OS:
+- Linux: `iptables -t nat REDIRECT`
+- macOS: `pf.conf rdr rule`
+- Windows: requires a TUN device (wintun) or system proxy
+
+## TUN Device Layer
+
+- `zero-tun`
+
+Platform-agnostic `TunDevice` trait (`AsyncRead + AsyncWrite`) for virtual network interfaces:
+
+| Platform | Backend | Dependency |
+|----------|---------|------------|
+| Linux | `/dev/net/tun` ioctl | Kernel built-in |
+| macOS | utun socket | Kernel built-in |
+| Windows | Wintun driver | `wintun.dll` (deployed by GUI/installer) |
+
+On Windows, `wintun.dll` is a platform dependency — like how Linux requires `/dev/net/tun` and macOS requires utun. The kernel crate (`zero-tun`) declares the dependency via the `wintun` crate; deployment of the DLL to the target system is the GUI/installer layer's responsibility.
+
+### TUN inbound (zero-proxy/src/inbound/tun.rs)
+
+The TUN inbound handler reads raw IP packets from a `TunDevice`, feeds them to a `NetworkStack`, and dispatches established TCP connections through `serve_inbound()`:
+
+```
+TunDevice::read() → packet → TcpStack::feed()
+     ↑                              ↓
+outbound writer task ← SYN-ACK/ACK/FIN
+     
+TcpStack::accept() → UserTcpStream → serve_inbound()
+```
+
+UDP datagrams are forwarded through a local relay socket with non-blocking response polling.
+
 ## Transport Layer
 
 - `zero-transport`
@@ -128,7 +188,13 @@ Unified transport abstractions: TLS, WebSocket, gRPC, H2, HTTPUpgrade, QUIC, Spl
 
 - `zero-traits`
 
-I/O, DNS, and similar abstractions, not bound to a specific runtime.
+Runtime-agnostic abstractions:
+
+| Trait | Purpose |
+|-------|---------|
+| `AsyncSocket` / `TcpListener` / `DatagramSocket` | I/O |
+| `TcpStack` / `UdpStack` / `NetworkStack` | Network packet → stream/datagram conversion |
+| `DnsResolver` / `TlsConnector` / `TlsAcceptor` | Platform services |
 
 ## Platform Layer
 
@@ -137,14 +203,33 @@ I/O, DNS, and similar abstractions, not bound to a specific runtime.
 
 Currently only the Tokio backend is implemented.
 
+## Inbound Protocols
+
+All inbound handlers implement `InboundProtocol` and feed into `serve_inbound()`:
+
+| Handler | Protocol | Notes |
+|---------|----------|-------|
+| `socks5` | SOCKS5 | CONNECT + UDP ASSOCIATE |
+| `http-connect` | HTTP CONNECT | |
+| `mixed` | Auto-detect | SOCKS5 / HTTP CONNECT on one port |
+| `vless` | VLESS | TCP + UDP-over-TCP |
+| `hysteria2` | Hysteria2 | QUIC |
+| `shadowsocks` | Shadowsocks | AEAD + 2022-blake3 |
+| `trojan` | Trojan | TCP |
+| `direct` | Direct | Fixed-target forwarder, no handshake |
+| `tun` | TUN | Virtual network interface, consumes `NetworkStack` |
+| `system` | System | OS-level traffic redirect, consumes `SystemTcpStack` |
+
 ## Dependency Direction
 
 Top-down only:
 
-- `zero` may depend on `config`, `engine`, `proxy`
-- `proxy` may depend on `engine`, `config`, `protocols/*`, platform layer
-- `engine` may depend on `config`, `router`, `core`, and `api`
-- `protocols/*` may depend on `core`
-- `core` may depend on `traits`
+- `zero` → `config`, `engine`, `proxy`
+- `proxy` → `engine`, `config`, `protocols/*`, `transport`, `stack`, `tun`
+- `engine` → `config`, `router`, `core`, `api`
+- `stack` → `traits`
+- `tun` → `traits`
+- `protocols/*` → `core`
+- `core` → `traits`
 
 No reverse dependencies.

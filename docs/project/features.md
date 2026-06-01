@@ -206,21 +206,53 @@ Token-bucket rate limiting using the Generic Cell Rate Algorithm (GCRA). Limits 
 
 TUN creates a virtual network interface that captures IP packets at Layer 3 and routes them through the proxy kernel. Always compiled, no feature gate required.
 
-- **Crate**: `crates/tun/` — `TunDevice` trait with platform backends for Linux (`ioctl`), macOS (`utun` socket), and Windows (`Wintun`).
-- **Listener**: `crates/proxy/src/inbound/tun.rs` — TCP state machine that processes IP packets from the TUN device, reassembles TCP streams, and integrates with `serve_inbound()`.
-- **Runtime API**: `Proxy::start_tun(name, addr, mask, mtu, tag)` — creates the TUN device and spawns a packet loop that reads IP packets and feeds recognized TCP connections through the kernel pipeline.
-- **Route integration**: TUN traffic lands in the routing table under the inbound's `tag`, so it can be directed to any outbound or outbound group via standard route rules.
-- **Scope**: Captures all IP traffic routed to the TUN interface at the OS level; no protocol handshake required (raw IP packets).
+### Architecture
 
-```json
-{
-  "tag": "tun-in",
-  "protocol": {
-    "type": "tun",
-    "name": "utun8",
-    "address": "10.0.0.1",
-    "netmask": "255.255.255.0",
-    "mtu": 1500
-  }
-}
 ```
+TunDevice (zero-tun)          → platform backends (Linux ioctl, macOS utun, Windows Wintun)
+    ↓
+NetworkStack (zero-traits)    → TcpStack / UdpStack traits
+    ↓
+UserTcpStack (zero-stack)     → user-space TCP state machine (SYN→SYN-ACK→ACK→data→FIN)
+    ↓
+TUN inbound (zero-proxy)      → tokio::select!{ read packets → feed stack → accept → serve_inbound() }
+```
+
+### Network Stack Trait
+
+`zero-traits` defines `TcpStack` / `UdpStack` / `NetworkStack` — the boundary between raw IP packets and connection-oriented I/O. Two implementations:
+
+| Implementation | Strategy | Driver |
+|---------------|----------|--------|
+| `UserNetworkStack` | User-space TCP state machine (SYN→Established→CloseWait, MSS option, seq/ack tracking) | TUN device required |
+| `SystemStack` | OS TCP listener (iptables/pf redirect → accept TcpStream) | None on Linux/macOS |
+
+The stack is pluggable via the trait — switching implementations requires zero changes to the inbound handler.
+
+### TCP State Machine (UserTcpStack)
+
+- **SYN** → SYN-ACK with MSS option → stored in SynReceived state
+- **ACK** → transition to Established → available via `TcpStack::accept()`
+- **Data** → payload extracted, forwarded to proxy via channel, ACK sent
+- **FIN** → ACK sent, transition to CloseWait → proxy shutdown triggers our FIN
+- **RST** → immediate teardown
+
+### Platform Support
+
+| Platform | Backend | Dependency | Provided by |
+|----------|---------|------------|-------------|
+| Linux | `/dev/net/tun` ioctl | Kernel built-in | OS |
+| macOS | utun socket | Kernel built-in | OS |
+| Windows | Wintun driver | `wintun.dll` | GUI / installer |
+
+On Windows, `wintun.dll` is a platform resource like `/dev/net/tun` on Linux — it must be present on the target system, but the kernel only *declares* the dependency (via the `wintun` crate), it does not manage DLL lifecycle.
+
+### CLI Commands
+
+```bash
+zero tun start --addr 10.0.0.1 --tag proxy    # start TUN
+zero tun stop                                  # stop TUN
+zero tun status                                # check status
+```
+
+Commands are routed through IPC (`ProxyHandle` intercepts TUN commands before they reach the engine).

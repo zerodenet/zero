@@ -60,14 +60,34 @@
 | `rate_limits()` | `InboundProtocolConfig` | method | 返回该入站的速率限制配置 |
 | `tun` | `InboundProtocolConfig` | variant | TUN 虚拟网卡入站类型 |
 
-### 8. TUN 虚拟网卡
+### 8. TUN 虚拟网卡 + NetworkStack trait 抽象
 
-- **`crates/tun/` 新 crate** — 定义 `TunDevice` trait，提供 Linux（ioctl）、macOS（utun socket）、Windows（Wintun）三个平台后端。
-- **`crates/proxy/src/inbound/tun.rs`** — TUN 入站监听器，支持 IPv4/IPv6 双栈数据包解析和构建。TCP：状态机重组 TCP 流，集成到 `serve_inbound()` 统一管线。UDP：本地 relay socket 转发，支持响应回写。6 个单元测试覆盖 IPv4/IPv6 TCP/UDP 数据包解析。
-- **Runtime API**: `Proxy::start_tun(name, addr, mask, mtu, tag)` — 创建 TUN 设备并启动数据包读取循环，将识别出的 TCP 连接送入内核代理管线。
-- **控制面**: CLI: `zero tun start --addr IP --tag TAG [--name NAME]` / `stop` / `status`；IPC/HTTP 统一。命令类型 `TunStartCommand`（字段：`name`/`addr`/`mask`/`mtu`/`tag`）和 `TunStopCommand`；查询类型 `TunStatusQuery`，返回 `TunStatusSnapshot`（`running`/`name`/`addr`/`tag`）。
-- **无 feature gate**：始终编译，不依赖可选 Cargo feature。
-- **路由集成**：TUN 流量以入站 `tag` 落入路由表，可通过标准路由规则定向到任意出站或出站组。
+**分层架构**：
+
+| 层 | crate | 职责 |
+|----|-------|------|
+| Trait 定义 | `zero-traits` | `TcpStack` / `UdpStack` / `NetworkStack` — 原始 IP 包 ←→ 流/数据报 |
+| 用户态栈 | `zero-stack` | `UserTcpStack` + `UserUdpStack`，TCP 状态机 (SYN→Established→CloseWait) |
+| TUN 设备 | `zero-tun` | `TunDevice` trait，Linux ioctl / macOS utun / Windows Wintun |
+| 入站处理 | `zero-proxy` | TUN inbound 消费 `NetworkStack`，喂入 `serve_inbound()` 管线 |
+
+**UserTcpStack 状态机**：SYN → SYN-ACK（含 MSS 选项）→ Established → 数据/ACK → FIN → CloseWait → proxy shutdown 触发 FIN。seq/ack 追踪，mpsc channel 连接 proxy 管线。11 个单元测试（6 packet + 5 TCP）。
+
+**UDP 转发**：本地 relay socket (`0.0.0.0:0`) → `send_to` 转发 → 非阻塞 `try_recv_from` 收集响应 → `UdpStack::send_to` 回写。
+
+**可插拔栈**：`NetworkStack` trait 也支持 `SystemStack`（OS 级 TCP listener，Linux/macOS 零驱动），与 `UserStack` 无缝切换。
+
+**平台依赖**：
+
+| 平台 | 后端 | 依赖 | 提供方 |
+|------|------|------|--------|
+| Linux | `/dev/net/tun` ioctl | 内核内置 | OS |
+| macOS | utun socket | 内核内置 | OS |
+| Windows | Wintun 驱动 | `wintun.dll` | GUI/installer |
+
+Windows 上 `wintun.dll` 是平台资源（类似 Linux 的 `/dev/net/tun`）——`zero-tun` crate 声明依赖，GUI/installer 负责部署到目标系统。
+
+**控制面**：CLI `tun start/stop/status`，通过 IPC 路由（`ProxyHandle` 在引擎之前拦截 TUN 命令），返回 `TunStatusSnapshot`。
 
 ## 明确不做什么
 

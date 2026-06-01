@@ -121,7 +121,18 @@ make fmt / check / test / clippy / build / release / run / run-status / status /
 4. **Transport Layer** (`crates/transport/` — `zero-transport`)
    - Unified transport abstraction: `tls`, `ws`, `grpc`, `h2`, `http_upgrade`, `quic`, `split_http`, `hysteria2_quic`, `vless_transport`
 
-5. **Support Crates**
+5. **Network Stack Layer** (`crates/stack/` — `zero-stack`)
+   - `TcpStack` / `UdpStack` / `NetworkStack` traits in `zero-traits`
+   - `UserTcpStack` — user-space TCP termination (SYN/SYN-ACK/ACK handshake, MSS option, seq tracking, FIN/RST, 11 tests)
+   - `UserUdpStack` — UDP datagram queue with bounded capacity
+   - `SystemTcpStack` / `SystemUdpStack` — OS-level stack (iptables/pf redirect → TcpListener, no driver needed on Linux/macOS)
+
+6. **TUN Device Layer** (`crates/tun/` — `zero-tun`)
+   - `TunDevice` trait (platform-agnostic virtual network interface)
+   - Linux: `/dev/net/tun` ioctl; macOS: utun socket
+   - Windows: Wintun driver (`wintun.dll` — platform dependency, deployed by GUI/installer)
+
+7. **Support Crates**
    - `crates/api` (`zero-api`) — control plane API types
    - `crates/connector` (`zero-connector`) — event dispatcher connectors (jsonl sink, webhook, push)
    - `crates/crypto` (`zero-crypto`) — crypto utilities (Reality, TLS)
@@ -139,8 +150,10 @@ make fmt / check / test / clippy / build / release / run / run-status / status /
 
 ```
 zero → config, engine, proxy, api, connector (optional)
-engine → config, router, core, platform
-proxy → protocols/*, transport, core, platform
+engine → config, router, core, api
+proxy → protocols/*, transport, stack, tun, core, platform
+stack → traits
+tun → traits
 transport → core, crypto, web
 protocols/* → core
 core → traits
@@ -150,7 +163,7 @@ core → traits
 
 ```
 inbound/          # Protocol handler structs implementing InboundProtocol trait
-                  #   socks5, vless, http_connect, mixed, hysteria2, shadowsocks, trojan, direct, tun
+                  #   socks5, vless, http_connect, mixed, hysteria2, shadowsocks, trojan, direct, tun, system
                   #   Each provides handshake (accept), client responses (send_ok/send_blocked/send_upstream_failure), and relay
 outbound/         # Outbound implementations: direct, socks5, vless, hysteria2, shadowsocks, trojan
 runtime/          # Protocol-agnostic runtime
