@@ -32,7 +32,6 @@
 
 pub mod packet;
 pub mod system;
-pub mod system_proxy;
 pub mod tcp;
 pub mod udp;
 
