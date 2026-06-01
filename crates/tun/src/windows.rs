@@ -3,6 +3,14 @@
 //! Uses WireGuard's Wintun driver for virtual network interfaces.
 //! I/O is bridged from synchronous Wintun sessions to async tokio
 //! via mpsc channels.
+//!
+//! ## wintun.dll resolution order
+//!
+//! 1. Binary-adjacent `wintun.dll` (same directory as the executable)
+//! 2. `PATH` / system library search
+//!
+//! To bundle: place `wintun.dll` (from <https://wintun.net>) next to
+//! the `zero` binary.  Release builds should ship it alongside.
 
 use std::io;
 use std::net::IpAddr;
@@ -32,13 +40,7 @@ impl WindowsTun {
     /// (e.g. `"ZeroTun"`).  The Wintun DLL must be available on the
     /// system (bundled with the binary or in `PATH`).
     pub fn create(name: Option<&str>) -> io::Result<Self> {
-        // wintun 0.4: `load()` returns `Result<Arc<wintun_raw::wintun>, Error>`.
-        let wintun = unsafe { wintun::load() }.map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("wintun load failed: {e}"),
-            )
-        })?;
+        let wintun = load_wintun()?;
 
         let adapter_name = name.unwrap_or("ZeroTun");
         let guid: u128 = 0xB6F4C8A2_1E3D_4F5A_9C2B_8D7E6A5F4C3B;
@@ -109,6 +111,38 @@ impl WindowsTun {
             _adapter: adapter,
         })
     }
+}
+
+/// Load wintun.dll, trying binary-adjacent first, then system path.
+fn load_wintun() -> io::Result<wintun::Wintun> {
+    // 1. Try binary-adjacent `wintun.dll`.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let adjacent = dir.join("wintun.dll");
+            if adjacent.exists() {
+                return unsafe { wintun::load_from_path(&adjacent) }.map_err(|e| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("wintun load from {} failed: {e}", adjacent.display()),
+                    )
+                });
+            }
+        }
+    }
+
+    // 2. Fall back to system PATH.
+    unsafe { wintun::load() }.map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "wintun.dll not found\n\
+             \n\
+             Download from https://wintun.net and place wintun.dll:\n\
+               • next to zero.exe (binary-adjacent), or\n\
+               • anywhere in %PATH%\n\
+             \n\
+             On Linux/macOS: TUN works without extra drivers.",
+        )
+    })
 }
 
 impl AsyncRead for WindowsTun {
