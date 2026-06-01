@@ -17,10 +17,6 @@ tokio = { workspace = true, features = ["net", "io-util"] }
 [target.'cfg(target_os = "windows")'.dependencies]
 wintun = "0.4"
 
-[build-dependencies]
-ureq = { version = "2", features = ["native-tls"] }
-zip = "0.6"
-
 [dependencies]
 tokio.workspace = true
 tracing.workspace = true

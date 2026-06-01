@@ -113,67 +113,36 @@ impl WindowsTun {
     }
 }
 
-/// Load wintun.dll.  Resolution order:
-///
-/// 1. Embedded DLL (compiled into the binary via build.rs)
-/// 2. Binary-adjacent `wintun.dll` (same directory as exe)
-/// 3. System PATH / library search
+/// Load wintun.dll, trying binary-adjacent first, then system path.
 fn load_wintun() -> io::Result<wintun::Wintun> {
-    // 1. Extract embedded DLL from the binary.
-    match write_embedded_dll() {
-        Ok(path) => {
-            let result = unsafe { wintun::load_from_path(&path) };
-            // Keep the temp file; OS cleans up on process exit.
-            let _ = path; // intentionally not deleted
-            return result.map_err(|e| {
-                io::Error::new(io::ErrorKind::Other, format!("wintun: {e}"))
-            });
-        }
-        Err(_) => {}
-    }
-
-    // 2. Try binary-adjacent.
+    // 1. Try binary-adjacent `wintun.dll`.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let adjacent = dir.join("wintun.dll");
             if adjacent.exists() {
                 return unsafe { wintun::load_from_path(&adjacent) }.map_err(|e| {
-                    io::Error::new(io::ErrorKind::Other, format!("wintun: {e}"))
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("wintun load from {} failed: {e}", adjacent.display()),
+                    )
                 });
             }
         }
     }
 
-    // 3. System PATH.
+    // 2. Fall back to system PATH.
     unsafe { wintun::load() }.map_err(|_| {
         io::Error::new(
             io::ErrorKind::NotFound,
-            "wintun.dll not found.\n\
-             Embedded DLL missing — was this built without build.rs?\n\
-             Download from https://wintun.net to continue.",
+            "wintun.dll not found\n\
+             \n\
+             Download from https://wintun.net and place wintun.dll:\n\
+               • next to zero.exe (binary-adjacent), or\n\
+               • anywhere in %PATH%\n\
+             \n\
+             On Linux/macOS: TUN works without extra drivers.",
         )
     })
-}
-
-/// Write the compile-time embedded wintun.dll to a temp file.
-///
-/// Only available when build.rs successfully downloaded the DLL
-/// (`cfg(wintun_embedded)`).  Returns `Err` otherwise.
-#[cfg(wintun_embedded)]
-fn write_embedded_dll() -> io::Result<std::path::PathBuf> {
-    let bytes: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wintun.dll"));
-    let dir = std::env::temp_dir().join("zero");
-    std::fs::create_dir_all(&dir)?;
-    let path = dir.join("wintun.dll");
-    if !path.exists() {
-        std::fs::write(&path, bytes)?;
-    }
-    Ok(path)
-}
-
-#[cfg(not(wintun_embedded))]
-fn write_embedded_dll() -> io::Result<std::path::PathBuf> {
-    Err(io::Error::new(io::ErrorKind::NotFound, "wintun not embedded at build time"))
 }
 
 impl AsyncRead for WindowsTun {
