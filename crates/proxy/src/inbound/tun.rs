@@ -2,26 +2,29 @@
 //!
 //! Reads raw IP packets from a [`TunDevice`], feeds them to a
 //! [`NetworkStack`] (which handles TCP termination and UDP forwarding),
-//! and dispatches established TCP connections through the kernel's
-//! `serve_inbound()` pipeline.
+//! and dispatches established TCP connections through `serve_inbound()`.
 //!
-//! The stack is pluggable: `UserNetworkStack` (default, user-space TCP
-//! state machine), or future `SystemStack` / `MixedStack` — the inbound
-//! handler only depends on the [`TcpStack`] / [`UdpStack`] traits.
+//! The stack is pluggable: `UserNetworkStack` (default), or future
+//! `SystemStack` / `MixedStack` — the inbound handler only depends on
+//! [`TcpStack`] / [`UdpStack`] traits.
 
+use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use tokio::io::AsyncReadExt;
+use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch, Mutex};
+use tokio::time::interval;
 use tracing::{error, info, warn};
 
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
 use zero_stack::{UserNetworkStack, UserTcpStream};
-use zero_traits::{NetworkStack, TcpStack, UdpStack};
+use zero_traits::{NetworkStack, SocketAddress as TraitsSocketAddr, TcpStack, UdpStack};
 use zero_tun::TunDevice;
 
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
@@ -30,11 +33,6 @@ use crate::transport::TcpRelayStream;
 
 // ── Protocol handler ──────────────────────────────────────────────────
 
-/// Minimal `InboundProtocol` implementation for TUN connections.
-///
-/// TUN doesn't have a protocol-level handshake — the TCP stack
-/// terminates the handshake before the connection reaches us.
-/// All response methods are no-ops.
 struct TunProtocol;
 
 #[async_trait]
@@ -57,22 +55,18 @@ impl InboundProtocol for TunProtocol {
     async fn send_blocked(&self, _: &mut Self::ClientStream) -> Result<(), EngineError> {
         Ok(())
     }
-    async fn send_upstream_failure(
-        &self,
-        _: &mut Self::ClientStream,
-    ) -> Result<(), EngineError> {
+    async fn send_upstream_failure(&self, _: &mut Self::ClientStream) -> Result<(), EngineError> {
         Ok(())
     }
 }
 
 // ── Dispatch loop ─────────────────────────────────────────────────────
 
-/// Main TUN dispatch loop.
-///
-/// Reads raw packets from the device, feeds them to the stack,
-/// and multiplexes between:
-/// - TCP connections arriving via `stack.accept()`
-/// - UDP datagrams arriving via `stack.recv_from()`
+/// How often to clean up idle UDP relay tasks.
+const UDP_CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
+/// Idle timeout for UDP relay tasks.
+const UDP_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
 async fn tun_loop<S: NetworkStack + Send + Sync + 'static>(
     proxy: Proxy,
     device: Arc<Mutex<impl TunDevice + 'static>>,
@@ -86,6 +80,18 @@ async fn tun_loop<S: NetworkStack + Send + Sync + 'static>(
     let udp = stack.udp();
     let mut buf = vec![0u8; 65536];
     let mut udp_buf = vec![0u8; 65536];
+    let mut cleanup_tick = interval(UDP_CLEANUP_INTERVAL);
+
+    // UDP relay: local socket for sending/receiving datagrams to destinations.
+    let relay_sock = match UdpSocket::bind("0.0.0.0:0").await {
+        Ok(s) => s,
+        Err(e) => {
+            error!(error = %e, "tun udp relay socket bind failed");
+            return;
+        }
+    };
+    // Track pending UDP requests: (src, dst) → last_active for response matching.
+    let pending = Mutex::new(HashMap::<(TraitsSocketAddr, TraitsSocketAddr), Instant>::new());
 
     loop {
         tokio::select! {
@@ -119,13 +125,20 @@ async fn tun_loop<S: NetworkStack + Send + Sync + 'static>(
                 });
             }
 
-            // ── UDP datagram from stack ──
-            Some((n, _src, dst)) = udp.recv_from(&mut udp_buf) => {
-                // UDP is forwarded by the proxy's UDP subsystem.
-                // For now, log and drop — full UDP relay through the
-                // proxy pipeline is a separate concern (see UDP ASSOCIATE
-                // in SOCKS5, VLESS UoT, Hysteria2 QUIC).
-                let _ = (n, dst);
+            // ── UDP datagram from stack → forward to destination ──
+            Some((n, src, dst)) = udp.recv_from(&mut udp_buf) => {
+                let target = sockaddr_to_std(&dst);
+                if let Err(e) = relay_sock.send_to(&udp_buf[..n], target).await {
+                    warn!(error = %e, %target, "tun udp send_to failed");
+                } else {
+                    pending.lock().await.insert((src, dst), Instant::now());
+                }
+            }
+
+            // ── Periodic cleanup ──
+            _ = cleanup_tick.tick() => {
+                let mut pend = pending.lock().await;
+                pend.retain(|_, last| last.elapsed() < UDP_IDLE_TIMEOUT);
             }
 
             // ── Raw packet from TUN device ──
@@ -136,9 +149,10 @@ async fn tun_loop<S: NetworkStack + Send + Sync + 'static>(
                 match r {
                     Ok(0) => break,
                     Ok(n) => {
-                        // Feed to both stacks — each ignores non-matching protocol.
                         tcp.feed(&buf[..n]).await;
                         udp.feed(&buf[..n]).await;
+                        // After feeding, poll for UDP responses.
+                        poll_udp_responses(&relay_sock, udp, &pending).await;
                     }
                     Err(e) => {
                         error!(error = %e, "tun read");
@@ -150,9 +164,43 @@ async fn tun_loop<S: NetworkStack + Send + Sync + 'static>(
     }
 }
 
+/// Non-blocking poll for UDP responses to pending TUN requests.
+///
+/// Tries to receive from the relay socket.  When a datagram arrives,
+/// looks up the sender's address in the pending map to determine the
+/// original TUN-side source; if matched, sends the response back
+/// through the UDP stack.
+async fn poll_udp_responses(
+    sock: &UdpSocket,
+    udp: &impl UdpStack,
+    pending: &Mutex<HashMap<(TraitsSocketAddr, TraitsSocketAddr), Instant>>,
+) {
+    let mut resp_buf = [0u8; 65536];
+    match sock.try_recv_from(&mut resp_buf) {
+        Ok((n, from)) => {
+            let mut pend = pending.lock().await;
+            let key = pend
+                .iter()
+                .find(|((_src, dst), _)| sockaddr_to_std(dst) == from)
+                .map(|((src, dst), _)| (*src, *dst));
+
+            if let Some((src, dst)) = key {
+                udp.send_to(&resp_buf[..n], dst, src).await;
+                pend.insert((src, dst), Instant::now());
+            }
+        }
+        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+            // Nothing available — expected.
+        }
+        Err(e) => {
+            warn!(error = %e, "tun udp recv error");
+        }
+    }
+}
+
 // ── Address conversion helpers ────────────────────────────────────────
 
-fn sockaddr_to_std(sa: &zero_traits::SocketAddress) -> SocketAddr {
+fn sockaddr_to_std(sa: &TraitsSocketAddr) -> SocketAddr {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     let ip: IpAddr = match sa.ip {
         zero_traits::IpAddress::V4(o) => IpAddr::V4(Ipv4Addr::from(o)),
@@ -161,7 +209,7 @@ fn sockaddr_to_std(sa: &zero_traits::SocketAddress) -> SocketAddr {
     SocketAddr::new(ip, sa.port)
 }
 
-fn sockaddr_to_address(sa: &zero_traits::SocketAddress) -> Address {
+fn sockaddr_to_address(sa: &TraitsSocketAddr) -> Address {
     match sa.ip {
         zero_traits::IpAddress::V4(o) => Address::Ipv4(o),
         zero_traits::IpAddress::V6(o) => Address::Ipv6(o),
@@ -171,7 +219,6 @@ fn sockaddr_to_address(sa: &zero_traits::SocketAddress) -> Address {
 // ── Proxy entry points ────────────────────────────────────────────────
 
 impl Proxy {
-    /// Start the TUN device using the user-space network stack.
     pub async fn start_tun(
         &self,
         name: Option<&str>,
@@ -199,8 +246,7 @@ impl Proxy {
         // Outbound packet channel: stack → writer task → TUN device.
         let (outbound_tx, mut outbound_rx) = mpsc::channel::<Vec<u8>>(256);
 
-        // Writer task: drains outbound packets from the stack and writes
-        // them to the TUN device.
+        // Writer task.
         let writer_dev = device.clone();
         tokio::spawn(async move {
             use tokio::io::AsyncWriteExt;
@@ -212,7 +258,6 @@ impl Proxy {
             }
         });
 
-        // Create user-space network stack.
         let stack = UserNetworkStack::new(outbound_tx, 1500);
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);

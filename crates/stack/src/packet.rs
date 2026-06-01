@@ -194,6 +194,113 @@ pub fn build_tcp(
     }
 }
 
+/// Build an IPv4/IPv6 + TCP packet with MSS option (for SYN-ACK).
+///
+/// Adds a single TCP option: MSS (kind=2, length=4, value=mss).
+/// The TCP data offset is adjusted to 24 bytes (20 base + 4 option).
+#[allow(clippy::too_many_arguments)]
+pub fn build_tcp_with_mss(
+    src: IpAddr,
+    dst: IpAddr,
+    sport: u16,
+    dport: u16,
+    seq: u32,
+    ack: u32,
+    flags: u8,
+    mss: u16,
+) -> Vec<u8> {
+    match (src, dst) {
+        (IpAddr::V4(s), IpAddr::V4(d)) => build_tcp_v4_with_mss(s, d, sport, dport, seq, ack, flags, mss),
+        (IpAddr::V6(s), IpAddr::V6(d)) => build_tcp_v6_with_mss(s, d, sport, dport, seq, ack, flags, mss),
+        _ => Vec::new(),
+    }
+}
+
+fn build_tcp_v4_with_mss(
+    src: Ipv4Addr, dst: Ipv4Addr,
+    sport: u16, dport: u16,
+    seq: u32, ack: u32,
+    flags: u8, mss: u16,
+) -> Vec<u8> {
+    // TCP header = 20 base + 4 MSS option = 24 bytes. No payload in SYN-ACK.
+    let tcp_hdr_len: usize = 24;
+    let total = 20 + tcp_hdr_len;
+    let mut p = vec![0u8; total];
+
+    // IP header.
+    p[0] = 0x45;
+    p[2] = (total >> 8) as u8;
+    p[3] = total as u8;
+    p[8] = 64;
+    p[9] = IPPROTO_TCP;
+    p[12..16].copy_from_slice(&src.octets());
+    p[16..20].copy_from_slice(&dst.octets());
+    let ip_cksum = checksum(&p[0..20]);
+    p[10] = (ip_cksum >> 8) as u8;
+    p[11] = ip_cksum as u8;
+
+    // TCP header.
+    let o = 20;
+    p[o..o + 2].copy_from_slice(&sport.to_be_bytes());
+    p[o + 2..o + 4].copy_from_slice(&dport.to_be_bytes());
+    p[o + 4..o + 8].copy_from_slice(&seq.to_be_bytes());
+    p[o + 8..o + 12].copy_from_slice(&ack.to_be_bytes());
+    p[o + 12] = ((tcp_hdr_len as u8) / 4) << 4; // data offset = 6 (24/4)
+    p[o + 13] = flags;
+    p[o + 14..o + 16].copy_from_slice(&65535u16.to_be_bytes()); // window
+
+    // MSS option: kind=2, len=4, value=mss (big-endian).
+    p[o + 20] = 2; // kind
+    p[o + 21] = 4; // length
+    p[o + 22..o + 24].copy_from_slice(&mss.to_be_bytes());
+
+    let tcp_cksum = tcp_checksum_v4(&src, &dst, &p[o..]);
+    p[o + 16] = (tcp_cksum >> 8) as u8;
+    p[o + 17] = tcp_cksum as u8;
+
+    p
+}
+
+fn build_tcp_v6_with_mss(
+    src: Ipv6Addr, dst: Ipv6Addr,
+    sport: u16, dport: u16,
+    seq: u32, ack: u32,
+    flags: u8, mss: u16,
+) -> Vec<u8> {
+    let tcp_hdr_len: usize = 24;
+    let total = 40 + tcp_hdr_len;
+    let mut p = vec![0u8; total];
+
+    // IPv6 header.
+    p[0] = 0x60;
+    p[4..6].copy_from_slice(&(tcp_hdr_len as u16).to_be_bytes());
+    p[6] = IPPROTO_TCP;
+    p[7] = 64;
+    p[8..24].copy_from_slice(&src.octets());
+    p[24..40].copy_from_slice(&dst.octets());
+
+    // TCP header.
+    let o = 40;
+    p[o..o + 2].copy_from_slice(&sport.to_be_bytes());
+    p[o + 2..o + 4].copy_from_slice(&dport.to_be_bytes());
+    p[o + 4..o + 8].copy_from_slice(&seq.to_be_bytes());
+    p[o + 8..o + 12].copy_from_slice(&ack.to_be_bytes());
+    p[o + 12] = ((tcp_hdr_len as u8) / 4) << 4;
+    p[o + 13] = flags;
+    p[o + 14..o + 16].copy_from_slice(&65535u16.to_be_bytes());
+
+    // MSS option.
+    p[o + 20] = 2;
+    p[o + 21] = 4;
+    p[o + 22..o + 24].copy_from_slice(&mss.to_be_bytes());
+
+    let tcp_cksum = tcp_checksum_v6(&src, &dst, &p[o..]);
+    p[o + 16] = (tcp_cksum >> 8) as u8;
+    p[o + 17] = tcp_cksum as u8;
+
+    p
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_tcp_v4(
     src: Ipv4Addr, dst: Ipv4Addr,

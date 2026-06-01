@@ -5,6 +5,14 @@
 //! completes three-way handshakes, extracts payload, and makes
 //! established connections available via [`accept`].
 //!
+//! # State machine
+//!
+//! ```text
+//!  SYN ──► SynReceived ──ACK──► Established ──FIN──► CloseWait ──FIN-ACK──► (removed)
+//!                                         │
+//!                                         └──proxy shutdown──► (FIN sent, removed)
+//! ```
+//!
 //! [`feed`]: TcpStack::feed
 //! [`accept`]: TcpStack::accept
 
@@ -14,6 +22,7 @@ use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll};
+use std::time::Instant;
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{mpsc, Mutex};
@@ -60,8 +69,7 @@ enum TcpState {
     SynReceived,
     /// Three-way handshake complete, data transfer.
     Established,
-    /// Received FIN from client, awaiting teardown.
-    #[allow(dead_code)]
+    /// Received FIN from client, waiting for our FIN-ACK to be sent.
     CloseWait,
 }
 
@@ -79,6 +87,8 @@ struct Conn {
     /// Read-side receiver — extracted when transitioning to Established
     /// and passed into the `UserTcpStream`.
     data_rx: Option<mpsc::Receiver<Vec<u8>>>,
+    /// Last time we saw activity on this connection.
+    last_active: Instant,
 }
 
 // ── UserTcpStream ─────────────────────────────────────────────────────
@@ -199,7 +209,6 @@ impl AsyncWrite for UserTcpStream {
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
     }
-
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let mut w = match self.write.try_lock() {
             Ok(w) => w,
@@ -242,7 +251,6 @@ pub struct UserTcpStack {
     accept_tx: mpsc::Sender<ReadyConn>,
     accept_rx: Mutex<mpsc::Receiver<ReadyConn>>,
     outbound: mpsc::Sender<Vec<u8>>,
-    #[allow(dead_code)]
     mss: u16,
 }
 
@@ -263,6 +271,12 @@ impl UserTcpStack {
         if let Err(e) = self.outbound.try_send(pkt) {
             warn!("tcp stack outbound full: {e}");
         }
+    }
+
+    /// Remove connections idle beyond `timeout`.
+    pub async fn cleanup_idle(&self, timeout: std::time::Duration) {
+        let mut conns = self.connections.lock().await;
+        conns.retain(|_, conn| conn.last_active.elapsed() < timeout);
     }
 }
 
@@ -290,6 +304,8 @@ impl TcpStack for UserTcpStack {
 
         // ── Existing connection ──
         if let Some(conn) = conns.get_mut(&key) {
+            conn.last_active = Instant::now();
+
             match conn.state {
                 TcpState::SynReceived => {
                     // Expect ACK completing the handshake.
@@ -319,7 +335,6 @@ impl TcpStack for UserTcpStack {
                 TcpState::Established => {
                     // Data transfer.
                     if !tcp.payload.is_empty() {
-                        // Forward payload to proxy.
                         if conn.data_tx.try_send(tcp.payload.to_vec()).is_err() {
                             // Channel full — proxy is slow.  Drop the packet;
                             // the client will retransmit.
@@ -336,20 +351,29 @@ impl TcpStack for UserTcpStack {
                     );
                     self.send_response(ack);
 
-                    // FIN.
+                    // FIN from client → transition to CloseWait.
                     if tcp.fin {
                         conn.rcv_nxt = conn.rcv_nxt.wrapping_add(1);
-                        let fin = packet::build_tcp(
+                        // ACK the FIN.
+                        let fin_ack = packet::build_tcp(
                             rev.0, rev.2, rev.1, rev.3,
                             conn.snd_nxt, conn.rcv_nxt,
-                            tcp_flags::FIN | tcp_flags::ACK, &[],
+                            tcp_flags::ACK, &[],
                         );
-                        self.send_response(fin);
-                        conns.remove(&key);
+                        self.send_response(fin_ack);
+                        conn.state = TcpState::CloseWait;
                     }
                 }
                 TcpState::CloseWait => {
-                    // Already closing; ignore.
+                    // Waiting for proxy to finish.  ACK any retransmitted FINs.
+                    if tcp.fin {
+                        let fin_ack = packet::build_tcp(
+                            rev.0, rev.2, rev.1, rev.3,
+                            conn.snd_nxt, conn.rcv_nxt,
+                            tcp_flags::ACK, &[],
+                        );
+                        self.send_response(fin_ack);
+                    }
                 }
             }
             return;
@@ -363,11 +387,12 @@ impl TcpStack for UserTcpStack {
         let iss = next_iss();
         let rcv_nxt = tcp.seq.wrapping_add(1);
 
-        // SYN-ACK.
-        let syn_ack = packet::build_tcp(
+        // SYN-ACK with MSS option.
+        let syn_ack = packet::build_tcp_with_mss(
             rev.0, rev.2, rev.1, rev.3,
             iss, rcv_nxt,
-            tcp_flags::SYN | tcp_flags::ACK, &[],
+            tcp_flags::SYN | tcp_flags::ACK,
+            self.mss,
         );
 
         let (data_tx, data_rx) = mpsc::channel::<Vec<u8>>(256);
@@ -379,6 +404,7 @@ impl TcpStack for UserTcpStack {
             rcv_nxt,
             data_tx,
             data_rx: Some(data_rx),
+            last_active: Instant::now(),
         });
 
         self.send_response(syn_ack);
@@ -388,5 +414,186 @@ impl TcpStack for UserTcpStack {
         let mut rx = self.accept_rx.lock().await;
         let conn = rx.recv().await?;
         Some((conn.stream, conn.src, conn.dst))
+    }
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::packet;
+    use std::net::{Ipv4Addr, SocketAddr};
+
+    const CLIENT_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2));
+    const SERVER_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+    const CLIENT_PORT: u16 = 54321;
+    const SERVER_PORT: u16 = 443;
+
+    /// Helper: create a stack and drain outbound packets.
+    fn new_stack() -> (UserTcpStack, mpsc::Receiver<Vec<u8>>) {
+        let (out_tx, out_rx) = mpsc::channel(256);
+        let stack = UserTcpStack::new(out_tx, 1500);
+        (stack, out_rx)
+    }
+
+    /// Helper: drain all outbound packets and parse them as TCP.
+    fn drain_outbound(rx: &mut mpsc::Receiver<Vec<u8>>) -> Vec<ParsedTcp<'static>> {
+        let mut results = Vec::new();
+        while let Ok(pkt) = rx.try_recv() {
+            if let Some(parsed) = packet::parse_tcp(&pkt) {
+                // Safety: we only read the parsed fields, not the original buffer.
+                // ParsedTcp borrows from the packet — extend its lifetime for tests.
+                let owned = ParsedTcp {
+                    src: parsed.src,
+                    dst: parsed.dst,
+                    seq: parsed.seq,
+                    ack: parsed.ack,
+                    syn: parsed.syn,
+                    ack_flag: parsed.ack_flag,
+                    fin: parsed.fin,
+                    rst: parsed.rst,
+                    psh: parsed.psh,
+                    data_off: parsed.data_off,
+                    payload: Vec::leak(parsed.payload.to_vec()),
+                };
+                results.push(owned);
+            }
+        }
+        results
+    }
+
+    /// Helper: build a client → server TCP packet.
+    fn client_packet(flags: u8, seq: u32, ack: u32, payload: &[u8]) -> Vec<u8> {
+        packet::build_tcp(CLIENT_IP, SERVER_IP, CLIENT_PORT, SERVER_PORT, seq, ack, flags, payload)
+    }
+
+    #[tokio::test]
+    async fn handshake_syn_ack_established() {
+        let (stack, mut rx) = new_stack();
+
+        // 1. Client sends SYN.
+        let syn = client_packet(tcp_flags::SYN, 1000, 0, &[]);
+        stack.feed(&syn).await;
+
+        // Expect SYN-ACK.
+        let out = drain_outbound(&mut rx);
+        assert_eq!(out.len(), 1);
+        assert!(out[0].syn);
+        assert!(out[0].ack_flag);
+        assert!(!out[0].fin);
+        assert_eq!(out[0].src.port, SERVER_PORT);
+        assert_eq!(out[0].dst.port, CLIENT_PORT);
+
+        // 2. Client sends ACK to complete handshake.
+        let server_seq = out[0].seq;
+        let client_ack = server_seq.wrapping_add(1);
+        let ack = client_packet(tcp_flags::ACK, 1001, client_ack, &[]);
+        stack.feed(&ack).await;
+
+        // Connection should be available via accept.
+        let conn = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            stack.accept(),
+        ).await.unwrap();
+        assert!(conn.is_some());
+        let (_stream, src, _dst) = conn.unwrap();
+        assert_eq!(src.port, CLIENT_PORT);
+    }
+
+    #[tokio::test]
+    async fn data_transfer_bidirectional() {
+        let (stack, mut rx) = new_stack();
+
+        // Handshake.
+        stack.feed(&client_packet(tcp_flags::SYN, 1000, 0, &[])).await;
+        drain_outbound(&mut rx); // consume SYN-ACK
+        let ack = client_packet(tcp_flags::ACK, 1001, 0, &[]);
+        stack.feed(&ack).await;
+
+        // Accept the connection.
+        let (stream, ..) = stack.accept().await.unwrap();
+
+        // Client sends data.
+        let data_pkt = client_packet(tcp_flags::PSH | tcp_flags::ACK, 1001, 0, b"hello");
+        stack.feed(&data_pkt).await;
+
+        // Read data from stream.
+        use tokio::io::AsyncReadExt;
+        let mut s = stream;
+        let mut buf = [0u8; 32];
+        let n = s.read(&mut buf).await.unwrap();
+        assert_eq!(&buf[..n], b"hello");
+
+        // Verify ACK was sent back.
+        let out = drain_outbound(&mut rx);
+        assert!(out.iter().any(|p| p.ack_flag && !p.syn && !p.fin));
+    }
+
+    #[tokio::test]
+    async fn fin_from_client_transitions_to_close_wait() {
+        let (stack, mut rx) = new_stack();
+
+        // Handshake.
+        stack.feed(&client_packet(tcp_flags::SYN, 1000, 0, &[])).await;
+        drain_outbound(&mut rx);
+        stack.feed(&client_packet(tcp_flags::ACK, 1001, 0, &[])).await;
+        let _ = stack.accept().await;
+
+        // Client sends FIN.
+        let fin = client_packet(tcp_flags::FIN | tcp_flags::ACK, 1001, 0, &[]);
+        stack.feed(&fin).await;
+
+        // Expect ACK of the FIN.
+        let out = drain_outbound(&mut rx);
+        assert!(out.iter().any(|p| p.ack_flag && !p.syn && !p.fin), "should ACK the FIN");
+
+        // Connection should be in CloseWait, not removed.
+        let conns = stack.connections.lock().await;
+        let key = (CLIENT_IP, CLIENT_PORT, SERVER_IP, SERVER_PORT);
+        let conn = conns.get(&key).expect("connection should exist in CloseWait");
+        assert_eq!(conn.state, TcpState::CloseWait);
+
+        // Retransmitted FIN should get another ACK.
+        drop(conns);
+        stack.feed(&fin).await;
+        let out2 = drain_outbound(&mut rx);
+        assert!(out2.iter().any(|p| p.ack_flag && !p.syn && !p.fin), "should re-ACK retransmitted FIN");
+    }
+
+    #[tokio::test]
+    async fn rst_tears_down_immediately() {
+        let (stack, mut rx) = new_stack();
+
+        // Handshake.
+        stack.feed(&client_packet(tcp_flags::SYN, 1000, 0, &[])).await;
+        drain_outbound(&mut rx);
+        stack.feed(&client_packet(tcp_flags::ACK, 1001, 0, &[])).await;
+        let _ = stack.accept().await;
+
+        // Client sends RST.
+        let rst = client_packet(tcp_flags::RST, 1001, 0, &[]);
+        stack.feed(&rst).await;
+
+        // No response should be sent for RST.
+        let out = drain_outbound(&mut rx);
+        assert!(out.is_empty(), "RST should not generate a response");
+
+        // Connection should be gone.
+        let conns = stack.connections.lock().await;
+        let key = (CLIENT_IP, CLIENT_PORT, SERVER_IP, SERVER_PORT);
+        assert!(conns.get(&key).is_none());
+    }
+
+    #[tokio::test]
+    async fn non_syn_ignored_when_no_connection() {
+        let (stack, mut rx) = new_stack();
+
+        // Send ACK without prior SYN — should be silently dropped.
+        let ack = client_packet(tcp_flags::ACK, 1000, 0, b"stray");
+        stack.feed(&ack).await;
+
+        let out = drain_outbound(&mut rx);
+        assert!(out.is_empty());
     }
 }
