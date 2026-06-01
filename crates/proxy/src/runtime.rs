@@ -191,7 +191,12 @@ impl Proxy {
             tokio::select! {
                 _ = &mut shutdown, if !shutting_down => {
                     shutting_down = true;
+                    // Notify the original channel (used by urltest groups).
                     let _ = shutdown_tx.send(true);
+                    // Notify each per-listener channel (used by inbound listeners).
+                    for tx in listener_stops.values() {
+                        let _ = tx.send(true);
+                    }
                     info!("propagated proxy shutdown to background tasks");
                 }
                 Some(()) = reload_async_rx.recv() => {
@@ -310,6 +315,19 @@ impl ProxyHandle {
 
 impl zero_api::QueryService for ProxyHandle {
     fn query(&self, request: zero_api::QueryRequest) -> zero_api::ApiResult<zero_api::QueryResponse> {
+        if let zero_api::QueryRequest::TunStatus(_) = &request {
+            let info = self.proxy.tun_info.lock().unwrap();
+            let snap = match info.as_ref() {
+                Some(tun) => zero_api::TunStatusSnapshot {
+                    running: true,
+                    name: Some(tun.name.clone()),
+                    addr: Some(tun.addr.clone()),
+                    tag: Some(tun.tag.clone()),
+                },
+                None => zero_api::TunStatusSnapshot::default(),
+            };
+            return Ok(zero_api::QueryResponse::TunStatus(snap));
+        }
         self.inner.query(request)
     }
 }
