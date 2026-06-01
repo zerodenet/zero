@@ -1,0 +1,13 @@
+[package]
+name = "zero-stack"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+tokio.workspace = true
+tracing.workspace = true
+zero-traits = { path = "../traits" }

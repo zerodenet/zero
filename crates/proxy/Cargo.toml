@@ -127,6 +127,7 @@ zero-protocol-trojan = { path = "../../protocols/trojan", optional = true, defau
 zero-protocol-vmess = { path = "../../protocols/vmess", optional = true }
 zero-traits = { path = "../traits" }
 zero-tun = { path = "../tun" }
+zero-stack = { path = "../stack" }
 zero-transport = { path = "../transport", optional = true, features = ["vless"] }
 
 [dev-dependencies]

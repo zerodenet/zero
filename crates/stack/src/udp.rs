@@ -1,0 +1,117 @@
+//! User-space UDP stack.
+//!
+//! Implements [`UdpStack`] by extracting UDP datagrams from raw IP
+//! packets and forwarding them through internal queues.  Outbound
+//! datagrams are wrapped in IP + UDP headers and emitted through
+//! the outbound packet channel.
+
+use std::collections::VecDeque;
+
+use tokio::sync::{mpsc, Mutex};
+use tracing::warn;
+
+use zero_traits::{SocketAddress, UdpStack};
+
+use crate::packet::{self, ParsedUdp};
+
+// ── Queued datagram ───────────────────────────────────────────────────
+
+struct Datagram {
+    data: Vec<u8>,
+    src: SocketAddress,
+    dst: SocketAddress,
+}
+
+fn endpoint_to_sockaddr(ep: &crate::packet::Endpoint) -> SocketAddress {
+    use std::net::IpAddr;
+    let ip = match ep.ip {
+        IpAddr::V4(v4) => zero_traits::IpAddress::V4(v4.octets()),
+        IpAddr::V6(v6) => zero_traits::IpAddress::V6(v6.octets()),
+    };
+    SocketAddress::new(ip, ep.port)
+}
+
+fn sockaddr_to_ipaddr(sa: &SocketAddress) -> std::net::IpAddr {
+    match sa.ip {
+        zero_traits::IpAddress::V4(octets) => std::net::IpAddr::V4(octets.into()),
+        zero_traits::IpAddress::V6(octets) => std::net::IpAddr::V6(octets.into()),
+    }
+}
+
+// ── UserUdpStack ──────────────────────────────────────────────────────
+
+/// User-space UDP forwarding stack.
+///
+/// Implements [`UdpStack`].  Inbound UDP packets are queued via
+/// [`feed`] and consumed via [`recv_from`].  Outbound datagrams
+/// sent via [`send_to`] are wrapped in IP + UDP headers and pushed
+/// through the outbound channel.
+///
+/// [`feed`]: UdpStack::feed
+/// [`recv_from`]: UdpStack::recv_from
+/// [`send_to`]: UdpStack::send_to
+pub struct UserUdpStack {
+    datagrams: Mutex<VecDeque<Datagram>>,
+    outbound: mpsc::Sender<Vec<u8>>,
+}
+
+impl UserUdpStack {
+    pub(crate) fn new(outbound: mpsc::Sender<Vec<u8>>) -> Self {
+        Self {
+            datagrams: Mutex::new(VecDeque::new()),
+            outbound,
+        }
+    }
+}
+
+impl UdpStack for UserUdpStack {
+    async fn feed(&self, packet: &[u8]) {
+        if packet::ip_protocol(packet) != Some(packet::IPPROTO_UDP) {
+            return;
+        }
+        let udp = match packet::parse_udp(packet) {
+            Some(u) => u,
+            None => return,
+        };
+        if udp.payload.is_empty() {
+            return;
+        }
+
+        let mut dgrams = self.datagrams.lock().await;
+        // Bound the queue to avoid unbounded growth.
+        if dgrams.len() >= 1024 {
+            warn!("udp datagram queue full, dropping");
+            return;
+        }
+        dgrams.push_back(Datagram {
+            data: udp.payload.to_vec(),
+            src: endpoint_to_sockaddr(&udp.src),
+            dst: endpoint_to_sockaddr(&udp.dst),
+        });
+    }
+
+    async fn recv_from(
+        &self,
+        buf: &mut [u8],
+    ) -> Option<(usize, SocketAddress, SocketAddress)> {
+        let mut dgrams = self.datagrams.lock().await;
+        let dgram = dgrams.pop_front()?;
+        let n = dgram.data.len().min(buf.len());
+        buf[..n].copy_from_slice(&dgram.data[..n]);
+        Some((n, dgram.src, dgram.dst))
+    }
+
+    async fn send_to(
+        &self,
+        data: &[u8],
+        src: SocketAddress,
+        dst: SocketAddress,
+    ) {
+        let src_ip = sockaddr_to_ipaddr(&src);
+        let dst_ip = sockaddr_to_ipaddr(&dst);
+        let pkt = packet::build_udp(src_ip, dst_ip, src.port, dst.port, data);
+        if let Err(e) = self.outbound.try_send(pkt) {
+            warn!("udp outbound full: {e}");
+        }
+    }
+}

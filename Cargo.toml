@@ -71,6 +71,7 @@ members = [
     "crates/ffi",
     "crates/grpc",
     "crates/tun",
+    "crates/stack",
 ]
 resolver = "2"
 

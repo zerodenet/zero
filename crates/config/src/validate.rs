@@ -23,10 +23,7 @@ impl RuntimeConfig {
                 &mut inbound_listens,
                 &inbound.listen.address,
                 inbound.listen.port,
-            )
-            .map_err(|e| {
-                ConfigError::InvalidInbound(format!("inbounds[{i}] `{}`: {e}", inbound.tag))
-            })?;
+            )?;
             validate_inbound_protocol(&inbound.protocol).map_err(|e| {
                 ConfigError::InvalidInbound(format!("inbounds[{i}] `{}`: {e}", inbound.tag))
             })?;

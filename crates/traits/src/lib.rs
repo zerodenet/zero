@@ -5,11 +5,38 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+// ── Address types ─────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IpAddress {
     V4([u8; 4]),
     V6([u8; 16]),
 }
+
+impl IpAddress {
+    pub fn is_v4(&self) -> bool {
+        matches!(self, IpAddress::V4(_))
+    }
+
+    pub fn is_v6(&self) -> bool {
+        matches!(self, IpAddress::V6(_))
+    }
+}
+
+/// Network socket address — an IP address and port.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SocketAddress {
+    pub ip: IpAddress,
+    pub port: u16,
+}
+
+impl SocketAddress {
+    pub const fn new(ip: IpAddress, port: u16) -> Self {
+        Self { ip, port }
+    }
+}
+
+// ── I/O traits ────────────────────────────────────────────────────────
 
 pub trait AsyncSocket: Send + Sync + Unpin {
     type Error;
@@ -32,6 +59,99 @@ pub trait DatagramSocket: Send + Sync + Unpin {
     async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, IpAddress, u16), Self::Error>;
     async fn send_to(&self, buf: &[u8], addr: IpAddress, port: u16) -> Result<(), Self::Error>;
 }
+
+// ── Network stack traits ──────────────────────────────────────────────
+
+/// Error from a network stack operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StackError {
+    /// Generic I/O failure.
+    Io,
+    /// The stack has been shut down.
+    Closed,
+    /// Malformed or unsupported packet.
+    InvalidPacket,
+}
+
+/// TCP connection acceptor backed by raw IP packets.
+///
+/// Implementations may use a user-space state machine, OS-level
+/// redirection, or a hybrid approach.  The consumer reads raw packets
+/// from a TUN device (or equivalent) and feeds them via [`feed`];
+/// fully-handshaked connections become available via [`accept`].
+///
+/// The `Connection` type should implement `tokio::io::AsyncRead +
+/// AsyncWrite + Unpin + Send` for integration with the proxy pipeline.
+/// That bound is expressed at the *consumer* site (via `where`), keeping
+/// this trait runtime-agnostic.
+///
+/// [`feed`]: TcpStack::feed
+/// [`accept`]: TcpStack::accept
+pub trait TcpStack: Send + Sync {
+    /// Established TCP connection.  Implementations should also
+    /// implement `AsyncRead + AsyncWrite + Unpin + Send` from the
+    /// chosen async runtime.
+    type Connection: Send + 'static;
+
+    /// Feed a raw IP packet into the stack.
+    ///
+    /// Non-TCP packets are silently ignored.  The stack parses the
+    /// TCP header, updates internal connection state, and may emit
+    /// response packets (SYN-ACK, ACK, FIN, …) through an internal
+    /// outbound channel.
+    async fn feed(&self, packet: &[u8]);
+
+    /// Accept the next fully-established TCP connection.
+    ///
+    /// Returns the connection stream together with the source (client)
+    /// and destination (server) addresses, or `None` when the stack
+    /// has been shut down.
+    async fn accept(&self) -> Option<(Self::Connection, SocketAddress, SocketAddress)>;
+}
+
+/// UDP datagram handler backed by raw IP packets.
+///
+/// Works like [`TcpStack`] but for connectionless UDP datagrams:
+/// inbound packets are queued via [`feed`] and consumed via
+/// [`recv_from`]; outbound datagrams are sent via [`send_to`].
+///
+/// [`feed`]: UdpStack::feed
+/// [`recv_from`]: UdpStack::recv_from
+/// [`send_to`]: UdpStack::send_to
+pub trait UdpStack: Send + Sync {
+    /// Feed a raw IP packet into the stack.
+    ///
+    /// Non-UDP packets are silently ignored.
+    async fn feed(&self, packet: &[u8]);
+
+    /// Receive the next queued UDP datagram.
+    ///
+    /// Returns `(bytes_read, source, destination)`, or `None` when
+    /// the stack has been shut down.
+    async fn recv_from(&self, buf: &mut [u8])
+        -> Option<(usize, SocketAddress, SocketAddress)>;
+
+    /// Send a UDP datagram from `src` to `dst`.
+    ///
+    /// The stack builds the IP + UDP headers (including checksums)
+    /// and emits the raw packet through its internal outbound channel.
+    async fn send_to(&self, data: &[u8], src: SocketAddress, dst: SocketAddress);
+}
+
+/// Complete network stack: TCP streams + UDP datagrams.
+///
+/// Convenience trait that bundles a [`TcpStack`] and a [`UdpStack`]
+/// behind a single type.  Implementations choose the strategy
+/// (user-space, system-level, or mixed).
+pub trait NetworkStack: Send + Sync + 'static {
+    type Tcp: TcpStack;
+    type Udp: UdpStack;
+
+    fn tcp(&self) -> &Self::Tcp;
+    fn udp(&self) -> &Self::Udp;
+}
+
+// ── Other abstractions ────────────────────────────────────────────────
 
 pub trait DnsResolver: Send + Sync {
     type Error;

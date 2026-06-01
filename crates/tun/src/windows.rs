@@ -7,6 +7,7 @@
 use std::io;
 use std::net::IpAddr;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -22,8 +23,8 @@ pub struct WindowsTun {
     name: String,
     rx: mpsc::Receiver<Vec<u8>>,
     tx: mpsc::Sender<Vec<u8>>,
-    _session: wintun::Session,
-    _adapter: wintun::Adapter,
+    _session: Arc<wintun::Session>,
+    _adapter: Arc<wintun::Adapter>,
 }
 
 impl WindowsTun {
@@ -31,28 +32,37 @@ impl WindowsTun {
     /// (e.g. `"ZeroTun"`).  The Wintun DLL must be available on the
     /// system (bundled with the binary or in `PATH`).
     pub fn create(name: Option<&str>) -> io::Result<Self> {
-        let wintun = unsafe {
-            wintun::Wintun::new()
-        }.map_err(|e| io::Error::new(
-            io::ErrorKind::Other,
-            format!("wintun load failed: {e}"),
-        ))?;
+        // wintun 0.4: `load()` returns `Result<Arc<wintun_raw::wintun>, Error>`.
+        let wintun = unsafe { wintun::load() }.map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("wintun load failed: {e}"),
+            )
+        })?;
 
         let adapter_name = name.unwrap_or("ZeroTun");
-        let guid = generate_guid();
-        let adapter = wintun
-            .create_adapter(adapter_name, "ZeroTun", Some(guid.as_str()))
-            .map_err(|e| io::Error::new(
-                io::ErrorKind::Other,
-                format!("wintun create adapter: {e}"),
-            ))?;
+        let guid: u128 = 0xB6F4C8A2_1E3D_4F5A_9C2B_8D7E6A5F4C3B;
 
-        let session = adapter
-            .start_session(wintun::DEFAULT_RING_CAPACITY)
-            .map_err(|e| io::Error::new(
-                io::ErrorKind::Other,
-                format!("wintun start session: {e}"),
-            ))?;
+        let adapter =
+            wintun::Adapter::create(&wintun, adapter_name, "ZeroTun", Some(guid)).map_err(
+                |e| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("wintun create adapter: {e}"),
+                    )
+                },
+            )?;
+
+        let session = Arc::new(
+            adapter
+                .start_session(wintun::MAX_RING_CAPACITY)
+                .map_err(|e| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("wintun start session: {e}"),
+                    )
+                })?,
+        );
 
         // Bridge Wintun (sync) ↔ tokio (async) via channels.
         let (read_tx, read_rx) = mpsc::channel::<Vec<u8>>(256);
@@ -77,8 +87,14 @@ impl WindowsTun {
         std::thread::spawn(move || loop {
             match write_rx.blocking_recv() {
                 Some(data) => {
-                    if writer_session.send_packet(&data).is_err() {
-                        break;
+                    let len = data.len().min(u16::MAX as usize) as u16;
+                    match writer_session.allocate_send_packet(len) {
+                        Ok(mut pkt) => {
+                            pkt.bytes_mut()[..len as usize]
+                                .copy_from_slice(&data[..len as usize]);
+                            writer_session.send_packet(pkt);
+                        }
+                        Err(_) => break,
                     }
                 }
                 None => break,
@@ -143,10 +159,4 @@ impl TunDevice for WindowsTun {
     fn name(&self) -> &str {
         &self.name
     }
-}
-
-fn generate_guid() -> String {
-    // Simple deterministic GUID based on adapter name.
-    // Wintun requires a GUID for adapter identification.
-    "{B6F4C8A2-1E3D-4F5A-9C2B-8D7E6A5F4C3B}".to_owned()
 }
