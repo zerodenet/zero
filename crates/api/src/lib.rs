@@ -15,8 +15,8 @@ pub use capabilities::{AdapterCapability, ApiCapabilities, SinkCapability};
 pub use command::{
     CommandRequest, CommandResponse, ConfigApplyCommand, ConfigValidateCommand,
     DiagnosticsDnsLookupCommand, DiagnosticsProbeTargetCommand, DiagnosticsTraceRouteCommand,
-    FlowCloseCommand, ModeSetCommand, PolicyProbeCommand, PolicySelectCommand,
-    TunStartCommand, TunStopCommand,
+    FlowCloseCommand, ModeSetCommand, PolicyProbeCommand, PolicySelectCommand, TunStartCommand,
+    TunStopCommand,
 };
 pub use error::{ApiError, ApiErrorCode};
 pub use event::{event_type, ApiEvent, EventFilter, PublishResult};

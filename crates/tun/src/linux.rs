@@ -37,7 +37,10 @@ impl LinuxTun {
 
         let mut ifr: libc::ifreq = unsafe { std::mem::zeroed() };
         let name_c = CString::new(if_name).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidInput, "interface name contains nul byte")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "interface name contains nul byte",
+            )
         })?;
         let name_bytes = name_c.as_bytes_with_nul();
         let copy_len = name_bytes.len().min(libc::IFNAMSIZ);
@@ -66,7 +69,8 @@ impl LinuxTun {
             }
         }
 
-        let actual_name = ifr.ifr_name
+        let actual_name = ifr
+            .ifr_name
             .iter()
             .take_while(|&&b| b != 0)
             .map(|&b| b as u8 as char)
@@ -176,9 +180,8 @@ impl AsyncWrite for LinuxTun {
             match guard.try_io(|inner| {
                 let fd = inner.get_ref();
                 // SAFETY: write to a valid fd.
-                let ret = unsafe {
-                    libc::write(*fd, buf.as_ptr() as *const libc::c_void, buf.len())
-                };
+                let ret =
+                    unsafe { libc::write(*fd, buf.as_ptr() as *const libc::c_void, buf.len()) };
                 if ret < 0 {
                     return Err(io::Error::last_os_error());
                 }

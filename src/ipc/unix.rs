@@ -83,8 +83,7 @@ pub async fn spawn_ipc_server(
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let path_for_handle = socket_path.to_path_buf();
 
-    let task =
-        tokio::spawn(async move { run_ipc_server(listener, handle, shutdown_rx).await });
+    let task = tokio::spawn(async move { run_ipc_server(listener, handle, shutdown_rx).await });
 
     info!(socket = %socket_path.display(), "ipc server ready");
 

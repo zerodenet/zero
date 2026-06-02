@@ -95,7 +95,14 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        cli::Command::TunStart { name, addr, mask, mtu, tag, socket_path } => {
+        cli::Command::TunStart {
+            name,
+            addr,
+            mask,
+            mtu,
+            tag,
+            socket_path,
+        } => {
             let socket = resolve_socket(socket_path.as_deref())?;
             let req = crate::ipc::protocol::IpcRequest::Command {
                 method: "tun.start".to_owned(),
@@ -107,18 +114,25 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
             };
             match ipc::client::send_request(&socket, &req) {
                 Ok(resp) if resp.ok => println!("tun started"),
-                Ok(resp) => eprintln!("error: {}", resp.error.map(|e| e.message).unwrap_or_default()),
+                Ok(resp) => eprintln!(
+                    "error: {}",
+                    resp.error.map(|e| e.message).unwrap_or_default()
+                ),
                 Err(e) => eprintln!("error: {e}"),
             }
         }
         cli::Command::TunStop { socket_path } => {
             let socket = resolve_socket(socket_path.as_deref())?;
             let req = crate::ipc::protocol::IpcRequest::Command {
-                method: "tun.stop".to_owned(), params: serde_json::json!({}),
+                method: "tun.stop".to_owned(),
+                params: serde_json::json!({}),
             };
             match ipc::client::send_request(&socket, &req) {
                 Ok(resp) if resp.ok => println!("tun stopped"),
-                Ok(resp) => eprintln!("error: {}", resp.error.map(|e| e.message).unwrap_or_default()),
+                Ok(resp) => eprintln!(
+                    "error: {}",
+                    resp.error.map(|e| e.message).unwrap_or_default()
+                ),
                 Err(e) => eprintln!("error: {e}"),
             }
         }
@@ -130,16 +144,24 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
             match ipc::client::send_request(&socket, &req) {
                 Ok(resp) if resp.ok => {
                     if let Some(v) = resp.result {
-                        let s: zero_api::TunStatusSnapshot = serde_json::from_value(v).unwrap_or_default();
+                        let s: zero_api::TunStatusSnapshot =
+                            serde_json::from_value(v).unwrap_or_default();
                         if s.running {
-                            println!("tun: running, name={}, addr={}, tag={}",
+                            println!(
+                                "tun: running, name={}, addr={}, tag={}",
                                 s.name.as_deref().unwrap_or("-"),
                                 s.addr.as_deref().unwrap_or("-"),
-                                s.tag.as_deref().unwrap_or("-"));
-                        } else { println!("tun: not running"); }
+                                s.tag.as_deref().unwrap_or("-")
+                            );
+                        } else {
+                            println!("tun: not running");
+                        }
                     }
                 }
-                Ok(resp) => eprintln!("error: {}", resp.error.map(|e| e.message).unwrap_or_default()),
+                Ok(resp) => eprintln!(
+                    "error: {}",
+                    resp.error.map(|e| e.message).unwrap_or_default()
+                ),
                 Err(e) => eprintln!("error: {e}"),
             }
         }

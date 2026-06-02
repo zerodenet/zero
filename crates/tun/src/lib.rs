@@ -46,7 +46,12 @@ pub trait TunDevice: AsyncRead + AsyncWrite + Send + Sync + Unpin {
     /// Used when the OS owns the TUN lifecycle (iOS `NEPacketTunnelProvider`,
     /// Android `VpnService`) and the application only sees packet channels.
     /// Default implementation bridges `AsyncRead`/`AsyncWrite` via spawned tasks.
-    fn into_channels(self) -> io::Result<(tokio::sync::mpsc::Sender<Vec<u8>>, tokio::sync::mpsc::Receiver<Vec<u8>>)>
+    fn into_channels(
+        self,
+    ) -> io::Result<(
+        tokio::sync::mpsc::Sender<Vec<u8>>,
+        tokio::sync::mpsc::Receiver<Vec<u8>>,
+    )>
     where
         Self: Sized + 'static,
     {
@@ -60,10 +65,17 @@ pub trait TunDevice: AsyncRead + AsyncWrite + Send + Sync + Unpin {
         tokio::spawn(async move {
             let mut buf = vec![0u8; 65536];
             loop {
-                let n = { let mut d = r.lock().await; tokio::io::AsyncReadExt::read(&mut *d, &mut buf).await };
+                let n = {
+                    let mut d = r.lock().await;
+                    tokio::io::AsyncReadExt::read(&mut *d, &mut buf).await
+                };
                 match n {
                     Ok(0) => break,
-                    Ok(n) => { if read_tx.send(buf[..n].to_vec()).await.is_err() { break; } }
+                    Ok(n) => {
+                        if read_tx.send(buf[..n].to_vec()).await.is_err() {
+                            break;
+                        }
+                    }
                     Err(_) => break,
                 }
             }
@@ -120,11 +132,17 @@ mod tests {
 
 pub fn create(name: Option<&str>) -> io::Result<impl TunDevice> {
     #[cfg(target_os = "linux")]
-    { return linux::LinuxTun::create(name); }
+    {
+        return linux::LinuxTun::create(name);
+    }
     #[cfg(target_os = "macos")]
-    { return macos::Utun::create(name); }
+    {
+        return macos::Utun::create(name);
+    }
     #[cfg(target_os = "windows")]
-    { return windows::WindowsTun::create(name); }
+    {
+        return windows::WindowsTun::create(name);
+    }
     #[allow(unreachable_code)]
     {
         Err(io::Error::new(

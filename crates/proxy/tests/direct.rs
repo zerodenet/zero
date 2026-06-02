@@ -62,9 +62,11 @@ async fn relays_raw_tcp_to_fixed_ipv4_target() {
 
     // Verify session tracked.
     let status = handle.export_status();
-    assert!(status.runtime.active_sessions.iter().any(
-        |s| s.inbound_tag.as_deref() == Some("direct-in")
-    ));
+    assert!(status
+        .runtime
+        .active_sessions
+        .iter()
+        .any(|s| s.inbound_tag.as_deref() == Some("direct-in")));
 
     handle.shutdown().await.expect("shutdown");
     let _ = echo_task.await;

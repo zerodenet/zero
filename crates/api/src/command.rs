@@ -126,8 +126,12 @@ pub struct TunStartCommand {
     pub tag: String,
 }
 
-fn default_tun_mtu() -> u16 { 1500 }
-fn default_tun_mask() -> String { "255.255.255.0".to_owned() }
+fn default_tun_mtu() -> u16 {
+    1500
+}
+fn default_tun_mask() -> String {
+    "255.255.255.0".to_owned()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TunStopCommand;

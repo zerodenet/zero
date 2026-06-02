@@ -47,9 +47,15 @@ impl InboundProtocol for SystemProtocol {
             "system accept handled by stack",
         )))
     }
-    async fn send_ok(&self, _: &mut TcpStream) -> Result<(), EngineError> { Ok(()) }
-    async fn send_blocked(&self, _: &mut TcpStream) -> Result<(), EngineError> { Ok(()) }
-    async fn send_upstream_failure(&self, _: &mut TcpStream) -> Result<(), EngineError> { Ok(()) }
+    async fn send_ok(&self, _: &mut TcpStream) -> Result<(), EngineError> {
+        Ok(())
+    }
+    async fn send_blocked(&self, _: &mut TcpStream) -> Result<(), EngineError> {
+        Ok(())
+    }
+    async fn send_upstream_failure(&self, _: &mut TcpStream) -> Result<(), EngineError> {
+        Ok(())
+    }
 }
 
 // ── System inbound loop ───────────────────────────────────────────────

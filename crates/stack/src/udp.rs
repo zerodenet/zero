@@ -90,10 +90,7 @@ impl UdpStack for UserUdpStack {
         });
     }
 
-    async fn recv_from(
-        &self,
-        buf: &mut [u8],
-    ) -> Option<(usize, SocketAddress, SocketAddress)> {
+    async fn recv_from(&self, buf: &mut [u8]) -> Option<(usize, SocketAddress, SocketAddress)> {
         let mut dgrams = self.datagrams.lock().await;
         let dgram = dgrams.pop_front()?;
         let n = dgram.data.len().min(buf.len());
@@ -101,12 +98,7 @@ impl UdpStack for UserUdpStack {
         Some((n, dgram.src, dgram.dst))
     }
 
-    async fn send_to(
-        &self,
-        data: &[u8],
-        src: SocketAddress,
-        dst: SocketAddress,
-    ) {
+    async fn send_to(&self, data: &[u8], src: SocketAddress, dst: SocketAddress) {
         let src_ip = sockaddr_to_ipaddr(&src);
         let dst_ip = sockaddr_to_ipaddr(&dst);
         let pkt = packet::build_udp(src_ip, dst_ip, src.port, dst.port, data);

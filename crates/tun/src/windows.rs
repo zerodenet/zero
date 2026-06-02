@@ -45,24 +45,16 @@ impl WindowsTun {
         let adapter_name = name.unwrap_or("ZeroTun");
         let guid: u128 = 0xB6F4C8A2_1E3D_4F5A_9C2B_8D7E6A5F4C3B;
 
-        let adapter =
-            wintun::Adapter::create(&wintun, adapter_name, "ZeroTun", Some(guid)).map_err(
-                |e| {
-                    io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("wintun create adapter: {e}"),
-                    )
-                },
-            )?;
+        let adapter = wintun::Adapter::create(&wintun, adapter_name, "ZeroTun", Some(guid))
+            .map_err(|e| {
+                io::Error::new(io::ErrorKind::Other, format!("wintun create adapter: {e}"))
+            })?;
 
         let session = Arc::new(
             adapter
                 .start_session(wintun::MAX_RING_CAPACITY)
                 .map_err(|e| {
-                    io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("wintun start session: {e}"),
-                    )
+                    io::Error::new(io::ErrorKind::Other, format!("wintun start session: {e}"))
                 })?,
         );
 
@@ -92,8 +84,7 @@ impl WindowsTun {
                     let len = data.len().min(u16::MAX as usize) as u16;
                     match writer_session.allocate_send_packet(len) {
                         Ok(mut pkt) => {
-                            pkt.bytes_mut()[..len as usize]
-                                .copy_from_slice(&data[..len as usize]);
+                            pkt.bytes_mut()[..len as usize].copy_from_slice(&data[..len as usize]);
                             writer_session.send_packet(pkt);
                         }
                         Err(_) => break,

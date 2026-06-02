@@ -128,8 +128,7 @@ pub trait UdpStack: Send + Sync {
     ///
     /// Returns `(bytes_read, source, destination)`, or `None` when
     /// the stack has been shut down.
-    async fn recv_from(&self, buf: &mut [u8])
-        -> Option<(usize, SocketAddress, SocketAddress)>;
+    async fn recv_from(&self, buf: &mut [u8]) -> Option<(usize, SocketAddress, SocketAddress)>;
 
     /// Send a UDP datagram from `src` to `dst`.
     ///

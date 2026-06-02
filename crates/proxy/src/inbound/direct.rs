@@ -40,9 +40,15 @@ impl InboundProtocol for DirectInboundHandler {
         )))
     }
 
-    async fn send_ok(&self, _: &mut TcpRelayStream) -> Result<(), EngineError> { Ok(()) }
-    async fn send_blocked(&self, _: &mut TcpRelayStream) -> Result<(), EngineError> { Ok(()) }
-    async fn send_upstream_failure(&self, _: &mut TcpRelayStream) -> Result<(), EngineError> { Ok(()) }
+    async fn send_ok(&self, _: &mut TcpRelayStream) -> Result<(), EngineError> {
+        Ok(())
+    }
+    async fn send_blocked(&self, _: &mut TcpRelayStream) -> Result<(), EngineError> {
+        Ok(())
+    }
+    async fn send_upstream_failure(&self, _: &mut TcpRelayStream) -> Result<(), EngineError> {
+        Ok(())
+    }
     // relay uses default
 }
 
@@ -55,12 +61,13 @@ impl Proxy {
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
         let (target, port) = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Direct { target, port } => {
-                (target.clone(), *port)
+            zero_config::InboundProtocolConfig::Direct { target, port } => (target.clone(), *port),
+            _ => {
+                return Err(EngineError::Io(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "direct listener requires direct config",
+                )))
             }
-            _ => return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput, "direct listener requires direct config",
-            ))),
         };
 
         let listener = bind_listener(&inbound).await?;
@@ -133,10 +140,12 @@ impl Proxy {
 fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::net::SocketAddr> {
     addr.and_then(|ip| match ip {
         zero_traits::IpAddress::V4(o) => Some(std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::from(o)), 0,
+            std::net::IpAddr::V4(std::net::Ipv4Addr::from(o)),
+            0,
         )),
         zero_traits::IpAddress::V6(o) => Some(std::net::SocketAddr::new(
-            std::net::IpAddr::V6(std::net::Ipv6Addr::from(o)), 0,
+            std::net::IpAddr::V6(std::net::Ipv6Addr::from(o)),
+            0,
         )),
     })
 }

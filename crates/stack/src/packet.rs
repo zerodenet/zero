@@ -77,8 +77,14 @@ pub fn parse_tcp(packet: &[u8]) -> Option<ParsedTcp<'_>> {
     };
 
     Some(ParsedTcp {
-        src: Endpoint { ip: src_ip, port: src_port },
-        dst: Endpoint { ip: dst_ip, port: dst_port },
+        src: Endpoint {
+            ip: src_ip,
+            port: src_port,
+        },
+        dst: Endpoint {
+            ip: dst_ip,
+            port: dst_port,
+        },
         seq,
         ack,
         syn: (flags & 0x02) != 0,
@@ -125,8 +131,14 @@ pub fn parse_udp(packet: &[u8]) -> Option<ParsedUdp<'_>> {
     };
 
     Some(ParsedUdp {
-        src: Endpoint { ip: src_ip, port: src_port },
-        dst: Endpoint { ip: dst_ip, port: dst_port },
+        src: Endpoint {
+            ip: src_ip,
+            port: src_port,
+        },
+        dst: Endpoint {
+            ip: dst_ip,
+            port: dst_port,
+        },
         payload,
     })
 }
@@ -142,8 +154,12 @@ fn parse_ip(packet: &[u8]) -> Option<(IpAddr, IpAddr, usize, Option<usize>)> {
                 return None;
             }
             let ihl = (packet[0] & 0x0f) as usize * 4;
-            let src = IpAddr::V4(Ipv4Addr::new(packet[12], packet[13], packet[14], packet[15]));
-            let dst = IpAddr::V4(Ipv4Addr::new(packet[16], packet[17], packet[18], packet[19]));
+            let src = IpAddr::V4(Ipv4Addr::new(
+                packet[12], packet[13], packet[14], packet[15],
+            ));
+            let dst = IpAddr::V4(Ipv4Addr::new(
+                packet[16], packet[17], packet[18], packet[19],
+            ));
             let total = u16::from_be_bytes([packet[2], packet[3]]) as usize;
             Some((src, dst, ihl, Some(total)))
         }
@@ -188,8 +204,12 @@ pub fn build_tcp(
     payload: &[u8],
 ) -> Vec<u8> {
     match (src, dst) {
-        (IpAddr::V4(s), IpAddr::V4(d)) => build_tcp_v4(s, d, sport, dport, seq, ack, flags, payload),
-        (IpAddr::V6(s), IpAddr::V6(d)) => build_tcp_v6(s, d, sport, dport, seq, ack, flags, payload),
+        (IpAddr::V4(s), IpAddr::V4(d)) => {
+            build_tcp_v4(s, d, sport, dport, seq, ack, flags, payload)
+        }
+        (IpAddr::V6(s), IpAddr::V6(d)) => {
+            build_tcp_v6(s, d, sport, dport, seq, ack, flags, payload)
+        }
         _ => Vec::new(),
     }
 }
@@ -210,18 +230,26 @@ pub fn build_tcp_with_mss(
     mss: u16,
 ) -> Vec<u8> {
     match (src, dst) {
-        (IpAddr::V4(s), IpAddr::V4(d)) => build_tcp_v4_with_mss(s, d, sport, dport, seq, ack, flags, mss),
-        (IpAddr::V6(s), IpAddr::V6(d)) => build_tcp_v6_with_mss(s, d, sport, dport, seq, ack, flags, mss),
+        (IpAddr::V4(s), IpAddr::V4(d)) => {
+            build_tcp_v4_with_mss(s, d, sport, dport, seq, ack, flags, mss)
+        }
+        (IpAddr::V6(s), IpAddr::V6(d)) => {
+            build_tcp_v6_with_mss(s, d, sport, dport, seq, ack, flags, mss)
+        }
         _ => Vec::new(),
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 fn build_tcp_v4_with_mss(
-    src: Ipv4Addr, dst: Ipv4Addr,
-    sport: u16, dport: u16,
-    seq: u32, ack: u32,
-    flags: u8, mss: u16,
+    src: Ipv4Addr,
+    dst: Ipv4Addr,
+    sport: u16,
+    dport: u16,
+    seq: u32,
+    ack: u32,
+    flags: u8,
+    mss: u16,
 ) -> Vec<u8> {
     // TCP header = 20 base + 4 MSS option = 24 bytes. No payload in SYN-ACK.
     let tcp_hdr_len: usize = 24;
@@ -264,10 +292,14 @@ fn build_tcp_v4_with_mss(
 
 #[allow(clippy::too_many_arguments)]
 fn build_tcp_v6_with_mss(
-    src: Ipv6Addr, dst: Ipv6Addr,
-    sport: u16, dport: u16,
-    seq: u32, ack: u32,
-    flags: u8, mss: u16,
+    src: Ipv6Addr,
+    dst: Ipv6Addr,
+    sport: u16,
+    dport: u16,
+    seq: u32,
+    ack: u32,
+    flags: u8,
+    mss: u16,
 ) -> Vec<u8> {
     let tcp_hdr_len: usize = 24;
     let total = 40 + tcp_hdr_len;
@@ -305,10 +337,14 @@ fn build_tcp_v6_with_mss(
 
 #[allow(clippy::too_many_arguments)]
 fn build_tcp_v4(
-    src: Ipv4Addr, dst: Ipv4Addr,
-    sport: u16, dport: u16,
-    seq: u32, ack: u32,
-    flags: u8, payload: &[u8],
+    src: Ipv4Addr,
+    dst: Ipv4Addr,
+    sport: u16,
+    dport: u16,
+    seq: u32,
+    ack: u32,
+    flags: u8,
+    payload: &[u8],
 ) -> Vec<u8> {
     let tcp_len = 20 + payload.len();
     let total = 20 + tcp_len;
@@ -334,7 +370,7 @@ fn build_tcp_v4(
     p[32] = 0x50; // data offset = 5 (20 bytes)
     p[33] = flags;
     p[34..36].copy_from_slice(&65535u16.to_be_bytes()); // window
-    // checksum at [36..38] — filled below
+                                                        // checksum at [36..38] — filled below
 
     if !payload.is_empty() {
         p[40..].copy_from_slice(payload);
@@ -349,10 +385,14 @@ fn build_tcp_v4(
 
 #[allow(clippy::too_many_arguments)]
 fn build_tcp_v6(
-    src: Ipv6Addr, dst: Ipv6Addr,
-    sport: u16, dport: u16,
-    seq: u32, ack: u32,
-    flags: u8, payload: &[u8],
+    src: Ipv6Addr,
+    dst: Ipv6Addr,
+    sport: u16,
+    dport: u16,
+    seq: u32,
+    ack: u32,
+    flags: u8,
+    payload: &[u8],
 ) -> Vec<u8> {
     let tcp_len = 20 + payload.len();
     let total = 40 + tcp_len;
@@ -375,7 +415,7 @@ fn build_tcp_v6(
     p[o + 12] = 0x50; // data offset = 5
     p[o + 13] = flags;
     p[o + 14..o + 16].copy_from_slice(&65535u16.to_be_bytes()); // window
-    // checksum at [o+16..o+18] — filled below
+                                                                // checksum at [o+16..o+18] — filled below
 
     if !payload.is_empty() {
         p[o + 20..].copy_from_slice(payload);
@@ -389,13 +429,7 @@ fn build_tcp_v6(
 }
 
 /// Build an IPv4/IPv6 + UDP packet with correct checksums.
-pub fn build_udp(
-    src: IpAddr,
-    dst: IpAddr,
-    sport: u16,
-    dport: u16,
-    payload: &[u8],
-) -> Vec<u8> {
+pub fn build_udp(src: IpAddr, dst: IpAddr, sport: u16, dport: u16, payload: &[u8]) -> Vec<u8> {
     match (src, dst) {
         (IpAddr::V4(s), IpAddr::V4(d)) => build_udp_v4(s, d, sport, dport, payload),
         (IpAddr::V6(s), IpAddr::V6(d)) => build_udp_v6(s, d, sport, dport, payload),
@@ -403,11 +437,7 @@ pub fn build_udp(
     }
 }
 
-fn build_udp_v4(
-    src: Ipv4Addr, dst: Ipv4Addr,
-    sport: u16, dport: u16,
-    payload: &[u8],
-) -> Vec<u8> {
+fn build_udp_v4(src: Ipv4Addr, dst: Ipv4Addr, sport: u16, dport: u16, payload: &[u8]) -> Vec<u8> {
     let udp_total = 8 + payload.len();
     let total = 20 + udp_total;
     let mut p = vec![0u8; total];
@@ -441,11 +471,7 @@ fn build_udp_v4(
     p
 }
 
-fn build_udp_v6(
-    src: Ipv6Addr, dst: Ipv6Addr,
-    sport: u16, dport: u16,
-    payload: &[u8],
-) -> Vec<u8> {
+fn build_udp_v6(src: Ipv6Addr, dst: Ipv6Addr, sport: u16, dport: u16, payload: &[u8]) -> Vec<u8> {
     let udp_total = 8 + payload.len();
     let total = 40 + udp_total;
     let mut p = vec![0u8; total];
@@ -570,7 +596,12 @@ mod tests {
         let p = build_tcp(
             IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)),
             IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)),
-            12345, 443, 100, 0, tcp_flags::SYN, b"",
+            12345,
+            443,
+            100,
+            0,
+            tcp_flags::SYN,
+            b"",
         );
         let t = parse_tcp(&p).expect("parse tcp v4");
         assert!(t.syn);
@@ -583,7 +614,16 @@ mod tests {
     fn parse_tcp_roundtrip_v6() {
         let s = Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, 1);
         let d = Ipv6Addr::new(0x2606, 0x4700, 0, 0, 0, 0, 0x6810, 0x1);
-        let p = build_tcp(IpAddr::V6(s), IpAddr::V6(d), 54321, 443, 500, 0, tcp_flags::SYN, b"");
+        let p = build_tcp(
+            IpAddr::V6(s),
+            IpAddr::V6(d),
+            54321,
+            443,
+            500,
+            0,
+            tcp_flags::SYN,
+            b"",
+        );
         let t = parse_tcp(&p).expect("parse tcp v6");
         assert!(t.syn);
         assert_eq!(t.seq, 500);
@@ -594,7 +634,9 @@ mod tests {
         let p = build_udp(
             IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)),
             IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
-            12345, 53, b"dns query",
+            12345,
+            53,
+            b"dns query",
         );
         let u = parse_udp(&p).expect("parse udp v4");
         assert_eq!(u.dst.port, 53);
@@ -616,14 +658,21 @@ mod tests {
         let tcp = build_tcp(
             IpAddr::V4(Ipv4Addr::LOCALHOST),
             IpAddr::V4(Ipv4Addr::LOCALHOST),
-            1, 80, 0, 0, tcp_flags::SYN, b"",
+            1,
+            80,
+            0,
+            0,
+            tcp_flags::SYN,
+            b"",
         );
         assert_eq!(ip_protocol(&tcp), Some(IPPROTO_TCP));
 
         let udp = build_udp(
             IpAddr::V4(Ipv4Addr::LOCALHOST),
             IpAddr::V4(Ipv4Addr::LOCALHOST),
-            1, 53, b"x",
+            1,
+            53,
+            b"x",
         );
         assert_eq!(ip_protocol(&udp), Some(IPPROTO_UDP));
     }
@@ -633,7 +682,8 @@ mod tests {
         // Build a minimal valid IPv4 header and verify checksum is non-zero.
         let mut hdr = [0u8; 20];
         hdr[0] = 0x45;
-        hdr[2] = 0; hdr[3] = 20; // total length
+        hdr[2] = 0;
+        hdr[3] = 20; // total length
         hdr[8] = 64;
         hdr[9] = 6; // TCP
         hdr[12..16].copy_from_slice(&[192, 168, 1, 1]);

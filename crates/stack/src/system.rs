@@ -113,10 +113,7 @@ impl UdpStack for SystemUdpStack {
     /// No-op: UDP packets arrive through the OS socket.
     async fn feed(&self, _packet: &[u8]) {}
 
-    async fn recv_from(
-        &self,
-        buf: &mut [u8],
-    ) -> Option<(usize, SocketAddress, SocketAddress)> {
+    async fn recv_from(&self, buf: &mut [u8]) -> Option<(usize, SocketAddress, SocketAddress)> {
         match self.socket.recv_from(buf).await {
             Ok((n, remote)) => {
                 let local = self.socket.local_addr().ok()?;

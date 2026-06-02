@@ -137,10 +137,10 @@ impl UserTcpStream {
             read_rx: Mutex::new(data_rx),
             write: Mutex::new(TcpWrite {
                 outbound,
-                src_ip: rev.0, // our_ip
-                dst_ip: rev.2, // app_ip
-                sport: rev.1,  // our_port
-                dport: rev.3,  // app_port
+                src_ip: rev.0,                // our_ip
+                dst_ip: rev.2,                // app_ip
+                sport: rev.1,                 // our_port
+                dport: rev.3,                 // app_port
                 snd_nxt: iss.wrapping_add(1), // first data byte after SYN-ACK
                 rcv_nxt,
                 fin_sent: false,
@@ -188,9 +188,12 @@ impl AsyncWrite for UserTcpStream {
             )));
         }
         let pkt = packet::build_tcp(
-            w.src_ip, w.dst_ip,
-            w.sport, w.dport,
-            w.snd_nxt, w.rcv_nxt,
+            w.src_ip,
+            w.dst_ip,
+            w.sport,
+            w.dport,
+            w.snd_nxt,
+            w.rcv_nxt,
             tcp_flags::PSH | tcp_flags::ACK,
             data,
         );
@@ -218,9 +221,12 @@ impl AsyncWrite for UserTcpStream {
             return Poll::Ready(Ok(()));
         }
         let pkt = packet::build_tcp(
-            w.src_ip, w.dst_ip,
-            w.sport, w.dport,
-            w.snd_nxt, w.rcv_nxt,
+            w.src_ip,
+            w.dst_ip,
+            w.sport,
+            w.dport,
+            w.snd_nxt,
+            w.rcv_nxt,
             tcp_flags::FIN | tcp_flags::ACK,
             &[],
         );
@@ -327,7 +333,11 @@ impl TcpStack for UserTcpStack {
 
                     let src = endpoint_to_sockaddr(&tcp.src);
                     let dst = endpoint_to_sockaddr(&tcp.dst);
-                    if self.accept_tx.try_send(ReadyConn { stream, src, dst }).is_err() {
+                    if self
+                        .accept_tx
+                        .try_send(ReadyConn { stream, src, dst })
+                        .is_err()
+                    {
                         warn!("tcp accept channel full, dropping connection");
                         conns.remove(&key);
                     }
@@ -345,9 +355,14 @@ impl TcpStack for UserTcpStack {
                     }
                     // ACK.
                     let ack = packet::build_tcp(
-                        rev.0, rev.2, rev.1, rev.3,
-                        conn.snd_nxt, conn.rcv_nxt,
-                        tcp_flags::ACK, &[],
+                        rev.0,
+                        rev.2,
+                        rev.1,
+                        rev.3,
+                        conn.snd_nxt,
+                        conn.rcv_nxt,
+                        tcp_flags::ACK,
+                        &[],
                     );
                     self.send_response(ack);
 
@@ -356,9 +371,14 @@ impl TcpStack for UserTcpStack {
                         conn.rcv_nxt = conn.rcv_nxt.wrapping_add(1);
                         // ACK the FIN.
                         let fin_ack = packet::build_tcp(
-                            rev.0, rev.2, rev.1, rev.3,
-                            conn.snd_nxt, conn.rcv_nxt,
-                            tcp_flags::ACK, &[],
+                            rev.0,
+                            rev.2,
+                            rev.1,
+                            rev.3,
+                            conn.snd_nxt,
+                            conn.rcv_nxt,
+                            tcp_flags::ACK,
+                            &[],
                         );
                         self.send_response(fin_ack);
                         conn.state = TcpState::CloseWait;
@@ -368,9 +388,14 @@ impl TcpStack for UserTcpStack {
                     // Waiting for proxy to finish.  ACK any retransmitted FINs.
                     if tcp.fin {
                         let fin_ack = packet::build_tcp(
-                            rev.0, rev.2, rev.1, rev.3,
-                            conn.snd_nxt, conn.rcv_nxt,
-                            tcp_flags::ACK, &[],
+                            rev.0,
+                            rev.2,
+                            rev.1,
+                            rev.3,
+                            conn.snd_nxt,
+                            conn.rcv_nxt,
+                            tcp_flags::ACK,
+                            &[],
                         );
                         self.send_response(fin_ack);
                     }
@@ -389,23 +414,30 @@ impl TcpStack for UserTcpStack {
 
         // SYN-ACK with MSS option.
         let syn_ack = packet::build_tcp_with_mss(
-            rev.0, rev.2, rev.1, rev.3,
-            iss, rcv_nxt,
+            rev.0,
+            rev.2,
+            rev.1,
+            rev.3,
+            iss,
+            rcv_nxt,
             tcp_flags::SYN | tcp_flags::ACK,
             self.mss,
         );
 
         let (data_tx, data_rx) = mpsc::channel::<Vec<u8>>(256);
 
-        conns.insert(key, Conn {
-            state: TcpState::SynReceived,
-            iss,
-            snd_nxt: iss.wrapping_add(1),
-            rcv_nxt,
-            data_tx,
-            data_rx: Some(data_rx),
-            last_active: Instant::now(),
-        });
+        conns.insert(
+            key,
+            Conn {
+                state: TcpState::SynReceived,
+                iss,
+                snd_nxt: iss.wrapping_add(1),
+                rcv_nxt,
+                data_tx,
+                data_rx: Some(data_rx),
+                last_active: Instant::now(),
+            },
+        );
 
         self.send_response(syn_ack);
     }
@@ -465,7 +497,16 @@ mod tests {
 
     /// Helper: build a client → server TCP packet.
     fn client_packet(flags: u8, seq: u32, ack: u32, payload: &[u8]) -> Vec<u8> {
-        packet::build_tcp(CLIENT_IP, SERVER_IP, CLIENT_PORT, SERVER_PORT, seq, ack, flags, payload)
+        packet::build_tcp(
+            CLIENT_IP,
+            SERVER_IP,
+            CLIENT_PORT,
+            SERVER_PORT,
+            seq,
+            ack,
+            flags,
+            payload,
+        )
     }
 
     #[tokio::test]
@@ -492,10 +533,9 @@ mod tests {
         stack.feed(&ack).await;
 
         // Connection should be available via accept.
-        let conn = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            stack.accept(),
-        ).await.unwrap();
+        let conn = tokio::time::timeout(std::time::Duration::from_millis(100), stack.accept())
+            .await
+            .unwrap();
         assert!(conn.is_some());
         let (_stream, src, _dst) = conn.unwrap();
         assert_eq!(src.port, CLIENT_PORT);
@@ -506,7 +546,9 @@ mod tests {
         let (stack, mut rx) = new_stack();
 
         // Handshake.
-        stack.feed(&client_packet(tcp_flags::SYN, 1000, 0, &[])).await;
+        stack
+            .feed(&client_packet(tcp_flags::SYN, 1000, 0, &[]))
+            .await;
         drain_outbound(&mut rx); // consume SYN-ACK
         let ack = client_packet(tcp_flags::ACK, 1001, 0, &[]);
         stack.feed(&ack).await;
@@ -535,9 +577,13 @@ mod tests {
         let (stack, mut rx) = new_stack();
 
         // Handshake.
-        stack.feed(&client_packet(tcp_flags::SYN, 1000, 0, &[])).await;
+        stack
+            .feed(&client_packet(tcp_flags::SYN, 1000, 0, &[]))
+            .await;
         drain_outbound(&mut rx);
-        stack.feed(&client_packet(tcp_flags::ACK, 1001, 0, &[])).await;
+        stack
+            .feed(&client_packet(tcp_flags::ACK, 1001, 0, &[]))
+            .await;
         let _ = stack.accept().await;
 
         // Client sends FIN.
@@ -546,19 +592,27 @@ mod tests {
 
         // Expect ACK of the FIN.
         let out = drain_outbound(&mut rx);
-        assert!(out.iter().any(|p| p.ack_flag && !p.syn && !p.fin), "should ACK the FIN");
+        assert!(
+            out.iter().any(|p| p.ack_flag && !p.syn && !p.fin),
+            "should ACK the FIN"
+        );
 
         // Connection should be in CloseWait, not removed.
         let conns = stack.connections.lock().await;
         let key = (CLIENT_IP, CLIENT_PORT, SERVER_IP, SERVER_PORT);
-        let conn = conns.get(&key).expect("connection should exist in CloseWait");
+        let conn = conns
+            .get(&key)
+            .expect("connection should exist in CloseWait");
         assert_eq!(conn.state, TcpState::CloseWait);
 
         // Retransmitted FIN should get another ACK.
         drop(conns);
         stack.feed(&fin).await;
         let out2 = drain_outbound(&mut rx);
-        assert!(out2.iter().any(|p| p.ack_flag && !p.syn && !p.fin), "should re-ACK retransmitted FIN");
+        assert!(
+            out2.iter().any(|p| p.ack_flag && !p.syn && !p.fin),
+            "should re-ACK retransmitted FIN"
+        );
     }
 
     #[tokio::test]
@@ -566,9 +620,13 @@ mod tests {
         let (stack, mut rx) = new_stack();
 
         // Handshake.
-        stack.feed(&client_packet(tcp_flags::SYN, 1000, 0, &[])).await;
+        stack
+            .feed(&client_packet(tcp_flags::SYN, 1000, 0, &[]))
+            .await;
         drain_outbound(&mut rx);
-        stack.feed(&client_packet(tcp_flags::ACK, 1001, 0, &[])).await;
+        stack
+            .feed(&client_packet(tcp_flags::ACK, 1001, 0, &[]))
+            .await;
         let _ = stack.accept().await;
 
         // Client sends RST.

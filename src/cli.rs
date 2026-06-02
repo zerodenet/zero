@@ -157,14 +157,12 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
             let remaining: Vec<String> = args.collect();
             match remaining.first().map(|s| s.as_str()) {
                 Some("start") => parse_tun_start(remaining[1..].to_vec()),
-                Some("stop") => parse_client_command(
-                    remaining[1..].to_vec(),
-                    |socket_path| Command::TunStop { socket_path },
-                ),
-                Some("status") => parse_client_command(
-                    remaining[1..].to_vec(),
-                    |socket_path| Command::TunStatus { socket_path },
-                ),
+                Some("stop") => parse_client_command(remaining[1..].to_vec(), |socket_path| {
+                    Command::TunStop { socket_path }
+                }),
+                Some("status") => parse_client_command(remaining[1..].to_vec(), |socket_path| {
+                    Command::TunStatus { socket_path }
+                }),
                 _ => Err(CliError::new(
                     "tun requires subcommand: start, stop, or status".to_owned(),
                 )),
@@ -379,16 +377,19 @@ fn parse_tun_start(args: Vec<String>) -> Result<Command, CliError> {
             "--name" => name = Some(iter.next().ok_or(CliError::new("--name requires value"))?),
             "--addr" => addr = Some(iter.next().ok_or(CliError::new("--addr requires value"))?),
             "--mask" => mask = Some(iter.next().ok_or(CliError::new("--mask requires value"))?),
-            "--mtu" => mtu = Some(
-                iter.next()
-                    .ok_or(CliError::new("--mtu requires value"))?
-                    .parse()
-                    .map_err(|_| CliError::new("--mtu must be a number"))?,
-            ),
+            "--mtu" => {
+                mtu = Some(
+                    iter.next()
+                        .ok_or(CliError::new("--mtu requires value"))?
+                        .parse()
+                        .map_err(|_| CliError::new("--mtu must be a number"))?,
+                )
+            }
             "--tag" => tag = Some(iter.next().ok_or(CliError::new("--tag requires value"))?),
             "--socket" => {
                 socket_path = Some(
-                    iter.next().ok_or(CliError::new("--socket requires value"))?,
+                    iter.next()
+                        .ok_or(CliError::new("--socket requires value"))?,
                 );
             }
             a if a.starts_with('-') => return Err(CliError::new(format!("unknown option `{a}`"))),
@@ -397,7 +398,14 @@ fn parse_tun_start(args: Vec<String>) -> Result<Command, CliError> {
     }
     let addr = addr.ok_or(CliError::new("--addr is required"))?;
     let tag = tag.ok_or(CliError::new("--tag is required"))?;
-    Ok(Command::TunStart { name, addr, mask, mtu, tag, socket_path })
+    Ok(Command::TunStart {
+        name,
+        addr,
+        mask,
+        mtu,
+        tag,
+        socket_path,
+    })
 }
 
 fn parse_mode(args: Vec<String>) -> Result<Command, CliError> {

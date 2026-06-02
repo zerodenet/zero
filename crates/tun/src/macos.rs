@@ -18,8 +18,8 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use crate::TunDevice;
 
 // XNU system controls
-const SYSPROTO_CONTROL: libc::c_int = 2;   // SYSPROTO_CONTROL
-const AF_SYSTEM: libc::c_int = 32;         // AF_SYSTEM
+const SYSPROTO_CONTROL: libc::c_int = 2; // SYSPROTO_CONTROL
+const AF_SYSTEM: libc::c_int = 32; // AF_SYSTEM
 const CTLIOCGINFO: libc::c_ulong = 0xc064_4e03;
 const UTUN_CONTROL_NAME: &str = "com.apple.net.utun_control";
 const UTUN_OPT_IFNAME: libc::c_int = 2;
@@ -165,9 +165,17 @@ impl AsyncRead for Utun {
                         buf.remaining(),
                     )
                 };
-                if ret < 0 { Err(io::Error::last_os_error()) } else { Ok(ret as usize) }
+                if ret < 0 {
+                    Err(io::Error::last_os_error())
+                } else {
+                    Ok(ret as usize)
+                }
             }) {
-                Ok(Ok(n)) => { unsafe { buf.assume_init(n) }; buf.advance(n); return Poll::Ready(Ok(())); }
+                Ok(Ok(n)) => {
+                    unsafe { buf.assume_init(n) };
+                    buf.advance(n);
+                    return Poll::Ready(Ok(()));
+                }
                 Ok(Err(e)) => return Poll::Ready(Err(e)),
                 Err(_) => continue,
             }
@@ -176,7 +184,11 @@ impl AsyncRead for Utun {
 }
 
 impl AsyncWrite for Utun {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
         loop {
             let mut guard = match self.fd.poll_write_ready(cx) {
                 Poll::Ready(Ok(g)) => g,
@@ -185,9 +197,17 @@ impl AsyncWrite for Utun {
             };
             match guard.try_io(|inner| {
                 let ret = unsafe {
-                    libc::write(*inner.get_ref(), buf.as_ptr() as *const libc::c_void, buf.len())
+                    libc::write(
+                        *inner.get_ref(),
+                        buf.as_ptr() as *const libc::c_void,
+                        buf.len(),
+                    )
                 };
-                if ret < 0 { Err(io::Error::last_os_error()) } else { Ok(ret as usize) }
+                if ret < 0 {
+                    Err(io::Error::last_os_error())
+                } else {
+                    Ok(ret as usize)
+                }
             }) {
                 Ok(Ok(n)) => return Poll::Ready(Ok(n)),
                 Ok(Err(e)) => return Poll::Ready(Err(e)),
@@ -195,6 +215,10 @@ impl AsyncWrite for Utun {
             }
         }
     }
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
 }

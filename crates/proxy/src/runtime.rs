@@ -314,7 +314,10 @@ impl ProxyHandle {
 }
 
 impl zero_api::QueryService for ProxyHandle {
-    fn query(&self, request: zero_api::QueryRequest) -> zero_api::ApiResult<zero_api::QueryResponse> {
+    fn query(
+        &self,
+        request: zero_api::QueryRequest,
+    ) -> zero_api::ApiResult<zero_api::QueryResponse> {
         if let zero_api::QueryRequest::TunStatus(_) = &request {
             let info = self.proxy.tun_info.lock().unwrap();
             let snap = match info.as_ref() {
@@ -346,41 +349,38 @@ impl zero_api::CommandService for ProxyHandle {
                 let mtu = cmd.mtu;
                 let tag = cmd.tag.clone();
                 match tokio::runtime::Handle::try_current() {
-                    Ok(rt) => {
-                        rt.block_on(async move {
-                            proxy
-                                .start_tun(name.as_deref(), &addr, &mask, mtu, &tag)
-                                .await
-                                .map(|_| zero_api::CommandResponse::accepted())
-                                .map_err(|e| zero_api::ApiError::new(
+                    Ok(rt) => rt.block_on(async move {
+                        proxy
+                            .start_tun(name.as_deref(), &addr, &mask, mtu, &tag)
+                            .await
+                            .map(|_| zero_api::CommandResponse::accepted())
+                            .map_err(|e| {
+                                zero_api::ApiError::new(
                                     zero_api::ApiErrorCode::Internal,
                                     e.to_string(),
-                                ))
-                        })
-                    }
+                                )
+                            })
+                    }),
                     Err(_) => Err(zero_api::ApiError::new(
                         zero_api::ApiErrorCode::Internal,
                         "no tokio runtime available for TUN command",
                     )),
                 }
             }
-            zero_api::CommandRequest::TunStop(_) => {
-                match tokio::runtime::Handle::try_current() {
-                    Ok(rt) => {
-                        rt.block_on(async move {
-                            self.proxy.stop_tun().map(|_| zero_api::CommandResponse::accepted())
-                                .map_err(|e| zero_api::ApiError::new(
-                                    zero_api::ApiErrorCode::Internal,
-                                    e.to_string(),
-                                ))
+            zero_api::CommandRequest::TunStop(_) => match tokio::runtime::Handle::try_current() {
+                Ok(rt) => rt.block_on(async move {
+                    self.proxy
+                        .stop_tun()
+                        .map(|_| zero_api::CommandResponse::accepted())
+                        .map_err(|e| {
+                            zero_api::ApiError::new(zero_api::ApiErrorCode::Internal, e.to_string())
                         })
-                    }
-                    Err(_) => Err(zero_api::ApiError::new(
-                        zero_api::ApiErrorCode::Internal,
-                        "no tokio runtime available for TUN command",
-                    )),
-                }
-            }
+                }),
+                Err(_) => Err(zero_api::ApiError::new(
+                    zero_api::ApiErrorCode::Internal,
+                    "no tokio runtime available for TUN command",
+                )),
+            },
             _ => self.inner.execute(command),
         }
     }
