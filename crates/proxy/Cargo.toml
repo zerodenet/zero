@@ -9,17 +9,15 @@ homepage.workspace = true
 
 [features]
 default = [
-    "inbound-socks5",
-    "inbound-http-connect",
-    "inbound-mixed",
-    "inbound-vless",
-    "outbound-socks5",
-    "outbound-vless",
+    "socks5",
+    "http-connect",
+    "mixed",
+    "vless",
 ]
-inbound-socks5 = ["dep:zero-protocol-socks5"]
-inbound-http-connect = ["dep:zero-protocol-http-connect"]
-inbound-mixed = ["inbound-socks5", "inbound-http-connect"]
-inbound-vless = [
+socks5 = ["dep:zero-protocol-socks5"]
+http-connect = ["dep:zero-protocol-http-connect"]
+mixed = ["socks5", "http-connect"]
+vless = [
     "zero-platform-tokio/vless-reality",
     "zero-transport/tls",
     "zero-transport/ws",
@@ -31,20 +29,7 @@ inbound-vless = [
     "dep:zero-protocol-vless",
     "zero-protocol-vless/reality",
 ]
-outbound-socks5 = ["dep:zero-protocol-socks5"]
-outbound-vless = [
-    "zero-platform-tokio/vless-reality",
-    "zero-transport/tls",
-    "zero-transport/ws",
-    "zero-transport/grpc",
-    "zero-transport/h2",
-    "zero-transport/http-upgrade",
-    "zero-transport/split-http",
-    "zero-transport/quic",
-    "dep:zero-protocol-vless",
-    "zero-protocol-vless/reality",
-]
-inbound-hysteria2 = [
+hysteria2 = [
     "dep:quinn",
     "dep:ring",
     "dep:rustls",
@@ -52,61 +37,28 @@ inbound-hysteria2 = [
     "dep:zero-protocol-hysteria2",
     "zero-protocol-hysteria2/crypto",
 ]
-outbound-hysteria2 = [
-    "dep:quinn",
-    "dep:ring",
-    "dep:rustls",
-    "zero-transport/quic",
-    "dep:zero-protocol-hysteria2",
-    "zero-protocol-hysteria2/crypto",
-]
-inbound-shadowsocks = [
+shadowsocks = [
     "dep:ring",
     "dep:zero-protocol-shadowsocks",
     "zero-protocol-shadowsocks/crypto",
     "zero-protocol-shadowsocks/blake3",
 ]
-outbound-shadowsocks = [
-    "dep:ring",
-    "dep:zero-protocol-shadowsocks",
-    "zero-protocol-shadowsocks/crypto",
-    "zero-protocol-shadowsocks/blake3",
-]
-inbound-trojan = [
+trojan = [
     "zero-transport/tls",
     "dep:ring",
     "dep:zero-protocol-trojan",
     "zero-protocol-trojan/crypto",
-    "dep:tokio-rustls"
+    "dep:tokio-rustls",
 ]
-outbound-trojan = [
-    "zero-transport/tls",
-    "dep:ring",
-    "dep:zero-protocol-trojan",
-    "zero-protocol-trojan/crypto",
-    "dep:tokio-rustls"
-]
-inbound-vmess = [
+vmess = [
     "zero-transport/tls",
     "zero-transport/ws",
     "zero-transport/grpc",
     "dep:ring",
     "dep:zero-protocol-vmess",
-    "dep:tokio-rustls"
+    "dep:tokio-rustls",
 ]
-outbound-vmess = [
-    "zero-transport/tls",
-    "zero-transport/ws",
-    "zero-transport/grpc",
-    "dep:ring",
-    "dep:zero-protocol-vmess",
-    "dep:tokio-rustls"
-]
-inbound-mieru = [
-    "dep:zero-protocol-mieru",
-    "zero-protocol-mieru/crypto",
-]
-outbound-mieru = [
+mieru = [
     "dep:zero-protocol-mieru",
     "zero-protocol-mieru/crypto",
 ]
@@ -117,7 +69,7 @@ async-trait = "0.1"
 regex = "1"
 quinn = { version = "0.11", default-features = false, features = ["rustls-ring"], optional = true }
 ring = { version = "0.17", optional = true }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std"], optional = true }
+rustls = { workspace = true, optional = true }
 tokio.workspace = true
 tracing.workspace = true
 tokio-rustls = { version = "0.26", optional = true }
@@ -143,7 +95,7 @@ zero-transport = { path = "../transport", optional = true, features = ["vless"] 
 [dev-dependencies]
 futures-util = "0.3"
 rcgen = "0.14"
-rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rustls = { workspace = true }
 serde_json.workspace = true
 tokio-rustls = { version = "0.26" }
 tokio-tungstenite = "0.23"

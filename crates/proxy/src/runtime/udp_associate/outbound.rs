@@ -114,7 +114,7 @@ impl Proxy {
                 cipher,
                 ..
             } => {
-                #[cfg(feature = "outbound-shadowsocks")]
+                #[cfg(feature = "shadowsocks")]
                 {
                     let sent = crate::outbound::shadowsocks::send_ss_udp_packet(
                         server,
@@ -143,12 +143,12 @@ impl Proxy {
                         outbound_tx_bytes: sent as u64,
                     })
                 }
-                #[cfg(not(feature = "outbound-shadowsocks"))]
+                #[cfg(not(feature = "shadowsocks"))]
                 {
                     Err(UdpCandidateFailure {
                         stage: "udp_shadowsocks_outbound",
                         error: zero_core::Error::Unsupported(
-                            "Shadowsocks UDP outbound requires Cargo feature `outbound-shadowsocks`",
+                            "Shadowsocks UDP outbound requires Cargo feature `shadowsocks`",
                         )
                         .into(),
                         upstream: None,

@@ -63,7 +63,7 @@ impl Proxy {
         }
     }
 
-    async fn establish_tcp_candidate(
+    pub(crate) async fn establish_tcp_candidate(
         &self,
         session: &Session,
         candidate: ResolvedLeafOutbound<'_>,
@@ -398,7 +398,7 @@ async fn send_hop_protocol_request(
     session: &Session,
 ) -> Result<(), EngineError> {
     match hop {
-        #[cfg(feature = "outbound-socks5")]
+        #[cfg(feature = "socks5")]
         ResolvedLeafOutbound::Socks5 {
             username, password, ..
         } => proxy
@@ -416,7 +416,7 @@ async fn send_hop_protocol_request(
             )
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e))),
-        #[cfg(feature = "outbound-vless")]
+        #[cfg(feature = "vless")]
         ResolvedLeafOutbound::Vless { id, flow, .. } => {
             let uuid = zero_protocol_vless::parse_uuid(id)?;
             if let Some(f) = flow {
@@ -435,7 +435,7 @@ async fn send_hop_protocol_request(
                     .map_err(|e| EngineError::Io(std::io::Error::other(e)))
             }
         }
-        #[cfg(feature = "outbound-shadowsocks")]
+        #[cfg(feature = "shadowsocks")]
         ResolvedLeafOutbound::Shadowsocks {
             password, cipher, ..
         } => {
@@ -451,14 +451,14 @@ async fn send_hop_protocol_request(
                 .await
                 .map_err(|e| EngineError::Io(std::io::Error::other(e)))
         }
-        #[cfg(feature = "outbound-trojan")]
+        #[cfg(feature = "trojan")]
         ResolvedLeafOutbound::Trojan { password, .. } => proxy
             .protocols
             .trojan_outbound
             .send_request(stream, session, password)
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e))),
-        #[cfg(feature = "outbound-vmess")]
+        #[cfg(feature = "vmess")]
         ResolvedLeafOutbound::Vmess { id, cipher, .. } => {
             let uuid = zero_protocol_vmess::parse_uuid(id).map_err(|e| {
                 EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))

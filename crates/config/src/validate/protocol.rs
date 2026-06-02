@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use crate::{
-    ConfigError, InboundProtocolConfig, InboundRealityConfig, MieruUserConfig,
-    OutboundProtocolConfig, RealityConfig, Socks5UserConfig, VlessUserConfig, VmessUserConfig,
+    ConfigError, InboundProtocolConfig, InboundRealityConfig, OutboundProtocolConfig,
+    RealityConfig, Socks5UserConfig, VlessUserConfig, VmessUserConfig,
 };
 
 pub(super) fn validate_inbound_protocol(

@@ -424,39 +424,39 @@ fn spawn_inbound_listener(
     let b = inbound.clone();
 
     match &b.protocol {
-        #[cfg(feature = "inbound-socks5")]
+        #[cfg(feature = "socks5")]
         InboundProtocolConfig::Socks5 { .. } => {
             listeners.spawn(async move { p.run_socks5_listener(b, shutdown_rx).await });
         }
-        #[cfg(feature = "inbound-http-connect")]
+        #[cfg(feature = "http-connect")]
         InboundProtocolConfig::HttpConnect => {
             listeners.spawn(async move { p.run_http_connect_listener(b, shutdown_rx).await });
         }
-        #[cfg(feature = "inbound-mixed")]
+        #[cfg(feature = "mixed")]
         InboundProtocolConfig::Mixed { .. } => {
             listeners.spawn(async move { p.run_mixed_listener(b, shutdown_rx).await });
         }
-        #[cfg(feature = "inbound-vless")]
+        #[cfg(feature = "vless")]
         InboundProtocolConfig::Vless { .. } => {
             listeners.spawn(async move { p.run_vless_listener(b, shutdown_rx).await });
         }
-        #[cfg(feature = "inbound-hysteria2")]
+        #[cfg(feature = "hysteria2")]
         InboundProtocolConfig::Hysteria2 { .. } => {
             listeners.spawn(async move { p.run_hysteria2_listener(b, shutdown_rx).await });
         }
-        #[cfg(feature = "inbound-shadowsocks")]
+        #[cfg(feature = "shadowsocks")]
         InboundProtocolConfig::Shadowsocks { .. } => {
             listeners.spawn(async move { p.run_shadowsocks_listener(b, shutdown_rx).await });
         }
-        #[cfg(feature = "inbound-trojan")]
+        #[cfg(feature = "trojan")]
         InboundProtocolConfig::Trojan { .. } => {
             listeners.spawn(async move { p.run_trojan_listener(b, shutdown_rx).await });
         }
-        #[cfg(feature = "inbound-vmess")]
+        #[cfg(feature = "vmess")]
         InboundProtocolConfig::Vmess { .. } => {
             listeners.spawn(async move { p.run_vmess_listener(b, shutdown_rx).await });
         }
-        #[cfg(feature = "inbound-mieru")]
+        #[cfg(feature = "mieru")]
         InboundProtocolConfig::Mieru { .. } => {
             listeners.spawn(async move { p.run_mieru_listener(b, shutdown_rx).await });
         }

@@ -1,21 +1,21 @@
 mod direct;
-#[cfg(feature = "inbound-http-connect")]
+#[cfg(feature = "http-connect")]
 mod http_connect;
-#[cfg(feature = "inbound-hysteria2")]
+#[cfg(feature = "hysteria2")]
 mod hysteria2;
-#[cfg(feature = "inbound-mieru")]
+#[cfg(feature = "mieru")]
 mod mieru;
-#[cfg(feature = "inbound-mixed")]
+#[cfg(feature = "mixed")]
 mod mixed;
-#[cfg(feature = "inbound-shadowsocks")]
+#[cfg(feature = "shadowsocks")]
 mod shadowsocks;
-#[cfg(feature = "inbound-socks5")]
+#[cfg(feature = "socks5")]
 mod socks5;
 mod system;
-#[cfg(feature = "inbound-trojan")]
+#[cfg(feature = "trojan")]
 mod trojan;
 mod tun;
-#[cfg(feature = "inbound-vless")]
+#[cfg(feature = "vless")]
 mod vless;
-#[cfg(feature = "inbound-vmess")]
+#[cfg(feature = "vmess")]
 mod vmess;

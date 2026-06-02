@@ -1,9 +1,9 @@
 pub mod direct;
-#[cfg(feature = "outbound-hysteria2")]
+#[cfg(feature = "hysteria2")]
 pub mod hysteria2;
-#[cfg(feature = "outbound-mieru")]
+#[cfg(feature = "mieru")]
 pub mod mieru;
-#[cfg(feature = "outbound-shadowsocks")]
+#[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks5;
 pub mod vless;

@@ -54,18 +54,9 @@ impl rustls::client::danger::ServerCertVerifier for InsecureCertVerifier {
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        vec![
-            rustls::SignatureScheme::RSA_PKCS1_SHA256,
-            rustls::SignatureScheme::RSA_PKCS1_SHA384,
-            rustls::SignatureScheme::RSA_PKCS1_SHA512,
-            rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
-            rustls::SignatureScheme::ECDSA_NISTP384_SHA384,
-            rustls::SignatureScheme::ECDSA_NISTP521_SHA512,
-            rustls::SignatureScheme::RSA_PSS_SHA256,
-            rustls::SignatureScheme::RSA_PSS_SHA384,
-            rustls::SignatureScheme::RSA_PSS_SHA512,
-            rustls::SignatureScheme::ED25519,
-        ]
+        rustls::crypto::ring::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
     }
 }
 
@@ -135,11 +126,27 @@ pub async fn connect_tls_upstream(
             .collect();
     }
 
+    let server_name_str = server_name.clone();
     let connector = TlsConnector::from(Arc::new(config));
     let server_name = rustls::pki_types::ServerName::try_from(server_name.as_str())
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid tls server_name"))?
         .to_owned();
-    let stream = connector.connect(server_name, socket.into_inner()).await?;
+
+    tracing::debug!(
+        sni = %server_name_str,
+        insecure = tls.insecure,
+        "tls connecting"
+    );
+
+    let stream = connector.connect(server_name, socket.into_inner()).await
+        .map_err(|e| {
+            tracing::warn!(
+                error = %e,
+                sni = %server_name_str,
+                "tls handshake failed"
+            );
+            e
+        })?;
 
     Ok(stream)
 }

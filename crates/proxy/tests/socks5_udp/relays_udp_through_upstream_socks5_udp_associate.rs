@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-#[cfg(feature = "outbound-socks5")]
+#[cfg(feature = "socks5")]
 async fn relays_udp_through_upstream_socks5_udp_associate() {
     let echo_port = free_udp_port();
     let upstream_port = free_port();

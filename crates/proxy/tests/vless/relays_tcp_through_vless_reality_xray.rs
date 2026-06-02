@@ -14,7 +14,7 @@ const REALITY_SERVER_NAME: &str = "www.cloudflare.com";
 
 #[tokio::test]
 #[ignore = "requires Docker and the Xray image; run explicitly with -- --ignored"]
-#[cfg(all(feature = "inbound-socks5", feature = "outbound-vless"))]
+#[cfg(all(feature = "socks5", feature = "vless"))]
 async fn relays_tcp_through_vless_reality_xray() {
     let xray_host_port = free_port();
     let outer_port = free_port();

@@ -1,9 +1,5 @@
 #![cfg_attr(
-    not(any(
-        feature = "inbound-socks5",
-        feature = "inbound-http-connect",
-        feature = "inbound-vless",
-    )),
+    not(any(feature = "socks5", feature = "http-connect", feature = "vless",)),
     allow(dead_code, unused_imports, unused_variables, unreachable_code)
 )]
 

@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-#[cfg(all(feature = "inbound-socks5", feature = "outbound-vless"))]
+#[cfg(all(feature = "socks5", feature = "vless"))]
 async fn relays_tcp_through_vless_ws_chained_outbound() {
     let echo_port = free_port();
     let upstream_port = free_port();

@@ -19,7 +19,7 @@ pub trait ProtocolAdapter: Send + Sync + fmt::Debug {
     /// Protocol name used in config `"type"` field and exported status.
     fn name(&self) -> &'static str;
 
-    /// Cargo feature that gates this protocol (e.g. `"inbound-socks5"`).
+    /// Cargo feature that gates this protocol (e.g. `"socks5"`).
     fn feature_name(&self) -> &'static str;
 
     /// Whether this adapter can handle the given inbound config.
@@ -65,7 +65,7 @@ impl ProtocolRegistry {
             .filter(|a| a.has_inbound())
             .map(|a| a.name())
             .collect::<Vec<_>>();
-        if cfg!(feature = "inbound-mixed") {
+        if cfg!(feature = "mixed") {
             names.push("mixed");
         }
         names
@@ -154,7 +154,7 @@ impl ProtocolRegistry {
             }
         }
         if matches!(config, InboundProtocolConfig::Mixed { .. }) {
-            return "inbound-mixed";
+            return "mixed";
         }
         "protocol-not-compiled"
     }

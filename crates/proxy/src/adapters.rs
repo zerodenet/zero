@@ -41,43 +41,43 @@ macro_rules! protocol_adapter {
     };
 }
 
-#[cfg(feature = "inbound-socks5")]
-protocol_adapter!(Socks5Adapter, proto: "socks5", feature: "inbound-socks5",
+#[cfg(feature = "socks5")]
+protocol_adapter!(Socks5Adapter, proto: "socks5", feature: "socks5",
     inbound: InboundProtocolConfig::Socks5 { .. },
     outbound: OutboundProtocolConfig::Socks5 { .. });
 
-#[cfg(feature = "inbound-http-connect")]
-protocol_adapter!(HttpConnectAdapter, proto: "http-connect", feature: "inbound-http-connect",
+#[cfg(feature = "http-connect")]
+protocol_adapter!(HttpConnectAdapter, proto: "http-connect", feature: "http-connect",
     inbound: InboundProtocolConfig::HttpConnect,
     outbound: OutboundProtocolConfig::Direct);
 
-#[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
-protocol_adapter!(VlessAdapter, proto: "vless", feature: "inbound-vless",
+#[cfg(feature = "vless")]
+protocol_adapter!(VlessAdapter, proto: "vless", feature: "vless",
     inbound: InboundProtocolConfig::Vless { .. },
     outbound: OutboundProtocolConfig::Vless { .. });
 
-#[cfg(any(feature = "inbound-hysteria2", feature = "outbound-hysteria2"))]
-protocol_adapter!(Hysteria2Adapter, proto: "hysteria2", feature: "inbound-hysteria2",
+#[cfg(feature = "hysteria2")]
+protocol_adapter!(Hysteria2Adapter, proto: "hysteria2", feature: "hysteria2",
     inbound: InboundProtocolConfig::Hysteria2 { .. },
     outbound: OutboundProtocolConfig::Hysteria2 { .. });
 
-#[cfg(any(feature = "inbound-shadowsocks", feature = "outbound-shadowsocks"))]
-protocol_adapter!(ShadowsocksAdapter, proto: "shadowsocks", feature: "inbound-shadowsocks",
+#[cfg(feature = "shadowsocks")]
+protocol_adapter!(ShadowsocksAdapter, proto: "shadowsocks", feature: "shadowsocks",
     inbound: InboundProtocolConfig::Shadowsocks { .. },
     outbound: OutboundProtocolConfig::Shadowsocks { .. });
 
-#[cfg(any(feature = "inbound-trojan", feature = "outbound-trojan"))]
-protocol_adapter!(TrojanAdapter, proto: "trojan", feature: "inbound-trojan",
+#[cfg(feature = "trojan")]
+protocol_adapter!(TrojanAdapter, proto: "trojan", feature: "trojan",
     inbound: InboundProtocolConfig::Trojan { .. },
     outbound: OutboundProtocolConfig::Trojan { .. });
 
-#[cfg(any(feature = "inbound-vmess", feature = "outbound-vmess"))]
-protocol_adapter!(VmessAdapter, proto: "vmess", feature: "inbound-vmess",
+#[cfg(feature = "vmess")]
+protocol_adapter!(VmessAdapter, proto: "vmess", feature: "vmess",
     inbound: InboundProtocolConfig::Vmess { .. },
     outbound: OutboundProtocolConfig::Vmess { .. });
 
-#[cfg(any(feature = "inbound-mieru", feature = "outbound-mieru"))]
-protocol_adapter!(MieruAdapter, proto: "mieru", feature: "inbound-mieru",
+#[cfg(feature = "mieru")]
+protocol_adapter!(MieruAdapter, proto: "mieru", feature: "mieru",
     inbound: InboundProtocolConfig::Mieru { .. },
     outbound: OutboundProtocolConfig::Mieru { .. });
 
@@ -110,19 +110,19 @@ impl ProtocolAdapter for DirectAdapter {
 pub(crate) fn build_registry() -> super::protocol_adapter::ProtocolRegistry {
     let mut r = super::protocol_adapter::ProtocolRegistry::default();
 
-    #[cfg(feature = "inbound-socks5")]
+    #[cfg(feature = "socks5")]
     r.register(Arc::new(Socks5Adapter));
-    #[cfg(feature = "inbound-http-connect")]
+    #[cfg(feature = "http-connect")]
     r.register(Arc::new(HttpConnectAdapter));
-    #[cfg(any(feature = "inbound-vless", feature = "outbound-vless"))]
+    #[cfg(feature = "vless")]
     r.register(Arc::new(VlessAdapter));
-    #[cfg(any(feature = "inbound-hysteria2", feature = "outbound-hysteria2"))]
+    #[cfg(feature = "hysteria2")]
     r.register(Arc::new(Hysteria2Adapter));
-    #[cfg(any(feature = "inbound-shadowsocks", feature = "outbound-shadowsocks"))]
+    #[cfg(feature = "shadowsocks")]
     r.register(Arc::new(ShadowsocksAdapter));
-    #[cfg(any(feature = "inbound-trojan", feature = "outbound-trojan"))]
+    #[cfg(feature = "trojan")]
     r.register(Arc::new(TrojanAdapter));
-    #[cfg(any(feature = "inbound-vmess", feature = "outbound-vmess"))]
+    #[cfg(feature = "vmess")]
     r.register(Arc::new(VmessAdapter));
     // Always available.
     r.register(Arc::new(DirectAdapter));

@@ -4,7 +4,7 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
 use crate::runtime::Proxy;
-#[cfg(feature = "outbound-socks5")]
+#[cfg(feature = "socks5")]
 use crate::transport::MeteredStream;
 use crate::transport::TcpRelayStream;
 
@@ -26,7 +26,7 @@ pub(crate) struct VlessUpstream<'a> {
 }
 
 impl Proxy {
-    #[cfg(feature = "outbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) async fn connect_via_socks5_upstream(
         &self,
         session: &Session,
@@ -59,7 +59,7 @@ impl Proxy {
         Ok(upstream.into_inner().into())
     }
 
-    #[cfg(not(feature = "outbound-socks5"))]
+    #[cfg(not(feature = "socks5"))]
     pub(crate) async fn connect_via_socks5_upstream(
         &self,
         _session: &Session,
@@ -71,11 +71,11 @@ impl Proxy {
             kind: "outbound",
             tag: "socks5-upstream".to_owned(),
             protocol: "socks5",
-            feature: "outbound-socks5",
+            feature: "socks5",
         })
     }
 
-    #[cfg(feature = "outbound-vless")]
+    #[cfg(feature = "vless")]
     pub(crate) async fn connect_via_vless_upstream(
         &self,
         session: &Session,
@@ -154,7 +154,7 @@ impl Proxy {
         }
     }
 
-    #[cfg(not(feature = "outbound-vless"))]
+    #[cfg(not(feature = "vless"))]
     pub(crate) async fn connect_via_vless_upstream(
         &self,
         _session: &Session,
@@ -175,11 +175,11 @@ impl Proxy {
             kind: "outbound",
             tag: "vless-upstream".to_owned(),
             protocol: "vless",
-            feature: "outbound-vless",
+            feature: "vless",
         })
     }
 
-    #[cfg(feature = "outbound-hysteria2")]
+    #[cfg(feature = "hysteria2")]
     pub(crate) async fn connect_via_hysteria2_upstream(
         &self,
         session: &Session,
@@ -192,7 +192,7 @@ impl Proxy {
         Ok(TcpRelayStream::new(stream))
     }
 
-    #[cfg(not(feature = "outbound-hysteria2"))]
+    #[cfg(not(feature = "hysteria2"))]
     pub(crate) async fn connect_via_hysteria2_upstream(
         &self,
         _session: &Session,
@@ -204,11 +204,11 @@ impl Proxy {
             kind: "outbound",
             tag: "hysteria2-upstream".to_owned(),
             protocol: "hysteria2",
-            feature: "outbound-hysteria2",
+            feature: "hysteria2",
         })
     }
 
-    #[cfg(feature = "outbound-shadowsocks")]
+    #[cfg(feature = "shadowsocks")]
     pub(crate) async fn connect_via_shadowsocks_upstream(
         &self,
         session: &Session,
@@ -238,7 +238,7 @@ impl Proxy {
         Ok(metered.into_inner().into())
     }
 
-    #[cfg(not(feature = "outbound-shadowsocks"))]
+    #[cfg(not(feature = "shadowsocks"))]
     pub(crate) async fn connect_via_shadowsocks_upstream(
         &self,
         _session: &Session,
@@ -251,11 +251,11 @@ impl Proxy {
             kind: "outbound",
             tag: "shadowsocks-upstream".to_owned(),
             protocol: "shadowsocks",
-            feature: "outbound-shadowsocks",
+            feature: "shadowsocks",
         })
     }
 
-    #[cfg(feature = "outbound-vmess")]
+    #[cfg(feature = "vmess")]
     pub(crate) async fn connect_via_vmess_upstream(
         &self,
         session: &Session,
@@ -344,7 +344,7 @@ impl Proxy {
         Ok(sock.into_inner())
     }
 
-    #[cfg(not(feature = "outbound-vmess"))]
+    #[cfg(not(feature = "vmess"))]
     pub(crate) async fn connect_via_vmess_upstream(
         &self,
         _session: &Session,
@@ -360,11 +360,11 @@ impl Proxy {
             kind: "outbound",
             tag: "vmess-upstream".to_owned(),
             protocol: "vmess",
-            feature: "outbound-vmess",
+            feature: "vmess",
         })
     }
 
-    #[cfg(feature = "outbound-trojan")]
+    #[cfg(feature = "trojan")]
     pub(crate) async fn connect_via_trojan_upstream(
         &self,
         session: &Session,
@@ -384,7 +384,7 @@ impl Proxy {
             disable_sni: false,
             ca_cert_path: None,
             insecure,
-            alpn: vec![],
+            alpn: vec!["h2".to_owned(), "http/1.1".to_owned()],
         };
         let tls_stream = zero_transport::tls::connect_tls_upstream(
             upstream,
@@ -402,7 +402,7 @@ impl Proxy {
         Ok(metered.into_inner())
     }
 
-    #[cfg(not(feature = "outbound-trojan"))]
+    #[cfg(not(feature = "trojan"))]
     pub(crate) async fn connect_via_trojan_upstream(
         &self,
         _session: &Session,
@@ -416,12 +416,12 @@ impl Proxy {
             kind: "outbound",
             tag: "trojan-upstream".to_owned(),
             protocol: "trojan",
-            feature: "outbound-trojan",
+            feature: "trojan",
         })
     }
 
     /// Mieru upstream (stub — feature disabled).
-    #[cfg(not(feature = "outbound-mieru"))]
+    #[cfg(not(feature = "mieru"))]
     pub(crate) async fn connect_via_mieru_upstream(
         &self,
         _session: &Session,
@@ -434,12 +434,12 @@ impl Proxy {
             kind: "outbound",
             tag: "mieru-upstream".to_owned(),
             protocol: "mieru",
-            feature: "outbound-mieru",
+            feature: "mieru",
         })
     }
 
     /// Mieru upstream — connect + handshake, return raw TCP stream.
-    #[cfg(feature = "outbound-mieru")]
+    #[cfg(feature = "mieru")]
     pub(crate) async fn connect_via_mieru_upstream(
         &self,
         session: &Session,
