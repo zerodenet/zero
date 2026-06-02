@@ -98,6 +98,7 @@ tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 
 [dependencies]
 serde.workspace = true
@@ -105,6 +106,7 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+rustls.workspace = true
 ureq = { version = "2", default-features = false, features = ["tls"] }
 zero-api = { path = "crates/api" }
 zero-config = { path = "crates/config" }
