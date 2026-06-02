@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Zero is a network proxy kernel written in Rust at workspace version `0.0.4`.
+Zero is a network proxy kernel written in Rust at workspace version `0.0.5`.
 
 **Inbound protocols:**
 - `SOCKS5` (no-auth, CONNECT + UDP ASSOCIATE)
