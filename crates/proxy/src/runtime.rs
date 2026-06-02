@@ -456,6 +456,10 @@ fn spawn_inbound_listener(
         InboundProtocolConfig::Vmess { .. } => {
             listeners.spawn(async move { p.run_vmess_listener(b, shutdown_rx).await });
         }
+        #[cfg(feature = "inbound-mieru")]
+        InboundProtocolConfig::Mieru { .. } => {
+            listeners.spawn(async move { p.run_mieru_listener(b, shutdown_rx).await });
+        }
         InboundProtocolConfig::Direct { .. } => {
             listeners.spawn(async move { p.run_direct_listener(b, shutdown_rx).await });
         }

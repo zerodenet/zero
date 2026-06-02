@@ -62,6 +62,12 @@ pub(crate) enum EstablishedTcpOutbound {
         port: u16,
         upstream: TcpRelayStream,
     },
+    Mieru {
+        tag: String,
+        server: String,
+        port: u16,
+        upstream: TcpRelayStream,
+    },
     Relay {
         upstream: TcpRelayStream,
     },
@@ -123,6 +129,12 @@ pub(crate) fn extract_tcp_stream(
             upstream,
         }
         | EstablishedTcpOutbound::Vmess {
+            tag,
+            server,
+            port,
+            upstream,
+        }
+        | EstablishedTcpOutbound::Mieru {
             tag,
             server,
             port,

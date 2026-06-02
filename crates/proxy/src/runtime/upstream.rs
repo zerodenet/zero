@@ -419,4 +419,55 @@ impl Proxy {
             feature: "outbound-trojan",
         })
     }
+
+    /// Mieru upstream (stub — feature disabled).
+    #[cfg(not(feature = "outbound-mieru"))]
+    pub(crate) async fn connect_via_mieru_upstream(
+        &self,
+        _session: &Session,
+        _server: &str,
+        _port: u16,
+        _username: &str,
+        _password: &str,
+    ) -> Result<TcpRelayStream, EngineError> {
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "outbound",
+            tag: "mieru-upstream".to_owned(),
+            protocol: "mieru",
+            feature: "outbound-mieru",
+        })
+    }
+
+    /// Mieru upstream — connect + handshake, return raw TCP stream.
+    #[cfg(feature = "outbound-mieru")]
+    pub(crate) async fn connect_via_mieru_upstream(
+        &self,
+        session: &Session,
+        server: &str,
+        port: u16,
+        username: &str,
+        password: &str,
+    ) -> Result<TcpRelayStream, EngineError> {
+        let socket = self
+            .protocols
+            .direct_outbound
+            .connect_host(server, port, self.resolver.as_ref())
+            .await?;
+
+        // Wrap in TcpRelayStream for AsyncSocket compatibility
+        let mut stream = TcpRelayStream::new(socket);
+
+        // Mieru handshake
+        let _outbound = zero_protocol_mieru::MieruOutbound::connect(
+            &mut stream,
+            username,
+            password,
+            &session.target,
+            session.port,
+        )
+        .await
+        .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru handshake: {e}"))))?;
+
+        Ok(stream)
+    }
 }

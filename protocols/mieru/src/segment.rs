@@ -1,0 +1,279 @@
+// Mieru protocol segment framing — segment.rs
+//
+// Segment wire format:
+//   [padding 0]  (variable, optional)
+//   [nonce]      (0 or 24 bytes)
+//   [encrypted metadata (32) + auth tag (16)]
+//   [padding 1]  (variable, length = prefix_length from data metadata)
+//   [encrypted payload + auth tag (16)]  (optional, when payload_length > 0)
+//   [padding 2]  (variable, length = suffix_length)
+
+use alloc::vec;
+use alloc::vec::Vec;
+
+use zero_core::Error;
+
+use crate::crypto::MieruCipher;
+use crate::metadata::{
+    DataMetadata, SessionMetadata, ACK_CLIENT_TO_SERVER, ACK_SERVER_TO_CLIENT,
+    CLOSE_SESSION_REQUEST, CLOSE_SESSION_RESPONSE, DATA_CLIENT_TO_SERVER, DATA_SERVER_TO_CLIENT,
+    METADATA_LEN, OPEN_SESSION_REQUEST, OPEN_SESSION_RESPONSE,
+};
+
+/// Maximum TCP fragment size.
+pub const MAX_FRAGMENT: usize = 32768;
+
+/// Auth tag length for XChaCha20-Poly1305.
+const TAG_LEN: usize = 16;
+
+/// A parsed Mieru segment.
+#[derive(Debug, Clone)]
+pub struct Segment {
+    /// Session-level metadata (for open/close).
+    pub session_meta: Option<SessionMetadata>,
+    /// Data-level metadata (for data/ACK).
+    pub data_meta: Option<DataMetadata>,
+    /// Decrypted payload.
+    pub payload: Vec<u8>,
+}
+
+// ── Build ────────────────────────────────────────────────────────────
+
+/// Build a session control segment (open/close).
+pub fn build_session_segment(
+    meta: &SessionMetadata,
+    payload: &[u8],
+    cipher: &mut MieruCipher,
+    include_nonce: bool,
+) -> Result<Vec<u8>, Error> {
+    let meta_bytes = meta.encode();
+
+    // Set nonce inclusion for this segment
+    cipher.set_include_nonce(include_nonce);
+    let encrypted_meta = cipher.encrypt(&meta_bytes)?;
+
+    let encrypted_payload = if !payload.is_empty() {
+        cipher.encrypt(payload)?
+    } else {
+        Vec::new()
+    };
+
+    let mut buf = Vec::new();
+    // padding0: random non-encrypted prefix for entropy adjustment
+    buf.extend_from_slice(&generate_padding0());
+
+    buf.extend_from_slice(&encrypted_meta);
+
+    if !encrypted_payload.is_empty() {
+        buf.extend_from_slice(&encrypted_payload);
+    }
+
+    Ok(buf)
+}
+
+/// Build a data transfer segment.
+pub fn build_data_segment(
+    meta: &DataMetadata,
+    payload: &[u8],
+    cipher: &mut MieruCipher,
+    include_nonce: bool,
+) -> Result<Vec<u8>, Error> {
+    let meta_bytes = meta.encode();
+
+    cipher.set_include_nonce(include_nonce);
+    let encrypted_meta = cipher.encrypt(&meta_bytes)?;
+
+    let encrypted_payload = if !payload.is_empty() {
+        cipher.encrypt(payload)?
+    } else {
+        Vec::new()
+    };
+
+    let mut buf = Vec::new();
+    // padding0: random non-encrypted prefix for entropy adjustment
+    buf.extend_from_slice(&generate_padding0());
+
+    buf.extend_from_slice(&encrypted_meta);
+
+    // padding 1 (prefix_length random bytes)
+    if meta.prefix_length > 0 {
+        let pad1 = random_bytes(meta.prefix_length as usize);
+        buf.extend_from_slice(&pad1);
+    }
+
+    if !encrypted_payload.is_empty() {
+        buf.extend_from_slice(&encrypted_payload);
+    }
+
+    // padding 2 (suffix_length random bytes)
+    if meta.suffix_length > 0 {
+        let pad2 = random_bytes(meta.suffix_length as usize);
+        buf.extend_from_slice(&pad2);
+    }
+
+    Ok(buf)
+}
+
+/// Build an ACK segment (no payload).
+pub fn build_ack_segment(
+    meta: &DataMetadata,
+    cipher: &mut MieruCipher,
+    include_nonce: bool,
+) -> Result<Vec<u8>, Error> {
+    build_data_segment(meta, &[], cipher, include_nonce)
+}
+
+// ── Parse ────────────────────────────────────────────────────────────
+
+/// Parse a raw segment from the wire.
+///
+/// Returns the parsed segment and the number of bytes consumed.
+pub fn parse_segment(
+    data: &[u8],
+    cipher: &mut MieruCipher,
+    has_nonce: bool,
+    is_session: bool,
+) -> Result<(Segment, usize), Error> {
+    let mut offset = 0;
+
+    // Decrypt metadata (with optional padding0 scanning on first segment)
+    let meta_chunk = if has_nonce {
+        // Try offsets 0..PADDING0_MAX to account for optional padding0
+        let mut best_offset = 0usize;
+        let mut best_meta = None;
+        for try_off in 0..=PADDING0_MAX {
+            let start = try_off;
+            let end = start + 24 + METADATA_LEN + TAG_LEN;
+            if data.len() < end {
+                if best_meta.is_some() {
+                    break;
+                }
+                continue;
+            }
+            let chunk = &data[start..end];
+            // Try decrypting; if valid, use this offset
+            if let Ok(pt) = cipher.decrypt(true, chunk) {
+                if pt.len() >= METADATA_LEN {
+                    let ptype = pt[0];
+                    if (2..=9).contains(&ptype) {
+                        best_offset = end;
+                        best_meta = Some(pt);
+                        break;
+                    }
+                }
+            }
+        }
+        match best_meta {
+            Some(pt) => {
+                offset = best_offset;
+                pt
+            }
+            None => {
+                // Fallback: try offset 0 without scanning
+                if data.len() < 24 + METADATA_LEN + TAG_LEN {
+                    return Err(Error::Protocol("mieru: segment too short for metadata"));
+                }
+                let chunk = &data[..24 + METADATA_LEN + TAG_LEN];
+                offset = 24 + METADATA_LEN + TAG_LEN;
+                cipher.decrypt(true, chunk)?
+            }
+        }
+    } else {
+        if data.len() < METADATA_LEN + TAG_LEN {
+            return Err(Error::Protocol("mieru: segment too short for metadata"));
+        }
+        offset = METADATA_LEN + TAG_LEN;
+        data[..METADATA_LEN + TAG_LEN].to_vec()
+    };
+    let meta_ciphertext = cipher.decrypt(has_nonce, &meta_chunk)?;
+
+    let meta_bytes = &meta_ciphertext[..METADATA_LEN];
+    let protocol_type = meta_bytes[0];
+
+    match protocol_type {
+        OPEN_SESSION_REQUEST
+        | OPEN_SESSION_RESPONSE
+        | CLOSE_SESSION_REQUEST
+        | CLOSE_SESSION_RESPONSE => {
+            let session_meta = SessionMetadata::decode(meta_bytes);
+
+            // Decrypt payload if any (implicit nonce — cipher tracks it)
+            let mut payload = Vec::new();
+            if session_meta.payload_length > 0 {
+                let payload_len = session_meta.payload_length as usize;
+                if data.len() < offset + payload_len + TAG_LEN {
+                    return Err(Error::Protocol("mieru: segment too short for payload"));
+                }
+                let pdata = data[offset..offset + payload_len + TAG_LEN].to_vec();
+                payload = cipher.decrypt(false, &pdata)?;
+                offset += payload_len + TAG_LEN;
+            }
+
+            Ok((
+                Segment {
+                    session_meta: Some(session_meta),
+                    data_meta: None,
+                    payload,
+                },
+                offset,
+            ))
+        }
+        DATA_CLIENT_TO_SERVER
+        | DATA_SERVER_TO_CLIENT
+        | ACK_CLIENT_TO_SERVER
+        | ACK_SERVER_TO_CLIENT => {
+            let data_meta = DataMetadata::decode(meta_bytes);
+
+            // Skip padding 1
+            offset += data_meta.prefix_length as usize;
+
+            // Decrypt payload if any (implicit nonce — cipher tracks it)
+            let mut payload = Vec::new();
+            if data_meta.payload_length > 0 {
+                let payload_len = data_meta.payload_length as usize;
+                if data.len() < offset + payload_len + TAG_LEN {
+                    return Err(Error::Protocol("mieru: segment too short for payload"));
+                }
+                let pdata = data[offset..offset + payload_len + TAG_LEN].to_vec();
+                payload = cipher.decrypt(false, &pdata)?;
+                offset += payload_len + TAG_LEN;
+            }
+
+            // Skip padding 2
+            offset += data_meta.suffix_length as usize;
+
+            Ok((
+                Segment {
+                    session_meta: None,
+                    data_meta: Some(data_meta),
+                    payload,
+                },
+                offset,
+            ))
+        }
+        _ => Err(Error::Protocol("mieru: unknown protocol type")),
+    }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+#[cfg(feature = "crypto")]
+fn random_bytes(len: usize) -> Vec<u8> {
+    use rand::RngCore;
+    let mut buf = vec![0u8; len];
+    rand::rngs::OsRng.fill_bytes(&mut buf);
+    buf
+}
+
+/// Generate padding0: random non-encrypted bytes before the segment.
+/// Default length: 0 (disabled). Configurable for anti-detection.
+const PADDING0_MAX: usize = 0; // Set >0 to enable random prefix padding
+
+fn generate_padding0() -> Vec<u8> {
+    if PADDING0_MAX == 0 {
+        return Vec::new();
+    }
+    use rand::Rng;
+    let len = rand::thread_rng().gen_range(0..=PADDING0_MAX);
+    random_bytes(len)
+}

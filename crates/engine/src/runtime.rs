@@ -815,6 +815,7 @@ impl Engine {
                 zero_config::OutboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
                 zero_config::OutboundProtocolConfig::Trojan { .. } => "trojan",
                 zero_config::OutboundProtocolConfig::Vmess { .. } => "vmess",
+                zero_config::OutboundProtocolConfig::Mieru { .. } => "mieru",
             })
     }
 }
@@ -830,7 +831,8 @@ fn extract_target_addr(leaf: &crate::ResolvedLeafOutbound<'_>) -> (Option<String
         | crate::ResolvedLeafOutbound::Hysteria2 { server, port, .. }
         | crate::ResolvedLeafOutbound::Shadowsocks { server, port, .. }
         | crate::ResolvedLeafOutbound::Trojan { server, port, .. }
-        | crate::ResolvedLeafOutbound::Vmess { server, port, .. } => {
+        | crate::ResolvedLeafOutbound::Vmess { server, port, .. }
+        | crate::ResolvedLeafOutbound::Mieru { server, port, .. } => {
             (Some(server.to_string()), Some(*port))
         }
     }

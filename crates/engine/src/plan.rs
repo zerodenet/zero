@@ -135,6 +135,17 @@ impl EnginePlan {
                     ws: ws.clone(),
                     grpc: grpc.clone(),
                 })),
+                OutboundProtocolConfig::Mieru {
+                    server,
+                    port,
+                    username,
+                    password,
+                } => TargetKind::Outbound(Box::new(OutboundTarget::Mieru {
+                    server: server.clone(),
+                    port: *port,
+                    username: username.clone(),
+                    password: password.clone(),
+                })),
             };
 
             targets.push(TargetNode {
@@ -392,6 +403,12 @@ pub enum OutboundTarget {
         tls: Option<ClientTlsConfig>,
         ws: Option<zero_config::WebSocketConfig>,
         grpc: Option<zero_config::GrpcConfig>,
+    },
+    Mieru {
+        server: String,
+        port: u16,
+        username: String,
+        password: String,
     },
 }
 

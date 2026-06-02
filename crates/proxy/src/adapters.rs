@@ -76,6 +76,11 @@ protocol_adapter!(VmessAdapter, proto: "vmess", feature: "inbound-vmess",
     inbound: InboundProtocolConfig::Vmess { .. },
     outbound: OutboundProtocolConfig::Vmess { .. });
 
+#[cfg(any(feature = "inbound-mieru", feature = "outbound-mieru"))]
+protocol_adapter!(MieruAdapter, proto: "mieru", feature: "inbound-mieru",
+    inbound: InboundProtocolConfig::Mieru { .. },
+    outbound: OutboundProtocolConfig::Mieru { .. });
+
 // Direct inbound is always available (no feature gate).
 #[derive(Debug)]
 pub(crate) struct DirectAdapter;

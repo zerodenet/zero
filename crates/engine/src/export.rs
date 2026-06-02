@@ -253,6 +253,12 @@ impl From<&OutboundConfig> for OutboundExport {
                 server: Some(server.clone()),
                 port: Some(*port),
             },
+            OutboundProtocolConfig::Mieru { server, port, .. } => Self {
+                tag: outbound.tag.clone(),
+                protocol: "mieru".to_owned(),
+                server: Some(server.clone()),
+                port: Some(*port),
+            },
         }
     }
 }
@@ -480,6 +486,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
         InboundProtocolConfig::Trojan { .. } => "trojan",
         InboundProtocolConfig::Vmess { .. } => "vmess",
         InboundProtocolConfig::Direct { .. } => "direct",
+        InboundProtocolConfig::Mieru { .. } => "mieru",
     }
 }
 

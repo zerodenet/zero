@@ -3,6 +3,8 @@ mod direct;
 mod http_connect;
 #[cfg(feature = "inbound-hysteria2")]
 mod hysteria2;
+#[cfg(feature = "inbound-mieru")]
+mod mieru;
 #[cfg(feature = "inbound-mixed")]
 mod mixed;
 #[cfg(feature = "inbound-shadowsocks")]

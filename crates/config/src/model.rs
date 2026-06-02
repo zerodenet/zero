@@ -383,6 +383,8 @@ pub enum InboundProtocolConfig {
         #[serde(default)]
         port: Option<u16>,
     },
+    #[serde(rename = "mieru")]
+    Mieru { users: Vec<MieruUserConfig> },
 }
 
 impl InboundProtocolConfig {
@@ -428,7 +430,8 @@ impl InboundProtocolConfig {
             | Self::Hysteria2 { .. }
             | Self::Shadowsocks { .. }
             | Self::Trojan { .. }
-            | Self::Vmess { .. } => &[],
+            | Self::Vmess { .. }
+            | Self::Mieru { .. } => &[],
         }
     }
 
@@ -501,6 +504,13 @@ impl InboundProtocolConfig {
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MieruUserConfig {
+    pub username: String,
+    pub password: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -810,6 +820,13 @@ pub enum OutboundProtocolConfig {
         ws: Option<WebSocketConfig>,
         #[serde(default)]
         grpc: Option<GrpcConfig>,
+    },
+    #[serde(rename = "mieru")]
+    Mieru {
+        server: String,
+        port: u16,
+        username: String,
+        password: String,
     },
 }
 

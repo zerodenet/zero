@@ -279,6 +279,30 @@ impl Proxy {
                     }),
                 }
             }
+            ResolvedLeafOutbound::Mieru {
+                tag,
+                server,
+                port,
+                username,
+                password,
+            } => {
+                match self
+                    .connect_via_mieru_upstream(session, server, port, username, password)
+                    .await
+                {
+                    Ok(upstream) => Ok(EstablishedTcpOutbound::Mieru {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        upstream,
+                    }),
+                    Err(error) => Err(TcpOutboundFailure {
+                        stage: "connect_upstream_mieru",
+                        error,
+                        upstream_endpoint: Some((server.to_owned(), port)),
+                    }),
+                }
+            }
         };
 
         // ── Record health after connection attempt ──
@@ -321,6 +345,7 @@ impl Proxy {
             | EstablishedTcpOutbound::Shadowsocks { upstream, .. }
             | EstablishedTcpOutbound::Trojan { upstream, .. }
             | EstablishedTcpOutbound::Vmess { upstream, .. }
+            | EstablishedTcpOutbound::Mieru { upstream, .. }
             | EstablishedTcpOutbound::Relay { upstream } => upstream,
             EstablishedTcpOutbound::Block { .. } => {
                 return Err(TcpOutboundFailure {
@@ -468,6 +493,7 @@ fn extract_chained_tag(candidate: &ResolvedLeafOutbound<'_>) -> Option<String> {
         ResolvedLeafOutbound::Shadowsocks { tag, .. } => Some(tag.to_string()),
         ResolvedLeafOutbound::Trojan { tag, .. } => Some(tag.to_string()),
         ResolvedLeafOutbound::Vmess { tag, .. } => Some(tag.to_string()),
+        ResolvedLeafOutbound::Mieru { .. } => todo!("mieru outbound relay"),
     }
 }
 

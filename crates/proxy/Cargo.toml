@@ -102,6 +102,14 @@ outbound-vmess = [
     "dep:zero-protocol-vmess",
     "dep:tokio-rustls"
 ]
+inbound-mieru = [
+    "dep:zero-protocol-mieru",
+    "zero-protocol-mieru/crypto",
+]
+outbound-mieru = [
+    "dep:zero-protocol-mieru",
+    "zero-protocol-mieru/crypto",
+]
 dns-udp = ["zero-dns/udp"]
 
 [dependencies]
@@ -125,6 +133,7 @@ zero-protocol-hysteria2 = { path = "../../protocols/hysteria2", optional = true,
 zero-protocol-shadowsocks = { path = "../../protocols/shadowsocks", optional = true, default-features = false }
 zero-protocol-trojan = { path = "../../protocols/trojan", optional = true, default-features = false }
 zero-protocol-vmess = { path = "../../protocols/vmess", optional = true }
+zero-protocol-mieru = { path = "../../protocols/mieru", optional = true, default-features = false }
 zero-api = { path = "../api" }
 zero-traits = { path = "../traits" }
 zero-tun = { path = "../tun" }
