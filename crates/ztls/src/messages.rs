@@ -2,7 +2,7 @@
 //
 // Construct TLS 1.3 handshake messages for REALITY protocol
 
-use crate::tls13::common::{
+use crate::common::{
     calculate_client_hello_padding, HANDSHAKE_TYPE_CERTIFICATE, HANDSHAKE_TYPE_CERTIFICATE_VERIFY,
     HANDSHAKE_TYPE_ENCRYPTED_EXTENSIONS, HANDSHAKE_TYPE_FINISHED, HANDSHAKE_TYPE_SERVER_HELLO,
     VERSION_TLS_1_2_MAJOR, VERSION_TLS_1_2_MINOR,

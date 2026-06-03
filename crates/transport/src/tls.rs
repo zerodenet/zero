@@ -202,15 +202,15 @@ async fn connect_tls13_upstream(
     server_name: &str,
     _fp: &crate::fingerprint::TlsFingerprint,
 ) -> Result<TcpRelayStream, EngineError> {
-    let config = crate::tls13::handshake::Tls13Config {
+    let config = ztls::handshake::Tls13Config {
         server_name: server_name.to_owned(),
-        cipher_suites: crate::tls13::cipher::DEFAULT_CIPHER_SUITES.to_vec(),
+        cipher_suites: ztls::cipher::DEFAULT_CIPHER_SUITES.to_vec(),
         alpn_protocols: vec!["h2".to_owned(), "http/1.1".to_owned()],
         handshake_timeout_ms: 15_000,
     };
 
     let inner = socket.into_inner();
-    let tls_stream = crate::tls13::stream::Tls13Stream::connect(inner, config)
+    let tls_stream = ztls::stream::Tls13Stream::connect(inner, config)
         .await
         .map_err(|e| EngineError::Io(io::Error::other(format!("custom TLS handshake: {e}"))))?;
 

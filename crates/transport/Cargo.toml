@@ -39,6 +39,7 @@ webpki-roots = "1"
 zero-config = { path = "../config" }
 zero-core = { path = "../core" }
 zero-engine = { path = "../engine" }
+ztls = { path = "../ztls" }
 zero-platform-tokio = { path = "../platform/tokio" }
 zero-protocol-hysteria2 = { path = "../../protocols/hysteria2", features = ["crypto"] }
 zero-protocol-vless = { path = "../../protocols/vless", default-features = false, features = ["reality"] }

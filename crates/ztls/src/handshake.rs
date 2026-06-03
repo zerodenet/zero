@@ -13,25 +13,25 @@ use rand::RngCore;
 use ring::digest;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use crate::tls13::aead::{decrypt_handshake_message, AeadKey};
-use crate::tls13::cipher::{CipherSuite, DEFAULT_CIPHER_SUITES};
-use crate::tls13::common::{
+use crate::aead::{decrypt_handshake_message, AeadKey};
+use crate::cipher::{CipherSuite, DEFAULT_CIPHER_SUITES};
+use crate::common::{
     ALERT_DESC_CLOSE_NOTIFY, ALERT_LEVEL_WARNING, CIPHERTEXT_READ_BUF_CAPACITY, CONTENT_TYPE_ALERT,
     CONTENT_TYPE_APPLICATION_DATA, CONTENT_TYPE_CHANGE_CIPHER_SPEC, CONTENT_TYPE_HANDSHAKE,
     HANDSHAKE_TYPE_CERTIFICATE, HANDSHAKE_TYPE_CERTIFICATE_VERIFY,
     HANDSHAKE_TYPE_ENCRYPTED_EXTENSIONS, HANDSHAKE_TYPE_FINISHED, OUTGOING_BUFFER_LIMIT,
     PLAINTEXT_READ_BUF_CAPACITY, TLS_MAX_RECORD_SIZE, TLS_RECORD_HEADER_SIZE,
 };
-use crate::tls13::keys::{
+use crate::keys::{
     compute_finished_verify_data, derive_application_secrets, derive_handshake_keys,
     derive_traffic_keys,
 };
-use crate::tls13::messages::{
+use crate::messages::{
     construct_client_hello, construct_finished, write_record_header, DEFAULT_ALPN_PROTOCOLS,
 };
-use crate::tls13::record::{RecordDecryptor, RecordEncryptor};
-use crate::tls13::slide_buffer::SlideBuffer;
-use crate::tls13::util::{extract_server_cipher_suite, extract_server_public_key};
+use crate::record::{RecordDecryptor, RecordEncryptor};
+use crate::slide_buffer::SlideBuffer;
+use crate::util::{extract_server_cipher_suite, extract_server_public_key};
 
 /// Configuration for a generic TLS 1.3 client.
 #[derive(Clone)]

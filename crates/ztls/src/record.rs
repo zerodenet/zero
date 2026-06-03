@@ -8,11 +8,11 @@
 
 use std::io::{self, Error};
 
-use super::common::{
+use crate::aead::AeadKey;
+use crate::common::{
     strip_content_type_slice, CONTENT_TYPE_ALERT, CONTENT_TYPE_APPLICATION_DATA,
     CONTENT_TYPE_HANDSHAKE, MAX_TLS_CIPHERTEXT_LEN, MAX_TLS_PLAINTEXT_LEN, TLS_RECORD_HEADER_SIZE,
 };
-use super::reality_aead::AeadKey;
 
 /// Encrypts plaintext into TLS 1.3 records.
 ///
@@ -205,7 +205,7 @@ impl<'a> RecordEncryptor<'a> {
         if target_inner_len > current_inner_len && target_inner_len <= MAX_TLS_PLAINTEXT_LEN + 1 {
             let padding = target_inner_len - current_inner_len;
             buf.resize(buf.len() + padding, 0);
-            log::trace!(
+            tracing::trace!(
                 "REALITY: Added {} bytes of TLS 1.3 inner padding (target={}, current={})",
                 padding,
                 target_record_size,

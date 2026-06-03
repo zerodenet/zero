@@ -3,7 +3,7 @@
 // Implements RFC 8446 key derivation for TLS 1.3
 // Supports both SHA256 and SHA384 based cipher suites
 
-use crate::tls13::cipher::CipherSuite;
+use crate::cipher::CipherSuite;
 use ring::{digest, hmac};
 use std::io::{Error, ErrorKind, Result};
 
