@@ -104,10 +104,22 @@ jobs:
           name: zero-${{ github.ref_name }}-${{ matrix.name }}
           path: target/${{ matrix.target }}/release/zero-*.${{ matrix.ext }}*
 
+  docs:
+    name: Deploy Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install and build
+        run: |
+          cd docs && npm install && npm run build
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, docs]
     steps:
       - uses: actions/checkout@v4
         with:
