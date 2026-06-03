@@ -43,7 +43,7 @@ impl EngineHandle {
     /// Stale subscribers (those whose receivers have been dropped) are
     /// removed lazily.
     pub fn emit(&self, event: RawApiEvent) {
-        let mut subscribers = self.subscribers.lock().expect("subscriber lock poisoned");
+        let mut subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
         subscribers.retain(|tx| tx.send(event.clone()).is_ok());
     }
 }

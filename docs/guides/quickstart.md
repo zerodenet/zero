@@ -36,8 +36,8 @@ cargo build --release
       }
     }
   ],
+  "mode": { "type": "global", "outbound": "proxy" },
   "route": {
-    "mode": { "type": "global", "outbound": "proxy" },
     "rules": [],
     "final": { "type": "direct" }
   },
@@ -56,7 +56,7 @@ cargo build --release
 输出：
 
 ```
-engine started  version=0.0.2
+engine started  version=0.0.8
 loaded proxy configuration  config=config.json
 ipc server ready  socket=/home/user/.zero/control.sock
 ```
@@ -86,6 +86,16 @@ curl -s http://127.0.0.1:9090/api/v1/runtime
 
 # 切换节点
 ./target/release/zero select proxy direct
+
+# 切换模式
+./target/release/zero mode rule
+./target/release/zero mode global proxy
+
+# 校验配置
+./target/release/zero validate config.json
+
+# 热重载配置
+./target/release/zero reload config.json
 ```
 
 ## 6. 常见场景
@@ -94,8 +104,8 @@ curl -s http://127.0.0.1:9090/api/v1/runtime
 
 ```json
 {
+  "mode": { "type": "rule" },
   "route": {
-    "mode": { "type": "rule" },
     "rules": [
       {
         "condition": { "type": "domain", "values": ["geosite:cn"] },
@@ -151,8 +161,23 @@ curl -s http://127.0.0.1:9090/api/v1/runtime
 }
 ```
 
+### 负载均衡
+
+```json
+{
+  "outbound_groups": [
+    {
+      "tag": "lb",
+      "type": "loadbalance",
+      "outbounds": ["server-a", "server-b", "server-c"],
+      "strategy": "round-robin"
+    }
+  ]
+}
+```
+
 ## 下一步
 
 - [完整配置参考](../control-plane-api/configuration.md)
 - [GUI 接入指南](gui-integration.md)
-- [控制面 API 参考](../control-plane-api/README.md)
+- [控制面 API 参考](../control-plane-api/)

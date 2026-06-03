@@ -112,10 +112,11 @@ pub(super) fn validate_inbound_protocol(
         }
         InboundProtocolConfig::Shadowsocks {
             password,
-            cipher: _,
+            cipher,
             ..
         } => {
             validate_inbound_optional_non_empty("shadowsocks password", password)?;
+            validate_shadowsocks_cipher("inbound", cipher)?;
             Ok(())
         }
         InboundProtocolConfig::Trojan {
@@ -245,9 +246,10 @@ pub(super) fn validate_outbound_protocol(
             server,
             port,
             password: _,
-            cipher: _,
+            cipher,
         } => {
             validate_outbound_endpoint("shadowsocks", server, *port)?;
+            validate_shadowsocks_cipher("outbound", cipher)?;
             Ok(())
         }
         OutboundProtocolConfig::Trojan { server, port, .. } => {
@@ -620,4 +622,27 @@ fn normalize_uuid_key(value: &str) -> String {
         .filter(|byte| *byte != b'-')
         .map(|byte| char::from(byte.to_ascii_lowercase()))
         .collect()
+}
+
+fn validate_shadowsocks_cipher(kind: &'static str, cipher: &str) -> Result<(), ConfigError> {
+    const VALID_CIPHERS: &[&str] = &[
+        "aes-128-gcm",
+        "aes-256-gcm",
+        "chacha20-ietf-poly1305",
+        "2022-blake3-aes-128-gcm",
+        "2022-blake3-aes-256-gcm",
+    ];
+    if !VALID_CIPHERS.iter().any(|c| *c == cipher) {
+        return Err(match kind {
+            "inbound" => ConfigError::InvalidInbound(format!(
+                "`shadowsocks` {kind} cipher `{cipher}` is not valid; expected one of: {}",
+                VALID_CIPHERS.join(", ")
+            )),
+            _ => ConfigError::InvalidOutbound(format!(
+                "`shadowsocks` {kind} cipher `{cipher}` is not valid; expected one of: {}",
+                VALID_CIPHERS.join(", ")
+            )),
+        });
+    }
+    Ok(())
 }

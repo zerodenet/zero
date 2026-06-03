@@ -17,6 +17,7 @@ pub enum ProtocolType {
     Shadowsocks,
     Trojan,
     Vmess,
+    Mieru,
     Unknown,
 }
 

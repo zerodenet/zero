@@ -29,7 +29,7 @@ impl UdpDnsResolver {
 
     pub(crate) async fn resolve(&self, domain: &str) -> io::Result<Vec<IpAddress>> {
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
-        tokio::time::timeout(Duration::from_secs(5), async {
+        tokio::time::timeout(Duration::from_secs(10), async {
             let mut ips = self.query(&socket, domain, 0x0001).await?;
             if ips.is_empty() {
                 ips = self.query(&socket, domain, 0x001c).await?;
@@ -47,11 +47,33 @@ impl UdpDnsResolver {
         qtype: u16,
     ) -> io::Result<Vec<IpAddress>> {
         let msg = build_query(domain, qtype);
-        socket.send_to(&msg, self.addr).await?;
 
-        let mut buf = [0u8; 512];
-        let (n, _) = socket.recv_from(&mut buf).await?;
-        parse_response(&buf[..n], qtype)
+        // Try up to 2 attempts: first attempt, then one retransmission after 2s.
+        for attempt in 0..2 {
+            socket.send_to(&msg, self.addr).await?;
+
+            let recv = tokio::time::timeout(
+                if attempt == 0 {
+                    Duration::from_secs(2)
+                } else {
+                    Duration::from_secs(5)
+                },
+                async {
+                    let mut buf = [0u8; 512];
+                    let (n, _) = socket.recv_from(&mut buf).await?;
+                    Ok::<_, io::Error>((n, buf))
+                },
+            )
+            .await;
+
+            match recv {
+                Ok(Ok((n, buf))) => return parse_response(&buf[..n], qtype),
+                Ok(Err(e)) => return Err(e),
+                Err(_) => continue, // timeout, retry
+            }
+        }
+
+        Err(io::Error::new(io::ErrorKind::TimedOut, "dns udp timeout after retry"))
     }
 }
 

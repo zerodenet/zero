@@ -42,6 +42,7 @@ export default defineConfig({
             { text: '编译参数', link: '/project/features' },
             { text: '日志', link: '/project/logging' },
             { text: '生命周期', link: '/project/lifecycle' },
+            { text: '控制面规范', link: '/project/control-plane' },
             { text: '定位', link: '/project/positioning' },
             { text: '目标', link: '/project/goals' },
             { text: '工具链', link: '/project/tooling' },
@@ -62,6 +63,22 @@ export default defineConfig({
             { text: 'Flow Hooks', link: '/control-plane-api/hooks' },
             { text: 'Push Connector', link: '/control-plane-api/push-connector' },
             { text: 'CLI 命令', link: '/control-plane-api/cli' },
+          ],
+        },
+      ],
+
+      '/versions/': [
+        {
+          text: '版本历史',
+          items: [
+            { text: '版本总览', link: '/versions/' },
+            { text: 'v0.0.8', link: '/versions/v0.0.8/' },
+            { text: 'v0.0.7', link: '/versions/v0.0.7/' },
+            { text: 'v0.0.6', link: '/versions/v0.0.6/' },
+            { text: 'v0.0.5', link: '/versions/v0.0.5/' },
+            { text: 'v0.0.4', link: '/versions/v0.0.4/' },
+            { text: 'v0.0.2', link: '/versions/v0.0.2/' },
+            { text: 'v0.0.1', link: '/versions/v0.0.1/' },
           ],
         },
       ],

@@ -28,7 +28,7 @@ impl CompletedSessionHistory {
     }
 
     pub fn push(&self, record: CompletedSessionRecord) {
-        let mut history = self.inner.lock().expect("completed session lock poisoned");
+        let mut history = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         history.push_back(record);
 
         while history.len() > self.capacity {

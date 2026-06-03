@@ -3,7 +3,11 @@ use std::time::Duration;
 use serde::Serialize;
 use tokio::sync::oneshot;
 use tracing::{debug, info, warn};
-use zero_api::{CommandRequest, CommandService, PolicySelectCommand};
+use zero_api::{
+    CommandRequest, CommandService, DiagnosticsDnsLookupCommand, DiagnosticsProbeTargetCommand,
+    DiagnosticsTraceRouteCommand, FlowCloseCommand, ModeSetCommand, PolicyProbeCommand,
+    PolicySelectCommand, TunStartCommand, TunStopCommand,
+};
 use zero_config::PushConfig;
 
 use crate::{ConnectorError, ConnectorResult};
@@ -277,6 +281,100 @@ async fn execute_panel_command(service: &impl CommandService, cmd: &serde_json::
                 }
             }
         }
+        "policies.probe" => {
+            let policy_tag = match params["policy_tag"].as_str() {
+                Some(p) => p.to_owned(),
+                None => {
+                    warn!("panel policies.probe missing policy_tag");
+                    return;
+                }
+            };
+            CommandRequest::PolicyProbe(PolicyProbeCommand { policy_tag })
+        }
+        "mode.set" => {
+            let mode = match params["mode"].as_str() {
+                Some(m) => m.to_owned(),
+                None => {
+                    warn!("panel mode.set missing mode");
+                    return;
+                }
+            };
+            let outbound = params["outbound"].as_str().map(|s| s.to_owned());
+            CommandRequest::ModeSet(ModeSetCommand { mode, outbound })
+        }
+        "flows.close" => {
+            let flow_id = match params["flow_id"].as_str() {
+                Some(id) => id.to_owned(),
+                None => {
+                    warn!("panel flows.close missing flow_id");
+                    return;
+                }
+            };
+            CommandRequest::FlowClose(FlowCloseCommand { flow_id })
+        }
+        "tun.start" => {
+            let addr = match params["addr"].as_str() {
+                Some(a) => a.to_owned(),
+                None => {
+                    warn!("panel tun.start missing addr");
+                    return;
+                }
+            };
+            let tag = match params["tag"].as_str() {
+                Some(t) => t.to_owned(),
+                None => {
+                    warn!("panel tun.start missing tag");
+                    return;
+                }
+            };
+            CommandRequest::TunStart(TunStartCommand {
+                name: params["name"].as_str().map(|s| s.to_owned()),
+                addr,
+                mtu: params["mtu"].as_u64().unwrap_or(1500) as u16,
+                mask: params["mask"].as_str().unwrap_or("255.255.255.0").to_owned(),
+                tag,
+            })
+        }
+        "tun.stop" => CommandRequest::TunStop(TunStopCommand),
+        "diagnostics.probe_target" => {
+            let target_tag = match params["target_tag"].as_str() {
+                Some(t) => t.to_owned(),
+                None => {
+                    warn!("panel diagnostics.probe_target missing target_tag");
+                    return;
+                }
+            };
+            CommandRequest::DiagnosticsProbeTarget(DiagnosticsProbeTargetCommand { target_tag })
+        }
+        "diagnostics.dns_lookup" => {
+            let hostname = match params["hostname"].as_str() {
+                Some(h) => h.to_owned(),
+                None => {
+                    warn!("panel diagnostics.dns_lookup missing hostname");
+                    return;
+                }
+            };
+            CommandRequest::DiagnosticsDnsLookup(DiagnosticsDnsLookupCommand { hostname })
+        }
+        "diagnostics.trace_route" => {
+            let target = match params["target"].as_str() {
+                Some(t) => t.to_owned(),
+                None => {
+                    warn!("panel diagnostics.trace_route missing target");
+                    return;
+                }
+            };
+            let port = params["port"].as_u64().unwrap_or(443) as u16;
+            let protocol = params["protocol"].as_str().map(|s| s.to_owned());
+            CommandRequest::DiagnosticsTraceRoute(DiagnosticsTraceRouteCommand {
+                target,
+                port,
+                protocol,
+            })
+        }
+        // Intentionally NOT exposed remotely:
+        //   "config.validate" — can be done locally
+        //   "config.apply"    — full config replacement from remote is too dangerous
         other => {
             debug!(method = other, "unknown panel command method");
             return;

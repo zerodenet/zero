@@ -1,10 +1,11 @@
-use ring::aead::{Aad, BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey};
-use ring::hkdf::{KeyType, Salt, HKDF_SHA256};
-use ring::hmac;
 use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::AsyncSocket;
 
-use crate::shared::{read_exact, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP, GCM_TAG_LEN, VERSION};
+use crate::crypto::{
+    aead_decrypt, aead_encrypt, compute_auth_id, current_timestamp, derive_body_key_nonce,
+    derive_cmd_key, derive_response_key_nonce, hex, GCM_TAG_LEN,
+};
+use crate::shared::{read_exact, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP, VERSION};
 
 #[derive(Clone)]
 pub struct VmessUser {
@@ -124,145 +125,6 @@ fn try_user(
     Ok((session, body_key_bytes, buf.auth_id, user.cipher))
 }
 
-fn derive_cmd_key(uuid: &[u8; 16], key_len: usize) -> Vec<u8> {
-    let salt = Salt::new(HKDF_SHA256, b"VMess AEAD KDF");
-    let prk = salt.extract(uuid);
-    let info: &[u8] = b"";
-    let info_array = [info];
-    let okm = prk
-        .expand(&info_array, CmdKeyLen(key_len))
-        .map_err(|_| ())
-        .expect("hkdf expand should succeed for valid key_len");
-    let mut key = vec![0u8; key_len];
-    okm.fill(&mut key)
-        .map_err(|_| ())
-        .expect("hkdf fill should succeed");
-    key
-}
-
-struct CmdKeyLen(usize);
-
-impl KeyType for CmdKeyLen {
-    fn len(&self) -> usize {
-        self.0
-    }
-}
-
-fn compute_auth_id(cmd_key: &[u8], timestamp: u64) -> [u8; 16] {
-    let key = hmac::Key::new(hmac::HMAC_SHA256, cmd_key);
-    let tag = hmac::sign(&key, &timestamp.to_be_bytes());
-    let mut result = [0u8; 16];
-    result.copy_from_slice(&tag.as_ref()[..16]);
-    result
-}
-
-fn derive_body_key_nonce(cmd_key: &[u8], auth_id: &[u8; 16], key_len: usize) -> (Vec<u8>, Vec<u8>) {
-    // body_key = HKDF(cmd_key, salt="VMess Body Key", info=auth_id, len=key_len)
-    let body_key = {
-        let salt = Salt::new(HKDF_SHA256, b"VMess Body Key");
-        let prk = salt.extract(cmd_key);
-        let auth_info = [auth_id.as_ref()];
-        let okm = prk
-            .expand(&auth_info, CmdKeyLen(key_len))
-            .expect("hkdf expand body_key");
-        let mut k = vec![0u8; key_len];
-        okm.fill(&mut k).expect("hkdf fill body_key");
-        k
-    };
-
-    // body_nonce = HKDF(cmd_key, salt="VMess Body Nonce", info=auth_id, len=12)
-    let body_nonce = {
-        let salt = Salt::new(HKDF_SHA256, b"VMess Body Nonce");
-        let prk = salt.extract(cmd_key);
-        let auth_info = [auth_id.as_ref()];
-        let okm = prk
-            .expand(&auth_info, CmdKeyLen(12))
-            .expect("hkdf expand body_nonce");
-        let mut n = vec![0u8; 12];
-        okm.fill(&mut n).expect("hkdf fill body_nonce");
-        n
-    };
-
-    (body_key, body_nonce)
-}
-
-fn derive_response_key_nonce(
-    body_key: &[u8],
-    auth_id: &[u8; 16],
-    key_len: usize,
-) -> (Vec<u8>, Vec<u8>) {
-    // response_key = HKDF(body_key, salt="VMess Resp Key", info=auth_id, len=key_len)
-    let resp_key = {
-        let salt = Salt::new(HKDF_SHA256, b"VMess Resp Key");
-        let prk = salt.extract(body_key);
-        let auth_info = [auth_id.as_ref()];
-        let okm = prk
-            .expand(&auth_info, CmdKeyLen(key_len))
-            .expect("hkdf expand resp_key");
-        let mut k = vec![0u8; key_len];
-        okm.fill(&mut k).expect("hkdf fill resp_key");
-        k
-    };
-
-    // response_nonce = HKDF(body_key, salt="VMess Resp Nonce", info=auth_id, len=12)
-    let resp_nonce = {
-        let salt = Salt::new(HKDF_SHA256, b"VMess Resp Nonce");
-        let prk = salt.extract(body_key);
-        let auth_info = [auth_id.as_ref()];
-        let okm = prk
-            .expand(&auth_info, CmdKeyLen(12))
-            .expect("hkdf expand resp_nonce");
-        let mut n = vec![0u8; 12];
-        okm.fill(&mut n).expect("hkdf fill resp_nonce");
-        n
-    };
-
-    (resp_key, resp_nonce)
-}
-
-fn aead_decrypt(
-    key: &[u8],
-    nonce_bytes: &[u8],
-    ciphertext: &[u8],
-    cipher: VmessCipher,
-) -> Result<Vec<u8>, Error> {
-    let unbound = UnboundKey::new(cipher.aead_algorithm(), key)
-        .map_err(|_| Error::Protocol("vmess invalid aead key"))?;
-    let nonce = Nonce::assume_unique_for_key(
-        nonce_bytes[..12]
-            .try_into()
-            .map_err(|_| Error::Protocol("vmess invalid nonce length"))?,
-    );
-    let mut opening_key = OpeningKey::new(unbound, CountingNonce::new(nonce));
-    let mut in_out = ciphertext.to_vec();
-    let plaintext = opening_key
-        .open_in_place(Aad::empty(), &mut in_out)
-        .map_err(|_| Error::Protocol("vmess aead decryption failed"))?;
-    Ok(plaintext.to_vec())
-}
-
-fn aead_encrypt(
-    key: &[u8],
-    nonce_bytes: &[u8],
-    plaintext: &[u8],
-    cipher: VmessCipher,
-) -> Result<Vec<u8>, Error> {
-    let unbound = UnboundKey::new(cipher.aead_algorithm(), key)
-        .map_err(|_| Error::Protocol("vmess invalid aead key"))?;
-    let nonce = Nonce::assume_unique_for_key(
-        nonce_bytes[..12]
-            .try_into()
-            .map_err(|_| Error::Protocol("vmess invalid nonce length"))?,
-    );
-    let mut sealing_key = SealingKey::new(unbound, CountingNonce::new(nonce));
-    let mut buf = plaintext.to_vec();
-    buf.reserve(GCM_TAG_LEN);
-    sealing_key
-        .seal_in_place_append_tag(Aad::empty(), &mut buf)
-        .map_err(|_| Error::Protocol("vmess aead encryption failed"))?;
-    Ok(buf)
-}
-
 /// Parse the decrypted command body:
 /// [timestamp:8][random:4][options:1][padding_len:1][padding:P][version:1][cmd:1][port:2][atyp:1][address:var]
 fn parse_command_body(plaintext: &[u8], uuid: &[u8; 16]) -> Result<(u64, Session), Error> {
@@ -333,19 +195,16 @@ fn parse_command_body(plaintext: &[u8], uuid: &[u8; 16]) -> Result<(u64, Session
 fn parse_address_from_bytes(atyp: u8, bytes: &[u8]) -> Result<Address, Error> {
     match atyp {
         0x01 => {
-            // IPv4
             let addr: [u8; 4] = bytes[..4].try_into().unwrap();
             Ok(Address::Ipv4(addr))
         }
         0x02 => {
-            // Domain: [len:1][domain:len]
             let len = bytes[0] as usize;
             let domain = std::str::from_utf8(&bytes[1..1 + len])
                 .map_err(|_| Error::Protocol("vmess domain not utf-8"))?;
             Ok(Address::Domain(domain.to_owned()))
         }
         0x03 => {
-            // IPv6
             let addr: [u8; 16] = bytes[..16].try_into().unwrap();
             Ok(Address::Ipv6(addr))
         }
@@ -377,39 +236,4 @@ async fn send_auth_response<S: AsyncSocket>(
         .map_err(|_| Error::Io("vmess: failed to write response"))?;
 
     Ok(())
-}
-
-fn current_timestamp() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-}
-
-struct CountingNonce {
-    nonce: [u8; 12],
-}
-
-impl CountingNonce {
-    fn new(initial: Nonce) -> Self {
-        let mut nonce = [0u8; 12];
-        nonce.copy_from_slice(initial.as_ref());
-        Self { nonce }
-    }
-}
-
-// ring 0.17 NonceSequence - use the trait from ring
-impl NonceSequence for CountingNonce {
-    fn advance(&mut self) -> Result<Nonce, ring::error::Unspecified> {
-        // For our use-case (single encrypt/decrypt), nonce stays the same
-        Ok(Nonce::assume_unique_for_key(self.nonce))
-    }
-}
-
-// Simple hex encoding for principal_key display
-mod hex {
-    pub fn encode(bytes: &[u8; 16]) -> String {
-        bytes.iter().map(|b| format!("{b:02x}")).collect()
-    }
 }

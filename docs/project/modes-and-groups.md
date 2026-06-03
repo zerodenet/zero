@@ -50,7 +50,7 @@ IPC 等价命令：
 
 ## outbound_groups
 
-当前已经实现三类：
+当前已经实现五类：
 
 - `selector`
   - 手动指定当前成员
@@ -59,6 +59,10 @@ IPC 等价命令：
   - 前一个成员建连失败时，顺序切到下一个
 - `urltest`
   - 周期探测后，选择可用且延迟更低的成员
+- `relay`
+  - 链式代理，流量依次经过每个节点
+- `loadbalance`
+  - 负载均衡，按策略（round-robin / random）分发连接
 
 这三类组的成员现在都可以引用另一个组。运行时会递归解析，配置阶段会拦掉循环引用。
 
@@ -122,6 +126,17 @@ POST /selectors/{group_tag}/{target_tag}
       "outbounds": ["fallback-proxy", "node-b", "direct"],
       "url": "http://example.com/",
       "interval_seconds": 300
+    },
+    {
+      "tag": "chain-hk-us",
+      "type": "relay",
+      "proxies": ["node-hk", "node-us"]
+    },
+    {
+      "tag": "lb",
+      "type": "loadbalance",
+      "outbounds": ["node-a", "node-b", "node-c"],
+      "strategy": "round-robin"
     }
   ],
   "mode": {

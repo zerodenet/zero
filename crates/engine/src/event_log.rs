@@ -305,7 +305,7 @@ impl EngineEventLog {
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
         event.sequence = Some(sequence);
 
-        let mut events = self.inner.lock().expect("engine event log lock poisoned");
+        let mut events = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         events.push_back(event);
 
         while events.len() > self.capacity {
@@ -448,6 +448,7 @@ fn protocol_name(protocol: ProtocolType) -> &'static str {
         ProtocolType::Shadowsocks => "shadowsocks",
         ProtocolType::Trojan => "trojan",
         ProtocolType::Vmess => "vmess",
+        ProtocolType::Mieru => "mieru",
         ProtocolType::Unknown => "unknown",
     }
 }
