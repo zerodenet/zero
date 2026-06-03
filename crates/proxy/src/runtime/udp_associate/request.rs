@@ -402,6 +402,7 @@ impl Proxy {
                 password,
                 sni,
                 insecure,
+                client_fingerprint,
             } => {
                 use crate::outbound::trojan::send_trojan_udp_packet;
                 match send_trojan_udp_packet(
@@ -412,6 +413,7 @@ impl Proxy {
                     password.as_str(),
                     sni.as_deref(),
                     *insecure,
+                    client_fingerprint.as_deref(),
                     &flow.session.target,
                     flow.session.port,
                     payload,

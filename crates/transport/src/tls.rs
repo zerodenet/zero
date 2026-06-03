@@ -103,13 +103,37 @@ pub async fn connect_tls_upstream(
         }
     }
 
-    let mut config = if tls.insecure {
+    // Look up fingerprint preset for builder-time configuration
+    let fingerprint = tls.client_fingerprint.as_deref().and_then(|name| {
+        let fp = crate::fingerprint::lookup_fingerprint(name);
+        if fp.is_none() {
+            tracing::warn!(fingerprint = %name, "unknown tls fingerprint preset, using defaults");
+        }
+        fp
+    });
+
+    // Build with optional fingerprint via custom CryptoProvider
+    let config_base = if let Some(ref fp) = fingerprint {
+        let provider = Arc::new(crate::fingerprint::build_provider(fp));
+        tracing::debug!(
+            fingerprint = %tls.client_fingerprint.as_deref().unwrap_or(""),
+            cipher_count = fp.cipher_suites.len(),
+            "tls fingerprint applied"
+        );
+        ClientConfig::builder_with_provider(provider)
+            .with_protocol_versions(&[&rustls::version::TLS13, &rustls::version::TLS12])
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
+    } else {
         ClientConfig::builder()
+    };
+
+    let mut config = if tls.insecure {
+        config_base
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(InsecureCertVerifier))
             .with_no_client_auth()
     } else {
-        ClientConfig::builder()
+        config_base
             .with_root_certificates(roots)
             .with_no_client_auth()
     };
@@ -118,12 +142,15 @@ pub async fn connect_tls_upstream(
         config.enable_sni = false;
     }
 
+    // ALPN: use explicit config if provided, otherwise use fingerprint-suggested ALPN
     if !tls.alpn.is_empty() {
         config.alpn_protocols = tls
             .alpn
             .iter()
             .map(|proto| proto.as_bytes().to_vec())
             .collect();
+    } else if fingerprint.is_some() && config.alpn_protocols.is_empty() {
+        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     }
 
     let server_name_str = server_name.clone();

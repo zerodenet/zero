@@ -201,6 +201,7 @@ impl Proxy {
                 password,
                 sni,
                 insecure,
+                client_fingerprint,
             } => {
                 let sent = crate::outbound::trojan::send_trojan_udp_packet(
                     self,
@@ -210,6 +211,7 @@ impl Proxy {
                     password,
                     sni,
                     insecure,
+                    client_fingerprint,
                     &context.session.target,
                     context.session.port,
                     context.payload,
@@ -229,6 +231,7 @@ impl Proxy {
                         password: password.to_owned(),
                         sni: sni.map(|s| s.to_owned()),
                         insecure,
+                        client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
                     },
                     outbound_tx_bytes: sent as u64,
                 })

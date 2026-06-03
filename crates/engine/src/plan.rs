@@ -111,12 +111,14 @@ impl EnginePlan {
                     password,
                     sni,
                     insecure,
+                    client_fingerprint,
                 } => TargetKind::Outbound(Box::new(OutboundTarget::Trojan {
                     server: server.clone(),
                     port: *port,
                     password: password.clone(),
                     sni: sni.clone(),
                     insecure: *insecure,
+                    client_fingerprint: client_fingerprint.clone(),
                 })),
                 OutboundProtocolConfig::Vmess {
                     server,
@@ -394,6 +396,7 @@ pub enum OutboundTarget {
         password: String,
         sni: Option<String>,
         insecure: bool,
+        client_fingerprint: Option<String>,
     },
     Vmess {
         server: String,

@@ -255,13 +255,7 @@ pub(super) fn validate_outbound_protocol(
             validate_outbound_endpoint("shadowsocks", server, *port)?;
             Ok(())
         }
-        OutboundProtocolConfig::Trojan {
-            server,
-            port,
-            password: _,
-            sni: _,
-            insecure: _,
-        } => {
+        OutboundProtocolConfig::Trojan { server, port, .. } => {
             validate_outbound_endpoint("trojan", server, *port)?;
             Ok(())
         }
