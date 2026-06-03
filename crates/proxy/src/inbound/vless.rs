@@ -12,16 +12,14 @@ use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{error, info, warn};
 use zero_config::{InboundRealityConfig, VlessUserConfig};
-use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
+use zero_platform_tokio::TokioSocket;
 use zero_protocol_vless::build_udp_packet;
 use zero_protocol_vless::RealityServerOptions;
 use zero_protocol_vless::{VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
-use crate::runtime::udp_associate::sessions::UdpSessionFlows;
-use crate::runtime::udp_helpers::{resolve_udp_target, send_direct_udp_packet};
-use crate::runtime::vless_udp::{VlessUdpOutboundManager, VlessUdpTransport};
-use crate::runtime::{log_completed_udp_flow, UdpFlowOutbound};
+use crate::runtime::udp_dispatch::UdpDispatch;
+use crate::runtime::udp_associate::helpers::log_completed_udp_flow;
 
 use super::super::logging::log_listener_connection_error;
 use super::super::runtime::{bind_listener, Proxy};
@@ -732,11 +730,9 @@ impl Proxy {
             .await?;
         self.record_session_inbound_traffic(session.id, client.drain_traffic());
 
-        let udp_socket = TokioDatagramSocket::bind("0.0.0.0:0").await?;
+        let mut dispatch = UdpDispatch::new(inbound_tag).await?;
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
-        let mut udp_flows = UdpSessionFlows::default();
-        let mut vless_manager = VlessUdpOutboundManager::new();
 
         info!(
             inbound_tag = inbound_tag,
@@ -749,6 +745,10 @@ impl Proxy {
         let proxy = self.clone();
 
         loop {
+            // Split dispatch into disjoint borrows so select! can pin
+            // both futures simultaneously without borrow conflicts.
+            let (direct_sock, vless_mgr) = dispatch.direct_socket_and_vless_manager();
+
             select! {
                 _ = tokio::time::sleep_until(last_activity + timeout) => {
                     info!(
@@ -765,18 +765,30 @@ impl Proxy {
                             last_activity = TokioInstant::now();
                             self.record_session_inbound_traffic(0, client.drain_traffic());
 
-                            if let Err(error) = proxy.handle_vless_udp_packet_full(
+                            if let Err(error) = Self::vless_dispatch_packet(
+                                &proxy,
+                                &mut dispatch,
                                 &buffer[..n],
-                                inbound_tag,
-                                &mut udp_flows,
-                                &udp_socket,
-                                &mut vless_manager,
                                 auth,
                             ).await {
                                 warn!(
                                     error = %error,
                                     "failed to process vless udp packet"
                                 );
+                            }
+
+                            // Drain chain-outbound responses (SS, H2, Trojan, Mieru)
+                            // and write them back to the VLESS client.
+                            for resp in UdpDispatch::drain_chain_responses() {
+                                if let Ok(packet) = build_udp_packet(&resp.target, resp.port, &resp.payload) {
+                                    if let Some(sid) = dispatch.session_id_by_target(
+                                        &resp.target, resp.port,
+                                    ) {
+                                        proxy.record_session_outbound_rx(sid, resp.payload.len() as u64);
+                                        proxy.record_session_inbound_tx(sid, packet.len() as u64);
+                                    }
+                                    let _ = client.write_all(&packet).await;
+                                }
                             }
                         }
                         Err(error) => {
@@ -788,7 +800,7 @@ impl Proxy {
                         }
                     }
                 }
-                recv = udp_socket.recv_from_addr(&mut udp_buffer) => {
+                recv = direct_sock.recv_from_addr(&mut udp_buffer) => {
                     let (n, sender) = recv?;
                     last_activity = TokioInstant::now();
 
@@ -799,7 +811,7 @@ impl Proxy {
                     };
                     let port = sender.port();
 
-                    if let Some(session_id) = udp_flows.direct_response_session_id(sender) {
+                    if let Some(session_id) = dispatch.direct_response_session_id(sender) {
                         self.record_session_outbound_rx(session_id, n as u64);
                     }
 
@@ -807,7 +819,7 @@ impl Proxy {
                         Ok(packet) => {
                             match client.write_all(&packet).await {
                                 Ok(_) => {
-                                    if let Some(session_id) = udp_flows.direct_response_session_id(sender) {
+                                    if let Some(session_id) = dispatch.direct_response_session_id(sender) {
                                         self.record_session_inbound_tx(session_id, packet.len() as u64);
                                     }
                                     self.record_session_inbound_traffic(0, client.drain_traffic());
@@ -829,7 +841,7 @@ impl Proxy {
                         }
                     }
                 }
-                response = vless_manager.next_response() => {
+                response = vless_mgr.next_response() => {
                     match response {
                         Some(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
@@ -866,9 +878,7 @@ impl Proxy {
             }
         }
 
-        drop(vless_manager);
-
-        for completed in udp_flows.finish_all() {
+        for completed in dispatch.finish_all() {
             log_completed_udp_flow(completed);
         }
 
@@ -881,164 +891,27 @@ impl Proxy {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    async fn handle_vless_udp_packet_full(
-        &self,
+    /// Parse a VLESS UDP packet and dispatch via the generic `UdpDispatch`.
+    async fn vless_dispatch_packet(
+        proxy: &Proxy,
+        dispatch: &mut UdpDispatch,
         packet: &[u8],
-        inbound_tag: &str,
-        udp_flows: &mut UdpSessionFlows,
-        udp_socket: &TokioDatagramSocket,
-        vless_manager: &mut VlessUdpOutboundManager,
         auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError> {
         use zero_protocol_vless::parse_udp_packet;
 
         let udp_packet = parse_udp_packet(packet)?;
-        let _flow_key = (udp_packet.target.clone(), udp_packet.port);
 
-        // Check if we already have an upstream connection for this target
-        if let Some(handle) = vless_manager.get(&udp_packet.target, udp_packet.port) {
-            // Existing VLESS upstream - send the payload
-            self.record_session_inbound_rx(handle.session_id, packet.len() as u64);
-
-            let _ = handle.send_tx.send(udp_packet.payload.clone()).await;
-            self.record_session_outbound_tx(handle.session_id, udp_packet.payload.len() as u64);
-            return Ok(());
-        }
-
-        // Check for existing direct flow
-        if let Some(flow) = udp_flows.snapshot(&udp_packet.target, udp_packet.port) {
-            self.record_session_inbound_rx(flow.session.id, packet.len() as u64);
-            if let UdpFlowOutbound::Direct { target_addr, .. } = flow.outbound {
-                let sent =
-                    send_direct_udp_packet(udp_socket, target_addr, &udp_packet.payload).await?;
-                self.record_session_outbound_tx(flow.session.id, sent as u64);
-            }
-            return Ok(());
-        }
-
-        // New flow - route decision
-        let mut session = zero_core::Session::new(
-            0,
-            udp_packet.target.clone(),
-            udp_packet.port,
-            zero_core::Network::Udp,
-            zero_core::ProtocolType::Vless,
-        );
-        session.auth = auth.clone();
-        self.prepare_session(&mut session, inbound_tag, None);
-        let mut session_handle = self.track_session(session.id);
-        self.record_session_inbound_rx(session.id, packet.len() as u64);
-
-        self.resolve_fake_ip_target(&mut session).await;
-        let action = self.route_decision(&session);
-        let (resolved, _plan) = self.resolve_outbound(&action)?;
-        crate::logging::log_session_accepted(&session, &action, self.config.mode.kind());
-
-        let candidate = match resolved {
-            zero_engine::ResolvedOutbound::Single(candidate) => candidate,
-            zero_engine::ResolvedOutbound::Fallback { mut candidates } => candidates.remove(0),
-            zero_engine::ResolvedOutbound::Relay { .. } => {
-                return Err(EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    "relay not supported for VLESS UDP",
-                )))
-            }
-        };
-
-        match candidate {
-            zero_engine::ResolvedLeafOutbound::Direct { tag } => {
-                session.outbound_tag = Some(tag.unwrap_or("direct").to_owned());
-                self.set_session_outbound(&session);
-
-                let target_addr = resolve_udp_target(self, &session).await?;
-
-                let sent =
-                    send_direct_udp_packet(udp_socket, target_addr, &udp_packet.payload).await?;
-                self.record_session_outbound_tx(session.id, sent as u64);
-
-                let tag = session.outbound_tag.clone().unwrap_or_default();
-                udp_flows.insert(
-                    session,
-                    session_handle,
-                    UdpFlowOutbound::Direct { tag, target_addr },
-                );
-            }
-            zero_engine::ResolvedLeafOutbound::Block { tag } => {
-                session.outbound_tag = Some(tag.unwrap_or("block").to_owned());
-                self.set_session_outbound(&session);
-                if let Some(record) = session_handle.finish(zero_engine::SessionOutcome::Blocked) {
-                    crate::logging::log_session_finished(&record, None);
-                }
-            }
-            zero_engine::ResolvedLeafOutbound::Vless {
-                tag,
-                server,
-                port,
-                id,
-                tls,
-                reality,
-                ws,
-                grpc,
-                h2,
-                http_upgrade,
-                split_http,
-                quic,
-                ..
-            } => {
-                session.outbound_tag = Some(tag.to_owned());
-                self.set_session_outbound(&session);
-
-                let transport = VlessUdpTransport {
-                    tls,
-                    reality,
-                    ws,
-                    grpc,
-                    h2,
-                    http_upgrade,
-                    split_http,
-                    quic,
-                };
-
-                match vless_manager
-                    .get_or_create_upstream(
-                        self,
-                        &session,
-                        udp_packet.target.clone(),
-                        udp_packet.port,
-                        server.to_owned(),
-                        port,
-                        id.to_owned(),
-                        udp_packet.payload.clone(),
-                        Some(&transport),
-                    )
-                    .await
-                {
-                    Ok(()) => {}
-                    Err(error) => {
-                        warn!(error = %error, "failed to establish vless upstream for udp");
-                        let record = session_handle.finish(zero_engine::SessionOutcome::Failed);
-                        crate::logging::log_session_failed(
-                            &session,
-                            record.as_ref(),
-                            "vless_udp_upstream",
-                            std::time::Instant::now().elapsed(),
-                            &error,
-                            Some((server, port)),
-                        );
-                    }
-                }
-            }
-            _ => {
-                warn!(
-                    target = ?session.target,
-                    port = %session.port,
-                    "chained outbound type not supported for VLESS UDP"
-                );
-            }
-        }
-
-        Ok(())
+        dispatch
+            .dispatch(
+                proxy,
+                udp_packet.target,
+                udp_packet.port,
+                &udp_packet.payload,
+                zero_core::ProtocolType::Vless,
+                auth.as_ref(),
+            )
+            .await
     }
     /// Relay a raw TCP stream (post-ClientHello) to a fallback target.
     /// The ClientHello bytes were already written by the caller.

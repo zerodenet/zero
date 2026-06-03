@@ -21,12 +21,10 @@ pub(crate) mod inbound_protocol;
 pub(crate) mod mux_pool;
 mod tcp_outbound;
 pub(crate) mod udp_associate;
+pub(crate) mod udp_dispatch;
 pub(crate) mod udp_helpers;
 pub(crate) mod upstream;
 pub(crate) mod vless_udp;
-
-pub(crate) use udp_associate::helpers::log_completed_udp_flow;
-pub(crate) use udp_associate::sessions::UdpFlowOutbound;
 
 #[derive(Debug, Clone)]
 pub struct Proxy {

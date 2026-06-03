@@ -11,6 +11,7 @@ use zero_platform_tokio::TokioDatagramSocket;
 use crate::runtime::Proxy;
 
 /// Resolve target address for direct UDP outbound.
+#[allow(dead_code)]
 pub(crate) async fn resolve_udp_target(
     proxy: &Proxy,
     session: &Session,

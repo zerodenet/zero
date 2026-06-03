@@ -145,6 +145,16 @@ impl UdpSessionFlows {
             .map(UdpFlow::snapshot)
     }
 
+    /// Look up a session ID by target+port only, regardless of outbound type.
+    ///
+    /// Used for chain-outbound response metering where the outbound tag
+    /// may not be known at the call site.
+    pub(crate) fn session_id_by_target(&self, target: &Address, port: u16) -> Option<u64> {
+        self.flows
+            .get(&UdpFlowKey::new(target, port))
+            .map(|flow| flow.session.id)
+    }
+
     pub(crate) fn insert(
         &mut self,
         session: Session,
