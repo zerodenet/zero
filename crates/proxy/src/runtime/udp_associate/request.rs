@@ -448,6 +448,58 @@ impl Proxy {
                     "Trojan UDP outbound requires feature `trojan`",
                 )));
             }
+            #[cfg(feature = "mieru")]
+            UdpFlowOutbound::Mieru {
+                tag: _,
+                server,
+                port,
+                username,
+                password,
+            } => {
+                use crate::outbound::mieru_udp::send_mieru_udp_packet;
+                match send_mieru_udp_packet(
+                    self,
+                    &flow.session,
+                    server.as_str(),
+                    *port,
+                    username.as_str(),
+                    password.as_str(),
+                    &flow.session.target,
+                    flow.session.port,
+                    payload,
+                )
+                .await
+                {
+                    Ok(sent) => {
+                        self.record_session_outbound_tx(flow.session.id, sent as u64);
+                    }
+                    Err(error) => {
+                        let msg = error.to_string();
+                        if let Some(completed) = context.udp_flows.finish(
+                            &flow.session.target,
+                            flow.session.port,
+                            SessionOutcome::Failed,
+                        ) {
+                            log_session_failed(
+                                &flow.session,
+                                Some(&completed.record),
+                                "udp_mieru_send",
+                                started_at.elapsed(),
+                                &EngineError::Io(std::io::Error::other(msg.as_str())),
+                                None,
+                            );
+                        }
+                        return Err(EngineError::Io(std::io::Error::other(msg.as_str())));
+                    }
+                }
+            }
+            #[cfg(not(feature = "mieru"))]
+            UdpFlowOutbound::Mieru { .. } => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Mieru UDP outbound requires feature `mieru`",
+                )));
+            }
         }
 
         Ok(())

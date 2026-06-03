@@ -241,11 +241,56 @@ impl Proxy {
                 error: zero_core::Error::Unsupported("UDP not supported").into(),
                 upstream: None,
             }),
+            #[cfg(feature = "mieru")]
+            ResolvedLeafOutbound::Mieru {
+                tag,
+                server,
+                port,
+                username,
+                password,
+            } => {
+                let sent = crate::outbound::mieru_udp::send_mieru_udp_packet(
+                    self,
+                    context.session,
+                    server,
+                    port,
+                    username,
+                    password,
+                    &context.session.target,
+                    context.session.port,
+                    context.payload,
+                )
+                .await
+                .map_err(|error| UdpCandidateFailure {
+                    stage: "udp_mieru_send",
+                    error,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
+
+                Ok(UdpCandidateStart::Flow {
+                    outbound: UdpFlowOutbound::Mieru {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        username: username.to_owned(),
+                        password: password.to_owned(),
+                    },
+                    outbound_tx_bytes: sent as u64,
+                })
+            }
             #[cfg(feature = "trojan")]
-            ResolvedLeafOutbound::Vmess { .. }
-            | ResolvedLeafOutbound::Mieru { .. } => Err(UdpCandidateFailure {
-                stage: "vmess/mieru",
-                error: zero_core::Error::Unsupported("vmess/mieru UDP not supported").into(),
+            ResolvedLeafOutbound::Vmess { .. } => Err(UdpCandidateFailure {
+                stage: "vmess",
+                error: zero_core::Error::Unsupported("vmess UDP not supported").into(),
+                upstream: None,
+            }),
+            #[cfg(not(feature = "mieru"))]
+            ResolvedLeafOutbound::Mieru { .. } => Err(UdpCandidateFailure {
+                stage: "udp_mieru_outbound",
+                error: zero_core::Error::Unsupported(
+                    "Mieru UDP outbound requires Cargo feature `mieru`",
+                )
+                .into(),
                 upstream: None,
             }),
         }

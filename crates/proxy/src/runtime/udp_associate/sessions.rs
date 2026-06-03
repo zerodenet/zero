@@ -73,6 +73,13 @@ pub(crate) enum UdpFlowOutbound {
         sni: Option<String>,
         insecure: bool,
     },
+    Mieru {
+        tag: String,
+        server: String,
+        port: u16,
+        username: String,
+        password: String,
+    },
 }
 
 impl UdpFlowOutbound {
@@ -82,7 +89,8 @@ impl UdpFlowOutbound {
             | Self::Socks5 { tag, .. }
             | Self::Shadowsocks { tag, .. }
             | Self::Hysteria2 { tag, .. }
-            | Self::Trojan { tag, .. } => tag,
+            | Self::Trojan { tag, .. }
+            | Self::Mieru { tag, .. } => tag,
         }
     }
 
@@ -92,7 +100,8 @@ impl UdpFlowOutbound {
             Self::Socks5 { server, port, .. }
             | Self::Shadowsocks { server, port, .. }
             | Self::Hysteria2 { server, port, .. }
-            | Self::Trojan { server, port, .. } => Some((server.clone(), *port)),
+            | Self::Trojan { server, port, .. }
+            | Self::Mieru { server, port, .. } => Some((server.clone(), *port)),
         }
     }
 
@@ -102,7 +111,8 @@ impl UdpFlowOutbound {
             Self::Socks5 { .. }
             | Self::Shadowsocks { .. }
             | Self::Hysteria2 { .. }
-            | Self::Trojan { .. } => SessionOutcome::ChainedRelayed,
+            | Self::Trojan { .. }
+            | Self::Mieru { .. } => SessionOutcome::ChainedRelayed,
         }
     }
 }
@@ -202,7 +212,8 @@ impl UdpSessionFlows {
             UdpFlowOutbound::Socks5 { tag, .. }
             | UdpFlowOutbound::Shadowsocks { tag, .. }
             | UdpFlowOutbound::Hysteria2 { tag, .. }
-            | UdpFlowOutbound::Trojan { tag, .. } => {
+            | UdpFlowOutbound::Trojan { tag, .. }
+            | UdpFlowOutbound::Mieru { tag, .. } => {
                 self.upstream_by_response.insert(
                     UdpUpstreamResponseKey::new(tag, &key.target, key.port),
                     key.clone(),
@@ -221,7 +232,8 @@ impl UdpSessionFlows {
             UdpFlowOutbound::Socks5 { tag, .. }
             | UdpFlowOutbound::Shadowsocks { tag, .. }
             | UdpFlowOutbound::Hysteria2 { tag, .. }
-            | UdpFlowOutbound::Trojan { tag, .. } => {
+            | UdpFlowOutbound::Trojan { tag, .. }
+            | UdpFlowOutbound::Mieru { tag, .. } => {
                 let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
                 if self.upstream_by_response.get(&response_key) == Some(key) {
                     self.upstream_by_response.remove(&response_key);
@@ -244,7 +256,8 @@ impl UdpSessionFlows {
             UdpFlowOutbound::Socks5 { tag, .. }
             | UdpFlowOutbound::Shadowsocks { tag, .. }
             | UdpFlowOutbound::Hysteria2 { tag, .. }
-            | UdpFlowOutbound::Trojan { tag, .. } => tag == outbound_tag,
+            | UdpFlowOutbound::Trojan { tag, .. }
+            | UdpFlowOutbound::Mieru { tag, .. } => tag == outbound_tag,
             UdpFlowOutbound::Direct { .. } => false,
         });
         let flow = upstream_flows.next()?;
