@@ -97,8 +97,13 @@ impl MieruInbound {
             .await
             .map_err(|_| Error::Io("mieru: write response"))?;
 
+        // Detect UDP session: Mieru clients use 0.0.0.0:0 as target for UDP associate.
+        let is_udp = matches!(&target, Address::Ipv4(ip) if *ip == [0, 0, 0, 0] && port == 0)
+            || matches!(&target, Address::Ipv6(ip) if *ip == [0; 16] && port == 0);
+        let network = if is_udp { Network::Udp } else { Network::Tcp };
+
         Ok(MieruAccept {
-            session: Session::new(0, target, port, Network::Tcp, ProtocolType::Trojan),
+            session: Session::new(0, target, port, network, ProtocolType::Trojan),
             mieru_session: session,
             client_cipher,
             server_cipher,

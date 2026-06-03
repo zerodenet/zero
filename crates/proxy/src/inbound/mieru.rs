@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use async_trait::async_trait;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -18,6 +18,7 @@ use zero_protocol_mieru::{
     build_data_segment, DataMetadata, MieruCipher, MieruInbound, MieruSession,
     DATA_SERVER_TO_CLIENT,
 };
+use zero_traits::DnsResolver;
 
 use crate::logging::log_listener_connection_error;
 use crate::runtime::bind_listener;
@@ -254,10 +255,16 @@ impl Proxy {
                             connections.spawn(async move {
                                 match handler.accept(stream.into()).await {
                                     Ok((session, client)) => {
-                                        let _ = serve_inbound(
-                                            &engine, session, client, &handler,
-                                            &tag, source_addr,
-                                        ).await;
+                                        if session.network == zero_core::Network::Udp {
+                                            let _ = engine.run_mieru_udp_relay(
+                                                client, &session, &tag,
+                                            ).await;
+                                        } else {
+                                            let _ = serve_inbound(
+                                                &engine, session, client, &handler,
+                                                &tag, source_addr,
+                                            ).await;
+                                        }
                                     }
                                     Err(error) => {
                                         log_listener_connection_error(
@@ -296,6 +303,140 @@ impl Proxy {
 
         info!(inbound_tag = %inbound.tag, protocol = "mieru", "listener stopped");
         Ok(())
+    }
+}
+
+// ── UDP relay ────────────────────────────────────────────────────────
+
+impl Proxy {
+    /// Run a Mieru UDP relay: read encrypted data segments, decrypt,
+    /// unwrap Mieru UDP associate framing, parse SOCKS5 UDP packet,
+    /// forward to target, and send responses back.
+    async fn run_mieru_udp_relay(
+        &self,
+        mut client: MieruClientStream,
+        _session: &Session,
+        inbound_tag: &str,
+    ) -> Result<(), EngineError> {
+        let udp_socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!("mieru udp bind: {e}")))
+        })?;
+
+        let mut read_buf = [0u8; 65536];
+        let mut recv_buf = [0u8; 65536];
+        let mut session_map: std::collections::HashMap<
+            std::net::SocketAddr,
+            (zero_core::Address, u16),
+        > = std::collections::HashMap::new();
+
+        loop {
+            tokio::select! {
+                // Read decrypted data from Mieru client
+                read = client.read(&mut read_buf) => {
+                    match read {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            let data = &read_buf[..n];
+                            if let Ok(unwrapped) =
+                                zero_protocol_mieru::unwrap_udp_associate(data)
+                            {
+                                if let Ok(pkt) =
+                                    zero_protocol_socks5::parse_udp_packet(&unwrapped)
+                                {
+                                    let target_addr = match &pkt.target {
+                                        zero_core::Address::Domain(domain) => {
+                                            match self.resolver.resolve(domain).await {
+                                                Ok(ips) => ips.first().copied().map(|ip| {
+                                                    addr_from_ip(ip, pkt.port)
+                                                }),
+                                                Err(_) => None,
+                                            }
+                                        }
+                                        zero_core::Address::Ipv4(ip) => Some(
+                                            std::net::SocketAddr::new(
+                                                std::net::IpAddr::V4(
+                                                    std::net::Ipv4Addr::new(
+                                                        ip[0], ip[1], ip[2], ip[3],
+                                                    ),
+                                                ),
+                                                pkt.port,
+                                            ),
+                                        ),
+                                        zero_core::Address::Ipv6(ip) => Some(
+                                            std::net::SocketAddr::new(
+                                                std::net::IpAddr::V6(
+                                                    std::net::Ipv6Addr::from(*ip),
+                                                ),
+                                                pkt.port,
+                                            ),
+                                        ),
+                                    };
+
+                                    if let Some(addr) = target_addr {
+                                        session_map.insert(
+                                            addr,
+                                            (pkt.target.clone(), pkt.port),
+                                        );
+                                        let _ = udp_socket.send_to(&pkt.payload, addr).await;
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "mieru udp read error");
+                            break;
+                        }
+                    }
+                }
+                // Read responses from UDP socket
+                recv = udp_socket.recv_from(&mut recv_buf) => {
+                    match recv {
+                        Ok((n, sender)) => {
+                            if let Some((target, port)) = session_map.get(&sender) {
+                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
+                                    target, *port, &recv_buf[..n],
+                                ) {
+                                    let wrapped =
+                                        zero_protocol_mieru::wrap_udp_associate(&frame);
+                                    if let Err(e) = client.write_all(&wrapped).await {
+                                        tracing::warn!(
+                                            error = %e, "mieru udp write error"
+                                        );
+                                        break;
+                                    }
+                                    if let Err(e) = client.flush().await {
+                                        tracing::warn!(
+                                            error = %e, "mieru udp flush error"
+                                        );
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "mieru udp recv_from error");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        tracing::info!(inbound_tag = %inbound_tag, "mieru udp relay stopped");
+        Ok(())
+    }
+}
+
+fn addr_from_ip(ip: zero_traits::IpAddress, port: u16) -> std::net::SocketAddr {
+    match ip {
+        zero_traits::IpAddress::V4(octets) => std::net::SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)),
+            port,
+        ),
+        zero_traits::IpAddress::V6(octets) => std::net::SocketAddr::new(
+            std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)),
+            port,
+        ),
     }
 }
 
