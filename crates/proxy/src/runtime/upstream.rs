@@ -3,8 +3,11 @@ use zero_core::Session;
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
+#[cfg(feature = "trojan")]
+use tokio::io::AsyncWriteExt;
+
 use crate::runtime::Proxy;
-#[cfg(feature = "outbound-socks5")]
+#[cfg(feature = "socks5")]
 use crate::transport::MeteredStream;
 use crate::transport::TcpRelayStream;
 
@@ -26,7 +29,7 @@ pub(crate) struct VlessUpstream<'a> {
 }
 
 impl Proxy {
-    #[cfg(feature = "outbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) async fn connect_via_socks5_upstream(
         &self,
         session: &Session,
@@ -59,7 +62,7 @@ impl Proxy {
         Ok(upstream.into_inner().into())
     }
 
-    #[cfg(not(feature = "outbound-socks5"))]
+    #[cfg(not(feature = "socks5"))]
     pub(crate) async fn connect_via_socks5_upstream(
         &self,
         _session: &Session,
@@ -71,11 +74,11 @@ impl Proxy {
             kind: "outbound",
             tag: "socks5-upstream".to_owned(),
             protocol: "socks5",
-            feature: "outbound-socks5",
+            feature: "socks5",
         })
     }
 
-    #[cfg(feature = "outbound-vless")]
+    #[cfg(feature = "vless")]
     pub(crate) async fn connect_via_vless_upstream(
         &self,
         session: &Session,
@@ -154,7 +157,7 @@ impl Proxy {
         }
     }
 
-    #[cfg(not(feature = "outbound-vless"))]
+    #[cfg(not(feature = "vless"))]
     pub(crate) async fn connect_via_vless_upstream(
         &self,
         _session: &Session,
@@ -175,11 +178,11 @@ impl Proxy {
             kind: "outbound",
             tag: "vless-upstream".to_owned(),
             protocol: "vless",
-            feature: "outbound-vless",
+            feature: "vless",
         })
     }
 
-    #[cfg(feature = "outbound-hysteria2")]
+    #[cfg(feature = "hysteria2")]
     pub(crate) async fn connect_via_hysteria2_upstream(
         &self,
         session: &Session,
@@ -192,7 +195,7 @@ impl Proxy {
         Ok(TcpRelayStream::new(stream))
     }
 
-    #[cfg(not(feature = "outbound-hysteria2"))]
+    #[cfg(not(feature = "hysteria2"))]
     pub(crate) async fn connect_via_hysteria2_upstream(
         &self,
         _session: &Session,
@@ -204,11 +207,11 @@ impl Proxy {
             kind: "outbound",
             tag: "hysteria2-upstream".to_owned(),
             protocol: "hysteria2",
-            feature: "outbound-hysteria2",
+            feature: "hysteria2",
         })
     }
 
-    #[cfg(feature = "outbound-shadowsocks")]
+    #[cfg(feature = "shadowsocks")]
     pub(crate) async fn connect_via_shadowsocks_upstream(
         &self,
         session: &Session,
@@ -218,6 +221,7 @@ impl Proxy {
         cipher: &str,
     ) -> Result<TcpRelayStream, EngineError> {
         use zero_protocol_shadowsocks::CipherKind;
+
         let upstream = self
             .protocols
             .direct_outbound
@@ -230,15 +234,28 @@ impl Proxy {
                 format!("unknown shadowsocks cipher: {cipher}"),
             ))
         })?;
-        self.protocols
+        let password_bytes = password.as_bytes().to_vec();
+        let ss_session = self
+            .protocols
             .shadowsocks_outbound
-            .send_request(&mut metered, session, cipher_kind, password.as_bytes())
+            .send_request(&mut metered, session, cipher_kind, &password_bytes)
             .await?;
         self.record_session_outbound_traffic(session.id, metered.drain_traffic());
-        Ok(metered.into_inner().into())
+        let upstream = metered.into_inner();
+        let (app_stream, ss_plain_stream) = tokio::io::duplex(64 * 1024);
+        tokio::spawn(async move {
+            let _ = relay_shadowsocks_outbound(
+                ss_plain_stream,
+                upstream.into(),
+                ss_session,
+                password_bytes,
+            )
+            .await;
+        });
+        Ok(crate::transport::TcpRelayStream::new(app_stream))
     }
 
-    #[cfg(not(feature = "outbound-shadowsocks"))]
+    #[cfg(not(feature = "shadowsocks"))]
     pub(crate) async fn connect_via_shadowsocks_upstream(
         &self,
         _session: &Session,
@@ -251,11 +268,11 @@ impl Proxy {
             kind: "outbound",
             tag: "shadowsocks-upstream".to_owned(),
             protocol: "shadowsocks",
-            feature: "outbound-shadowsocks",
+            feature: "shadowsocks",
         })
     }
 
-    #[cfg(feature = "outbound-vmess")]
+    #[cfg(feature = "vmess")]
     pub(crate) async fn connect_via_vmess_upstream(
         &self,
         session: &Session,
@@ -344,7 +361,7 @@ impl Proxy {
         Ok(sock.into_inner())
     }
 
-    #[cfg(not(feature = "outbound-vmess"))]
+    #[cfg(not(feature = "vmess"))]
     pub(crate) async fn connect_via_vmess_upstream(
         &self,
         _session: &Session,
@@ -360,11 +377,11 @@ impl Proxy {
             kind: "outbound",
             tag: "vmess-upstream".to_owned(),
             protocol: "vmess",
-            feature: "outbound-vmess",
+            feature: "vmess",
         })
     }
 
-    #[cfg(feature = "outbound-trojan")]
+    #[cfg(feature = "trojan")]
     pub(crate) async fn connect_via_trojan_upstream(
         &self,
         session: &Session,
@@ -384,7 +401,7 @@ impl Proxy {
             disable_sni: false,
             ca_cert_path: None,
             insecure,
-            alpn: vec![],
+            alpn: Vec::new(),
         };
         let tls_stream = zero_transport::tls::connect_tls_upstream(
             upstream,
@@ -398,11 +415,20 @@ impl Proxy {
             .trojan_outbound
             .send_request(&mut metered, session, password)
             .await?;
-        self.record_session_outbound_traffic(session.id, metered.drain_traffic());
+        metered.flush().await?;
+        let traffic = metered.drain_traffic();
+        tracing::debug!(
+            session_id = session.id,
+            trojan_handshake_tx = traffic.written_bytes,
+            target = ?session.target,
+            target_port = session.port,
+            "trojan upstream connected"
+        );
+        self.record_session_outbound_traffic(session.id, traffic);
         Ok(metered.into_inner())
     }
 
-    #[cfg(not(feature = "outbound-trojan"))]
+    #[cfg(not(feature = "trojan"))]
     pub(crate) async fn connect_via_trojan_upstream(
         &self,
         _session: &Session,
@@ -416,7 +442,154 @@ impl Proxy {
             kind: "outbound",
             tag: "trojan-upstream".to_owned(),
             protocol: "trojan",
-            feature: "outbound-trojan",
+            feature: "trojan",
         })
     }
+
+    /// Mieru upstream (stub — feature disabled).
+    #[cfg(not(feature = "mieru"))]
+    pub(crate) async fn connect_via_mieru_upstream(
+        &self,
+        _session: &Session,
+        _server: &str,
+        _port: u16,
+        _username: &str,
+        _password: &str,
+    ) -> Result<TcpRelayStream, EngineError> {
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "outbound",
+            tag: "mieru-upstream".to_owned(),
+            protocol: "mieru",
+            feature: "mieru",
+        })
+    }
+
+    /// Mieru upstream — connect + handshake, return raw TCP stream.
+    #[cfg(feature = "mieru")]
+    pub(crate) async fn connect_via_mieru_upstream(
+        &self,
+        session: &Session,
+        server: &str,
+        port: u16,
+        username: &str,
+        password: &str,
+    ) -> Result<TcpRelayStream, EngineError> {
+        let socket = self
+            .protocols
+            .direct_outbound
+            .connect_host(server, port, self.resolver.as_ref())
+            .await?;
+
+        // Wrap in TcpRelayStream for AsyncSocket compatibility
+        let mut stream = TcpRelayStream::new(socket);
+
+        let outbound = zero_protocol_mieru::MieruOutbound::connect(
+            &mut stream,
+            username,
+            password,
+            &session.target,
+            session.port,
+        )
+        .await
+        .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru handshake: {e}"))))?;
+
+        Ok(TcpRelayStream::new(
+            crate::outbound::mieru::MieruTcpStream::new(stream, outbound),
+        ))
+    }
+}
+
+#[cfg(feature = "shadowsocks")]
+async fn relay_shadowsocks_outbound(
+    app_stream: tokio::io::DuplexStream,
+    upstream: TcpRelayStream,
+    ss_session: zero_protocol_shadowsocks::ShadowsocksOutboundSession,
+    password: Vec<u8>,
+) -> std::io::Result<()> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use zero_protocol_shadowsocks::{
+        decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, encrypt_tcp_chunk,
+    };
+
+    let cipher = ss_session.cipher;
+    let (mut app_read, mut app_write) = tokio::io::split(app_stream);
+    let (mut upstream_read, mut upstream_write) = tokio::io::split(upstream);
+
+    let upload_key = ss_session.session_key;
+    let mut upload_nonce = ss_session.next_upload_nonce;
+    let upload = tokio::spawn(async move {
+        let mut buf = [0u8; 0x3fff];
+        loop {
+            let n = app_read.read(&mut buf).await?;
+            if n == 0 {
+                let _ = upstream_write.shutdown().await;
+                return Ok::<(), std::io::Error>(());
+            }
+            let chunk = encrypt_tcp_chunk(cipher, &upload_key, &mut upload_nonce, &buf[..n])
+                .map_err(protocol_to_io)?;
+            upstream_write.write_all(&chunk).await?;
+            upstream_write.flush().await?;
+        }
+    });
+
+    let download = tokio::spawn(async move {
+        let mut salt = vec![0u8; cipher.salt_len()];
+        upstream_read.read_exact(&mut salt).await?;
+        let download_key = ss_derive_outbound_key(cipher, &password, &salt)?;
+        let mut download_nonce = 0;
+
+        loop {
+            let mut encrypted_length = vec![0u8; 2 + cipher.tag_len()];
+            if upstream_read
+                .read_exact(&mut encrypted_length)
+                .await
+                .is_err()
+            {
+                let _ = app_write.shutdown().await;
+                return Ok::<(), std::io::Error>(());
+            }
+            let payload_len = decrypt_tcp_chunk_length(
+                cipher,
+                &download_key,
+                &mut download_nonce,
+                &encrypted_length,
+            )
+            .map_err(protocol_to_io)?;
+            let mut encrypted_payload = vec![0u8; payload_len + cipher.tag_len()];
+            upstream_read.read_exact(&mut encrypted_payload).await?;
+            let plain = decrypt_tcp_chunk_payload(
+                cipher,
+                &download_key,
+                &mut download_nonce,
+                payload_len,
+                &encrypted_payload,
+            )
+            .map_err(protocol_to_io)?;
+            app_write.write_all(&plain).await?;
+            app_write.flush().await?;
+        }
+    });
+
+    let _ = tokio::try_join!(upload, download);
+    Ok(())
+}
+
+#[cfg(feature = "shadowsocks")]
+fn ss_derive_outbound_key(
+    cipher: zero_protocol_shadowsocks::CipherKind,
+    password: &[u8],
+    salt: &[u8],
+) -> std::io::Result<Vec<u8>> {
+    if cipher.is_blake3() {
+        zero_protocol_shadowsocks::derive_key_blake3(password, salt, cipher.key_len())
+            .map_err(protocol_to_io)
+    } else {
+        zero_protocol_shadowsocks::derive_key(password, salt, cipher.key_len())
+            .map_err(protocol_to_io)
+    }
+}
+
+#[cfg(feature = "shadowsocks")]
+fn protocol_to_io(error: zero_core::Error) -> std::io::Error {
+    std::io::Error::other(error.to_string())
 }

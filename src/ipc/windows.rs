@@ -8,7 +8,7 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use tokio::net::windows::named_pipe::{ClientOptions, ServerOptions};
+use tokio::net::windows::named_pipe::ServerOptions;
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use tracing::{debug, error, info, warn};
@@ -69,7 +69,7 @@ async fn run_ipc_server(
     let mut connections = JoinSet::new();
 
     loop {
-        let mut server = match ServerOptions::new().create(pipe_name) {
+        let server = match ServerOptions::new().create(pipe_name) {
             Ok(s) => s,
             Err(e) => {
                 error!(pipe = %pipe_name, error = %e, "failed to create named pipe");

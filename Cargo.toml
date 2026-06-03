@@ -10,37 +10,27 @@ homepage.workspace = true
 [features]
 default = ["full", "status-api"]
 full = [
-    "inbound-socks5",
-    "inbound-http-connect",
-    "inbound-mixed",
-    "inbound-vless",
-    "inbound-hysteria2",
-    "outbound-socks5",
-    "outbound-vless",
-    "outbound-hysteria2",
-    "inbound-shadowsocks",
-    "outbound-shadowsocks",
-    "inbound-trojan",
-    "outbound-trojan",
-    "inbound-vmess",
-    "outbound-vmess",
+    "socks5",
+    "http-connect",
+    "mixed",
+    "vless",
+    "hysteria2",
+    "shadowsocks",
+    "trojan",
+    "vmess",
+    "mieru",
     "dns-udp",
 ]
 dns-udp = ["zero-proxy/dns-udp"]
-inbound-socks5 = ["zero-proxy/inbound-socks5"]
-inbound-http-connect = ["zero-proxy/inbound-http-connect"]
-inbound-mixed = ["zero-proxy/inbound-mixed"]
-inbound-vless = ["zero-proxy/inbound-vless"]
-inbound-hysteria2 = ["zero-proxy/inbound-hysteria2"]
-inbound-shadowsocks = ["zero-proxy/inbound-shadowsocks"]
-inbound-trojan = ["zero-proxy/inbound-trojan"]
-outbound-trojan = ["zero-proxy/outbound-trojan"]
-outbound-socks5 = ["zero-proxy/outbound-socks5"]
-outbound-vless = ["zero-proxy/outbound-vless"]
-outbound-hysteria2 = ["zero-proxy/outbound-hysteria2"]
-outbound-shadowsocks = ["zero-proxy/outbound-shadowsocks"]
-inbound-vmess = ["zero-proxy/inbound-vmess"]
-outbound-vmess = ["zero-proxy/outbound-vmess"]
+socks5 = ["zero-proxy/socks5"]
+http-connect = ["zero-proxy/http-connect"]
+mixed = ["zero-proxy/mixed"]
+vless = ["zero-proxy/vless"]
+hysteria2 = ["zero-proxy/hysteria2"]
+shadowsocks = ["zero-proxy/shadowsocks"]
+trojan = ["zero-proxy/trojan"]
+vmess = ["zero-proxy/vmess"]
+mieru = ["zero-proxy/mieru"]
 status-api = []
 event-dispatcher = ["dep:zero-connector", "zero-connector/event-dispatcher"]
 sink-jsonl = ["event-dispatcher", "zero-connector/sink-jsonl"]
@@ -66,6 +56,7 @@ members = [
     "protocols/shadowsocks",
     "protocols/trojan",
     "protocols/vmess",
+    "protocols/mieru",
     "crates/dns",
     "crates/engine",
     "crates/ffi",
@@ -93,6 +84,7 @@ tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 
 [dependencies]
 serde.workspace = true
@@ -100,6 +92,7 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+rustls.workspace = true
 ureq = { version = "2", default-features = false, features = ["tls"] }
 zero-api = { path = "crates/api" }
 zero-config = { path = "crates/config" }

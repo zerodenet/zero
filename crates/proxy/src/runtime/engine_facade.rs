@@ -107,12 +107,12 @@ impl Proxy {
         self.engine.record_session_inbound_tx(session_id, bytes);
     }
 
-    #[cfg(any(feature = "outbound-socks5", feature = "outbound-vless"))]
+    #[cfg(any(feature = "socks5", feature = "vless"))]
     pub(crate) fn record_session_outbound_rx(&self, session_id: u64, bytes: u64) {
         self.engine.record_session_outbound_rx(session_id, bytes);
     }
 
-    #[cfg(any(feature = "outbound-socks5", feature = "outbound-vless"))]
+    #[cfg(any(feature = "socks5", feature = "vless"))]
     pub(crate) fn record_session_outbound_tx(&self, session_id: u64, bytes: u64) {
         self.engine.record_session_outbound_tx(session_id, bytes);
     }
@@ -126,7 +126,7 @@ impl Proxy {
         self.record_session_inbound_tx(session_id, traffic.written_bytes);
     }
 
-    #[cfg(any(feature = "outbound-socks5", feature = "outbound-vless"))]
+    #[cfg(any(feature = "socks5", feature = "vless"))]
     pub(crate) fn record_session_outbound_traffic(&self, session_id: u64, traffic: StreamTraffic) {
         if traffic.is_empty() {
             return;
@@ -136,57 +136,57 @@ impl Proxy {
         self.record_session_outbound_tx(session_id, traffic.written_bytes);
     }
 
-    #[cfg(feature = "inbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn record_udp_upstream_association_created(&self) {
         self.engine.record_udp_upstream_association_created();
     }
 
-    #[cfg(feature = "inbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn record_udp_upstream_association_reused(&self) {
         self.engine.record_udp_upstream_association_reused();
     }
 
-    #[cfg(feature = "outbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn record_udp_upstream_association_closed(&self) {
         self.engine.record_udp_upstream_association_closed();
     }
 
-    #[cfg(feature = "outbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn record_udp_upstream_association_idle_timeout(&self) {
         self.engine.record_udp_upstream_association_idle_timeout();
     }
 
-    #[cfg(feature = "outbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn record_udp_upstream_association_dropped(&self) {
         self.engine.record_udp_upstream_association_dropped();
     }
 
-    #[cfg(feature = "inbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn record_udp_upstream_association_failed(&self) {
         self.engine.record_udp_upstream_association_failed();
     }
 
-    #[cfg(feature = "inbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn record_udp_upstream_send_failure(&self) {
         self.engine.record_udp_upstream_send_failure();
     }
 
-    #[cfg(feature = "inbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn record_udp_upstream_recv_failure(&self) {
         self.engine.record_udp_upstream_recv_failure();
     }
 
-    #[cfg(feature = "inbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn record_udp_upstream_packet_sent(&self) {
         self.engine.record_udp_upstream_packet_sent();
     }
 
-    #[cfg(feature = "inbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn record_udp_upstream_packet_received(&self) {
         self.engine.record_udp_upstream_packet_received();
     }
 
-    #[cfg(feature = "inbound-socks5")]
+    #[cfg(feature = "socks5")]
     pub(crate) fn udp_upstream_idle_timeout(&self) -> std::time::Duration {
         self.engine.udp_upstream_idle_timeout()
     }

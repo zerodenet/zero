@@ -20,6 +20,8 @@ pub struct ShadowsocksAccept {
     pub session_key: Vec<u8>,
     /// Cipher kind for subsequent chunks.
     pub cipher: super::shared::CipherKind,
+    /// Next nonce for decrypting client-to-server chunks after the first request chunk.
+    pub next_upload_nonce: u64,
 }
 
 impl ShadowsocksInbound {
@@ -36,7 +38,7 @@ impl ShadowsocksInbound {
         cipher: super::shared::CipherKind,
         password: &[u8],
     ) -> Result<ShadowsocksAccept, Error> {
-        use super::shared::{aead_decrypt, parse_target_data, read_exact};
+        use super::shared::{parse_target_data, read_exact, read_tcp_chunk};
 
         let key_len = cipher.key_len();
         let salt_len = cipher.salt_len();
@@ -57,20 +59,8 @@ impl ShadowsocksInbound {
             super::shared::derive_key(password, &salt, key_len)?
         };
 
-        // Read first chunk (2-byte length + encrypted data)
-        let mut len_buf = [0u8; 2];
-        read_exact(stream, &mut len_buf).await?;
-        let chunk_len = u16::from_be_bytes(len_buf) as usize;
-        if chunk_len < cipher.tag_len() {
-            return Err(Error::Protocol("ss: chunk too short"));
-        }
-
-        let mut chunk = vec![0u8; chunk_len];
-        read_exact(stream, &mut chunk).await?;
-
-        // Decrypt: nonce is zero for first chunk
-        let nonce = [0u8; 12];
-        let plain = aead_decrypt(cipher, &key, &nonce, &chunk)?;
+        let mut nonce = 0;
+        let plain = read_tcp_chunk(stream, cipher, &key, &mut nonce).await?;
 
         // Parse target from plaintext
         let (target, port, payload_offset) = parse_target_data(&plain)?;
@@ -83,6 +73,7 @@ impl ShadowsocksInbound {
             remaining_payload,
             session_key: key,
             cipher,
+            next_upload_nonce: nonce,
         })
     }
 
@@ -94,10 +85,7 @@ impl ShadowsocksInbound {
         nonce_counter: &mut u64,
         data: &[u8],
     ) -> Result<Vec<u8>, Error> {
-        let mut nonce = [0u8; 12];
-        nonce[..8].copy_from_slice(&nonce_counter.to_be_bytes());
-        *nonce_counter += 1;
-        super::shared::aead_encrypt(cipher, key, &nonce, data)
+        super::shared::encrypt_tcp_chunk(cipher, key, nonce_counter, data)
     }
 
     /// Decrypt a ciphertext chunk for client→server direction.
@@ -108,9 +96,22 @@ impl ShadowsocksInbound {
         nonce_counter: &mut u64,
         data: &[u8],
     ) -> Result<Vec<u8>, Error> {
-        let mut nonce = [0u8; 12];
-        nonce[..8].copy_from_slice(&nonce_counter.to_be_bytes());
-        *nonce_counter += 1;
-        super::shared::aead_decrypt(cipher, key, &nonce, data)
+        let length_size = super::shared::TCP_CHUNK_SIZE_LEN + cipher.tag_len();
+        if data.len() < length_size {
+            return Err(Error::Protocol("ss: chunk too short"));
+        }
+        let payload_len = super::shared::decrypt_tcp_chunk_length(
+            cipher,
+            key,
+            nonce_counter,
+            &data[..length_size],
+        )?;
+        super::shared::decrypt_tcp_chunk_payload(
+            cipher,
+            key,
+            nonce_counter,
+            payload_len,
+            &data[length_size..],
+        )
     }
 }

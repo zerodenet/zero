@@ -294,7 +294,7 @@ impl Proxy {
                     }
                 }
             }
-            #[cfg(feature = "outbound-shadowsocks")]
+            #[cfg(feature = "shadowsocks")]
             UdpFlowOutbound::Shadowsocks {
                 tag: _,
                 server,
@@ -337,11 +337,11 @@ impl Proxy {
                     }
                 }
             }
-            #[cfg(not(feature = "outbound-shadowsocks"))]
+            #[cfg(not(feature = "shadowsocks"))]
             UdpFlowOutbound::Shadowsocks { .. } => {
                 return Err(EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
-                    "Shadowsocks UDP outbound requires feature `outbound-shadowsocks`",
+                    "Shadowsocks UDP outbound requires feature `shadowsocks`",
                 )));
             }
         }

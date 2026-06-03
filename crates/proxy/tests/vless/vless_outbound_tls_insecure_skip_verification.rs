@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-#[cfg(all(feature = "inbound-socks5", feature = "outbound-vless"))]
+#[cfg(all(feature = "socks5", feature = "vless"))]
 async fn vless_outbound_tls_insecure_skip_verification() {
     let echo_port = free_port();
     let upstream_port = free_port();

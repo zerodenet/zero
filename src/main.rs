@@ -30,6 +30,12 @@ async fn main() {
 }
 
 async fn try_main() -> Result<(), Box<dyn Error>> {
+    // Install rustls crypto provider before any TLS operation.
+    // Must be called once at process start (rustls 0.23 requirement).
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("rustls ring crypto provider");
+
     match cli::parse_args(env::args())? {
         cli::Command::Run {
             config_path,

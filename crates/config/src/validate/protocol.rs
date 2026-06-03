@@ -132,6 +132,14 @@ pub(super) fn validate_inbound_protocol(
             Ok(())
         }
         InboundProtocolConfig::Direct { .. } => Ok(()),
+        InboundProtocolConfig::Mieru { users } => {
+            if users.is_empty() {
+                return Err(ConfigError::InvalidInbound(
+                    "`mieru` inbound requires at least one user".to_owned(),
+                ));
+            }
+            Ok(())
+        }
     }
 }
 
@@ -272,6 +280,15 @@ pub(super) fn validate_outbound_protocol(
             Ok(())
         }
         OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => Ok(()),
+        OutboundProtocolConfig::Mieru {
+            server,
+            port,
+            username: _,
+            password: _,
+        } => {
+            validate_outbound_endpoint("mieru", server, *port)?;
+            Ok(())
+        }
     }
 }
 

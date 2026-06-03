@@ -76,7 +76,7 @@ pub trait InboundProtocol: Send + Sync {
 }
 ```
 
-**Protocol implementors** (SOCKS5, HTTP CONNECT, VLESS, Hysteria2, Shadowsocks, Trojan) only implement this trait. Each handler provides:
+**Protocol implementors** (SOCKS5, HTTP CONNECT, VLESS, Hysteria2, Shadowsocks, Trojan, VMess, Mieru) only implement this trait. Each handler provides:
 
 - `accept` -- authenticate and extract the target address into a `Session`
 - `send_ok` -- notify the client that the tunnel is established (protocol-specific response)
@@ -216,6 +216,8 @@ All inbound handlers implement `InboundProtocol` and feed into `serve_inbound()`
 | `hysteria2` | Hysteria2 | QUIC |
 | `shadowsocks` | Shadowsocks | AEAD + 2022-blake3 |
 | `trojan` | Trojan | TCP |
+| `vmess` | VMess | Experimental AEAD implementation; not compatible with `cipher: auto` exports yet |
+| `mieru` | Mieru | Registered adapter; TCP single-hop outbound uses encrypted stream wrapper; relay-chain hop not supported yet |
 | `direct` | Direct | Fixed-target forwarder, no handshake |
 | `tun` | TUN | Virtual network interface, consumes `NetworkStack` |
 | `system` | System | OS-level traffic redirect, consumes `SystemTcpStack` |

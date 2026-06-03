@@ -26,3 +26,7 @@
 
 - `v0.0.x`：未定型推进线，只推进第三位
 - `v0.1.0`：第一次正式发布版，达不到正式发布条件前不启用
+
+Additional v0.0.x notes:
+
+- `v0.0.5` - protocol correctness and real-node compatibility pass: TCP relay direction, Trojan TCP request write, Shadowsocks AEAD framing/KDF/outbound stream wrapping, Mieru single-hop adapter/outbound stream, file logging guard/rotation fixes, and explicit VMess compatibility limits.

@@ -1,6 +1,6 @@
 use super::*;
 
-#[cfg(feature = "outbound-vless")]
+#[cfg(feature = "vless")]
 #[tokio::test]
 async fn relays_tcp_through_vless_reality_zero_inbound() {
     let echo_port = free_port();

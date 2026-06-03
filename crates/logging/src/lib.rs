@@ -43,12 +43,15 @@ pub fn init_tracing(config: &LogConfig) {
     let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> =
         vec![Box::new(stderr_layer), Box::new(WarningBridgeLayer)];
 
+    let mut guards = Vec::new();
+
     for file_cfg in &config.files {
         let level = file_cfg.level.as_deref().unwrap_or(default_level);
         let file_filter = EnvFilter::try_new(level).unwrap_or_else(|_| EnvFilter::new(level));
         let writer = RotatingWriter::new(&file_cfg.path, file_cfg.max_bytes, file_cfg.max_files)
             .expect("failed to open log file");
-        let (non_blocking, _guard) = tracing_appender::non_blocking(writer);
+        let (non_blocking, guard) = tracing_appender::non_blocking(writer);
+        guards.push(guard);
 
         let file_rate_filter = {
             let rl = rate_limiter.clone();
@@ -68,8 +71,11 @@ pub fn init_tracing(config: &LogConfig) {
         layers.push(Box::new(file_layer));
     }
 
+    let _ = LOG_GUARDS.set(guards);
     let _ = tracing_subscriber::registry().with(layers).try_init();
 }
+
+static LOG_GUARDS: OnceLock<Vec<tracing_appender::non_blocking::WorkerGuard>> = OnceLock::new();
 
 /// Callback that receives every `warn` / `error` log line so it can be
 /// forwarded to the engine event log.
@@ -220,15 +226,12 @@ impl RotatingWriter {
 impl Write for RotatingWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.written + buf.len() as u64 > self.max_bytes {
-            self.file.write_all(buf)?;
-            self.file.flush()?;
             self.rotate()?;
-            Ok(buf.len())
-        } else {
-            let n = self.file.write(buf)?;
-            self.written += n as u64;
-            Ok(n)
         }
+
+        let n = self.file.write(buf)?;
+        self.written += n as u64;
+        Ok(n)
     }
 
     fn flush(&mut self) -> io::Result<()> {

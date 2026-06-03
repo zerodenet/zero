@@ -63,7 +63,7 @@ impl Proxy {
         }
     }
 
-    async fn establish_tcp_candidate(
+    pub(crate) async fn establish_tcp_candidate(
         &self,
         session: &Session,
         candidate: ResolvedLeafOutbound<'_>,
@@ -279,6 +279,30 @@ impl Proxy {
                     }),
                 }
             }
+            ResolvedLeafOutbound::Mieru {
+                tag,
+                server,
+                port,
+                username,
+                password,
+            } => {
+                match self
+                    .connect_via_mieru_upstream(session, server, port, username, password)
+                    .await
+                {
+                    Ok(upstream) => Ok(EstablishedTcpOutbound::Mieru {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        upstream,
+                    }),
+                    Err(error) => Err(TcpOutboundFailure {
+                        stage: "connect_upstream_mieru",
+                        error,
+                        upstream_endpoint: Some((server.to_owned(), port)),
+                    }),
+                }
+            }
         };
 
         // ── Record health after connection attempt ──
@@ -321,6 +345,7 @@ impl Proxy {
             | EstablishedTcpOutbound::Shadowsocks { upstream, .. }
             | EstablishedTcpOutbound::Trojan { upstream, .. }
             | EstablishedTcpOutbound::Vmess { upstream, .. }
+            | EstablishedTcpOutbound::Mieru { upstream, .. }
             | EstablishedTcpOutbound::Relay { upstream } => upstream,
             EstablishedTcpOutbound::Block { .. } => {
                 return Err(TcpOutboundFailure {
@@ -373,7 +398,7 @@ async fn send_hop_protocol_request(
     session: &Session,
 ) -> Result<(), EngineError> {
     match hop {
-        #[cfg(feature = "outbound-socks5")]
+        #[cfg(feature = "socks5")]
         ResolvedLeafOutbound::Socks5 {
             username, password, ..
         } => proxy
@@ -391,7 +416,7 @@ async fn send_hop_protocol_request(
             )
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e))),
-        #[cfg(feature = "outbound-vless")]
+        #[cfg(feature = "vless")]
         ResolvedLeafOutbound::Vless { id, flow, .. } => {
             let uuid = zero_protocol_vless::parse_uuid(id)?;
             if let Some(f) = flow {
@@ -410,7 +435,7 @@ async fn send_hop_protocol_request(
                     .map_err(|e| EngineError::Io(std::io::Error::other(e)))
             }
         }
-        #[cfg(feature = "outbound-shadowsocks")]
+        #[cfg(feature = "shadowsocks")]
         ResolvedLeafOutbound::Shadowsocks {
             password, cipher, ..
         } => {
@@ -424,16 +449,17 @@ async fn send_hop_protocol_request(
             ShadowsocksOutbound
                 .send_request(stream, session, kind, password.as_bytes())
                 .await
+                .map(|_| ())
                 .map_err(|e| EngineError::Io(std::io::Error::other(e)))
         }
-        #[cfg(feature = "outbound-trojan")]
+        #[cfg(feature = "trojan")]
         ResolvedLeafOutbound::Trojan { password, .. } => proxy
             .protocols
             .trojan_outbound
             .send_request(stream, session, password)
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e))),
-        #[cfg(feature = "outbound-vmess")]
+        #[cfg(feature = "vmess")]
         ResolvedLeafOutbound::Vmess { id, cipher, .. } => {
             let uuid = zero_protocol_vmess::parse_uuid(id).map_err(|e| {
                 EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
@@ -450,6 +476,11 @@ async fn send_hop_protocol_request(
                 .await
                 .map_err(|e| EngineError::Io(std::io::Error::other(e)))
         }
+        #[cfg(feature = "mieru")]
+        ResolvedLeafOutbound::Mieru { .. } => Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "mieru relay hop is not supported yet",
+        ))),
         _ => Err(EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "relay hop protocol not supported or disabled",
@@ -468,6 +499,7 @@ fn extract_chained_tag(candidate: &ResolvedLeafOutbound<'_>) -> Option<String> {
         ResolvedLeafOutbound::Shadowsocks { tag, .. } => Some(tag.to_string()),
         ResolvedLeafOutbound::Trojan { tag, .. } => Some(tag.to_string()),
         ResolvedLeafOutbound::Vmess { tag, .. } => Some(tag.to_string()),
+        ResolvedLeafOutbound::Mieru { tag, .. } => Some(tag.to_string()),
     }
 }
 
@@ -479,7 +511,8 @@ fn hop_addr(hop: &ResolvedLeafOutbound<'_>) -> zero_core::Address {
         | ResolvedLeafOutbound::Hysteria2 { server, .. }
         | ResolvedLeafOutbound::Shadowsocks { server, .. }
         | ResolvedLeafOutbound::Trojan { server, .. }
-        | ResolvedLeafOutbound::Vmess { server, .. } => Address::Domain(server.to_string()),
+        | ResolvedLeafOutbound::Vmess { server, .. }
+        | ResolvedLeafOutbound::Mieru { server, .. } => Address::Domain(server.to_string()),
         _ => Address::Domain("unknown".to_owned()),
     }
 }
@@ -491,7 +524,8 @@ fn hop_port(hop: &ResolvedLeafOutbound<'_>) -> u16 {
         | ResolvedLeafOutbound::Hysteria2 { port, .. }
         | ResolvedLeafOutbound::Shadowsocks { port, .. }
         | ResolvedLeafOutbound::Trojan { port, .. }
-        | ResolvedLeafOutbound::Vmess { port, .. } => *port,
+        | ResolvedLeafOutbound::Vmess { port, .. }
+        | ResolvedLeafOutbound::Mieru { port, .. } => *port,
         _ => 0,
     }
 }

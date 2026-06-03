@@ -56,13 +56,28 @@ pub(crate) trait InboundProtocol: Send + Sync {
         &self,
         client: Self::ClientStream,
         upstream: TcpRelayStream,
+        proxy: &Proxy,
+        session_id: u64,
         up_bps: Option<u64>,
         down_bps: Option<u64>,
     ) -> Result<(), EngineError> {
-        relay_bidirectional_metered_throttled(client, upstream, |_| {}, |_| {}, up_bps, down_bps)
-            .await
-            .map(|_| ())
-            .map_err(EngineError::Io)
+        relay_bidirectional_metered_throttled(
+            client,
+            upstream,
+            |bytes| {
+                proxy.record_session_inbound_rx(session_id, bytes);
+                proxy.record_session_outbound_tx(session_id, bytes);
+            },
+            |bytes| {
+                proxy.record_session_outbound_rx(session_id, bytes);
+                proxy.record_session_inbound_tx(session_id, bytes);
+            },
+            up_bps,
+            down_bps,
+        )
+        .await
+        .map(|_| ())
+        .map_err(EngineError::Io)
     }
 }
 
@@ -127,7 +142,14 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
 
             let relay_result = tokio::time::timeout(
                 Duration::from_secs(idle_secs),
-                protocol.relay(client, result.upstream, session.up_bps, session.down_bps),
+                protocol.relay(
+                    client,
+                    result.upstream,
+                    proxy,
+                    session.id,
+                    session.up_bps,
+                    session.down_bps,
+                ),
             )
             .await;
 

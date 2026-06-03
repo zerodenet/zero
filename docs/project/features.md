@@ -23,31 +23,35 @@ Each inbound protocol is independently feature-gated and may be trimmed as neede
 
 | Feature | Protocol | Extra dependencies |
 |---------|------|----------|
-| `inbound-socks5` | SOCKS5 inbound | -- |
-| `inbound-http-connect` | HTTP CONNECT inbound | -- |
-| `inbound-mixed` | Mixed inbound (same port SOCKS5 + HTTP CONNECT) | Implies `inbound-socks5` + `inbound-http-connect` |
-| `inbound-vless` | VLESS inbound | TLS / Reality / WebSocket / gRPC / H2 / QUIC transport |
-| `inbound-hysteria2` | Hysteria2 inbound | QUIC (quinn) |
-| `inbound-shadowsocks` | Shadowsocks inbound | AEAD encryption + 2022-blake3 |
-| `inbound-trojan` | Trojan inbound | TLS |
+| `socks5` | SOCKS5 inbound | -- |
+| `http-connect` | HTTP CONNECT inbound | -- |
+| `mixed` | Mixed inbound (same port SOCKS5 + HTTP CONNECT) | Implies `socks5` + `http-connect` |
+| `vless` | VLESS inbound | TLS / Reality / WebSocket / gRPC / H2 / QUIC transport |
+| `hysteria2` | Hysteria2 inbound | QUIC (quinn) |
+| `shadowsocks` | Shadowsocks inbound | AEAD encryption + 2022-blake3 |
+| `trojan` | Trojan inbound | TLS |
+| `vmess` | VMess inbound | Experimental AEAD implementation |
+| `mieru` | Mieru inbound | XChaCha20-Poly1305 session framing |
 | -- | `direct` inbound | Always compiled, no feature gate required (fixed-target forwarder) |
 | -- | `tun` inbound | Always compiled, no feature gate required (virtual network interface: Linux ioctl, macOS utun socket, Windows Wintun) |
 
 ```bash
 # Trim example: SOCKS5 + HTTP CONNECT only
 cargo build --release --no-default-features \
-  --features inbound-socks5,inbound-http-connect,status-api
+  --features socks5,http-connect,status-api
 ```
 
 ## Outbound Protocols
 
 | Feature | Protocol | Extra dependencies |
 |---------|------|----------|
-| `outbound-socks5` | SOCKS5 outbound | -- |
-| `outbound-vless` | VLESS outbound | Same transport stack as inbound |
-| `outbound-hysteria2` | Hysteria2 outbound | QUIC (quinn) |
-| `outbound-shadowsocks` | Shadowsocks outbound | Same encryption as inbound |
-| `outbound-trojan` | Trojan outbound | TLS |
+| `socks5` | SOCKS5 outbound | -- |
+| `vless` | VLESS outbound | Same transport stack as inbound |
+| `hysteria2` | Hysteria2 outbound | QUIC (quinn) |
+| `shadowsocks` | Shadowsocks outbound | Same encryption as inbound |
+| `trojan` | Trojan outbound | TLS |
+| `vmess` | VMess outbound | Experimental AEAD implementation; `cipher: auto` is not supported yet |
+| `mieru` | Mieru outbound | Single-hop TCP routing; relay-chain hop is not supported yet |
 
 `direct` and `block` outbounds are always available, no feature gate required -- they need no protocol implementation.
 
@@ -96,11 +100,12 @@ Server scenario:  + panel-connector
 
 ## Relation to Protocol Implementations
 
-Protocols present in the codebase but not in `full`:
+Protocol crates are compiled through the root Cargo features listed above. Protocol presence in the workspace does not by itself mean production compatibility with every external ecosystem export.
 
 | Protocol | Feature | Notes |
 |------|---------|------|
-| VMess | -- | Crate skeleton only, not implemented. No feature gate |
+| VMess | `vmess` | Experimental AEAD implementation. `cipher: auto` from Xray/Clash exports is not supported yet |
+| Mieru | `mieru` | Registered adapter with single-hop TCP outbound support. Relay-chain hop support is not implemented |
 | HTTP CONNECT outbound | -- | Outbound direction not implemented |
 
 Asymmetric inbound/outbound features are normal -- some protocols do not need the opposite direction.

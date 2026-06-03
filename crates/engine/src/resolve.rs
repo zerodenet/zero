@@ -68,6 +68,13 @@ pub enum ResolvedLeafOutbound<'a> {
         ws: Option<&'a zero_config::WebSocketConfig>,
         grpc: Option<&'a zero_config::GrpcConfig>,
     },
+    Mieru {
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        username: &'a str,
+        password: &'a str,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -292,6 +299,18 @@ fn resolve_leaf_outbound<'a>(
             tls: tls.as_ref(),
             ws: ws.as_ref(),
             grpc: grpc.as_ref(),
+        },
+        OutboundTarget::Mieru {
+            server,
+            port,
+            username,
+            password,
+        } => ResolvedLeafOutbound::Mieru {
+            tag,
+            server,
+            port: *port,
+            username,
+            password,
         },
     }
 }

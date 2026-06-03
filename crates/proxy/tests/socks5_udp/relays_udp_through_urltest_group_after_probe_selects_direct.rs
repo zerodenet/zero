@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-#[cfg(feature = "outbound-socks5")]
+#[cfg(feature = "socks5")]
 async fn relays_udp_through_urltest_group_after_probe_selects_direct() {
     let echo_port = free_udp_port();
     let probe_port = free_port();

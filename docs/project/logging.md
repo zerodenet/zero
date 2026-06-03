@@ -83,3 +83,9 @@ cargo run -- run examples/v0.0.1/basic.json
 - `upstream_port`
 - `idle_timeout_seconds`
 - `error`
+
+## File log sinks
+
+Runtime config can define file log sinks under `runtime.log.files`. File sinks use non-blocking tracing appenders and keep their worker guards alive for the process lifetime, so configured log files are written after startup instead of staying empty.
+
+When `max_bytes` and `max_files` are configured, rotation is checked before writing a new oversized entry. This keeps the active file within the configured size boundary except for a single log entry that is itself larger than `max_bytes`.

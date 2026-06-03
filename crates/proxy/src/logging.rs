@@ -186,7 +186,7 @@ pub(crate) fn log_urltest_group_target_changed(
     }
 }
 
-#[cfg(feature = "inbound-socks5")]
+#[cfg(feature = "socks5")]
 pub(crate) fn log_udp_upstream_association_created(
     inbound_tag: &str,
     outbound_tag: &str,
@@ -205,7 +205,7 @@ pub(crate) fn log_udp_upstream_association_created(
     );
 }
 
-#[cfg(feature = "inbound-socks5")]
+#[cfg(feature = "socks5")]
 pub(crate) fn log_udp_upstream_association_reused(
     inbound_tag: &str,
     outbound_tag: &str,
@@ -222,7 +222,7 @@ pub(crate) fn log_udp_upstream_association_reused(
     );
 }
 
-#[cfg(feature = "inbound-socks5")]
+#[cfg(feature = "socks5")]
 pub(crate) fn log_udp_upstream_association_idle_timeout(
     inbound_tag: &str,
     outbound_tag: &str,
@@ -241,7 +241,7 @@ pub(crate) fn log_udp_upstream_association_idle_timeout(
     );
 }
 
-#[cfg(feature = "inbound-socks5")]
+#[cfg(feature = "socks5")]
 pub(crate) fn log_udp_upstream_association_dropped(
     inbound_tag: &str,
     outbound_tag: &str,

@@ -7,8 +7,7 @@ use tracing::{debug, info, warn};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
-use super::super::runtime::upstream::VlessUpstream;
-use super::super::transport::TcpRelayStream;
+use super::super::transport::extract_tcp_stream;
 use super::super::{logging::log_urltest_group_target_changed, runtime::Proxy};
 use zero_engine::{
     EngineError, PolicyProbeCompletedPayload, PolicyProbeMember, ProbeTrigger,
@@ -244,90 +243,25 @@ impl Proxy {
         timeout(URLTEST_PROBE_TIMEOUT, async {
             let started_at = Instant::now();
 
-            let mut socket: TcpRelayStream = match candidate {
-                ResolvedLeafOutbound::Direct { .. } => self
-                    .protocols
-                    .direct_outbound
-                    .connect_host(probe.host.as_str(), probe.port, self.resolver.as_ref())
-                    .await
-                    .map_err(EngineError::from)?
-                    .into(),
-                ResolvedLeafOutbound::Block { .. } => {
-                    return Err(std::io::Error::other("block outbound is not probeable").into());
-                }
-                ResolvedLeafOutbound::Socks5 {
-                    server,
-                    port,
-                    username,
-                    password,
-                    ..
-                } => {
-                    let session = Session::new(
-                        0,
-                        Address::Domain(probe.host.clone()),
-                        probe.port,
-                        Network::Tcp,
-                        ProtocolType::Unknown,
-                    );
-                    self.connect_via_socks5_upstream(&session, server, port, username.zip(password))
-                        .await?
-                }
-                ResolvedLeafOutbound::Vless {
-                    server,
-                    port,
-                    id,
-                    flow,
-                    tls,
-                    reality,
-                    ws,
-                    ..
-                } => {
-                    let session = Session::new(
-                        0,
-                        Address::Domain(probe.host.clone()),
-                        probe.port,
-                        Network::Tcp,
-                        ProtocolType::Unknown,
-                    );
-                    self.connect_via_vless_upstream(
-                        &session,
-                        VlessUpstream {
-                            server,
-                            port,
-                            id,
-                            flow,
-                            mux_concurrency: None,
-                            mux_idle_timeout_secs: None,
-                            tls,
-                            reality,
-                            ws,
-                            grpc: None,
-                            h2: None,
-                            http_upgrade: None,
-                            split_http: None,
-                            quic: None,
-                        },
-                    )
-                    .await?
-                }
-                ResolvedLeafOutbound::Hysteria2 { server, port, .. } => {
-                    let quic_stream = crate::transport::connect_quic(server, port, true).await?;
-                    TcpRelayStream::new(quic_stream)
-                }
-                ResolvedLeafOutbound::Shadowsocks { server, port, .. } => self
-                    .protocols
-                    .direct_outbound
-                    .connect_host(server, port, self.resolver.as_ref())
-                    .await
-                    .map_err(EngineError::from)?
-                    .into(),
-                ResolvedLeafOutbound::Trojan { .. } | ResolvedLeafOutbound::Vmess { .. } => {
-                    return Err(EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Unsupported,
-                        "trojan/vmess cannot be a urltest member",
-                    )))
-                }
-            };
+            // Build a dummy session for the probe target — the outbound
+            // establishment pipeline will connect through the candidate.
+            let probe_session = Session::new(
+                0,
+                Address::Domain(probe.host.clone()),
+                probe.port,
+                Network::Tcp,
+                ProtocolType::Unknown,
+            );
+
+            // Use the existing TCP outbound establishment pipeline which
+            // handles ALL protocol types generically (Direct, Socks5,
+            // Vless, Hysteria2, Shadowsocks, Trojan, Vmess, Mieru, etc.).
+            let outbound = self
+                .establish_tcp_candidate(&probe_session, candidate)
+                .await
+                .map_err(|f| f.error)?;
+            let result = extract_tcp_stream(outbound)?;
+            let mut socket = result.upstream;
 
             socket
                 .write_all(probe.request.as_bytes())

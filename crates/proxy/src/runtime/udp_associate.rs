@@ -108,7 +108,7 @@ impl Proxy {
                         }
 
                         // Forward pending SS upstream responses to the SOCKS5 client.
-                        #[cfg(feature = "outbound-shadowsocks")]
+                        #[cfg(feature = "shadowsocks")]
                         if let Some(client_addr) = client_udp_addr {
                             use crate::outbound::shadowsocks::drain_all_responses;
                             for resp in drain_all_responses() {

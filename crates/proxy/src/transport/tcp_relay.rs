@@ -154,8 +154,8 @@ where
     let (right_read, right_write) = tokio::io::split(right);
 
     tokio::try_join!(
-        copy_one_way(left_read, left_write, left_to_right, up_bps),
-        copy_one_way(right_read, right_write, right_to_left, down_bps)
+        copy_one_way(left_read, right_write, left_to_right, up_bps),
+        copy_one_way(right_read, left_write, right_to_left, down_bps)
     )
 }
 
@@ -199,6 +199,7 @@ where
             return Ok(total);
         }
         writer.write_all(&buf[..n]).await?;
+        writer.flush().await?;
         total = total.saturating_add(n as u64);
         on_bytes(n as u64);
     }
