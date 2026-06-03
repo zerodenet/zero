@@ -95,11 +95,16 @@ async fn tracks_live_bytes_and_completed_session_history() {
     client.write_all(b"ping").await.expect("write payload");
     let _ = payload_read_rx.await;
 
+    // Session byte tracking counts only relay-phase bytes (not SOCKS5
+    // handshake overhead).  At this point "ping" has been relayed to
+    // the echo server but the response is blocked by release_rx.
+    //   in_rx=4 out_tx=4 → bytes_up=8
+    //   in_tx=0 out_rx=0 → bytes_down=0
     wait_for("active session to record upload bytes", || {
         probe
             .active_sessions()
             .first()
-            .map(|session| session.bytes_up == 21 && session.bytes_down == 12)
+            .map(|session| session.bytes_up == 8 && session.bytes_down == 0)
             .unwrap_or(false)
     })
     .await;
@@ -110,10 +115,10 @@ async fn tracks_live_bytes_and_completed_session_history() {
     assert_eq!(active[0].mode, "rule");
     assert_eq!(active[0].inbound_tag.as_deref(), Some("socks-in"));
     assert_eq!(active[0].outbound_tag.as_deref(), Some("direct"));
-    assert_eq!(active[0].bytes_up, 21);
-    assert_eq!(active[0].bytes_down, 12);
-    assert_eq!(active[0].inbound_rx_bytes, 17);
-    assert_eq!(active[0].inbound_tx_bytes, 12);
+    assert_eq!(active[0].bytes_up, 8);
+    assert_eq!(active[0].bytes_down, 0);
+    assert_eq!(active[0].inbound_rx_bytes, 4);
+    assert_eq!(active[0].inbound_tx_bytes, 0);
     assert_eq!(active[0].outbound_tx_bytes, 4);
 
     let _ = release_tx.send(());
@@ -141,9 +146,12 @@ async fn tracks_live_bytes_and_completed_session_history() {
     })
     .await;
 
+    // After "ping" echo + "pong" exchange: 8 bytes each way through relay.
+    //   in_rx=8 out_tx=8 → bytes_up=16
+    //   out_rx=8 in_tx=8 → bytes_down=16
     let active = probe.active_sessions();
-    assert_eq!(active[0].bytes_up, 29);
-    assert_eq!(active[0].bytes_down, 28);
+    assert_eq!(active[0].bytes_up, 16);
+    assert_eq!(active[0].bytes_down, 16);
     assert!(active[0].throughput_up_bps > 0);
     assert!(active[0].throughput_down_bps > 0);
     drop(client);
@@ -152,7 +160,7 @@ async fn tracks_live_bytes_and_completed_session_history() {
         let completed = probe.completed_sessions();
         completed
             .first()
-            .map(|session| session.bytes_down == 28)
+            .map(|session| session.bytes_down == 16)
             .unwrap_or(false)
     })
     .await;
@@ -165,10 +173,10 @@ async fn tracks_live_bytes_and_completed_session_history() {
     assert_eq!(completed[0].network, zero_core::Network::Tcp);
     assert_eq!(completed[0].mode, "rule");
     assert_eq!(completed[0].outcome.kind(), "direct-relayed");
-    assert_eq!(completed[0].bytes_up, 29);
-    assert_eq!(completed[0].bytes_down, 28);
-    assert_eq!(completed[0].inbound_rx_bytes, 21);
-    assert_eq!(completed[0].inbound_tx_bytes, 20);
+    assert_eq!(completed[0].bytes_up, 16);
+    assert_eq!(completed[0].bytes_down, 16);
+    assert_eq!(completed[0].inbound_rx_bytes, 8);
+    assert_eq!(completed[0].inbound_tx_bytes, 8);
     assert_eq!(completed[0].outbound_rx_bytes, 8);
     assert_eq!(completed[0].outbound_tx_bytes, 8);
     assert!(probe.active_sessions().is_empty());
