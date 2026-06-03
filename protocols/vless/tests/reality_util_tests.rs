@@ -1,27 +1,22 @@
-use zero_protocol_vless::reality::reality_util::*;
+use zero_protocol_vless::reality::reality_util::{decode_public_key, decode_short_id};
+use ztls::util::extract_client_random;
 
 #[test]
 fn test_decode_short_id() {
     let short_id = decode_short_id("0123456789abcdef").unwrap();
     assert_eq!(short_id, [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]);
-    let short_id2 = decode_short_id("abcdef").unwrap();
-    assert_eq!(short_id2, [0xab, 0xcd, 0xef, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    let short_id3 = decode_short_id("").unwrap();
-    assert_eq!(short_id3, [0; 8]);
+    // Shorter inputs are rejected (must be exactly 8 bytes / 16 hex chars)
+    assert!(decode_short_id("abcdef").is_err());
+    assert!(decode_short_id("").is_err());
     assert!(decode_short_id("0123456789abcdef0").is_err());
 }
 
 #[test]
 fn test_extract_client_random() {
+    // ztls::util::extract_client_random reads 32 bytes from offset 6
     let mut client_hello = vec![0u8; 100];
-    client_hello[0] = 0x16;
-    client_hello[1] = 0x03;
-    client_hello[2] = 0x03;
-    client_hello[5] = 0x01;
-    client_hello[9] = 0x03;
-    client_hello[10] = 0x03;
     for i in 0..32 {
-        client_hello[11 + i] = (i + 1) as u8;
+        client_hello[6 + i] = (i + 1) as u8;
     }
     let random = extract_client_random(&client_hello).unwrap();
     for (index, byte) in random.iter().enumerate() {

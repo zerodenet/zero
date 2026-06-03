@@ -14,14 +14,23 @@ async fn relays_raw_tcp_to_fixed_ipv4_target() {
     let echo_port = free_port();
     let proxy_port = free_port();
 
+    // Echo server accepts multiple connections so that the `wait_for_listener`
+    // TCP probe (treated as real traffic by direct inbound) doesn't consume
+    // the sole accept slot.  Each connection gets its own task.
     let echo_task = tokio::spawn(async move {
         let listener = TcpListener::bind(("127.0.0.1", echo_port))
             .await
             .expect("bind echo");
-        let (mut stream, _) = listener.accept().await.expect("accept echo");
-        let mut buf = [0_u8; 4];
-        stream.read_exact(&mut buf).await.expect("read echo");
-        stream.write_all(&buf).await.expect("write echo");
+        loop {
+            let (mut stream, _) = listener.accept().await.expect("accept echo");
+            tokio::spawn(async move {
+                let mut buf = [0_u8; 4];
+                if stream.read_exact(&mut buf).await.is_err() {
+                    return; // probe or other noise — ignore
+                }
+                let _ = stream.write_all(&buf).await;
+            });
+        }
     });
 
     let config = RuntimeConfig::parse(&format!(
@@ -69,7 +78,7 @@ async fn relays_raw_tcp_to_fixed_ipv4_target() {
         .any(|s| s.inbound_tag.as_deref() == Some("direct-in")));
 
     handle.shutdown().await.expect("shutdown");
-    let _ = echo_task.await;
+    echo_task.abort();
 }
 
 #[tokio::test]

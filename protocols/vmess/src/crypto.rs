@@ -19,6 +19,7 @@ pub(crate) const GCM_TAG_LEN: usize = 16;
 pub(crate) const NONCE_LEN: usize = 12;
 
 /// Number of chunks before a re-key cycle (VMess AEAD spec).
+#[allow(dead_code)] // Used by BodyAead body relay (wired in next phase)
 const REKEY_INTERVAL: u64 = 1 << 14; // 16384
 
 // ── HKDF key-length helper ──────────────────────────────────────────
@@ -142,6 +143,7 @@ pub(crate) struct BodyAead {
     chunks_since_rekey: u64,
 }
 
+#[allow(dead_code)] // Body relay phase — wired in next phase
 impl BodyAead {
     pub fn new(key: Vec<u8>, nonce_prefix: &[u8], cipher: VmessCipher) -> Self {
         // nonce = nonce_prefix (12 bytes) XOR big-endian(counter)
@@ -257,6 +259,7 @@ impl BodyAead {
 
 // ── AEAD helpers with explicit nonce (no counter) ──────────────────
 
+#[allow(dead_code)] // Used by BodyAead body relay (wired in next phase)
 fn aead_encrypt_with_nonce(
     key: &[u8],
     nonce: &[u8; NONCE_LEN],
@@ -275,6 +278,7 @@ fn aead_encrypt_with_nonce(
     Ok(buf)
 }
 
+#[allow(dead_code)] // Used by BodyAead body relay (wired in next phase)
 fn aead_decrypt_with_nonce(
     key: &[u8],
     nonce: &[u8; NONCE_LEN],
@@ -314,6 +318,7 @@ impl NonceSequence for CountingNonce {
 }
 
 /// Single-use nonce (for body AEAD per-chunk operations).
+#[allow(dead_code)] // Used by body AEAD helpers (wired in next phase)
 struct SingleNonce([u8; NONCE_LEN]);
 
 impl SingleNonce {
