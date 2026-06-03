@@ -13,10 +13,11 @@ fn test_decode_short_id() {
 
 #[test]
 fn test_extract_client_random() {
-    // ztls::util::extract_client_random reads 32 bytes from offset 6
+    // ztls::util::extract_client_random reads 32 bytes from offset 11
+    // (5-byte record header + 4-byte handshake header + 2-byte version)
     let mut client_hello = vec![0u8; 100];
     for i in 0..32 {
-        client_hello[6 + i] = (i + 1) as u8;
+        client_hello[11 + i] = (i + 1) as u8;
     }
     let random = extract_client_random(&client_hello).unwrap();
     for (index, byte) in random.iter().enumerate() {
