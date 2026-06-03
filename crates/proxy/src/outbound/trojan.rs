@@ -64,6 +64,7 @@ pub async fn send_trojan_udp_packet(
     password: &str,
     sni: Option<&str>,
     insecure: bool,
+    client_fingerprint: Option<&str>,
     target: &Address,
     target_port: u16,
     payload: &[u8],
@@ -84,9 +85,17 @@ pub async fn send_trojan_udp_packet(
     }
 
     // Establish new upstream (TLS + CMD_UDP).
-    let (send_tx, _bridge_target, _bridge_port) =
-        establish_trojan_upstream(proxy, server, server_port, password, sni, insecure, session)
-            .await?;
+    let (send_tx, _bridge_target, _bridge_port) = establish_trojan_upstream(
+        proxy,
+        server,
+        server_port,
+        password,
+        sni,
+        insecure,
+        client_fingerprint,
+        session,
+    )
+    .await?;
 
     // Cache for reuse.
     TROJAN_CACHE
@@ -115,6 +124,7 @@ async fn establish_trojan_upstream(
     password: &str,
     sni: Option<&str>,
     insecure: bool,
+    client_fingerprint: Option<&str>,
     session: &Session,
 ) -> Result<(mpsc::Sender<Vec<u8>>, Address, u16), EngineError> {
     use zero_config::ClientTlsConfig;
@@ -133,6 +143,7 @@ async fn establish_trojan_upstream(
         ca_cert_path: None,
         insecure,
         alpn: Vec::new(),
+        client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
     };
     let tls_stream = zero_transport::tls::connect_tls_upstream(
         upstream,

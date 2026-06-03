@@ -72,6 +72,7 @@ pub(crate) enum UdpFlowOutbound {
         password: String,
         sni: Option<String>,
         insecure: bool,
+        client_fingerprint: Option<String>,
     },
     Mieru {
         tag: String,

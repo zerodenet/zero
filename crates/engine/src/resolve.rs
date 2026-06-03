@@ -57,6 +57,7 @@ pub enum ResolvedLeafOutbound<'a> {
         password: &'a str,
         sni: Option<&'a str>,
         insecure: bool,
+        client_fingerprint: Option<&'a str>,
     },
     Vmess {
         tag: &'a str,
@@ -274,6 +275,7 @@ fn resolve_leaf_outbound<'a>(
             password,
             sni,
             insecure,
+            client_fingerprint,
         } => ResolvedLeafOutbound::Trojan {
             tag,
             server,
@@ -281,6 +283,7 @@ fn resolve_leaf_outbound<'a>(
             password,
             sni: sni.as_deref(),
             insecure: *insecure,
+            client_fingerprint: client_fingerprint.as_deref(),
         },
         OutboundTarget::Vmess {
             server,
