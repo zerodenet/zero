@@ -6,11 +6,11 @@ use rand::RngCore;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use super::reality_cipher_suite::{CipherSuite, DEFAULT_CIPHER_SUITES};
 use super::reality_client_connection::{RealityClientConfig, RealityClientConnection};
-use super::reality_reader_writer::{RealityReader, RealityWriter};
 use super::reality_server_connection::{RealityServerConfig, RealityServerConnection};
 use super::reality_util::{decode_private_key, decode_public_key, decode_short_id, encode_key};
+use ztls::cipher::{CipherSuite, DEFAULT_CIPHER_SUITES};
+use ztls::reader_writer::{RealityReader, RealityWriter};
 
 pub struct RealityClientOptions<'a> {
     pub public_key: &'a str,
@@ -104,7 +104,7 @@ async fn perform_reality_server_handshake<IO>(
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    let mut read_buf = vec![0_u8; super::common::TLS_MAX_RECORD_SIZE].into_boxed_slice();
+    let mut read_buf = vec![0_u8; ztls::common::TLS_MAX_RECORD_SIZE].into_boxed_slice();
     let mut iteration = 0;
 
     while session.is_handshaking() || session.wants_write() {
@@ -150,7 +150,7 @@ async fn perform_reality_handshake<IO>(
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    let mut read_buf = vec![0_u8; super::common::TLS_MAX_RECORD_SIZE].into_boxed_slice();
+    let mut read_buf = vec![0_u8; ztls::common::TLS_MAX_RECORD_SIZE].into_boxed_slice();
     let mut iteration = 0;
 
     while session.is_handshaking() || session.wants_write() {

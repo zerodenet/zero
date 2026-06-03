@@ -792,6 +792,8 @@ pub enum OutboundProtocolConfig {
         password: String,
         #[serde(default)]
         insecure: bool,
+        #[serde(default, alias = "client-fingerprint")]
+        client_fingerprint: Option<String>,
     },
     #[serde(rename = "shadowsocks")]
     Shadowsocks {

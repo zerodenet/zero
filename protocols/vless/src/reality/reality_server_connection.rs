@@ -6,32 +6,32 @@ use ring::{digest, hmac};
 use x25519_dalek::{PublicKey, StaticSecret};
 use x509_parser::prelude::FromDer;
 
-use super::common::{
+use super::reality_auth::{decrypt_session_id, derive_auth_key, perform_ecdh};
+use ztls::aead::AeadKey;
+use ztls::cipher::{CipherSuite, DEFAULT_CIPHER_SUITES};
+use ztls::common::{
     build_tls_alert, random_anti_detection_delay, ALERT_DESC_CLOSE_NOTIFY, ALERT_DESC_DECODE_ERROR,
     ALERT_LEVEL_WARNING, CIPHERTEXT_READ_BUF_CAPACITY, CONTENT_TYPE_ALERT,
     CONTENT_TYPE_APPLICATION_DATA, CONTENT_TYPE_CHANGE_CIPHER_SPEC, CONTENT_TYPE_HANDSHAKE,
     HANDSHAKE_TYPE_FINISHED, OUTGOING_BUFFER_LIMIT, PLAINTEXT_READ_BUF_CAPACITY,
     TLS_MAX_RECORD_SIZE, TLS_RECORD_HEADER_SIZE,
 };
-use super::reality_aead::AeadKey;
-use super::reality_auth::{decrypt_session_id, derive_auth_key, perform_ecdh};
-use super::reality_cipher_suite::{CipherSuite, DEFAULT_CIPHER_SUITES};
-use super::reality_io_state::RealityIoState;
-use super::reality_reader_writer::{RealityReader, RealityWriter};
-use super::reality_records::{RecordDecryptor, RecordEncryptor};
-use super::reality_tls13_keys::{
+use ztls::keys::{
     compute_finished_verify_data, derive_application_secrets, derive_handshake_keys,
     derive_traffic_keys,
 };
-use super::reality_tls13_messages::{
+use ztls::messages::{
     construct_certificate, construct_certificate_verify, construct_encrypted_extensions,
     construct_finished, construct_server_hello, write_record_header,
 };
-use super::reality_util::{
+use ztls::reader_writer::{RealityReader, RealityWriter};
+use ztls::reality_io_state::RealityIoState;
+use ztls::record::{RecordDecryptor, RecordEncryptor};
+use ztls::slide_buffer::SlideBuffer;
+use ztls::util::{
     extract_client_cipher_suites, extract_client_public_key, extract_client_random,
     extract_session_id_slice, negotiate_cipher_suite,
 };
-use super::slide_buffer::SlideBuffer;
 
 #[derive(Clone)]
 pub struct RealityServerConfig {
@@ -221,7 +221,11 @@ impl RealityServerConnection {
         }
 
         let client_public_key = extract_client_public_key(&record)?;
-        let shared_secret = perform_ecdh(&self.config.private_key, &client_public_key)?;
+        let client_pk: [u8; 32] = client_public_key
+            .as_slice()
+            .try_into()
+            .map_err(|_| io::Error::other("invalid client public key length"))?;
+        let shared_secret = perform_ecdh(&self.config.private_key, &client_pk)?;
         let auth_key = derive_auth_key(&shared_secret, &client_random[0..20], b"REALITY")?;
 
         let mut aad = client_hello.to_vec();
@@ -252,16 +256,22 @@ impl RealityServerConnection {
         } else {
             &self.config.cipher_suites
         };
-        let cipher_suite = negotiate_cipher_suite(server_preferences, &client_cipher_suites)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no common cipher suite"))?;
+        let server_pref_ids: Vec<u16> = server_preferences.iter().map(|cs| cs.id()).collect();
+        let cipher_suite_id = negotiate_cipher_suite(&server_pref_ids, &client_cipher_suites)?;
+        let cipher_suite = CipherSuite::from_id(cipher_suite_id)
+            .ok_or_else(|| io::Error::other("no common cipher suite"))?;
 
         let mut rng = rand::rng();
         let mut server_private_bytes = [0u8; 32];
         rng.fill_bytes(&mut server_private_bytes);
         let server_private_key = StaticSecret::from(server_private_bytes);
         let server_public_key = PublicKey::from(&server_private_key);
+        let client_pk: [u8; 32] = client_public_key
+            .as_slice()
+            .try_into()
+            .map_err(|_| io::Error::other("invalid client public key"))?;
         let tls_shared_secret = server_private_key
-            .diffie_hellman(&PublicKey::from(client_public_key))
+            .diffie_hellman(&PublicKey::from(client_pk))
             .to_bytes();
 
         let mut server_random = [0u8; 32];

@@ -1,6 +1,6 @@
 use std::io::{BufRead, Read, Write};
-use zero_protocol_vless::reality::reality_reader_writer::*;
-use zero_protocol_vless::reality::slide_buffer::SlideBuffer;
+use ztls::reader_writer::*;
+use ztls::slide_buffer::SlideBuffer;
 
 #[test]
 fn test_reality_crypto_reader() {

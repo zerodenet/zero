@@ -19,6 +19,7 @@ use zero_traits::AsyncSocket;
 
 use zero_engine::EngineError;
 use zero_platform_tokio::ClientStream;
+use zero_platform_tokio::TcpRelayStream;
 
 #[derive(Debug)]
 struct InsecureCertVerifier;
@@ -87,7 +88,7 @@ pub async fn connect_tls_upstream(
     tls: &ClientTlsConfig,
     base_dir: Option<&Path>,
     default_server_name: &str,
-) -> Result<tokio_rustls::client::TlsStream<TcpStream>, EngineError> {
+) -> Result<TcpRelayStream, EngineError> {
     let server_name = tls
         .server_name
         .as_deref()
@@ -154,6 +155,17 @@ pub async fn connect_tls_upstream(
     }
 
     let server_name_str = server_name.clone();
+
+    // Use custom TLS 1.3 handshake when fingerprint is specified
+    if let Some(ref fp) = fingerprint {
+        tracing::debug!(
+            sni = %server_name_str,
+            fingerprint = %tls.client_fingerprint.as_deref().unwrap_or(""),
+            "connecting via custom TLS 1.3 handshake"
+        );
+        return connect_tls13_upstream(socket, &server_name_str, fp).await;
+    }
+
     let connector = TlsConnector::from(Arc::new(config));
     let server_name = rustls::pki_types::ServerName::try_from(server_name.as_str())
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid tls server_name"))?
@@ -181,7 +193,28 @@ pub async fn connect_tls_upstream(
             e
         })?;
 
-    Ok(stream)
+    Ok(TcpRelayStream::new(stream))
+}
+
+/// Connect using our custom TLS 1.3 stack with full ClientHello control.
+async fn connect_tls13_upstream(
+    socket: TokioSocket,
+    server_name: &str,
+    _fp: &crate::fingerprint::TlsFingerprint,
+) -> Result<TcpRelayStream, EngineError> {
+    let config = ztls::handshake::Tls13Config {
+        server_name: server_name.to_owned(),
+        cipher_suites: ztls::cipher::DEFAULT_CIPHER_SUITES.to_vec(),
+        alpn_protocols: vec!["h2".to_owned(), "http/1.1".to_owned()],
+        handshake_timeout_ms: 15_000,
+    };
+
+    let inner = socket.into_inner();
+    let tls_stream = ztls::stream::Tls13Stream::connect(inner, config)
+        .await
+        .map_err(|e| EngineError::Io(io::Error::other(format!("custom TLS handshake: {e}"))))?;
+
+    Ok(TcpRelayStream::new(tls_stream))
 }
 
 fn load_certs(path: &Path) -> io::Result<Vec<rustls::pki_types::CertificateDer<'static>>> {

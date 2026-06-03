@@ -6,32 +6,32 @@ use rand::RngCore;
 use ring::digest;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use super::common::{
+use super::reality_auth::{derive_auth_key, encrypt_session_id, perform_ecdh};
+use super::reality_client_verify::{
+    extract_certificate_der, extract_certificate_verify_signature, extract_ed25519_public_key,
+    verify_certificate_hmac, verify_certificate_verify_signature,
+};
+use ztls::aead::{decrypt_handshake_message, AeadKey};
+use ztls::cipher::{CipherSuite, DEFAULT_CIPHER_SUITES};
+use ztls::common::{
     ALERT_DESC_CLOSE_NOTIFY, ALERT_LEVEL_WARNING, CIPHERTEXT_READ_BUF_CAPACITY, CONTENT_TYPE_ALERT,
     CONTENT_TYPE_APPLICATION_DATA, CONTENT_TYPE_CHANGE_CIPHER_SPEC, CONTENT_TYPE_HANDSHAKE,
     HANDSHAKE_TYPE_CERTIFICATE, HANDSHAKE_TYPE_CERTIFICATE_VERIFY,
     HANDSHAKE_TYPE_ENCRYPTED_EXTENSIONS, HANDSHAKE_TYPE_FINISHED, OUTGOING_BUFFER_LIMIT,
     PLAINTEXT_READ_BUF_CAPACITY, TLS_MAX_RECORD_SIZE, TLS_RECORD_HEADER_SIZE,
 };
-use super::reality_aead::{decrypt_handshake_message, AeadKey};
-use super::reality_auth::{derive_auth_key, encrypt_session_id, perform_ecdh};
-use super::reality_cipher_suite::{CipherSuite, DEFAULT_CIPHER_SUITES};
-use super::reality_client_verify::{
-    extract_certificate_der, extract_certificate_verify_signature, extract_ed25519_public_key,
-    verify_certificate_hmac, verify_certificate_verify_signature,
-};
-use super::reality_io_state::RealityIoState;
-use super::reality_reader_writer::{RealityReader, RealityWriter};
-use super::reality_records::{RecordDecryptor, RecordEncryptor};
-use super::reality_tls13_keys::{
+use ztls::keys::{
     compute_finished_verify_data, derive_application_secrets, derive_handshake_keys,
     derive_traffic_keys,
 };
-use super::reality_tls13_messages::{
+use ztls::messages::{
     construct_client_hello, construct_finished, write_record_header, DEFAULT_ALPN_PROTOCOLS,
 };
-use super::reality_util::{extract_server_cipher_suite, extract_server_public_key};
-use super::slide_buffer::SlideBuffer;
+use ztls::reader_writer::{RealityReader, RealityWriter};
+use ztls::reality_io_state::RealityIoState;
+use ztls::record::{RecordDecryptor, RecordEncryptor};
+use ztls::slide_buffer::SlideBuffer;
+use ztls::util::{extract_server_cipher_suite, extract_server_public_key};
 
 /// Configuration for REALITY client connections
 #[derive(Clone)]
@@ -429,7 +429,10 @@ impl RealityClientConnection {
         };
 
         let my_private_key = StaticSecret::from(*client_private_key);
-        let peer_public_key = PublicKey::from(server_public_key);
+        let peer_public_key = PublicKey::from(
+            <[u8; 32]>::try_from(server_public_key.as_slice())
+                .map_err(|_| std::io::Error::other("invalid server public key"))?,
+        );
         let tls_shared_secret = my_private_key.diffie_hellman(&peer_public_key).to_bytes();
 
         let hs_keys = derive_handshake_keys(

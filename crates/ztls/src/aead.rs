@@ -4,8 +4,8 @@
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey};
 use std::io::{self, Error, ErrorKind};
 
-use super::common::strip_content_type_with_padding;
-use super::reality_cipher_suite::CipherSuite;
+use crate::cipher::CipherSuite;
+use crate::common::strip_content_type_with_padding;
 
 /// AEAD key for TLS 1.3 encryption/decryption.
 ///

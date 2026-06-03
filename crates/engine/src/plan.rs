@@ -88,11 +88,13 @@ impl EnginePlan {
                     port,
                     password,
                     insecure,
+                    client_fingerprint,
                 } => TargetKind::Outbound(Box::new(OutboundTarget::Hysteria2 {
                     server: server.clone(),
                     port: *port,
                     password: password.clone(),
                     insecure: *insecure,
+                    client_fingerprint: client_fingerprint.clone(),
                 })),
                 OutboundProtocolConfig::Shadowsocks {
                     server,
@@ -383,6 +385,7 @@ pub enum OutboundTarget {
         port: u16,
         password: String,
         insecure: bool,
+        client_fingerprint: Option<String>,
     },
     Shadowsocks {
         server: String,

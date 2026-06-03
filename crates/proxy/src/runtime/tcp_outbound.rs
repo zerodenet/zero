@@ -184,10 +184,17 @@ impl Proxy {
                 server,
                 port,
                 password,
+                client_fingerprint,
                 ..
             } => {
                 match self
-                    .connect_via_hysteria2_upstream(session, server, port, password)
+                    .connect_via_hysteria2_upstream(
+                        session,
+                        server,
+                        port,
+                        password,
+                        client_fingerprint,
+                    )
                     .await
                 {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Hysteria2 {

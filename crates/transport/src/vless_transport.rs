@@ -132,8 +132,7 @@ pub async fn build_vless_outbound_transport(
 
         // ── TLS only ──
         (Some(tls), None, None, None, None) => {
-            let tls_stream = tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
-            Ok(TcpRelayStream::new(tls_stream))
+            tls::connect_tls_upstream(socket, tls, source_dir, server).await
         }
 
         // ── Reality ──

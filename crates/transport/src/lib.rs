@@ -1,4 +1,6 @@
 #[cfg(feature = "tls")]
+pub mod client_hello;
+#[cfg(feature = "tls")]
 pub mod fingerprint;
 #[cfg(feature = "grpc")]
 pub mod grpc;

@@ -1,8 +1,8 @@
 use std::io::{self};
-use zero_protocol_vless::reality::common::*;
-use zero_protocol_vless::reality::reality_aead::AeadKey;
-use zero_protocol_vless::reality::reality_cipher_suite::CipherSuite;
-use zero_protocol_vless::reality::reality_records::*;
+use ztls::common::*;
+use ztls::aead::AeadKey;
+use ztls::cipher::CipherSuite;
+use ztls::record::*;
 
 const CS: CipherSuite = CipherSuite::AES_128_GCM_SHA256;
 

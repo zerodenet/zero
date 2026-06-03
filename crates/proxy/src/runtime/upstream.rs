@@ -189,8 +189,10 @@ impl Proxy {
         server: &str,
         port: u16,
         password: &str,
+        client_fingerprint: Option<&str>,
     ) -> Result<TcpRelayStream, EngineError> {
-        let connector = crate::transport::Hysteria2Connector::new(server, port, password);
+        let connector = crate::transport::Hysteria2Connector::new(server, port, password)
+            .with_fingerprint(client_fingerprint);
         let stream = connector.connect(session).await?;
         Ok(TcpRelayStream::new(stream))
     }
@@ -412,7 +414,7 @@ impl Proxy {
             server,
         )
         .await?;
-        let mut metered = crate::transport::MeteredStream::new(TcpRelayStream::new(tls_stream));
+        let mut metered = crate::transport::MeteredStream::new(tls_stream);
         self.protocols
             .trojan_outbound
             .send_request(&mut metered, session, password)

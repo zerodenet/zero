@@ -1,6 +1,6 @@
 use std::io::{BufRead, Read, Write};
 
-use super::slide_buffer::SlideBuffer;
+use crate::slide_buffer::SlideBuffer;
 
 /// Reader for accessing decrypted plaintext from REALITY connections
 ///

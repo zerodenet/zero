@@ -9,8 +9,11 @@ node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 docs/node_modules/
-docs/package-lock.json
 
 # Logs / generated
 *.log
 *.log.*
+
+# Test configs (may contain credentials)
+test_config.json
+AP_subdog.yaml

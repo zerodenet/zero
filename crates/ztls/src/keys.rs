@@ -3,7 +3,7 @@
 // Implements RFC 8446 key derivation for TLS 1.3
 // Supports both SHA256 and SHA384 based cipher suites
 
-use super::reality_cipher_suite::CipherSuite;
+use crate::cipher::CipherSuite;
 use ring::{digest, hmac};
 use std::io::{Error, ErrorKind, Result};
 
@@ -42,7 +42,7 @@ pub fn hkdf_expand(
         let key = hmac::Key::new(hmac_algorithm, prk);
         let mut ctx = hmac::Context::with_key(&key);
 
-        log::debug!(
+        tracing::debug!(
             "HKDF iteration {}: prev_len={}, info_len={}",
             i,
             prev.len(),
@@ -54,7 +54,7 @@ pub fn hkdf_expand(
         ctx.update(&[i as u8]);
         let tag = ctx.sign();
 
-        log::debug!(
+        tracing::debug!(
             "HKDF iteration {}: output={:02x?}",
             i,
             &tag.as_ref()[..tag.as_ref().len().min(16)]
@@ -76,7 +76,7 @@ pub fn hkdf_expand_label_with_algorithm(
     context: &[u8],
     length: usize,
 ) -> Result<Vec<u8>> {
-    log::debug!(
+    tracing::debug!(
         "DEBUG hkdf_expand_label: secret len={}, label={:?}, context len={}, length={}",
         secret.len(),
         std::str::from_utf8(label).unwrap_or("<binary>"),
@@ -104,7 +104,7 @@ pub fn hkdf_expand_label_with_algorithm(
     hkdf_label.push(context.len() as u8);
     hkdf_label.extend_from_slice(context);
 
-    log::debug!("HKDF_LABEL_BYTES: {:02x?}", hkdf_label);
+    tracing::debug!("HKDF_LABEL_BYTES: {:02x?}", hkdf_label);
 
     hkdf_expand(hmac_algorithm, secret, &hkdf_label, length)
 }
@@ -148,14 +148,14 @@ pub fn derive_traffic_keys(
     let hash_len = cipher_suite.hash_len();
     let hmac_algorithm = cipher_suite.hmac_algorithm();
 
-    log::debug!(
+    tracing::debug!(
         "TRAFFIC_KEY_DERIVE: cipher_suite={:?}, key_len={}, iv_len={}, hash_len={}",
         cipher_suite,
         key_length,
         iv_length,
         hash_len
     );
-    log::debug!("TRAFFIC_KEY_DERIVE: traffic_secret={:02x?}", traffic_secret);
+    tracing::debug!("TRAFFIC_KEY_DERIVE: traffic_secret={:02x?}", traffic_secret);
 
     // key = HKDF-Expand-Label(Secret, "key", "", key_length)
     let key =
@@ -165,8 +165,8 @@ pub fn derive_traffic_keys(
     let iv =
         hkdf_expand_label_with_algorithm(hmac_algorithm, traffic_secret, b"iv", b"", iv_length)?;
 
-    log::debug!("TRAFFIC_KEY_DERIVE: key={:02x?}", key);
-    log::debug!("TRAFFIC_KEY_DERIVE: iv={:02x?}", iv);
+    tracing::debug!("TRAFFIC_KEY_DERIVE: key={:02x?}", key);
+    tracing::debug!("TRAFFIC_KEY_DERIVE: iv={:02x?}", iv);
 
     Ok((key, iv))
 }
@@ -216,7 +216,7 @@ pub fn derive_handshake_keys(
         ));
     }
 
-    log::debug!(
+    tracing::debug!(
         "TLS13 DEBUG: Deriving handshake keys (Phase 1) with {:?}...",
         cipher_suite
     );
@@ -270,7 +270,7 @@ pub fn derive_handshake_keys(
     // 7. Master Secret = HKDF-Extract(salt=derived_secret, IKM=0)
     let master_secret = hkdf_extract_with_algorithm(hmac_algorithm, &derived_secret_2, &zero_salt);
 
-    log::debug!("  master_secret: {:?}", &master_secret[..8]);
+    tracing::debug!("  master_secret: {:?}", &master_secret[..8]);
 
     Ok(Tls13HandshakeKeys {
         client_handshake_traffic_secret,
@@ -309,11 +309,11 @@ pub fn derive_application_secrets(
         ));
     }
 
-    log::debug!(
+    tracing::debug!(
         "TLS13 DEBUG: Deriving application secrets (Phase 2) with {:?}...",
         cipher_suite
     );
-    log::debug!(
+    tracing::debug!(
         "  handshake_hash (with Finished): {:?}",
         &handshake_hash[..8]
     );
@@ -326,11 +326,11 @@ pub fn derive_application_secrets(
         handshake_hash,
     )?;
 
-    log::debug!(
+    tracing::debug!(
         "  client_app_traffic: {:?}",
         &client_application_traffic_secret[..8]
     );
-    log::debug!(
+    tracing::debug!(
         "DERIVE_APP_SECRETS: ClientAppSecret(full)={:02x?}",
         client_application_traffic_secret
     );
@@ -343,11 +343,11 @@ pub fn derive_application_secrets(
         handshake_hash,
     )?;
 
-    log::debug!(
+    tracing::debug!(
         "  server_app_traffic: {:?}",
         &server_application_traffic_secret[..8]
     );
-    log::debug!(
+    tracing::debug!(
         "DERIVE_APP_SECRETS: ServerAppSecret(full)={:02x?}",
         server_application_traffic_secret
     );

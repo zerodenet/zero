@@ -1,0 +1,16 @@
+[package]
+name = "ztls"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+rand = "0.9"
+ring = "0.17"
+tokio = { workspace = true, features = ["net", "rt"] }
+tracing = { workspace = true }
+x25519-dalek = { version = "2.0.1", default-features = false, features = ["static_secrets"] }
+zero-core = { path = "../core" }

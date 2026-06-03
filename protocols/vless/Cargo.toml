@@ -11,6 +11,7 @@ homepage.workspace = true
 default = []
 reality = [
     "dep:base64",
+    "dep:hex",
     "dep:log",
     "dep:rand",
     "dep:rcgen",
@@ -23,6 +24,7 @@ reality = [
 
 [dependencies]
 base64 = { version = "0.22", optional = true }
+hex = { version = "0.4", optional = true }
 log = { version = "0.4", optional = true }
 rand = { version = "0.9", optional = true }
 rcgen = { version = "0.14", optional = true }
@@ -32,6 +34,7 @@ tokio = { workspace = true, optional = true }
 x25519-dalek = { version = "2.0.1", default-features = false, features = ["static_secrets"], optional = true }
 x509-parser = { version = "0.18", default-features = false, features = ["verify"], optional = true }
 zero-core = { path = "../../crates/core" }
+ztls = { path = "../../crates/ztls" }
 zero-traits = { path = "../../crates/traits" }
 
 [dev-dependencies]

@@ -1,6 +1,6 @@
 use std::io::ErrorKind;
-use zero_protocol_vless::reality::reality_aead::*;
-use zero_protocol_vless::reality::reality_cipher_suite::CipherSuite;
+use ztls::aead::*;
+use ztls::cipher::CipherSuite;
 
 const CS: CipherSuite = CipherSuite::AES_128_GCM_SHA256;
 
@@ -175,8 +175,8 @@ fn test_large_plaintext() {
 
 #[test]
 fn test_decrypt_handshake_message() {
-    use zero_protocol_vless::reality::common::CONTENT_TYPE_HANDSHAKE;
-    use zero_protocol_vless::reality::reality_aead::decrypt_handshake_message;
+    use ztls::common::CONTENT_TYPE_HANDSHAKE;
+    use ztls::aead::decrypt_handshake_message;
 
     let key = vec![0x42u8; 16];
     let iv = vec![0x99u8; 12];
@@ -210,8 +210,8 @@ fn test_decrypt_handshake_message() {
 
 #[test]
 fn test_decrypt_handshake_message_with_padding() {
-    use zero_protocol_vless::reality::common::CONTENT_TYPE_HANDSHAKE;
-    use zero_protocol_vless::reality::reality_aead::decrypt_handshake_message;
+    use ztls::common::CONTENT_TYPE_HANDSHAKE;
+    use ztls::aead::decrypt_handshake_message;
 
     let key = vec![0x42u8; 16];
     let iv = vec![0x99u8; 12];

@@ -156,6 +156,7 @@ pub async fn send_h2_udp_packet(
     server: &str,
     server_port: u16,
     password: &str,
+    client_fingerprint: Option<&str>,
     target: &Address,
     target_port: u16,
     payload: &[u8],
@@ -189,6 +190,7 @@ pub async fn send_h2_udp_packet(
         server,
         server_port,
         password,
+        client_fingerprint,
         payload,
     )
     .await
@@ -244,9 +246,11 @@ pub async fn establish_hysteria2_udp_upstream(
     server: &str,
     port: u16,
     password: &str,
+    client_fingerprint: Option<&str>,
     initial_payload: &[u8],
 ) -> Result<(Hysteria2UdpUpstream, mpsc::Receiver<Vec<u8>>), EngineError> {
-    let connector = Hysteria2Connector::new(server, port, password);
+    let connector =
+        Hysteria2Connector::new(server, port, password).with_fingerprint(client_fingerprint);
     let conn = connector.connect_raw().await?;
 
     let h2_sid: u16 = 1;
@@ -312,6 +316,7 @@ impl Hysteria2UdpOutboundManager {
             &server,
             server_port,
             &password,
+            None, // client_fingerprint not stored in manager
             &initial_payload,
         )
         .await
