@@ -119,6 +119,19 @@ impl Proxy {
                                 }
                             }
                         }
+
+                        // Forward pending Hysteria2 UDP responses to the SOCKS5 client.
+                        #[cfg(feature = "hysteria2")]
+                        if let Some(client_addr) = client_udp_addr {
+                            use crate::outbound::hysteria2::drain_all_h2_responses;
+                            for resp in drain_all_h2_responses() {
+                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
+                                    &resp.target, resp.port, &resp.payload,
+                                ) {
+                                    let _ = relay.send_to_addr(&frame, client_addr).await;
+                                }
+                            }
+                        }
                     } else if let Some(client_addr) = client_udp_addr {
                         if let Some(session_id) = udp_flows.direct_response_session_id(sender) {
                             self.record_session_outbound_rx(session_id, buf.len() as u64);

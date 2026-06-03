@@ -99,10 +99,48 @@ impl Proxy {
                 .into(),
                 upstream: None,
             }),
+            #[cfg(feature = "hysteria2")]
+            ResolvedLeafOutbound::Hysteria2 {
+                tag,
+                server,
+                port,
+                password,
+                ..
+            } => {
+                let sent = crate::outbound::hysteria2::send_h2_udp_packet(
+                    self,
+                    context.session,
+                    server,
+                    port,
+                    password,
+                    &context.session.target,
+                    context.session.port,
+                    context.payload,
+                )
+                .await
+                .map_err(|error| UdpCandidateFailure {
+                    stage: "udp_h2_send",
+                    error,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
+
+                Ok(UdpCandidateStart::Flow {
+                    outbound: UdpFlowOutbound::Hysteria2 {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        password: password.to_owned(),
+                    },
+                    outbound_tx_bytes: sent as u64,
+                })
+            }
+            #[cfg(not(feature = "hysteria2"))]
             ResolvedLeafOutbound::Hysteria2 { .. } => Err(UdpCandidateFailure {
                 stage: "udp_hysteria2_outbound",
-                error: zero_core::Error::Unsupported("Hysteria2 UDP outbound not yet implemented")
-                    .into(),
+                error: zero_core::Error::Unsupported(
+                    "Hysteria2 UDP outbound requires Cargo feature `hysteria2`",
+                )
+                .into(),
                 upstream: None,
             }),
             #[allow(unused_variables)]

@@ -59,30 +59,39 @@ pub(crate) enum UdpFlowOutbound {
         password: String,
         cipher: String,
     },
+    Hysteria2 {
+        tag: String,
+        server: String,
+        port: u16,
+        password: String,
+    },
 }
 
 impl UdpFlowOutbound {
     pub(crate) fn tag(&self) -> &str {
         match self {
-            Self::Direct { tag, .. } | Self::Socks5 { tag, .. } | Self::Shadowsocks { tag, .. } => {
-                tag
-            }
+            Self::Direct { tag, .. }
+            | Self::Socks5 { tag, .. }
+            | Self::Shadowsocks { tag, .. }
+            | Self::Hysteria2 { tag, .. } => tag,
         }
     }
 
     fn upstream_endpoint(&self) -> Option<(String, u16)> {
         match self {
             Self::Direct { .. } => None,
-            Self::Socks5 { server, port, .. } | Self::Shadowsocks { server, port, .. } => {
-                Some((server.clone(), *port))
-            }
+            Self::Socks5 { server, port, .. }
+            | Self::Shadowsocks { server, port, .. }
+            | Self::Hysteria2 { server, port, .. } => Some((server.clone(), *port)),
         }
     }
 
     fn success_outcome(&self) -> SessionOutcome {
         match self {
             Self::Direct { .. } => SessionOutcome::DirectRelayed,
-            Self::Socks5 { .. } | Self::Shadowsocks { .. } => SessionOutcome::ChainedRelayed,
+            Self::Socks5 { .. }
+            | Self::Shadowsocks { .. }
+            | Self::Hysteria2 { .. } => SessionOutcome::ChainedRelayed,
         }
     }
 }
@@ -179,7 +188,9 @@ impl UdpSessionFlows {
             UdpFlowOutbound::Direct { target_addr, .. } => {
                 self.direct_by_sender.insert(*target_addr, key.clone());
             }
-            UdpFlowOutbound::Socks5 { tag, .. } | UdpFlowOutbound::Shadowsocks { tag, .. } => {
+            UdpFlowOutbound::Socks5 { tag, .. }
+            | UdpFlowOutbound::Shadowsocks { tag, .. }
+            | UdpFlowOutbound::Hysteria2 { tag, .. } => {
                 self.upstream_by_response.insert(
                     UdpUpstreamResponseKey::new(tag, &key.target, key.port),
                     key.clone(),
@@ -195,7 +206,9 @@ impl UdpSessionFlows {
                     self.direct_by_sender.remove(target_addr);
                 }
             }
-            UdpFlowOutbound::Socks5 { tag, .. } | UdpFlowOutbound::Shadowsocks { tag, .. } => {
+            UdpFlowOutbound::Socks5 { tag, .. }
+            | UdpFlowOutbound::Shadowsocks { tag, .. }
+            | UdpFlowOutbound::Hysteria2 { tag, .. } => {
                 let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
                 if self.upstream_by_response.get(&response_key) == Some(key) {
                     self.upstream_by_response.remove(&response_key);
@@ -215,9 +228,9 @@ impl UdpSessionFlows {
 
     fn single_socks5_flow_session_id(&self, outbound_tag: &str) -> Option<u64> {
         let mut upstream_flows = self.flows.values().filter(|flow| match &flow.outbound {
-            UdpFlowOutbound::Socks5 { tag, .. } | UdpFlowOutbound::Shadowsocks { tag, .. } => {
-                tag == outbound_tag
-            }
+            UdpFlowOutbound::Socks5 { tag, .. }
+            | UdpFlowOutbound::Shadowsocks { tag, .. }
+            | UdpFlowOutbound::Hysteria2 { tag, .. } => tag == outbound_tag,
             UdpFlowOutbound::Direct { .. } => false,
         });
         let flow = upstream_flows.next()?;
