@@ -414,7 +414,7 @@ impl Proxy {
             server,
         )
         .await?;
-        let mut metered = crate::transport::MeteredStream::new(TcpRelayStream::new(tls_stream));
+        let mut metered = crate::transport::MeteredStream::new(tls_stream);
         self.protocols
             .trojan_outbound
             .send_request(&mut metered, session, password)

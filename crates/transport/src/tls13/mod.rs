@@ -17,4 +17,5 @@ pub mod reader_writer;
 pub mod reality_io_state;
 pub mod record;
 pub mod slide_buffer;
+pub mod stream;
 pub mod util;
