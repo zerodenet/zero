@@ -10,7 +10,7 @@ hero:
   actions:
     - theme: brand
       text: 快速上手
-      link: /guide/quickstart
+      link: /guides/quickstart
     - theme: alt
       text: 配置参考
       link: /project/config

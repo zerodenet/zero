@@ -8,19 +8,19 @@ export default defineConfig({
 
   themeConfig: {
     nav: [
-      { text: '指南', link: '/guide/quickstart' },
+      { text: '指南', link: '/guides/quickstart' },
       { text: '配置', link: '/project/config' },
       { text: '控制面', link: '/control-plane-api/' },
       { text: '参考', link: '/project/architecture' },
     ],
 
     sidebar: {
-      '/guide/': [
+      '/guides/': [
         {
           text: '入门指南',
           items: [
-            { text: '快速上手', link: '/guide/quickstart' },
-            { text: 'GUI 集成', link: '/guide/gui-integration' },
+            { text: '快速上手', link: '/guides/quickstart' },
+            { text: 'GUI 集成', link: '/guides/gui-integration' },
           ],
         },
       ],
