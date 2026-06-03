@@ -244,6 +244,7 @@ impl ClientStream for TokioSocket {
 /// from the same function.
 pub struct TcpRelayStream {
     inner: Box<dyn RelayIo>,
+    local_addr: Option<SocketAddr>,
 }
 
 trait RelayIo: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
@@ -257,17 +258,43 @@ impl TcpRelayStream {
     {
         Self {
             inner: Box::new(stream),
+            local_addr: None,
+        }
+    }
+
+    pub fn with_local_addr<S>(stream: S, addr: SocketAddr) -> Self
+    where
+        S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
+    {
+        Self {
+            inner: Box::new(stream),
+            local_addr: Some(addr),
         }
     }
 }
 
 impl From<TokioSocket> for TcpRelayStream {
     fn from(socket: TokioSocket) -> Self {
-        Self::new(socket)
+        match socket.local_addr() {
+            Ok(addr) => Self::with_local_addr(socket, addr),
+            Err(_) => Self::new(socket),
+        }
     }
 }
 
-impl ClientStream for TcpRelayStream {}
+impl ClientStream for TcpRelayStream {
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.local_addr
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Unsupported, "local_addr not available"))
+    }
+
+    fn peer_addr(&self) -> io::Result<SocketAddr> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "ClientStream: peer_addr not available",
+        ))
+    }
+}
 
 impl AsyncSocket for TcpRelayStream {
     type Error = io::Error;
