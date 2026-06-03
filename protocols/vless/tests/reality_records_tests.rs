@@ -1,7 +1,7 @@
 use std::io::{self};
-use ztls::common::*;
 use ztls::aead::AeadKey;
 use ztls::cipher::CipherSuite;
+use ztls::common::*;
 use ztls::record::*;
 
 const CS: CipherSuite = CipherSuite::AES_128_GCM_SHA256;

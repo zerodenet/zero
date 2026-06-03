@@ -175,8 +175,8 @@ fn test_large_plaintext() {
 
 #[test]
 fn test_decrypt_handshake_message() {
-    use ztls::common::CONTENT_TYPE_HANDSHAKE;
     use ztls::aead::decrypt_handshake_message;
+    use ztls::common::CONTENT_TYPE_HANDSHAKE;
 
     let key = vec![0x42u8; 16];
     let iv = vec![0x99u8; 12];
@@ -210,8 +210,8 @@ fn test_decrypt_handshake_message() {
 
 #[test]
 fn test_decrypt_handshake_message_with_padding() {
-    use ztls::common::CONTENT_TYPE_HANDSHAKE;
     use ztls::aead::decrypt_handshake_message;
+    use ztls::common::CONTENT_TYPE_HANDSHAKE;
 
     let key = vec![0x42u8; 16];
     let iv = vec![0x99u8; 12];
