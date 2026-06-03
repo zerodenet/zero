@@ -1,14 +1,25 @@
-//! Shared UDP helper functions used by inbound handlers.
+//! Shared UDP helper functions and types used by inbound handlers.
 //!
 //! Moved from outbound/direct.rs — these are runtime orchestration, not outbound protocol logic.
 
 use std::net::SocketAddr;
 
-use zero_core::Session;
+use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::runtime::Proxy;
+
+/// A normalized response from any chain outbound (SS, H2, Trojan, Mieru).
+///
+/// Used as the item type in per-dispatcher response channels so inbound
+/// handlers can `select!` on responses from all chain outbounds.
+#[derive(Debug)]
+pub struct UdpChainResponse {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+}
 
 /// Resolve target address for direct UDP outbound.
 #[allow(dead_code)]

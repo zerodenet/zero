@@ -34,6 +34,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Instant;
 
+use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 
 use zero_core::{Address, Network, ProtocolType, Session, SessionAuth};
@@ -47,6 +48,238 @@ use crate::runtime::udp_associate::sessions::{
 use crate::runtime::udp_helpers::send_direct_udp_packet;
 use crate::runtime::vless_udp::{VlessUdpOutboundManager, VlessUdpTransport};
 use crate::runtime::Proxy;
+
+// Re-export for inbound handlers.
+pub(crate) use crate::runtime::udp_helpers::UdpChainResponse;
+
+// ── Chain response types ────────────────────────────────────────────
+
+/// A response item produced by a chain-outbound recv bridge task.
+/// Stored in a unified [`JoinSet`] so all chain outbound responses are
+/// polled from a single `select!` branch via [`UdpDispatch::poll_chain_response`].
+type ChainTask = Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>;
+
+// ── SS chain manager ─────────────────────────────────────────────────
+
+/// Per-dispatcher manager for Shadowsocks chain outbound.
+///
+/// Caches upstream UDP sockets per-dispatcher (not globally) and spawns
+/// one-shot bridge tasks into the shared [`JoinSet`] so responses are
+/// polled uniformly via [`UdpDispatch::poll_chain_response`].
+#[cfg(feature = "shadowsocks")]
+mod ss_manager {
+    use std::collections::HashMap;
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+
+    use tokio::sync::broadcast;
+    use tokio::task::JoinSet;
+    use zero_core::{Address, EngineError};
+
+    use super::{ChainTask, FlowFailure};
+
+    type SsRecvItem = (Address, u16, Vec<u8>);
+
+    struct SsUpstream {
+        socket: Arc<tokio::net::UdpSocket>,
+        recv_tx: broadcast::Sender<SsRecvItem>,
+    }
+
+    pub(super) struct SsChainManager {
+        upstreams: HashMap<(String, u16, String, String), Arc<SsUpstream>>,
+    }
+
+    impl SsChainManager {
+        pub(super) fn new() -> Self {
+            Self { upstreams: HashMap::new() }
+        }
+
+        pub(super) async fn send(
+            &mut self,
+            chain_tasks: &mut JoinSet<ChainTask>,
+            session_id: u64,
+            server: &str,
+            port: u16,
+            password: &str,
+            cipher: &str,
+            target: &Address,
+            target_port: u16,
+            payload: &[u8],
+        ) -> Result<usize, FlowFailure> {
+            use zero_protocol_shadowsocks::{
+                aead_encrypt_udp, build_target_data, derive_key, CipherKind,
+            };
+
+            let cipher_kind = CipherKind::from_str(cipher).ok_or_else(|| FlowFailure {
+                stage: "ss_cipher",
+                error: EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("unknown shadowsocks cipher: {cipher}"),
+                )),
+                upstream: Some((server.to_owned(), port)),
+            })?;
+
+            let entry = self.ensure_entry(server, port, password, cipher_kind);
+
+            let target_data = build_target_data(target, target_port, payload).map_err(|e| {
+                FlowFailure {
+                    stage: "ss_build_target",
+                    error: EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)),
+                    upstream: Some((server.to_owned(), port)),
+                }
+            })?;
+
+            let mut salt = vec![0u8; cipher_kind.salt_len()];
+            use rand::RngCore;
+            rand::rngs::OsRng.fill_bytes(&mut salt);
+
+            let key =
+                derive_key(password.as_bytes(), &salt, cipher_kind.key_len()).map_err(|e| {
+                    FlowFailure {
+                        stage: "ss_derive_key",
+                        error: EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)),
+                        upstream: Some((server.to_owned(), port)),
+                    }
+                })?;
+
+            let nonce = [0u8; 12];
+            let encrypted =
+                aead_encrypt_udp(cipher_kind, &key, &nonce, &target_data).map_err(|e| {
+                    FlowFailure {
+                        stage: "ss_encrypt",
+                        error: EngineError::Io(std::io::Error::other(e)),
+                        upstream: Some((server.to_owned(), port)),
+                    }
+                })?;
+
+            let mut packet = salt;
+            packet.extend_from_slice(&encrypted);
+
+            let target_addr: SocketAddr = format!("{server}:{port}").parse().map_err(|_| {
+                FlowFailure {
+                    stage: "ss_parse_addr",
+                    error: EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("invalid ss upstream: {server}:{port}"),
+                    )),
+                    upstream: Some((server.to_owned(), port)),
+                }
+            })?;
+
+            entry.socket.send_to(&packet, target_addr).await.map_err(|e| FlowFailure {
+                stage: "ss_send",
+                error: EngineError::from(e),
+                upstream: Some((server.to_owned(), port)),
+            })?;
+
+            // Spawn one-shot bridge task.
+            let mut recv_rx = entry.recv_tx.subscribe();
+            chain_tasks.spawn(async move {
+                match recv_rx.recv().await {
+                    Ok((resp_target, resp_port, resp_payload)) => {
+                        Ok((resp_target, resp_port, resp_payload, Some(session_id)))
+                    }
+                    Err(broadcast::error::RecvError::Closed) => Err(EngineError::Io(
+                        std::io::Error::other("ss upstream closed"),
+                    )),
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        // Skip lagged messages and try again
+                        match recv_rx.recv().await {
+                            Ok((resp_target, resp_port, resp_payload)) => {
+                                Ok((resp_target, resp_port, resp_payload, Some(session_id)))
+                            }
+                            Err(_) => Err(EngineError::Io(std::io::Error::other("ss upstream closed"))),
+                        }
+                    }
+                }
+            });
+
+            Ok(payload.len())
+        }
+
+        fn ensure_entry(
+            &mut self,
+            server: &str,
+            port: u16,
+            password: &str,
+            cipher_kind: zero_protocol_shadowsocks::CipherKind,
+        ) -> Arc<SsUpstream> {
+            use zero_protocol_shadowsocks::CipherKind;
+            let key = (
+                server.to_owned(), port, cipher_kind.to_string(), password.to_owned(),
+            );
+            if let Some(entry) = self.upstreams.get(&key) {
+                return entry.clone();
+            }
+
+            let socket = Arc::new(
+                tokio::net::UdpSocket::from_std(
+                    std::net::UdpSocket::bind("0.0.0.0:0").expect("ss: bind"),
+                )
+                .expect("ss: tokio"),
+            );
+
+            let (recv_tx, _) = broadcast::channel::<SsRecvItem>(32);
+            let entry = Arc::new(SsUpstream { socket: socket.clone(), recv_tx: recv_tx.clone() });
+            self.upstreams.insert(key, entry.clone());
+
+            tokio::spawn(Self::recv_loop(socket, cipher_kind, password.to_owned(), recv_tx));
+            entry
+        }
+
+        async fn recv_loop(
+            socket: Arc<tokio::net::UdpSocket>,
+            cipher: zero_protocol_shadowsocks::CipherKind,
+            password: String,
+            recv_tx: broadcast::Sender<SsRecvItem>,
+        ) {
+            use zero_protocol_shadowsocks::{aead_decrypt_udp, derive_key, parse_target_data};
+            let mut buf = vec![0u8; 4096];
+            loop {
+                let (n, _) = match socket.recv_from(&mut buf).await {
+                    Ok(r) => r,
+                    Err(_) => break,
+                };
+                let packet = &buf[..n];
+                let sl = cipher.salt_len();
+                let tl = cipher.tag_len();
+                if packet.len() < sl + tl { continue; }
+                let Ok(key) = derive_key(password.as_bytes(), &packet[..sl], cipher.key_len())
+                    else { continue };
+                let Ok(plain) = aead_decrypt_udp(cipher, &key, &[0u8; 12], &packet[sl..])
+                    else { continue };
+                let Ok((t, p, off)) = parse_target_data(&plain) else { continue };
+                if recv_tx.send((t, p, plain[off..].to_vec())).is_err() { break; }
+            }
+        }
+    }
+}
+#[cfg(not(feature = "shadowsocks"))]
+mod ss_manager {
+    use super::{ChainTask, FlowFailure};
+    use tokio::task::JoinSet;
+    use zero_core::Address;
+    pub(super) struct SsChainManager;
+    impl SsChainManager {
+        pub(super) fn new() -> Self { Self }
+        #[allow(unused_variables)]
+        pub(super) async fn send(
+            &mut self, _tasks: &mut JoinSet<ChainTask>, _session_id: u64,
+            _server: &str, _port: u16, _password: &str, _cipher: &str,
+            _target: &Address, _target_port: u16, _payload: &[u8],
+        ) -> Result<usize, FlowFailure> {
+            Err(FlowFailure {
+                stage: "ss_feature",
+                error: zero_engine::EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Shadowsocks requires feature `shadowsocks`",
+                )),
+                upstream: None,
+            })
+        }
+    }
+}
+use ss_manager::SsChainManager;
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -75,13 +308,6 @@ struct FlowFailure {
     upstream: Option<(String, u16)>,
 }
 
-/// A response from a chain outbound (SS / H2 / Trojan / Mieru).
-pub(crate) struct UdpChainResponse {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
-}
-
 // ── UdpDispatch ───────────────────────────────────────────────────────
 
 /// Protocol-agnostic UDP dispatch state.
@@ -104,6 +330,11 @@ pub(crate) struct UdpDispatch {
     /// upstream connections. We store handles here so `finish_all()` can
     /// properly complete them.
     vless_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
+    /// Unified JoinSet for chain-outbound (SS/H2/Trojan/Mieru/VLESS)
+    /// response bridge tasks. Polled by [`poll_chain_response`].
+    chain_tasks: JoinSet<ChainTask>,
+    /// Per-dispatcher SS chain manager. Caches upstream sockets.
+    ss_manager: SsChainManager,
 }
 
 impl UdpDispatch {
@@ -118,6 +349,8 @@ impl UdpDispatch {
             socks5_idle_deadline: None,
             vless_manager: VlessUdpOutboundManager::new(),
             vless_handles: HashMap::new(),
+            chain_tasks: JoinSet::new(),
+            ss_manager: SsChainManager::new(),
         })
     }
 
@@ -132,6 +365,8 @@ impl UdpDispatch {
             socks5_idle_deadline: None,
             vless_manager: VlessUdpOutboundManager::new(),
             vless_handles: HashMap::new(),
+            chain_tasks: JoinSet::new(),
+            ss_manager: SsChainManager::new(),
         }
     }
 
@@ -148,10 +383,11 @@ impl UdpDispatch {
     ///
     /// This avoids borrow-checker conflicts in `select!` loops where both
     /// the direct socket and VLESS manager are polled concurrently.
+    /// Returns chain_tasks for unified chain response polling.
     pub(crate) fn direct_socket_and_vless_manager(
         &mut self,
-    ) -> (&TokioDatagramSocket, &mut VlessUdpOutboundManager) {
-        (&self.direct_socket, &mut self.vless_manager)
+    ) -> (&TokioDatagramSocket, &mut VlessUdpOutboundManager, &mut JoinSet<ChainTask>) {
+        (&self.direct_socket, &mut self.vless_manager, &mut self.chain_tasks)
     }
 
     /// Borrow all polling sources simultaneously for `select!` loops.
@@ -161,6 +397,7 @@ impl UdpDispatch {
     /// - `&mut VlessUdpOutboundManager` — VLESS chain response poller
     /// - `Option<&ActiveUpstreamSocks5UdpAssociation>` — SOCKS5 chain upstream
     /// - `Option<TokioInstant>` — SOCKS5 idle deadline
+    /// - `&mut JoinSet<ChainTask>` — SS/H2/VLESS chain response tasks
     pub(crate) fn poll_refs(
         &mut self,
     ) -> (
@@ -168,12 +405,14 @@ impl UdpDispatch {
         &mut VlessUdpOutboundManager,
         Option<&crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation>,
         Option<TokioInstant>,
+        &mut JoinSet<ChainTask>,
     ) {
         (
             &self.direct_socket,
             &mut self.vless_manager,
             self.socks5_upstream.as_ref(),
             self.socks5_idle_deadline,
+            &mut self.chain_tasks,
         )
     }
 
@@ -283,6 +522,22 @@ impl UdpDispatch {
     ///
     /// Returns `(target, port, payload)` tuples for the inbound handler to
     /// encode in protocol-specific format.
+    /// Poll the unified chain-outbound response `JoinSet`.
+    ///
+    /// All chain recv bridge tasks (SS, H2, VLESS, Trojan, Mieru)
+    /// are spawned into this set.  Use in `select!` loops alongside
+    /// direct-socket and SOCKS5-upstream polls.
+    pub(crate) fn poll_chain_response(
+        &mut self,
+    ) -> &mut JoinSet<ChainTask> {
+        &mut self.chain_tasks
+    }
+
+    /// Drain pending chain responses from global queues (Trojan/Mieru fallback).
+    ///
+    /// New SS/H2/VLESS responses flow through [`poll_chain_response`].
+    /// Trojan and Mieru still use global queues until their per-dispatcher
+    /// managers are implemented.
     pub(crate) fn drain_chain_responses() -> Vec<UdpChainResponse> {
         #[allow(unused_mut)]
         let mut responses = Vec::new();
@@ -534,8 +789,9 @@ impl UdpDispatch {
                 password,
                 cipher,
             } => {
-                use crate::outbound::shadowsocks::send_ss_udp_packet;
-                match send_ss_udp_packet(
+                match self.ss_manager.send(
+                    &mut self.chain_tasks,
+                    flow.session.id,
                     server.as_str(),
                     *port,
                     password.as_str(),
@@ -549,10 +805,11 @@ impl UdpDispatch {
                     Ok(sent) => {
                         proxy.record_session_outbound_tx(flow.session.id, sent as u64);
                     }
-                    Err(error) => {
-                        let msg = error.to_string();
-                        self.fail_flow_with_msg(&flow, started_at, "udp_ss_send", &msg);
-                        return Err(EngineError::Io(std::io::Error::other(msg)));
+                    Err(failure) => {
+                        self.fail_flow_with_msg(
+                            &flow, started_at, failure.stage, &failure.error.to_string(),
+                        );
+                        return Err(failure.error);
                     }
                 }
             }
@@ -876,7 +1133,9 @@ impl UdpDispatch {
             } => {
                 #[cfg(feature = "shadowsocks")]
                 {
-                    let sent = crate::outbound::shadowsocks::send_ss_udp_packet(
+                    let sent = self.ss_manager.send(
+                        &mut self.chain_tasks,
+                        session.id,
                         server,
                         port,
                         password,
@@ -886,10 +1145,10 @@ impl UdpDispatch {
                         payload,
                     )
                     .await
-                    .map_err(|error| FlowFailure {
-                        stage: "udp_ss_encrypt_send",
-                        error,
-                        upstream: Some((server.to_owned(), port)),
+                    .map_err(|f: FlowFailure| FlowFailure {
+                        stage: f.stage,
+                        error: f.error,
+                        upstream: f.upstream,
                     })?;
 
                     Ok(FlowStartResult::Flow {

@@ -746,8 +746,8 @@ impl Proxy {
 
         loop {
             // Split dispatch into disjoint borrows so select! can pin
-            // both futures simultaneously without borrow conflicts.
-            let (direct_sock, vless_mgr) = dispatch.direct_socket_and_vless_manager();
+            // all futures simultaneously without borrow conflicts.
+            let (direct_sock, vless_mgr, chain_tasks) = dispatch.direct_socket_and_vless_manager();
 
             select! {
                 _ = tokio::time::sleep_until(last_activity + timeout) => {
@@ -873,6 +873,33 @@ impl Proxy {
                             warn!(error = %error, "vless upstream read error");
                         }
                         None => {}
+                    }
+                }
+                Some(chain_result) = chain_tasks.join_next() => {
+                    // Chain-outbound response (SS, H2, VLESS via JoinSet).
+                    match chain_result {
+                        Ok(Ok((target, port, payload, session_id))) => {
+                            last_activity = TokioInstant::now();
+                            if let Some(sid) = session_id {
+                                proxy.record_session_outbound_rx(sid, payload.len() as u64);
+                            }
+                            if let Ok(packet) = build_udp_packet(&target, port, &payload) {
+                                if let Err(error) = client.write_all(&packet).await {
+                                    warn!(error = %error, "failed to write chain response");
+                                    break;
+                                }
+                                if let Some(sid) = session_id {
+                                    proxy.record_session_inbound_tx(sid, packet.len() as u64);
+                                }
+                                proxy.record_session_inbound_traffic(0, client.drain_traffic());
+                            }
+                        }
+                        Ok(Err(error)) => {
+                            warn!(error = %error, "chain upstream read error");
+                        }
+                        Err(join_err) => {
+                            warn!(error = %join_err, "chain response task panicked");
+                        }
                     }
                 }
             }

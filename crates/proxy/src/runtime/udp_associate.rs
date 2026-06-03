@@ -71,7 +71,7 @@ impl Proxy {
         loop {
             // Extract all mutable/immutable borrows in one go to satisfy
             // select!'s requirement that all branches be independent.
-            let (direct_sock, vless_mgr, socks5_up, socks5_idle) = dispatch.poll_refs();
+            let (direct_sock, vless_mgr, socks5_up, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
                 control = client.read(&mut control_probe) => {
@@ -251,6 +251,33 @@ impl Proxy {
                             );
                         }
                         None => {}
+                    }
+                }
+                Some(chain_result) = chain_tasks.join_next() => {
+                    // Chain-outbound response (SS, H2, VLESS via JoinSet).
+                    match chain_result {
+                        Ok(Ok((target, port, payload, session_id))) => {
+                            if let Some(sid) = session_id {
+                                self.record_session_outbound_rx(sid, payload.len() as u64);
+                            }
+                            if let Some(client_addr) = client_udp_addr {
+                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
+                                    &target, port, &payload,
+                                ) {
+                                    if let Ok(sent) = relay.send_to_addr(&frame, client_addr).await {
+                                        if let Some(sid) = session_id {
+                                            self.record_session_inbound_tx(sid, sent as u64);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Ok(Err(error)) => {
+                            warn!(error = %error, "chain upstream read error");
+                        }
+                        Err(join_err) => {
+                            warn!(error = %join_err, "chain response task panicked");
+                        }
                     }
                 }
                 _ = wait_for_upstream_idle(socks5_idle) => {
