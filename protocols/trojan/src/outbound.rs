@@ -3,6 +3,8 @@
 use zero_core::{Address, Error, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
+use super::shared::{CMD_TCP, CMD_UDP};
+
 /// Trojan outbound handler.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrojanOutbound;
@@ -30,8 +32,25 @@ impl TrojanOutbound {
     }
 }
 
+/// Build a Trojan UDP associate request (CMD_UDP).
+///
+/// This is a standalone request builder used by the proxy outbound
+/// module to initiate a UDP relay connection.
+pub fn build_udp_request(password: &str, addr: &Address, port: u16) -> Result<Vec<u8>, Error> {
+    build_trojan_request(password, addr, port, CMD_UDP)
+}
+
 fn build_tcp_request(password: &str, addr: &Address, port: u16) -> Result<Vec<u8>, Error> {
-    use super::shared::{ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, CMD_TCP, CRLF};
+    build_trojan_request(password, addr, port, CMD_TCP)
+}
+
+fn build_trojan_request(
+    password: &str,
+    addr: &Address,
+    port: u16,
+    cmd: u8,
+) -> Result<Vec<u8>, Error> {
+    use super::shared::{ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, CRLF};
 
     let mut request = Vec::new();
 
@@ -48,7 +67,7 @@ fn build_tcp_request(password: &str, addr: &Address, port: u16) -> Result<Vec<u8
     }
 
     request.extend_from_slice(CRLF);
-    request.push(CMD_TCP);
+    request.push(cmd);
 
     match addr {
         Address::Ipv4(bytes) => {

@@ -193,11 +193,59 @@ impl Proxy {
                     })
                 }
             }
+            #[cfg(feature = "trojan")]
+            ResolvedLeafOutbound::Trojan {
+                tag,
+                server,
+                port,
+                password,
+                sni,
+                insecure,
+            } => {
+                let sent = crate::outbound::trojan::send_trojan_udp_packet(
+                    self,
+                    context.session,
+                    server,
+                    port,
+                    password,
+                    sni,
+                    insecure,
+                    &context.session.target,
+                    context.session.port,
+                    context.payload,
+                )
+                .await
+                .map_err(|error| UdpCandidateFailure {
+                    stage: "udp_trojan_send",
+                    error,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
+
+                Ok(UdpCandidateStart::Flow {
+                    outbound: UdpFlowOutbound::Trojan {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        password: password.to_owned(),
+                        sni: sni.map(|s| s.to_owned()),
+                        insecure,
+                    },
+                    outbound_tx_bytes: sent as u64,
+                })
+            }
+            #[cfg(not(feature = "trojan"))]
             ResolvedLeafOutbound::Trojan { .. }
             | ResolvedLeafOutbound::Vmess { .. }
             | ResolvedLeafOutbound::Mieru { .. } => Err(UdpCandidateFailure {
-                stage: "trojan/vmess",
-                error: zero_core::Error::Unsupported("trojan/vmess UDP not supported").into(),
+                stage: "trojan/vmess/mieru",
+                error: zero_core::Error::Unsupported("UDP not supported").into(),
+                upstream: None,
+            }),
+            #[cfg(feature = "trojan")]
+            ResolvedLeafOutbound::Vmess { .. }
+            | ResolvedLeafOutbound::Mieru { .. } => Err(UdpCandidateFailure {
+                stage: "vmess/mieru",
+                error: zero_core::Error::Unsupported("vmess/mieru UDP not supported").into(),
                 upstream: None,
             }),
         }

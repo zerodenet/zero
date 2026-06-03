@@ -6,4 +6,6 @@ pub mod mieru;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks5;
+#[cfg(feature = "trojan")]
+pub mod trojan;
 pub mod vless;
