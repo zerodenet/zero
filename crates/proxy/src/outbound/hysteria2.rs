@@ -131,11 +131,7 @@ pub fn drain_all_h2_responses() -> Vec<H2Decrypted> {
 }
 
 /// Bridge an async response receiver into the global sync queue.
-fn bridge_h2_responses(
-    mut recv_rx: mpsc::Receiver<Vec<u8>>,
-    target: Address,
-    port: u16,
-) {
+fn bridge_h2_responses(mut recv_rx: mpsc::Receiver<Vec<u8>>, target: Address, port: u16) {
     tokio::spawn(async move {
         while let Some(payload) = recv_rx.recv().await {
             let mut pending = H2_PENDING.lock().expect("h2 pending lock poisoned");
@@ -165,12 +161,7 @@ pub async fn send_h2_udp_packet(
     payload: &[u8],
 ) -> Result<usize, EngineError> {
     let sent = payload.len();
-    let key = (
-        server.to_owned(),
-        server_port,
-        target.clone(),
-        target_port,
-    );
+    let key = (server.to_owned(), server_port, target.clone(), target_port);
 
     // Reuse existing upstream if available.
     let cached_tx = {

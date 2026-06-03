@@ -80,18 +80,19 @@ pub async fn send_mieru_udp_packet(
     }
 
     // Establish new upstream.
-    let send_tx = establish_mieru_upstream(
-        proxy, server, server_port, username, password, session,
-    )
-    .await?;
+    let send_tx =
+        establish_mieru_upstream(proxy, server, server_port, username, password, session).await?;
 
     // Cache for reuse.
     MIERU_CACHE
         .lock()
         .expect("mieru cache lock poisoned")
-        .insert(key, MieruCachedUpstream {
-            send_tx: send_tx.clone(),
-        });
+        .insert(
+            key,
+            MieruCachedUpstream {
+                send_tx: send_tx.clone(),
+            },
+        );
 
     // Send initial payload.
     let wrapped = wrap_udp_associate(payload);
@@ -191,15 +192,11 @@ async fn establish_mieru_upstream(
                             if let Ok(unwrapped) = unwrap_udp_associate(&payload) {
                                 let mut pending =
                                     MIERU_PENDING.lock().expect("mieru pending lock poisoned");
-                                pending.push_back(MieruUdpResponse {
-                                    payload: unwrapped,
-                                });
+                                pending.push_back(MieruUdpResponse { payload: unwrapped });
                             }
                         }
                     }
-                    Err(error)
-                        if error == zero_core::Error::Protocol("mieru: need more data") =>
-                    {
+                    Err(error) if error == zero_core::Error::Protocol("mieru: need more data") => {
                         break; // wait for more data
                     }
                     Err(e) => {

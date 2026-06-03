@@ -318,9 +318,9 @@ impl Proxy {
         _session: &Session,
         inbound_tag: &str,
     ) -> Result<(), EngineError> {
-        let udp_socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!("mieru udp bind: {e}")))
-        })?;
+        let udp_socket = tokio::net::UdpSocket::bind("0.0.0.0:0")
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru udp bind: {e}"))))?;
 
         let mut read_buf = [0u8; 65536];
         let mut recv_buf = [0u8; 65536];
@@ -429,14 +429,12 @@ impl Proxy {
 
 fn addr_from_ip(ip: zero_traits::IpAddress, port: u16) -> std::net::SocketAddr {
     match ip {
-        zero_traits::IpAddress::V4(octets) => std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)),
-            port,
-        ),
-        zero_traits::IpAddress::V6(octets) => std::net::SocketAddr::new(
-            std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)),
-            port,
-        ),
+        zero_traits::IpAddress::V4(octets) => {
+            std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)), port)
+        }
+        zero_traits::IpAddress::V6(octets) => {
+            std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), port)
+        }
     }
 }
 

@@ -84,10 +84,9 @@ pub async fn send_trojan_udp_packet(
     }
 
     // Establish new upstream (TLS + CMD_UDP).
-    let (send_tx, _bridge_target, _bridge_port) = establish_trojan_upstream(
-        proxy, server, server_port, password, sni, insecure, session,
-    )
-    .await?;
+    let (send_tx, _bridge_target, _bridge_port) =
+        establish_trojan_upstream(proxy, server, server_port, password, sni, insecure, session)
+            .await?;
 
     // Cache for reuse.
     TROJAN_CACHE
@@ -187,8 +186,7 @@ async fn establish_trojan_upstream(
             match read_udp_packet(&mut *s).await {
                 Ok((addr, port, payload)) => {
                     drop(s);
-                    let mut pending =
-                        TROJAN_PENDING.lock().expect("trojan pending lock poisoned");
+                    let mut pending = TROJAN_PENDING.lock().expect("trojan pending lock poisoned");
                     pending.push_back(TrojanDecrypted {
                         target: addr,
                         port,
