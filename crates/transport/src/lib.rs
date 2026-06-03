@@ -16,6 +16,8 @@ pub mod quic;
 pub mod split_http;
 #[cfg(feature = "tls")]
 pub mod tls;
+#[cfg(feature = "tls")]
+pub mod tls13;
 #[cfg(feature = "vless")]
 pub mod vless_transport;
 #[cfg(feature = "ws")]
