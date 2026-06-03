@@ -71,6 +71,130 @@ pub async fn read_request<S: AsyncSocket>(stream: &mut S) -> Result<(u8, Address
     Ok((cmd, addr, port))
 }
 
+/// Write a Trojan UDP packet over a TCP stream.
+///
+/// Format: `[2 bytes length BE][ATYP][ADDR][PORT][payload]`
+/// The length covers everything after the length field itself.
+pub async fn write_udp_packet<S: AsyncSocket>(
+    stream: &mut S,
+    addr: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<(), Error> {
+    let packet = build_udp_packet(addr, port, payload);
+    stream
+        .write_all(&packet)
+        .await
+        .map_err(|_| Error::Io("trojan: write udp failed"))
+}
+
+/// Build a Trojan UDP packet in memory.
+pub fn build_udp_packet(addr: &Address, port: u16, payload: &[u8]) -> Vec<u8> {
+    // Body = ATYP + ADDR + PORT + payload
+    let body = build_address_body(addr, port, payload);
+    let mut packet = Vec::with_capacity(2 + body.len());
+    packet.extend_from_slice(&(body.len() as u16).to_be_bytes());
+    packet.extend_from_slice(&body);
+    packet
+}
+
+/// Read a Trojan UDP packet from a TCP stream.
+///
+/// Returns (address, port, payload) on success.
+pub async fn read_udp_packet<S: AsyncSocket>(
+    stream: &mut S,
+) -> Result<(Address, u16, Vec<u8>), Error> {
+    // Read 2-byte length header
+    let mut len_buf = [0u8; 2];
+    read_exact(stream, &mut len_buf).await?;
+    let body_len = u16::from_be_bytes(len_buf) as usize;
+
+    // Read body
+    let mut body = vec![0u8; body_len];
+    read_exact(stream, &mut body).await?;
+
+    // Parse body: ATYP + ADDR + PORT + payload
+    let (addr, port, payload_offset) = parse_address(&body)?;
+    let payload = body[payload_offset..].to_vec();
+    Ok((addr, port, payload))
+}
+
+// ── internal helpers ────────────────────────────────────────────────
+
+fn build_address_body(addr: &Address, port: u16, payload: &[u8]) -> Vec<u8> {
+    let mut body = Vec::new();
+    match addr {
+        Address::Ipv4(bytes) => {
+            body.push(ATYP_IPV4);
+            body.extend_from_slice(bytes);
+        }
+        Address::Ipv6(bytes) => {
+            body.push(ATYP_IPV6);
+            body.extend_from_slice(bytes);
+        }
+        Address::Domain(domain) => {
+            let b = domain.as_bytes();
+            body.push(ATYP_DOMAIN);
+            body.push(b.len() as u8);
+            body.extend_from_slice(b);
+        }
+    }
+    body.extend_from_slice(&port.to_be_bytes());
+    body.extend_from_slice(payload);
+    body
+}
+
+fn parse_address(data: &[u8]) -> Result<(Address, u16, usize), Error> {
+    if data.is_empty() {
+        return Err(Error::Protocol("trojan udp: empty address body"));
+    }
+    let mut off = 0;
+    let addr = match data[off] {
+        ATYP_IPV4 => {
+            off += 1;
+            if data.len() < off + 4 {
+                return Err(Error::Protocol("trojan udp: truncated ipv4"));
+            }
+            let mut bytes = [0u8; 4];
+            bytes.copy_from_slice(&data[off..off + 4]);
+            off += 4;
+            Address::Ipv4(bytes)
+        }
+        ATYP_IPV6 => {
+            off += 1;
+            if data.len() < off + 16 {
+                return Err(Error::Protocol("trojan udp: truncated ipv6"));
+            }
+            let mut bytes = [0u8; 16];
+            bytes.copy_from_slice(&data[off..off + 16]);
+            off += 16;
+            Address::Ipv6(bytes)
+        }
+        ATYP_DOMAIN => {
+            off += 1;
+            if data.len() < off + 1 {
+                return Err(Error::Protocol("trojan udp: truncated domain len"));
+            }
+            let len = data[off] as usize;
+            off += 1;
+            if data.len() < off + len {
+                return Err(Error::Protocol("trojan udp: truncated domain"));
+            }
+            let domain = String::from_utf8(data[off..off + len].to_vec())
+                .map_err(|_| Error::Protocol("trojan udp: invalid domain encoding"))?;
+            off += len;
+            Address::Domain(domain)
+        }
+        _ => return Err(Error::Protocol("trojan udp: unsupported address type")),
+    };
+    if data.len() < off + 2 {
+        return Err(Error::Protocol("trojan udp: truncated port"));
+    }
+    let port = u16::from_be_bytes([data[off], data[off + 1]]);
+    off += 2;
+    Ok((addr, port, off))
+}
+
 /// Write command byte + address + port + CRLF.
 pub async fn write_request<S: AsyncSocket>(
     stream: &mut S,

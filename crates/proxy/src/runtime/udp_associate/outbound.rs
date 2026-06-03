@@ -99,10 +99,48 @@ impl Proxy {
                 .into(),
                 upstream: None,
             }),
+            #[cfg(feature = "hysteria2")]
+            ResolvedLeafOutbound::Hysteria2 {
+                tag,
+                server,
+                port,
+                password,
+                ..
+            } => {
+                let sent = crate::outbound::hysteria2::send_h2_udp_packet(
+                    self,
+                    context.session,
+                    server,
+                    port,
+                    password,
+                    &context.session.target,
+                    context.session.port,
+                    context.payload,
+                )
+                .await
+                .map_err(|error| UdpCandidateFailure {
+                    stage: "udp_h2_send",
+                    error,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
+
+                Ok(UdpCandidateStart::Flow {
+                    outbound: UdpFlowOutbound::Hysteria2 {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        password: password.to_owned(),
+                    },
+                    outbound_tx_bytes: sent as u64,
+                })
+            }
+            #[cfg(not(feature = "hysteria2"))]
             ResolvedLeafOutbound::Hysteria2 { .. } => Err(UdpCandidateFailure {
                 stage: "udp_hysteria2_outbound",
-                error: zero_core::Error::Unsupported("Hysteria2 UDP outbound not yet implemented")
-                    .into(),
+                error: zero_core::Error::Unsupported(
+                    "Hysteria2 UDP outbound requires Cargo feature `hysteria2`",
+                )
+                .into(),
                 upstream: None,
             }),
             #[allow(unused_variables)]
@@ -155,11 +193,107 @@ impl Proxy {
                     })
                 }
             }
+            #[cfg(feature = "trojan")]
+            ResolvedLeafOutbound::Trojan {
+                tag,
+                server,
+                port,
+                password,
+                sni,
+                insecure,
+                client_fingerprint,
+            } => {
+                let sent = crate::outbound::trojan::send_trojan_udp_packet(
+                    self,
+                    context.session,
+                    server,
+                    port,
+                    password,
+                    sni,
+                    insecure,
+                    client_fingerprint,
+                    &context.session.target,
+                    context.session.port,
+                    context.payload,
+                )
+                .await
+                .map_err(|error| UdpCandidateFailure {
+                    stage: "udp_trojan_send",
+                    error,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
+
+                Ok(UdpCandidateStart::Flow {
+                    outbound: UdpFlowOutbound::Trojan {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        password: password.to_owned(),
+                        sni: sni.map(|s| s.to_owned()),
+                        insecure,
+                        client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
+                    },
+                    outbound_tx_bytes: sent as u64,
+                })
+            }
+            #[cfg(not(feature = "trojan"))]
             ResolvedLeafOutbound::Trojan { .. }
             | ResolvedLeafOutbound::Vmess { .. }
             | ResolvedLeafOutbound::Mieru { .. } => Err(UdpCandidateFailure {
-                stage: "trojan/vmess",
-                error: zero_core::Error::Unsupported("trojan/vmess UDP not supported").into(),
+                stage: "trojan/vmess/mieru",
+                error: zero_core::Error::Unsupported("UDP not supported").into(),
+                upstream: None,
+            }),
+            #[cfg(feature = "mieru")]
+            ResolvedLeafOutbound::Mieru {
+                tag,
+                server,
+                port,
+                username,
+                password,
+            } => {
+                let sent = crate::outbound::mieru_udp::send_mieru_udp_packet(
+                    self,
+                    context.session,
+                    server,
+                    port,
+                    username,
+                    password,
+                    &context.session.target,
+                    context.session.port,
+                    context.payload,
+                )
+                .await
+                .map_err(|error| UdpCandidateFailure {
+                    stage: "udp_mieru_send",
+                    error,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
+
+                Ok(UdpCandidateStart::Flow {
+                    outbound: UdpFlowOutbound::Mieru {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        username: username.to_owned(),
+                        password: password.to_owned(),
+                    },
+                    outbound_tx_bytes: sent as u64,
+                })
+            }
+            #[cfg(feature = "trojan")]
+            ResolvedLeafOutbound::Vmess { .. } => Err(UdpCandidateFailure {
+                stage: "vmess",
+                error: zero_core::Error::Unsupported("vmess UDP not supported").into(),
+                upstream: None,
+            }),
+            #[cfg(not(feature = "mieru"))]
+            ResolvedLeafOutbound::Mieru { .. } => Err(UdpCandidateFailure {
+                stage: "udp_mieru_outbound",
+                error: zero_core::Error::Unsupported(
+                    "Mieru UDP outbound requires Cargo feature `mieru`",
+                )
+                .into(),
                 upstream: None,
             }),
         }

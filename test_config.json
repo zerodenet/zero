@@ -1,0 +1,48 @@
+{
+  "inbounds": [
+    {
+      "tag": "socks-in",
+      "listen": { "address": "127.0.0.1", "port": 15581 },
+      "protocol": { "type": "socks5" }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": { "type": "direct" }
+    },
+    {
+      "tag": "ss-in",
+      "protocol": {
+        "type": "shadowsocks",
+        "server": "mzdyr76ksq.ss-29.dd90ia3zi3.763106.xyz",
+        "port": 37077,
+        "cipher": "chacha20-ietf-poly1305",
+        "password": "318149df-2bab-4a35-9de1-870f3e410598"
+      }
+    },
+    {
+      "tag": "tr-sg",
+      "protocol": {
+        "type": "trojan",
+        "server": "eieyy23m86.orangesg-std.763106.xyz",
+        "port": 14688,
+        "password": "318149df-2bab-4a35-9de1-870f3e410598",
+        "sni": "eieyy23m86.orangesg-std.763106.xyz",
+        "insecure": true
+      }
+    }
+  ],
+  "outbound_groups": [
+    {
+      "tag": "proxy",
+      "type": "selector",
+      "outbounds": ["ss-in", "tr-sg", "direct"]
+    }
+  ],
+  "mode": { "type": "global", "outbound": "proxy" },
+  "route": {
+    "rules": [],
+    "final": { "type": "direct" }
+  }
+}

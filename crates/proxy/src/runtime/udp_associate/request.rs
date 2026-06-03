@@ -344,6 +344,164 @@ impl Proxy {
                     "Shadowsocks UDP outbound requires feature `shadowsocks`",
                 )));
             }
+            #[cfg(feature = "hysteria2")]
+            UdpFlowOutbound::Hysteria2 {
+                tag: _,
+                server,
+                port,
+                password,
+            } => {
+                use crate::outbound::hysteria2::send_h2_udp_packet;
+                match send_h2_udp_packet(
+                    self,
+                    &flow.session,
+                    server.as_str(),
+                    *port,
+                    password.as_str(),
+                    &flow.session.target,
+                    flow.session.port,
+                    payload,
+                )
+                .await
+                {
+                    Ok(sent) => {
+                        self.record_session_outbound_tx(flow.session.id, sent as u64);
+                    }
+                    Err(error) => {
+                        let msg = error.to_string();
+                        if let Some(completed) = context.udp_flows.finish(
+                            &flow.session.target,
+                            flow.session.port,
+                            SessionOutcome::Failed,
+                        ) {
+                            log_session_failed(
+                                &flow.session,
+                                Some(&completed.record),
+                                "udp_h2_send",
+                                started_at.elapsed(),
+                                &EngineError::Io(std::io::Error::other(msg.as_str())),
+                                None,
+                            );
+                        }
+                        return Err(EngineError::Io(std::io::Error::other(msg.as_str())));
+                    }
+                }
+            }
+            #[cfg(not(feature = "hysteria2"))]
+            UdpFlowOutbound::Hysteria2 { .. } => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Hysteria2 UDP outbound requires feature `hysteria2`",
+                )));
+            }
+            #[cfg(feature = "trojan")]
+            UdpFlowOutbound::Trojan {
+                tag: _,
+                server,
+                port,
+                password,
+                sni,
+                insecure,
+                client_fingerprint,
+            } => {
+                use crate::outbound::trojan::send_trojan_udp_packet;
+                match send_trojan_udp_packet(
+                    self,
+                    &flow.session,
+                    server.as_str(),
+                    *port,
+                    password.as_str(),
+                    sni.as_deref(),
+                    *insecure,
+                    client_fingerprint.as_deref(),
+                    &flow.session.target,
+                    flow.session.port,
+                    payload,
+                )
+                .await
+                {
+                    Ok(sent) => {
+                        self.record_session_outbound_tx(flow.session.id, sent as u64);
+                    }
+                    Err(error) => {
+                        let msg = error.to_string();
+                        if let Some(completed) = context.udp_flows.finish(
+                            &flow.session.target,
+                            flow.session.port,
+                            SessionOutcome::Failed,
+                        ) {
+                            log_session_failed(
+                                &flow.session,
+                                Some(&completed.record),
+                                "udp_trojan_send",
+                                started_at.elapsed(),
+                                &EngineError::Io(std::io::Error::other(msg.as_str())),
+                                None,
+                            );
+                        }
+                        return Err(EngineError::Io(std::io::Error::other(msg.as_str())));
+                    }
+                }
+            }
+            #[cfg(not(feature = "trojan"))]
+            UdpFlowOutbound::Trojan { .. } => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Trojan UDP outbound requires feature `trojan`",
+                )));
+            }
+            #[cfg(feature = "mieru")]
+            UdpFlowOutbound::Mieru {
+                tag: _,
+                server,
+                port,
+                username,
+                password,
+            } => {
+                use crate::outbound::mieru_udp::send_mieru_udp_packet;
+                match send_mieru_udp_packet(
+                    self,
+                    &flow.session,
+                    server.as_str(),
+                    *port,
+                    username.as_str(),
+                    password.as_str(),
+                    &flow.session.target,
+                    flow.session.port,
+                    payload,
+                )
+                .await
+                {
+                    Ok(sent) => {
+                        self.record_session_outbound_tx(flow.session.id, sent as u64);
+                    }
+                    Err(error) => {
+                        let msg = error.to_string();
+                        if let Some(completed) = context.udp_flows.finish(
+                            &flow.session.target,
+                            flow.session.port,
+                            SessionOutcome::Failed,
+                        ) {
+                            log_session_failed(
+                                &flow.session,
+                                Some(&completed.record),
+                                "udp_mieru_send",
+                                started_at.elapsed(),
+                                &EngineError::Io(std::io::Error::other(msg.as_str())),
+                                None,
+                            );
+                        }
+                        return Err(EngineError::Io(std::io::Error::other(msg.as_str())));
+                    }
+                }
+            }
+            #[cfg(not(feature = "mieru"))]
+            UdpFlowOutbound::Mieru { .. } => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Mieru UDP outbound requires feature `mieru`",
+                )));
+            }
         }
 
         Ok(())

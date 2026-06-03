@@ -1,3 +1,5 @@
+#[cfg(feature = "tls")]
+pub mod fingerprint;
 #[cfg(feature = "grpc")]
 pub mod grpc;
 #[cfg(feature = "h2")]

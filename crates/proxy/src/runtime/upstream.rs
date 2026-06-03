@@ -390,6 +390,7 @@ impl Proxy {
         password: &str,
         sni: Option<&str>,
         insecure: bool,
+        client_fingerprint: Option<&str>,
     ) -> Result<TcpRelayStream, EngineError> {
         let upstream = self
             .protocols
@@ -402,6 +403,7 @@ impl Proxy {
             ca_cert_path: None,
             insecure,
             alpn: Vec::new(),
+            client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
         };
         let tls_stream = zero_transport::tls::connect_tls_upstream(
             upstream,
@@ -437,6 +439,7 @@ impl Proxy {
         _password: &str,
         _sni: Option<&str>,
         _insecure: bool,
+        _client_fingerprint: Option<&str>,
     ) -> Result<TcpRelayStream, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",

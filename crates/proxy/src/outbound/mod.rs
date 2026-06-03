@@ -3,7 +3,11 @@ pub mod direct;
 pub mod hysteria2;
 #[cfg(feature = "mieru")]
 pub mod mieru;
+#[cfg(feature = "mieru")]
+pub mod mieru_udp;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks5;
+#[cfg(feature = "trojan")]
+pub mod trojan;
 pub mod vless;

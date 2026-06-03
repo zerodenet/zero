@@ -234,9 +234,18 @@ impl Proxy {
                 password,
                 sni,
                 insecure,
+                client_fingerprint,
             } => {
                 match self
-                    .connect_via_trojan_upstream(session, server, port, password, sni, insecure)
+                    .connect_via_trojan_upstream(
+                        session,
+                        server,
+                        port,
+                        password,
+                        sni,
+                        insecure,
+                        client_fingerprint,
+                    )
                     .await
                 {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Trojan {

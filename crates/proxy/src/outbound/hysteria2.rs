@@ -3,11 +3,12 @@
 //! Provides UDP upstream establishment and management for chained
 //! Hysteria2 connections, following the same pattern as VLESS.
 //!
-//! TODO: wire UDP relay (establish_hysteria2_udp_upstream, etc.)
-#![allow(dead_code)]
+//! UDP relay is wired into the SOCKS5 UDP associate dispatch path
+//! via `send_h2_udp_packet` / `drain_all_h2_responses`.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::VecDeque;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -23,6 +24,7 @@ use crate::transport::Hysteria2Connector;
 
 /// Handle to an established Hysteria2 UDP upstream connection.
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct Hysteria2UdpUpstream {
     pub session_id: u64,
     pub send_tx: mpsc::Sender<Vec<u8>>,
@@ -105,6 +107,131 @@ fn spawn_hysteria2_udp_relay(
     )
 }
 
+// ── Global response queue ──────────────────────────────────────────
+
+/// A decrypted response from a Hysteria2 upstream.
+#[derive(Debug, Clone)]
+pub struct H2Decrypted {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+}
+
+/// Global pending Hysteria2 UDP responses, drained by the UDP associate loop.
+static H2_PENDING: LazyLock<Arc<Mutex<VecDeque<H2Decrypted>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(VecDeque::new())));
+
+/// Drain all pending Hysteria2 UDP responses (synchronous).
+pub fn drain_all_h2_responses() -> Vec<H2Decrypted> {
+    H2_PENDING
+        .lock()
+        .expect("h2 pending lock poisoned")
+        .drain(..)
+        .collect()
+}
+
+/// Bridge an async response receiver into the global sync queue.
+fn bridge_h2_responses(mut recv_rx: mpsc::Receiver<Vec<u8>>, target: Address, port: u16) {
+    tokio::spawn(async move {
+        while let Some(payload) = recv_rx.recv().await {
+            let mut pending = H2_PENDING.lock().expect("h2 pending lock poisoned");
+            pending.push_back(H2Decrypted {
+                target: target.clone(),
+                port,
+                payload,
+            });
+        }
+    });
+}
+
+// ── Send (SOCKS5 UDP dispatch) ─────────────────────────────────────
+
+/// Send a UDP payload through a Hysteria2 upstream, reusing existing connections.
+///
+/// Called by the SOCKS5 UDP associate dispatch path for the first packet
+/// to a new target, and for subsequent packets via `forward_existing_udp_flow`.
+pub async fn send_h2_udp_packet(
+    proxy: &Proxy,
+    session: &Session,
+    server: &str,
+    server_port: u16,
+    password: &str,
+    target: &Address,
+    target_port: u16,
+    payload: &[u8],
+) -> Result<usize, EngineError> {
+    let sent = payload.len();
+    let key = (server.to_owned(), server_port, target.clone(), target_port);
+
+    // Reuse existing upstream if available.
+    let cached_tx = {
+        let cache = H2_CACHE.lock().expect("h2 cache lock poisoned");
+        cache.get(&key).map(|u| u.send_tx.clone())
+    };
+    if let Some(tx) = cached_tx {
+        let _ = tx.send(payload.to_vec()).await;
+        proxy.record_session_outbound_tx(session.id, sent as u64);
+        return Ok(sent);
+    }
+
+    // Establish new upstream.
+    let h2_session = Session::new(
+        session.id,
+        target.clone(),
+        target_port,
+        zero_core::Network::Udp,
+        zero_core::ProtocolType::Hysteria2,
+    );
+
+    match establish_hysteria2_udp_upstream(
+        proxy,
+        &h2_session,
+        server,
+        server_port,
+        password,
+        payload,
+    )
+    .await
+    {
+        Ok((upstream, recv_rx)) => {
+            // Cache for reuse.
+            let cached = H2CachedUpstream {
+                send_tx: upstream.send_tx.clone(),
+            };
+            H2_CACHE
+                .lock()
+                .expect("h2 cache lock poisoned")
+                .insert(key.clone(), cached);
+
+            // Bridge response receiver to global sync queue.
+            bridge_h2_responses(recv_rx, target.clone(), target_port);
+
+            proxy.record_session_outbound_tx(session.id, sent as u64);
+            Ok(sent)
+        }
+        Err(e) => {
+            error!(
+                %e, server, server_port, ?target, target_port,
+                "hysteria2 udp send failed"
+            );
+            Err(e)
+        }
+    }
+}
+
+// ── Global upstream cache ──────────────────────────────────────────
+
+type H2CacheKey = (String, u16, Address, u16); // (server, port, target, target_port)
+
+#[derive(Clone)]
+struct H2CachedUpstream {
+    send_tx: mpsc::Sender<Vec<u8>>,
+}
+
+/// Global Hysteria2 UDP upstream cache for connection reuse.
+static H2_CACHE: LazyLock<Mutex<HashMap<H2CacheKey, H2CachedUpstream>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 // ── Establishment ──
 
 /// Establish a Hysteria2 UDP upstream connection.
@@ -137,11 +264,14 @@ pub async fn establish_hysteria2_udp_upstream(
 // ── Manager ──
 
 /// Manages per-target Hysteria2 UDP upstream connections.
+/// Kept for future connection-pooling enhancements.
+#[allow(dead_code)]
 pub struct Hysteria2UdpOutboundManager {
     upstreams: HashMap<(Address, u16), Hysteria2UdpUpstream>,
     response_tasks: JoinSet<Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>>,
 }
 
+#[allow(dead_code)]
 impl Hysteria2UdpOutboundManager {
     pub fn new() -> Self {
         Self {

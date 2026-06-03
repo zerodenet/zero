@@ -564,6 +564,10 @@ pub struct ClientTlsConfig {
     pub insecure: bool,
     #[serde(default)]
     pub alpn: Vec<String>,
+    /// TLS client fingerprint preset: "chrome", "firefox", "safari",
+    /// "ios", "edge", "randomized", or empty/"none" for rustls defaults.
+    #[serde(default, alias = "client-fingerprint")]
+    pub client_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -806,6 +810,8 @@ pub enum OutboundProtocolConfig {
         sni: Option<String>,
         #[serde(default)]
         insecure: bool,
+        #[serde(default, alias = "client-fingerprint")]
+        client_fingerprint: Option<String>,
     },
     #[serde(rename = "vmess")]
     Vmess {

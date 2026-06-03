@@ -119,6 +119,61 @@ impl Proxy {
                                 }
                             }
                         }
+
+                        // Forward pending Hysteria2 UDP responses to the SOCKS5 client.
+                        #[cfg(feature = "hysteria2")]
+                        if let Some(client_addr) = client_udp_addr {
+                            use crate::outbound::hysteria2::drain_all_h2_responses;
+                            for resp in drain_all_h2_responses() {
+                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
+                                    &resp.target, resp.port, &resp.payload,
+                                ) {
+                                    let _ = relay.send_to_addr(&frame, client_addr).await;
+                                }
+                            }
+                        }
+
+                        // Forward pending Trojan UDP responses to the SOCKS5 client.
+                        #[cfg(feature = "trojan")]
+                        if let Some(client_addr) = client_udp_addr {
+                            use crate::outbound::trojan::drain_all_trojan_responses;
+                            for resp in drain_all_trojan_responses() {
+                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
+                                    &resp.target, resp.port, &resp.payload,
+                                ) {
+                                    let _ = relay.send_to_addr(&frame, client_addr).await;
+                                }
+                            }
+                        }
+
+                        // Forward pending Mieru UDP responses to the SOCKS5 client.
+                        #[cfg(feature = "mieru")]
+                        if let Some(client_addr) = client_udp_addr {
+                            use crate::outbound::mieru_udp::drain_all_mieru_responses;
+                            for resp in drain_all_mieru_responses() {
+                                // Mieru responses are full SOCKS5 UDP packets
+                                if let Ok(parsed) =
+                                    zero_protocol_socks5::parse_udp_packet(&resp.payload)
+                                {
+                                    if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
+                                        &parsed.target,
+                                        parsed.port,
+                                        &parsed.payload,
+                                    ) {
+                                        let _ = relay.send_to_addr(&frame, client_addr).await;
+                                    }
+                                } else {
+                                    // Fallback: forward raw payload as-is
+                                    if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
+                                        &zero_core::Address::Ipv4([0, 0, 0, 0]),
+                                        0,
+                                        &resp.payload,
+                                    ) {
+                                        let _ = relay.send_to_addr(&frame, client_addr).await;
+                                    }
+                                }
+                            }
+                        }
                     } else if let Some(client_addr) = client_udp_addr {
                         if let Some(session_id) = udp_flows.direct_response_session_id(sender) {
                             self.record_session_outbound_rx(session_id, buf.len() as u64);

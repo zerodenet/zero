@@ -6,7 +6,7 @@ STATUS_LISTEN ?= 127.0.0.1:9090
 PREFIX ?= /usr/local
 VERSION := $(shell grep -m1 'version = ' Cargo.toml | sed 's/.*= *"//;s/".*//')
 
-.PHONY: help fmt check test clippy build build-full release release-full strip clean install uninstall run run-status status status-json version
+.PHONY: help fmt check test clippy build build-full release release-full strip clean install uninstall run run-status status status-json version docs-dev docs-build docs-preview docs-install
 
 help:
 	@echo Available targets:
@@ -26,7 +26,11 @@ help:
 	@echo   make run-status   - run zero with local status endpoint
 	@echo   make status       - print text status for CONFIG=$(CONFIG)
 	@echo   make status-json  - print JSON status for CONFIG=$(CONFIG)
-	@echo   make version      - show version
+	@echo   make version     - show version
+	@echo   make docs-dev    - start VitePress dev server
+	@echo   make docs-build  - build static docs site
+	@echo   make docs-preview- preview built docs site
+	@echo   make docs-install- install docs npm dependencies
 
 fmt:
 	$(CARGO) fmt --all
@@ -78,3 +82,17 @@ status-json:
 
 version:
 	@echo v$(VERSION)
+
+# ── Documentation ──────────────────────────────────────────────────────
+
+docs-install:
+	cd docs && npm install
+
+docs-dev:
+	cd docs && npm run dev
+
+docs-build:
+	cd docs && npm run build
+
+docs-preview:
+	cd docs && npm run preview
