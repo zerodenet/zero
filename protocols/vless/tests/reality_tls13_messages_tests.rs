@@ -1,6 +1,6 @@
-use zero_protocol_vless::reality::common::CONTENT_TYPE_HANDSHAKE;
-use zero_protocol_vless::reality::common::*;
-use zero_protocol_vless::reality::reality_tls13_messages::*;
+use ztls::common::CONTENT_TYPE_HANDSHAKE;
+use ztls::common::*;
+use ztls::messages::*;
 
 #[test]
 fn test_construct_finished() {

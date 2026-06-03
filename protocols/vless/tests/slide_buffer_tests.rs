@@ -1,5 +1,5 @@
 use std::io::{BufRead, Read};
-use zero_protocol_vless::reality::slide_buffer::*;
+use ztls::slide_buffer::*;
 
 #[test]
 fn test_new_buffer() {
