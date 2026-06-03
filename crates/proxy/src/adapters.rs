@@ -124,6 +124,8 @@ pub(crate) fn build_registry() -> super::protocol_adapter::ProtocolRegistry {
     r.register(Arc::new(TrojanAdapter));
     #[cfg(feature = "vmess")]
     r.register(Arc::new(VmessAdapter));
+    #[cfg(feature = "mieru")]
+    r.register(Arc::new(MieruAdapter));
     // Always available.
     r.register(Arc::new(DirectAdapter));
 

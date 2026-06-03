@@ -6,9 +6,9 @@ use zero_traits::AsyncSocket;
 #[cfg(feature = "reality")]
 use crate::flow::{flow_from_byte, flow_read_request, is_aead_flow};
 use crate::mux::MuxServer;
-use crate::shared::{
-    read_addon, read_address, read_exact, CMD_MUX, CMD_TCP, CMD_UDP, VLESS_VERSION,
-};
+#[cfg(not(feature = "reality"))]
+use crate::shared::read_addon;
+use crate::shared::{read_address, read_exact, CMD_MUX, CMD_TCP, CMD_UDP, VLESS_VERSION};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VlessInbound;

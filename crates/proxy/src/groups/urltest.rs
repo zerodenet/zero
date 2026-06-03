@@ -7,7 +7,7 @@ use tracing::{debug, info, warn};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
-use super::super::transport::{extract_tcp_stream, TcpRelayStream};
+use super::super::transport::extract_tcp_stream;
 use super::super::{logging::log_urltest_group_target_changed, runtime::Proxy};
 use zero_engine::{
     EngineError, PolicyProbeCompletedPayload, PolicyProbeMember, ProbeTrigger,

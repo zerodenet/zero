@@ -132,17 +132,23 @@ pub async fn connect_tls_upstream(
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid tls server_name"))?
         .to_owned();
 
+    let peer_addr = socket.peer_addr().ok();
     tracing::debug!(
         sni = %server_name_str,
+        peer = ?peer_addr,
         insecure = tls.insecure,
+        alpn = ?tls.alpn,
         "tls connecting"
     );
 
-    let stream = connector.connect(server_name, socket.into_inner()).await
+    let stream = connector
+        .connect(server_name, socket.into_inner())
+        .await
         .map_err(|e| {
             tracing::warn!(
                 error = %e,
                 sni = %server_name_str,
+                peer = ?peer_addr,
                 "tls handshake failed"
             );
             e

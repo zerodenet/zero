@@ -19,8 +19,6 @@ use zero_core::Error;
 /// Number of trailing nonce bytes replaced with user hint.
 /// Original mieru uses 4 by default.
 pub const USER_HINT_LEN: usize = 4;
-/// Prefix length used to compute the user hint.
-const USER_HINT_PREFIX: usize = 16;
 
 /// Nonce pattern types matching upstream mieru.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +59,7 @@ impl Default for NonceConfig {
 }
 
 /// Mieru cipher state for one direction.
+#[derive(Clone)]
 pub struct MieruCipher {
     key: [u8; 32],
     /// Full 24-byte nonce — incremented as big-endian after each use.

@@ -74,17 +74,39 @@ impl InboundProtocol for Hysteria2StreamHandler {
         &self,
         client: Hysteria2Stream,
         upstream: crate::transport::TcpRelayStream,
+        proxy: &Proxy,
+        session_id: u64,
         up_bps: Option<u64>,
         down_bps: Option<u64>,
     ) -> Result<(), EngineError> {
         let (up_read, up_write) = tokio::io::split(upstream);
         let (down_read, down_write) = tokio::io::split(client);
 
+        let upload_proxy = proxy.clone();
         let upload = tokio::spawn(async move {
-            let _ = copy_one_way(down_read, up_write, |_| {}, up_bps).await;
+            let _ = copy_one_way(
+                down_read,
+                up_write,
+                |bytes| {
+                    upload_proxy.record_session_inbound_rx(session_id, bytes);
+                    upload_proxy.record_session_outbound_tx(session_id, bytes);
+                },
+                up_bps,
+            )
+            .await;
         });
+        let download_proxy = proxy.clone();
         let download = tokio::spawn(async move {
-            let _ = copy_one_way(up_read, down_write, |_| {}, down_bps).await;
+            let _ = copy_one_way(
+                up_read,
+                down_write,
+                |bytes| {
+                    download_proxy.record_session_outbound_rx(session_id, bytes);
+                    download_proxy.record_session_inbound_tx(session_id, bytes);
+                },
+                down_bps,
+            )
+            .await;
         });
         let _ = tokio::try_join!(upload, download);
         Ok(())

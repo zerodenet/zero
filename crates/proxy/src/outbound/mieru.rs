@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use zero_protocol_mieru::{DataMetadata, MieruOutbound, Segment, DATA_SERVER_TO_CLIENT};
+use zero_protocol_mieru::MieruOutbound;
 
 use crate::transport::TcpRelayStream;
 
@@ -17,6 +17,9 @@ use crate::transport::TcpRelayStream;
 pub(crate) struct MieruTcpStream {
     inner: TcpRelayStream,
     outbound: MieruOutbound,
+    write_buf: Vec<u8>,
+    write_pos: usize,
+    raw_read_buf: Vec<u8>,
     /// Buffered decrypted data from the last read.
     read_buf: Vec<u8>,
     read_pos: usize,
@@ -27,6 +30,9 @@ impl MieruTcpStream {
         Self {
             inner,
             outbound,
+            write_buf: Vec::new(),
+            write_pos: 0,
+            raw_read_buf: Vec::new(),
             read_buf: Vec::new(),
             read_pos: 0,
         }
@@ -38,30 +44,31 @@ impl MieruTcpStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        // Encrypt data as a Mieru data segment
-        let segment = self
-            .outbound
-            .encrypt_client_data(buf)
-            .map_err(|e| io::Error::other(format!("mieru encrypt: {e}")))?;
+        if self.write_buf.is_empty() {
+            self.write_buf = self
+                .outbound
+                .encrypt_client_data(buf)
+                .map_err(|e| io::Error::other(format!("mieru encrypt: {e}")))?;
+            self.write_pos = 0;
+        }
 
-        // Write encrypted segment to underlying stream
-        let mut written = 0;
-        while written < segment.len() {
-            match Pin::new(&mut self.inner).poll_write(cx, &segment[written..]) {
-                Poll::Ready(Ok(n)) if n > 0 => written += n,
-                Poll::Ready(Ok(_)) => break,
+        while self.write_pos < self.write_buf.len() {
+            match Pin::new(&mut self.inner).poll_write(cx, &self.write_buf[self.write_pos..]) {
+                Poll::Ready(Ok(0)) => {
+                    return Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "mieru write zero",
+                    )))
+                }
+                Poll::Ready(Ok(n)) => self.write_pos += n,
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                Poll::Pending if written > 0 => break,
                 Poll::Pending => return Poll::Pending,
             }
         }
 
-        // Report the plaintext bytes as written (caller doesn't know about framing)
-        if written > 0 {
-            Poll::Ready(Ok(buf.len()))
-        } else {
-            Poll::Pending
-        }
+        self.write_buf.clear();
+        self.write_pos = 0;
+        Poll::Ready(Ok(buf.len()))
     }
 
     /// Read encrypted data → decrypt Mieru segment → return plaintext.
@@ -83,35 +90,42 @@ impl MieruTcpStream {
             return Poll::Ready(Ok(()));
         }
 
-        // Read a chunk from the underlying stream
-        let mut raw = vec![0u8; 4096];
-        let mut read_buf = ReadBuf::new(&mut raw);
-        match Pin::new(&mut self.inner).poll_read(cx, &mut read_buf) {
-            Poll::Ready(Ok(())) => {
-                let filled = read_buf.filled().len();
-                if filled == 0 {
-                    return Poll::Ready(Ok(())); // EOF
-                }
-                raw.truncate(filled);
-
-                // Decrypt the mieru segment
-                match self.outbound.decrypt_server_data(&raw) {
-                    Ok(segment) => {
-                        let payload = segment.payload;
-                        let n = payload.len().min(buf.remaining());
-                        buf.put_slice(&payload[..n]);
-                        // Buffer any remaining decrypted data
-                        if n < payload.len() {
-                            self.read_buf = payload[n..].to_vec();
-                            self.read_pos = 0;
-                        }
-                        Poll::Ready(Ok(()))
+        loop {
+            match self
+                .outbound
+                .decrypt_server_data_with_consumed(&self.raw_read_buf)
+            {
+                Ok((segment, consumed)) => {
+                    self.raw_read_buf.drain(..consumed);
+                    let payload = segment.payload;
+                    if payload.is_empty() {
+                        continue;
                     }
-                    Err(e) => Poll::Ready(Err(io::Error::other(format!("mieru decrypt: {e}")))),
+                    let n = payload.len().min(buf.remaining());
+                    buf.put_slice(&payload[..n]);
+                    if n < payload.len() {
+                        self.read_buf = payload[n..].to_vec();
+                        self.read_pos = 0;
+                    }
+                    return Poll::Ready(Ok(()));
                 }
+                Err(error) if error == zero_core::Error::Protocol("mieru: need more data") => {
+                    let mut scratch = [0u8; 4096];
+                    let mut read_buf = ReadBuf::new(&mut scratch);
+                    match Pin::new(&mut self.inner).poll_read(cx, &mut read_buf) {
+                        Poll::Ready(Ok(())) => {
+                            let filled = read_buf.filled();
+                            if filled.is_empty() {
+                                return Poll::Ready(Ok(()));
+                            }
+                            self.raw_read_buf.extend_from_slice(filled);
+                        }
+                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                        Poll::Pending => return Poll::Pending,
+                    }
+                }
+                Err(e) => return Poll::Ready(Err(io::Error::other(format!("mieru decrypt: {e}")))),
             }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Pending => Poll::Pending,
         }
     }
 }

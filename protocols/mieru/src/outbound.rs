@@ -101,10 +101,21 @@ impl MieruOutbound {
 
     /// Decrypt data from server→client.
     pub fn decrypt_server_data(&mut self, data: &[u8]) -> Result<Segment, Error> {
+        self.decrypt_server_data_with_consumed(data)
+            .map(|(segment, _)| segment)
+    }
+
+    pub fn decrypt_server_data_with_consumed(
+        &mut self,
+        data: &[u8],
+    ) -> Result<(Segment, usize), Error> {
         let incl = !self.s2c_nonce_recv;
-        let (seg, _) = parse_segment(data, &mut self.server_cipher, incl, false)?;
+        let mut server_cipher = self.server_cipher.clone();
+        let (seg, consumed) = parse_segment(data, &mut server_cipher, incl, false)?;
+        self.server_cipher = server_cipher;
         self.s2c_nonce_recv = true;
-        Ok(seg)
+        let consumed = consumed.max(segment_wire_len(&seg, incl));
+        Ok((seg, consumed))
     }
 
     /// Build closeSessionRequest.
@@ -119,6 +130,26 @@ impl MieruOutbound {
             suffix_length: 0,
         };
         build_session_segment(&meta, &[], &mut self.client_cipher, false)
+    }
+}
+
+fn segment_wire_len(segment: &Segment, has_nonce: bool) -> usize {
+    let nonce_len = if has_nonce { 24 } else { 0 };
+    let meta_len = METADATA_LEN + 16;
+    if let Some(meta) = segment.data_meta.as_ref() {
+        nonce_len
+            + meta_len
+            + meta.prefix_length as usize
+            + meta.payload_length as usize
+            + if meta.payload_length > 0 { 16 } else { 0 }
+            + meta.suffix_length as usize
+    } else if let Some(meta) = segment.session_meta.as_ref() {
+        nonce_len
+            + meta_len
+            + meta.payload_length as usize
+            + if meta.payload_length > 0 { 16 } else { 0 }
+    } else {
+        nonce_len + meta_len
     }
 }
 

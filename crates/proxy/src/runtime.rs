@@ -129,13 +129,25 @@ impl Proxy {
         let mut urltests: JoinSet<Result<(), EngineError>> = JoinSet::new();
 
         let reload_rx = self.engine.subscribe_reload();
-        // Bridge std mpsc (blocking) → async via a oneshot sent from
-        // a spawn_blocking task each time the channel fires.
+        // Bridge std mpsc (blocking) → async via a spawn_blocking task.
+        // Uses recv_timeout so the thread can detect when the async
+        // receiver is dropped (e.g. during shutdown) and exit cleanly
+        // instead of blocking tokio runtime teardown.
         let (reload_tx, mut reload_async_rx) = tokio::sync::mpsc::unbounded_channel();
-        tokio::task::spawn_blocking(move || {
-            while reload_rx.recv().is_ok() {
-                if reload_tx.send(()).is_err() {
-                    break;
+        tokio::task::spawn_blocking(move || loop {
+            match reload_rx.recv_timeout(std::time::Duration::from_millis(500)) {
+                Ok(()) => {
+                    if reload_tx.send(()).is_err() {
+                        break; // async receiver dropped
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    if reload_tx.is_closed() {
+                        break; // async receiver dropped during shutdown
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    break; // engine dropped all senders
                 }
             }
         });

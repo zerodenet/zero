@@ -17,7 +17,9 @@ pub mod udp;
 #[cfg(feature = "crypto")]
 pub mod crypto;
 
+#[cfg(feature = "crypto")]
 mod inbound;
+#[cfg(feature = "crypto")]
 mod outbound;
 
 #[cfg(feature = "crypto")]
@@ -25,12 +27,14 @@ pub use crypto::{
     derive_key, try_derive_keys, MieruCipher, NonceConfig, NoncePattern, USER_HINT_LEN,
 };
 
+#[cfg(feature = "crypto")]
 pub use inbound::MieruInbound;
 pub use metadata::{
     DataMetadata, SessionMetadata, ACK_CLIENT_TO_SERVER, ACK_SERVER_TO_CLIENT,
     CLOSE_SESSION_REQUEST, CLOSE_SESSION_RESPONSE, DATA_CLIENT_TO_SERVER, DATA_SERVER_TO_CLIENT,
     METADATA_LEN, OPEN_SESSION_REQUEST, OPEN_SESSION_RESPONSE,
 };
+#[cfg(feature = "crypto")]
 pub use outbound::MieruOutbound;
 pub use segment::{
     build_data_segment, build_session_segment, parse_segment, Segment, MAX_FRAGMENT,

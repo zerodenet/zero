@@ -32,7 +32,10 @@ use crate::transport::{MeteredStream, RateLimiter, TcpRelayStream};
 
 pub(crate) struct SsClientStream {
     inner: TcpRelayStream,
-    key: Vec<u8>,
+    upload_key: Vec<u8>,
+    download_key: Vec<u8>,
+    next_upload_nonce: u64,
+    response_salt: Vec<u8>,
     remaining: Vec<u8>,
 }
 
@@ -90,11 +93,23 @@ impl InboundProtocol for ShadowsocksInboundHandler {
         sa.principal_key = Some(String::from_utf8_lossy(&self.password).to_string());
         session.apply_auth(sa);
 
+        let mut response_salt = vec![0u8; self.cipher.salt_len()];
+        ring::rand::SystemRandom::new()
+            .fill(&mut response_salt)
+            .map_err(|_| {
+                EngineError::Io(io::Error::other("shadowsocks: response salt random failed"))
+            })?;
+        let download_key = download_key_for_client(self.cipher, &self.password, &response_salt)
+            .map_err(|e| EngineError::Io(io::Error::other(format!("shadowsocks: {e}"))))?;
+
         Ok((
             session,
             SsClientStream {
                 inner: metered.into_inner(),
-                key: accept.session_key,
+                upload_key: accept.session_key,
+                download_key,
+                next_upload_nonce: accept.next_upload_nonce,
+                response_salt,
                 remaining: accept.remaining_payload,
             },
         ))
@@ -118,24 +133,60 @@ impl InboundProtocol for ShadowsocksInboundHandler {
         &self,
         client: SsClientStream,
         upstream: TcpRelayStream,
+        proxy: &Proxy,
+        session_id: u64,
         up_bps: Option<u64>,
         down_bps: Option<u64>,
     ) -> Result<(), EngineError> {
-        let (client_read, client_write) = tokio::io::split(client.inner);
+        let response_salt = client.response_salt.clone();
+        let (client_read, mut client_write) = tokio::io::split(client.inner);
         let (up_read, mut up_write) = tokio::io::split(upstream);
 
         if !client.remaining.is_empty() {
-            let _ = up_write.write_all(&client.remaining).await;
+            if up_write.write_all(&client.remaining).await.is_ok() {
+                let bytes = client.remaining.len() as u64;
+                proxy.record_session_inbound_rx(session_id, bytes);
+                proxy.record_session_outbound_tx(session_id, bytes);
+            }
         }
 
-        let key_up = client.key.clone();
-        let key_down = client.key;
+        client_write.write_all(&response_salt).await?;
+        client_write.flush().await?;
+
+        let key_up = client.upload_key.clone();
+        let key_down = client.download_key;
         let cipher = self.cipher;
+        let upload_nonce = client.next_upload_nonce;
+        let upload_proxy = proxy.clone();
         let upload = tokio::spawn(async move {
-            let _ = ss_decrypt_upload(client_read, up_write, cipher, key_up, up_bps).await;
+            let _ = ss_decrypt_upload(
+                client_read,
+                up_write,
+                cipher,
+                key_up,
+                upload_nonce,
+                up_bps,
+                move |bytes| {
+                    upload_proxy.record_session_inbound_rx(session_id, bytes);
+                    upload_proxy.record_session_outbound_tx(session_id, bytes);
+                },
+            )
+            .await;
         });
+        let download_proxy = proxy.clone();
         let download = tokio::spawn(async move {
-            let _ = ss_encrypt_download(up_read, client_write, cipher, key_down, down_bps).await;
+            let _ = ss_encrypt_download(
+                up_read,
+                client_write,
+                cipher,
+                key_down,
+                down_bps,
+                move |bytes| {
+                    download_proxy.record_session_outbound_rx(session_id, bytes);
+                    download_proxy.record_session_inbound_tx(session_id, bytes);
+                },
+            )
+            .await;
         });
 
         let _ = tokio::try_join!(upload, download);
@@ -287,24 +338,29 @@ async fn ss_decrypt_upload(
     mut upstream: impl AsyncWrite + Unpin + Send + 'static,
     cipher: CipherKind,
     key: Vec<u8>,
+    next_nonce: u64,
     rate_bps: Option<u64>,
+    mut on_bytes: impl FnMut(u64) + Send + 'static,
 ) -> Result<(), ()> {
+    use zero_protocol_shadowsocks::{decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload};
+
     let mut limiter = rate_bps.filter(|b| *b > 0).map(RateLimiter::new);
-    let mut nonce: u64 = 1;
-    let mut len_buf = [0u8; 2];
+    let mut nonce = next_nonce;
     loop {
-        if client.read_exact(&mut len_buf).await.is_err() {
+        let mut encrypted_length = vec![0u8; 2 + cipher.tag_len()];
+        if client.read_exact(&mut encrypted_length).await.is_err() {
             break;
         }
-        let chunk_len = u16::from_be_bytes(len_buf) as usize;
-        if chunk_len < cipher.tag_len() || chunk_len > 65535 {
+        let Ok(payload_len) = decrypt_tcp_chunk_length(cipher, &key, &mut nonce, &encrypted_length)
+        else {
+            break;
+        };
+
+        let mut encrypted_payload = vec![0u8; payload_len + cipher.tag_len()];
+        if client.read_exact(&mut encrypted_payload).await.is_err() {
             break;
         }
-        let mut chunk = vec![0u8; chunk_len];
-        if client.read_exact(&mut chunk).await.is_err() {
-            break;
-        }
-        match ShadowsocksInbound::decrypt_chunk(cipher, &key, &mut nonce, &chunk) {
+        match decrypt_tcp_chunk_payload(cipher, &key, &mut nonce, payload_len, &encrypted_payload) {
             Ok(plain) => {
                 // Wait for rate-limit tokens before writing (kernel GCRA).
                 if let Some(ref mut lim) = limiter {
@@ -315,6 +371,7 @@ async fn ss_decrypt_upload(
                 if upstream.write_all(&plain).await.is_err() {
                     break;
                 }
+                on_bytes(plain.len() as u64);
             }
             Err(_) => break,
         }
@@ -329,6 +386,7 @@ async fn ss_encrypt_download(
     cipher: CipherKind,
     key: Vec<u8>,
     rate_bps: Option<u64>,
+    mut on_bytes: impl FnMut(u64),
 ) -> Result<(), ()> {
     let mut limiter = rate_bps.filter(|b| *b > 0).map(RateLimiter::new);
     let mut nonce: u64 = 0;
@@ -347,6 +405,7 @@ async fn ss_encrypt_download(
                     if client.write_all(&encrypted).await.is_err() {
                         break;
                     }
+                    on_bytes(n as u64);
                 }
                 Err(_) => break,
             },
@@ -601,6 +660,14 @@ fn ss_derive_key(
     } else {
         derive_key(password, salt, cipher.key_len())
     }
+}
+
+fn download_key_for_client(
+    cipher: CipherKind,
+    password: &[u8],
+    salt: &[u8],
+) -> Result<Vec<u8>, zero_core::Error> {
+    ss_derive_key(cipher, password, salt)
 }
 
 async fn resolve_socket_addr(

@@ -6,8 +6,6 @@
 //
 // All multibyte fields are big-endian.
 
-use alloc::vec::Vec;
-
 pub const METADATA_LEN: usize = 32;
 
 // ── Protocol type constants ──────────────────────────────────────────

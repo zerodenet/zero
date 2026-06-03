@@ -10,6 +10,13 @@ use zero_traits::AsyncSocket;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ShadowsocksOutbound;
 
+#[cfg(feature = "crypto")]
+pub struct ShadowsocksOutboundSession {
+    pub session_key: Vec<u8>,
+    pub next_upload_nonce: u64,
+    pub cipher: super::shared::CipherKind,
+}
+
 impl ShadowsocksOutbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Shadowsocks
@@ -23,8 +30,8 @@ impl ShadowsocksOutbound {
         session: &Session,
         cipher: super::shared::CipherKind,
         password: &[u8],
-    ) -> Result<(), Error> {
-        use super::shared::{aead_encrypt, build_target_data};
+    ) -> Result<ShadowsocksOutboundSession, Error> {
+        use super::shared::{build_target_data, encrypt_tcp_chunk};
 
         let key_len = cipher.key_len();
         let salt_len = cipher.salt_len();
@@ -51,20 +58,21 @@ impl ShadowsocksOutbound {
         // Build target data
         let target_data = build_target_data(&session.target, session.port, &[])?;
 
-        // Encrypt: nonce is zero for first chunk
-        let nonce = [0u8; 12];
-        let encrypted = aead_encrypt(cipher, &key, &nonce, &target_data)?;
+        let mut nonce = 0;
+        let encrypted = encrypt_tcp_chunk(cipher, &key, &mut nonce, &target_data)?;
 
-        // Write salt + encrypted chunk
+        let mut request = Vec::with_capacity(salt.len() + encrypted.len());
+        request.extend_from_slice(&salt);
+        request.extend_from_slice(&encrypted);
         stream
-            .write_all(&salt)
+            .write_all(&request)
             .await
-            .map_err(|_| Error::Io("ss: failed to write salt"))?;
-        stream
-            .write_all(&encrypted)
-            .await
-            .map_err(|_| Error::Io("ss: failed to write encrypted chunk"))?;
+            .map_err(|_| Error::Io("ss: failed to write request"))?;
 
-        Ok(())
+        Ok(ShadowsocksOutboundSession {
+            session_key: key,
+            next_upload_nonce: nonce,
+            cipher,
+        })
     }
 }

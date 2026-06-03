@@ -449,6 +449,7 @@ async fn send_hop_protocol_request(
             ShadowsocksOutbound
                 .send_request(stream, session, kind, password.as_bytes())
                 .await
+                .map(|_| ())
                 .map_err(|e| EngineError::Io(std::io::Error::other(e)))
         }
         #[cfg(feature = "trojan")]
@@ -475,6 +476,11 @@ async fn send_hop_protocol_request(
                 .await
                 .map_err(|e| EngineError::Io(std::io::Error::other(e)))
         }
+        #[cfg(feature = "mieru")]
+        ResolvedLeafOutbound::Mieru { .. } => Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "mieru relay hop is not supported yet",
+        ))),
         _ => Err(EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "relay hop protocol not supported or disabled",
@@ -493,7 +499,7 @@ fn extract_chained_tag(candidate: &ResolvedLeafOutbound<'_>) -> Option<String> {
         ResolvedLeafOutbound::Shadowsocks { tag, .. } => Some(tag.to_string()),
         ResolvedLeafOutbound::Trojan { tag, .. } => Some(tag.to_string()),
         ResolvedLeafOutbound::Vmess { tag, .. } => Some(tag.to_string()),
-        ResolvedLeafOutbound::Mieru { .. } => todo!("mieru outbound relay"),
+        ResolvedLeafOutbound::Mieru { tag, .. } => Some(tag.to_string()),
     }
 }
 
@@ -505,7 +511,8 @@ fn hop_addr(hop: &ResolvedLeafOutbound<'_>) -> zero_core::Address {
         | ResolvedLeafOutbound::Hysteria2 { server, .. }
         | ResolvedLeafOutbound::Shadowsocks { server, .. }
         | ResolvedLeafOutbound::Trojan { server, .. }
-        | ResolvedLeafOutbound::Vmess { server, .. } => Address::Domain(server.to_string()),
+        | ResolvedLeafOutbound::Vmess { server, .. }
+        | ResolvedLeafOutbound::Mieru { server, .. } => Address::Domain(server.to_string()),
         _ => Address::Domain("unknown".to_owned()),
     }
 }
@@ -517,7 +524,8 @@ fn hop_port(hop: &ResolvedLeafOutbound<'_>) -> u16 {
         | ResolvedLeafOutbound::Hysteria2 { port, .. }
         | ResolvedLeafOutbound::Shadowsocks { port, .. }
         | ResolvedLeafOutbound::Trojan { port, .. }
-        | ResolvedLeafOutbound::Vmess { port, .. } => *port,
+        | ResolvedLeafOutbound::Vmess { port, .. }
+        | ResolvedLeafOutbound::Mieru { port, .. } => *port,
         _ => 0,
     }
 }

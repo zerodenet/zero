@@ -6,18 +6,17 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use async_trait::async_trait;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
-use tokio::net::TcpListener;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 use zero_config::InboundConfig;
-use zero_core::{Address, Session};
+use zero_core::Session;
 use zero_engine::EngineError;
 use zero_protocol_mieru::{
     build_data_segment, DataMetadata, MieruCipher, MieruInbound, MieruSession,
-    DATA_SERVER_TO_CLIENT, OPEN_SESSION_REQUEST,
+    DATA_SERVER_TO_CLIENT,
 };
 
 use crate::logging::log_listener_connection_error;
@@ -47,7 +46,7 @@ pub(crate) struct MieruClientStream {
 
 impl AsyncRead for MieruClientStream {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
@@ -103,7 +102,7 @@ impl AsyncRead for MieruClientStream {
 
 impl AsyncWrite for MieruClientStream {
     fn poll_write(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {

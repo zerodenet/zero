@@ -1,6 +1,6 @@
 //! Trojan outbound protocol handler.
 
-use zero_core::{Error, ProtocolType, Session};
+use zero_core::{Address, Error, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 /// Trojan outbound handler.
@@ -22,9 +22,55 @@ impl TrojanOutbound {
         session: &Session,
         password: &str,
     ) -> Result<(), Error> {
-        use super::shared::{write_password, write_request, CMD_TCP};
-
-        write_password(stream, password).await?;
-        write_request(stream, CMD_TCP, &session.target, session.port).await
+        let request = build_tcp_request(password, &session.target, session.port)?;
+        stream
+            .write_all(&request)
+            .await
+            .map_err(|_| Error::Io("trojan: write failed"))
     }
+}
+
+fn build_tcp_request(password: &str, addr: &Address, port: u16) -> Result<Vec<u8>, Error> {
+    use super::shared::{ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, CMD_TCP, CRLF};
+
+    let mut request = Vec::new();
+
+    #[cfg(feature = "crypto")]
+    {
+        use sha2::{Digest, Sha224};
+        let digest = Sha224::digest(password.as_bytes());
+        request.extend_from_slice(super::shared::hex::encode(&digest).as_bytes());
+    }
+    #[cfg(not(feature = "crypto"))]
+    {
+        let _ = password;
+        return Err(Error::Unsupported("trojan: crypto feature not enabled"));
+    }
+
+    request.extend_from_slice(CRLF);
+    request.push(CMD_TCP);
+
+    match addr {
+        Address::Ipv4(bytes) => {
+            request.push(ATYP_IPV4);
+            request.extend_from_slice(bytes);
+        }
+        Address::Ipv6(bytes) => {
+            request.push(ATYP_IPV6);
+            request.extend_from_slice(bytes);
+        }
+        Address::Domain(domain) => {
+            let bytes = domain.as_bytes();
+            if bytes.is_empty() || bytes.len() > 255 {
+                return Err(Error::Protocol("trojan: domain too long"));
+            }
+            request.push(ATYP_DOMAIN);
+            request.push(bytes.len() as u8);
+            request.extend_from_slice(bytes);
+        }
+    }
+
+    request.extend_from_slice(&port.to_be_bytes());
+    request.extend_from_slice(CRLF);
+    Ok(request)
 }

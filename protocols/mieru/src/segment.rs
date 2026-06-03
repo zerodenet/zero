@@ -132,12 +132,10 @@ pub fn parse_segment(
     data: &[u8],
     cipher: &mut MieruCipher,
     has_nonce: bool,
-    is_session: bool,
+    _is_session: bool,
 ) -> Result<(Segment, usize), Error> {
-    let mut offset = 0;
-
-    // Decrypt metadata (with optional padding0 scanning on first segment)
-    let meta_chunk = if has_nonce {
+    // Decrypt metadata (with optional padding0 scanning on first segment).
+    let (meta_bytes, mut offset) = if has_nonce {
         // Try offsets 0..PADDING0_MAX to account for optional padding0
         let mut best_offset = 0usize;
         let mut best_meta = None;
@@ -164,30 +162,24 @@ pub fn parse_segment(
             }
         }
         match best_meta {
-            Some(pt) => {
-                offset = best_offset;
-                pt
-            }
+            Some(pt) => (pt, best_offset),
             None => {
                 // Fallback: try offset 0 without scanning
                 if data.len() < 24 + METADATA_LEN + TAG_LEN {
-                    return Err(Error::Protocol("mieru: segment too short for metadata"));
+                    return Err(Error::Protocol("mieru: need more data"));
                 }
                 let chunk = &data[..24 + METADATA_LEN + TAG_LEN];
-                offset = 24 + METADATA_LEN + TAG_LEN;
-                cipher.decrypt(true, chunk)?
+                (cipher.decrypt(true, chunk)?, 24 + METADATA_LEN + TAG_LEN)
             }
         }
     } else {
         if data.len() < METADATA_LEN + TAG_LEN {
-            return Err(Error::Protocol("mieru: segment too short for metadata"));
+            return Err(Error::Protocol("mieru: need more data"));
         }
-        offset = METADATA_LEN + TAG_LEN;
-        data[..METADATA_LEN + TAG_LEN].to_vec()
+        let chunk = &data[..METADATA_LEN + TAG_LEN];
+        (cipher.decrypt(false, chunk)?, METADATA_LEN + TAG_LEN)
     };
-    let meta_ciphertext = cipher.decrypt(has_nonce, &meta_chunk)?;
 
-    let meta_bytes = &meta_ciphertext[..METADATA_LEN];
     let protocol_type = meta_bytes[0];
 
     match protocol_type {
@@ -195,14 +187,14 @@ pub fn parse_segment(
         | OPEN_SESSION_RESPONSE
         | CLOSE_SESSION_REQUEST
         | CLOSE_SESSION_RESPONSE => {
-            let session_meta = SessionMetadata::decode(meta_bytes);
+            let session_meta = SessionMetadata::decode(&meta_bytes);
 
             // Decrypt payload if any (implicit nonce — cipher tracks it)
             let mut payload = Vec::new();
             if session_meta.payload_length > 0 {
                 let payload_len = session_meta.payload_length as usize;
                 if data.len() < offset + payload_len + TAG_LEN {
-                    return Err(Error::Protocol("mieru: segment too short for payload"));
+                    return Err(Error::Protocol("mieru: need more data"));
                 }
                 let pdata = data[offset..offset + payload_len + TAG_LEN].to_vec();
                 payload = cipher.decrypt(false, &pdata)?;
@@ -222,7 +214,7 @@ pub fn parse_segment(
         | DATA_SERVER_TO_CLIENT
         | ACK_CLIENT_TO_SERVER
         | ACK_SERVER_TO_CLIENT => {
-            let data_meta = DataMetadata::decode(meta_bytes);
+            let data_meta = DataMetadata::decode(&meta_bytes);
 
             // Skip padding 1
             offset += data_meta.prefix_length as usize;
@@ -232,7 +224,7 @@ pub fn parse_segment(
             if data_meta.payload_length > 0 {
                 let payload_len = data_meta.payload_length as usize;
                 if data.len() < offset + payload_len + TAG_LEN {
-                    return Err(Error::Protocol("mieru: segment too short for payload"));
+                    return Err(Error::Protocol("mieru: need more data"));
                 }
                 let pdata = data[offset..offset + payload_len + TAG_LEN].to_vec();
                 payload = cipher.decrypt(false, &pdata)?;

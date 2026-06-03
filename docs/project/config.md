@@ -200,10 +200,16 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 - `hysteria2` -- QUIC, TCP streams and UDP datagram forwarding
 - `shadowsocks` -- AEAD cipher (chacha20-ietf-poly1305, aes-128-gcm, aes-256-gcm); 2022-blake3
 - `trojan` -- TLS + SHA224 password auth, TCP streams
+- `vmess` -- TCP streams using the in-tree VMess AEAD implementation; current compatibility does not include Xray/Clash `cipher: auto`
+- `mieru` -- TCP streams using XChaCha20-Poly1305 session framing; registered for single-hop TCP paths, with relay-chain limitations below
 - `direct` -- fixed-target TCP forwarder; accepts raw TCP with no handshake, outbound determined by normal route rules
 - `tun` -- virtual network interface; started at runtime via CLI/API commands, routes traffic through normal rule matching
 
 `mixed` is not an external protocol, but a config entry for "same port multi-protocol inbound".
+
+`mieru` is registered in the protocol inventory and the single-hop outbound path uses the encrypted Mieru stream wrapper. It is not yet supported as an intermediate `relay` chain hop because that path must replace the active stream with the Mieru encrypted wrapper after the hop handshake.
+
+`vmess` is still experimental. Configs using `cipher: auto` from Xray/Clash exports are rejected; forcing an AEAD cipher may still fail against standard Xray VMess AEAD nodes until the VMess wire format is reworked for full compatibility.
 
 ### Direct inbound
 
@@ -438,6 +444,28 @@ Trojan inbound config fields:
 - `up_bps` -- optional, upload rate limit in bytes/sec (kernel GCRA)
 - `down_bps` -- optional, download rate limit in bytes/sec (kernel GCRA)
 
+### Mieru inbound
+
+Mieru inbound is available in config and accepts encrypted TCP sessions from in-tree clients:
+
+```json
+{
+  "tag": "mieru-in",
+  "listen": { "address": "0.0.0.0", "port": 8964 },
+  "protocol": {
+    "type": "mieru",
+    "users": [
+      { "username": "alice", "password": "secret" }
+    ]
+  }
+}
+```
+
+Mieru inbound config fields:
+- `users` -- required, non-empty list of username/password pairs
+
+Mieru TCP framing uses protocol-level encrypted segments. The proxy keeps Mieru-specific framing in the Mieru stream wrapper instead of using the generic raw TCP relay directly. Current compatibility work has focused on single-hop outbound; treat inbound interoperability with external Mieru clients as experimental until it has real-client coverage.
+
 ### Per-inbound rate limits (rate_limits)
 
 Hysteria2, Shadowsocks, and Trojan inbound protocol configs support `up_bps` and `down_bps` fields for per-inbound GCRA rate limiting. These are the values returned by `InboundProtocolConfig::rate_limits()`.
@@ -468,6 +496,8 @@ Currently supported:
 - `hysteria2`
 - `shadowsocks`
 - `trojan`
+- `vmess`
+- `mieru`
 
 SOCKS5 outbound defaults to no-auth. Configure `username` and `password` when connecting to an authenticated upstream:
 
@@ -664,6 +694,59 @@ Trojan outbound config fields:
 - `password` -- required, authentication password (SHA224 hashed before sending)
 - `sni` -- optional, TLS SNI, defaults to `server`
 - `insecure` -- optional, skip certificate verification, default `false`
+
+### VMess outbound
+
+VMess outbound currently supports the in-tree AEAD implementation and explicit cipher names:
+
+```json
+{
+  "tag": "vmess-chain",
+  "protocol": {
+    "type": "vmess",
+    "server": "example.com",
+    "port": 443,
+    "id": "11111111-2222-3333-4444-555555555555",
+    "cipher": "aes-128-gcm"
+  }
+}
+```
+
+VMess outbound config fields:
+- `server` -- required, upstream server address
+- `port` -- required, upstream port, must be greater than 0
+- `id` -- required, VMess UUID
+- `cipher` -- optional, default `aes-128-gcm`; supported values are `aes-128-gcm`, `aes-256-gcm`, and `chacha20-poly1305`
+- `tls` -- optional, TLS transport wrapper
+- `ws` -- optional, WebSocket transport wrapper
+- `grpc` -- optional, gRPC transport wrapper
+
+Compatibility note: Xray/Clash exports commonly use `cipher: auto`; that alias is not supported yet, and the current VMess implementation is not considered compatible with standard Xray VMess AEAD nodes.
+
+### Mieru outbound
+
+Connect to an upstream Mieru node:
+
+```json
+{
+  "tag": "mieru-chain",
+  "protocol": {
+    "type": "mieru",
+    "server": "example.com",
+    "port": 8964,
+    "username": "alice",
+    "password": "secret"
+  }
+}
+```
+
+Mieru outbound config fields:
+- `server` -- required, upstream server address
+- `port` -- required, upstream port, must be greater than 0
+- `username` -- required, upstream username
+- `password` -- required, upstream password
+
+Mieru outbound is supported for direct single-hop TCP routing through the encrypted Mieru stream wrapper. Using Mieru as an intermediate member of a `relay` chain is not supported yet.
 
 UDP currently supports only `direct`, `block`, and upstream `socks5`; upstream `vless` is not yet supported.
 

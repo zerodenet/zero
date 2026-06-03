@@ -16,3 +16,6 @@ ring = { version = "0.17", optional = true }
 sha2 = { version = "0.10", optional = true }
 zero-core = { path = "../../crates/core" }
 zero-traits = { path = "../../crates/traits" }
+
+[dev-dependencies]
+tokio.workspace = true
