@@ -9,7 +9,6 @@ node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 docs/node_modules/
-docs/package-lock.json
 
 # Logs / generated
 *.log
