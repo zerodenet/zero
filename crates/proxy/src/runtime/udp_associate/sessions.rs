@@ -64,6 +64,7 @@ pub(crate) enum UdpFlowOutbound {
         server: String,
         port: u16,
         password: String,
+        client_fingerprint: Option<String>,
     },
     Trojan {
         tag: String,

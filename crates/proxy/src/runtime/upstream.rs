@@ -189,8 +189,10 @@ impl Proxy {
         server: &str,
         port: u16,
         password: &str,
+        client_fingerprint: Option<&str>,
     ) -> Result<TcpRelayStream, EngineError> {
-        let connector = crate::transport::Hysteria2Connector::new(server, port, password);
+        let connector = crate::transport::Hysteria2Connector::new(server, port, password)
+            .with_fingerprint(client_fingerprint);
         let stream = connector.connect(session).await?;
         Ok(TcpRelayStream::new(stream))
     }

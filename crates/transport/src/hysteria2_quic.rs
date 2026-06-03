@@ -94,6 +94,7 @@ pub struct Hysteria2Connector {
     server: String,
     port: u16,
     password: String,
+    client_fingerprint: Option<String>,
 }
 
 impl Hysteria2Connector {
@@ -102,15 +103,44 @@ impl Hysteria2Connector {
             server: server.to_owned(),
             port,
             password: password.to_owned(),
+            client_fingerprint: None,
         }
     }
 
+    pub fn with_fingerprint(mut self, fp: Option<&str>) -> Self {
+        self.client_fingerprint = fp.map(|s| s.to_owned());
+        self
+    }
+
     /// Connect + authenticate, returning the raw QUIC connection.
-    ///
-    /// Used by both TCP and UDP outbound paths — callers can then
-    /// open bi streams or send datagrams on the authenticated connection.
     pub async fn connect_raw(&self) -> Result<quinn::Connection, EngineError> {
-        let mut tls_config = rustls::ClientConfig::builder()
+        // Build TLS config with optional fingerprint
+        let config_base = if let Some(ref fp_name) = self.client_fingerprint {
+            if let Some(preset) = crate::fingerprint::lookup_fingerprint(fp_name) {
+                let provider = std::sync::Arc::new(crate::fingerprint::build_provider(&preset));
+                tracing::debug!(
+                    fingerprint = %fp_name,
+                    "hysteria2 tls fingerprint applied"
+                );
+                rustls::ClientConfig::builder_with_provider(provider)
+                    .with_protocol_versions(&[&rustls::version::TLS13, &rustls::version::TLS12])
+                    .map_err(|e| {
+                        EngineError::Io(std::io::Error::other(format!(
+                            "hysteria2 tls protocol: {e}"
+                        )))
+                    })?
+            } else {
+                tracing::warn!(
+                    fingerprint = %fp_name,
+                    "unknown hysteria2 tls fingerprint, using defaults"
+                );
+                rustls::ClientConfig::builder()
+            }
+        } else {
+            rustls::ClientConfig::builder()
+        };
+
+        let mut tls_config = config_base
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(SkipVerify))
             .with_no_client_auth();

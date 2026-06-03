@@ -350,6 +350,7 @@ impl Proxy {
                 server,
                 port,
                 password,
+                client_fingerprint,
             } => {
                 use crate::outbound::hysteria2::send_h2_udp_packet;
                 match send_h2_udp_packet(
@@ -358,6 +359,7 @@ impl Proxy {
                     server.as_str(),
                     *port,
                     password.as_str(),
+                    client_fingerprint.as_deref(),
                     &flow.session.target,
                     flow.session.port,
                     payload,

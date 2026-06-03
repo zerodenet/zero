@@ -42,6 +42,7 @@ pub enum ResolvedLeafOutbound<'a> {
         port: u16,
         password: &'a str,
         insecure: bool,
+        client_fingerprint: Option<&'a str>,
     },
     Shadowsocks {
         tag: &'a str,
@@ -250,12 +251,14 @@ fn resolve_leaf_outbound<'a>(
             port,
             password,
             insecure,
+            client_fingerprint,
         } => ResolvedLeafOutbound::Hysteria2 {
             tag,
             server,
             port: *port,
             password,
             insecure: *insecure,
+            client_fingerprint: client_fingerprint.as_deref(),
         },
         OutboundTarget::Shadowsocks {
             server,

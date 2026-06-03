@@ -237,12 +237,7 @@ pub(super) fn validate_outbound_protocol(
             }
             Ok(())
         }
-        OutboundProtocolConfig::Hysteria2 {
-            server,
-            port,
-            password: _,
-            insecure: _,
-        } => {
+        OutboundProtocolConfig::Hysteria2 { server, port, .. } => {
             validate_outbound_endpoint("hysteria2", server, *port)?;
             Ok(())
         }

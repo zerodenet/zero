@@ -105,6 +105,7 @@ impl Proxy {
                 server,
                 port,
                 password,
+                client_fingerprint,
                 ..
             } => {
                 let sent = crate::outbound::hysteria2::send_h2_udp_packet(
@@ -113,6 +114,7 @@ impl Proxy {
                     server,
                     port,
                     password,
+                    client_fingerprint,
                     &context.session.target,
                     context.session.port,
                     context.payload,
@@ -130,6 +132,7 @@ impl Proxy {
                         server: server.to_owned(),
                         port,
                         password: password.to_owned(),
+                        client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
                     },
                     outbound_tx_bytes: sent as u64,
                 })
