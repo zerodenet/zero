@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use zero_config::{
     ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, QuicConfig, RealityConfig,
@@ -41,15 +41,15 @@ pub(crate) struct VlessUdpTransport<'a> {
 }
 
 /// Spawn the bidirectional meter + relay task for a VLESS UDP upstream,
-/// returning the upstream handle and receive channel.
+/// returning the upstream handle and a broadcast sender for responses.
 fn spawn_vless_udp_relay(
     proxy: &Proxy,
     session_id: u64,
     mut metered: MeteredStream<TcpRelayStream>,
     initial_payload_len: usize,
-) -> (VlessUdpUpstream, mpsc::Receiver<Vec<u8>>) {
+) -> (VlessUdpUpstream, broadcast::Sender<Vec<u8>>) {
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
-    let (recv_tx, recv_rx) = mpsc::channel::<Vec<u8>>(32);
+    let (recv_tx, _) = broadcast::channel::<Vec<u8>>(32);
 
     proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
 
@@ -73,7 +73,7 @@ fn spawn_vless_udp_relay(
                     match read {
                         Ok(0) => break,
                         Ok(n) => {
-                            if recv_tx.send(buffer[..n].to_vec()).await.is_err() {
+                            if recv_tx.send(buffer[..n].to_vec()).is_err() {
                                 break;
                             }
                         }
@@ -89,7 +89,7 @@ fn spawn_vless_udp_relay(
             session_id,
             send_tx,
         },
-        recv_rx,
+        recv_tx,
     )
 }
 
@@ -102,7 +102,7 @@ pub(crate) async fn establish_vless_udp_upstream(
     id: &str,
     initial_payload: &[u8],
     transport: Option<&VlessUdpTransport<'_>>,
-) -> Result<(VlessUdpUpstream, mpsc::Receiver<Vec<u8>>), EngineError> {
+) -> Result<(VlessUdpUpstream, broadcast::Sender<Vec<u8>>), EngineError> {
     let vless_id = parse_uuid(id)?;
 
     // QUIC uses UDP — handle before TCP connect entirely
@@ -170,27 +170,52 @@ pub(crate) async fn establish_vless_udp_upstream(
 }
 
 /// VLESS UDP outbound manager — manages per-target upstream connections.
+///
+/// Response bridge tasks are spawned into the shared `chain_tasks` JoinSet
+/// in [`UdpDispatch`], so all chain outbound responses are polled uniformly.
 pub(crate) struct VlessUdpOutboundManager {
-    upstreams: HashMap<(Address, u16), VlessUdpUpstream>,
-    response_tasks: JoinSet<Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>>,
+    upstreams: HashMap<(Address, u16), (VlessUdpUpstream, broadcast::Sender<Vec<u8>>)>,
 }
 
 impl VlessUdpOutboundManager {
     pub fn new() -> Self {
         Self {
             upstreams: HashMap::new(),
-            response_tasks: JoinSet::new(),
         }
     }
 
     /// Check if an upstream already exists for a target.
     pub fn get(&self, target: &Address, port: u16) -> Option<&VlessUdpUpstream> {
-        self.upstreams.get(&(target.clone(), port))
+        self.upstreams
+            .get(&(target.clone(), port))
+            .map(|(upstream, _)| upstream)
     }
 
-    /// Get or create an upstream for a target
+    /// Spawn a one-shot bridge task for a cached upstream.
+    pub(crate) fn spawn_bridge(
+        &self,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        target: Address,
+        port: u16,
+        session_id: u64,
+    ) {
+        if let Some((_, recv_tx)) = self.upstreams.get(&(target.clone(), port)) {
+            let mut recv_rx = recv_tx.subscribe();
+            let t = target.clone();
+            chain_tasks.spawn(async move {
+                let payload = recv_rx.recv().await.map_err(|_| {
+                    EngineError::Io(std::io::Error::other("vless upstream closed"))
+                })?;
+                Ok((t, port, payload, Some(session_id)))
+            });
+        }
+    }
+
+    /// Get or create an upstream for a target.
+    /// Spawns a bridge task into `chain_tasks` for response polling.
     pub async fn get_or_create_upstream(
         &mut self,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         proxy: &Proxy,
         session: &Session,
         target: Address,
@@ -203,11 +228,13 @@ impl VlessUdpOutboundManager {
     ) -> Result<(), EngineError> {
         let key = (target.clone(), port);
 
-        if let Some(upstream) = self.upstreams.get(&key) {
+        if let Some((upstream, _)) = self.upstreams.get(&key) {
             proxy.record_session_inbound_rx(upstream.session_id, initial_payload.len() as u64);
             let payload_len = initial_payload.len() as u64;
             let _ = upstream.send_tx.send(initial_payload).await;
             proxy.record_session_outbound_tx(upstream.session_id, payload_len);
+            // Spawn bridge for the expected response
+            self.spawn_bridge(chain_tasks, target, port, upstream.session_id);
             return Ok(());
         }
 
@@ -222,35 +249,14 @@ impl VlessUdpOutboundManager {
         )
         .await
         {
-            Ok((upstream, mut recv_rx)) => {
+            Ok((upstream, recv_tx)) => {
                 let session_id = upstream.session_id;
-                self.upstreams.insert(key, upstream);
-
-                // Spawn response reader task
-                self.response_tasks.spawn(async move {
-                    let payload = recv_rx.recv().await.ok_or_else(|| {
-                        EngineError::Io(std::io::Error::other("upstream channel closed"))
-                    })?;
-
-                    Ok((target, port, payload, Some(session_id)))
-                });
-
+                self.upstreams.insert(key, (upstream, recv_tx));
+                // Spawn bridge for the first response
+                self.spawn_bridge(chain_tasks, target, port, session_id);
                 Ok(())
             }
             Err(error) => Err(error),
         }
-    }
-
-    /// Poll for next response
-    pub async fn next_response(
-        &mut self,
-    ) -> Option<Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>> {
-        self.response_tasks.join_next().await.map(|res| match res {
-            Ok(inner) => inner,
-            Err(e) => Err(EngineError::Io(std::io::Error::other(format!(
-                "upstream task failed: {}",
-                e
-            )))),
-        })
     }
 }

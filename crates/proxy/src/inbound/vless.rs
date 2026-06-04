@@ -750,9 +750,9 @@ impl Proxy {
         loop {
             // Split dispatch into disjoint borrows so select! can pin
             // all futures simultaneously without borrow conflicts.
-            // Uses poll_refs() to get ALL borrows, enabling SOCKS5 upstream
-            // and idle timeout handling alongside direct/VLESS/chain polls.
-            let (direct_sock, vless_mgr, socks5_up, socks5_idle, chain_tasks) = dispatch.poll_refs();
+            // VLESS chain responses now flow through chain_tasks.JoinSet
+            // alongside SS/H2/Trojan/Mieru — no separate vless_mgr poll.
+            let (direct_sock, socks5_up, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
                 _ = tokio::time::sleep_until(last_activity + timeout) => {
@@ -831,40 +831,6 @@ impl Proxy {
                                 "failed to build vless udp response packet"
                             );
                         }
-                    }
-                }
-                response = vless_mgr.next_response() => {
-                    match response {
-                        Some(Ok((target, port, payload, session_id))) => {
-                            last_activity = TokioInstant::now();
-                            if let Some(sid) = session_id {
-                                self.record_session_outbound_rx(sid, payload.len() as u64);
-                            }
-
-                            match build_udp_packet(&target, port, &payload) {
-                                Ok(packet) => {
-                                    match client.write_all(&packet).await {
-                                        Ok(_) => {
-                                            if let Some(sid) = session_id {
-                                                self.record_session_inbound_tx(sid, packet.len() as u64);
-                                            }
-                                            self.record_session_inbound_traffic(0, client.drain_traffic());
-                                        }
-                                        Err(error) => {
-                                            warn!(error = %error, "failed to write vless upstream response");
-                                            break;
-                                        }
-                                    }
-                                }
-                                Err(error) => {
-                                    warn!(error = %error, "failed to build vless upstream response");
-                                }
-                            }
-                        }
-                        Some(Err(error)) => {
-                            warn!(error = %error, "vless upstream read error");
-                        }
-                        None => {}
                     }
                 }
                 upstream = recv_upstream_packet(socks5_up, &mut upstream_buffer) => {

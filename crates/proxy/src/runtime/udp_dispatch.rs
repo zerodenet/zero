@@ -57,7 +57,7 @@ pub(crate) use crate::runtime::udp_helpers::UdpChainResponse;
 /// A response item produced by a chain-outbound recv bridge task.
 /// Stored in a unified [`JoinSet`] so all chain outbound responses are
 /// polled from a single `select!` branch via [`UdpDispatch::poll_chain_response`].
-type ChainTask = Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>;
+pub(crate) type ChainTask = Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>;
 
 // ── SS chain manager ─────────────────────────────────────────────────
 
@@ -963,47 +963,34 @@ impl UdpDispatch {
         &self.direct_socket
     }
 
-    /// Borrow the direct socket and VLESS manager simultaneously.
-    ///
-    /// This avoids borrow-checker conflicts in `select!` loops where both
-    /// the direct socket and VLESS manager are polled concurrently.
-    /// Returns chain_tasks for unified chain response polling.
-    pub(crate) fn direct_socket_and_vless_manager(
+    /// Borrow direct socket and chain_tasks for `select!` polling.
+    pub(crate) fn poll_sockets(
         &mut self,
-    ) -> (&TokioDatagramSocket, &mut VlessUdpOutboundManager, &mut JoinSet<ChainTask>) {
-        (&self.direct_socket, &mut self.vless_manager, &mut self.chain_tasks)
+    ) -> (&TokioDatagramSocket, &mut JoinSet<ChainTask>) {
+        (&self.direct_socket, &mut self.chain_tasks)
     }
 
     /// Borrow all polling sources simultaneously for `select!` loops.
     ///
     /// Returns:
     /// - `&TokioDatagramSocket` — direct outbound response socket
-    /// - `&mut VlessUdpOutboundManager` — VLESS chain response poller
     /// - `Option<&ActiveUpstreamSocks5UdpAssociation>` — SOCKS5 chain upstream
     /// - `Option<TokioInstant>` — SOCKS5 idle deadline
-    /// - `&mut JoinSet<ChainTask>` — SS/H2/VLESS chain response tasks
+    /// - `&mut JoinSet<ChainTask>` — unified chain response tasks
     pub(crate) fn poll_refs(
         &mut self,
     ) -> (
         &TokioDatagramSocket,
-        &mut VlessUdpOutboundManager,
         Option<&crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation>,
         Option<TokioInstant>,
         &mut JoinSet<ChainTask>,
     ) {
         (
             &self.direct_socket,
-            &mut self.vless_manager,
             self.socks5_upstream.as_ref(),
             self.socks5_idle_deadline,
             &mut self.chain_tasks,
         )
-    }
-
-    /// Mutable access to the VLESS upstream manager for response polling.
-    #[allow(dead_code)]
-    pub(crate) fn vless_manager_mut(&mut self) -> &mut VlessUdpOutboundManager {
-        &mut self.vless_manager
     }
 
     /// The SOCKS5 upstream association, if established.
@@ -1188,6 +1175,10 @@ impl UdpDispatch {
             proxy.record_session_inbound_rx(handle.session_id, payload.len() as u64);
             let _ = handle.send_tx.send(payload.to_vec()).await;
             proxy.record_session_outbound_tx(handle.session_id, payload.len() as u64);
+            // Spawn bridge task for the expected response.
+            self.vless_manager.spawn_bridge(
+                &mut self.chain_tasks, target, port, handle.session_id,
+            );
             return Ok(());
         }
 
@@ -1604,6 +1595,7 @@ impl UdpDispatch {
                 let tag_owned = tag.to_owned();
                 self.vless_manager
                     .get_or_create_upstream(
+                        &mut self.chain_tasks,
                         proxy,
                         session,
                         session.target.clone(),

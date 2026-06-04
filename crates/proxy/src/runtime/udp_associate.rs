@@ -71,7 +71,7 @@ impl Proxy {
         loop {
             // Extract all mutable/immutable borrows in one go to satisfy
             // select!'s requirement that all branches be independent.
-            let (direct_sock, vless_mgr, socks5_up, socks5_idle, chain_tasks) = dispatch.poll_refs();
+            let (direct_sock, socks5_up, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
                 control = client.read(&mut control_probe) => {
