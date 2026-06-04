@@ -1,11 +1,13 @@
 use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use tokio::net::UnixListener;
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use zero_proxy::ProxyHandle;
 
 use super::connection;
@@ -100,6 +102,7 @@ async fn run_ipc_server(
     mut shutdown: oneshot::Receiver<()>,
 ) -> io::Result<()> {
     let mut connections = JoinSet::new();
+    let active = Arc::new(AtomicU64::new(0));
 
     loop {
         tokio::select! {
@@ -107,12 +110,26 @@ async fn run_ipc_server(
             accept_result = listener.accept() => {
                 let (stream, peer_addr) = accept_result?;
                 let handle = handle.clone();
+                let active = active.clone();
+                active.fetch_add(1, Ordering::Relaxed);
+                info!(?peer_addr, active = active.load(Ordering::Relaxed),
+                      "ipc client connected");
+
                 connections.spawn(async move {
-                    if let Err(error) = connection::handle_ipc_connection(stream, handle).await {
-                        if connection::is_transient_disconnect(&error) {
-                            debug!(?peer_addr, error = %error, "ipc connection closed early");
-                        } else {
-                            warn!(?peer_addr, error = %error, "ipc connection failed");
+                    let result = connection::handle_ipc_connection(stream, handle).await;
+
+                    let n = active.fetch_sub(1, Ordering::Relaxed) - 1;
+                    match result {
+                        Ok(()) => {
+                            info!(?peer_addr, active = n, "ipc client disconnected cleanly");
+                        }
+                        Err(ref error) if connection::is_transient_disconnect(error) => {
+                            warn!(?peer_addr, error = %error, active = n,
+                                  "ipc client disconnected");
+                        }
+                        Err(error) => {
+                            warn!(?peer_addr, error = %error, active = n,
+                                  "ipc connection failed");
                         }
                     }
                 });

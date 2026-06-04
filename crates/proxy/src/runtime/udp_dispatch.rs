@@ -74,7 +74,8 @@ mod ss_manager {
 
     use tokio::sync::broadcast;
     use tokio::task::JoinSet;
-    use zero_core::{Address, EngineError};
+    use zero_core::Address;
+    use zero_engine::EngineError;
 
     use super::{ChainTask, FlowFailure};
 
@@ -130,8 +131,14 @@ mod ss_manager {
             })?;
 
             let mut salt = vec![0u8; cipher_kind.salt_len()];
-            use rand::RngCore;
-            rand::rngs::OsRng.fill_bytes(&mut salt);
+            use ring::rand::SecureRandom;
+            ring::rand::SystemRandom::new()
+                .fill(&mut salt)
+                .map_err(|_| FlowFailure {
+                    stage: "ss_random",
+                    error: EngineError::Io(std::io::Error::other("ss: random failed")),
+                    upstream: Some((server.to_owned(), port)),
+                })?;
 
             let key =
                 derive_key(password.as_bytes(), &salt, cipher_kind.key_len()).map_err(|e| {
@@ -204,9 +211,8 @@ mod ss_manager {
             password: &str,
             cipher_kind: zero_protocol_shadowsocks::CipherKind,
         ) -> Arc<SsUpstream> {
-            use zero_protocol_shadowsocks::CipherKind;
             let key = (
-                server.to_owned(), port, cipher_kind.to_string(), password.to_owned(),
+                server.to_owned(), port, format!("{cipher_kind:?}"), password.to_owned(),
             );
             if let Some(entry) = self.upstreams.get(&key) {
                 return entry.clone();
@@ -365,7 +371,7 @@ mod trojan_manager {
             proxy: &Proxy,
             chain_tasks: &mut JoinSet<ChainTask>,
             session_id: u64,
-            session: &Session,
+            _session: &Session,
             server: &str,
             port: u16,
             password: &str,
@@ -640,12 +646,13 @@ mod mieru_manager {
 
             // Spawn one-shot bridge task for the response
             let mut recv_rx = recv_tx.subscribe();
+            let s_target = session.target.clone();
+            let s_port = session.port;
             chain_tasks.spawn(async move {
                 let payload = recv_rx.recv().await.map_err(|_| {
                     EngineError::Io(std::io::Error::other("mieru upstream closed"))
                 })?;
-                // Mieru payload is raw (target/port are part of the initial session)
-                Ok((session.target.clone(), session.port, payload, Some(session_id)))
+                Ok((s_target, s_port, payload, Some(session_id)))
             });
 
             Ok(send_tx)
@@ -777,13 +784,14 @@ mod h2_manager {
 
             let target_owned = target.clone();
             let port_owned = target_port;
+            let init_payload = initial_payload.to_vec();
 
             // Send task: reads outgoing datagrams, sends via QUIC.
             let conn_send = conn.clone();
             tokio::spawn(async move {
                 let mut pkt_id: u16 = 0;
                 // Send initial payload first
-                if let Ok(dg) = build_udp_datagram(0, pkt_id, &target_owned, port_owned, initial_payload) {
+                if let Ok(dg) = build_udp_datagram(0, pkt_id, &target_owned, port_owned, &init_payload) {
                     if conn_send.send_datagram(dg.into()).is_err() { return; }
                 }
                 pkt_id = pkt_id.wrapping_add(1);

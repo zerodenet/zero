@@ -6,12 +6,14 @@
 
 use std::io;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::net::windows::named_pipe::ServerOptions;
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use zero_proxy::ProxyHandle;
 
 use super::connection;
@@ -67,6 +69,7 @@ async fn run_ipc_server(
     mut shutdown: oneshot::Receiver<()>,
 ) -> io::Result<()> {
     let mut connections = JoinSet::new();
+    let active = Arc::new(AtomicU64::new(0));
 
     loop {
         let server = match ServerOptions::new().create(pipe_name) {
@@ -87,12 +90,26 @@ async fn run_ipc_server(
                 }
 
                 let handle = handle.clone();
+                let active = active.clone();
+                active.fetch_add(1, Ordering::Relaxed);
+                info!(pipe = %pipe_name, active = active.load(Ordering::Relaxed),
+                      "ipc client connected");
+
                 connections.spawn(async move {
-                    if let Err(error) = connection::handle_ipc_connection(server, handle).await {
-                        if connection::is_transient_disconnect(&error) {
-                            debug!(error = %error, "ipc connection closed early");
-                        } else {
-                            warn!(error = %error, "ipc connection failed");
+                    let result = connection::handle_ipc_connection(server, handle).await;
+
+                    let n = active.fetch_sub(1, Ordering::Relaxed) - 1;
+                    match result {
+                        Ok(()) => {
+                            info!(active = n, "ipc client disconnected cleanly");
+                        }
+                        Err(ref error) if connection::is_transient_disconnect(error) => {
+                            warn!(error = %error, active = n,
+                                  "ipc client disconnected");
+                        }
+                        Err(error) => {
+                            warn!(error = %error, active = n,
+                                  "ipc connection failed");
                         }
                     }
                 });

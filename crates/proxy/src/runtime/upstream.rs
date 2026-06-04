@@ -204,6 +204,7 @@ impl Proxy {
         _server: &str,
         _port: u16,
         _password: &str,
+        _client_fingerprint: Option<&str>,
     ) -> Result<TcpRelayStream, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",
