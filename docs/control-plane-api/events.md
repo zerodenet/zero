@@ -52,7 +52,7 @@
 
 ```json
 {
-  "version": "0.0.2",
+  "version": "0.0.9",
   "started_at_unix_ms": 1713500000000
 }
 ```
@@ -252,11 +252,24 @@ urltest 探测完成后发射，包含每个成员的探测结果。
 }
 ```
 
+## 事件过滤
+
+所有消费方式均支持 `event_type` 白名单过滤：
+
+| 写法 | 含义 |
+|------|------|
+| `"events": ["flow.completed"]` | 仅接收 `flow.completed` |
+| `"events": ["flow.completed", "flow.started"]` | 接收两个指定类型 |
+| `"events": ["*"]` | 接收所有事件（等价于省略或传空数组） |
+| `"events": null` / 省略 | 接收所有事件 |
+
+内部 `EventFilter` 的 `event_types` 为空数组时即不过滤，`*` 作为特殊值等价于空数组。
+
 ## 消费方式
 
 | 方式 | 过滤 | 回放 |
 |------|------|------|
-| SSE (`GET /api/v1/events/stream?types=...`) | event_type 白名单 | `?since=<seq>` / `Last-Event-ID` |
-| IPC (`{"type":"subscribe","events":[...]}`) | event_type 白名单 | 不支持（实时流） |
+| SSE (`GET /api/v1/events/stream?types=...`) | event_type 白名单，`*` = 全部 | `?since=<seq>` / `Last-Event-ID` |
+| IPC (`{"type":"subscribe","events":[...]}`) | event_type 白名单，`*` = 全部 | 不支持（实时流） |
 | CLI (`zero events`) | 无 | 不支持 |
 | Sink (`event_sinks[].events`) | event_type 白名单 | 不支持（持久投递） |

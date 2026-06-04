@@ -149,6 +149,30 @@
 
 这样只需要一条持久连接即可承载所有通信，无需为 query/command 单独创建短期连接。
 
+## 内核日志
+
+IPC server 在以下事件输出结构化日志，每条日志携带 `active=N` 表示当前活跃连接数：
+
+| 事件 | 级别 | 示例 |
+|------|------|------|
+| 客户端连接 | `info` | `ipc client connected active=1` |
+| 客户端正常断开 | `info` | `ipc client disconnected cleanly active=0` |
+| 客户端异常断开 | `warn` | `ipc client disconnected error=BrokenPipe active=0` |
+| 连接处理失败 | `warn` | `ipc connection failed error=... active=0` |
+| 连接 task panic | `error` | `ipc connection task panicked` |
+| 服务端就绪 | `info` | `ipc server ready pipe=\\.\pipe\zero-control` |
+| 服务端停止 | `info` | `ipc server stopped` |
+| Pipe connect 失败 | `warn` | `named pipe connect failed error=...` |
+| Pipe create 失败 | `error` | `failed to create named pipe error=...` |
+
+通过设置 `RUST_LOG` 控制日志级别：
+```bash
+RUST_LOG=zero=debug zero run config.json     # 调试级别
+RUST_LOG=zero=warn zero run config.json      # 仅警告和错误
+```
+
+诊断 pipe 实例耗尽问题时，观察 `active=N` 是否持续增长（无减）。正常情况下连接数和断开数应平衡。
+
 ## 客户端示例
 
 ### CLI

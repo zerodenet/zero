@@ -42,8 +42,8 @@ Zero 内核提供标准化的控制面，支持本地管理、远程上报和外
 |------|------|------|----------------|-----|
 | 传输 | TCP | HTTP/2 | Unix Domain Socket / Named Pipe | UDS / Named Pipe |
 | 认证 | Bearer token | Bearer token | 文件系统权限 (0600) | 文件系统权限 |
-| 查询 | `GET /api/v1/*` | proto RPC | `{"type":"query",...}` | `zero status/flows/policies` |
-| 命令 | `POST /api/v1/commands` | proto RPC | `{"type":"command",...}` | `zero select <p> <t>` |
+| 查询 | `GET /api/v1/*` | proto RPC | `{"type":"query","id":1,...}` | `zero status/flows/policies` |
+| 命令 | `POST /api/v1/commands` | proto RPC | `{"type":"command","id":1,...}` | `zero select <p> <t>` |
 | 事件流 | SSE (`text/event-stream`) | server streaming | JSON-line 推送 | `zero events` |
 | 适用场景 | 远程调试、Web 面板 | 服务端集成、SDK | 本地 GUI 进程 | 终端管理 |
 | 默认端口/路径 | 127.0.0.1:9090 | 127.0.0.1:9091 | `~/.zero/control.sock` / `\\.\pipe\zero-control` | 自动发现 |
