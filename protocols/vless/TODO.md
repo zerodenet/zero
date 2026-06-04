@@ -24,6 +24,7 @@
 - [x] Xray 兼容 MUX 帧格式 (session_id + length + payload, max 16384)
 - [x] MUX 连接池 (PoolKey, TransportKey, MuxPoolConn, MuxStreamRelay)
 - [x] 流级别 AES-128-GCM 加密 (per-stream key derivation, counter nonce)
+- [ ] MUX UDP 子连接 (parse_new_stream_payload 需解析 network 字段) ← 见 README.md
 
 ### UDP
 - [x] VLESS UDP 包 v1 + v2 格式
