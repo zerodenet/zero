@@ -681,6 +681,178 @@ mod mieru_manager {
 }
 use mieru_manager::MieruChainManager;
 
+// ── H2 chain manager ─────────────────────────────────────────────────
+
+#[cfg(feature = "hysteria2")]
+mod h2_manager {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use tokio::sync::broadcast;
+    use tokio::task::JoinSet;
+    use zero_core::{Address, Session};
+    use zero_engine::EngineError;
+    use zero_protocol_hysteria2::{build_udp_datagram, parse_udp_datagram};
+
+    use crate::runtime::Proxy;
+    use crate::transport::Hysteria2Connector;
+    use super::{ChainTask, FlowFailure};
+
+    type RecvItem = (Address, u16, Vec<u8>);
+
+    pub(super) struct H2ChainManager {
+        upstreams: HashMap<(String, u16, String), H2Entry>,
+    }
+
+    struct H2Entry {
+        send_tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+    }
+
+    impl H2ChainManager {
+        pub(super) fn new() -> Self { Self { upstreams: HashMap::new() } }
+
+        pub(super) async fn send(
+            &mut self,
+            chain_tasks: &mut JoinSet<ChainTask>,
+            session_id: u64,
+            proxy: &Proxy,
+            server: &str,
+            port: u16,
+            password: &str,
+            client_fingerprint: Option<&str>,
+            target: &Address,
+            target_port: u16,
+            payload: &[u8],
+        ) -> Result<usize, FlowFailure> {
+            let sent = payload.len();
+            let key = (server.to_owned(), port, password.to_owned());
+
+            // Cache hit
+            if let Some(entry) = self.upstreams.get(&key) {
+                let dg = build_udp_datagram(0, 0, target, target_port, payload)
+                    .expect("h2 build datagram");
+                let _ = entry.send_tx.send(dg).await;
+                return Ok(sent);
+            }
+
+            // Cache miss: establish new upstream.
+            let send_tx = Self::establish(
+                proxy, chain_tasks, session_id,
+                server, port, password, client_fingerprint,
+                target, target_port, payload,
+            ).await.map_err(|e| FlowFailure {
+                stage: "h2_establish",
+                error: e,
+                upstream: Some((server.to_owned(), port)),
+            })?;
+
+            self.upstreams.insert(key, H2Entry { send_tx: send_tx.clone() });
+
+            // Send initial payload
+            let dg = build_udp_datagram(0, 1, target, target_port, payload)
+                .expect("h2 build datagram");
+            let _ = send_tx.send(dg).await;
+
+            Ok(sent)
+        }
+
+        async fn establish(
+            proxy: &Proxy,
+            chain_tasks: &mut JoinSet<ChainTask>,
+            session_id: u64,
+            server: &str,
+            port: u16,
+            password: &str,
+            client_fingerprint: Option<&str>,
+            target: &Address,
+            target_port: u16,
+            initial_payload: &[u8],
+        ) -> Result<tokio::sync::mpsc::Sender<Vec<u8>>, EngineError> {
+            let connector = Hysteria2Connector::new(server, port, password)
+                .with_fingerprint(client_fingerprint);
+            let conn = Arc::new(connector.connect_raw().await?);
+
+            let (send_tx, mut send_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
+            let (recv_tx, _) = broadcast::channel::<RecvItem>(32);
+
+            let target_owned = target.clone();
+            let port_owned = target_port;
+
+            // Send task: reads outgoing datagrams, sends via QUIC.
+            let conn_send = conn.clone();
+            tokio::spawn(async move {
+                let mut pkt_id: u16 = 0;
+                // Send initial payload first
+                if let Ok(dg) = build_udp_datagram(0, pkt_id, &target_owned, port_owned, initial_payload) {
+                    if conn_send.send_datagram(dg.into()).is_err() { return; }
+                }
+                pkt_id = pkt_id.wrapping_add(1);
+                // Send subsequent payloads
+                while let Some(datagram) = send_rx.recv().await {
+                    if conn_send.send_datagram(datagram.into()).is_err() { break; }
+                }
+            });
+
+            // Recv task: reads QUIC datagrams, parses target+port, broadcasts.
+            let conn_recv = conn.clone();
+            let recv_tx2 = recv_tx.clone();
+            tokio::spawn(async move {
+                loop {
+                    match conn_recv.read_datagram().await {
+                        Ok(data) => {
+                            if let Ok(pkt) = parse_udp_datagram(&data) {
+                                if recv_tx2.send((pkt.target, pkt.port, pkt.payload)).is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+
+            // Spawn one-shot bridge task for the response.
+            let mut recv_rx = recv_tx.subscribe();
+            chain_tasks.spawn(async move {
+                match recv_rx.recv().await {
+                    Ok((t, p, payload)) => Ok((t, p, payload, Some(session_id))),
+                    Err(_) => Err(EngineError::Io(std::io::Error::other("h2 upstream closed"))),
+                }
+            });
+
+            Ok(send_tx)
+        }
+    }
+}
+#[cfg(not(feature = "hysteria2"))]
+mod h2_manager {
+    use std::collections::HashMap;
+    use tokio::task::JoinSet;
+    use zero_core::{Address, Session};
+    use crate::runtime::Proxy;
+    use super::{ChainTask, FlowFailure};
+    pub(super) struct H2ChainManager;
+    impl H2ChainManager {
+        pub(super) fn new() -> Self { Self }
+        #[allow(unused_variables)]
+        pub(super) async fn send(
+            &mut self, _tasks: &mut JoinSet<ChainTask>, _sid: u64,
+            _proxy: &Proxy,
+            _server: &str, _port: u16, _password: &str, _fp: Option<&str>,
+            _target: &Address, _tp: u16, _payload: &[u8],
+        ) -> Result<usize, FlowFailure> {
+            Err(FlowFailure {
+                stage: "h2_feature",
+                error: zero_engine::EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported, "Hysteria2 requires feature `hysteria2`",
+                )),
+                upstream: None,
+            })
+        }
+    }
+}
+use h2_manager::H2ChainManager;
+
 // ── Types ─────────────────────────────────────────────────────────────
 
 /// Result of starting a new UDP flow.
@@ -739,6 +911,8 @@ pub(crate) struct UdpDispatch {
     trojan_manager: TrojanChainManager,
     /// Per-dispatcher Mieru chain manager. Caches encrypted upstream streams.
     mieru_manager: MieruChainManager,
+    /// Per-dispatcher H2 chain manager. Caches QUIC upstream connections.
+    h2_manager: H2ChainManager,
 }
 
 impl UdpDispatch {
@@ -757,6 +931,7 @@ impl UdpDispatch {
             ss_manager: SsChainManager::new(),
             trojan_manager: TrojanChainManager::new(),
             mieru_manager: MieruChainManager::new(),
+            h2_manager: H2ChainManager::new(),
         })
     }
 
@@ -775,6 +950,7 @@ impl UdpDispatch {
             ss_manager: SsChainManager::new(),
             trojan_manager: TrojanChainManager::new(),
             mieru_manager: MieruChainManager::new(),
+            h2_manager: H2ChainManager::new(),
         }
     }
 
@@ -953,17 +1129,6 @@ impl UdpDispatch {
         #[cfg(feature = "shadowsocks")]
         responses.extend(
             crate::outbound::shadowsocks::drain_all_responses()
-                .into_iter()
-                .map(|r| UdpChainResponse {
-                    target: r.target,
-                    port: r.port,
-                    payload: r.payload,
-                }),
-        );
-
-        #[cfg(feature = "hysteria2")]
-        responses.extend(
-            crate::outbound::hysteria2::drain_all_h2_responses()
                 .into_iter()
                 .map(|r| UdpChainResponse {
                     target: r.target,
@@ -1236,27 +1401,20 @@ impl UdpDispatch {
                 password,
                 client_fingerprint,
             } => {
-                use crate::outbound::hysteria2::send_h2_udp_packet;
-                match send_h2_udp_packet(
+                match self.h2_manager.send(
+                    &mut self.chain_tasks, flow.session.id,
                     proxy,
-                    &flow.session,
-                    server.as_str(),
-                    *port,
-                    password.as_str(),
-                    client_fingerprint.as_deref(),
-                    &flow.session.target,
-                    flow.session.port,
-                    payload,
+                    server.as_str(), *port, password.as_str(), client_fingerprint.as_deref(),
+                    &flow.session.target, flow.session.port, payload,
                 )
                 .await
                 {
                     Ok(sent) => {
                         proxy.record_session_outbound_tx(flow.session.id, sent as u64);
                     }
-                    Err(error) => {
-                        let msg = error.to_string();
-                        self.fail_flow_with_msg(&flow, started_at, "udp_h2_send", &msg);
-                        return Err(EngineError::Io(std::io::Error::other(msg)));
+                    Err(failure) => {
+                        self.fail_flow_with_msg(&flow, started_at, failure.stage, &failure.error.to_string());
+                        return Err(failure.error);
                     }
                 }
             }
@@ -1477,22 +1635,17 @@ impl UdpDispatch {
                 client_fingerprint,
                 ..
             } => {
-                let sent = crate::outbound::hysteria2::send_h2_udp_packet(
+                let sent = self.h2_manager.send(
+                    &mut self.chain_tasks, session.id,
                     proxy,
-                    session,
-                    server,
-                    port,
-                    password,
-                    client_fingerprint,
-                    &session.target,
-                    session.port,
-                    payload,
+                    server, port, password, client_fingerprint,
+                    &session.target, session.port, payload,
                 )
                 .await
-                .map_err(|error| FlowFailure {
-                    stage: "udp_h2_send",
-                    error,
-                    upstream: Some((server.to_owned(), port)),
+                .map_err(|f: FlowFailure| FlowFailure {
+                    stage: f.stage,
+                    error: f.error,
+                    upstream: f.upstream,
                 })?;
 
                 Ok(FlowStartResult::Flow {

@@ -105,26 +105,6 @@ impl Proxy {
                             );
                         }
 
-                        // Drain H2 responses (H2 still uses global queue).
-                        // SS/Trojan/Mieru now flow through chain_tasks.join_next().
-                        // TODO: migrate H2 to per-dispatcher manager.
-                        #[cfg(feature = "hysteria2")]
-                        if let Some(client_addr) = client_udp_addr {
-                            use crate::outbound::hysteria2::drain_all_h2_responses;
-                            for resp in drain_all_h2_responses() {
-                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
-                                    &resp.target, resp.port, &resp.payload,
-                                ) {
-                                    if let Some(sid) = dispatch.session_id_by_target(
-                                        &resp.target, resp.port,
-                                    ) {
-                                        self.record_session_outbound_rx(sid, resp.payload.len() as u64);
-                                        self.record_session_inbound_tx(sid, frame.len() as u64);
-                                    }
-                                    let _ = relay.send_to_addr(&frame, client_addr).await;
-                                }
-                            }
-                        }
                     } else if let Some(client_addr) = client_udp_addr {
                         // Legacy direct response arriving on the relay socket
                         // (from pre-dispatch flows). Forward to client.
