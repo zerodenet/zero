@@ -196,15 +196,30 @@ pub async fn connect_tls_upstream(
     Ok(TcpRelayStream::new(stream))
 }
 
-/// Connect using our custom TLS 1.3 stack with full ClientHello control.
+/// Connect using our custom TLS 1.3 stack with the requested
+/// fingerprint's cipher suites and ClientHello control.
 async fn connect_tls13_upstream(
     socket: TokioSocket,
     server_name: &str,
-    _fp: &crate::fingerprint::TlsFingerprint,
+    fp: &crate::fingerprint::TlsFingerprint,
 ) -> Result<TcpRelayStream, EngineError> {
+    // Convert rustls cipher suite names to ztls CipherSuites.
+    // rustls uses "TLS13_AES_128_GCM_SHA256", ztls uses "TLS_AES_128_GCM_SHA256".
+    let cipher_suites: Vec<ztls::cipher::CipherSuite> = fp
+        .cipher_suites
+        .iter()
+        .filter_map(|s| rustls_to_ztls_suite(s.suite().as_str()?))
+        .collect();
+
+    let suites = if cipher_suites.is_empty() {
+        ztls::cipher::DEFAULT_CIPHER_SUITES.to_vec()
+    } else {
+        cipher_suites
+    };
+
     let config = ztls::handshake::Tls13Config {
         server_name: server_name.to_owned(),
-        cipher_suites: ztls::cipher::DEFAULT_CIPHER_SUITES.to_vec(),
+        cipher_suites: suites,
         alpn_protocols: vec!["h2".to_owned(), "http/1.1".to_owned()],
         handshake_timeout_ms: 15_000,
     };
@@ -215,6 +230,20 @@ async fn connect_tls13_upstream(
         .map_err(|e| EngineError::Io(io::Error::other(format!("custom TLS handshake: {e}"))))?;
 
     Ok(TcpRelayStream::new(tls_stream))
+}
+
+/// Map a rustls cipher suite name to the equivalent ztls CipherSuite.
+fn rustls_to_ztls_suite(name: &str) -> Option<ztls::cipher::CipherSuite> {
+    let ztls_name = match name {
+        "TLS13_AES_128_GCM_SHA256" => "TLS_AES_128_GCM_SHA256",
+        "TLS13_AES_256_GCM_SHA384" => "TLS_AES_256_GCM_SHA384",
+        "TLS13_CHACHA20_POLY1305_SHA256" => "TLS_CHACHA20_POLY1305_SHA256",
+        // TLS 1.2 suites that also appear in some fingerprints
+        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256" => "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256" => "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+        _ => return None,
+    };
+    ztls::cipher::CipherSuite::from_name(ztls_name)
 }
 
 fn load_certs(path: &Path) -> io::Result<Vec<rustls::pki_types::CertificateDer<'static>>> {
