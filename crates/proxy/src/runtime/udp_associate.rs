@@ -105,10 +105,13 @@ impl Proxy {
                             );
                         }
 
-                        // Drain chain-outbound responses (SS, H2, Trojan, Mieru)
-                        // and forward to the SOCKS5 client.
+                        // Drain H2 responses (H2 still uses global queue).
+                        // SS/Trojan/Mieru now flow through chain_tasks.join_next().
+                        // TODO: migrate H2 to per-dispatcher manager.
+                        #[cfg(feature = "hysteria2")]
                         if let Some(client_addr) = client_udp_addr {
-                            for resp in UdpDispatch::drain_chain_responses() {
+                            use crate::outbound::hysteria2::drain_all_h2_responses;
+                            for resp in drain_all_h2_responses() {
                                 if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
                                     &resp.target, resp.port, &resp.payload,
                                 ) {

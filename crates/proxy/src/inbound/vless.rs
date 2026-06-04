@@ -19,7 +19,9 @@ use zero_protocol_vless::{VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_associate::helpers::log_completed_udp_flow;
+use crate::runtime::udp_associate::helpers::{
+    log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
+};
 
 use super::super::logging::log_listener_connection_error;
 use super::super::runtime::{bind_listener, Proxy};
@@ -742,12 +744,15 @@ impl Proxy {
 
         let mut buffer = vec![0_u8; 64 * 1024];
         let mut udp_buffer = vec![0_u8; 64 * 1024];
+        let mut upstream_buffer = vec![0_u8; 64 * 1024];
         let proxy = self.clone();
 
         loop {
             // Split dispatch into disjoint borrows so select! can pin
             // all futures simultaneously without borrow conflicts.
-            let (direct_sock, vless_mgr, chain_tasks) = dispatch.direct_socket_and_vless_manager();
+            // Uses poll_refs() to get ALL borrows, enabling SOCKS5 upstream
+            // and idle timeout handling alongside direct/VLESS/chain polls.
+            let (direct_sock, vless_mgr, socks5_up, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
                 _ = tokio::time::sleep_until(last_activity + timeout) => {
@@ -777,17 +782,25 @@ impl Proxy {
                                 );
                             }
 
-                            // Drain chain-outbound responses (SS, H2, Trojan, Mieru)
-                            // and write them back to the VLESS client.
-                            for resp in UdpDispatch::drain_chain_responses() {
-                                if let Ok(packet) = build_udp_packet(&resp.target, resp.port, &resp.payload) {
+                            // Drain H2 responses (H2 still uses global queue).
+                            // TODO: migrate H2 to per-dispatcher manager.
+                            #[cfg(feature = "hysteria2")]
+                            {
+                                use crate::outbound::hysteria2::drain_all_h2_responses;
+                                for resp in drain_all_h2_responses() {
                                     if let Some(sid) = dispatch.session_id_by_target(
                                         &resp.target, resp.port,
                                     ) {
                                         proxy.record_session_outbound_rx(sid, resp.payload.len() as u64);
-                                        proxy.record_session_inbound_tx(sid, packet.len() as u64);
                                     }
-                                    let _ = client.write_all(&packet).await;
+                                    if let Ok(packet) = build_udp_packet(&resp.target, resp.port, &resp.payload) {
+                                        if let Some(sid) = dispatch.session_id_by_target(
+                                            &resp.target, resp.port,
+                                        ) {
+                                            proxy.record_session_inbound_tx(sid, packet.len() as u64);
+                                        }
+                                        let _ = client.write_all(&packet).await;
+                                    }
                                 }
                             }
                         }
@@ -875,6 +888,25 @@ impl Proxy {
                         None => {}
                     }
                 }
+                upstream = recv_upstream_packet(socks5_up, &mut upstream_buffer) => {
+                    // SOCKS5 chain upstream response — re-encode as VLESS.
+                    use zero_protocol_socks5::parse_udp_packet;
+                    match upstream {
+                        Ok(read) => {
+                            last_activity = TokioInstant::now();
+                            if let Ok(pkt) = parse_udp_packet(&upstream_buffer[..read]) {
+                                if let Ok(packet) = build_udp_packet(&pkt.target, pkt.port, &pkt.payload) {
+                                    let _ = client.write_all(&packet).await;
+                                    proxy.record_session_inbound_traffic(0, client.drain_traffic());
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            warn!(error = %error, "SOCKS5 upstream recv error");
+                        }
+                    }
+                }
+                _ = wait_for_upstream_idle(socks5_idle) => {
                 Some(chain_result) = chain_tasks.join_next() => {
                     // Chain-outbound response (SS, H2, VLESS via JoinSet).
                     match chain_result {

@@ -19,7 +19,7 @@ pub(crate) fn log_completed_udp_flow(completed: CompletedUdpFlow) {
     );
 }
 
-pub(super) async fn recv_upstream_packet(
+pub(crate) async fn recv_upstream_packet(
     association: Option<&ActiveUpstreamSocks5UdpAssociation>,
     buf: &mut [u8],
 ) -> Result<usize, EngineError> {
@@ -29,7 +29,7 @@ pub(super) async fn recv_upstream_packet(
     }
 }
 
-pub(super) async fn wait_for_upstream_idle(deadline: Option<TokioInstant>) {
+pub(crate) async fn wait_for_upstream_idle(deadline: Option<TokioInstant>) {
     match deadline {
         Some(deadline) => sleep_until(deadline).await,
         None => std::future::pending::<()>().await,
