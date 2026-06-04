@@ -1,5 +1,5 @@
 [package]
-name = "zero-protocol-hysteria2"
+name = "hysteria2"
 # hysteria v2.6.1
 version = "2.6.1"
 edition.workspace = true

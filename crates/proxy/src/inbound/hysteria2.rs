@@ -15,7 +15,7 @@ use tracing::{error, info, warn};
 use zero_config::InboundConfig;
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
-use zero_protocol_hysteria2::{
+use hysteria2::{
     build_auth_error, build_auth_ok, build_connect_error, build_connect_ok, build_udp_datagram,
     parse_auth_frame, parse_tcp_connect_header, parse_udp_datagram, verify_hmac,
 };

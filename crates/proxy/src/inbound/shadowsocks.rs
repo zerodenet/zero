@@ -17,7 +17,7 @@ use tracing::{error, info, warn};
 use zero_config::InboundConfig;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
-use zero_protocol_shadowsocks::{
+use shadowsocks::{
     aead_decrypt_udp, aead_encrypt_udp, build_target_data, parse_target_data, CipherKind,
     ShadowsocksInbound,
 };
@@ -342,7 +342,7 @@ async fn ss_decrypt_upload(
     rate_bps: Option<u64>,
     mut on_bytes: impl FnMut(u64) + Send + 'static,
 ) -> Result<(), ()> {
-    use zero_protocol_shadowsocks::{decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload};
+    use shadowsocks::{decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload};
 
     let mut limiter = rate_bps.filter(|b| *b > 0).map(RateLimiter::new);
     let mut nonce = next_nonce;
@@ -585,11 +585,11 @@ impl Proxy {
             };
             let nonce = [0u8; 12];
             let Ok(plain) =
-                zero_protocol_shadowsocks::aead_decrypt_udp(*chain_cipher, &key, &nonce, encrypted)
+                shadowsocks::aead_decrypt_udp(*chain_cipher, &key, &nonce, encrypted)
             else {
                 continue;
             };
-            let Ok((_, _, payload_offset)) = zero_protocol_shadowsocks::parse_target_data(&plain)
+            let Ok((_, _, payload_offset)) = shadowsocks::parse_target_data(&plain)
             else {
                 continue;
             };
@@ -610,7 +610,7 @@ impl Proxy {
             else {
                 continue;
             };
-            let Ok(resp_enc) = zero_protocol_shadowsocks::aead_encrypt_udp(
+            let Ok(resp_enc) = shadowsocks::aead_encrypt_udp(
                 inbound_cipher,
                 &resp_key,
                 &nonce,
@@ -654,9 +654,9 @@ fn ss_derive_key(
     password: &[u8],
     salt: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
-    use zero_protocol_shadowsocks::derive_key;
+    use shadowsocks::derive_key;
     if cipher.is_blake3() {
-        zero_protocol_shadowsocks::derive_key_blake3(password, salt, cipher.key_len())
+        shadowsocks::derive_key_blake3(password, salt, cipher.key_len())
     } else {
         derive_key(password, salt, cipher.key_len())
     }

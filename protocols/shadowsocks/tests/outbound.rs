@@ -3,7 +3,7 @@
 use std::io;
 
 use zero_core::{Address, Network, ProtocolType, Session};
-use zero_protocol_shadowsocks::{
+use shadowsocks::{
     decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, derive_key, parse_target_data, CipherKind,
     ShadowsocksOutbound, TCP_CHUNK_SIZE_LEN,
 };

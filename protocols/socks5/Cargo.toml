@@ -1,5 +1,5 @@
 [package]
-name = "zero-protocol-socks5"
+name = "socks5"
 version = "0.0.1"  # RFC 1928, no upstream reference
 edition.workspace = true
 authors.workspace = true

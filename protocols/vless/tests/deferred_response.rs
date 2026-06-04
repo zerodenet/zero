@@ -1,5 +1,5 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use zero_protocol_vless::{DeferredVlessResponseStream, VLESS_VERSION};
+use vless::{DeferredVlessResponseStream, VLESS_VERSION};
 
 #[tokio::test]
 async fn deferred_vless_response_discards_header_before_payload() {

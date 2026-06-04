@@ -13,9 +13,9 @@ use tokio::time::Instant as TokioInstant;
 use tracing::{error, info, warn};
 use zero_config::{InboundRealityConfig, VlessUserConfig};
 use zero_platform_tokio::TokioSocket;
-use zero_protocol_vless::build_udp_packet;
-use zero_protocol_vless::RealityServerOptions;
-use zero_protocol_vless::{VlessUser, VlessUserStore};
+use vless::build_udp_packet;
+use vless::RealityServerOptions;
+use vless::{VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
 use crate::runtime::udp_dispatch::UdpDispatch;
@@ -39,7 +39,7 @@ use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 
 #[derive(Clone)]
 struct VlessInboundHandler {
-    vless_inbound: zero_protocol_vless::VlessInbound,
+    vless_inbound: vless::VlessInbound,
 }
 
 #[async_trait]
@@ -520,7 +520,7 @@ impl Proxy {
 
         let auth = session.auth.clone();
 
-        if zero_protocol_vless::VlessInbound::is_mux_session(&session) {
+        if vless::VlessInbound::is_mux_session(&session) {
             self.handle_vless_mux_session(client, inbound_tag, uuid, &auth)
                 .await
         } else if session.network == zero_core::Network::Udp {
@@ -554,7 +554,7 @@ impl Proxy {
         S: ClientStream,
     {
         use tokio::sync::mpsc;
-        use zero_protocol_vless::{
+        use vless::{
             encode_new_stream_response, parse_new_stream_payload, MuxServer, MUX_STATUS_FAIL,
             MUX_STATUS_OK, MUX_STREAM_NEW,
         };
@@ -835,7 +835,7 @@ impl Proxy {
                 }
                 upstream = recv_upstream_packet(socks5_up, &mut upstream_buffer) => {
                     // SOCKS5 chain upstream response — re-encode as VLESS.
-                    use zero_protocol_socks5::parse_udp_packet;
+                    use socks5::parse_udp_packet;
                     match upstream {
                         Ok(read) => {
                             last_activity = TokioInstant::now();
@@ -905,7 +905,7 @@ impl Proxy {
         packet: &[u8],
         auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError> {
-        use zero_protocol_vless::parse_udp_packet;
+        use vless::parse_udp_packet;
 
         let udp_packet = parse_udp_packet(packet)?;
 
@@ -1077,12 +1077,12 @@ where
 async fn upgrade_vless_reality_server<S>(
     stream: S,
     reality: &InboundRealityConfig,
-) -> std::io::Result<zero_protocol_vless::RealityTlsStream<S>>
+) -> std::io::Result<vless::RealityTlsStream<S>>
 where
     S: ClientStream + 'static,
 {
     let server_name = reality.server_name.as_deref().unwrap_or("localhost");
-    zero_protocol_vless::upgrade_reality_server(
+    vless::upgrade_reality_server(
         stream,
         RealityServerOptions {
             private_key: &reality.private_key,
@@ -1101,12 +1101,12 @@ struct ConfiguredVlessUsers<'a> {
 impl VlessUserStore for ConfiguredVlessUsers<'_> {
     fn find_user(&self, id: &[u8; 16]) -> Option<VlessUser> {
         self.users.iter().find_map(|user| {
-            let configured_id = zero_protocol_vless::parse_uuid(&user.id).ok()?;
+            let configured_id = vless::parse_uuid(&user.id).ok()?;
             if &configured_id == id {
                 let flow = user
                     .flow
                     .as_deref()
-                    .and_then(|f| zero_protocol_vless::parse_flow(f).ok());
+                    .and_then(|f| vless::parse_flow(f).ok());
                 Some(VlessUser {
                     credential_id: user.credential_id.clone(),
                     principal_key: user.principal_key.clone(),

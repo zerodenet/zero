@@ -8,9 +8,9 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-vless-reality = ["dep:zero-protocol-vless"]
+vless-reality = ["dep:vless"]
 
 [dependencies]
 tokio.workspace = true
-zero-protocol-vless = { path = "../../../protocols/vless", default-features = false, features = ["reality"], optional = true }
+vless = { path = "../../../protocols/vless", default-features = false, features = ["reality"], optional = true }
 zero-traits = { path = "../../traits" }

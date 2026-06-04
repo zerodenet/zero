@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use tracing::warn;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
-use zero_protocol_trojan::{build_udp_packet, build_udp_request, read_udp_packet};
+use trojan::{build_udp_packet, build_udp_request, read_udp_packet};
 
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};

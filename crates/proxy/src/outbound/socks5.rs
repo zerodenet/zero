@@ -7,7 +7,7 @@ use tokio::time::Instant as TokioInstant;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
-use zero_protocol_socks5::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
+use socks5::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
 
 use crate::logging::{
     log_udp_upstream_association_created, log_udp_upstream_association_dropped,
@@ -65,7 +65,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
             .establish_udp_association_with_auth(
                 &mut control,
                 auth.map(
-                    |(username, password)| zero_protocol_socks5::Socks5OutboundAuth {
+                    |(username, password)| socks5::Socks5OutboundAuth {
                         username,
                         password,
                     },

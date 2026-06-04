@@ -1,5 +1,5 @@
 use x25519_dalek::{PublicKey, StaticSecret};
-use zero_protocol_vless::reality::reality_auth::*;
+use vless::reality::reality_auth::*;
 
 #[test]
 fn test_ecdh() {

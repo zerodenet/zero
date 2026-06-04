@@ -1,4 +1,4 @@
-use zero_protocol_vless::reality::reality_util::{decode_public_key, decode_short_id};
+use vless::reality::reality_util::{decode_public_key, decode_short_id};
 use ztls::util::extract_client_random;
 
 #[test]

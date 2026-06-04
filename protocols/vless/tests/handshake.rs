@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use zero_core::{Address, Error, Network, ProtocolType, Session};
-use zero_protocol_vless::{
+use vless::{
     build_udp_packet, build_udp_packet_v2, format_uuid, parse_udp_packet, parse_udp_packet_v2,
     parse_uuid, VlessInbound, VlessOutbound, VlessUser, VlessUserStore,
 };

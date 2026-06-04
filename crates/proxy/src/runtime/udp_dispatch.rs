@@ -107,7 +107,7 @@ mod ss_manager {
             target_port: u16,
             payload: &[u8],
         ) -> Result<usize, FlowFailure> {
-            use zero_protocol_shadowsocks::{
+            use shadowsocks::{
                 aead_encrypt_udp, build_target_data, derive_key, CipherKind,
             };
 
@@ -209,7 +209,7 @@ mod ss_manager {
             server: &str,
             port: u16,
             password: &str,
-            cipher_kind: zero_protocol_shadowsocks::CipherKind,
+            cipher_kind: shadowsocks::CipherKind,
         ) -> Arc<SsUpstream> {
             let key = (
                 server.to_owned(), port, format!("{cipher_kind:?}"), password.to_owned(),
@@ -235,11 +235,11 @@ mod ss_manager {
 
         async fn recv_loop(
             socket: Arc<tokio::net::UdpSocket>,
-            cipher: zero_protocol_shadowsocks::CipherKind,
+            cipher: shadowsocks::CipherKind,
             password: String,
             recv_tx: broadcast::Sender<SsRecvItem>,
         ) {
-            use zero_protocol_shadowsocks::{aead_decrypt_udp, derive_key, parse_target_data};
+            use shadowsocks::{aead_decrypt_udp, derive_key, parse_target_data};
             let mut buf = vec![0u8; 4096];
             loop {
                 let (n, _) = match socket.recv_from(&mut buf).await {
@@ -299,7 +299,7 @@ mod trojan_manager {
     use tokio::task::JoinSet;
     use zero_core::{Address, Session};
     use zero_engine::EngineError;
-    use zero_protocol_trojan::{build_udp_packet, build_udp_request, read_udp_packet};
+    use trojan::{build_udp_packet, build_udp_request, read_udp_packet};
 
     use crate::runtime::Proxy;
     use crate::transport::{MeteredStream, TcpRelayStream};
@@ -499,7 +499,7 @@ mod mieru_manager {
     use tokio::task::JoinSet;
     use zero_core::{Address, Session};
     use zero_engine::EngineError;
-    use zero_protocol_mieru::{unwrap_udp_associate, wrap_udp_associate, MieruOutbound};
+    use mieru::{unwrap_udp_associate, wrap_udp_associate, MieruOutbound};
     use zero_traits::AsyncSocket;
 
     use crate::runtime::Proxy;
@@ -699,7 +699,7 @@ mod h2_manager {
     use tokio::task::JoinSet;
     use zero_core::{Address, Session};
     use zero_engine::EngineError;
-    use zero_protocol_hysteria2::{build_udp_datagram, parse_udp_datagram};
+    use hysteria2::{build_udp_datagram, parse_udp_datagram};
 
     use crate::runtime::Proxy;
     use crate::transport::Hysteria2Connector;
@@ -1146,7 +1146,7 @@ impl UdpDispatch {
         #[cfg(feature = "mieru")]
         for resp in crate::outbound::mieru_udp::drain_all_mieru_responses() {
             // Mieru responses contain SOCKS5-framed UDP packets.
-            if let Ok(parsed) = zero_protocol_socks5::parse_udp_packet(&resp.payload) {
+            if let Ok(parsed) = socks5::parse_udp_packet(&resp.payload) {
                 responses.push(UdpChainResponse {
                     target: parsed.target,
                     port: parsed.port,

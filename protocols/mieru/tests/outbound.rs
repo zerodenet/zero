@@ -2,7 +2,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use zero_protocol_mieru::{
+use mieru::{
     build_data_segment, derive_key, DataMetadata, MieruCipher, MieruOutbound, MieruSession,
     DATA_SERVER_TO_CLIENT,
 };

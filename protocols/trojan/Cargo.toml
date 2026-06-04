@@ -1,5 +1,5 @@
 [package]
-name = "zero-protocol-trojan"
+name = "trojan"
 # trojan-go v0.10.6
 version = "0.10.6"
 edition.workspace = true

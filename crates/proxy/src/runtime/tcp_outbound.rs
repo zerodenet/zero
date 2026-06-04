@@ -425,7 +425,7 @@ async fn send_hop_protocol_request(
                 session,
                 username
                     .zip(*password)
-                    .map(|(u, p)| zero_protocol_socks5::Socks5OutboundAuth {
+                    .map(|(u, p)| socks5::Socks5OutboundAuth {
                         username: u,
                         password: p,
                     }),
@@ -434,7 +434,7 @@ async fn send_hop_protocol_request(
             .map_err(|e| EngineError::Io(std::io::Error::other(e))),
         #[cfg(feature = "vless")]
         ResolvedLeafOutbound::Vless { id, flow, .. } => {
-            let uuid = zero_protocol_vless::parse_uuid(id)?;
+            let uuid = vless::parse_uuid(id)?;
             if let Some(f) = flow {
                 proxy
                     .protocols
@@ -455,7 +455,7 @@ async fn send_hop_protocol_request(
         ResolvedLeafOutbound::Shadowsocks {
             password, cipher, ..
         } => {
-            use zero_protocol_shadowsocks::{CipherKind, ShadowsocksOutbound};
+            use shadowsocks::{CipherKind, ShadowsocksOutbound};
             let kind = CipherKind::from_str(cipher).ok_or_else(|| {
                 EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
@@ -477,17 +477,17 @@ async fn send_hop_protocol_request(
             .map_err(|e| EngineError::Io(std::io::Error::other(e))),
         #[cfg(feature = "vmess")]
         ResolvedLeafOutbound::Vmess { id, cipher, .. } => {
-            let uuid = zero_protocol_vmess::parse_uuid(id).map_err(|e| {
+            let uuid = vmess::parse_uuid(id).map_err(|e| {
                 EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
             })?;
             let vmess_cipher =
-                zero_protocol_vmess::VmessCipher::from_name(cipher).ok_or_else(|| {
+                vmess::VmessCipher::from_name(cipher).ok_or_else(|| {
                     EngineError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
                         format!("vmess unknown cipher: {cipher}"),
                     ))
                 })?;
-            zero_protocol_vmess::VmessOutbound
+            vmess::VmessOutbound
                 .establish_tcp_tunnel(stream, session, &uuid, vmess_cipher)
                 .await
                 .map_err(|e| EngineError::Io(std::io::Error::other(e)))

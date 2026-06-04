@@ -5,8 +5,8 @@ use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_config::Socks5UserConfig;
 use zero_engine::EngineError;
-use zero_protocol_socks5::Socks5PasswordAuth;
-use zero_protocol_socks5::{Socks5Inbound, Socks5Reply, Socks5Request};
+use socks5::Socks5PasswordAuth;
+use socks5::{Socks5Inbound, Socks5Reply, Socks5Request};
 
 use zero_core::Session;
 

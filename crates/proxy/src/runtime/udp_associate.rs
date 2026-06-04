@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use tokio::select;
 use tracing::{debug, info, warn};
 use zero_platform_tokio::TokioDatagramSocket;
-use zero_protocol_socks5::{parse_udp_packet, Socks5Reply, Socks5UdpAssociateRequest};
+use socks5::{parse_udp_packet, Socks5Reply, Socks5UdpAssociateRequest};
 use zero_traits::AsyncSocket;
 use zero_traits::DnsResolver;
 
@@ -216,7 +216,7 @@ impl Proxy {
                                 self.record_session_outbound_rx(sid, payload.len() as u64);
                             }
                             if let Some(client_addr) = client_udp_addr {
-                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
+                                if let Ok(frame) = socks5::build_udp_packet(
                                     &target, port, &payload,
                                 ) {
                                     if let Ok(sent) = relay.send_to_addr(&frame, client_addr).await {
@@ -321,7 +321,7 @@ impl Proxy {
         sender: SocketAddr,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        let packet = zero_protocol_socks5::build_udp_packet(
+        let packet = socks5::build_udp_packet(
             &address_from_socket_addr(sender),
             sender.port(),
             payload,

@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use tracing::warn;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
-use zero_protocol_mieru::{unwrap_udp_associate, wrap_udp_associate, MieruOutbound};
+use mieru::{unwrap_udp_associate, wrap_udp_associate, MieruOutbound};
 use zero_traits::AsyncSocket;
 
 use crate::runtime::Proxy;

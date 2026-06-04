@@ -377,7 +377,7 @@ pub trait TcpConnector: Send + Sync {
 // ── Cross-crate trait impls ──
 
 #[cfg(feature = "vless-reality")]
-impl<IO> ClientStream for zero_protocol_vless::RealityTlsStream<IO> where
+impl<IO> ClientStream for vless::RealityTlsStream<IO> where
     IO: AsyncRead + AsyncWrite + Send + Sync + Unpin
 {
 }

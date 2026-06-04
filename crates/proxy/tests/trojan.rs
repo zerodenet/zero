@@ -109,13 +109,13 @@ async fn spawn_trojan_tls_echo_server(
         let mut stream = acceptor.accept(stream).await.expect("accept tls");
         assert!(stream.get_ref().1.alpn_protocol().is_none());
 
-        let mut password = [0_u8; zero_protocol_trojan::PASSWORD_HASH_LEN + 2];
+        let mut password = [0_u8; trojan::PASSWORD_HASH_LEN + 2];
         stream
             .read_exact(&mut password)
             .await
             .expect("read trojan password");
         assert_eq!(
-            &password[zero_protocol_trojan::PASSWORD_HASH_LEN..],
+            &password[trojan::PASSWORD_HASH_LEN..],
             b"\r\n"
         );
 
@@ -124,13 +124,13 @@ async fn spawn_trojan_tls_echo_server(
             .read_exact(&mut header)
             .await
             .expect("read trojan command");
-        assert_eq!(header[0], zero_protocol_trojan::CMD_TCP);
+        assert_eq!(header[0], trojan::CMD_TCP);
 
         stream
             .read_exact(&mut header)
             .await
             .expect("read trojan address type");
-        assert_eq!(header[0], zero_protocol_trojan::ATYP_IPV4);
+        assert_eq!(header[0], trojan::ATYP_IPV4);
 
         let mut ipv4 = [0_u8; 4];
         stream

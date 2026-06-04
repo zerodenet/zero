@@ -1,5 +1,5 @@
 use zero_core::Address;
-use zero_protocol_vless::{
+use vless::{
     flow_build_request, flow_byte, flow_from_byte, parse_flow, parse_uuid, FLOW_XTLS_RPRX_VISION,
     FLOW_XTLS_RPRX_VISION_UDP,
 };

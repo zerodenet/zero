@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::{EngineError, ResolvedOutbound, SessionOutcome};
-use zero_protocol_socks5::parse_udp_packet;
+use socks5::parse_udp_packet;
 use zero_traits::DnsResolver;
 
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
@@ -34,7 +34,7 @@ impl Proxy {
                             let dns_resp =
                                 zero_dns::udp::build_dns_response(&udp_packet.payload, &ips);
                             if !dns_resp.is_empty() {
-                                let frame = zero_protocol_socks5::build_udp_packet(
+                                let frame = socks5::build_udp_packet(
                                     &udp_packet.target,
                                     udp_packet.port,
                                     &dns_resp,

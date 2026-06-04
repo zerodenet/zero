@@ -10,7 +10,7 @@ use tracing::{error, info, warn};
 use zero_config::{GrpcConfig, InboundConfig, WebSocketConfig};
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_protocol_vmess::{VmessCipher, VmessInbound, VmessUser};
+use vmess::{VmessCipher, VmessInbound, VmessUser};
 use zero_traits::AsyncSocket;
 
 use crate::runtime::bind_listener;
@@ -145,7 +145,7 @@ impl Proxy {
         let vmess_users: Vec<VmessUser> = users
             .iter()
             .map(|u| {
-                let uuid = zero_protocol_vmess::parse_uuid(&u.id)
+                let uuid = vmess::parse_uuid(&u.id)
                     .map_err(|e| EngineError::Io(io::Error::new(io::ErrorKind::InvalidInput, e)))?;
                 let cipher = VmessCipher::from_name(&u.cipher).ok_or_else(|| {
                     EngineError::Io(io::Error::new(

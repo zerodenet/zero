@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use zero_core::Address;
-use zero_protocol_http_connect::{HttpConnectInbound, HttpConnectResponse};
+use http_connect::{HttpConnectInbound, HttpConnectResponse};
 use zero_traits::AsyncSocket;
 
 #[derive(Debug, Default)]

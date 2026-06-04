@@ -3,7 +3,7 @@
 use std::io;
 
 use zero_core::{Address, Network, ProtocolType, Session};
-use zero_protocol_trojan::{TrojanOutbound, CMD_TCP, CRLF, PASSWORD_HASH_LEN};
+use trojan::{TrojanOutbound, CMD_TCP, CRLF, PASSWORD_HASH_LEN};
 use zero_traits::AsyncSocket;
 
 #[derive(Default)]
@@ -50,7 +50,7 @@ async fn outbound_writes_complete_request_in_one_write() {
     assert_eq!(request[PASSWORD_HASH_LEN + 2], CMD_TCP);
     assert_eq!(
         request[PASSWORD_HASH_LEN + 3],
-        zero_protocol_trojan::ATYP_DOMAIN
+        trojan::ATYP_DOMAIN
     );
     assert_eq!(
         request[PASSWORD_HASH_LEN + 4] as usize,

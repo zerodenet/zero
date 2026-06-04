@@ -14,7 +14,7 @@ use zero_config::{
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
-use zero_protocol_vless::parse_uuid;
+use vless::parse_uuid;
 use zero_traits::AsyncSocket;
 
 use crate::runtime::Proxy;

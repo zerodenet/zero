@@ -1,6 +1,6 @@
 use tokio::sync::mpsc;
 
-use zero_protocol_vless::{VlessInbound, VlessOutbound, VlessUser, VlessUserStore};
+use vless::{VlessInbound, VlessOutbound, VlessUser, VlessUserStore};
 use zero_traits::AsyncSocket;
 
 const USER_ID: &str = "11111111-2222-3333-4444-555555555555";
@@ -60,7 +60,7 @@ impl VlessUserStore for TestUsers {
 }
 
 fn uuid() -> [u8; 16] {
-    zero_protocol_vless::parse_uuid(USER_ID).unwrap()
+    vless::parse_uuid(USER_ID).unwrap()
 }
 
 #[tokio::test]

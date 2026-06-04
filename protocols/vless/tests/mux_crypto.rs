@@ -1,5 +1,5 @@
-use zero_protocol_vless::parse_uuid;
-use zero_protocol_vless::MuxCrypto;
+use vless::parse_uuid;
+use vless::MuxCrypto;
 
 #[test]
 fn test_key_derivation_determinism() {
