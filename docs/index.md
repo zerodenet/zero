@@ -44,7 +44,7 @@ features:
 
 ## 当前版本
 
-**v0.0.8** — 全协议支持、DNS 子系统、负载均衡出站组、gRPC 控制面、TUN 虚拟网卡。
+**latest** — [https://github.com/zerodenet/zero/releases/latest](https://github.com/zerodenet/zero/releases/latest)
 
 ## 一分钟跑起来
 
