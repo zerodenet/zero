@@ -37,9 +37,11 @@
 ### Query
 
 ```
-→ {"type":"query","request":{"type":"health"}}
-← {"ok":true,"result":{"engine_version":"...","started_at_unix_ms":...,"healthy":true}}
+→ {"type":"query","id":1,"request":{"type":"health"}}
+← {"ok":true,"id":1,"result":{"engine_version":"...","started_at_unix_ms":...,"healthy":true}}
 ```
+
+`id` 是可选的，省略时响应不会回显（用于简单的一次性查询）。
 
 `request` 字段是 `QueryRequest` 枚举，使用 serde tagged enum 格式（`type` 标签 + `snake_case`）：
 
@@ -62,9 +64,11 @@
 ### Command
 
 ```
-→ {"type":"command","method":"policies.select","params":{"policy_tag":"proxy","target_tag":"direct"}}
-← {"ok":true,"result":{"accepted":true}}
+→ {"type":"command","id":1,"method":"policies.select","params":{"policy_tag":"proxy","target_tag":"direct"}}
+← {"ok":true,"id":1,"result":{"accepted":true}}
 ```
+
+`id` 可选，与 Query 一致。
 
 支持的方法：
 
@@ -85,12 +89,14 @@
 ### Subscribe
 
 ```
-→ {"type":"subscribe","events":["flow.completed"]}
-← {"ok":true,"result":"subscribed"}
+→ {"type":"subscribe","id":1,"events":["flow.completed"]}
+← {"ok":true,"id":1,"result":"subscribed"}
 ← {"event_type":"flow.completed","event_id":"...","occurred_at_unix_ms":...,"payload":{...}}
 ← :\n
 ← ...持续推送...
 ```
+
+`id` 可选，与 Query/Command 一致。
 
 `events` 为可选的事件类型白名单，空或省略表示接收所有事件。
 
@@ -170,22 +176,17 @@ def ipc_request(sock_path, req):
     s.close()
     return json.loads(resp.split(b"\n")[0])
 
-# 查询（正确格式：request 是带 type 标签的对象）
-print(ipc_request("~/.zero/control.sock", {
-    "type": "query",
-    "request": {"type": "health"}
-}))
-
-# 带 id 的多路复用查询
+# 查询（正确格式：request 是带 type 标签的对象，id 可选）
 print(ipc_request("~/.zero/control.sock", {
     "type": "query",
     "id": 1,
-    "request": {"type": "stats"}
+    "request": {"type": "health"}
 }))
 
 # 切换 selector
 print(ipc_request("~/.zero/control.sock", {
     "type": "command",
+    "id": 2,
     "method": "policies.select",
     "params": {"policy_tag": "proxy", "target_tag": "direct"}
 }))
@@ -196,7 +197,7 @@ print(ipc_request("~/.zero/control.sock", {
 ```go
 conn, _ := net.Dial("unix", "/home/user/.zero/control.sock")
 req, _ := json.Marshal(map[string]any{
-    "type": "query", "request": map[string]any{"type": "health"},
+    "type": "query", "id": 1, "request": map[string]any{"type": "health"},
 })
 conn.Write(append(req, '\n'))
 buf := make([]byte, 4096)
