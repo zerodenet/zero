@@ -120,7 +120,7 @@ fn local_status_listener_exposes_live_runtime_view() {
         serde_json::from_str(config_body).expect("parse config json");
     assert_eq!(config_json["result"]["rule_count"], 0);
     assert_eq!(
-        config_json["result"]["inbounds"][0]["listen_port"],
+        config_json["result"]["listeners"][0]["listen_port"],
         socks_port
     );
 

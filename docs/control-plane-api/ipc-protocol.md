@@ -50,7 +50,7 @@
 | `{"type":"capabilities"}` | 能力查询 |
 | `{"type":"health"}` | 健康检查 |
 | `{"type":"config"}` | 配置快照 |
-| `{"type":"runtime"}` | 运行时状态 |
+| `{"type":"runtime"}` | 运行时状态（含统计、日志配置、活动流） |
 | `{"type":"stats"}` | 统计摘要 |
 | `{"type":"policies"}` | 所有策略 |
 | `{"type":"policy","policy_tag":"proxy"}` | 单个策略 |
@@ -86,12 +86,16 @@
 | `diagnostics.dns_lookup` | `hostname` | DNS 查询 |
 | `diagnostics.trace_route` | `target`, `port`, `protocol?` | 路由追踪 |
 
+> **实现说明：** IPC Command 和 HTTP `POST /api/v1/commands` 共用同一条 serde 反序列化路径（`CommandRequest` 的 `#[serde(tag = "method", content = "params")]`）。新增 command 只需修改 `zero_api::CommandRequest`，传输层无需单独适配。
+
 ### Subscribe
 
 ```
 → {"type":"subscribe","id":1,"events":["flow.completed"]}
-← {"ok":true,"id":1,"result":"subscribed"}
-← {"event_type":"flow.completed","event_id":"...","occurred_at_unix_ms":...,"payload":{...}}
+← {"api_version":"zero.api.v1","ok":true,"id":1,"result":"subscribed"}
+← {"schema_version":"zero.event.v1","event_id":"...","event_type":"flow.completed",
+   "occurred_at_unix_ms":1713500000000,"source_id":null,"sequence":4201,
+   "principal_key":"user-001","labels":{},"payload":{...}}
 ← :\n
 ← ...持续推送...
 ```
@@ -100,12 +104,17 @@
 
 `events` 为可选的事件类型白名单，空或省略表示接收所有事件。
 
+**事件格式与 SSE 完全相同** — 都是 `zero_api::ApiEvent<serde_json::Value>` JSON。消费者只需要一套解析代码即可同时消费 IPC 和 HTTP/SSE 两个通道的事件。事件信封详见 [events.md](./events.md)。
+
 连接保持期间服务端持续推送事件帧，同时可以继续发送 Query/Command/Ping 帧获取即时响应。心跳用 `:\n`（SSE 注释格式，客户端忽略）。
 
 ## 响应格式
 
+IPC 响应使用与 HTTP 相同的信封格式（`zero_api::ApiResponse`），包含 `api_version` 字段用于协议识别。
+
 ```json
 {
+  "api_version": "zero.api.v1",
   "ok": true,
   "id": null,
   "result": { },
@@ -113,6 +122,7 @@
 }
 ```
 
+- `api_version` — 协议版本，始终为 `"zero.api.v1"`
 - `id` — 回显请求的 `id` 字段，用于多路复用时配对。请求不带 `id` 时此字段为 `null`
 - `ok` — `true` 成功 / `false` 失败
 - `result` — 成功的响应数据
@@ -121,16 +131,19 @@
 错误响应：
 ```json
 {
+  "api_version": "zero.api.v1",
   "ok": false,
   "id": null,
   "result": null,
   "error": {
-    "code": "not_found",
+    "code": "not-found",
     "message": "Policy not found",
     "field_path": "policy_tag"
   }
 }
 ```
+
+> **注意：** 错误码使用 kebab-case（如 `not-found`），与 HTTP 响应格式完全一致。
 
 ## 多路复用
 
@@ -138,12 +151,12 @@
 
 ```
 → {"type":"subscribe","id":1,"events":["flow.completed"]}
-← {"ok":true,"id":1,"result":"subscribed"}
+← {"api_version":"zero.api.v1","ok":true,"id":1,"result":"subscribed"}
 ← {"event_type":"flow.completed",...}
 → {"type":"query","id":2,"request":{"type":"stats"}}
-← {"ok":true,"id":2,"result":{"active_sessions":3,...}}
+← {"api_version":"zero.api.v1","ok":true,"id":2,"result":{"active_sessions":3,...}}
 → {"type":"ping","id":3}
-← {"ok":true,"id":3,"result":"pong"}
+← {"api_version":"zero.api.v1","ok":true,"id":3,"result":"pong"}
 ← {"event_type":"flow.completed",...}
 ```
 

@@ -25,18 +25,19 @@ impl QueryRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum QueryResponse {
     Capabilities(ApiCapabilities),
     Health(HealthSnapshot),
-    Config(Snapshot),
-    Runtime(Snapshot),
-    Stats(Snapshot),
-    Flows(Snapshot),
-    Flow(Snapshot),
-    Policies(Snapshot),
-    Policy(Snapshot),
-    Diagnostics(Snapshot),
+    Config(crate::ConfigSnapshot),
+    Runtime(crate::RuntimeSnapshot),
+    Stats(crate::StatsSnapshot),
+    ActiveFlows(Vec<crate::FlowSnapshot>),
+    RecentFlows(Vec<crate::CompletedFlowSnapshot>),
+    Flow(crate::FlowSnapshot),
+    Policies(Vec<crate::PolicySnapshot>),
+    Policy(crate::PolicySnapshot),
+    Diagnostics(serde_json::Value),
     Sinks(SinkStatusSnapshot),
     TunStatus(TunStatusSnapshot),
 }
@@ -78,30 +79,31 @@ pub struct FlowFilter {
     pub network: Option<Network>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FlowGetQuery {
+    #[serde(default)]
     pub flow_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PolicyGetQuery {
+    #[serde(default)]
     pub policy_tag: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Snapshot {
-    pub value: serde_json::Value,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HealthSnapshot {
+    #[serde(default)]
     pub engine_version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at_unix_ms: Option<u64>,
+    #[serde(default)]
     pub healthy: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SinkStatusSnapshot {
+    #[serde(default)]
     pub sinks: Vec<SinkStatus>,
 }
 
@@ -110,8 +112,12 @@ pub struct TunStatusQuery;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TunStatusSnapshot {
+    #[serde(default)]
     pub running: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub addr: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
 }

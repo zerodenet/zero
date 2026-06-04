@@ -112,9 +112,9 @@ async fn direct_inbound_appears_in_config_export() {
     wait_for_listener(proxy_port).await;
 
     let exported = handle.export_status();
-    assert_eq!(exported.config.inbounds.len(), 1);
-    assert_eq!(exported.config.inbounds[0].tag, "direct-in");
-    assert_eq!(exported.config.inbounds[0].protocol, "direct");
+    assert_eq!(exported.config.listeners.len(), 1);
+    assert_eq!(exported.config.listeners[0].tag, "direct-in");
+    assert_eq!(exported.config.listeners[0].protocol, "direct");
 
     handle.shutdown().await.expect("shutdown");
 }

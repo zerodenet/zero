@@ -8,110 +8,39 @@ use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 
+use serde::Serialize;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::sync::Mutex as TokioMutex;
 use zero_api::{
-    AuthContext, CommandRequest, CommandService, DiagnosticsDnsLookupCommand,
-    DiagnosticsTraceRouteCommand, EventFilter, EventSource, Permission, PolicySelectCommand,
-    QueryService, TunStopCommand,
+    ApiResponse, AuthContext, CommandRequest, CommandService, EventFilter, EventSource, Permission,
+    QueryService,
 };
 use zero_proxy::ProxyHandle;
 
-use super::protocol::{serialize_frame, IpcRequest, IpcResponse};
+use super::protocol::{ipc_api_error, ipc_error, ipc_ok, serialize_frame, IpcRequest};
 
 /// Parse a string method name + JSON params into a typed `CommandRequest`.
+///
+/// Uses the same serde `#[serde(tag = "method", content = "params")]` path as
+/// the HTTP adapter — the two transport layers share one deserialization
+/// definition.  Adding a new command variant only requires changing
+/// `zero_api::CommandRequest`; no transport-specific code needed.
 pub(crate) fn parse_command(
     method: &str,
     params: &serde_json::Value,
-) -> Result<CommandRequest, IpcResponse> {
-    match method {
-        "policies.select" => {
-            let policy_tag = params["policy_tag"]
-                .as_str()
-                .ok_or_else(|| IpcResponse::error("invalid_argument", "missing policy_tag"))?;
-            let target_tag = params["target_tag"]
-                .as_str()
-                .ok_or_else(|| IpcResponse::error("invalid_argument", "missing target_tag"))?;
-            Ok(CommandRequest::PolicySelect(PolicySelectCommand {
-                policy_tag: policy_tag.to_owned(),
-                target_tag: target_tag.to_owned(),
-            }))
+) -> Result<CommandRequest, ApiResponse<()>> {
+    let wrapper = serde_json::json!({
+        "method": method,
+        "params": params,
+    });
+    serde_json::from_value::<CommandRequest>(wrapper).map_err(|e| {
+        let msg = e.to_string();
+        if msg.contains("unknown_variant") {
+            ApiResponse::error_msg("unsupported", format!("unknown command method: {method}"))
+        } else {
+            ApiResponse::error_msg("invalid_argument", msg)
         }
-        "policies.probe" => {
-            let policy_tag = params["policy_tag"]
-                .as_str()
-                .ok_or_else(|| IpcResponse::error("invalid_argument", "missing policy_tag"))?;
-            Ok(CommandRequest::PolicyProbe(zero_api::PolicyProbeCommand {
-                policy_tag: policy_tag.to_owned(),
-            }))
-        }
-        "flows.close" => {
-            let flow_id = params["flow_id"]
-                .as_str()
-                .ok_or_else(|| IpcResponse::error("invalid_argument", "missing flow_id"))?;
-            Ok(CommandRequest::FlowClose(zero_api::FlowCloseCommand {
-                flow_id: flow_id.to_owned(),
-            }))
-        }
-        "config.validate" => Ok(CommandRequest::ConfigValidate(
-            zero_api::ConfigValidateCommand {
-                config: params.clone(),
-            },
-        )),
-        "config.apply" => Ok(CommandRequest::ConfigApply(zero_api::ConfigApplyCommand {
-            config: params.clone(),
-        })),
-        "diagnostics.probe_target" => {
-            let target_tag = params["target_tag"]
-                .as_str()
-                .ok_or_else(|| IpcResponse::error("invalid_argument", "missing target_tag"))?;
-            Ok(CommandRequest::DiagnosticsProbeTarget(
-                zero_api::DiagnosticsProbeTargetCommand {
-                    target_tag: target_tag.to_owned(),
-                },
-            ))
-        }
-        "diagnostics.dns_lookup" => {
-            let hostname = params["hostname"]
-                .as_str()
-                .ok_or_else(|| IpcResponse::error("invalid_argument", "missing hostname"))?;
-            Ok(CommandRequest::DiagnosticsDnsLookup(
-                DiagnosticsDnsLookupCommand {
-                    hostname: hostname.to_owned(),
-                },
-            ))
-        }
-        "diagnostics.trace_route" => {
-            let target = params["target"]
-                .as_str()
-                .ok_or_else(|| IpcResponse::error("invalid_argument", "missing target"))?;
-            let port = params["port"]
-                .as_u64()
-                .ok_or_else(|| IpcResponse::error("invalid_argument", "missing port"))?
-                as u16;
-            let protocol = params["protocol"].as_str().map(|s| s.to_owned());
-            Ok(CommandRequest::DiagnosticsTraceRoute(
-                DiagnosticsTraceRouteCommand {
-                    target: target.to_owned(),
-                    port,
-                    protocol,
-                },
-            ))
-        }
-        "mode.set" => Ok(CommandRequest::ModeSet(
-            serde_json::from_value(params.clone())
-                .map_err(|e| IpcResponse::error("invalid_argument", e.to_string()))?,
-        )),
-        "tun.start" => Ok(CommandRequest::TunStart(
-            serde_json::from_value(params.clone())
-                .map_err(|e| IpcResponse::error("invalid_argument", e.to_string()))?,
-        )),
-        "tun.stop" => Ok(CommandRequest::TunStop(TunStopCommand)),
-        _ => Err(IpcResponse::error(
-            "unsupported",
-            format!("unknown command method: {method}"),
-        )),
-    }
+    })
 }
 
 /// Handle a single IPC connection: read JSON-line frames, dispatch
@@ -156,7 +85,7 @@ where
         let request: IpcRequest = match serde_json::from_str(line.trim()) {
             Ok(req) => req,
             Err(_) => {
-                let resp = IpcResponse::error("invalid_argument", "invalid request frame");
+                let resp = ipc_error(None, "invalid_argument", "invalid request frame");
                 write_ipc_response(&mut *writer.lock().await, &resp).await?;
                 continue;
             }
@@ -166,19 +95,18 @@ where
 
         match request {
             IpcRequest::Ping { .. } => {
-                let resp = IpcResponse::ok("pong").with_id(req_id);
+                let resp = ipc_ok(req_id, "pong");
                 write_ipc_response(&mut *writer.lock().await, &resp).await?;
             }
             IpcRequest::Query { request, .. } => {
-                let result = handle.query(request);
-                match result {
-                    Ok(resp) => {
-                        let value = serde_json::to_value(resp).map_err(io::Error::other)?;
-                        let resp = IpcResponse::ok_raw(value).with_id(req_id);
+                match handle.query(request) {
+                    Ok(query_resp) => {
+                        let value = serde_json::to_value(query_resp).map_err(io::Error::other)?;
+                        let resp = ipc_ok(req_id, value);
                         write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     }
                     Err(error) => {
-                        let resp = IpcResponse::from_api_error(&error).with_id(req_id);
+                        let resp = ipc_api_error(req_id, &error);
                         write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     }
                 }
@@ -189,17 +117,17 @@ where
                     Ok(ref cmd) if !auth_ctx.allows(cmd.required_permission()) => {
                         let error =
                             zero_api::ApiError::permission_denied(cmd.required_permission());
-                        let resp = IpcResponse::from_api_error(&error).with_id(req_id);
+                        let resp = ipc_api_error(req_id, &error);
                         write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     }
                     Ok(cmd) => match handle.execute(cmd) {
-                        Ok(resp) => {
-                            let value = serde_json::to_value(resp).map_err(io::Error::other)?;
-                            let resp = IpcResponse::ok_raw(value).with_id(req_id);
+                        Ok(cmd_resp) => {
+                            let value = serde_json::to_value(cmd_resp).map_err(io::Error::other)?;
+                            let resp = ipc_ok(req_id, value);
                             write_ipc_response(&mut *writer.lock().await, &resp).await?;
                         }
                         Err(error) => {
-                            let resp = IpcResponse::from_api_error(&error).with_id(req_id);
+                            let resp = ipc_api_error(req_id, &error);
                             write_ipc_response(&mut *writer.lock().await, &resp).await?;
                         }
                     },
@@ -211,17 +139,17 @@ where
             }
             IpcRequest::Subscribe { events, .. } => {
                 if subscribed {
-                    let resp = IpcResponse::error(
+                    let resp = ipc_error(
+                        req_id,
                         "already_subscribed",
                         "this connection is already subscribed to events",
-                    )
-                    .with_id(req_id);
+                    );
                     write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     continue;
                 }
                 subscribed = true;
 
-                let resp = IpcResponse::ok("subscribed").with_id(req_id);
+                let resp = ipc_ok(req_id, "subscribed");
                 write_ipc_response(&mut *writer.lock().await, &resp).await?;
 
                 let mut filter = EventFilter::default();
@@ -235,13 +163,9 @@ where
 
                         let blocking = tokio::task::spawn_blocking(move || {
                             while let Some(event) = subscriber.recv() {
-                                let value =
-                                    serde_json::to_value(&super::protocol::IpcEvent::Event {
-                                        event_type: event.event_type.clone(),
-                                        event_id: event.event_id.clone(),
-                                        occurred_at_unix_ms: event.occurred_at_unix_ms,
-                                        payload: event.payload.clone(),
-                                    });
+                                // Serialize the full ApiEvent envelope (same format as SSE)
+                                // so consumers use one parsing code for both channels.
+                                let value = serde_json::to_value(&event);
                                 if let Ok(value) = value {
                                     if event_tx.send(value).is_err() {
                                         break;
@@ -284,7 +208,7 @@ where
                         let _ = (event_task, blocking);
                     }
                     Err(error) => {
-                        let resp = IpcResponse::from_api_error(&error).with_id(req_id);
+                        let resp = ipc_api_error(req_id, &error);
                         write_ipc_response(&mut *writer.lock().await, &resp).await?;
                         subscribed = false;
                     }
@@ -299,7 +223,7 @@ where
 /// Write a serialized IPC response frame to the transport.
 pub(crate) async fn write_ipc_response(
     writer: &mut (impl AsyncWriteExt + Unpin),
-    response: &IpcResponse,
+    response: &impl Serialize,
 ) -> io::Result<()> {
     let frame = serialize_frame(response).map_err(io::Error::other)?;
     writer.write_all(&frame).await?;

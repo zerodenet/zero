@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use serde::Serialize;
+use zero_api::{OutboundTrafficStats, StatsSnapshot, UdpUpstreamStats};
 
 #[derive(Debug, Default)]
 pub struct EngineStats {
@@ -50,7 +50,7 @@ impl EngineStats {
         }
     }
 
-    pub fn snapshot(&self) -> EngineStatsSnapshot {
+    pub fn snapshot(&self) -> StatsSnapshot {
         let per_outbound = self
             .per_outbound
             .lock()
@@ -59,7 +59,7 @@ impl EngineStats {
             .map(|(tag, s)| {
                 (
                     tag.clone(),
-                    OutboundStatsSnapshot {
+                    OutboundTrafficStats {
                         flows: s.flows.load(Ordering::Relaxed),
                         bytes_up: s.bytes_up.load(Ordering::Relaxed),
                         bytes_down: s.bytes_down.load(Ordering::Relaxed),
@@ -68,7 +68,7 @@ impl EngineStats {
             })
             .collect();
 
-        EngineStatsSnapshot {
+        StatsSnapshot {
             total_started: self.total_started.load(Ordering::Relaxed),
             active_sessions: self.active_sessions.load(Ordering::Relaxed),
             completed_sessions: self.completed_sessions.load(Ordering::Relaxed),
@@ -79,7 +79,7 @@ impl EngineStats {
             bytes_up: self.bytes_up.load(Ordering::Relaxed),
             bytes_down: self.bytes_down.load(Ordering::Relaxed),
             per_outbound,
-            udp_upstream: UdpUpstreamStatsSnapshot {
+            udp_upstream: UdpUpstreamStats {
                 active_associations: self
                     .udp_upstream_active_associations
                     .load(Ordering::Relaxed),
@@ -216,47 +216,9 @@ impl SessionOutcome {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
-pub struct EngineStatsSnapshot {
-    pub total_started: u64,
-    pub active_sessions: u64,
-    pub completed_sessions: u64,
-    pub failed_sessions: u64,
-    pub blocked_sessions: u64,
-    pub direct_sessions: u64,
-    pub chained_sessions: u64,
-    /// Aggregated bytes per direction (server-facing).
-    pub bytes_up: u64,
-    pub bytes_down: u64,
-    pub per_outbound: Vec<(String, OutboundStatsSnapshot)>,
-    pub udp_upstream: UdpUpstreamStatsSnapshot,
-}
-
 #[derive(Debug, Default)]
 struct PerOutboundStats {
     flows: AtomicU64,
     bytes_up: AtomicU64,
     bytes_down: AtomicU64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
-pub struct OutboundStatsSnapshot {
-    pub flows: u64,
-    pub bytes_up: u64,
-    pub bytes_down: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
-pub struct UdpUpstreamStatsSnapshot {
-    pub active_associations: u64,
-    pub created_associations: u64,
-    pub reused_associations: u64,
-    pub closed_associations: u64,
-    pub idle_timeouts: u64,
-    pub dropped_associations: u64,
-    pub failed_association_attempts: u64,
-    pub send_failures: u64,
-    pub recv_failures: u64,
-    pub packets_sent: u64,
-    pub packets_received: u64,
 }

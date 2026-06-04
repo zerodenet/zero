@@ -10,14 +10,14 @@
 
 ## 通用响应格式
 
+HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiResponse`）。`api_version` 字段始终存在，用于协议版本识别。
+
 成功：
 ```json
 {
   "api_version": "zero.api.v1",
-  "request_id": "req-abc123",
   "ok": true,
-  "result": { },
-  "error": null
+  "result": { }
 }
 ```
 
@@ -25,17 +25,24 @@
 ```json
 {
   "api_version": "zero.api.v1",
-  "request_id": null,
   "ok": false,
-  "result": null,
   "error": {
     "code": "not-found",
     "message": "Policy not found",
-    "field_path": "policy_tag",
-    "details": null
+    "field_path": "policy_tag"
   }
 }
 ```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `api_version` | string | 协议版本，始终为 `"zero.api.v1"` |
+| `id` | u64? | 请求关联 ID（IPC 多路复用时使用，HTTP 通常为 null） |
+| `ok` | bool | 成功标志 |
+| `result` | object? | 成功时的响应数据 |
+| `error.code` | string | 机器可读错误码（kebab-case） |
+| `error.message` | string | 人类可读错误信息 |
+| `error.field_path` | string? | 参数校验错误时的字段路径 |
 
 错误码（kebab-case，与 JSON serde 格式一致）：
 
@@ -82,13 +89,86 @@ API 版本和能力列表。
 
 ### GET /api/v1/config
 
-当前配置快照。
+当前配置快照。所有类型定义在 `zero-api::snapshot` 模块，外部消费者可直接依赖 `zero-api` crate。
 
-参数：`?format=full|minimal`（默认 full）
+```json
+{
+  "mode": { "kind": "rule", "outbound": null },
+  "rule_count": 5,
+  "listeners": [
+    { "tag": "socks-in", "protocol": "socks5", "listen_address": "0.0.0.0", "listen_port": 1080 }
+  ],
+  "outbounds": [
+    { "tag": "direct", "protocol": "direct", "server": null, "port": null },
+    { "tag": "proxy", "protocol": "vless", "server": "1.2.3.4", "port": 443 }
+  ],
+  "outbound_groups": [
+    {
+      "tag": "auto",
+      "kind": "urltest",
+      "outbounds": ["server-a", "server-b"],
+      "selected": "server-a",
+      "latency_ms": 120,
+      "last_checked_unix_ms": 1713500000000,
+      "effective_chains": [["server-a"]],
+      "urltest_members": [
+        {
+          "member_tag": "server-a",
+          "healthy": true,
+          "latency_ms": 120,
+          "last_checked_unix_ms": 1713500000000,
+          "last_error": null,
+          "effective_chains": [["server-a"]]
+        }
+      ]
+    }
+  ]
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `mode.kind` | 路由模式：`rule` / `global` / `direct` |
+| `mode.outbound` | global 模式的出站 tag（其他模式为 null） |
+| `rule_count` | 规则数量 |
+| `listeners` | 入站监听列表（tag, protocol, listen_address, listen_port） |
+| `outbounds` | 出站列表（tag, protocol, server?, port?） |
+| `outbound_groups` | 出站组（selector/fallback/urltest/relay/loadbalance） |
 
 ### GET /api/v1/runtime
 
-完整运行时状态：统计、策略、活动流、最近完成的流。
+完整运行时状态：统计、日志配置、活动流、最近完成的流。
+
+```json
+{
+  "stats": {
+    "active_sessions": 3,
+    "total_started": 100,
+    "completed_sessions": 97,
+    "failed_sessions": 0,
+    "blocked_sessions": 0,
+    "direct_sessions": 50,
+    "chained_sessions": 47,
+    "bytes_up": 1024000,
+    "bytes_down": 5120000,
+    "udp_upstream": { "active_associations": 0, "..." : "..." }
+  },
+  "udp_upstream_idle_timeout_seconds": 300,
+  "log_level": "info",
+  "log_files": ["logs/zero.log"],
+  "active_sessions": [],
+  "recent_completed_sessions": []
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `stats` | 统计摘要（同 `GET /api/v1/stats`） |
+| `udp_upstream_idle_timeout_seconds` | UDP upstream 空闲超时 |
+| `log_level` | 当前日志级别（`trace`/`debug`/`info`/`warn`/`error`） |
+| `log_files` | 配置的日志文件路径列表，无文件输出时为空数组 |
+| `active_sessions` | 活动流详情列表 |
+| `recent_completed_sessions` | 最近完成的流详情列表 |
 
 ### GET /api/v1/stats
 
@@ -96,7 +176,7 @@ API 版本和能力列表。
 
 ### GET /api/v1/flows
 
-活动流列表，支持过滤。
+活动流列表，返回 `ActiveFlows`（强类型 `FlowSnapshot` 数组）。支持过滤。
 
 | 参数 | 默认 | 说明 |
 |------|------|------|

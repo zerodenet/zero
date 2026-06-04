@@ -36,6 +36,9 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
         .install_default()
         .expect("rustls ring crypto provider");
 
+    // Register compiled feature flags so they're visible in capabilities queries.
+    zero_engine::register_build_features(collect_build_features());
+
     match cli::parse_args(env::args())? {
         cli::Command::Run {
             config_path,
@@ -780,4 +783,25 @@ fn reload_command(config_path: &str, socket_path: Option<&str>) -> Result<(), Bo
         process::exit(1);
     }
     Ok(())
+}
+
+/// Collect compiled feature flags for the capabilities endpoint.
+fn collect_build_features() -> Vec<String> {
+    let mut features = Vec::new();
+    if cfg!(feature = "status-api")        { features.push("status-api".to_owned()); }
+    if cfg!(feature = "event-dispatcher")  { features.push("event-dispatcher".to_owned()); }
+    if cfg!(feature = "sink-jsonl")        { features.push("sink-jsonl".to_owned()); }
+    if cfg!(feature = "panel-connector")   { features.push("panel-connector".to_owned()); }
+    if cfg!(feature = "grpc-api")          { features.push("grpc-api".to_owned()); }
+    if cfg!(feature = "socks5")            { features.push("socks5".to_owned()); }
+    if cfg!(feature = "http-connect")      { features.push("http-connect".to_owned()); }
+    if cfg!(feature = "mixed")             { features.push("mixed".to_owned()); }
+    if cfg!(feature = "vless")             { features.push("vless".to_owned()); }
+    if cfg!(feature = "hysteria2")         { features.push("hysteria2".to_owned()); }
+    if cfg!(feature = "shadowsocks")       { features.push("shadowsocks".to_owned()); }
+    if cfg!(feature = "trojan")            { features.push("trojan".to_owned()); }
+    if cfg!(feature = "vmess")             { features.push("vmess".to_owned()); }
+    if cfg!(feature = "mieru")             { features.push("mieru".to_owned()); }
+    if cfg!(feature = "dns-udp")           { features.push("dns-udp".to_owned()); }
+    features
 }

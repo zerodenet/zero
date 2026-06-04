@@ -4,7 +4,8 @@ use zero_api::{AuthContext, Permission};
 use zero_engine::EngineHandle;
 
 use super::handlers;
-use super::response::{api_error_status, ApiResponse};
+use super::response::api_error_status;
+use zero_api::ApiResponse;
 
 /// A parsed HTTP request ready for routing.
 pub struct HttpRequest {
@@ -138,7 +139,7 @@ fn require_permission(auth_ctx: &AuthContext, required: Permission) -> Option<Ro
     } else {
         let error = zero_api::ApiError::permission_denied(required);
         let status = api_error_status(&error);
-        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error)).unwrap_or_default();
+        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&error)).unwrap_or_default();
         Some(RouteResult::Respond(status.to_owned(), body))
     }
 }

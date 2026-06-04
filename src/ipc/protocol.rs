@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use zero_api::{ApiResponse, RawResponse};
+
 /// A request frame sent by the client to the UDS server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -42,91 +44,37 @@ impl IpcRequest {
     }
 }
 
-/// A response frame sent by the server to the client.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IpcResponse {
-    pub ok: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<IpcErrorBody>,
-}
-
 /// An event frame pushed by the server to subscribed clients.
+///
+/// Regular events are sent as `zero_api::ApiEvent<serde_json::Value>` JSON
+/// directly (the same format as SSE).  The `Goodbye` frame is IPC-specific.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum IpcEvent {
-    Event {
-        event_type: String,
-        event_id: String,
-        occurred_at_unix_ms: u64,
-        payload: serde_json::Value,
-    },
-    /// Server is shutting down.
+    /// Server is shutting down; clients should reconnect.
     Goodbye { message: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IpcErrorBody {
-    pub code: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub field_path: Option<String>,
+// ── IPC server response helpers ─────────────────────────────────────
+
+/// Construct a success response with a raw JSON value and optional request id.
+pub fn ipc_ok(id: Option<u64>, result: impl Serialize) -> ApiResponse<serde_json::Value> {
+    let value = serde_json::to_value(result).unwrap_or(serde_json::Value::Null);
+    ApiResponse::ok_with_id(id, value)
 }
 
-impl IpcResponse {
-    pub fn ok(result: impl Serialize) -> Self {
-        Self {
-            ok: true,
-            id: None,
-            result: serde_json::to_value(result).ok(),
-            error: None,
-        }
-    }
+/// Construct an error response with a code, message, and optional request id.
+pub fn ipc_error(
+    id: Option<u64>,
+    code: impl Into<String>,
+    message: impl Into<String>,
+) -> ApiResponse<()> {
+    ApiResponse::error_msg(code, message).with_id(id)
+}
 
-    pub fn ok_raw(result: serde_json::Value) -> Self {
-        Self {
-            ok: true,
-            id: None,
-            result: Some(result),
-            error: None,
-        }
-    }
-
-    pub fn error(code: &str, message: impl Into<String>) -> Self {
-        Self {
-            ok: false,
-            id: None,
-            result: None,
-            error: Some(IpcErrorBody {
-                code: code.to_owned(),
-                message: message.into(),
-                field_path: None,
-            }),
-        }
-    }
-
-    pub fn from_api_error(error: &zero_api::ApiError) -> Self {
-        Self {
-            ok: false,
-            id: None,
-            result: None,
-            error: Some(IpcErrorBody {
-                code: error.code.as_code_str().to_owned(),
-                message: error.message.clone(),
-                field_path: error.field_path.clone(),
-            }),
-        }
-    }
-
-    /// Attach a request id for response-request pairing on
-    /// multiplexed connections.
-    pub fn with_id(mut self, id: Option<u64>) -> Self {
-        self.id = id;
-        self
-    }
+/// Construct an error response from an `ApiError`, with optional request id.
+pub fn ipc_api_error(id: Option<u64>, error: &zero_api::ApiError) -> ApiResponse<()> {
+    ApiResponse::<()>::from_api_error(error).with_id(id)
 }
 
 /// Serialize a frame to a JSON line (with trailing newline).
@@ -135,3 +83,9 @@ pub fn serialize_frame(frame: &impl Serialize) -> Result<Vec<u8>, serde_json::Er
     bytes.push(b'\n');
     Ok(bytes)
 }
+
+// ── Re-export for IPC client deserialization ─────────────────────────
+
+/// The response type returned by IPC client operations.
+/// Shares the same wire format as `ApiResponse<T>`.
+pub type IpcResponse = RawResponse;

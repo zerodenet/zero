@@ -95,9 +95,9 @@ async fn exports_serializable_engine_status_view() {
     let exported = handle.export_status();
     assert_eq!(exported.config.mode.kind, "rule");
     assert_eq!(exported.config.rule_count, 0);
-    assert_eq!(exported.config.inbounds.len(), 1);
-    assert_eq!(exported.config.inbounds[0].tag, "socks-in");
-    assert_eq!(exported.config.inbounds[0].protocol, "socks5");
+    assert_eq!(exported.config.listeners.len(), 1);
+    assert_eq!(exported.config.listeners[0].tag, "socks-in");
+    assert_eq!(exported.config.listeners[0].protocol, "socks5");
     assert_eq!(exported.config.outbounds.len(), 1);
     assert_eq!(exported.config.outbounds[0].tag, "chain");
     assert_eq!(exported.config.outbounds[0].protocol, "socks5");
@@ -112,7 +112,7 @@ async fn exports_serializable_engine_status_view() {
 
     let json = serde_json::to_value(&exported).expect("serialize export");
     assert_eq!(json["config"]["mode"]["kind"], "rule");
-    assert_eq!(json["config"]["inbounds"][0]["tag"], "socks-in");
+    assert_eq!(json["config"]["listeners"][0]["tag"], "socks-in");
     assert_eq!(json["config"]["outbounds"][0]["server"], "127.0.0.1");
     assert_eq!(json["runtime"]["udp_upstream_idle_timeout_seconds"], 30);
     assert_eq!(json["runtime"]["active_sessions"][0]["network"], "tcp");
@@ -405,8 +405,8 @@ fn engine_query_service_exposes_config_and_policy_snapshots() {
     let QueryResponse::Config(config) = config else {
         panic!("expected config query response");
     };
-    assert_eq!(config.value["mode"]["kind"], "global");
-    assert_eq!(config.value["mode"]["outbound"], "proxy");
+    assert_eq!(config.mode.kind, "global");
+    assert_eq!(config.mode.outbound.as_deref(), Some("proxy"));
 
     let policies = engine
         .query(QueryRequest::Policies(PoliciesQuery))
@@ -414,9 +414,9 @@ fn engine_query_service_exposes_config_and_policy_snapshots() {
     let QueryResponse::Policies(policies) = policies else {
         panic!("expected policies query response");
     };
-    assert_eq!(policies.value.as_array().expect("policies array").len(), 1);
-    assert_eq!(policies.value[0]["tag"], "proxy");
-    assert_eq!(policies.value[0]["selected"], "block");
+    assert_eq!(policies.len(), 1);
+    assert_eq!(policies[0].tag, "proxy");
+    assert_eq!(policies[0].selected.as_deref(), Some("block"));
 }
 
 #[test]
@@ -449,9 +449,8 @@ fn engine_query_service_reports_flow_lookup_and_filter_boundaries() {
             },
         }))
         .expect("principal filter should be supported");
-    let QueryResponse::Flows(filtered) = filtered else {
-        panic!("expected flows query response");
+    let QueryResponse::ActiveFlows(filtered) = filtered else {
+        panic!("expected active flows query response");
     };
-    let flows = filtered.value.as_array().expect("flows array");
-    assert!(flows.is_empty());
+    assert!(filtered.is_empty());
 }

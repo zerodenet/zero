@@ -4,11 +4,20 @@ use crate::{Permission, API_VERSION, EVENT_SCHEMA_VERSION};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApiCapabilities {
+    #[serde(default)]
     pub api_version: String,
+    #[serde(default)]
     pub schema_version: String,
+    #[serde(default)]
     pub adapters: Vec<AdapterCapability>,
+    #[serde(default)]
     pub sinks: Vec<SinkCapability>,
+    #[serde(default)]
     pub features: Vec<String>,
+    /// Compiled cargo feature flags visible at runtime.
+    #[serde(default)]
+    pub build_features: Vec<String>,
+    #[serde(default)]
     pub permissions: Vec<Permission>,
 }
 
@@ -20,6 +29,7 @@ impl ApiCapabilities {
             adapters: Vec::new(),
             sinks: Vec::new(),
             features: Vec::new(),
+            build_features: Vec::new(),
             permissions: Vec::new(),
         }
     }

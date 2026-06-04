@@ -17,12 +17,15 @@ mod stats;
 mod traffic_sampler;
 mod view;
 
+pub use api::register_build_features;
 pub use completed_sessions::CompletedSessionRecord;
 pub use error::EngineError;
-pub use export::{
-    ActiveSessionExport, AddressExport, CompletedSessionExport, EngineConfigExport,
-    EngineRuntimeExport, EngineStatusExport, InboundExport, ModeExport, OutboundExport,
-    OutboundGroupExport, SessionAuthExport,
+// Re-export snapshot types from zero-api so downstream code doesn't need
+// to import from two different crates for the same logical types.
+pub use zero_api::{
+    AddressSnapshot, AuthSnapshot, CompletedFlowSnapshot, ConfigSnapshot, FlowSnapshot,
+    ListenerSnapshot, ModeSnapshot, OutboundTargetSnapshot, PolicyMemberSnapshot, PolicySnapshot,
+    RuntimeSnapshot, StatsSnapshot, StatusSnapshot,
 };
 pub use groups::{UrlTestGroupState, UrlTestMemberState};
 pub use handle::{EngineHandle, EventSubscriber};
@@ -37,7 +40,7 @@ pub use runtime::Engine;
 pub use runtime::RouteDecision;
 pub use session_lifecycle::SessionHandle;
 pub use session_registry::ActiveSession;
-pub use stats::{
-    EngineStatsSnapshot, OutboundStatsSnapshot, SessionOutcome, UdpUpstreamStatsSnapshot,
-};
+pub use stats::SessionOutcome;
+// Re-export stats sub-types from zero-api.
+pub use zero_api::{OutboundTrafficStats, UdpUpstreamStats};
 pub use zero_api::{PolicyProbeCompletedPayload, PolicyProbeMember};

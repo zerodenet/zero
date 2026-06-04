@@ -153,7 +153,7 @@ impl EngineEventLog {
         self.push(event);
     }
 
-    pub fn push_stats_sampled(&self, stats: &super::stats::EngineStatsSnapshot) {
+    pub fn push_stats_sampled(&self, stats: &zero_api::StatsSnapshot) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()

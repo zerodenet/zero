@@ -48,7 +48,9 @@ impl CommandRequest {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CommandResponse {
+    #[serde(default)]
     pub accepted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result: Option<serde_json::Value>,
 }
 
@@ -66,49 +68,67 @@ pub struct ConfigValidateCommand {
     pub config: serde_json::Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FlowCloseCommand {
+    #[serde(default)]
     pub flow_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PolicySelectCommand {
+    #[serde(default)]
     pub policy_tag: String,
+    #[serde(default)]
     pub target_tag: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PolicyProbeCommand {
+    #[serde(default)]
     pub policy_tag: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConfigApplyCommand {
+    #[serde(default)]
     pub config: serde_json::Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+impl Default for ConfigApplyCommand {
+    fn default() -> Self {
+        Self {
+            config: serde_json::Value::Null,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticsProbeTargetCommand {
+    #[serde(default)]
     pub target_tag: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModeSetCommand {
     /// One of: "rule", "global", "direct"
+    #[serde(default)]
     pub mode: String,
     /// Required when mode is "global" — the outbound tag to route all traffic to.
     #[serde(default)]
     pub outbound: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticsDnsLookupCommand {
+    #[serde(default)]
     pub hostname: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticsTraceRouteCommand {
+    #[serde(default)]
     pub target: String,
+    #[serde(default)]
     pub port: u16,
     #[serde(default)]
     pub protocol: Option<String>,
@@ -118,12 +138,26 @@ pub struct DiagnosticsTraceRouteCommand {
 pub struct TunStartCommand {
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
     pub addr: String,
     #[serde(default = "default_tun_mtu")]
     pub mtu: u16,
     #[serde(default = "default_tun_mask")]
     pub mask: String,
+    #[serde(default)]
     pub tag: String,
+}
+
+impl Default for TunStartCommand {
+    fn default() -> Self {
+        Self {
+            name: None,
+            addr: String::new(),
+            mtu: default_tun_mtu(),
+            mask: default_tun_mask(),
+            tag: String::new(),
+        }
+    }
 }
 
 fn default_tun_mtu() -> u16 {

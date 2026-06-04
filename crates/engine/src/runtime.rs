@@ -23,7 +23,7 @@ use super::resolve::{
 };
 use super::session_lifecycle::SessionHandle;
 use super::session_registry::{ActiveSession, SessionRegistry};
-use super::stats::{EngineStats, EngineStatsSnapshot, SessionOutcome};
+use super::stats::{EngineStats, SessionOutcome};
 use super::view::PlanView;
 
 #[derive(Debug, Clone)]
@@ -48,6 +48,10 @@ pub struct Engine {
     /// Source path of the running config.  When set, `reload_config`
     /// writes the new config back to this path so it survives restarts.
     config_path: Option<std::path::PathBuf>,
+    /// Process start time (UNIX epoch milliseconds), captured on Engine::new.
+    pub(crate) started_at_unix_ms: u64,
+    /// ID of the OS process hosting this engine.
+    pub(crate) pid: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,6 +79,14 @@ impl From<&RouteAction> for RouteDecision {
             RouteAction::Reject => Self::Reject,
         }
     }
+}
+
+/// Current UNIX epoch in milliseconds.
+fn started_at_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 impl Engine {
@@ -141,6 +153,8 @@ impl Engine {
             udp_upstream_idle_timeout,
             reload_notify: Arc::new(std::sync::Mutex::new(Vec::new())),
             config_path: None,
+            started_at_unix_ms: started_at_unix_ms(),
+            pid: std::process::id(),
         })
     }
 
@@ -153,6 +167,16 @@ impl Engine {
 
     pub fn config(&self) -> Arc<RuntimeConfig> {
         self.config.read().expect("config lock poisoned").clone()
+    }
+
+    /// The config file path used to start or reload this engine.
+    pub fn config_path(&self) -> Option<&std::path::Path> {
+        self.config_path.as_deref()
+    }
+
+    /// UNIX epoch milliseconds when this engine was created.
+    pub fn started_at_unix_ms(&self) -> u64 {
+        self.started_at_unix_ms
     }
 
     pub fn plan(&self) -> Arc<EnginePlan> {
@@ -300,7 +324,7 @@ impl Engine {
         Ok((resolved, plan))
     }
 
-    pub fn stats_snapshot(&self) -> EngineStatsSnapshot {
+    pub fn stats_snapshot(&self) -> zero_api::StatsSnapshot {
         self.stats.snapshot()
     }
 

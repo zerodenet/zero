@@ -6,7 +6,8 @@ use zero_api::{
 };
 use zero_engine::EngineHandle;
 
-use super::response::{api_error_status, ApiResponse};
+use super::response::api_error_status;
+use zero_api::ApiResponse;
 
 /// Handle GET /api/v1/capabilities.
 pub fn capabilities(handle: &EngineHandle) -> io::Result<Vec<u8>> {
@@ -91,7 +92,7 @@ pub fn commands(
         };
         let status = api_error_status(&api_error);
         let body =
-            serde_json::to_vec_pretty(&ApiResponse::<()>::error(&api_error)).unwrap_or_default();
+            serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&api_error)).unwrap_or_default();
         (status, body)
     })?;
 
@@ -100,7 +101,7 @@ pub fn commands(
     if !auth_ctx.allows(required) {
         let error = ApiError::permission_denied(required);
         let status = api_error_status(&error);
-        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error)).unwrap_or_default();
+        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&error)).unwrap_or_default();
         return Err((status, body));
     }
 
@@ -112,7 +113,7 @@ pub fn commands(
         Err(error) => {
             let status = api_error_status(&error);
             let body =
-                serde_json::to_vec_pretty(&ApiResponse::<()>::error(&error)).unwrap_or_default();
+                serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&error)).unwrap_or_default();
             Err((status, body))
         }
     }
@@ -191,7 +192,7 @@ fn serialize_response(resp: Result<QueryResponse, ApiError>) -> io::Result<Vec<u
             serde_json::to_vec_pretty(&body).map_err(io::Error::other)
         }
         Err(error) => {
-            let body = ApiResponse::<()>::error(&error);
+            let body = ApiResponse::<()>::from_api_error(&error);
             serde_json::to_vec_pretty(&body).map_err(io::Error::other)
         }
     }

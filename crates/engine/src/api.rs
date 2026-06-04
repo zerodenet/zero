@@ -1,36 +1,35 @@
-use serde::Serialize;
+use std::sync::OnceLock;
+
 use serde_json::json;
 use zero_api::{
     AdapterCapability, ApiCapabilities, ApiError, ApiErrorCode, CommandRequest, CommandResponse,
     CommandService, ConfigApplyCommand, ConfigValidateCommand, EventFilter, EventSource,
-    FlowFilter, FlowGetQuery, FlowListQuery, Network as ApiNetwork, Permission, PoliciesQuery,
-    PolicyGetQuery, QueryRequest, QueryResponse, QueryService, RawApiEvent, SinkCapability,
-    SinkStatusSnapshot, Snapshot,
+    FlowFilter, FlowSnapshot, Network as ApiNetwork, Permission, QueryRequest, QueryResponse,
+    QueryService, RawApiEvent, SinkCapability, SinkStatusSnapshot,
 };
 use zero_config::{ModeConfig, RuntimeConfig};
 
-use super::completed_sessions::CompletedSessionRecord;
 use super::error::EngineError;
-use super::export::{
-    ActiveSessionExport, CompletedSessionExport, EngineConfigExport, EngineRuntimeExport,
-    OutboundGroupExport,
-};
+use super::export::{completed_to_flow, session_to_flow};
 use super::runtime::Engine;
-use super::session_registry::ActiveSession;
-use super::stats::EngineStatsSnapshot;
+
+// ── Build features registry (injected from the top-level binary) ───
+
+static BUILD_FEATURES: OnceLock<Vec<String>> = OnceLock::new();
+
+/// Register compiled cargo features. Called once at startup from the
+/// top-level binary crate that controls feature gating.
+pub fn register_build_features(features: Vec<String>) {
+    let _ = BUILD_FEATURES.set(features);
+}
+
+fn build_features() -> Vec<String> {
+    BUILD_FEATURES.get().cloned().unwrap_or_default()
+}
 
 impl QueryService for Engine {
     fn query(&self, request: QueryRequest) -> zero_api::ApiResult<QueryResponse> {
-        query_engine(
-            EngineQueryView {
-                config: self.export_config(),
-                runtime: self.export_runtime(),
-                stats: self.stats_snapshot(),
-                active_sessions: self.active_sessions(),
-                completed_sessions: self.completed_sessions(),
-            },
-            request,
-        )
+        query_engine(self, request)
     }
 }
 
@@ -54,59 +53,131 @@ impl EventSource for Engine {
     }
 }
 
-struct EngineQueryView {
-    config: EngineConfigExport,
-    runtime: EngineRuntimeExport,
-    stats: EngineStatsSnapshot,
-    active_sessions: Vec<ActiveSession>,
-    completed_sessions: Vec<CompletedSessionRecord>,
-}
-
-fn query_engine(
-    view: EngineQueryView,
-    request: QueryRequest,
-) -> zero_api::ApiResult<QueryResponse> {
+fn query_engine(engine: &Engine, request: QueryRequest) -> zero_api::ApiResult<QueryResponse> {
     match request {
         QueryRequest::Capabilities(_) => Ok(QueryResponse::Capabilities(capabilities())),
         QueryRequest::Health(_) => Ok(QueryResponse::Health(zero_api::HealthSnapshot {
             engine_version: env!("CARGO_PKG_VERSION").to_owned(),
-            started_at_unix_ms: None,
+            started_at_unix_ms: Some(engine.started_at_unix_ms()),
             healthy: true,
         })),
-        QueryRequest::Config(_) => snapshot_response(QueryResponse::Config, view.config),
-        QueryRequest::Runtime(_) => snapshot_response(QueryResponse::Runtime, view.runtime),
-        QueryRequest::Stats(_) => snapshot_response(QueryResponse::Stats, view.stats),
-        QueryRequest::ActiveFlows(query) => snapshot_response(
-            QueryResponse::Flows,
-            active_flows(view.active_sessions, &query)?,
-        ),
-        QueryRequest::RecentFlows(query) => snapshot_response(
-            QueryResponse::Flows,
-            recent_flows(view.completed_sessions, &query)?,
-        ),
+        QueryRequest::Config(_) => Ok(QueryResponse::Config(engine.export_config())),
+        QueryRequest::Runtime(_) => Ok(QueryResponse::Runtime(engine.export_runtime())),
+        QueryRequest::Stats(_) => Ok(QueryResponse::Stats(engine.stats_snapshot())),
+        QueryRequest::ActiveFlows(query) => {
+            let flows = engine
+                .active_sessions()
+                .iter()
+                .map(session_to_flow)
+                .filter(|flow| matches_flow_filter(flow, &query.filter))
+                .take(query.limit.unwrap_or(usize::MAX))
+                .collect();
+            Ok(QueryResponse::ActiveFlows(flows))
+        }
+        QueryRequest::RecentFlows(query) => {
+            let flows = engine
+                .completed_sessions()
+                .iter()
+                .map(completed_to_flow)
+                .filter(|flow| matches_flow_filter(flow, &query.filter))
+                .take(query.limit.unwrap_or(usize::MAX))
+                .collect();
+            Ok(QueryResponse::RecentFlows(flows))
+        }
         QueryRequest::Flow(query) => {
-            query_flow(view.active_sessions, view.completed_sessions, query)
+            let active = engine.active_sessions();
+            if let Some(flow) = active
+                .iter()
+                .map(session_to_flow)
+                .find(|flow| flow.id.to_string() == query.flow_id)
+            {
+                return Ok(QueryResponse::Flow(flow));
+            }
+
+            let completed = engine.completed_sessions();
+            if let Some(record) = completed
+                .iter()
+                .find(|s| s.id.to_string() == query.flow_id)
+            {
+                // Flow variant holds FlowSnapshot; for completed flows we
+                // convert the common fields. The consumer can check the
+                // `outcome` field on the diagnostics endpoint for completion.
+                let flow = session_to_flow_from_completed(record);
+                return Ok(QueryResponse::Flow(flow));
+            }
+
+            Err(ApiError::new(
+                ApiErrorCode::NotFound,
+                format!("flow `{}` was not found", query.flow_id),
+            ))
         }
-        QueryRequest::Policies(PoliciesQuery) => {
-            snapshot_response(QueryResponse::Policies, view.config.outbound_groups)
+        QueryRequest::Policies(_) => {
+            let config = engine.export_config();
+            Ok(QueryResponse::Policies(config.outbound_groups))
         }
-        QueryRequest::Policy(query) => query_policy(view.config.outbound_groups, query),
-        QueryRequest::Diagnostics(_) => snapshot_response(
-            QueryResponse::Diagnostics,
-            json!({
+        QueryRequest::Policy(query) => {
+            let config = engine.export_config();
+            let policy = config
+                .outbound_groups
+                .into_iter()
+                .find(|policy| policy.tag == query.policy_tag)
+                .ok_or_else(|| {
+                    ApiError::new(
+                        ApiErrorCode::NotFound,
+                        format!("policy `{}` was not found", query.policy_tag),
+                    )
+                })?;
+            Ok(QueryResponse::Policy(policy))
+        }
+        QueryRequest::Diagnostics(_) => {
+            let stats = engine.stats_snapshot();
+            Ok(QueryResponse::Diagnostics(json!({
                 "healthy": true,
-                "active_sessions": view.stats.active_sessions,
-                "completed_sessions": view.stats.completed_sessions,
-                "failed_sessions": view.stats.failed_sessions,
-                "udp_upstream": view.stats.udp_upstream,
-            }),
-        ),
+                "active_sessions": stats.active_sessions,
+                "completed_sessions": stats.completed_sessions,
+                "failed_sessions": stats.failed_sessions,
+                "udp_upstream": stats.udp_upstream,
+            })))
+        }
         QueryRequest::Sinks(_) => Ok(QueryResponse::Sinks(SinkStatusSnapshot::default())),
         QueryRequest::TunStatus(_) => Ok(QueryResponse::TunStatus(
             zero_api::TunStatusSnapshot::default(),
         )),
     }
 }
+
+/// Convert a completed session to a FlowSnapshot for the `Flow` query variant.
+/// The completed-specific fields (outcome, duration) are lost here; consumers
+/// should use the RecentFlows query for full completed-session details.
+fn session_to_flow_from_completed(record: &super::completed_sessions::CompletedSessionRecord) -> FlowSnapshot {
+    use super::export::address_to_snapshot;
+    use super::export::auth_to_snapshot;
+    FlowSnapshot {
+        id: record.id,
+        inbound_tag: record.inbound_tag.clone(),
+        outbound_tag: record.outbound_tag.clone(),
+        target: address_to_snapshot(&record.target),
+        port: record.port,
+        protocol: protocol_name(record.protocol).to_owned(),
+        auth: record.auth.as_ref().map(auth_to_snapshot),
+        network: network_name(record.network).to_owned(),
+        mode: record.mode.clone(),
+        started_at_unix_ms: record.started_at_unix_ms,
+        last_activity_at_unix_ms: record.last_activity_at_unix_ms,
+        bytes_up: record.bytes_up,
+        bytes_down: record.bytes_down,
+        inbound_rx_bytes: record.inbound_rx_bytes,
+        inbound_tx_bytes: record.inbound_tx_bytes,
+        outbound_rx_bytes: record.outbound_rx_bytes,
+        outbound_tx_bytes: record.outbound_tx_bytes,
+        throughput_up_bps: 0,
+        throughput_down_bps: 0,
+        process_id: record.process_id,
+        process_name: record.process_name.clone(),
+    }
+}
+
+// ── Command dispatch ────────────────────────────────────────────────
 
 fn execute_engine_command(
     engine: &Engine,
@@ -246,88 +317,12 @@ fn capabilities() -> ApiCapabilities {
         "flow-snapshot".to_owned(),
         "policy-snapshot".to_owned(),
     ];
+    capabilities.build_features = build_features();
     capabilities.permissions = vec![Permission::Read];
     capabilities
 }
 
-fn snapshot_response(
-    wrap: impl FnOnce(Snapshot) -> QueryResponse,
-    value: impl Serialize,
-) -> zero_api::ApiResult<QueryResponse> {
-    Ok(wrap(Snapshot {
-        value: serde_json::to_value(value).map_err(to_internal_error)?,
-    }))
-}
-
-fn active_flows(
-    sessions: Vec<ActiveSession>,
-    query: &FlowListQuery,
-) -> zero_api::ApiResult<Vec<ActiveSessionExport>> {
-    let flows = sessions
-        .iter()
-        .map(ActiveSessionExport::from)
-        .filter(|flow| matches_flow_filter(flow, &query.filter))
-        .take(query.limit.unwrap_or(usize::MAX))
-        .collect();
-    Ok(flows)
-}
-
-fn recent_flows(
-    sessions: Vec<CompletedSessionRecord>,
-    query: &FlowListQuery,
-) -> zero_api::ApiResult<Vec<CompletedSessionExport>> {
-    let flows = sessions
-        .iter()
-        .map(CompletedSessionExport::from)
-        .filter(|flow| matches_flow_filter(flow, &query.filter))
-        .take(query.limit.unwrap_or(usize::MAX))
-        .collect();
-    Ok(flows)
-}
-
-fn query_flow(
-    active_sessions: Vec<ActiveSession>,
-    completed_sessions: Vec<CompletedSessionRecord>,
-    query: FlowGetQuery,
-) -> zero_api::ApiResult<QueryResponse> {
-    if let Some(flow) = active_sessions
-        .iter()
-        .map(ActiveSessionExport::from)
-        .find(|flow| flow.id.to_string() == query.flow_id)
-    {
-        return snapshot_response(QueryResponse::Flow, flow);
-    }
-
-    if let Some(flow) = completed_sessions
-        .iter()
-        .map(CompletedSessionExport::from)
-        .find(|flow| flow.id.to_string() == query.flow_id)
-    {
-        return snapshot_response(QueryResponse::Flow, flow);
-    }
-
-    Err(ApiError::new(
-        ApiErrorCode::NotFound,
-        format!("flow `{}` was not found", query.flow_id),
-    ))
-}
-
-fn query_policy(
-    policies: Vec<OutboundGroupExport>,
-    query: PolicyGetQuery,
-) -> zero_api::ApiResult<QueryResponse> {
-    let policy = policies
-        .into_iter()
-        .find(|policy| policy.tag == query.policy_tag)
-        .ok_or_else(|| {
-            ApiError::new(
-                ApiErrorCode::NotFound,
-                format!("policy `{}` was not found", query.policy_tag),
-            )
-        })?;
-
-    snapshot_response(QueryResponse::Policy, policy)
-}
+// ── Flow filter ─────────────────────────────────────────────────────
 
 trait FlowFilterView {
     fn inbound_tag(&self) -> Option<&str>;
@@ -335,7 +330,7 @@ trait FlowFilterView {
     fn principal_key(&self) -> Option<&str>;
 }
 
-impl FlowFilterView for ActiveSessionExport {
+impl FlowFilterView for FlowSnapshot {
     fn inbound_tag(&self) -> Option<&str> {
         self.inbound_tag.as_deref()
     }
@@ -351,7 +346,7 @@ impl FlowFilterView for ActiveSessionExport {
     }
 }
 
-impl FlowFilterView for CompletedSessionExport {
+impl FlowFilterView for zero_api::CompletedFlowSnapshot {
     fn inbound_tag(&self) -> Option<&str> {
         self.inbound_tag.as_deref()
     }
@@ -395,6 +390,31 @@ fn api_network_name(network: ApiNetwork) -> &'static str {
         ApiNetwork::Udp => "udp",
     }
 }
+
+// ── Name helpers (shared with export) ────────────────────────────────
+
+fn protocol_name(protocol: zero_core::ProtocolType) -> &'static str {
+    match protocol {
+        zero_core::ProtocolType::Socks5 => "socks5",
+        zero_core::ProtocolType::HttpConnect => "http-connect",
+        zero_core::ProtocolType::Vless => "vless",
+        zero_core::ProtocolType::Hysteria2 => "hysteria2",
+        zero_core::ProtocolType::Shadowsocks => "shadowsocks",
+        zero_core::ProtocolType::Trojan => "trojan",
+        zero_core::ProtocolType::Vmess => "vmess",
+        zero_core::ProtocolType::Mieru => "mieru",
+        zero_core::ProtocolType::Unknown => "unknown",
+    }
+}
+
+fn network_name(network: zero_core::Network) -> &'static str {
+    match network {
+        zero_core::Network::Tcp => "tcp",
+        zero_core::Network::Udp => "udp",
+    }
+}
+
+// ── Error conversions ───────────────────────────────────────────────
 
 fn to_internal_error(error: serde_json::Error) -> ApiError {
     ApiError {

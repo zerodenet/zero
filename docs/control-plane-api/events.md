@@ -299,9 +299,11 @@ urltest 探测完成后发射，包含每个成员的探测结果。
 
 ## 消费方式
 
-| 方式 | 过滤 | 回放 |
-|------|------|------|
-| SSE (`GET /api/v1/events/stream?types=...`) | event_type 白名单，`*` = 全部 | `?since=<seq>` / `Last-Event-ID` |
-| IPC (`{"type":"subscribe","events":[...]}`) | event_type 白名单，`*` = 全部 | 不支持（实时流） |
-| CLI (`zero events`) | 无 | 不支持 |
-| Sink (`event_sinks[].events`) | event_type 白名单 | 不支持（持久投递） |
+IPC 和 SSE 的**事件 JSON 格式完全相同**（都是 `ApiEvent<P>` 信封），消费者只需一套解析代码。
+
+| 方式 | 过滤 | 回放 | 格式 |
+|------|------|------|------|
+| SSE (`GET /api/v1/events/stream?types=...`) | event_type 白名单，`*` = 全部 | `?since=<seq>` / `Last-Event-ID` | SSE frame: `id` + `event` + `data: <ApiEvent JSON>` |
+| IPC (`{"type":"subscribe","events":[...]}`) | event_type 白名单，`*` = 全部 | 不支持（实时流） | JSON line: `<ApiEvent JSON>\n` |
+| CLI (`zero events`) | 无 | 不支持 | stdout: JSON line |
+| Sink (`event_sinks[].events`) | event_type 白名单 | 不支持（持久投递） | JSON line 文件 |

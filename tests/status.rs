@@ -26,8 +26,8 @@ fn status_command_emits_json_export() {
 
     assert_eq!(json["config"]["mode"]["kind"], "rule");
     assert_eq!(json["config"]["rule_count"], 3);
-    assert_eq!(json["config"]["inbounds"][0]["tag"], "mixed-in");
-    assert_eq!(json["config"]["inbounds"][0]["protocol"], "mixed");
+    assert_eq!(json["config"]["listeners"][0]["tag"], "mixed-in");
+    assert_eq!(json["config"]["listeners"][0]["protocol"], "mixed");
     assert_eq!(json["config"]["outbounds"][0]["tag"], "direct");
     assert_eq!(
         json["config"]["outbound_groups"].as_array().unwrap().len(),

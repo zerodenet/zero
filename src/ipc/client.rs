@@ -6,12 +6,11 @@
 #[cfg(unix)]
 mod imp {
     use std::io::{self, BufRead, BufReader, Write};
-    use std::os::unix::net::UnixStream;
 
     use crate::ipc::protocol::{serialize_frame, IpcRequest, IpcResponse};
 
     pub fn send_request(socket_path: &str, request: &IpcRequest) -> io::Result<IpcResponse> {
-        let stream = UnixStream::connect(socket_path)?;
+        let stream = std::os::unix::net::UnixStream::connect(socket_path)?;
         send_impl(&stream, request)?;
         read_impl(&stream)
     }
@@ -21,17 +20,17 @@ mod imp {
         request: &IpcRequest,
         on_event: impl FnMut(serde_json::Value),
     ) -> io::Result<()> {
-        let stream = UnixStream::connect(socket_path)?;
+        let stream = std::os::unix::net::UnixStream::connect(socket_path)?;
         stream_impl(&stream, request, on_event)
     }
 
-    fn send_impl(mut stream: &UnixStream, request: &IpcRequest) -> io::Result<()> {
+    fn send_impl(mut stream: &std::os::unix::net::UnixStream, request: &IpcRequest) -> io::Result<()> {
         let frame = serialize_frame(request).map_err(io::Error::other)?;
         stream.write_all(&frame)?;
         Ok(())
     }
 
-    fn read_impl(stream: &UnixStream) -> io::Result<IpcResponse> {
+    fn read_impl(stream: &std::os::unix::net::UnixStream) -> io::Result<IpcResponse> {
         let reader = BufReader::new(stream);
         for line in reader.lines() {
             let line = line?;
@@ -47,7 +46,7 @@ mod imp {
     }
 
     fn stream_impl(
-        stream: &UnixStream,
+        stream: &std::os::unix::net::UnixStream,
         request: &IpcRequest,
         mut on_event: impl FnMut(serde_json::Value),
     ) -> io::Result<()> {

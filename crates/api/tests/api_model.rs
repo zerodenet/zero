@@ -131,6 +131,8 @@ fn event_type_catalog_lists_current_api_events() {
             event_type::ENGINE_STARTED,
             event_type::ENGINE_STOPPED,
             event_type::ENGINE_WARNING,
+            event_type::IPC_CONNECTED,
+            event_type::IPC_DISCONNECTED,
         ]
     );
     assert!(event_type::is_known("flow.completed"));

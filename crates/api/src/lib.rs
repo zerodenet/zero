@@ -5,7 +5,9 @@ pub mod error;
 pub mod event;
 pub mod flow;
 pub mod query;
+pub mod response;
 pub mod sink;
+pub mod snapshot;
 pub mod traits;
 #[cfg(feature = "webhook")]
 pub mod webhook;
@@ -28,12 +30,17 @@ pub use flow::{
 pub use query::{
     CapabilitiesQuery, ConfigQuery, DiagnosticsQuery, FlowFilter, FlowGetQuery, FlowListQuery,
     HealthQuery, HealthSnapshot, PoliciesQuery, PolicyGetQuery, QueryRequest, QueryResponse,
-    RuntimeQuery, SinkStatusSnapshot, SinksQuery, Snapshot, StatsQuery, TunStatusQuery,
-    TunStatusSnapshot,
+    RuntimeQuery, SinkStatusSnapshot, SinksQuery, StatsQuery, TunStatusQuery, TunStatusSnapshot,
 };
+pub use response::{ApiResponse, EnvelopeError, RawResponse};
 pub use sink::{
     CallbackEventSink, DeadLetterSink, JsonLineEventSink, MemorySink, RotatingFileSink,
     SinkManager, SinkStatus,
+};
+pub use snapshot::{
+    AddressSnapshot, AuthSnapshot, CompletedFlowSnapshot, ConfigSnapshot, FlowSnapshot,
+    ListenerSnapshot, ModeSnapshot, OutboundTargetSnapshot, OutboundTrafficStats, PolicyMemberSnapshot,
+    PolicySnapshot, RuntimeSnapshot, StatsSnapshot, StatusSnapshot, UdpUpstreamStats,
 };
 pub use traits::{ApiAuth, ApiCodec, CommandService, EventSink, EventSource, QueryService};
 #[cfg(feature = "webhook")]

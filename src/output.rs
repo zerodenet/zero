@@ -1,12 +1,12 @@
-use zero_engine::{AddressExport, EngineStatusExport};
+use zero_engine::{AddressSnapshot, StatusSnapshot};
 
-pub fn render_status(status: &EngineStatusExport) -> String {
+pub fn render_status(status: &StatusSnapshot) -> String {
     let mut output = String::new();
 
     output.push_str("Engine Status\n");
     output.push_str("config:\n");
     output.push_str(&format!("  mode: {}\n", status.config.mode.kind));
-    output.push_str(&format!("  inbounds: {}\n", status.config.inbounds.len()));
+    output.push_str(&format!("  inbounds: {}\n", status.config.listeners.len()));
     output.push_str(&format!("  outbounds: {}\n", status.config.outbounds.len()));
     output.push_str(&format!(
         "  outbound_groups: {}\n",
@@ -45,9 +45,9 @@ pub fn render_status(status: &EngineStatusExport) -> String {
         status.runtime.stats.udp_upstream.packets_received,
     ));
 
-    if !status.config.inbounds.is_empty() {
+    if !status.config.listeners.is_empty() {
         output.push_str("listeners:\n");
-        for inbound in &status.config.inbounds {
+        for inbound in &status.config.listeners {
             output.push_str(&format!(
                 "  - {} {}://{}:{}\n",
                 inbound.tag, inbound.protocol, inbound.listen_address, inbound.listen_port
@@ -178,7 +178,7 @@ pub fn render_status(status: &EngineStatusExport) -> String {
     output
 }
 
-fn render_address(address: &AddressExport) -> &str {
+fn render_address(address: &AddressSnapshot) -> &str {
     &address.value
 }
 
