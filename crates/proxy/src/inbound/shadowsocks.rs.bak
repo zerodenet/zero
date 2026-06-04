@@ -416,7 +416,7 @@ async fn ss_encrypt_download(
     Ok(())
 }
 
-// ── UDP relay (uses generic UdpDispatch for routing) ────────────────
+// ── UDP relay (kept as Proxy method for now) ────────────────────────────
 
 impl Proxy {
     pub(crate) async fn ss_udp_relay_loop(
@@ -426,24 +426,34 @@ impl Proxy {
         password: &str,
         cipher: CipherKind,
     ) -> Result<(), EngineError> {
-        use zero_core::ProtocolType;
-
-        let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(inbound_tag).await?;
-        // Map session_id -> client_addr for response delivery.
-        let mut client_sessions: std::collections::HashMap<u64, SocketAddr> =
-            std::collections::HashMap::new();
+        use zero_core::{Network, ProtocolType};
 
         let mut buf = [0u8; 65536];
-        let mut direct_buf = [0u8; 65536];
+        let relay_socket = UdpSocket::bind("0.0.0.0:0")
+            .await
+            .map_err(|e| EngineError::Io(io::Error::other(format!("ss udp relay socket: {e}"))))?;
+
+        let mut direct_sessions: std::collections::HashMap<SocketAddr, (Address, u16)> =
+            std::collections::HashMap::new();
+
+        let mut ss_upstreams: std::collections::HashMap<
+            (String, u16),
+            (Arc<UdpSocket>, CipherKind, String),
+        > = std::collections::HashMap::new();
+        let mut chained_clients: std::collections::HashMap<
+            SocketAddr,
+            (String, u16, Address, u16),
+        > = std::collections::HashMap::new();
+
+        let mut recv_buf = [0u8; 65536];
+        let mut chain_buf = [0u8; 65536];
 
         loop {
-            let (direct_sock, chain_tasks) = dispatch.poll_sockets();
-
-            tokio::select! {
+            select! {
                 recv = udp_socket.recv_from(&mut buf) => {
                     let (n, client_addr) = match recv {
                         Ok(r) => r,
-                        Err(e) => { warn!(error = %e, "ss udp recv error"); break Ok(()); }
+                        Err(e) => { warn!(error = %e, "ss udp recv error"); break; }
                     };
                     let packet = &buf[..n];
 
@@ -453,80 +463,165 @@ impl Proxy {
                     let encrypted = &packet[salt_len..];
 
                     let Ok(key) = ss_derive_key(cipher, password.as_bytes(), salt) else { continue };
-                    let Ok(plain) = aead_decrypt_udp(cipher, &key, &[0u8; 12], encrypted) else { continue };
-                    let Ok((target, port, payload_offset)) = parse_target_data(&plain) else { continue };
-                    let payload = &plain[payload_offset..];
+                    let nonce = [0u8; 12];
+                    let Ok(plain) = aead_decrypt_udp(cipher, &key, &nonce, encrypted) else { continue };
 
-                    let mut sa = zero_core::SessionAuth::new("shadowsocks");
-                    sa.principal_key = Some(password.to_owned());
-                    match dispatch.dispatch(
-                        self, target, port, payload,
-                        ProtocolType::Shadowsocks, Some(&sa),
-                    ).await {
-                        Ok(session_id) => {
-                            client_sessions.insert(session_id, client_addr);
-                        }
-                        Err(error) => {
-                            warn!(error = %error, "ss udp dispatch failed");
-                        }
-                    }
-                }
+                    if let Ok((target, port, payload_offset)) = parse_target_data(&plain) {
+                        let payload = &plain[payload_offset..];
 
-                recv = direct_sock.recv_from_addr(&mut direct_buf) => {
-                    let (n, sender) = recv?;
-                    if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                        if let Some(&client) = client_sessions.get(&sid) {
-                            ss_send_encrypted(
-                                udp_socket.as_ref(), cipher, password,
-                                &direct_buf[..n], client,
-                            );
-                        }
-                    }
-                }
+                        let mut session = Session::new(0, target.clone(), port, Network::Udp, ProtocolType::Shadowsocks);
+                        let mut sa = zero_core::SessionAuth::new("shadowsocks");
+                        sa.principal_key = Some(password.to_owned());
+                        session.auth = Some(sa);
+                        self.prepare_session(&mut session, inbound_tag, None);
+                        self.resolve_fake_ip_target(&mut session).await;
+                        let action = self.route_decision(&session);
+                        let Ok((resolved, _plan)) = self.resolve_outbound(&action) else { continue };
 
-                Some(chain_result) = chain_tasks.join_next() => {
-                    match chain_result {
-                        Ok(Ok((target, port, payload, session_id))) => {
-                            if let Some(sid) = session_id {
-                                if let Some(&client) = client_sessions.get(&sid) {
-                                    let Ok(td) = build_target_data(&target, port, &payload) else { continue };
-                                    ss_send_encrypted(
-                                        udp_socket.as_ref(), cipher, password, &td, client,
-                                    );
-                                }
+                        let leaf = match &resolved {
+                            zero_engine::ResolvedOutbound::Single(c) => c,
+                            zero_engine::ResolvedOutbound::Relay { .. } => continue,
+                            zero_engine::ResolvedOutbound::Fallback { candidates } => {
+                                let Some(first) = candidates.first() else { continue };
+                                first
                             }
-                        }
-                        Ok(Err(error)) => {
-                            warn!(error = %error, "ss chain response error");
-                        }
-                        Err(e) => {
-                            warn!(error = %e, "ss chain task panicked");
+                        };
+                        let ss_chain = match leaf {
+                            zero_engine::ResolvedLeafOutbound::Shadowsocks { server, port, password: chain_pwd, cipher: chain_cipher, .. } =>
+                                Some((server.to_owned(), *port, chain_pwd.to_owned(), chain_cipher.to_owned())),
+                            _ => None,
+                        };
+
+                        if let Some((server, upstream_port, chain_pwd, chain_cipher_str)) = ss_chain {
+                            let chain_key = (server.to_string(), upstream_port);
+                            let chain_cipher = CipherKind::from_str(chain_cipher_str);
+                            let Some(chain_cipher) = chain_cipher else { continue };
+
+                            let upstream_entry = ss_upstreams
+                                .entry(chain_key.clone())
+                                .or_insert_with(|| {
+                                    let sock = Arc::new(
+                                        tokio::net::UdpSocket::from_std(
+                                            std::net::UdpSocket::bind("0.0.0.0:0").unwrap()
+                                        ).unwrap()
+                                    );
+                                    (sock, chain_cipher, chain_pwd.to_string())
+                                });
+                            let upstream = upstream_entry.0.clone();
+                            chained_clients.insert(client_addr, (server.to_string(), upstream_port, target.clone(), port));
+
+                            let target_data = match build_target_data(&target, port, payload) {
+                                Ok(d) => d,
+                                Err(_) => continue,
+                            };
+                            let mut up_salt = vec![0u8; chain_cipher.salt_len()];
+                            let _ = ring::rand::SystemRandom::new().fill(&mut up_salt);
+                            let Ok(up_key) = ss_derive_key(chain_cipher, chain_pwd.as_bytes(), &up_salt) else { continue };
+                            let Ok(up_encrypted) = aead_encrypt_udp(chain_cipher, &up_key, &nonce, &target_data) else { continue };
+
+                            let target_addr = format!("{server}:{upstream_port}");
+                            if let Ok(addr) = target_addr.parse::<SocketAddr>() {
+                                let mut packet = up_salt;
+                                packet.extend_from_slice(&up_encrypted);
+                                let _ = upstream.send_to(&packet, addr).await;
+                            }
+                        } else {
+                            let target_addr = resolve_socket_addr(&target, port, self.resolver.as_ref()).await;
+                            let Some(target_addr) = target_addr else { continue };
+                            direct_sessions.insert(client_addr, (target.clone(), port));
+                            let _ = relay_socket.send_to(payload, target_addr).await;
                         }
                     }
                 }
+
+                recv = relay_socket.recv_from(&mut recv_buf) => {
+                    let (n, target_addr) = match recv {
+                        Ok(r) => r,
+                        Err(e) => { warn!(error = %e, "ss udp relay recv error"); break; }
+                    };
+
+                    let client_addr = direct_sessions.iter()
+                        .find(|(_, (t, p))| addr_to_socket(t, *p) == Some(target_addr))
+                        .map(|(c, _)| *c);
+
+                    let Some(client_addr) = client_addr else { continue };
+
+                    let mut salt = vec![0u8; cipher.salt_len()];
+                    let _ = ring::rand::SystemRandom::new().fill(&mut salt);
+                    let Ok(key) = ss_derive_key(cipher, password.as_bytes(), &salt) else { continue };
+                    let nonce = [0u8; 12];
+                    let Ok(encrypted) = aead_encrypt_udp(cipher, &key, &nonce, &recv_buf[..n]) else { continue };
+
+                    let mut resp = salt;
+                    resp.extend_from_slice(&encrypted);
+                    let _ = udp_socket.send_to(&resp, client_addr).await;
+                }
+
+                _ = Self::ss_chain_recv_any(&ss_upstreams, &mut chained_clients, udp_socket.as_ref(), cipher, password, &mut chain_buf) => {}
             }
+        }
+        Ok(())
+    }
+
+    async fn ss_chain_recv_any(
+        upstreams: &std::collections::HashMap<(String, u16), (Arc<UdpSocket>, CipherKind, String)>,
+        clients: &mut std::collections::HashMap<SocketAddr, (String, u16, Address, u16)>,
+        out_socket: &UdpSocket,
+        inbound_cipher: CipherKind,
+        inbound_password: &str,
+        buf: &mut [u8],
+    ) {
+        for (sock, chain_cipher, chain_pwd) in upstreams.values() {
+            let Ok(n) = sock.try_recv(buf) else { continue };
+            let salt_len = chain_cipher.salt_len();
+            if n < salt_len + chain_cipher.tag_len() {
+                continue;
+            }
+            let salt = &buf[..salt_len];
+            let encrypted = &buf[salt_len..n];
+
+            let Ok(key) = ss_derive_key(*chain_cipher, chain_pwd.as_bytes(), salt) else {
+                continue;
+            };
+            let nonce = [0u8; 12];
+            let Ok(plain) = shadowsocks::aead_decrypt_udp(*chain_cipher, &key, &nonce, encrypted)
+            else {
+                continue;
+            };
+            let Ok((_, _, payload_offset)) = shadowsocks::parse_target_data(&plain) else {
+                continue;
+            };
+            let payload = &plain[payload_offset..];
+
+            let client_addr = clients
+                .iter()
+                .find(|(_, (s, p, _, _))| upstreams.contains_key(&(s.clone(), *p)))
+                .map(|(c, _)| *c);
+            let Some(client_addr) = client_addr else {
+                continue;
+            };
+
+            let mut resp_salt = vec![0u8; inbound_cipher.salt_len()];
+            let _ = ring::rand::SystemRandom::new().fill(&mut resp_salt);
+            let Ok(resp_key) =
+                ss_derive_key(inbound_cipher, inbound_password.as_bytes(), &resp_salt)
+            else {
+                continue;
+            };
+            let Ok(resp_enc) =
+                shadowsocks::aead_encrypt_udp(inbound_cipher, &resp_key, &nonce, payload)
+            else {
+                continue;
+            };
+
+            let mut resp = resp_salt;
+            resp.extend_from_slice(&resp_enc);
+            let _ = out_socket.send_to(&resp, client_addr).await;
+            return;
         }
     }
 }
 
-/// Encrypt plaintext with SS AEAD and send via socket.
-fn ss_send_encrypted(
-    socket: &UdpSocket, cipher: CipherKind, password: &str,
-    plain: &[u8], client: SocketAddr,
-) {
-    use ring::rand::SecureRandom;
-    let mut salt = vec![0u8; cipher.salt_len()];
-    let _ = ring::rand::SystemRandom::new().fill(&mut salt);
-    let Ok(key) = ss_derive_key(cipher, password.as_bytes(), &salt) else { return };
-    let Ok(encrypted) = aead_encrypt_udp(cipher, &key, &[0u8; 12], plain) else { return };
-    let mut resp = salt;
-    resp.extend_from_slice(&encrypted);
-    let _ = tokio::runtime::Handle::try_current().and_then(|rt| {
-        Ok(rt.block_on(async {
-            let _ = socket.send_to(&resp, client).await;
-        }))
-    });
-}
 fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<SocketAddr> {
     addr.map(|ip| match ip {
         zero_traits::IpAddress::V4(octets) => {

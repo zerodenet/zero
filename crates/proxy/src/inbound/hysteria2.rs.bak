@@ -304,9 +304,8 @@ impl Proxy {
             let conn_dg = conn.clone();
             let udp_dg = udp.clone();
             let tag = inbound_tag.to_owned();
-            let engine_for_h2 = self.clone();
             stream_tasks.spawn(async move {
-                Self::hysteria2_datagram_loop(conn_dg, udp_dg, tag, resolver, engine_for_h2).await
+                Self::hysteria2_datagram_loop(conn_dg, udp_dg, &tag, resolver).await
             });
         }
 
@@ -367,74 +366,99 @@ impl Proxy {
     /// Datagram forwarding loop (unchanged).
     async fn hysteria2_datagram_loop(
         conn: Arc<quinn::Connection>,
-        _udp_socket: Arc<tokio::net::UdpSocket>,
-        inbound_tag: String,
-        _resolver: Arc<zero_dns::DnsSystem>,
-        proxy: Proxy,
+        udp_socket: Arc<tokio::net::UdpSocket>,
+        _inbound_tag: &str,
+        resolver: Arc<zero_dns::DnsSystem>,
     ) -> Result<(), EngineError> {
-        let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(&inbound_tag).await?;
-        let mut h2_flows: std::collections::HashMap<u64, u16> = std::collections::HashMap::new();
-
-        let mut dg_buf = [0u8; 65536];
-        let mut direct_buf = [0u8; 65536];
+        let mut buf = [0u8; 65536];
+        let mut session_map: std::collections::HashMap<(SocketAddr, u16), (u16, Address, u16)> =
+            std::collections::HashMap::new();
 
         loop {
-            let (direct_sock, chain_tasks) = dispatch.poll_sockets();
-
             select! {
                 dg = conn.read_datagram() => {
                     match dg {
                         Ok(data) => {
                             if let Ok(pkt) = parse_udp_datagram(&data) {
-                                let _ = dispatch.dispatch(
-                                    &proxy, pkt.target.clone(), pkt.port, &pkt.payload,
-                                    ProtocolType::Hysteria2, None,
-                                ).await.inspect(|sid| {
-                                    h2_flows.insert(*sid, pkt.session_id);
-                                }).inspect_err(|e| {
-                                    warn!(error = %e, "h2 udp dispatch failed");
-                                });
+                                let target_addr = match &pkt.target {
+                                    Address::Domain(d) => {
+                                        match resolver.resolve(d).await {
+                                            Ok(addrs) => {
+                                                let first = match addrs.first() {
+                                                    Some(ip) => *ip,
+                                                    None => {
+                                                        warn!("hysteria2 UDP: no addresses resolved for {}", d);
+                                                        continue;
+                                                    }
+                                                };
+                                                match first {
+                                                    zero_traits::IpAddress::V4(ip) => {
+                                                        SocketAddr::new(std::net::IpAddr::V4(ip.into()), pkt.port)
+                                                    }
+                                                    zero_traits::IpAddress::V6(ip) => {
+                                                        SocketAddr::new(std::net::IpAddr::V6(ip.into()), pkt.port)
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                warn!("hysteria2 UDP: DNS resolve failed for {}: {}", d, e);
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                    Address::Ipv4(ip) => {
+                                        SocketAddr::new(
+                                            std::net::IpAddr::V4(std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])),
+                                            pkt.port,
+                                        )
+                                    }
+                                    Address::Ipv6(ip) => {
+                                        SocketAddr::new(
+                                            std::net::IpAddr::V6(std::net::Ipv6Addr::from(*ip)),
+                                            pkt.port,
+                                        )
+                                    }
+                                };
+
+                                let local_addr = udp_socket.local_addr().unwrap_or_else(|_| "0.0.0.0:0".parse().unwrap());
+                                session_map.insert(
+                                    (local_addr, pkt.session_id),
+                                    (pkt.packet_id, pkt.target.clone(), pkt.port),
+                                );
+
+                                if let Err(e) = udp_socket.send_to(&pkt.payload, target_addr).await {
+                                    warn!(error = %e, "hysteria2 UDP send_to failed");
+                                }
                             }
                         }
                         Err(e) => {
                             warn!(error = %e, "hysteria2 read_datagram error");
-                            break Ok(());
+                            break;
                         }
                     }
                 }
-
-                recv = direct_sock.recv_from_addr(&mut direct_buf) => {
-                    let (n, sender) = recv?;
-                    if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                        if let Some(&h2_sid) = h2_flows.get(&sid) {
-                            let ip = zero_platform_tokio::socket_addr_to_ip(sender);
-                            let target = match ip {
-                                zero_traits::IpAddress::V4(b) => Address::Ipv4(b),
-                                zero_traits::IpAddress::V6(b) => Address::Ipv6(b),
-                            };
-                            if let Ok(dg) = build_udp_datagram(h2_sid, 0, &target, sender.port(), &direct_buf[..n]) {
-                                let _ = conn.send_datagram(dg.into());
-                            }
-                        }
-                    }
-                }
-
-                Some(chain_result) = chain_tasks.join_next() => {
-                    match chain_result {
-                        Ok(Ok((target, port, payload, session_id))) => {
-                            if let Some(sid) = session_id {
-                                if let Some(&h2_sid) = h2_flows.get(&sid) {
-                                    if let Ok(dg) = build_udp_datagram(h2_sid, 0, &target, port, &payload) {
-                                        let _ = conn.send_datagram(dg.into());
-                                    }
+                recv = udp_socket.recv_from(&mut buf) => {
+                    match recv {
+                        Ok((n, sender)) => {
+                            if let Some(((_local_addr, sid), (_, ref target, port))) =
+                                session_map.iter().find(|((la, _), _)| la == &sender)
+                            {
+                                if let Ok(dg) = build_udp_datagram(
+                                    *sid, 0, target, *port, &buf[..n],
+                                ) {
+                                    let _ = conn.send_datagram(dg.into());
                                 }
                             }
                         }
-                        Ok(Err(error)) => warn!(error = %error, "h2 chain response error"),
-                        Err(e) => warn!(error = %e, "h2 chain task panicked"),
+                        Err(e) => {
+                            warn!(error = %e, "hysteria2 UDP recv_from error");
+                            break;
+                        }
                     }
                 }
             }
         }
+
+        Ok(())
     }
 }
