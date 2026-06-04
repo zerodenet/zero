@@ -193,7 +193,6 @@ impl Proxy {
                         server,
                         port,
                         password,
-                        client_fingerprint,
                     )
                     .await
                 {

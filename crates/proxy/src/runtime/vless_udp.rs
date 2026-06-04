@@ -50,6 +50,7 @@ fn spawn_vless_udp_relay(
 ) -> (VlessUdpUpstream, broadcast::Sender<Vec<u8>>) {
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
     let (recv_tx, _) = broadcast::channel::<Vec<u8>>(32);
+    let recv_tx_bg = recv_tx.clone();
 
     proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
 
@@ -73,7 +74,7 @@ fn spawn_vless_udp_relay(
                     match read {
                         Ok(0) => break,
                         Ok(n) => {
-                            if recv_tx.send(buffer[..n].to_vec()).is_err() {
+                            if recv_tx_bg.send(buffer[..n].to_vec()).is_err() {
                                 break;
                             }
                         }

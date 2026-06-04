@@ -208,34 +208,6 @@ impl Proxy {
                         }
                     }
                 }
-                response = vless_mgr.next_response() => {
-                    match response {
-                        Some(Ok((target, port, payload, session_id))) => {
-                            if let Some(sid) = session_id {
-                                self.record_session_outbound_rx(sid, payload.len() as u64);
-                            }
-                            if let Some(client_addr) = client_udp_addr {
-                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
-                                    &target, port, &payload,
-                                ) {
-                                    let sent = relay.send_to_addr(&frame, client_addr).await?;
-                                    if let Some(sid) = session_id {
-                                        self.record_session_inbound_tx(sid, sent as u64);
-                                    }
-                                }
-                            }
-                        }
-                        Some(Err(error)) => {
-                            warn!(
-                                inbound_tag = inbound_tag,
-                                protocol = "socks5-udp",
-                                error = %error,
-                                "VLESS chain upstream read error"
-                            );
-                        }
-                        None => {}
-                    }
-                }
                 Some(chain_result) = chain_tasks.join_next() => {
                     // Chain-outbound response (SS, H2, VLESS via JoinSet).
                     match chain_result {
@@ -320,13 +292,8 @@ impl Proxy {
             }
         }
 
-        // Record TCP control traffic from the SOCKS5 session.
-        self.record_session_inbound_traffic(0, pending_control_traffic.clone());
-        *pending_control_traffic = StreamTraffic::default();
-        self.record_session_inbound_rx(0, packet.len() as u64);
-
         // ── Generic dispatch ─────────────────────────────────────────
-        dispatch
+        let session_id = dispatch
             .dispatch(
                 self,
                 udp_packet.target,
@@ -335,7 +302,16 @@ impl Proxy {
                 ProtocolType::Socks5,
                 None,
             )
-            .await
+            .await?;
+
+        // Record protocol-specific overhead: TCP control traffic and
+        // SOCKS5 framing bytes (payload is already tracked by dispatch).
+        self.record_session_inbound_traffic(session_id, pending_control_traffic.clone());
+        *pending_control_traffic = StreamTraffic::default();
+        let framing_bytes = packet.len() as u64 - udp_packet.payload.len() as u64;
+        self.record_session_inbound_rx(session_id, framing_bytes);
+
+        Ok(())
     }
 
     async fn forward_direct_udp_response(

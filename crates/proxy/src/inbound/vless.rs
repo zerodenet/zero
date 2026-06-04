@@ -852,6 +852,9 @@ impl Proxy {
                     }
                 }
                 _ = wait_for_upstream_idle(socks5_idle) => {
+                    // SOCKS5 upstream idle timeout — association will be
+                    // closed by finish_all() on session end.
+                }
                 Some(chain_result) = chain_tasks.join_next() => {
                     // Chain-outbound response (SS, H2, VLESS via JoinSet).
                     match chain_result {
@@ -916,6 +919,7 @@ impl Proxy {
                 auth.as_ref(),
             )
             .await
+            .map(|_| ())
     }
     /// Relay a raw TCP stream (post-ClientHello) to a fallback target.
     /// The ClientHello bytes were already written by the caller.

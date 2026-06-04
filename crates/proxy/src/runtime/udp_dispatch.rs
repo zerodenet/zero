@@ -1161,6 +1161,7 @@ impl UdpDispatch {
     ///
     /// Supports all outbound types: direct, block, socks5, vless,
     /// shadowsocks, hysteria2, trojan, mieru.
+    /// Returns the session_id of the (new or cached) flow for metering.
     pub(crate) async fn dispatch(
         &mut self,
         proxy: &Proxy,
@@ -1169,7 +1170,7 @@ impl UdpDispatch {
         payload: &[u8],
         protocol: ProtocolType,
         auth: Option<&SessionAuth>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<u64, EngineError> {
         // ── VLESS manager shortcut (cached upstream) ──────────────
         if let Some(handle) = self.vless_manager.get(&target, port) {
             proxy.record_session_inbound_rx(handle.session_id, payload.len() as u64);
@@ -1179,12 +1180,13 @@ impl UdpDispatch {
             self.vless_manager.spawn_bridge(
                 &mut self.chain_tasks, target, port, handle.session_id,
             );
-            return Ok(());
+            return Ok(handle.session_id);
         }
 
         // ── Existing flow (direct / socks5 / ss / h2 / trojan / mieru) ─
         if let Some(flow) = self.flows.snapshot(&target, port) {
-            return self.forward_existing(proxy, &flow, payload).await;
+            self.forward_existing(proxy, &flow, payload).await?;
+            return Ok(flow.session.id);
         }
 
         // ── New flow ──────────────────────────────────────────────
@@ -1237,7 +1239,7 @@ impl UdpDispatch {
                     proxy.set_session_outbound(&session);
                     self.flows.insert(session, session_handle, outbound);
                     proxy.record_session_outbound_tx(session_id, tx_bytes);
-                    return Ok(());
+                    return Ok(session_id);
                 }
                 Ok(FlowStartResult::VlessFlow { session_id, tag }) => {
                     session.outbound_tag = Some(tag);
@@ -1247,7 +1249,7 @@ impl UdpDispatch {
                         (session, session_handle),
                     );
                     proxy.record_session_outbound_tx(session_id, payload.len() as u64);
-                    return Ok(());
+                    return Ok(session_id);
                 }
                 Ok(FlowStartResult::Blocked { tag }) => {
                     session.outbound_tag = Some(tag);
@@ -1255,7 +1257,7 @@ impl UdpDispatch {
                     if let Some(record) = session_handle.finish(SessionOutcome::Blocked) {
                         log_session_finished(&record, None);
                     }
-                    return Ok(());
+                    return Ok(session.id);
                 }
                 Err(failure) => {
                     last_failure = Some(failure);
@@ -1281,19 +1283,19 @@ impl UdpDispatch {
                     .as_ref()
                     .map(|(server, port)| (server.as_str(), *port)),
             );
-        } else {
-            let error = EngineError::Io(std::io::Error::other("all fallback outbounds failed"));
-            log_session_failed(
-                &session,
-                record.as_ref(),
-                "fallback_exhausted",
-                started_at.elapsed(),
-                &error,
-                None,
-            );
+            return Err(failure.error);
         }
 
-        Ok(())
+        let error = EngineError::Io(std::io::Error::other("all fallback outbounds failed"));
+        log_session_failed(
+            &session,
+            record.as_ref(),
+            "fallback_exhausted",
+            started_at.elapsed(),
+            &error,
+            None,
+        );
+        Err(error)
     }
 
     /// Forward a packet to an existing flow.
@@ -1854,7 +1856,7 @@ impl UdpDispatch {
         .await
         {
             Ok(sent) => {
-                proxy.record_udp_upstream_packet_sent();
+                // packet_sent already recorded in send_socks5_udp_packet
                 Ok(sent)
             }
             Err(error) => {
