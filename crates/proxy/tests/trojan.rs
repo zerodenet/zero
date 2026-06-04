@@ -114,10 +114,7 @@ async fn spawn_trojan_tls_echo_server(
             .read_exact(&mut password)
             .await
             .expect("read trojan password");
-        assert_eq!(
-            &password[trojan::PASSWORD_HASH_LEN..],
-            b"\r\n"
-        );
+        assert_eq!(&password[trojan::PASSWORD_HASH_LEN..], b"\r\n");
 
         let mut header = [0_u8; 1];
         stream

@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
 
-use zero_core::{Address, Error, Network, ProtocolType, Session};
 use vless::{
     build_udp_packet, build_udp_packet_v2, format_uuid, parse_udp_packet, parse_udp_packet_v2,
     parse_uuid, VlessInbound, VlessOutbound, VlessUser, VlessUserStore,
 };
+use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 const USER_ID: &str = "11111111-2222-3333-4444-555555555555";

@@ -1,8 +1,8 @@
 use std::time::Instant;
 
+use socks5::parse_udp_packet;
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::{EngineError, ResolvedOutbound, SessionOutcome};
-use socks5::parse_udp_packet;
 use zero_traits::DnsResolver;
 
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};

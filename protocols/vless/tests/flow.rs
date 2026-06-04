@@ -1,8 +1,8 @@
-use zero_core::Address;
 use vless::{
     flow_build_request, flow_byte, flow_from_byte, parse_flow, parse_uuid, FLOW_XTLS_RPRX_VISION,
     FLOW_XTLS_RPRX_VISION_UDP,
 };
+use zero_core::Address;
 
 #[test]
 fn test_flow_roundtrip() {

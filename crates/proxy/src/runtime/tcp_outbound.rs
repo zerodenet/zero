@@ -480,13 +480,12 @@ async fn send_hop_protocol_request(
             let uuid = vmess::parse_uuid(id).map_err(|e| {
                 EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
             })?;
-            let vmess_cipher =
-                vmess::VmessCipher::from_name(cipher).ok_or_else(|| {
-                    EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        format!("vmess unknown cipher: {cipher}"),
-                    ))
-                })?;
+            let vmess_cipher = vmess::VmessCipher::from_name(cipher).ok_or_else(|| {
+                EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("vmess unknown cipher: {cipher}"),
+                ))
+            })?;
             vmess::VmessOutbound
                 .establish_tcp_tunnel(stream, session, &uuid, vmess_cipher)
                 .await

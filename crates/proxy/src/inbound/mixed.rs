@@ -1,9 +1,9 @@
+use socks5::Socks5Request;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_core::Error as CoreError;
 use zero_engine::EngineError;
-use socks5::Socks5Request;
 use zero_traits::AsyncSocket;
 
 use crate::logging::log_listener_connection_error;

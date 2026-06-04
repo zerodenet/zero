@@ -717,7 +717,10 @@ fn policies_command(socket_path: Option<&str>) -> Result<(), Box<dyn Error>> {
 
 fn events_command(socket_path: Option<&str>) -> Result<(), Box<dyn Error>> {
     let socket = resolve_socket(socket_path)?;
-    let request = crate::ipc::protocol::IpcRequest::Subscribe { id: None, events: None };
+    let request = crate::ipc::protocol::IpcRequest::Subscribe {
+        id: None,
+        events: None,
+    };
     ipc::client::stream_events(&socket, &request, |event| {
         println!("{}", serde_json::to_string(&event).unwrap_or_default());
     })?;

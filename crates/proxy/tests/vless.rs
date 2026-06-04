@@ -11,9 +11,9 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsConnector;
+use vless::parse_uuid;
 use zero_api::{event_type, EventFilter, EventSource};
 use zero_config::RuntimeConfig;
-use vless::parse_uuid;
 use zero_proxy::Proxy as Engine;
 
 use support::{free_port, spawn_engine, wait_for, wait_for_listener};

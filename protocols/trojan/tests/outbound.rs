@@ -2,8 +2,8 @@
 
 use std::io;
 
-use zero_core::{Address, Network, ProtocolType, Session};
 use trojan::{TrojanOutbound, CMD_TCP, CRLF, PASSWORD_HASH_LEN};
+use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 #[derive(Default)]
@@ -48,10 +48,7 @@ async fn outbound_writes_complete_request_in_one_write() {
     let request = &socket.writes[0];
     assert_eq!(&request[PASSWORD_HASH_LEN..PASSWORD_HASH_LEN + 2], CRLF);
     assert_eq!(request[PASSWORD_HASH_LEN + 2], CMD_TCP);
-    assert_eq!(
-        request[PASSWORD_HASH_LEN + 3],
-        trojan::ATYP_DOMAIN
-    );
+    assert_eq!(request[PASSWORD_HASH_LEN + 3], trojan::ATYP_DOMAIN);
     assert_eq!(
         request[PASSWORD_HASH_LEN + 4] as usize,
         "www.gstatic.com".len()

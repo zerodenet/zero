@@ -95,12 +95,16 @@ pub fn extract_server_cipher_suite(data: &[u8]) -> std::io::Result<u16> {
     // ServerHello: [record_hdr:5][hs_type:1][length:3][version:2][random:32][sid_len:1][sid...][cipher_suite:2]
     const SERVER_SID_LEN_OFFSET: usize = TLS_HEADER_LEN + 1 + 3 + PROTOCOL_VERSION_LEN + RANDOM_LEN;
     if data.len() < SERVER_SID_LEN_OFFSET + 1 {
-        return Err(std::io::Error::other("server hello too short for cipher suite"));
+        return Err(std::io::Error::other(
+            "server hello too short for cipher suite",
+        ));
     }
     let session_id_len = data[SERVER_SID_LEN_OFFSET] as usize;
     let cs_offset = SERVER_SID_LEN_OFFSET + 1 + session_id_len;
     if data.len() < cs_offset + 2 {
-        return Err(std::io::Error::other("server hello too short for cipher suite"));
+        return Err(std::io::Error::other(
+            "server hello too short for cipher suite",
+        ));
     }
     Ok(u16::from_be_bytes([data[cs_offset], data[cs_offset + 1]]))
 }
@@ -140,7 +144,9 @@ pub fn extract_server_public_key(data: &[u8]) -> std::io::Result<Vec<u8>> {
             if group == 0x001d {
                 return Ok(reader.read_slice(key_len)?.to_vec());
             }
-            return Err(std::io::Error::other("X25519 key share not found in ServerHello"));
+            return Err(std::io::Error::other(
+                "X25519 key share not found in ServerHello",
+            ));
         }
         reader.skip(ext_len)?;
     }

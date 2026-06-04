@@ -111,9 +111,7 @@ pub(super) fn validate_inbound_protocol(
             Ok(())
         }
         InboundProtocolConfig::Shadowsocks {
-            password,
-            cipher,
-            ..
+            password, cipher, ..
         } => {
             validate_inbound_optional_non_empty("shadowsocks password", password)?;
             validate_shadowsocks_cipher("inbound", cipher)?;

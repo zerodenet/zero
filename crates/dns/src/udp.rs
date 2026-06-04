@@ -73,7 +73,10 @@ impl UdpDnsResolver {
             }
         }
 
-        Err(io::Error::new(io::ErrorKind::TimedOut, "dns udp timeout after retry"))
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "dns udp timeout after retry",
+        ))
     }
 }
 

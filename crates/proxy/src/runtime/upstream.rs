@@ -49,12 +49,7 @@ impl Proxy {
             .establish_tunnel_with_auth(
                 &mut upstream,
                 session,
-                auth.map(
-                    |(username, password)| socks5::Socks5OutboundAuth {
-                        username,
-                        password,
-                    },
-                ),
+                auth.map(|(username, password)| socks5::Socks5OutboundAuth { username, password }),
             )
             .await?;
         self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
@@ -512,10 +507,8 @@ async fn relay_shadowsocks_outbound(
     ss_session: shadowsocks::ShadowsocksOutboundSession,
     password: Vec<u8>,
 ) -> std::io::Result<()> {
+    use shadowsocks::{decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, encrypt_tcp_chunk};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use shadowsocks::{
-        decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, encrypt_tcp_chunk,
-    };
 
     let cipher = ss_session.cipher;
     let (mut app_read, mut app_write) = tokio::io::split(app_stream);
@@ -587,11 +580,9 @@ fn ss_derive_outbound_key(
     salt: &[u8],
 ) -> std::io::Result<Vec<u8>> {
     if cipher.is_blake3() {
-        shadowsocks::derive_key_blake3(password, salt, cipher.key_len())
-            .map_err(protocol_to_io)
+        shadowsocks::derive_key_blake3(password, salt, cipher.key_len()).map_err(protocol_to_io)
     } else {
-        shadowsocks::derive_key(password, salt, cipher.key_len())
-            .map_err(protocol_to_io)
+        shadowsocks::derive_key(password, salt, cipher.key_len()).map_err(protocol_to_io)
     }
 }
 

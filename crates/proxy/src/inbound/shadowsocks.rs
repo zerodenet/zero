@@ -8,6 +8,10 @@ use std::task::{Context, Poll};
 
 use async_trait::async_trait;
 use ring::rand::SecureRandom;
+use shadowsocks::{
+    aead_decrypt_udp, aead_encrypt_udp, build_target_data, parse_target_data, CipherKind,
+    ShadowsocksInbound,
+};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::UdpSocket;
 use tokio::select;
@@ -17,10 +21,6 @@ use tracing::{error, info, warn};
 use zero_config::InboundConfig;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
-use shadowsocks::{
-    aead_decrypt_udp, aead_encrypt_udp, build_target_data, parse_target_data, CipherKind,
-    ShadowsocksInbound,
-};
 
 use crate::logging::log_listener_connection_error;
 use crate::runtime::bind_listener;
@@ -584,13 +584,11 @@ impl Proxy {
                 continue;
             };
             let nonce = [0u8; 12];
-            let Ok(plain) =
-                shadowsocks::aead_decrypt_udp(*chain_cipher, &key, &nonce, encrypted)
+            let Ok(plain) = shadowsocks::aead_decrypt_udp(*chain_cipher, &key, &nonce, encrypted)
             else {
                 continue;
             };
-            let Ok((_, _, payload_offset)) = shadowsocks::parse_target_data(&plain)
-            else {
+            let Ok((_, _, payload_offset)) = shadowsocks::parse_target_data(&plain) else {
                 continue;
             };
             let payload = &plain[payload_offset..];
@@ -610,12 +608,9 @@ impl Proxy {
             else {
                 continue;
             };
-            let Ok(resp_enc) = shadowsocks::aead_encrypt_udp(
-                inbound_cipher,
-                &resp_key,
-                &nonce,
-                payload,
-            ) else {
+            let Ok(resp_enc) =
+                shadowsocks::aead_encrypt_udp(inbound_cipher, &resp_key, &nonce, payload)
+            else {
                 continue;
             };
 

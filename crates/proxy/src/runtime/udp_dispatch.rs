@@ -38,7 +38,9 @@ use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 
 use zero_core::{Address, Network, ProtocolType, Session, SessionAuth};
-use zero_engine::{EngineError, ResolvedLeafOutbound, ResolvedOutbound, SessionHandle, SessionOutcome};
+use zero_engine::{
+    EngineError, ResolvedLeafOutbound, ResolvedOutbound, SessionHandle, SessionOutcome,
+};
 use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
@@ -92,7 +94,9 @@ mod ss_manager {
 
     impl SsChainManager {
         pub(super) fn new() -> Self {
-            Self { upstreams: HashMap::new() }
+            Self {
+                upstreams: HashMap::new(),
+            }
         }
 
         pub(super) async fn send(
@@ -107,9 +111,7 @@ mod ss_manager {
             target_port: u16,
             payload: &[u8],
         ) -> Result<usize, FlowFailure> {
-            use shadowsocks::{
-                aead_encrypt_udp, build_target_data, derive_key, CipherKind,
-            };
+            use shadowsocks::{aead_encrypt_udp, build_target_data, derive_key, CipherKind};
 
             let cipher_kind = CipherKind::from_str(cipher).ok_or_else(|| FlowFailure {
                 stage: "ss_cipher",
@@ -122,13 +124,15 @@ mod ss_manager {
 
             let entry = self.ensure_entry(server, port, password, cipher_kind);
 
-            let target_data = build_target_data(target, target_port, payload).map_err(|e| {
-                FlowFailure {
+            let target_data =
+                build_target_data(target, target_port, payload).map_err(|e| FlowFailure {
                     stage: "ss_build_target",
-                    error: EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)),
+                    error: EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        e,
+                    )),
                     upstream: Some((server.to_owned(), port)),
-                }
-            })?;
+                })?;
 
             let mut salt = vec![0u8; cipher_kind.salt_len()];
             use ring::rand::SecureRandom;
@@ -144,7 +148,10 @@ mod ss_manager {
                 derive_key(password.as_bytes(), &salt, cipher_kind.key_len()).map_err(|e| {
                     FlowFailure {
                         stage: "ss_derive_key",
-                        error: EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)),
+                        error: EngineError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            e,
+                        )),
                         upstream: Some((server.to_owned(), port)),
                     }
                 })?;
@@ -162,22 +169,27 @@ mod ss_manager {
             let mut packet = salt;
             packet.extend_from_slice(&encrypted);
 
-            let target_addr: SocketAddr = format!("{server}:{port}").parse().map_err(|_| {
-                FlowFailure {
-                    stage: "ss_parse_addr",
-                    error: EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        format!("invalid ss upstream: {server}:{port}"),
-                    )),
-                    upstream: Some((server.to_owned(), port)),
-                }
-            })?;
+            let target_addr: SocketAddr =
+                format!("{server}:{port}")
+                    .parse()
+                    .map_err(|_| FlowFailure {
+                        stage: "ss_parse_addr",
+                        error: EngineError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            format!("invalid ss upstream: {server}:{port}"),
+                        )),
+                        upstream: Some((server.to_owned(), port)),
+                    })?;
 
-            entry.socket.send_to(&packet, target_addr).await.map_err(|e| FlowFailure {
-                stage: "ss_send",
-                error: EngineError::from(e),
-                upstream: Some((server.to_owned(), port)),
-            })?;
+            entry
+                .socket
+                .send_to(&packet, target_addr)
+                .await
+                .map_err(|e| FlowFailure {
+                    stage: "ss_send",
+                    error: EngineError::from(e),
+                    upstream: Some((server.to_owned(), port)),
+                })?;
 
             // Spawn one-shot bridge task.
             let mut recv_rx = entry.recv_tx.subscribe();
@@ -186,16 +198,18 @@ mod ss_manager {
                     Ok((resp_target, resp_port, resp_payload)) => {
                         Ok((resp_target, resp_port, resp_payload, Some(session_id)))
                     }
-                    Err(broadcast::error::RecvError::Closed) => Err(EngineError::Io(
-                        std::io::Error::other("ss upstream closed"),
-                    )),
+                    Err(broadcast::error::RecvError::Closed) => {
+                        Err(EngineError::Io(std::io::Error::other("ss upstream closed")))
+                    }
                     Err(broadcast::error::RecvError::Lagged(_)) => {
                         // Skip lagged messages and try again
                         match recv_rx.recv().await {
                             Ok((resp_target, resp_port, resp_payload)) => {
                                 Ok((resp_target, resp_port, resp_payload, Some(session_id)))
                             }
-                            Err(_) => Err(EngineError::Io(std::io::Error::other("ss upstream closed"))),
+                            Err(_) => {
+                                Err(EngineError::Io(std::io::Error::other("ss upstream closed")))
+                            }
                         }
                     }
                 }
@@ -212,7 +226,10 @@ mod ss_manager {
             cipher_kind: shadowsocks::CipherKind,
         ) -> Arc<SsUpstream> {
             let key = (
-                server.to_owned(), port, format!("{cipher_kind:?}"), password.to_owned(),
+                server.to_owned(),
+                port,
+                format!("{cipher_kind:?}"),
+                password.to_owned(),
             );
             if let Some(entry) = self.upstreams.get(&key) {
                 return entry.clone();
@@ -226,10 +243,18 @@ mod ss_manager {
             );
 
             let (recv_tx, _) = broadcast::channel::<SsRecvItem>(32);
-            let entry = Arc::new(SsUpstream { socket: socket.clone(), recv_tx: recv_tx.clone() });
+            let entry = Arc::new(SsUpstream {
+                socket: socket.clone(),
+                recv_tx: recv_tx.clone(),
+            });
             self.upstreams.insert(key, entry.clone());
 
-            tokio::spawn(Self::recv_loop(socket, cipher_kind, password.to_owned(), recv_tx));
+            tokio::spawn(Self::recv_loop(
+                socket,
+                cipher_kind,
+                password.to_owned(),
+                recv_tx,
+            ));
             entry
         }
 
@@ -249,13 +274,22 @@ mod ss_manager {
                 let packet = &buf[..n];
                 let sl = cipher.salt_len();
                 let tl = cipher.tag_len();
-                if packet.len() < sl + tl { continue; }
+                if packet.len() < sl + tl {
+                    continue;
+                }
                 let Ok(key) = derive_key(password.as_bytes(), &packet[..sl], cipher.key_len())
-                    else { continue };
-                let Ok(plain) = aead_decrypt_udp(cipher, &key, &[0u8; 12], &packet[sl..])
-                    else { continue };
-                let Ok((t, p, off)) = parse_target_data(&plain) else { continue };
-                if recv_tx.send((t, p, plain[off..].to_vec())).is_err() { break; }
+                else {
+                    continue;
+                };
+                let Ok(plain) = aead_decrypt_udp(cipher, &key, &[0u8; 12], &packet[sl..]) else {
+                    continue;
+                };
+                let Ok((t, p, off)) = parse_target_data(&plain) else {
+                    continue;
+                };
+                if recv_tx.send((t, p, plain[off..].to_vec())).is_err() {
+                    break;
+                }
             }
         }
     }
@@ -267,12 +301,21 @@ mod ss_manager {
     use zero_core::Address;
     pub(super) struct SsChainManager;
     impl SsChainManager {
-        pub(super) fn new() -> Self { Self }
+        pub(super) fn new() -> Self {
+            Self
+        }
         #[allow(unused_variables)]
         pub(super) async fn send(
-            &mut self, _tasks: &mut JoinSet<ChainTask>, _session_id: u64,
-            _server: &str, _port: u16, _password: &str, _cipher: &str,
-            _target: &Address, _target_port: u16, _payload: &[u8],
+            &mut self,
+            _tasks: &mut JoinSet<ChainTask>,
+            _session_id: u64,
+            _server: &str,
+            _port: u16,
+            _password: &str,
+            _cipher: &str,
+            _target: &Address,
+            _target_port: u16,
+            _payload: &[u8],
         ) -> Result<usize, FlowFailure> {
             Err(FlowFailure {
                 stage: "ss_feature",
@@ -297,13 +340,13 @@ mod trojan_manager {
     use tokio::io::AsyncWriteExt;
     use tokio::sync::{broadcast, mpsc};
     use tokio::task::JoinSet;
+    use trojan::{build_udp_packet, build_udp_request, read_udp_packet};
     use zero_core::{Address, Session};
     use zero_engine::EngineError;
-    use trojan::{build_udp_packet, build_udp_request, read_udp_packet};
 
+    use super::{ChainTask, FlowFailure};
     use crate::runtime::Proxy;
     use crate::transport::{MeteredStream, TcpRelayStream};
-    use super::{ChainTask, FlowFailure};
 
     type RecvItem = (Address, u16, Vec<u8>);
 
@@ -316,7 +359,11 @@ mod trojan_manager {
     }
 
     impl TrojanChainManager {
-        pub(super) fn new() -> Self { Self { upstreams: HashMap::new() } }
+        pub(super) fn new() -> Self {
+            Self {
+                upstreams: HashMap::new(),
+            }
+        }
 
         pub(super) async fn send(
             &mut self,
@@ -346,21 +393,37 @@ mod trojan_manager {
 
             // Cache miss: establish new upstream.
             let send_tx = Self::establish(
-                proxy, chain_tasks, session_id, session,
-                server, port, password, sni, insecure, client_fingerprint,
-                target, target_port,
-            ).await.map_err(|e| FlowFailure {
+                proxy,
+                chain_tasks,
+                session_id,
+                session,
+                server,
+                port,
+                password,
+                sni,
+                insecure,
+                client_fingerprint,
+                target,
+                target_port,
+            )
+            .await
+            .map_err(|e| FlowFailure {
                 stage: "trojan_establish",
                 error: e,
                 upstream: Some((server.to_owned(), port)),
             })?;
 
-            self.upstreams.insert(key, TrojanEntry { send_tx: send_tx.clone() });
+            self.upstreams.insert(
+                key,
+                TrojanEntry {
+                    send_tx: send_tx.clone(),
+                },
+            );
 
             // Send initial payload.
-            let pkt = build_udp_packet(target, target_port, &[]);  // empty payload for CMD_UDP
-            let _ = send_tx.send(pkt).await;  // initial handshake packet already sent in establish
-            // Actually we need to send the real payload too:
+            let pkt = build_udp_packet(target, target_port, &[]); // empty payload for CMD_UDP
+            let _ = send_tx.send(pkt).await; // initial handshake packet already sent in establish
+                                             // Actually we need to send the real payload too:
             let real_pkt = build_udp_packet(target, target_port, payload);
             let _ = send_tx.send(real_pkt).await;
 
@@ -400,8 +463,12 @@ mod trojan_manager {
                 client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
             };
             let tls_stream = zero_transport::tls::connect_tls_upstream(
-                upstream, &tls_config, proxy.config.source_dir(), server,
-            ).await?;
+                upstream,
+                &tls_config,
+                proxy.config.source_dir(),
+                server,
+            )
+            .await?;
 
             let mut metered = MeteredStream::new(TcpRelayStream::new(tls_stream));
 
@@ -423,8 +490,12 @@ mod trojan_manager {
             tokio::spawn(async move {
                 while let Some(pkt) = send_rx.recv().await {
                     let mut s = send_stream.lock().await;
-                    if AsyncWriteExt::write_all(&mut *s, &pkt).await.is_err() { break; }
-                    if AsyncWriteExt::flush(&mut *s).await.is_err() { break; }
+                    if AsyncWriteExt::write_all(&mut *s, &pkt).await.is_err() {
+                        break;
+                    }
+                    if AsyncWriteExt::flush(&mut *s).await.is_err() {
+                        break;
+                    }
                 }
             });
 
@@ -437,7 +508,9 @@ mod trojan_manager {
                     match read_udp_packet(&mut *s).await {
                         Ok((addr, p, payload)) => {
                             drop(s);
-                            if recv_tx2.send((addr, p, payload)).is_err() { break; }
+                            if recv_tx2.send((addr, p, payload)).is_err() {
+                                break;
+                            }
                         }
                         Err(_) => break,
                     }
@@ -449,7 +522,9 @@ mod trojan_manager {
             chain_tasks.spawn(async move {
                 match recv_rx.recv().await {
                     Ok((t, p, payload)) => Ok((t, p, payload, Some(session_id))),
-                    Err(_) => Err(EngineError::Io(std::io::Error::other("trojan upstream closed"))),
+                    Err(_) => Err(EngineError::Io(std::io::Error::other(
+                        "trojan upstream closed",
+                    ))),
                 }
             });
 
@@ -459,26 +534,38 @@ mod trojan_manager {
 }
 #[cfg(not(feature = "trojan"))]
 mod trojan_manager {
+    use super::{ChainTask, FlowFailure};
+    use crate::runtime::Proxy;
     use std::collections::HashMap;
     use tokio::task::JoinSet;
     use zero_core::{Address, Session};
-    use crate::runtime::Proxy;
-    use super::{ChainTask, FlowFailure};
     pub(super) struct TrojanChainManager;
     impl TrojanChainManager {
-        pub(super) fn new() -> Self { Self }
+        pub(super) fn new() -> Self {
+            Self
+        }
         #[allow(unused_variables)]
         pub(super) async fn send(
-            &mut self, _tasks: &mut JoinSet<ChainTask>, _sid: u64,
-            _proxy: &Proxy, _sess: &Session,
-            _server: &str, _port: u16, _password: &str,
-            _sni: Option<&str>, _insecure: bool, _fp: Option<&str>,
-            _target: &Address, _tp: u16, _payload: &[u8],
+            &mut self,
+            _tasks: &mut JoinSet<ChainTask>,
+            _sid: u64,
+            _proxy: &Proxy,
+            _sess: &Session,
+            _server: &str,
+            _port: u16,
+            _password: &str,
+            _sni: Option<&str>,
+            _insecure: bool,
+            _fp: Option<&str>,
+            _target: &Address,
+            _tp: u16,
+            _payload: &[u8],
         ) -> Result<usize, FlowFailure> {
             Err(FlowFailure {
                 stage: "trojan_feature",
                 error: zero_engine::EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported, "Trojan requires feature `trojan`",
+                    std::io::ErrorKind::Unsupported,
+                    "Trojan requires feature `trojan`",
                 )),
                 upstream: None,
             })
@@ -494,17 +581,17 @@ mod mieru_manager {
     use std::collections::HashMap;
     use std::sync::Arc;
 
+    use mieru::{unwrap_udp_associate, wrap_udp_associate, MieruOutbound};
     use tokio::io::AsyncWriteExt;
     use tokio::sync::{broadcast, mpsc};
     use tokio::task::JoinSet;
     use zero_core::{Address, Session};
     use zero_engine::EngineError;
-    use mieru::{unwrap_udp_associate, wrap_udp_associate, MieruOutbound};
     use zero_traits::AsyncSocket;
 
+    use super::{ChainTask, FlowFailure};
     use crate::runtime::Proxy;
     use crate::transport::TcpRelayStream;
-    use super::{ChainTask, FlowFailure};
 
     type RecvItem = Vec<u8>;
 
@@ -517,7 +604,11 @@ mod mieru_manager {
     }
 
     impl MieruChainManager {
-        pub(super) fn new() -> Self { Self { upstreams: HashMap::new() } }
+        pub(super) fn new() -> Self {
+            Self {
+                upstreams: HashMap::new(),
+            }
+        }
 
         pub(super) async fn send(
             &mut self,
@@ -534,7 +625,12 @@ mod mieru_manager {
             payload: &[u8],
         ) -> Result<usize, FlowFailure> {
             let sent = payload.len();
-            let key = (server.to_owned(), port, username.to_owned(), password.to_owned());
+            let key = (
+                server.to_owned(),
+                port,
+                username.to_owned(),
+                password.to_owned(),
+            );
 
             // Cache hit
             if let Some(entry) = self.upstreams.get(&key) {
@@ -545,15 +641,30 @@ mod mieru_manager {
 
             // Cache miss: establish new upstream.
             let send_tx = Self::establish(
-                proxy, chain_tasks, session_id, session,
-                server, port, username, password, target, target_port,
-            ).await.map_err(|e| FlowFailure {
+                proxy,
+                chain_tasks,
+                session_id,
+                session,
+                server,
+                port,
+                username,
+                password,
+                target,
+                target_port,
+            )
+            .await
+            .map_err(|e| FlowFailure {
                 stage: "mieru_establish",
                 error: e,
                 upstream: Some((server.to_owned(), port)),
             })?;
 
-            self.upstreams.insert(key, MieruEntry { send_tx: send_tx.clone() });
+            self.upstreams.insert(
+                key,
+                MieruEntry {
+                    send_tx: send_tx.clone(),
+                },
+            );
 
             // Send initial payload
             let wrapped = wrap_udp_associate(payload);
@@ -583,11 +694,12 @@ mod mieru_manager {
             let mut stream = TcpRelayStream::new(socket);
 
             // Mieru handshake
-            let outbound = MieruOutbound::connect(
-                &mut stream, username, password, target, target_port,
-            ).await.map_err(|e| EngineError::Io(
-                std::io::Error::other(format!("mieru udp handshake: {e}"))
-            ))?;
+            let outbound =
+                MieruOutbound::connect(&mut stream, username, password, target, target_port)
+                    .await
+                    .map_err(|e| {
+                        EngineError::Io(std::io::Error::other(format!("mieru udp handshake: {e}")))
+                    })?;
 
             let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
             let (recv_tx, _) = broadcast::channel::<RecvItem>(32);
@@ -604,8 +716,12 @@ mod mieru_manager {
                     match ob.encrypt_client_data(&payload) {
                         Ok(encrypted) => {
                             let mut s = send_stream.lock().await;
-                            if AsyncWriteExt::write_all(&mut *s, &encrypted).await.is_err() { break; }
-                            if AsyncWriteExt::flush(&mut *s).await.is_err() { break; }
+                            if AsyncWriteExt::write_all(&mut *s, &encrypted).await.is_err() {
+                                break;
+                            }
+                            if AsyncWriteExt::flush(&mut *s).await.is_err() {
+                                break;
+                            }
                         }
                         Err(_) => break,
                     }
@@ -633,11 +749,15 @@ mod mieru_manager {
                                 raw.drain(..consumed);
                                 if !segment.payload.is_empty() {
                                     if let Ok(unwrapped) = unwrap_udp_associate(&segment.payload) {
-                                        if recv_tx2.send(unwrapped).is_err() { return; }
+                                        if recv_tx2.send(unwrapped).is_err() {
+                                            return;
+                                        }
                                     }
                                 }
                             }
-                            Err(e) if e == zero_core::Error::Protocol("mieru: need more data") => break,
+                            Err(e) if e == zero_core::Error::Protocol("mieru: need more data") => {
+                                break
+                            }
                             Err(_) => return,
                         }
                     }
@@ -649,9 +769,10 @@ mod mieru_manager {
             let s_target = session.target.clone();
             let s_port = session.port;
             chain_tasks.spawn(async move {
-                let payload = recv_rx.recv().await.map_err(|_| {
-                    EngineError::Io(std::io::Error::other("mieru upstream closed"))
-                })?;
+                let payload = recv_rx
+                    .recv()
+                    .await
+                    .map_err(|_| EngineError::Io(std::io::Error::other("mieru upstream closed")))?;
                 Ok((s_target, s_port, payload, Some(session_id)))
             });
 
@@ -661,25 +782,36 @@ mod mieru_manager {
 }
 #[cfg(not(feature = "mieru"))]
 mod mieru_manager {
+    use super::{ChainTask, FlowFailure};
+    use crate::runtime::Proxy;
     use std::collections::HashMap;
     use tokio::task::JoinSet;
     use zero_core::{Address, Session};
-    use crate::runtime::Proxy;
-    use super::{ChainTask, FlowFailure};
     pub(super) struct MieruChainManager;
     impl MieruChainManager {
-        pub(super) fn new() -> Self { Self }
+        pub(super) fn new() -> Self {
+            Self
+        }
         #[allow(unused_variables)]
         pub(super) async fn send(
-            &mut self, _tasks: &mut JoinSet<ChainTask>, _sid: u64,
-            _proxy: &Proxy, _sess: &Session,
-            _server: &str, _port: u16, _username: &str, _password: &str,
-            _target: &Address, _tp: u16, _payload: &[u8],
+            &mut self,
+            _tasks: &mut JoinSet<ChainTask>,
+            _sid: u64,
+            _proxy: &Proxy,
+            _sess: &Session,
+            _server: &str,
+            _port: u16,
+            _username: &str,
+            _password: &str,
+            _target: &Address,
+            _tp: u16,
+            _payload: &[u8],
         ) -> Result<usize, FlowFailure> {
             Err(FlowFailure {
                 stage: "mieru_feature",
                 error: zero_engine::EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported, "Mieru requires feature `mieru`",
+                    std::io::ErrorKind::Unsupported,
+                    "Mieru requires feature `mieru`",
                 )),
                 upstream: None,
             })
@@ -695,15 +827,15 @@ mod h2_manager {
     use std::collections::HashMap;
     use std::sync::Arc;
 
+    use hysteria2::{build_udp_datagram, parse_udp_datagram};
     use tokio::sync::broadcast;
     use tokio::task::JoinSet;
     use zero_core::{Address, Session};
     use zero_engine::EngineError;
-    use hysteria2::{build_udp_datagram, parse_udp_datagram};
 
+    use super::{ChainTask, FlowFailure};
     use crate::runtime::Proxy;
     use crate::transport::Hysteria2Connector;
-    use super::{ChainTask, FlowFailure};
 
     type RecvItem = (Address, u16, Vec<u8>);
 
@@ -716,7 +848,11 @@ mod h2_manager {
     }
 
     impl H2ChainManager {
-        pub(super) fn new() -> Self { Self { upstreams: HashMap::new() } }
+        pub(super) fn new() -> Self {
+            Self {
+                upstreams: HashMap::new(),
+            }
+        }
 
         pub(super) async fn send(
             &mut self,
@@ -744,20 +880,34 @@ mod h2_manager {
 
             // Cache miss: establish new upstream.
             let send_tx = Self::establish(
-                proxy, chain_tasks, session_id,
-                server, port, password, client_fingerprint,
-                target, target_port, payload,
-            ).await.map_err(|e| FlowFailure {
+                proxy,
+                chain_tasks,
+                session_id,
+                server,
+                port,
+                password,
+                client_fingerprint,
+                target,
+                target_port,
+                payload,
+            )
+            .await
+            .map_err(|e| FlowFailure {
                 stage: "h2_establish",
                 error: e,
                 upstream: Some((server.to_owned(), port)),
             })?;
 
-            self.upstreams.insert(key, H2Entry { send_tx: send_tx.clone() });
+            self.upstreams.insert(
+                key,
+                H2Entry {
+                    send_tx: send_tx.clone(),
+                },
+            );
 
             // Send initial payload
-            let dg = build_udp_datagram(0, 1, target, target_port, payload)
-                .expect("h2 build datagram");
+            let dg =
+                build_udp_datagram(0, 1, target, target_port, payload).expect("h2 build datagram");
             let _ = send_tx.send(dg).await;
 
             Ok(sent)
@@ -791,13 +941,19 @@ mod h2_manager {
             tokio::spawn(async move {
                 let mut pkt_id: u16 = 0;
                 // Send initial payload first
-                if let Ok(dg) = build_udp_datagram(0, pkt_id, &target_owned, port_owned, &init_payload) {
-                    if conn_send.send_datagram(dg.into()).is_err() { return; }
+                if let Ok(dg) =
+                    build_udp_datagram(0, pkt_id, &target_owned, port_owned, &init_payload)
+                {
+                    if conn_send.send_datagram(dg.into()).is_err() {
+                        return;
+                    }
                 }
                 pkt_id = pkt_id.wrapping_add(1);
                 // Send subsequent payloads
                 while let Some(datagram) = send_rx.recv().await {
-                    if conn_send.send_datagram(datagram.into()).is_err() { break; }
+                    if conn_send.send_datagram(datagram.into()).is_err() {
+                        break;
+                    }
                 }
             });
 
@@ -834,25 +990,35 @@ mod h2_manager {
 }
 #[cfg(not(feature = "hysteria2"))]
 mod h2_manager {
+    use super::{ChainTask, FlowFailure};
+    use crate::runtime::Proxy;
     use std::collections::HashMap;
     use tokio::task::JoinSet;
     use zero_core::{Address, Session};
-    use crate::runtime::Proxy;
-    use super::{ChainTask, FlowFailure};
     pub(super) struct H2ChainManager;
     impl H2ChainManager {
-        pub(super) fn new() -> Self { Self }
+        pub(super) fn new() -> Self {
+            Self
+        }
         #[allow(unused_variables)]
         pub(super) async fn send(
-            &mut self, _tasks: &mut JoinSet<ChainTask>, _sid: u64,
+            &mut self,
+            _tasks: &mut JoinSet<ChainTask>,
+            _sid: u64,
             _proxy: &Proxy,
-            _server: &str, _port: u16, _password: &str, _fp: Option<&str>,
-            _target: &Address, _tp: u16, _payload: &[u8],
+            _server: &str,
+            _port: u16,
+            _password: &str,
+            _fp: Option<&str>,
+            _target: &Address,
+            _tp: u16,
+            _payload: &[u8],
         ) -> Result<usize, FlowFailure> {
             Err(FlowFailure {
                 stage: "h2_feature",
                 error: zero_engine::EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported, "Hysteria2 requires feature `hysteria2`",
+                    std::io::ErrorKind::Unsupported,
+                    "Hysteria2 requires feature `hysteria2`",
                 )),
                 upstream: None,
             })
@@ -871,14 +1037,9 @@ enum FlowStartResult {
         tx_bytes: u64,
     },
     /// A VLESS chain flow was established (tracked by the manager, not `UdpSessionFlows`).
-    VlessFlow {
-        session_id: u64,
-        tag: String,
-    },
+    VlessFlow { session_id: u64, tag: String },
     /// The target was blocked.
-    Blocked {
-        tag: String,
-    },
+    Blocked { tag: String },
 }
 
 /// Failure details for a flow start attempt.
@@ -972,9 +1133,7 @@ impl UdpDispatch {
     }
 
     /// Borrow direct socket and chain_tasks for `select!` polling.
-    pub(crate) fn poll_sockets(
-        &mut self,
-    ) -> (&TokioDatagramSocket, &mut JoinSet<ChainTask>) {
+    pub(crate) fn poll_sockets(&mut self) -> (&TokioDatagramSocket, &mut JoinSet<ChainTask>) {
         (&self.direct_socket, &mut self.chain_tasks)
     }
 
@@ -1057,8 +1216,8 @@ impl UdpDispatch {
     /// Close the SOCKS5 upstream association on idle timeout.
     #[allow(dead_code)]
     pub(crate) fn close_socks5_idle(&mut self) {
-        use crate::outbound::socks5::UpstreamAssociationCloseReason;
         use crate::logging::log_udp_upstream_association_idle_timeout;
+        use crate::outbound::socks5::UpstreamAssociationCloseReason;
 
         if let Some(assoc) = self.socks5_upstream.take() {
             let outbound_tag = assoc.outbound_tag().to_owned();
@@ -1106,9 +1265,7 @@ impl UdpDispatch {
     /// All chain recv bridge tasks (SS, H2, VLESS, Trojan, Mieru)
     /// are spawned into this set.  Use in `select!` loops alongside
     /// direct-socket and SOCKS5-upstream polls.
-    pub(crate) fn poll_chain_response(
-        &mut self,
-    ) -> &mut JoinSet<ChainTask> {
+    pub(crate) fn poll_chain_response(&mut self) -> &mut JoinSet<ChainTask> {
         &mut self.chain_tasks
     }
 
@@ -1185,9 +1342,8 @@ impl UdpDispatch {
             let _ = handle.send_tx.send(payload.to_vec()).await;
             proxy.record_session_outbound_tx(handle.session_id, payload.len() as u64);
             // Spawn bridge task for the expected response.
-            self.vless_manager.spawn_bridge(
-                &mut self.chain_tasks, target, port, handle.session_id,
-            );
+            self.vless_manager
+                .spawn_bridge(&mut self.chain_tasks, target, port, handle.session_id);
             return Ok(handle.session_id);
         }
 
@@ -1363,25 +1519,30 @@ impl UdpDispatch {
                 password,
                 cipher,
             } => {
-                match self.ss_manager.send(
-                    &mut self.chain_tasks,
-                    flow.session.id,
-                    server.as_str(),
-                    *port,
-                    password.as_str(),
-                    cipher.as_str(),
-                    &flow.session.target,
-                    flow.session.port,
-                    payload,
-                )
-                .await
+                match self
+                    .ss_manager
+                    .send(
+                        &mut self.chain_tasks,
+                        flow.session.id,
+                        server.as_str(),
+                        *port,
+                        password.as_str(),
+                        cipher.as_str(),
+                        &flow.session.target,
+                        flow.session.port,
+                        payload,
+                    )
+                    .await
                 {
                     Ok(sent) => {
                         proxy.record_session_outbound_tx(flow.session.id, sent as u64);
                     }
                     Err(failure) => {
                         self.fail_flow_with_msg(
-                            &flow, started_at, failure.stage, &failure.error.to_string(),
+                            &flow,
+                            started_at,
+                            failure.stage,
+                            &failure.error.to_string(),
                         );
                         return Err(failure.error);
                     }
@@ -1402,19 +1563,32 @@ impl UdpDispatch {
                 password,
                 client_fingerprint,
             } => {
-                match self.h2_manager.send(
-                    &mut self.chain_tasks, flow.session.id,
-                    proxy,
-                    server.as_str(), *port, password.as_str(), client_fingerprint.as_deref(),
-                    &flow.session.target, flow.session.port, payload,
-                )
-                .await
+                match self
+                    .h2_manager
+                    .send(
+                        &mut self.chain_tasks,
+                        flow.session.id,
+                        proxy,
+                        server.as_str(),
+                        *port,
+                        password.as_str(),
+                        client_fingerprint.as_deref(),
+                        &flow.session.target,
+                        flow.session.port,
+                        payload,
+                    )
+                    .await
                 {
                     Ok(sent) => {
                         proxy.record_session_outbound_tx(flow.session.id, sent as u64);
                     }
                     Err(failure) => {
-                        self.fail_flow_with_msg(&flow, started_at, failure.stage, &failure.error.to_string());
+                        self.fail_flow_with_msg(
+                            &flow,
+                            started_at,
+                            failure.stage,
+                            &failure.error.to_string(),
+                        );
                         return Err(failure.error);
                     }
                 }
@@ -1436,20 +1610,35 @@ impl UdpDispatch {
                 insecure,
                 client_fingerprint,
             } => {
-                match self.trojan_manager.send(
-                    &mut self.chain_tasks, flow.session.id,
-                    proxy, &flow.session,
-                    server.as_str(), *port, password.as_str(),
-                    sni.as_deref(), *insecure, client_fingerprint.as_deref(),
-                    &flow.session.target, flow.session.port, payload,
-                )
-                .await
+                match self
+                    .trojan_manager
+                    .send(
+                        &mut self.chain_tasks,
+                        flow.session.id,
+                        proxy,
+                        &flow.session,
+                        server.as_str(),
+                        *port,
+                        password.as_str(),
+                        sni.as_deref(),
+                        *insecure,
+                        client_fingerprint.as_deref(),
+                        &flow.session.target,
+                        flow.session.port,
+                        payload,
+                    )
+                    .await
                 {
                     Ok(sent) => {
                         proxy.record_session_outbound_tx(flow.session.id, sent as u64);
                     }
                     Err(failure) => {
-                        self.fail_flow_with_msg(&flow, started_at, failure.stage, &failure.error.to_string());
+                        self.fail_flow_with_msg(
+                            &flow,
+                            started_at,
+                            failure.stage,
+                            &failure.error.to_string(),
+                        );
                         return Err(failure.error);
                     }
                 }
@@ -1469,19 +1658,33 @@ impl UdpDispatch {
                 username,
                 password,
             } => {
-                match self.mieru_manager.send(
-                    &mut self.chain_tasks, flow.session.id,
-                    proxy, &flow.session,
-                    server.as_str(), *port, username.as_str(), password.as_str(),
-                    &flow.session.target, flow.session.port, payload,
-                )
-                .await
+                match self
+                    .mieru_manager
+                    .send(
+                        &mut self.chain_tasks,
+                        flow.session.id,
+                        proxy,
+                        &flow.session,
+                        server.as_str(),
+                        *port,
+                        username.as_str(),
+                        password.as_str(),
+                        &flow.session.target,
+                        flow.session.port,
+                        payload,
+                    )
+                    .await
                 {
                     Ok(sent) => {
                         proxy.record_session_outbound_tx(flow.session.id, sent as u64);
                     }
                     Err(failure) => {
-                        self.fail_flow_with_msg(&flow, started_at, failure.stage, &failure.error.to_string());
+                        self.fail_flow_with_msg(
+                            &flow,
+                            started_at,
+                            failure.stage,
+                            &failure.error.to_string(),
+                        );
                         return Err(failure.error);
                     }
                 }
@@ -1549,14 +1752,7 @@ impl UdpDispatch {
             } => {
                 let sent = self
                     .send_socks5(
-                        proxy,
-                        tag,
-                        server,
-                        port,
-                        username,
-                        password,
-                        session,
-                        payload,
+                        proxy, tag, server, port, username, password, session, payload,
                     )
                     .await
                     .map_err(|error| FlowFailure {
@@ -1637,18 +1833,26 @@ impl UdpDispatch {
                 client_fingerprint,
                 ..
             } => {
-                let sent = self.h2_manager.send(
-                    &mut self.chain_tasks, session.id,
-                    proxy,
-                    server, port, password, client_fingerprint,
-                    &session.target, session.port, payload,
-                )
-                .await
-                .map_err(|f: FlowFailure| FlowFailure {
-                    stage: f.stage,
-                    error: f.error,
-                    upstream: f.upstream,
-                })?;
+                let sent = self
+                    .h2_manager
+                    .send(
+                        &mut self.chain_tasks,
+                        session.id,
+                        proxy,
+                        server,
+                        port,
+                        password,
+                        client_fingerprint,
+                        &session.target,
+                        session.port,
+                        payload,
+                    )
+                    .await
+                    .map_err(|f: FlowFailure| FlowFailure {
+                        stage: f.stage,
+                        error: f.error,
+                        upstream: f.upstream,
+                    })?;
 
                 Ok(FlowStartResult::Flow {
                     outbound: UdpFlowOutbound::Hysteria2 {
@@ -1681,23 +1885,25 @@ impl UdpDispatch {
             } => {
                 #[cfg(feature = "shadowsocks")]
                 {
-                    let sent = self.ss_manager.send(
-                        &mut self.chain_tasks,
-                        session.id,
-                        server,
-                        port,
-                        password,
-                        cipher,
-                        &session.target,
-                        session.port,
-                        payload,
-                    )
-                    .await
-                    .map_err(|f: FlowFailure| FlowFailure {
-                        stage: f.stage,
-                        error: f.error,
-                        upstream: f.upstream,
-                    })?;
+                    let sent = self
+                        .ss_manager
+                        .send(
+                            &mut self.chain_tasks,
+                            session.id,
+                            server,
+                            port,
+                            password,
+                            cipher,
+                            &session.target,
+                            session.port,
+                            payload,
+                        )
+                        .await
+                        .map_err(|f: FlowFailure| FlowFailure {
+                            stage: f.stage,
+                            error: f.error,
+                            upstream: f.upstream,
+                        })?;
 
                     Ok(FlowStartResult::Flow {
                         outbound: UdpFlowOutbound::Shadowsocks {
@@ -1732,19 +1938,29 @@ impl UdpDispatch {
                 insecure,
                 client_fingerprint,
             } => {
-                let sent = self.trojan_manager.send(
-                    &mut self.chain_tasks, session.id,
-                    proxy, session,
-                    server, port, password,
-                    sni, insecure, client_fingerprint,
-                    &session.target, session.port, payload,
-                )
-                .await
-                .map_err(|f: FlowFailure| FlowFailure {
-                    stage: f.stage,
-                    error: f.error,
-                    upstream: f.upstream,
-                })?;
+                let sent = self
+                    .trojan_manager
+                    .send(
+                        &mut self.chain_tasks,
+                        session.id,
+                        proxy,
+                        session,
+                        server,
+                        port,
+                        password,
+                        sni,
+                        insecure,
+                        client_fingerprint,
+                        &session.target,
+                        session.port,
+                        payload,
+                    )
+                    .await
+                    .map_err(|f: FlowFailure| FlowFailure {
+                        stage: f.stage,
+                        error: f.error,
+                        upstream: f.upstream,
+                    })?;
 
                 Ok(FlowStartResult::Flow {
                     outbound: UdpFlowOutbound::Trojan {
@@ -1776,18 +1992,27 @@ impl UdpDispatch {
                 username,
                 password,
             } => {
-                let sent = self.mieru_manager.send(
-                    &mut self.chain_tasks, session.id,
-                    proxy, session,
-                    server, port, username, password,
-                    &session.target, session.port, payload,
-                )
-                .await
-                .map_err(|f: FlowFailure| FlowFailure {
-                    stage: f.stage,
-                    error: f.error,
-                    upstream: f.upstream,
-                })?;
+                let sent = self
+                    .mieru_manager
+                    .send(
+                        &mut self.chain_tasks,
+                        session.id,
+                        proxy,
+                        session,
+                        server,
+                        port,
+                        username,
+                        password,
+                        &session.target,
+                        session.port,
+                        payload,
+                    )
+                    .await
+                    .map_err(|f: FlowFailure| FlowFailure {
+                        stage: f.stage,
+                        error: f.error,
+                        upstream: f.upstream,
+                    })?;
 
                 Ok(FlowStartResult::Flow {
                     outbound: UdpFlowOutbound::Mieru {
@@ -1838,10 +2063,10 @@ impl UdpDispatch {
         session: &Session,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
+        use crate::logging::log_udp_upstream_association_dropped;
         use crate::outbound::socks5::{
             send_socks5_udp_packet, Socks5UdpAssociation, UpstreamAssociationCloseReason,
         };
-        use crate::logging::log_udp_upstream_association_dropped;
 
         let association = Socks5UdpAssociation {
             tag: tag.to_owned(),
@@ -1897,10 +2122,11 @@ impl UdpDispatch {
         stage: &'static str,
         error: &EngineError,
     ) {
-        if let Some(completed) =
-            self.flows
-                .finish(&flow.session.target, flow.session.port, SessionOutcome::Failed)
-        {
+        if let Some(completed) = self.flows.finish(
+            &flow.session.target,
+            flow.session.port,
+            SessionOutcome::Failed,
+        ) {
             log_session_failed(
                 &flow.session,
                 Some(&completed.record),
@@ -1910,7 +2136,14 @@ impl UdpDispatch {
                 None,
             );
         } else {
-            log_session_failed(&flow.session, None, stage, started_at.elapsed(), error, None);
+            log_session_failed(
+                &flow.session,
+                None,
+                stage,
+                started_at.elapsed(),
+                error,
+                None,
+            );
         }
     }
 

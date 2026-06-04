@@ -79,12 +79,12 @@ impl AsyncSocket for Hysteria2Stream {
 
 // ── Hysteria2Connector ──
 
-use std::sync::Arc;
-use zero_core::Session;
-use zero_engine::EngineError;
 use hysteria2::{
     build_auth_frame, build_tcp_connect_header, derive_salt, parse_auth_response, sign_hmac,
 };
+use std::sync::Arc;
+use zero_core::Session;
+use zero_engine::EngineError;
 
 /// Establishes a Hysteria2 outbound connection.
 ///

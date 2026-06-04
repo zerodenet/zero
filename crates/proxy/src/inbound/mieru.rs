@@ -6,6 +6,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use async_trait::async_trait;
+use mieru::{
+    build_data_segment, DataMetadata, MieruCipher, MieruInbound, MieruSession,
+    DATA_SERVER_TO_CLIENT,
+};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::select;
 use tokio::sync::watch;
@@ -14,10 +18,6 @@ use tracing::{error, info};
 use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
-use mieru::{
-    build_data_segment, DataMetadata, MieruCipher, MieruInbound, MieruSession,
-    DATA_SERVER_TO_CLIENT,
-};
 use zero_traits::DnsResolver;
 
 use crate::logging::log_listener_connection_error;

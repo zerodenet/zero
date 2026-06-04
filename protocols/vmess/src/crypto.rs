@@ -195,12 +195,8 @@ impl BodyAead {
         let nonce_payload = self.next_nonce();
 
         // Decrypt 2-byte length
-        let len_plain = aead_decrypt_with_nonce(
-            &self.key,
-            &nonce_len,
-            &buf[..2 + GCM_TAG_LEN],
-            self.cipher,
-        )?;
+        let len_plain =
+            aead_decrypt_with_nonce(&self.key, &nonce_len, &buf[..2 + GCM_TAG_LEN], self.cipher)?;
         let payload_len = u16::from_be_bytes(
             len_plain[..2]
                 .try_into()

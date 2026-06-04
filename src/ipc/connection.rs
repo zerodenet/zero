@@ -257,8 +257,8 @@ where
                             loop {
                                 match event_rx.recv_timeout(Duration::from_secs(30)) {
                                     Ok(value) => {
-                                        let frame = serialize_frame(&value)
-                                            .map_err(io::Error::other)?;
+                                        let frame =
+                                            serialize_frame(&value).map_err(io::Error::other)?;
                                         let mut w = event_writer.lock().await;
                                         w.write_all(&frame).await?;
                                         w.flush().await?;

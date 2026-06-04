@@ -11,17 +11,17 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{error, info, warn};
-use zero_config::{InboundRealityConfig, VlessUserConfig};
-use zero_platform_tokio::TokioSocket;
 use vless::build_udp_packet;
 use vless::RealityServerOptions;
 use vless::{VlessUser, VlessUserStore};
+use zero_config::{InboundRealityConfig, VlessUserConfig};
+use zero_platform_tokio::TokioSocket;
 use zero_traits::AsyncSocket;
 
-use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_associate::helpers::{
     log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };
+use crate::runtime::udp_dispatch::UdpDispatch;
 
 use super::super::logging::log_listener_connection_error;
 use super::super::runtime::{bind_listener, Proxy};
@@ -1103,10 +1103,7 @@ impl VlessUserStore for ConfiguredVlessUsers<'_> {
         self.users.iter().find_map(|user| {
             let configured_id = vless::parse_uuid(&user.id).ok()?;
             if &configured_id == id {
-                let flow = user
-                    .flow
-                    .as_deref()
-                    .and_then(|f| vless::parse_flow(f).ok());
+                let flow = user.flow.as_deref().and_then(|f| vless::parse_flow(f).ok());
                 Some(VlessUser {
                     credential_id: user.credential_id.clone(),
                     principal_key: user.principal_key.clone(),

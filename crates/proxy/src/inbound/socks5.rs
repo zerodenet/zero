@@ -1,12 +1,12 @@
 use async_trait::async_trait;
+use socks5::Socks5PasswordAuth;
+use socks5::{Socks5Inbound, Socks5Reply, Socks5Request};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_config::Socks5UserConfig;
 use zero_engine::EngineError;
-use socks5::Socks5PasswordAuth;
-use socks5::{Socks5Inbound, Socks5Reply, Socks5Request};
 
 use zero_core::Session;
 

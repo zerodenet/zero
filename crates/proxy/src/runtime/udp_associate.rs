@@ -1,16 +1,16 @@
+use socks5::{parse_udp_packet, Socks5Reply, Socks5UdpAssociateRequest};
 use std::net::SocketAddr;
 use tokio::select;
 use tracing::{debug, info, warn};
 use zero_platform_tokio::TokioDatagramSocket;
-use socks5::{parse_udp_packet, Socks5Reply, Socks5UdpAssociateRequest};
 use zero_traits::AsyncSocket;
 use zero_traits::DnsResolver;
 
 use crate::logging::{
     log_udp_upstream_association_dropped, log_udp_upstream_association_idle_timeout,
 };
-use crate::runtime::Proxy;
 use crate::runtime::udp_dispatch::UdpDispatch;
+use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, StreamTraffic};
 use zero_core::{Address, ProtocolType};
 use zero_engine::EngineError;
@@ -321,11 +321,8 @@ impl Proxy {
         sender: SocketAddr,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        let packet = socks5::build_udp_packet(
-            &address_from_socket_addr(sender),
-            sender.port(),
-            payload,
-        )?;
+        let packet =
+            socks5::build_udp_packet(&address_from_socket_addr(sender), sender.port(), payload)?;
         relay
             .send_to_addr(&packet, client_addr)
             .await

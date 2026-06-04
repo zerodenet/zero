@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
+use vless::parse_uuid;
 use zero_config::{
     ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, QuicConfig, RealityConfig,
     SplitHttpConfig, WebSocketConfig,
@@ -14,7 +15,6 @@ use zero_config::{
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
-use vless::parse_uuid;
 use zero_traits::AsyncSocket;
 
 use crate::runtime::Proxy;
@@ -204,9 +204,10 @@ impl VlessUdpOutboundManager {
             let mut recv_rx = recv_tx.subscribe();
             let t = target.clone();
             chain_tasks.spawn(async move {
-                let payload = recv_rx.recv().await.map_err(|_| {
-                    EngineError::Io(std::io::Error::other("vless upstream closed"))
-                })?;
+                let payload = recv_rx
+                    .recv()
+                    .await
+                    .map_err(|_| EngineError::Io(std::io::Error::other("vless upstream closed")))?;
                 Ok((t, port, payload, Some(session_id)))
             });
         }

@@ -17,10 +17,10 @@ use zero_platform_tokio::TransportConnector;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
-use zero_config::{ClientTlsConfig, RealityConfig};
 use vless::mux_pool::{
     decrypt_mux_payload, encrypt_mux_payload, MuxPoolConn, MuxStreamRelay, PoolKey, TransportKey,
 };
+use zero_config::{ClientTlsConfig, RealityConfig};
 
 #[derive(Clone)]
 pub(crate) struct MuxConnectionPool {
@@ -199,9 +199,8 @@ impl MuxConnectionPool {
 
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
-        let crypto: Option<Arc<Mutex<vless::MuxCrypto>>> = Some(Arc::new(
-            Mutex::new(vless::MuxCrypto::new(&key.uuid)),
-        ));
+        let crypto: Option<Arc<Mutex<vless::MuxCrypto>>> =
+            Some(Arc::new(Mutex::new(vless::MuxCrypto::new(&key.uuid))));
 
         // Write relay: frames → TCP
         tokio::spawn(async move {

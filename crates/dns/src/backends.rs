@@ -171,9 +171,8 @@ impl DotDnsResolver {
         })?;
 
         let server_name = server_name.unwrap_or(address);
-        let mut roots = rustls::RootCertStore::from_iter(
-            webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
-        );
+        let mut roots =
+            rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
         let tls_config = Arc::new(
             rustls::ClientConfig::builder()
                 .with_root_certificates(roots)

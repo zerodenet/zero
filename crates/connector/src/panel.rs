@@ -331,7 +331,10 @@ async fn execute_panel_command(service: &impl CommandService, cmd: &serde_json::
                 name: params["name"].as_str().map(|s| s.to_owned()),
                 addr,
                 mtu: params["mtu"].as_u64().unwrap_or(1500) as u16,
-                mask: params["mask"].as_str().unwrap_or("255.255.255.0").to_owned(),
+                mask: params["mask"]
+                    .as_str()
+                    .unwrap_or("255.255.255.0")
+                    .to_owned(),
                 tag,
             })
         }
