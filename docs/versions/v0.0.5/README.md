@@ -29,9 +29,9 @@ This version is still on the unstable `v0.0.x` line. It focuses on protocol corr
 
 - `cargo fmt --all`
 - `cargo check --features full,status-api`
-- `cargo test -p zero-protocol-mieru --features crypto`
-- `cargo test -p zero-protocol-shadowsocks --features crypto`
-- `cargo test -p zero-protocol-trojan --features crypto`
+- `cargo test -p mieru --features crypto`
+- `cargo test -p shadowsocks --features crypto`
+- `cargo test -p trojan --features crypto`
 - `cargo test -p zero-logging`
 - Real-node verification passed for Trojan and Shadowsocks through local mixed HTTP CONNECT.
 
