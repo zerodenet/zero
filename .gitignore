@@ -3,6 +3,7 @@ Cargo.lock
 **/*.rs.bk
 *.pdb
 .claude/
+.cargo/config.toml
 node_modules/
 
 # Docs

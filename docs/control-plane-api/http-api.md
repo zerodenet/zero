@@ -44,6 +44,8 @@ HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiRespons
 | `error.message` | string | 人类可读错误信息 |
 | `error.field_path` | string? | 参数校验错误时的字段路径 |
 
+> **HTTP 和 IPC 的 `result` 格式不同**：HTTP 的 `result` 直接包含端点数据（如 `{engine_version:"0.0.9",...}`）。IPC 的 `result` 包含一个变体名 key 包裹（如 `{"health":{engine_version:"0.0.9",...}}`）。详见 [ipc-protocol.md](./ipc-protocol.md)。
+
 错误码（kebab-case，与 JSON serde 格式一致）：
 
 | code | HTTP | 说明 |
@@ -176,7 +178,7 @@ API 版本和能力列表。
 
 ### GET /api/v1/flows
 
-活动流列表，返回 `ActiveFlows`（强类型 `FlowSnapshot` 数组）。支持过滤。
+活动流列表，返回 `active_flows`（强类型 `FlowSnapshot` 数组）。支持过滤。
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
@@ -195,6 +197,35 @@ API 版本和能力列表。
 ### GET /api/v1/policies/{policy_tag}
 
 单个 policy 详情。不存在返回 404。
+
+### GET /api/v1/sinks
+
+事件接收器投递状态快照。
+
+### GET /api/v1/tun_status
+
+TUN 虚拟网卡运行状态。
+
+```json
+{
+  "running": true,
+  "name": "zero-tun",
+  "addr": "10.0.0.1",
+  "tag": "tun-in"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `running` | TUN 是否正在运行 |
+| `name` | 网卡名称（运行时返回） |
+| `addr` | 网卡地址（运行时返回） |
+| `tag` | 入站 tag（运行时返回） |
+
+未启动时所有字段为零值 / null：
+```json
+{ "running": false, "name": null, "addr": null, "tag": null }
+```
 
 ---
 
@@ -270,6 +301,64 @@ Response：
 ```
 
 错误：`invalid-argument` — 配置无效（cause 字段包含详情）
+
+#### config.apply
+
+热加载配置。成功后路由规则、出站组、模式原子替换，活动连接不受影响。
+
+Params：`config` (object, 完整配置)
+
+Response：
+```json
+{ "applied": true }
+```
+
+错误：`invalid-argument` — 配置无效
+
+权限：`config`
+
+#### mode.set
+
+切换全局代理模式。
+
+Params：`mode` (string, `"rule"` | `"direct"` | `"global"`), `outbound` (string, 仅 global 模式必填)
+
+Response：
+```json
+{ "accepted": true }
+```
+
+错误：
+- `invalid-argument` — mode 值无效，或 global 缺少 outbound
+- `invalid-argument` — outbound tag 不存在
+
+权限：`admin`
+
+#### tun.start
+
+启动 TUN 虚拟网卡。
+
+Params：`name` (string, 可选), `addr` (string), `mask` (string, 可选, 默认 `"255.255.255.0"`), `mtu` (number, 可选, 默认 1500), `tag` (string)
+
+Response：
+```json
+{ "accepted": true }
+```
+
+权限：`admin`
+
+#### tun.stop
+
+停止 TUN 虚拟网卡。
+
+Params：无
+
+Response：
+```json
+{ "accepted": true }
+```
+
+权限：`admin`
 
 #### diagnostics.probe_target
 
@@ -361,6 +450,10 @@ data: {"schema_version":"zero.event.v1","event_id":"...","event_type":"flow.comp
 ```
 
 连接断开后可使用 `Last-Event-ID` 续传，服务端先发送追赶事件再切回实时流。详见 [events.md](./events.md)。
+
+### GET /api/v1/events
+
+事件快照（一次性返回当前事件日志中的所有事件）。不如 `/events/stream` 实时，适合一次性调试。
 
 ---
 

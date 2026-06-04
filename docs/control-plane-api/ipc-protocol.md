@@ -15,8 +15,8 @@
 每条帧是一个完整的 JSON 对象，以 `\n` 结尾。支持在同一条连接上多路复用多个请求（请求-响应用 `id` 字段配对），也可以只发一个请求后关闭连接（`id` 可省略）。
 
 ```
-→ {"type":"query","id":1,"request":{"type":"health"}}\n
-← {"ok":true,"id":1,"result":{...}}\n
+→ {"type":"query","id":1,"request":{"health":{}}}\n
+← {"api_version":"zero.api.v1","ok":true,"id":1,"result":{"engine_version":"0.0.9",...}}\n
 ```
 
 ## 请求类型
@@ -25,47 +25,47 @@
 
 ```
 → {"type":"ping"}
-← {"ok":true,"result":"pong"}
+← {"api_version":"zero.api.v1","ok":true,"result":"pong"}
 ```
 
 带 `id` 的多路复用形式：
 ```
 → {"type":"ping","id":42}
-← {"ok":true,"id":42,"result":"pong"}
+← {"api_version":"zero.api.v1","ok":true,"id":42,"result":"pong"}
 ```
 
 ### Query
 
+`request` 字段是 `QueryRequest` 枚举，使用 **externally-tagged** 格式（serde 默认）。每个变体名是 snake_case，值是查询参数对象（无参数时为空对象 `{}`）。
+
 ```
-→ {"type":"query","id":1,"request":{"type":"health"}}
-← {"ok":true,"id":1,"result":{"engine_version":"...","started_at_unix_ms":...,"healthy":true}}
+→ {"type":"query","id":1,"request":{"health":{}}}
+← {"api_version":"zero.api.v1","ok":true,"id":1,"result":{...}}
 ```
 
-`id` 是可选的，省略时响应不会回显（用于简单的一次性查询）。
-
-`request` 字段是 `QueryRequest` 枚举，使用 serde tagged enum 格式（`type` 标签 + `snake_case`）：
+> **关键**：`request` 字段必须是一个 JSON 对象，包含一个变体名作为 key。不要用字符串（`"request":"runtime"` 是错的），不要用 `{"type":"runtime"}` 格式（那也是错的）。
 
 | request | 说明 |
 |---------|------|
-| `{"type":"capabilities"}` | 能力查询 |
-| `{"type":"health"}` | 健康检查 |
-| `{"type":"config"}` | 配置快照 |
-| `{"type":"runtime"}` | 运行时状态（含统计、日志配置、活动流） |
-| `{"type":"stats"}` | 统计摘要 |
-| `{"type":"policies"}` | 所有策略 |
-| `{"type":"policy","policy_tag":"proxy"}` | 单个策略 |
-| `{"type":"active_flows","limit":100,"filter":{}}` | 活动流列表 |
-| `{"type":"recent_flows","limit":100,"filter":{}}` | 近期流列表 |
-| `{"type":"flow","flow_id":"42"}` | 单流详情 |
-| `{"type":"diagnostics"}` | 诊断信息 |
-| `{"type":"sinks"}` | 事件接收器状态 |
-| `{"type":"tun_status"}` | TUN 虚拟网卡状态 |
+| `{"capabilities":{}}` | 能力查询 |
+| `{"health":{}}` | 健康检查 |
+| `{"config":{}}` | 配置快照 |
+| `{"runtime":{}}` | 运行时状态（含统计、日志配置、活动流） |
+| `{"stats":{}}` | 统计摘要 |
+| `{"active_flows":{"limit":100,"filter":{}}}` | 活动流列表 |
+| `{"recent_flows":{"limit":100,"filter":{}}}` | 近期流列表 |
+| `{"flow":{"flow_id":"42"}}` | 单流详情 |
+| `{"policies":{}}` | 所有策略 |
+| `{"policy":{"policy_tag":"proxy"}}` | 单个策略 |
+| `{"diagnostics":{}}` | 诊断信息 |
+| `{"sinks":{}}` | 事件接收器状态 |
+| `{"tun_status":{}}` | TUN 虚拟网卡状态 |
 
 ### Command
 
 ```
 → {"type":"command","id":1,"method":"policies.select","params":{"policy_tag":"proxy","target_tag":"direct"}}
-← {"ok":true,"id":1,"result":{"accepted":true}}
+← {"api_version":"zero.api.v1","ok":true,"id":1,"result":{"accepted":true,"result":{"policy_tag":"proxy","selected":"direct"}}}
 ```
 
 `id` 可选，与 Query 一致。
@@ -93,9 +93,7 @@
 ```
 → {"type":"subscribe","id":1,"events":["flow.completed"]}
 ← {"api_version":"zero.api.v1","ok":true,"id":1,"result":"subscribed"}
-← {"schema_version":"zero.event.v1","event_id":"...","event_type":"flow.completed",
-   "occurred_at_unix_ms":1713500000000,"source_id":null,"sequence":4201,
-   "principal_key":"user-001","labels":{},"payload":{...}}
+← {"schema_version":"zero.event.v1","event_id":"...","event_type":"flow.completed","occurred_at_unix_ms":1713500000000,...}
 ← :\n
 ← ...持续推送...
 ```
@@ -110,13 +108,13 @@
 
 ## 响应格式
 
-IPC 响应使用与 HTTP 相同的信封格式（`zero_api::ApiResponse`），包含 `api_version` 字段用于协议识别。
+IPC 响应使用统一信封格式（`zero_api::ApiResponse`），包含 `api_version` 字段用于协议识别。
 
 ```json
 {
   "api_version": "zero.api.v1",
   "ok": true,
-  "id": null,
+  "id": 1,
   "result": { },
   "error": null
 }
@@ -125,20 +123,58 @@ IPC 响应使用与 HTTP 相同的信封格式（`zero_api::ApiResponse`），�
 - `api_version` — 协议版本，始终为 `"zero.api.v1"`
 - `id` — 回显请求的 `id` 字段，用于多路复用时配对。请求不带 `id` 时此字段为 `null`
 - `ok` — `true` 成功 / `false` 失败
-- `result` — 成功的响应数据
+- `result` — 成功时的响应数据
 - `error` — 失败时的错误详情
+
+### Query 响应的 result 格式
+
+`result` 字段包含 **externally-tagged** 的 `QueryResponse` 枚举——一个变体名 key 包裹内部数据。每个变体名与请求变体名一致：
+
+```json
+{
+  "api_version": "zero.api.v1",
+  "ok": true,
+  "id": 1,
+  "result": {
+    "health": {
+      "engine_version": "0.0.9",
+      "started_at_unix_ms": 1713500000000,
+      "healthy": true
+    }
+  }
+}
+```
+
+访问路径：`response.result.health.engine_version`
+
+各变体名及内部数据结构：
+
+| QueryResponse 变体 | result 内部 key | 内部数据 |
+|---|---|---|
+| `QueryRequest::Health` | `"health"` | `{engine_version, started_at_unix_ms, healthy}` |
+| `QueryRequest::Config` | `"config"` | `{mode, rule_count, listeners, outbounds, outbound_groups}` |
+| `QueryRequest::Runtime` | `"runtime"` | `{stats, log_level, active_sessions, ...}` |
+| `QueryRequest::Stats` | `"stats"` | `{active_sessions, total_started, bytes_up, bytes_down, ...}` |
+| `QueryRequest::ActiveFlows` | `"active_flows"` | `[flow, ...]` |
+| `QueryRequest::Policies` | `"policies"` | `[policy, ...]` |
+| `QueryRequest::Policy` | `"policy"` | `{tag, kind, outbounds, selected, ...}` |
+| `QueryRequest::Diagnostics` | `"diagnostics"` | `{healthy, active_sessions, ...}` |
+| `QueryRequest::Sinks` | `"sinks"` | `{sinks: [{name, total_delivered, ...}]}` |
+| `QueryRequest::TunStatus` | `"tun_status"` | `{running, name, addr, tag}` |
+
+> **注意：** 这是 IPC 通道的格式。HTTP 通道的 `result` 字段**不包含**变体名 key——直接就是内部数据。例如 HTTP `GET /api/v1/health` 返回 `result: {"engine_version":"0.0.9",...}`，而 IPC 返回 `result: {"health":{"engine_version":"0.0.9",...}}`。
 
 错误响应：
 ```json
 {
   "api_version": "zero.api.v1",
   "ok": false,
-  "id": null,
+  "id": 1,
   "result": null,
   "error": {
     "code": "not-found",
-    "message": "Policy not found",
-    "field_path": "policy_tag"
+    "message": "flow `42` was not found",
+    "field_path": "flow_id"
   }
 }
 ```
@@ -152,12 +188,12 @@ IPC 响应使用与 HTTP 相同的信封格式（`zero_api::ApiResponse`），�
 ```
 → {"type":"subscribe","id":1,"events":["flow.completed"]}
 ← {"api_version":"zero.api.v1","ok":true,"id":1,"result":"subscribed"}
-← {"event_type":"flow.completed",...}
-→ {"type":"query","id":2,"request":{"type":"stats"}}
-← {"api_version":"zero.api.v1","ok":true,"id":2,"result":{"active_sessions":3,...}}
+← {"schema_version":"zero.event.v1","event_type":"flow.completed",...}
+→ {"type":"query","id":2,"request":{"stats":{}}}
+← {"api_version":"zero.api.v1","ok":true,"id":2,"result":{"stats":{"active_sessions":3,...}}}
 → {"type":"ping","id":3}
 ← {"api_version":"zero.api.v1","ok":true,"id":3,"result":"pong"}
-← {"event_type":"flow.completed",...}
+← {"schema_version":"zero.event.v1","event_type":"flow.completed",...}
 ```
 
 这样只需要一条持久连接即可承载所有通信，无需为 query/command 单独创建短期连接。
@@ -198,14 +234,16 @@ zero policies
 zero events
 ```
 
-### Python
+### Python（Unix）
 
 ```python
-import json, socket, sys
+import json, socket, os
 
-def ipc_request(sock_path, req):
+SOCK = os.path.expanduser("~/.zero/control.sock")
+
+def ipc_request(req):
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.connect(sock_path)
+    s.connect(SOCK)
     s.sendall((json.dumps(req) + "\n").encode())
     resp = b""
     while b"\n" not in resp:
@@ -213,32 +251,170 @@ def ipc_request(sock_path, req):
     s.close()
     return json.loads(resp.split(b"\n")[0])
 
-# 查询（正确格式：request 是带 type 标签的对象，id 可选）
-print(ipc_request("~/.zero/control.sock", {
-    "type": "query",
-    "id": 1,
-    "request": {"type": "health"}
-}))
+# 查询健康状态（注意 request 格式：externally-tagged）
+health = ipc_request({"type": "query", "id": 1, "request": {"health": {}}})
+print(f"Version: {health['result']['health']['engine_version']}")
+
+# 查询策略列表
+policies = ipc_request({"type": "query", "id": 2, "request": {"policies": {}}})
+for p in policies['result']['policies']:
+    print(f"  {p['tag']} ({p['kind']}) → {p.get('selected', '-')}")
 
 # 切换 selector
-print(ipc_request("~/.zero/control.sock", {
+ipc_request({
     "type": "command",
-    "id": 2,
+    "id": 3,
     "method": "policies.select",
     "params": {"policy_tag": "proxy", "target_tag": "direct"}
-}))
+})
 ```
 
-### Go
+### Python（Windows）
+
+```python
+import json
+
+PIPE = r"\\.\pipe\zero-control"
+
+def ipc_request(req):
+    # Windows Named Pipe 用普通文件操作即可
+    with open(PIPE, "r+b") as f:
+        f.write((json.dumps(req) + "\n").encode())
+        f.flush()
+        resp = b""
+        while b"\n" not in resp:
+            chunk = f.read(4096)
+            if not chunk:
+                break
+            resp += chunk
+        return json.loads(resp.split(b"\n")[0])
+
+# 用法与 Unix 版本完全相同
+health = ipc_request({"type": "query", "id": 1, "request": {"health": {}}})
+print(f"Version: {health['result']['health']['engine_version']}")
+```
+
+### Go（Unix）
 
 ```go
-conn, _ := net.Dial("unix", "/home/user/.zero/control.sock")
-req, _ := json.Marshal(map[string]any{
-    "type": "query", "id": 1, "request": map[string]any{"type": "health"},
-})
-conn.Write(append(req, '\n'))
-buf := make([]byte, 4096)
-n, _ := conn.Read(buf)
-conn.Close()
-fmt.Println(string(buf[:n]))
+package main
+
+import (
+    "bufio"
+    "encoding/json"
+    "net"
+    "os"
+)
+
+func ipcRequest(req map[string]any) map[string]any {
+    conn, _ := net.Dial("unix", os.Getenv("HOME")+"/.zero/control.sock")
+    defer conn.Close()
+
+    data, _ := json.Marshal(req)
+    conn.Write(append(data, '\n'))
+
+    line, _ := bufio.NewReader(conn).ReadString('\n')
+    var resp map[string]any
+    json.Unmarshal([]byte(line), &resp)
+    return resp
+}
+
+func main() {
+    health := ipcRequest(map[string]any{
+        "type":    "query",
+        "id":      1,
+        "request": map[string]any{"health": map[string]any{}},
+    })
+    _ = health
+}
 ```
+
+### Node.js / Electron（Unix + Windows）
+
+```javascript
+const net = require('net');
+const os = require('os');
+const path = require('path');
+
+// Unix 和 Windows 自动切换
+const SOCK = process.platform === 'win32'
+  ? '\\\\.\\pipe\\zero-control'
+  : path.join(os.homedir(), '.zero', 'control.sock');
+
+function ipcRequest(req) {
+  return new Promise((resolve, reject) => {
+    const client = net.createConnection(SOCK, () => {
+      client.write(JSON.stringify(req) + '\n');
+    });
+    client.on('data', (data) => {
+      client.destroy();
+      const parsed = JSON.parse(data.toString().split('\n')[0]);
+      resolve(parsed);
+    });
+    client.on('error', reject);
+  });
+}
+
+// 查询运行时状态
+const resp = await ipcRequest({ type: 'query', id: 1, request: { runtime: {} } });
+console.log(`活跃连接: ${resp.result.runtime.stats.active_sessions}`);
+
+// 查询策略列表
+const policies = await ipcRequest({ type: 'query', id: 2, request: { policies: {} } });
+for (const p of policies.result.policies) {
+  console.log(`  ${p.tag} (${p.kind}) → ${p.selected ?? '-'}`);
+}
+
+// 切换 selector
+await ipcRequest({
+  type: 'command',
+  id: 3,
+  method: 'policies.select',
+  params: { policy_tag: 'proxy', target_tag: 'direct' }
+});
+```
+
+## 错误处理
+
+### IPC 连接不存在
+
+Zero 未启动时，socket/pipe 不存在，连接会失败：
+
+```javascript
+// Node.js
+client.on('error', (err) => {
+  if (err.code === 'ENOENT' || err.code === 'ECONNREFUSED') {
+    console.log('Zero is not running');
+  }
+});
+```
+
+### Subscribe 后的帧顺序
+
+Subscribe 请求的第一条响应是确认帧（`ok:true, result:"subscribed"`，包含在 `ApiResponse` 信封中）。之后才是事件帧（裸 `ApiEvent` JSON，无信封包裹）。消费者需要区分这两种帧：
+
+```
+← {"api_version":"zero.api.v1","ok":true,"id":1,"result":"subscribed"}   ← 确认帧（ApiResponse 信封）
+← {"schema_version":"zero.event.v1","event_type":"flow.completed",...}    ← 事件帧（裸 ApiEvent）
+```
+
+判断方法：检查 `ok` 字段。存在且为 `true`/`false` → 确认帧；不存在 → 事件帧。
+
+### 命令执行失败
+
+命令失败时 `ok` 为 `false`，`error` 包含错误详情：
+
+```json
+{
+  "api_version": "zero.api.v1",
+  "ok": false,
+  "id": 2,
+  "error": {
+    "code": "not-found",
+    "message": "policy `nonexistent` was not found",
+    "field_path": "policy_tag"
+  }
+}
+```
+
+错误码列表：`not-found`, `invalid-argument`, `permission-denied`, `feature-disabled`, `conflict`, `unsupported`, `internal`。
