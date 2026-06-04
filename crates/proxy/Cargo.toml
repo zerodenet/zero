@@ -14,8 +14,8 @@ default = [
     "mixed",
     "vless",
 ]
-socks5 = ["dep:zero-protocol-socks5"]
-http-connect = ["dep:zero-protocol-http-connect"]
+socks5 = ["dep:socks5"]
+http-connect = ["dep:http-connect"]
 mixed = ["socks5", "http-connect"]
 vless = [
     "zero-platform-tokio/vless-reality",
@@ -26,28 +26,28 @@ vless = [
     "zero-transport/http-upgrade",
     "zero-transport/split-http",
     "zero-transport/quic",
-    "dep:zero-protocol-vless",
-    "zero-protocol-vless/reality",
+    "dep:vless",
+    "vless/reality",
 ]
 hysteria2 = [
     "dep:quinn",
     "dep:ring",
     "dep:rustls",
     "zero-transport/quic",
-    "dep:zero-protocol-hysteria2",
-    "zero-protocol-hysteria2/crypto",
+    "dep:hysteria2",
+    "hysteria2/crypto",
 ]
 shadowsocks = [
     "dep:ring",
-    "dep:zero-protocol-shadowsocks",
-    "zero-protocol-shadowsocks/crypto",
-    "zero-protocol-shadowsocks/blake3",
+    "dep:shadowsocks",
+    "shadowsocks/crypto",
+    "shadowsocks/blake3",
 ]
 trojan = [
     "zero-transport/tls",
     "dep:ring",
-    "dep:zero-protocol-trojan",
-    "zero-protocol-trojan/crypto",
+    "dep:trojan",
+    "trojan/crypto",
     "dep:tokio-rustls",
 ]
 vmess = [
@@ -55,12 +55,12 @@ vmess = [
     "zero-transport/ws",
     "zero-transport/grpc",
     "dep:ring",
-    "dep:zero-protocol-vmess",
+    "dep:vmess",
     "dep:tokio-rustls",
 ]
 mieru = [
-    "dep:zero-protocol-mieru",
-    "zero-protocol-mieru/crypto",
+    "dep:mieru",
+    "mieru/crypto",
 ]
 dns-udp = ["zero-dns/udp"]
 
@@ -78,14 +78,14 @@ zero-core = { path = "../core" }
 zero-dns = { path = "../dns" }
 zero-engine = { path = "../engine" }
 zero-platform-tokio = { path = "../platform/tokio" }
-zero-protocol-http-connect = { path = "../../protocols/http-connect", optional = true }
-zero-protocol-socks5 = { path = "../../protocols/socks5", optional = true }
-zero-protocol-vless = { path = "../../protocols/vless", optional = true, default-features = false }
-zero-protocol-hysteria2 = { path = "../../protocols/hysteria2", optional = true, default-features = false }
-zero-protocol-shadowsocks = { path = "../../protocols/shadowsocks", optional = true, default-features = false }
-zero-protocol-trojan = { path = "../../protocols/trojan", optional = true, default-features = false }
-zero-protocol-vmess = { path = "../../protocols/vmess", optional = true }
-zero-protocol-mieru = { path = "../../protocols/mieru", optional = true, default-features = false }
+http-connect = { path = "../../protocols/http-connect", optional = true }
+socks5 = { path = "../../protocols/socks5", optional = true }
+vless = { path = "../../protocols/vless", optional = true, default-features = false }
+hysteria2 = { path = "../../protocols/hysteria2", optional = true, default-features = false }
+shadowsocks = { path = "../../protocols/shadowsocks", optional = true, default-features = false }
+trojan = { path = "../../protocols/trojan", optional = true, default-features = false }
+vmess = { path = "../../protocols/vmess", optional = true }
+mieru = { path = "../../protocols/mieru", optional = true, default-features = false }
 zero-api = { path = "../api" }
 zero-traits = { path = "../traits" }
 zero-tun = { path = "../tun" }

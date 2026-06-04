@@ -75,6 +75,7 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
         } => {
             let socket = resolve_socket(socket_path.as_deref())?;
             let request = crate::ipc::protocol::IpcRequest::Command {
+                id: None,
                 method: "mode.set".to_owned(),
                 params: serde_json::json!({
                     "mode": mode,
@@ -111,6 +112,7 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
         } => {
             let socket = resolve_socket(socket_path.as_deref())?;
             let req = crate::ipc::protocol::IpcRequest::Command {
+                id: None,
                 method: "tun.start".to_owned(),
                 params: serde_json::json!({
                     "name": name, "addr": addr,
@@ -130,6 +132,7 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
         cli::Command::TunStop { socket_path } => {
             let socket = resolve_socket(socket_path.as_deref())?;
             let req = crate::ipc::protocol::IpcRequest::Command {
+                id: None,
                 method: "tun.stop".to_owned(),
                 params: serde_json::json!({}),
             };
@@ -145,6 +148,7 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
         cli::Command::TunStatus { socket_path } => {
             let socket = resolve_socket(socket_path.as_deref())?;
             let req = crate::ipc::protocol::IpcRequest::Query {
+                id: None,
                 request: zero_api::QueryRequest::TunStatus(zero_api::TunStatusQuery),
             };
             match ipc::client::send_request(&socket, &req) {
@@ -584,6 +588,7 @@ fn status_command(
     if config_path.is_none() {
         if let Ok(socket) = resolve_socket(socket_path) {
             let request = crate::ipc::protocol::IpcRequest::Query {
+                id: None,
                 request: QueryRequest::Runtime(Default::default()),
             };
             let response = ipc::client::send_request(&socket, &request)?;
@@ -639,6 +644,7 @@ fn select_command(
 ) -> Result<(), Box<dyn Error>> {
     let socket = resolve_socket(socket_path)?;
     let request = crate::ipc::protocol::IpcRequest::Command {
+        id: None,
         method: "policies.select".to_owned(),
         params: serde_json::json!({
             "policy_tag": policy_tag,
@@ -663,6 +669,7 @@ fn select_command(
 fn flows_command(socket_path: Option<&str>) -> Result<(), Box<dyn Error>> {
     let socket = resolve_socket(socket_path)?;
     let request = crate::ipc::protocol::IpcRequest::Query {
+        id: None,
         request: QueryRequest::ActiveFlows(FlowListQuery {
             limit: Some(100),
             filter: Default::default(),
@@ -688,6 +695,7 @@ fn flows_command(socket_path: Option<&str>) -> Result<(), Box<dyn Error>> {
 fn policies_command(socket_path: Option<&str>) -> Result<(), Box<dyn Error>> {
     let socket = resolve_socket(socket_path)?;
     let request = crate::ipc::protocol::IpcRequest::Query {
+        id: None,
         request: QueryRequest::Policies(PoliciesQuery),
     };
     let response = ipc::client::send_request(&socket, &request)?;
@@ -709,7 +717,10 @@ fn policies_command(socket_path: Option<&str>) -> Result<(), Box<dyn Error>> {
 
 fn events_command(socket_path: Option<&str>) -> Result<(), Box<dyn Error>> {
     let socket = resolve_socket(socket_path)?;
-    let request = crate::ipc::protocol::IpcRequest::Subscribe { events: None };
+    let request = crate::ipc::protocol::IpcRequest::Subscribe {
+        id: None,
+        events: None,
+    };
     ipc::client::stream_events(&socket, &request, |event| {
         println!("{}", serde_json::to_string(&event).unwrap_or_default());
     })?;
@@ -752,6 +763,7 @@ fn reload_command(config_path: &str, socket_path: Option<&str>) -> Result<(), Bo
         serde_json::from_str(&config_str).map_err(std::io::Error::other)?;
 
     let request = crate::ipc::protocol::IpcRequest::Command {
+        id: None,
         method: "config.apply".to_owned(),
         params: config_value,
     };

@@ -1,9 +1,9 @@
+use socks5::Socks5Request;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_core::Error as CoreError;
 use zero_engine::EngineError;
-use zero_protocol_socks5::Socks5Request;
 use zero_traits::AsyncSocket;
 
 use crate::logging::log_listener_connection_error;
@@ -111,14 +111,14 @@ impl Proxy {
                                             let _ = http_h.http_connect_inbound()
                                                 .send_response(
                                                     &mut metered,
-                                                    zero_protocol_http_connect::HttpConnectResponse::MethodNotAllowed,
+                                                    http_connect::HttpConnectResponse::MethodNotAllowed,
                                                 ).await;
                                         }
                                         Err(CoreError::Protocol(_)) => {
                                             let _ = http_h.http_connect_inbound()
                                                 .send_response(
                                                     &mut metered,
-                                                    zero_protocol_http_connect::HttpConnectResponse::BadRequest,
+                                                    http_connect::HttpConnectResponse::BadRequest,
                                                 ).await;
                                         }
                                         Err(err) => {

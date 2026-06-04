@@ -49,12 +49,7 @@ impl Proxy {
             .establish_tunnel_with_auth(
                 &mut upstream,
                 session,
-                auth.map(
-                    |(username, password)| zero_protocol_socks5::Socks5OutboundAuth {
-                        username,
-                        password,
-                    },
-                ),
+                auth.map(|(username, password)| socks5::Socks5OutboundAuth { username, password }),
             )
             .await?;
         self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
@@ -84,7 +79,7 @@ impl Proxy {
         session: &Session,
         upstream: VlessUpstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
-        let id = zero_protocol_vless::parse_uuid(upstream.id)?;
+        let id = vless::parse_uuid(upstream.id)?;
 
         // If MUX flow is configured, use connection pool
         if upstream.flow == Some("xtls-rprx-vision") {
@@ -144,7 +139,7 @@ impl Proxy {
             self.record_session_outbound_traffic(session.id, metered.drain_traffic());
 
             Ok(TcpRelayStream::new(
-                zero_protocol_vless::DeferredVlessResponseStream::new(metered.into_inner()),
+                vless::DeferredVlessResponseStream::new(metered.into_inner()),
             ))
         } else {
             self.protocols
@@ -204,6 +199,7 @@ impl Proxy {
         _server: &str,
         _port: u16,
         _password: &str,
+        _client_fingerprint: Option<&str>,
     ) -> Result<TcpRelayStream, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",
@@ -222,7 +218,7 @@ impl Proxy {
         password: &str,
         cipher: &str,
     ) -> Result<TcpRelayStream, EngineError> {
-        use zero_protocol_shadowsocks::CipherKind;
+        use shadowsocks::CipherKind;
 
         let upstream = self
             .protocols
@@ -286,7 +282,7 @@ impl Proxy {
         ws: Option<&zero_config::WebSocketConfig>,
         grpc: Option<&zero_config::GrpcConfig>,
     ) -> Result<TcpRelayStream, EngineError> {
-        use zero_protocol_vmess::{parse_uuid, VmessCipher, VmessOutbound};
+        use vmess::{parse_uuid, VmessCipher, VmessOutbound};
 
         let uuid = parse_uuid(id).map_err(|e| {
             EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
@@ -488,7 +484,7 @@ impl Proxy {
         // Wrap in TcpRelayStream for AsyncSocket compatibility
         let mut stream = TcpRelayStream::new(socket);
 
-        let outbound = zero_protocol_mieru::MieruOutbound::connect(
+        let outbound = mieru::MieruOutbound::connect(
             &mut stream,
             username,
             password,
@@ -508,13 +504,11 @@ impl Proxy {
 async fn relay_shadowsocks_outbound(
     app_stream: tokio::io::DuplexStream,
     upstream: TcpRelayStream,
-    ss_session: zero_protocol_shadowsocks::ShadowsocksOutboundSession,
+    ss_session: shadowsocks::ShadowsocksOutboundSession,
     password: Vec<u8>,
 ) -> std::io::Result<()> {
+    use shadowsocks::{decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, encrypt_tcp_chunk};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use zero_protocol_shadowsocks::{
-        decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, encrypt_tcp_chunk,
-    };
 
     let cipher = ss_session.cipher;
     let (mut app_read, mut app_write) = tokio::io::split(app_stream);
@@ -581,16 +575,14 @@ async fn relay_shadowsocks_outbound(
 
 #[cfg(feature = "shadowsocks")]
 fn ss_derive_outbound_key(
-    cipher: zero_protocol_shadowsocks::CipherKind,
+    cipher: shadowsocks::CipherKind,
     password: &[u8],
     salt: &[u8],
 ) -> std::io::Result<Vec<u8>> {
     if cipher.is_blake3() {
-        zero_protocol_shadowsocks::derive_key_blake3(password, salt, cipher.key_len())
-            .map_err(protocol_to_io)
+        shadowsocks::derive_key_blake3(password, salt, cipher.key_len()).map_err(protocol_to_io)
     } else {
-        zero_protocol_shadowsocks::derive_key(password, salt, cipher.key_len())
-            .map_err(protocol_to_io)
+        shadowsocks::derive_key(password, salt, cipher.key_len()).map_err(protocol_to_io)
     }
 }
 

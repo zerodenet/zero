@@ -4,10 +4,10 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::time::Instant as TokioInstant;
 
+use socks5::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
-use zero_protocol_socks5::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
 
 use crate::logging::{
     log_udp_upstream_association_created, log_udp_upstream_association_dropped,
@@ -64,12 +64,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
             .socks5_outbound
             .establish_udp_association_with_auth(
                 &mut control,
-                auth.map(
-                    |(username, password)| zero_protocol_socks5::Socks5OutboundAuth {
-                        username,
-                        password,
-                    },
-                ),
+                auth.map(|(username, password)| socks5::Socks5OutboundAuth { username, password }),
             )
             .await?;
         proxy.record_session_outbound_traffic(session_id, control.drain_traffic());

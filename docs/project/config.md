@@ -1,6 +1,6 @@
 # Configuration
 
-`v0.0.4` uses JSON. The current top-level structure is:
+Zero uses JSON. The current top-level structure is:
 
 ```json
 {
@@ -646,6 +646,7 @@ Hysteria2 outbound config fields:
 - `port` -- required, upstream port, must be greater than 0
 - `password` -- required, authentication password
 - `insecure` -- optional, skip certificate verification, default `false`
+- `client_fingerprint` -- optional, TLS client fingerprint preset: `chrome`, `firefox`, `safari`, `ios`, `edge`, `randomized`; omit for rustls defaults
 
 ### Shadowsocks outbound
 
@@ -694,6 +695,7 @@ Trojan outbound config fields:
 - `password` -- required, authentication password (SHA224 hashed before sending)
 - `sni` -- optional, TLS SNI, defaults to `server`
 - `insecure` -- optional, skip certificate verification, default `false`
+- `client_fingerprint` -- optional, TLS client fingerprint preset: `chrome`, `firefox`, `safari`, `ios`, `edge`, `randomized`; omit for rustls defaults
 
 ### VMess outbound
 
@@ -758,11 +760,13 @@ This is a kernel primitive -- no configuration required. It applies automaticall
 
 ## Outbound Groups
 
-Three outbound group types are currently implemented:
+Five outbound group types are currently implemented:
 
 - `selector`
 - `fallback`
 - `urltest`
+- `relay`
+- `loadbalance`
 
 Group members may be either concrete outbounds or other outbound groups. Circular references are rejected at config validation.
 
@@ -826,6 +830,43 @@ Semantics:
 - Currently only `http://` probe URLs are supported
 - Select the member with successful probe and lowest latency
 - If all probes fail this round, keep the current selection; before the first probe, default to the first member
+
+### relay
+
+```json
+{
+  "tag": "hk-us",
+  "type": "relay",
+  "proxies": ["hk-vless", "us-socks5"]
+}
+```
+
+Semantics:
+
+- Chain members in order: traffic flows through each proxy in sequence
+- First member is the entry, last member is the exit
+- Connection failure at any hop terminates the chain
+- Circuit breaker applies to each chained member individually
+
+### loadbalance
+
+```json
+{
+  "tag": "lb",
+  "type": "loadbalance",
+  "outbounds": ["node-a", "node-b", "node-c"],
+  "strategy": "round-robin"
+}
+```
+
+Loadbalance config fields:
+- `outbounds` -- required, list of outbound tags to balance across
+- `default` -- optional, initial outbound selection; falls back to `outbounds[0]` if not set
+- `strategy` -- optional, distribution strategy, default `round-robin`
+  - `round-robin` -- distribute connections sequentially across members
+  - `random` -- pick a random member for each connection
+
+Group members may be either concrete outbounds or other outbound groups. Circular references are rejected at config validation.
 
 ## Mode
 
@@ -1034,6 +1075,12 @@ zero mode direct            # All direct
 zero mode global proxy      # Global via specified outbound
 ```
 
+IPC equivalent:
+
+```json
+{ "method": "mode.set", "params": { "mode": "global", "outbound": "proxy" } }
+```
+
 ### Hot Reload
 
 `zero reload <config>` reloads the configuration file. The following changes take effect immediately:
@@ -1041,6 +1088,18 @@ zero mode global proxy      # Global via specified outbound
 - route rules, mode, DNS config -- hot swap
 - outbound_groups adjustments -- hot swap
 - inbounds/outbounds additions/removals/changes -- require restart
+
+### Config Validation
+
+```bash
+zero validate config.json
+```
+
+Validates config offline (does not connect to a running daemon). Prints a summary on success:
+
+```
+config valid: 2 inbounds, 3 outbounds, 1 groups, 5 rules
+```
 
 ### Selector Switching
 

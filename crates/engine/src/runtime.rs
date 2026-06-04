@@ -83,7 +83,7 @@ impl Engine {
             config.route.compile(config.source_dir())?,
         )));
         let plan = Arc::new(std::sync::Mutex::new(Arc::new(EnginePlan::build(&config)?)));
-        let plan_inner = plan.lock().expect("plan lock poisoned").clone();
+        let plan_inner = plan.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let udp_upstream_idle_timeout =
             Duration::from_secs(config.runtime.udp_upstream_idle_timeout_seconds);
         let outbound_group_state = OutboundGroupStateStore::shared();
@@ -156,7 +156,7 @@ impl Engine {
     }
 
     pub fn plan(&self) -> Arc<EnginePlan> {
-        self.plan.lock().expect("plan lock poisoned").clone()
+        self.plan.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     pub fn with_udp_upstream_idle_timeout(mut self, timeout: Duration) -> Self {
@@ -183,16 +183,16 @@ impl Engine {
     }
 
     pub fn mode_kind(&self) -> &'static str {
-        self.mode.lock().expect("mode lock poisoned").kind()
+        self.mode.lock().unwrap_or_else(|e| e.into_inner()).kind()
     }
 
     pub fn current_mode(&self) -> ModeConfig {
-        self.mode.lock().expect("mode lock poisoned").clone()
+        self.mode.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Atomically switch the global proxy mode at runtime.
     pub fn set_mode(&self, new_mode: ModeConfig) {
-        let mut mode = self.mode.lock().expect("mode lock poisoned");
+        let mut mode = self.mode.lock().unwrap_or_else(|e| e.into_inner());
         *mode = new_mode.clone();
         self.event_log.push_config_changed();
         info!(mode = new_mode.kind(), "proxy mode switched");
@@ -203,7 +203,7 @@ impl Engine {
     }
 
     pub fn route_decision(&self, address: &Address, sni: Option<&str>) -> RouteDecision {
-        let mode = self.mode.lock().expect("mode lock poisoned").clone();
+        let mode = self.mode.lock().unwrap_or_else(|e| e.into_inner()).clone();
         match &mode {
             ModeConfig::Rule => {
                 let action = self
@@ -346,15 +346,15 @@ impl Engine {
 
         // Atomically swap router, plan, mode, and config.
         {
-            let mut guard = self.router.lock().expect("router lock poisoned");
+            let mut guard = self.router.lock().unwrap_or_else(|e| e.into_inner());
             *guard = new_router;
         }
         {
-            let mut guard = self.plan.lock().expect("plan lock poisoned");
+            let mut guard = self.plan.lock().unwrap_or_else(|e| e.into_inner());
             *guard = new_plan;
         }
         {
-            let mut guard = self.mode.lock().expect("mode lock poisoned");
+            let mut guard = self.mode.lock().unwrap_or_else(|e| e.into_inner());
             *guard = new_config.mode.clone();
         }
         let config_for_persist = new_config.clone();
@@ -507,7 +507,7 @@ impl Engine {
         if let Some(ref hook) = self.flow_hook {
             let ctx = super::hook::FlowContext::from_session(
                 session,
-                self.mode.lock().expect("mode lock poisoned").kind(),
+                self.mode.lock().unwrap_or_else(|e| e.into_inner()).kind(),
                 now_ms,
             );
             if let Err(reason) = hook.on_flow_start(&ctx) {
@@ -526,12 +526,12 @@ impl Engine {
 
         self.session_registry.insert(
             session,
-            self.mode.lock().expect("mode lock poisoned").kind(),
+            self.mode.lock().unwrap_or_else(|e| e.into_inner()).kind(),
         );
         self.stats.record_start();
         self.event_log.push_flow_started(
             session,
-            self.mode.lock().expect("mode lock poisoned").kind(),
+            self.mode.lock().unwrap_or_else(|e| e.into_inner()).kind(),
         );
     }
 
@@ -681,7 +681,7 @@ impl Engine {
             Err(_) => zero_core::Address::Domain(target.to_owned()),
         };
 
-        let router = self.router.lock().expect("router lock poisoned");
+        let router = self.router.lock().unwrap_or_else(|e| e.into_inner());
         let action = router.decide(&address, None);
 
         let mode = self.mode_kind();

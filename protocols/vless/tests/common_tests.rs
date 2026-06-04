@@ -1,4 +1,4 @@
-use zero_protocol_vless::reality::common::*;
+use ztls::common::*;
 
 #[test]
 fn test_strip_content_type_app_data() {

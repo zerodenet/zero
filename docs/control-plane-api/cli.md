@@ -80,6 +80,85 @@ zero events
 zero help
 ```
 
+### zero version
+
+```bash
+zero version
+```
+
+显示版本号、构建时间和 git 描述：
+
+```
+zero 0.0.8
+build: 2026-06-01T12:00:00Z
+git: v0.0.8-0-g7f27f96
+```
+
+### zero validate
+
+校验配置文件有效性（离线，不连接守护进程）：
+
+```bash
+zero validate config.json
+```
+
+成功输出：
+
+```
+config valid: 2 inbounds, 3 outbounds, 1 groups, 5 rules
+```
+
+失败时打印错误详情并以退出码 1 退出。
+
+### zero mode
+
+运行时模式热切换，即时生效：
+
+```bash
+zero mode rule              # 规则模式
+zero mode direct            # 全部直连
+zero mode global proxy      # 全局走 proxy 出站
+```
+
+IPC 等价命令：
+
+```json
+{ "method": "mode.set", "params": { "mode": "global", "outbound": "proxy" } }
+```
+
+### zero reload
+
+热重载配置文件：
+
+```bash
+zero reload config.json
+```
+
+支持热换的部分：
+- route 规则、mode、DNS 配置
+- outbound_groups 调整
+
+不支持热换（需重启）：
+- inbounds/outbounds 增删改
+
+### zero tun
+
+TUN 虚拟网卡管理：
+
+```bash
+zero tun start --addr 10.0.0.1 --tag my-tun    # 启动
+zero tun start --addr 10.0.0.1 --tag my-tun --name tun0 --mask 255.255.255.0 --mtu 1500
+zero tun stop                                   # 停止
+zero tun status                                 # 查看状态
+```
+
+参数说明：
+- `--addr` — 必填，虚拟网卡 IP 地址
+- `--tag` — 必填，入站标签，用于路由决策
+- `--name` — 可选，OS 级设备名（如 `tun0`、`utun8`），省略自动分配
+- `--mask` — 可选，子网掩码，默认 `255.255.255.0`
+- `--mtu` — 可选，MTU 字节数，默认 `1500`
+
 ## 退出码
 
 | 码 | 说明 |

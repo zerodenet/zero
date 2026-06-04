@@ -26,7 +26,7 @@ pub struct MieruAccept {
 
 impl MieruInbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Trojan
+        ProtocolType::Mieru
     }
 
     /// Accept a mieru TCP connection — perform full handshake.
@@ -103,7 +103,7 @@ impl MieruInbound {
         let network = if is_udp { Network::Udp } else { Network::Tcp };
 
         Ok(MieruAccept {
-            session: Session::new(0, target, port, network, ProtocolType::Trojan),
+            session: Session::new(0, target, port, network, ProtocolType::Mieru),
             mieru_session: session,
             client_cipher,
             server_cipher,

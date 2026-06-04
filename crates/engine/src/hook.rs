@@ -233,6 +233,7 @@ fn protocol_str(proto: ProtocolType) -> &'static str {
         ProtocolType::Shadowsocks => "shadowsocks",
         ProtocolType::Trojan => "trojan",
         ProtocolType::Vmess => "vmess",
+        ProtocolType::Mieru => "mieru",
         ProtocolType::Unknown => "unknown",
     }
 }

@@ -7,8 +7,8 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use mieru::MieruOutbound;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use zero_protocol_mieru::MieruOutbound;
 
 use crate::transport::TcpRelayStream;
 

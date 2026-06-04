@@ -8,12 +8,12 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::{Arc, LazyLock, Mutex};
 
+use mieru::{unwrap_udp_associate, wrap_udp_associate, MieruOutbound};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use tracing::warn;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
-use zero_protocol_mieru::{unwrap_udp_associate, wrap_udp_associate, MieruOutbound};
 use zero_traits::AsyncSocket;
 
 use crate::runtime::Proxy;

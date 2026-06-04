@@ -1,5 +1,5 @@
 [package]
-name = "zero-protocol-mieru"
+name = "mieru"
 version = "3.33.0"
 edition.workspace = true
 authors.workspace = true

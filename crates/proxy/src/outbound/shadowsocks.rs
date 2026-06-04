@@ -5,13 +5,13 @@ use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::{Arc, LazyLock, Mutex};
 
-use tokio::net::UdpSocket;
-use zero_core::Address;
-use zero_engine::EngineError;
-use zero_protocol_shadowsocks::{
+use shadowsocks::{
     aead_decrypt_udp, aead_encrypt_udp, build_target_data, derive_key, parse_target_data,
     CipherKind,
 };
+use tokio::net::UdpSocket;
+use zero_core::Address;
+use zero_engine::EngineError;
 
 // ── types ─────────────────────────────────────────────────────────────
 

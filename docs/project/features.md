@@ -70,6 +70,7 @@ The following features deploy Zero as a server/panel node and are **not in the d
 | Feature | Description | Implies |
 |---------|------|------|
 | `status-api` | HTTP status API (`/api/v1/*`) | -- |
+| `grpc-api` | gRPC control plane endpoint | `dep:zero-grpc` |
 | `event-dispatcher` | Event dispatcher: delivers zero events to external sinks | `dep:zero-connector` |
 | `sink-jsonl` | JSON Lines file sink (event persistence) | `event-dispatcher` |
 | `panel-connector` | Panel connector: heartbeat + remote commands, node reporting | `status-api` + `event-dispatcher` |

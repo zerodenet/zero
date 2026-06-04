@@ -5,6 +5,7 @@ mod support;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use socks5::{build_udp_packet, parse_udp_packet};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::select;
@@ -12,7 +13,6 @@ use tokio::sync::watch;
 use tokio::time::{sleep, timeout, Duration};
 use zero_config::RuntimeConfig;
 use zero_core::Address;
-use zero_protocol_socks5::{build_udp_packet, parse_udp_packet};
 use zero_proxy::Proxy as Engine;
 
 use support::{free_port, spawn_engine, wait_for_listener};

@@ -179,10 +179,10 @@ Unified transport abstractions: TLS, WebSocket, gRPC, H2, HTTPUpgrade, QUIC, Spl
 
 - `zero-api` -- control plane API types
 - `zero-connector` -- event dispatcher connectors (JSONL sink, webhook, push)
-- `zero-crypto` -- crypto utilities (Reality, TLS)
 - `zero-logging` -- structured logging
-- `zero-web` -- web utilities (WebSocket)
 - `zero-ffi` -- C-compatible embedded interface
+- `zero-grpc` -- gRPC control plane adapter (`grpc-api` feature)
+- `zero-dns` -- DNS subsystem (system / UDP / DoH / DoT / Fake IP)
 
 ## Abstraction Layer
 
@@ -226,8 +226,8 @@ All inbound handlers implement `InboundProtocol` and feed into `serve_inbound()`
 
 Top-down only:
 
-- `zero` → `config`, `engine`, `proxy`
-- `proxy` → `engine`, `config`, `protocols/*`, `transport`, `stack`, `tun`
+- `zero` → `config`, `engine`, `proxy`, `api`, `connector` (optional), `grpc` (optional)
+- `proxy` → `engine`, `config`, `protocols/*`, `transport`, `stack`, `tun`, `dns`
 - `engine` → `config`, `router`, `core`, `api`
 - `stack` → `traits`
 - `tun` → `traits`

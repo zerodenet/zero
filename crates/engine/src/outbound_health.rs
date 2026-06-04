@@ -68,7 +68,7 @@ impl OutboundHealth {
 
         // Update failure window.
         {
-            let mut failures = self.failures.lock().expect("outbound health lock poisoned");
+            let mut failures = self.failures.lock().unwrap_or_else(|e| e.into_inner());
             let entry = failures
                 .entry(tag.to_owned())
                 .or_insert_with(|| FailureWindow {

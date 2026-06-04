@@ -1,11 +1,11 @@
 use async_trait::async_trait;
+use http_connect::{HttpConnectInbound, HttpConnectResponse};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_core::{Error as CoreError, Session};
 use zero_engine::EngineError;
-use zero_protocol_http_connect::{HttpConnectInbound, HttpConnectResponse};
 
 use crate::logging::log_listener_connection_error;
 use crate::runtime::bind_listener;

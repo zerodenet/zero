@@ -10,12 +10,12 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::{Arc, LazyLock, Mutex};
 
+use hysteria2::{build_udp_datagram, parse_udp_datagram};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{error, warn};
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
-use zero_protocol_hysteria2::{build_udp_datagram, parse_udp_datagram};
 
 use crate::runtime::Proxy;
 use crate::transport::Hysteria2Connector;

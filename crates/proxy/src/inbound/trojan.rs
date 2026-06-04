@@ -7,10 +7,10 @@ use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
+use trojan::TrojanInbound;
 use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_protocol_trojan::TrojanInbound;
 use zero_traits::AsyncSocket;
 
 use crate::runtime::bind_listener;

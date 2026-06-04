@@ -6,6 +6,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use async_trait::async_trait;
+use mieru::{
+    build_data_segment, DataMetadata, MieruCipher, MieruInbound, MieruSession,
+    DATA_SERVER_TO_CLIENT,
+};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::select;
 use tokio::sync::watch;
@@ -14,10 +18,6 @@ use tracing::{error, info};
 use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_protocol_mieru::{
-    build_data_segment, DataMetadata, MieruCipher, MieruInbound, MieruSession,
-    DATA_SERVER_TO_CLIENT,
-};
 use zero_traits::DnsResolver;
 
 use crate::logging::log_listener_connection_error;
@@ -338,10 +338,10 @@ impl Proxy {
                         Ok(n) => {
                             let data = &read_buf[..n];
                             if let Ok(unwrapped) =
-                                zero_protocol_mieru::unwrap_udp_associate(data)
+                                mieru::unwrap_udp_associate(data)
                             {
                                 if let Ok(pkt) =
-                                    zero_protocol_socks5::parse_udp_packet(&unwrapped)
+                                    socks5::parse_udp_packet(&unwrapped)
                                 {
                                     let target_addr = match &pkt.target {
                                         zero_core::Address::Domain(domain) => {
@@ -393,11 +393,11 @@ impl Proxy {
                     match recv {
                         Ok((n, sender)) => {
                             if let Some((target, port)) = session_map.get(&sender) {
-                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
+                                if let Ok(frame) = socks5::build_udp_packet(
                                     target, *port, &recv_buf[..n],
                                 ) {
                                     let wrapped =
-                                        zero_protocol_mieru::wrap_udp_associate(&frame);
+                                        mieru::wrap_udp_associate(&frame);
                                     if let Err(e) = client.write_all(&wrapped).await {
                                         tracing::warn!(
                                             error = %e, "mieru udp write error"

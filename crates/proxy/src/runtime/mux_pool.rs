@@ -3,7 +3,7 @@
 // Reuses MUX connections to the same upstream (server + port + transport).
 // Supports TCP, TLS, REALITY transports.
 //
-// Types moved to zero_protocol_vless::mux_pool; this module handles
+// Types moved to vless::mux_pool; this module handles
 // connection establishment which depends on proxy I/O infrastructure.
 
 use std::collections::HashMap;
@@ -17,10 +17,10 @@ use zero_platform_tokio::TransportConnector;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
-use zero_config::{ClientTlsConfig, RealityConfig};
-use zero_protocol_vless::mux_pool::{
+use vless::mux_pool::{
     decrypt_mux_payload, encrypt_mux_payload, MuxPoolConn, MuxStreamRelay, PoolKey, TransportKey,
 };
+use zero_config::{ClientTlsConfig, RealityConfig};
 
 #[derive(Clone)]
 pub(crate) struct MuxConnectionPool {
@@ -125,7 +125,7 @@ impl MuxConnectionPool {
         conn.streams.lock().unwrap().insert(sid, down_tx);
 
         // Send new-stream request to the peer
-        let req = zero_protocol_vless::encode_new_stream(session.port, &session.target)
+        let req = vless::encode_new_stream(session.port, &session.target)
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
         conn.write_tx
             .send(req)
@@ -139,12 +139,12 @@ impl MuxConnectionPool {
             let mut up_rx = up_rx;
             while let Some(data) = up_rx.recv().await {
                 let payload = encrypt_mux_payload(&crypto, sid, &data, true);
-                let frame = zero_protocol_vless::encode_frame(sid, &payload);
+                let frame = vless::encode_frame(sid, &payload);
                 if write.send(frame).is_err() {
                     break;
                 }
             }
-            let close_frame = zero_protocol_vless::encode_frame(sid, &[]);
+            let close_frame = vless::encode_frame(sid, &[]);
             let _ = write.send(close_frame);
             *conn_drop.active.lock().unwrap() -= 1;
         });
@@ -199,9 +199,8 @@ impl MuxConnectionPool {
 
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
-        let crypto: Option<Arc<Mutex<zero_protocol_vless::MuxCrypto>>> = Some(Arc::new(
-            Mutex::new(zero_protocol_vless::MuxCrypto::new(&key.uuid)),
-        ));
+        let crypto: Option<Arc<Mutex<vless::MuxCrypto>>> =
+            Some(Arc::new(Mutex::new(vless::MuxCrypto::new(&key.uuid))));
 
         // Write relay: frames → TCP
         tokio::spawn(async move {

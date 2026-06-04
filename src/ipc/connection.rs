@@ -5,9 +5,11 @@
 //! socket and Windows named pipe IPC servers.
 
 use std::io;
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
+use tokio::sync::Mutex as TokioMutex;
 use zero_api::{
     AuthContext, CommandRequest, CommandService, DiagnosticsDnsLookupCommand,
     DiagnosticsTraceRouteCommand, EventFilter, EventSource, Permission, PolicySelectCommand,
@@ -115,15 +117,17 @@ pub(crate) fn parse_command(
 /// Handle a single IPC connection: read JSON-line frames, dispatch
 /// queries/commands/subscriptions, and write responses.
 ///
-/// This function is transport-agnostic — it works with any stream that
-/// implements `AsyncRead + AsyncWrite`.
+/// After a `Subscribe`, the connection stays open for event streaming
+/// AND continues to accept `Query` / `Command` / `Ping` frames.
+/// Responses echo the request `id` so the client can pair them on a
+/// multiplexed connection.
 pub(crate) async fn handle_ipc_connection<S>(stream: S, handle: ProxyHandle) -> io::Result<()>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
     let (reader, writer) = tokio::io::split(stream);
     let mut reader = BufReader::new(reader);
-    let mut writer = BufWriter::new(writer);
+    let writer = Arc::new(TokioMutex::new(BufWriter::new(writer)));
 
     // IPC connections are protected by OS-level file permissions
     // (Unix socket 0o600).  All callers are trusted with admin.
@@ -137,6 +141,7 @@ where
         ],
     };
 
+    let mut subscribed = false;
     let mut line = String::new();
     loop {
         line.clear();
@@ -152,55 +157,72 @@ where
             Ok(req) => req,
             Err(_) => {
                 let resp = IpcResponse::error("invalid_argument", "invalid request frame");
-                write_ipc_response(&mut writer, &resp).await?;
+                write_ipc_response(&mut *writer.lock().await, &resp).await?;
                 continue;
             }
         };
 
+        let req_id = request.id();
+
         match request {
-            IpcRequest::Ping => {
-                write_ipc_response(&mut writer, &IpcResponse::ok("pong")).await?;
+            IpcRequest::Ping { .. } => {
+                let resp = IpcResponse::ok("pong").with_id(req_id);
+                write_ipc_response(&mut *writer.lock().await, &resp).await?;
             }
-            IpcRequest::Query { request } => {
+            IpcRequest::Query { request, .. } => {
                 let result = handle.query(request);
                 match result {
                     Ok(resp) => {
                         let value = serde_json::to_value(resp).map_err(io::Error::other)?;
-                        write_ipc_response(&mut writer, &IpcResponse::ok_raw(value)).await?;
+                        let resp = IpcResponse::ok_raw(value).with_id(req_id);
+                        write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     }
                     Err(error) => {
-                        write_ipc_response(&mut writer, &IpcResponse::from_api_error(&error))
-                            .await?;
+                        let resp = IpcResponse::from_api_error(&error).with_id(req_id);
+                        write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     }
                 }
             }
-            IpcRequest::Command { method, params } => {
+            IpcRequest::Command { method, params, .. } => {
                 let command = parse_command(&method, &params);
                 match command {
                     Ok(ref cmd) if !auth_ctx.allows(cmd.required_permission()) => {
                         let error =
                             zero_api::ApiError::permission_denied(cmd.required_permission());
-                        write_ipc_response(&mut writer, &IpcResponse::from_api_error(&error))
-                            .await?;
+                        let resp = IpcResponse::from_api_error(&error).with_id(req_id);
+                        write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     }
                     Ok(cmd) => match handle.execute(cmd) {
                         Ok(resp) => {
                             let value = serde_json::to_value(resp).map_err(io::Error::other)?;
-                            write_ipc_response(&mut writer, &IpcResponse::ok_raw(value)).await?;
+                            let resp = IpcResponse::ok_raw(value).with_id(req_id);
+                            write_ipc_response(&mut *writer.lock().await, &resp).await?;
                         }
                         Err(error) => {
-                            write_ipc_response(&mut writer, &IpcResponse::from_api_error(&error))
-                                .await?;
+                            let resp = IpcResponse::from_api_error(&error).with_id(req_id);
+                            write_ipc_response(&mut *writer.lock().await, &resp).await?;
                         }
                     },
                     Err(error) => {
-                        write_ipc_response(&mut writer, &error).await?;
+                        let resp = error.with_id(req_id);
+                        write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     }
                 }
             }
-            IpcRequest::Subscribe { events } => {
-                write_ipc_response(&mut writer, &IpcResponse::ok("subscribed")).await?;
-                writer.flush().await?;
+            IpcRequest::Subscribe { events, .. } => {
+                if subscribed {
+                    let resp = IpcResponse::error(
+                        "already_subscribed",
+                        "this connection is already subscribed to events",
+                    )
+                    .with_id(req_id);
+                    write_ipc_response(&mut *writer.lock().await, &resp).await?;
+                    continue;
+                }
+                subscribed = true;
+
+                let resp = IpcResponse::ok("subscribed").with_id(req_id);
+                write_ipc_response(&mut *writer.lock().await, &resp).await?;
 
                 let mut filter = EventFilter::default();
                 if let Some(types) = events {
@@ -228,38 +250,47 @@ where
                             }
                         });
 
-                        loop {
-                            match event_rx.recv_timeout(Duration::from_secs(30)) {
-                                Ok(value) => {
-                                    let frame =
-                                        serialize_frame(&value).map_err(io::Error::other)?;
-                                    writer.write_all(&frame).await?;
-                                    writer.flush().await?;
-                                }
-                                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                                    // heartbeat
-                                    writer.write_all(b":\n").await?;
-                                    writer.flush().await?;
-                                }
-                                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                                    break;
+                        // Spawn event writer task so the main loop can
+                        // continue reading query/command/ping frames.
+                        let event_writer = writer.clone();
+                        let event_task = tokio::spawn(async move {
+                            loop {
+                                match event_rx.recv_timeout(Duration::from_secs(30)) {
+                                    Ok(value) => {
+                                        let frame =
+                                            serialize_frame(&value).map_err(io::Error::other)?;
+                                        let mut w = event_writer.lock().await;
+                                        w.write_all(&frame).await?;
+                                        w.flush().await?;
+                                    }
+                                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                                        // heartbeat
+                                        let mut w = event_writer.lock().await;
+                                        w.write_all(b":\n").await?;
+                                        w.flush().await?;
+                                    }
+                                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                                        break;
+                                    }
                                 }
                             }
-                        }
+                            io::Result::Ok(())
+                        });
 
-                        blocking.abort();
+                        // Don't break — continue the loop for subsequent requests.
+                        // The event_task runs concurrently.
+                        // When the client disconnects, read_line returns 0 → break,
+                        // event_task's write fails → task exits, blocking task aborted.
+                        let _ = (event_task, blocking);
                     }
                     Err(error) => {
-                        write_ipc_response(&mut writer, &IpcResponse::from_api_error(&error))
-                            .await?;
+                        let resp = IpcResponse::from_api_error(&error).with_id(req_id);
+                        write_ipc_response(&mut *writer.lock().await, &resp).await?;
+                        subscribed = false;
                     }
                 }
-
-                break;
             }
         }
-
-        writer.flush().await?;
     }
 
     Ok(())
@@ -267,7 +298,7 @@ where
 
 /// Write a serialized IPC response frame to the transport.
 pub(crate) async fn write_ipc_response(
-    writer: &mut BufWriter<impl AsyncWriteExt + Unpin>,
+    writer: &mut (impl AsyncWriteExt + Unpin),
     response: &IpcResponse,
 ) -> io::Result<()> {
     let frame = serialize_frame(response).map_err(io::Error::other)?;

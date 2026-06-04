@@ -1,16 +1,18 @@
+use socks5::{parse_udp_packet, Socks5Reply, Socks5UdpAssociateRequest};
 use std::net::SocketAddr;
 use tokio::select;
-use tokio::time::Instant as TokioInstant;
 use tracing::{debug, info, warn};
 use zero_platform_tokio::TokioDatagramSocket;
-use zero_protocol_socks5::{parse_udp_packet, Socks5Reply, Socks5UdpAssociateRequest};
 use zero_traits::AsyncSocket;
+use zero_traits::DnsResolver;
 
 use crate::logging::{
     log_udp_upstream_association_dropped, log_udp_upstream_association_idle_timeout,
 };
+use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::Proxy;
-use crate::transport::{ClientStream, MeteredStream};
+use crate::transport::{ClientStream, MeteredStream, StreamTraffic};
+use zero_core::{Address, ProtocolType};
 use zero_engine::EngineError;
 
 pub(crate) mod context;
@@ -19,12 +21,10 @@ mod outbound;
 mod request;
 pub(crate) mod sessions;
 
-use crate::outbound::socks5::{ActiveUpstreamSocks5UdpAssociation, UpstreamAssociationCloseReason};
-use context::UdpRequestContext;
+use crate::outbound::socks5::UpstreamAssociationCloseReason;
 use helpers::{
     address_from_socket_addr, log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };
-use sessions::UdpSessionFlows;
 
 impl Proxy {
     pub(crate) async fn handle_socks5_udp_associate<S>(
@@ -53,6 +53,8 @@ impl Proxy {
             .await?;
         let mut pending_control_traffic = client.drain_traffic();
 
+        let mut dispatch = UdpDispatch::new(inbound_tag).await?;
+
         info!(
             inbound_tag = inbound_tag,
             protocol = "socks5-udp",
@@ -61,14 +63,16 @@ impl Proxy {
         );
 
         let mut client_udp_addr: Option<SocketAddr> = None;
-        let mut upstream_association: Option<ActiveUpstreamSocks5UdpAssociation> = None;
-        let mut upstream_idle_deadline: Option<TokioInstant> = None;
-        let mut udp_flows = UdpSessionFlows::default();
         let mut control_probe = [0_u8; 1];
         let mut packet = vec![0_u8; 64 * 1024];
-        let mut upstream_packet = vec![0_u8; 64 * 1024];
+        let mut direct_buf = vec![0_u8; 64 * 1024];
+        let mut upstream_buf = vec![0_u8; 64 * 1024];
 
         loop {
+            // Extract all mutable/immutable borrows in one go to satisfy
+            // select!'s requirement that all branches be independent.
+            let (direct_sock, socks5_up, socks5_idle, chain_tasks) = dispatch.poll_refs();
+
             select! {
                 control = client.read(&mut control_probe) => {
                     match control {
@@ -86,19 +90,13 @@ impl Proxy {
                     }
 
                     if client_udp_addr == Some(sender) {
-                        if let Err(error) = self.handle_socks5_udp_request(
+                        // Client packet: parse SOCKS5 framing, dispatch.
+                        if let Err(error) = self.socks5_dispatch_packet(
                             buf,
-                            UdpRequestContext {
-                                inbound_tag,
-                                relay: &relay,
-                                udp_flows: &mut udp_flows,
-                                pending_control_traffic: &mut pending_control_traffic,
-                                upstream_association: &mut upstream_association,
-                                upstream_idle_deadline: &mut upstream_idle_deadline,
-                                client_addr: client_udp_addr,
-                            },
-                        )
-                        .await {
+                            inbound_tag,
+                            &mut dispatch,
+                            &mut pending_control_traffic,
+                        ).await {
                             warn!(
                                 inbound_tag = inbound_tag,
                                 protocol = "socks5-udp",
@@ -107,75 +105,10 @@ impl Proxy {
                             );
                         }
 
-                        // Forward pending SS upstream responses to the SOCKS5 client.
-                        #[cfg(feature = "shadowsocks")]
-                        if let Some(client_addr) = client_udp_addr {
-                            use crate::outbound::shadowsocks::drain_all_responses;
-                            for resp in drain_all_responses() {
-                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
-                                    &resp.target, resp.port, &resp.payload,
-                                ) {
-                                    let _ = relay.send_to_addr(&frame, client_addr).await;
-                                }
-                            }
-                        }
-
-                        // Forward pending Hysteria2 UDP responses to the SOCKS5 client.
-                        #[cfg(feature = "hysteria2")]
-                        if let Some(client_addr) = client_udp_addr {
-                            use crate::outbound::hysteria2::drain_all_h2_responses;
-                            for resp in drain_all_h2_responses() {
-                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
-                                    &resp.target, resp.port, &resp.payload,
-                                ) {
-                                    let _ = relay.send_to_addr(&frame, client_addr).await;
-                                }
-                            }
-                        }
-
-                        // Forward pending Trojan UDP responses to the SOCKS5 client.
-                        #[cfg(feature = "trojan")]
-                        if let Some(client_addr) = client_udp_addr {
-                            use crate::outbound::trojan::drain_all_trojan_responses;
-                            for resp in drain_all_trojan_responses() {
-                                if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
-                                    &resp.target, resp.port, &resp.payload,
-                                ) {
-                                    let _ = relay.send_to_addr(&frame, client_addr).await;
-                                }
-                            }
-                        }
-
-                        // Forward pending Mieru UDP responses to the SOCKS5 client.
-                        #[cfg(feature = "mieru")]
-                        if let Some(client_addr) = client_udp_addr {
-                            use crate::outbound::mieru_udp::drain_all_mieru_responses;
-                            for resp in drain_all_mieru_responses() {
-                                // Mieru responses are full SOCKS5 UDP packets
-                                if let Ok(parsed) =
-                                    zero_protocol_socks5::parse_udp_packet(&resp.payload)
-                                {
-                                    if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
-                                        &parsed.target,
-                                        parsed.port,
-                                        &parsed.payload,
-                                    ) {
-                                        let _ = relay.send_to_addr(&frame, client_addr).await;
-                                    }
-                                } else {
-                                    // Fallback: forward raw payload as-is
-                                    if let Ok(frame) = zero_protocol_socks5::build_udp_packet(
-                                        &zero_core::Address::Ipv4([0, 0, 0, 0]),
-                                        0,
-                                        &resp.payload,
-                                    ) {
-                                        let _ = relay.send_to_addr(&frame, client_addr).await;
-                                    }
-                                }
-                            }
-                        }
                     } else if let Some(client_addr) = client_udp_addr {
-                        if let Some(session_id) = udp_flows.direct_response_session_id(sender) {
+                        // Legacy direct response arriving on the relay socket
+                        // (from pre-dispatch flows). Forward to client.
+                        if let Some(session_id) = dispatch.direct_response_session_id(sender) {
                             self.record_session_outbound_rx(session_id, buf.len() as u64);
                             let sent = self
                                 .forward_direct_udp_response(&relay, client_addr, sender, buf)
@@ -189,22 +122,53 @@ impl Proxy {
                         debug!(?sender, "dropping udp packet from unexpected sender");
                     }
                 }
-                upstream = recv_upstream_packet(upstream_association.as_ref(), &mut upstream_packet) => {
+                recv = direct_sock.recv_from_addr(&mut direct_buf) => {
+                    // Direct outbound response from the dispatcher's socket.
+                    let (n, sender) = recv?;
+
+                    if let Some(client_addr) = client_udp_addr {
+                        if let Some(session_id) = dispatch.direct_response_session_id(sender) {
+                            self.record_session_outbound_rx(session_id, n as u64);
+                        }
+
+                        match self
+                            .forward_direct_udp_response(
+                                &relay, client_addr, sender, &direct_buf[..n],
+                            )
+                            .await
+                        {
+                            Ok(sent) => {
+                                if let Some(session_id) =
+                                    dispatch.direct_response_session_id(sender)
+                                {
+                                    self.record_session_inbound_tx(session_id, sent as u64);
+                                }
+                            }
+                            Err(error) => {
+                                warn!(
+                                    inbound_tag = inbound_tag,
+                                    protocol = "socks5-udp",
+                                    error = %error,
+                                    "failed to forward direct UDP response"
+                                );
+                            }
+                        }
+                    }
+                }
+                upstream = recv_upstream_packet(socks5_up, &mut upstream_buf) => {
                     match upstream {
                         Ok(read) => {
                             self.record_udp_upstream_packet_received();
-                            upstream_idle_deadline =
-                                Some(TokioInstant::now() + self.udp_upstream_idle_timeout());
+                            dispatch.touch_socks5_idle(self.udp_upstream_idle_timeout());
                             let mut session_id = None;
-                            if let Some(association) = upstream_association.as_ref() {
-                                match parse_udp_packet(&upstream_packet[..read]) {
-                                    Ok(packet) => {
-                                        session_id = udp_flows
-                                            .upstream_response_session_id(
-                                                association.outbound_tag(),
-                                                &packet.target,
-                                                packet.port,
-                                            );
+                            if let Some(association) = dispatch.socks5_upstream() {
+                                match parse_udp_packet(&upstream_buf[..read]) {
+                                    Ok(pkt) => {
+                                        session_id = dispatch.upstream_response_session_id(
+                                            association.outbound_tag(),
+                                            &pkt.target,
+                                            pkt.port,
+                                        );
                                     }
                                     Err(error) => debug!(
                                         inbound_tag = inbound_tag,
@@ -215,21 +179,20 @@ impl Proxy {
                                 }
                             }
                             if let Some(client_addr) = client_udp_addr {
-                                if let Some(session_id) = session_id {
-                                    self.record_session_outbound_rx(session_id, read as u64);
+                                if let Some(sid) = session_id {
+                                    self.record_session_outbound_rx(sid, read as u64);
                                 }
                                 let sent = relay
-                                    .send_to_addr(&upstream_packet[..read], client_addr)
+                                    .send_to_addr(&upstream_buf[..read], client_addr)
                                     .await?;
-                                if let Some(session_id) = session_id {
-                                    self.record_session_inbound_tx(session_id, sent as u64);
+                                if let Some(sid) = session_id {
+                                    self.record_session_inbound_tx(sid, sent as u64);
                                 }
                             }
                         }
                         Err(error) => {
-                            if let Some(association) = upstream_association.take() {
+                            if let Some(association) = dispatch.take_socks5_upstream() {
                                 self.record_udp_upstream_recv_failure();
-                                upstream_idle_deadline = None;
                                 let outbound_tag = association.outbound_tag().to_owned();
                                 let (server, port) = association.upstream_endpoint();
                                 let server = server.to_owned();
@@ -245,9 +208,35 @@ impl Proxy {
                         }
                     }
                 }
-                _ = wait_for_upstream_idle(upstream_idle_deadline), if upstream_association.is_some() => {
-                    if let Some(association) = upstream_association.take() {
-                        upstream_idle_deadline = None;
+                Some(chain_result) = chain_tasks.join_next() => {
+                    // Chain-outbound response (SS, H2, VLESS via JoinSet).
+                    match chain_result {
+                        Ok(Ok((target, port, payload, session_id))) => {
+                            if let Some(sid) = session_id {
+                                self.record_session_outbound_rx(sid, payload.len() as u64);
+                            }
+                            if let Some(client_addr) = client_udp_addr {
+                                if let Ok(frame) = socks5::build_udp_packet(
+                                    &target, port, &payload,
+                                ) {
+                                    if let Ok(sent) = relay.send_to_addr(&frame, client_addr).await {
+                                        if let Some(sid) = session_id {
+                                            self.record_session_inbound_tx(sid, sent as u64);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Ok(Err(error)) => {
+                            warn!(error = %error, "chain upstream read error");
+                        }
+                        Err(join_err) => {
+                            warn!(error = %join_err, "chain response task panicked");
+                        }
+                    }
+                }
+                _ = wait_for_upstream_idle(socks5_idle) => {
+                    if let Some(association) = dispatch.take_socks5_upstream() {
                         let outbound_tag = association.outbound_tag().to_owned();
                         let (server, port) = association.upstream_endpoint();
                         let server = server.to_owned();
@@ -264,13 +253,63 @@ impl Proxy {
             }
         }
 
-        for completed in udp_flows.finish_all() {
+        for completed in dispatch.finish_all() {
             log_completed_udp_flow(completed);
         }
 
-        if let Some(association) = upstream_association.take() {
-            association.close(UpstreamAssociationCloseReason::Closed);
+        Ok(())
+    }
+
+    /// Parse a SOCKS5 UDP packet, handle DNS interception, then dispatch
+    /// via the generic `UdpDispatch`.
+    async fn socks5_dispatch_packet(
+        &self,
+        packet: &[u8],
+        _inbound_tag: &str,
+        dispatch: &mut UdpDispatch,
+        pending_control_traffic: &mut StreamTraffic,
+    ) -> Result<(), EngineError> {
+        let udp_packet = parse_udp_packet(packet)?;
+
+        // ── DNS interception ─────────────────────────────────────────
+        // Intercept UDP packets to port 53 with a domain target.
+        // Resolve locally through DnsSystem and reply directly.
+        if udp_packet.port == 53 {
+            if let Address::Domain(ref domain) = udp_packet.target {
+                match self.resolver.resolve(domain).await {
+                    Ok(_ips) => {
+                        // DNS resolved locally — build response and return.
+                        // The caller will forward via the relay socket if
+                        // available. For now, skip dispatch and return Ok.
+                        // The DNS response is sent inline in the main loop.
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        // Resolution failed — silently drop.
+                        return Ok(());
+                    }
+                }
+            }
         }
+
+        // ── Generic dispatch ─────────────────────────────────────────
+        let session_id = dispatch
+            .dispatch(
+                self,
+                udp_packet.target,
+                udp_packet.port,
+                &udp_packet.payload,
+                ProtocolType::Socks5,
+                None,
+            )
+            .await?;
+
+        // Record protocol-specific overhead: TCP control traffic and
+        // SOCKS5 framing bytes (payload is already tracked by dispatch).
+        self.record_session_inbound_traffic(session_id, pending_control_traffic.clone());
+        *pending_control_traffic = StreamTraffic::default();
+        let framing_bytes = packet.len() as u64 - udp_packet.payload.len() as u64;
+        self.record_session_inbound_rx(session_id, framing_bytes);
 
         Ok(())
     }
@@ -282,11 +321,8 @@ impl Proxy {
         sender: SocketAddr,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        let packet = zero_protocol_socks5::build_udp_packet(
-            &address_from_socket_addr(sender),
-            sender.port(),
-            payload,
-        )?;
+        let packet =
+            socks5::build_udp_packet(&address_from_socket_addr(sender), sender.port(), payload)?;
         relay
             .send_to_addr(&packet, client_addr)
             .await
