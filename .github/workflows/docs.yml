@@ -43,3 +43,4 @@ jobs:
           command: >-
             pages deploy .vitepress/dist
             --project-name=${{ inputs.project-name || secrets.CLOUDFLARE_PAGES_PROJECT || 'zero-docs' }}
+            --branch=main
