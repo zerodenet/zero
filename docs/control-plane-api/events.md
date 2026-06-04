@@ -43,6 +43,8 @@
 | `policy.selected` | selector 切换 | 按需 |
 | `policy.probe.completed` | urltest 完成一轮探测 | 按探测间隔 |
 | `stats.sampled` | 统计采样 | 每 30s |
+| `ipc.connected` | IPC 客户端连接 | 按需 |
+| `ipc.disconnected` | IPC 客户端断开 | 按需 |
 
 ---
 
@@ -264,6 +266,36 @@ urltest 探测完成后发射，包含每个成员的探测结果。
 | `"events": null` / 省略 | 接收所有事件 |
 
 内部 `EventFilter` 的 `event_types` 为空数组时即不过滤，`*` 作为特殊值等价于空数组。
+
+### ipc.connected
+
+```json
+{
+  "active": 1,
+  "pipe": "\\\\.\\pipe\\zero-control"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `active` | 当前活跃连接数（含本连接） |
+| `pipe` | 管道名称（Windows）或对端地址（Unix） |
+
+### ipc.disconnected
+
+```json
+{
+  "active": 0,
+  "pipe": "\\\\.\\pipe\\zero-control",
+  "error": "BrokenPipe"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `active` | 断开后的活跃连接数 |
+| `pipe` | 管道名称或对端地址 |
+| `error` | 异常断开时的错误信息（正常断开时为 null，不出现在 JSON 中） |
 
 ## 消费方式
 

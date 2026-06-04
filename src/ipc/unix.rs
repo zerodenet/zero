@@ -111,14 +111,23 @@ async fn run_ipc_server(
                 let (stream, peer_addr) = accept_result?;
                 let handle = handle.clone();
                 let active = active.clone();
+                let pipe = format!("{:?}", peer_addr);
                 active.fetch_add(1, Ordering::Relaxed);
+                super::events::emit_connected(&handle, active.load(Ordering::Relaxed), &pipe);
                 info!(?peer_addr, active = active.load(Ordering::Relaxed),
                       "ipc client connected");
 
                 connections.spawn(async move {
+                    let emit_handle = handle.clone();
                     let result = connection::handle_ipc_connection(stream, handle).await;
 
                     let n = active.fetch_sub(1, Ordering::Relaxed) - 1;
+                    let error_str = match &result {
+                        Ok(_) => None,
+                        Err(ref e) if connection::is_transient_disconnect(e) => Some(e.to_string()),
+                        Err(ref e) => Some(e.to_string()),
+                    };
+                    super::events::emit_disconnected(&emit_handle, n, &pipe, error_str.as_deref());
                     match result {
                         Ok(()) => {
                             info!(?peer_addr, active = n, "ipc client disconnected cleanly");
@@ -133,8 +142,6 @@ async fn run_ipc_server(
                         }
                     }
                 });
-            }
-            result = connections.join_next(), if !connections.is_empty() => {
                 if let Some(Err(error)) = result {
                     if !error.is_cancelled() {
                         error!(error = %error, "ipc connection task panicked");

@@ -91,14 +91,23 @@ async fn run_ipc_server(
 
                 let handle = handle.clone();
                 let active = active.clone();
+                let pipe_owned = pipe_name.to_string();
                 active.fetch_add(1, Ordering::Relaxed);
+                super::events::emit_connected(&handle, active.load(Ordering::Relaxed), &pipe_owned);
                 info!(pipe = %pipe_name, active = active.load(Ordering::Relaxed),
                       "ipc client connected");
 
                 connections.spawn(async move {
+                    let emit_handle = handle.clone();
                     let result = connection::handle_ipc_connection(server, handle).await;
 
                     let n = active.fetch_sub(1, Ordering::Relaxed) - 1;
+                    let error_str = match &result {
+                        Ok(_) => None,
+                        Err(ref e) if connection::is_transient_disconnect(e) => Some(e.to_string()),
+                        Err(ref e) => Some(e.to_string()),
+                    };
+                    super::events::emit_disconnected(&emit_handle, n, &pipe_owned, error_str.as_deref());
                     match result {
                         Ok(()) => {
                             info!(active = n, "ipc client disconnected cleanly");

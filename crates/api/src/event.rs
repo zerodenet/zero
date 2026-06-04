@@ -19,6 +19,8 @@ pub mod event_type {
     pub const ENGINE_STARTED: &str = "engine.started";
     pub const ENGINE_STOPPED: &str = "engine.stopped";
     pub const ENGINE_WARNING: &str = "engine.warning";
+    pub const IPC_CONNECTED: &str = "ipc.connected";
+    pub const IPC_DISCONNECTED: &str = "ipc.disconnected";
 
     pub const ALL: &[&str] = &[
         FLOW_STARTED,
@@ -31,6 +33,8 @@ pub mod event_type {
         ENGINE_STARTED,
         ENGINE_STOPPED,
         ENGINE_WARNING,
+        IPC_CONNECTED,
+        IPC_DISCONNECTED,
     ];
 
     pub fn is_known(value: &str) -> bool {
