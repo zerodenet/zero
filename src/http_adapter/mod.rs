@@ -170,9 +170,9 @@ async fn serve_connection(
         RateLimitCategory::Sse => limiters.sse_connections.allow(),
     };
     if !allowed {
-        return write_response(
+        return write_response_with_headers(
             &mut stream,
-            "HTTP/1.1 429 Too Many Requests\r\n",
+            "HTTP/1.1 429 Too Many Requests\r\nRetry-After: 1\r\n",
             br#"{"error":"rate limit exceeded"}"#,
         )
         .await;
@@ -374,8 +374,16 @@ fn authenticate(request: &HttpRequest, auth: Option<&HttpServerAuth>) -> AuthCon
 }
 
 async fn write_response(stream: &mut TcpStream, status_line: &str, body: &[u8]) -> io::Result<()> {
+    write_response_with_headers(stream, status_line, body).await
+}
+
+async fn write_response_with_headers(
+    stream: &mut TcpStream,
+    status_and_extra_headers: &str,
+    body: &[u8],
+) -> io::Result<()> {
     let headers = format!(
-        "{status_line}\
+        "{status_and_extra_headers}\
         Content-Type: application/json\r\n\
         Content-Length: {}\r\n\
         Access-Control-Allow-Origin: *\r\n\

@@ -1,11 +1,13 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
-use zero_api::{DeadLetterSink, EventFilter, EventSink, EventSource, RawApiEvent};
+use zero_api::{DeadLetterSink, EventFilter, EventSink, EventSource, RawApiEvent, SinkStatus};
 use zero_config::ApiConfig;
 
 use crate::registry::{build_event_sinks, ConfiguredEventSink};
@@ -29,9 +31,56 @@ impl Default for EventDispatcherOptions {
     }
 }
 
+/// Per-sink delivery counters, updated by the dispatcher thread.
+struct PerSinkStats {
+    total_delivered: AtomicU64,
+    total_failed: AtomicU64,
+    last_success_ms: Mutex<Option<u64>>,
+    last_failure_ms: Mutex<Option<u64>>,
+    last_error: Mutex<Option<String>>,
+}
+
+impl PerSinkStats {
+    fn new() -> Self {
+        Self {
+            total_delivered: AtomicU64::new(0),
+            total_failed: AtomicU64::new(0),
+            last_success_ms: Mutex::new(None),
+            last_failure_ms: Mutex::new(None),
+            last_error: Mutex::new(None),
+        }
+    }
+
+    fn record_delivered(&self) {
+        self.total_delivered.fetch_add(1, Ordering::Relaxed);
+        *self.last_success_ms.lock().expect("sink stats") = Some(now_unix_ms());
+        *self.last_error.lock().expect("sink stats") = None;
+    }
+
+    fn record_failed(&self, message: Option<String>) {
+        self.total_failed.fetch_add(1, Ordering::Relaxed);
+        *self.last_failure_ms.lock().expect("sink stats") = Some(now_unix_ms());
+        *self.last_error.lock().expect("sink stats") = message;
+    }
+
+    fn snapshot(&self, name: String) -> SinkStatus {
+        SinkStatus {
+            name,
+            total_delivered: self.total_delivered.load(Ordering::Relaxed),
+            total_failed: self.total_failed.load(Ordering::Relaxed),
+            last_success_at_unix_ms: *self.last_success_ms.lock().expect("sink stats"),
+            last_failure_at_unix_ms: *self.last_failure_ms.lock().expect("sink stats"),
+            last_error: self.last_error.lock().expect("sink stats").clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct EventDispatcherHandle {
     shutdown: Option<mpsc::Sender<()>>,
     task: JoinHandle<()>,
+    /// Per-sink delivery stats shared with the dispatcher thread.
+    sink_stats: Arc<Vec<(String, Arc<PerSinkStats>)>>,
 }
 
 impl EventDispatcherHandle {
@@ -41,6 +90,14 @@ impl EventDispatcherHandle {
         }
 
         let _ = self.task.await;
+    }
+
+    /// Snapshot the current delivery status for all configured sinks.
+    pub fn sink_status(&self) -> Vec<SinkStatus> {
+        self.sink_stats
+            .iter()
+            .map(|(tag, stats)| stats.snapshot(tag.clone()))
+            .collect()
     }
 }
 
@@ -58,6 +115,14 @@ where
 
     let dead_letter_path = api.dead_letter_path.clone();
 
+    // Shared stats: populated by the dispatcher thread after sink construction,
+    // read by the handle on demand.  Created empty here; tags are filled in
+    // before the init signal so the handle always sees valid data.
+    let sink_stats: Arc<Mutex<Vec<(String, Arc<PerSinkStats>)>>> =
+        Arc::new(Mutex::new(Vec::new()));
+    let stats_for_handle = sink_stats.clone();
+    let stats_for_thread = sink_stats.clone();
+
     let task = tokio::task::spawn_blocking(move || {
         let sinks = match build_event_sinks(&api, source_dir.as_deref()) {
             Ok(sinks) => sinks,
@@ -72,6 +137,14 @@ where
             return;
         }
 
+        // Initialise per-sink stats with the constructed tags.
+        {
+            let mut shared = stats_for_thread.lock().expect("sink stats");
+            for sink in &sinks {
+                shared.push((sink.tag.clone(), Arc::new(PerSinkStats::new())));
+            }
+        }
+
         let dead_letter = dead_letter_path.and_then(|p| match DeadLetterSink::new(&p) {
             Ok(dl) => {
                 debug!(path = %p, "dead-letter sink enabled");
@@ -84,25 +157,34 @@ where
         });
 
         let _ = init_tx.send(Ok(true));
-        run_event_dispatcher(source, sinks, options, shutdown_rx, dead_letter);
+        run_event_dispatcher(source, sinks, &stats_for_thread, options, shutdown_rx, dead_letter);
     });
 
-    if !init_rx
+    let init_result = init_rx
         .recv()
-        .map_err(|_| ConnectorError::DispatcherStart)??
-    {
+        .map_err(|_| ConnectorError::DispatcherStart)??;
+
+    if !init_result {
         return Ok(None);
     }
 
-    Ok(Some(EventDispatcherHandle {
+    // Stats are now populated; take them out of the mutex for the handle.
+    let stats_snapshot = stats_for_handle
+        .lock()
+        .expect("sink stats")
+        .clone();
+
+    Ok(EventDispatcherHandle {
         shutdown: Some(shutdown_tx),
         task,
-    }))
+        sink_stats: Arc::new(stats_snapshot),
+    })
 }
 
 fn run_event_dispatcher<S>(
     source: S,
     sinks: Vec<ConfiguredEventSink>,
+    stats: &Arc<Mutex<Vec<(String, Arc<PerSinkStats>)>>>,
     options: EventDispatcherOptions,
     shutdown: mpsc::Receiver<()>,
     dead_letter: Option<DeadLetterSink>,
@@ -115,6 +197,7 @@ fn run_event_dispatcher<S>(
     loop {
         retry_pending(
             &sinks,
+            stats,
             &mut pending,
             options.max_retry_attempts,
             dead_letter.as_ref(),
@@ -127,7 +210,7 @@ fn run_event_dispatcher<S>(
                         .map(|sequence| sequence > last_sequence)
                         .unwrap_or(true);
                     if should_dispatch {
-                        dispatch_event(&sinks, &mut pending, event.clone());
+                        dispatch_event(&sinks, stats, &mut pending, event.clone());
                         if let Some(sequence) = event.sequence {
                             last_sequence = last_sequence.max(sequence);
                         }
@@ -148,6 +231,7 @@ fn run_event_dispatcher<S>(
 
 fn dispatch_event(
     sinks: &[ConfiguredEventSink],
+    stats: &Arc<Mutex<Vec<(String, Arc<PerSinkStats>)>>>,
     pending: &mut VecDeque<PendingDelivery>,
     event: RawApiEvent,
 ) {
@@ -156,7 +240,10 @@ fn dispatch_event(
             continue;
         }
 
-        match sink.publish(&event) {
+        let result = sink.publish(&event);
+        record_delivery(stats, &sink.tag, &result);
+
+        match result {
             Ok(result) if result.delivered => {}
             Ok(result) if result.retryable => pending.push_back(PendingDelivery::new(
                 sink.tag.clone(),
@@ -181,6 +268,7 @@ fn dispatch_event(
 
 fn retry_pending(
     sinks: &[ConfiguredEventSink],
+    stats: &Arc<Mutex<Vec<(String, Arc<PerSinkStats>)>>>,
     pending: &mut VecDeque<PendingDelivery>,
     max_attempts: u32,
     dead_letter: Option<&DeadLetterSink>,
@@ -210,7 +298,10 @@ fn retry_pending(
             continue;
         };
 
-        match sink.publish(&delivery.event) {
+        let result = sink.publish(&delivery.event);
+        record_delivery(stats, &sink.tag, &result);
+
+        match result {
             Ok(result) if result.delivered => {}
             Ok(result) if result.retryable && delivery.attempts < max_attempts => {
                 delivery.attempts += 1;
@@ -250,6 +341,31 @@ fn retry_pending(
             }
         }
     }
+}
+
+/// Record the outcome of a sink delivery into shared per-sink stats.
+fn record_delivery(
+    stats: &Arc<Mutex<Vec<(String, Arc<PerSinkStats>)>>>,
+    sink_tag: &str,
+    result: &Result<zero_api::PublishResult, zero_api::ApiError>,
+) {
+    let shared = stats.lock().expect("sink stats");
+    let Some(entry) = shared.iter().find(|(tag, _)| tag == sink_tag) else {
+        return;
+    };
+    let s = &entry.1;
+    match result {
+        Ok(r) if r.delivered => s.record_delivered(),
+        Ok(r) => s.record_failed(r.message.clone()),
+        Err(e) => s.record_failed(Some(e.to_string())),
+    }
+}
+
+fn now_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 fn retry_delay(attempts: u32) -> Duration {

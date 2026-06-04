@@ -254,6 +254,22 @@ async fn run_command(
 
     let event_dispatcher = spawn_event_dispatcher_if_configured(&engine)?;
 
+    // Bridge dispatcher sink status → Engine so /api/v1/sinks is live.
+    #[cfg(feature = "event-dispatcher")]
+    if let Some(ref dispatcher) = event_dispatcher {
+        engine.update_sink_status(dispatcher.sink_status());
+        // Periodically refresh sink status in the background.
+        let engine_ref = engine.clone();
+        let dispatcher_ref = dispatcher.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+            loop {
+                interval.tick().await;
+                engine_ref.update_sink_status(dispatcher_ref.sink_status());
+            }
+        });
+    }
+
     tracing::info!(config = %config_path, "loaded proxy configuration");
 
     // IPC server always starts (not feature-gated).

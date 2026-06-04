@@ -13,6 +13,7 @@ Zero 内核提供标准化的控制面，支持本地管理、远程上报和外
 | [hooks.md](./hooks.md) | FlowHook 扩展点 |
 | [push-connector.md](./push-connector.md) | 节点主动上报与远程命令 |
 | [cli.md](./cli.md) | CLI 控制命令 |
+| [compatibility.md](./compatibility.md) | API 兼容性承诺与演化规则 |
 
 ## 架构概览
 

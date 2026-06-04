@@ -12,40 +12,38 @@ use zero_api::ApiResponse;
 /// Handle GET /api/v1/capabilities.
 pub fn capabilities(handle: &EngineHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Capabilities(Default::default()));
-    serialize_response(resp)
+    serialize_query(resp)
 }
 
 /// Handle GET /api/v1/health.
 pub fn health(handle: &EngineHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Health(Default::default()));
-    serialize_response(resp)
+    serialize_query(resp)
 }
 
 /// Handle GET /api/v1/config.
 pub fn config(handle: &EngineHandle) -> io::Result<Vec<u8>> {
-    let status = handle.inner().export_config();
-    let body = ApiResponse::ok(status);
-    serde_json::to_vec_pretty(&body).map_err(io::Error::other)
+    let resp = handle.query(QueryRequest::Config(Default::default()));
+    serialize_query(resp)
 }
 
 /// Handle GET /api/v1/runtime.
 pub fn runtime(handle: &EngineHandle) -> io::Result<Vec<u8>> {
-    let status = handle.inner().export_runtime();
-    let body = ApiResponse::ok(status);
-    serde_json::to_vec_pretty(&body).map_err(io::Error::other)
+    let resp = handle.query(QueryRequest::Runtime(Default::default()));
+    serialize_query(resp)
 }
 
 /// Handle GET /api/v1/stats.
 pub fn stats(handle: &EngineHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Stats(Default::default()));
-    serialize_response(resp)
+    serialize_query(resp)
 }
 
 /// Handle GET /api/v1/flows (active flows list).
 pub fn flows_list(handle: &EngineHandle, query: &str) -> io::Result<Vec<u8>> {
     let params = parse_flow_list_params(query);
     let resp = handle.query(QueryRequest::ActiveFlows(params));
-    serialize_response(resp)
+    serialize_query(resp)
 }
 
 /// Handle GET /api/v1/flows/{flow_id}.
@@ -53,13 +51,13 @@ pub fn flow_get(handle: &EngineHandle, flow_id: &str) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Flow(FlowGetQuery {
         flow_id: flow_id.to_owned(),
     }));
-    serialize_response(resp)
+    serialize_query(resp)
 }
 
 /// Handle GET /api/v1/policies.
 pub fn policies_list(handle: &EngineHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Policies(Default::default()));
-    serialize_response(resp)
+    serialize_query(resp)
 }
 
 /// Handle GET /api/v1/policies/{policy_tag}.
@@ -67,7 +65,19 @@ pub fn policy_get(handle: &EngineHandle, policy_tag: &str) -> io::Result<Vec<u8>
     let resp = handle.query(QueryRequest::Policy(zero_api::PolicyGetQuery {
         policy_tag: policy_tag.to_owned(),
     }));
-    serialize_response(resp)
+    serialize_query(resp)
+}
+
+/// Handle GET /api/v1/sinks.
+pub fn sinks(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+    let resp = handle.query(QueryRequest::Sinks(Default::default()));
+    serialize_query(resp)
+}
+
+/// Handle GET /api/v1/tun_status.
+pub fn tun_status(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+    let resp = handle.query(QueryRequest::TunStatus(Default::default()));
+    serialize_query(resp)
 }
 
 /// Handle GET /api/v1/events (snapshot).
@@ -169,7 +179,17 @@ pub fn events_stream(
         });
 
     let catch_up = match since {
-        Some(s) => handle.inner().events_since(s, 256, &filter),
+        Some(s) => {
+            let result = handle.inner().events_since(s, 256, &filter);
+            if result.has_gap {
+                tracing::warn!(
+                    requested_since = s,
+                    actual_from = result.actual_from,
+                    "SSE catch-up has gap — events were evicted from ring buffer"
+                );
+            }
+            result.events
+        }
         None => Vec::new(),
     };
 
@@ -185,10 +205,22 @@ pub fn events_stream(
 
 // ── helpers ──────────────────────────────────────────────────────────
 
-fn serialize_response(resp: Result<QueryResponse, ApiError>) -> io::Result<Vec<u8>> {
+/// Serialize a QueryResponse into a flat HTTP response.
+///
+/// HTTP responses unwrap the `QueryResponse` enum so that `result`
+/// contains the inner data directly (no outer variant key).
+/// This keeps HTTP responses flat and predictable:
+///
+/// ```json
+/// {"api_version":"zero.api.v1","ok":true,"result":{"engine_version":"0.0.9",...}}
+/// ```
+///
+/// IPC responses preserve the externally-tagged enum for typed dispatch.
+fn serialize_query(resp: Result<QueryResponse, ApiError>) -> io::Result<Vec<u8>> {
     match resp {
         Ok(result) => {
-            let body = ApiResponse::ok(result);
+            let value = unwrap_query_response(result);
+            let body = ApiResponse::ok(value);
             serde_json::to_vec_pretty(&body).map_err(io::Error::other)
         }
         Err(error) => {
@@ -196,6 +228,31 @@ fn serialize_response(resp: Result<QueryResponse, ApiError>) -> io::Result<Vec<u
             serde_json::to_vec_pretty(&body).map_err(io::Error::other)
         }
     }
+}
+
+/// Extract the inner value from a QueryResponse as a JSON Value.
+///
+/// This is the HTTP-specific serialization: the variant tag is stripped
+/// so consumers get the data directly without wrapping.
+fn unwrap_query_response(resp: QueryResponse) -> serde_json::Value {
+    use serde::Serialize;
+    match resp {
+        QueryResponse::Capabilities(v) => serde_json::to_value(v),
+        QueryResponse::Health(v) => serde_json::to_value(v),
+        QueryResponse::Config(v) => serde_json::to_value(v),
+        QueryResponse::Runtime(v) => serde_json::to_value(v),
+        QueryResponse::Stats(v) => serde_json::to_value(v),
+        QueryResponse::ActiveFlows(v) => serde_json::to_value(v),
+        QueryResponse::RecentFlows(v) => serde_json::to_value(v),
+        QueryResponse::Flow(v) => serde_json::to_value(v),
+        QueryResponse::Policies(v) => serde_json::to_value(v),
+        QueryResponse::Policy(v) => serde_json::to_value(v),
+        QueryResponse::Diagnostics(v) => Ok(v),
+        QueryResponse::Sinks(v) => serde_json::to_value(v),
+        QueryResponse::TunStatus(v) => serde_json::to_value(v),
+        QueryResponse::Unknown(v) => Ok(v),
+    }
+    .unwrap_or(serde_json::Value::Null)
 }
 
 fn parse_flow_list_params(query: &str) -> FlowListQuery {

@@ -71,6 +71,8 @@ pub fn route(request: &HttpRequest, handle: &EngineHandle, auth_ctx: &AuthContex
                 let policy_tag = &p["/api/v1/policies/".len()..];
                 read_json(handlers::policy_get(handle, policy_tag), auth_ctx)
             }
+            ("GET", "/api/v1/sinks") => read_json(handlers::sinks(handle), auth_ctx),
+            ("GET", "/api/v1/tun_status") => read_json(handlers::tun_status(handle), auth_ctx),
             _ => not_found_response(),
         },
 

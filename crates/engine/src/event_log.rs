@@ -15,6 +15,18 @@ use super::completed_sessions::CompletedSessionRecord;
 use super::session_registry::ActiveSession;
 use super::stats::SessionOutcome;
 
+/// Result of [`EngineEventLog::events_since`] — includes the actual start
+/// sequence so consumers can detect if events were evicted from the ring buffer.
+pub struct EventsSinceResult {
+    /// Sequence number of the first event actually returned.
+    /// If `actual_from > requested_since + 1`, there is a gap.
+    pub actual_from: u64,
+    /// `true` when events between `since` and `actual_from` were lost.
+    pub has_gap: bool,
+    /// The matching events.
+    pub events: Vec<RawApiEvent>,
+}
+
 const DEFAULT_EVENT_LOG_CAPACITY: usize = 1024;
 
 #[derive(Debug)]
@@ -275,11 +287,14 @@ impl EngineEventLog {
             .collect()
     }
 
-    /// Return events with `sequence > since` that match the filter.
+    /// Return events with `sequence > since` that match the filter, along with
+    /// the actual first sequence number in the result.
     ///
-    /// Used for SSE `Last-Event-ID` / `?since=` resumption.
-    pub fn events_since(&self, since: u64, limit: usize, filter: &EventFilter) -> Vec<RawApiEvent> {
-        self.inner
+    /// If `actual_from > since + 1`, some events were evicted from the ring
+    /// buffer and the consumer has a gap.  Used for SSE `Last-Event-ID` / `?since=` resumption.
+    pub fn events_since(&self, since: u64, limit: usize, filter: &EventFilter) -> EventsSinceResult {
+        let events: Vec<RawApiEvent> = self
+            .inner
             .lock()
             .expect("engine event log lock poisoned")
             .iter()
@@ -288,7 +303,18 @@ impl EngineEventLog {
             })
             .take(limit)
             .cloned()
-            .collect()
+            .collect();
+
+        let actual_from = events
+            .first()
+            .and_then(|e| e.sequence)
+            .unwrap_or(since + 1);
+
+        EventsSinceResult {
+            actual_from,
+            has_gap: actual_from > since + 1,
+            events,
+        }
     }
 
     /// Highest sequence number currently in the log, or 0 if empty.

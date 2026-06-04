@@ -52,6 +52,9 @@ pub struct Engine {
     pub(crate) started_at_unix_ms: u64,
     /// ID of the OS process hosting this engine.
     pub(crate) pid: u32,
+    /// External sink status injected by the event dispatcher.
+    /// Updated via `update_sink_status()` when the dispatcher runs.
+    sink_status: Arc<std::sync::Mutex<Vec<zero_api::SinkStatus>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -155,6 +158,7 @@ impl Engine {
             config_path: None,
             started_at_unix_ms: started_at_unix_ms(),
             pid: std::process::id(),
+            sink_status: Arc::new(std::sync::Mutex::new(Vec::new())),
         })
     }
 
@@ -340,7 +344,12 @@ impl Engine {
         self.event_log.snapshot(filter)
     }
 
-    pub fn events_since(&self, since: u64, limit: usize, filter: &EventFilter) -> Vec<RawApiEvent> {
+    pub fn events_since(
+        &self,
+        since: u64,
+        limit: usize,
+        filter: &EventFilter,
+    ) -> super::event_log::EventsSinceResult {
         self.event_log.events_since(since, limit, filter)
     }
 
@@ -356,6 +365,25 @@ impl Engine {
     /// Emit an `engine.stopped` event during graceful shutdown.
     pub fn push_engine_stopped(&self, reason: &str) {
         self.event_log.push_engine_stopped(reason);
+    }
+
+    /// Update the external sink status snapshot (called by the event dispatcher).
+    pub fn update_sink_status(&self, status: Vec<zero_api::SinkStatus>) {
+        *self
+            .sink_status
+            .lock()
+            .expect("sink status lock poisoned") = status;
+    }
+
+    /// Read the current sink status snapshot.
+    pub fn sink_status_snapshot(&self) -> zero_api::SinkStatusSnapshot {
+        zero_api::SinkStatusSnapshot {
+            sinks: self
+                .sink_status
+                .lock()
+                .expect("sink status lock poisoned")
+                .clone(),
+        }
     }
 
     /// Hot-reload route rules and outbound group definitions.

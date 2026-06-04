@@ -263,70 +263,77 @@
 
 ---
 
-## 当前状态映射
+## 当前状态
 
-### 已有能力 → 阶段 1
+> **五个阶段全部完成。** 控制面已实现完整的 Query/Command/Event 三类 API，
+> 通过 HTTP、IPC、CLI 三种通道对外暴露，共享 `zero-api` 类型层和统一信封格式。
 
-- ✅ `flow.completed` 事件定义
-- ✅ Webhook sink 雏形
-- ✅ `/status`、`/runtime`、`/config` HTTP 端点
-- ✅ `POST /selectors/{group}/{target}` 切换能力
+### 已实现能力总览
 
-### 待补能力
+| 阶段 | 交付物 | 代码位置 |
+|------|--------|----------|
+| 1 · 核心模型 | 6 个 trait、13 种 Query、11 种 Command、12 种事件、7 种错误码、4 级权限 | `crates/api/src/` |
+| 2 · In-process | `EngineHandle`（Query + Command + EventSource）+ 内存事件总线 | `crates/engine/src/handle.rs`、`api.rs` |
+| 3 · HTTP | 11 个 `/api/v1/*` 端点 + 5 个兼容端点 + Bearer Token + 限流 + SSE | `src/http_adapter/` |
+| 4 · Sink | 6 种 Sink 实现 + SinkManager + 事件分发器 + DeadLetter | `crates/api/src/sink.rs`、`crates/connector/src/` |
+| 5 · IPC | Unix Socket + Windows Named Pipe + 多路复用 + CLI 集成 | `src/ipc/` |
 
-- 核心类型系统整理
-- Query/Command/Event trait 定义
-- 统一错误模型
-- 权限模型实现
-- In-process Adapter
-- SSE 事件流
-- 多 Sink 管理
+### 路线图之外已实现
+
+- `mode.set` 命令（rule / global / direct 运行时切换）
+- `diagnostics.*` 三件套（probe_target / dns_lookup / trace_route）
+- `tun.start` / `tun.stop` 命令（通过 ProxyHandle 拦截转发）
+- `ipc.connected` / `ipc.disconnected` 生命周期事件
+- HTTP 限流（Query 100/s、Command 10/s、SSE 5 并发）
+- `DeadLetterSink`（失败事件持久化到 JSON-line 文件）
+- Push connector（节点主动上报 + 心跳 + 远程命令）
+- FlowHook trait（外部决策插件）
 
 ---
 
 ## 验收检查清单
 
-### 阶段 1 验收
+### 阶段 1 验收 ✅
 
-- [ ] 所有现有状态字段映射到 `zero-api` 核心类型
-- [ ] `QueryService` trait 包含所有现有查询能力
-- [ ] `CommandService` trait 包含 `policies.select`
-- [ ] `EventSource` trait 支持 `flow.completed`
-- [ ] 统一错误码和错误结构定义完成
-- [ ] 权限范围枚举定义完成
+- [x] 所有现有状态字段映射到 `zero-api` 核心类型
+- [x] `QueryService` trait 包含所有现有查询能力
+- [x] `CommandService` trait 包含 `policies.select`
+- [x] `EventSource` trait 支持 `flow.completed`
+- [x] 统一错误码和错误结构定义完成
+- [x] 权限范围枚举定义完成
 
-### 阶段 2 验收
+### 阶段 2 验收 ✅
 
-- [ ] `EngineHandle` 实现 `QueryService`
-- [ ] `EngineHandle` 实现 `CommandService`
-- [ ] `EngineHandle` 实现 `EventSource`
-- [ ] 集成测试验证查询能力
-- [ ] 集成测试验证 policy 切换
-- [ ] 集成测试验证事件订阅
+- [x] `EngineHandle` 实现 `QueryService`
+- [x] `EngineHandle` 实现 `CommandService`
+- [x] `EngineHandle` 实现 `EventSource`
+- [x] 集成测试验证查询能力
+- [x] 集成测试验证 policy 切换
+- [x] 集成测试验证事件订阅
 
-### 阶段 3 验收
+### 阶段 3 验收 ✅
 
-- [ ] HTTP 路由覆盖所有 Query 端点
-- [ ] HTTP 命令端点支持 `policies.select`
-- [ ] SSE 事件流支持 `flow.completed`
-- [ ] Bearer Token 认证生效
-- [ ] 权限检查生效
-- [ ] 所有端点返回统一错误格式
+- [x] HTTP 路由覆盖所有 Query 端点
+- [x] HTTP 命令端点支持 `policies.select`
+- [x] SSE 事件流支持 `flow.completed`
+- [x] Bearer Token 认证生效
+- [x] 权限检查生效
+- [x] 所有端点返回统一错误格式
 
-### 阶段 4 验收
+### 阶段 4 验收 ✅
 
-- [ ] 配置模型支持多 sink 定义
-- [ ] `flow.completed` 事件投递到配置的 sink
-- [ ] HTTP sink 支持失败重试
-- [ ] File sink 支持日志轮转
-- [ ] 事件过滤按配置生效
-- [ ] 投递状态可查询
+- [x] 配置模型支持多 sink 定义
+- [x] `flow.completed` 事件投递到配置的 sink
+- [x] HTTP sink 支持失败重试
+- [x] File sink 支持日志轮转
+- [x] 事件过滤按配置生效
+- [x] 投递状态可查询
 
-### 阶段 5 验收
+### 阶段 5 验收 ✅
 
-- [ ] Unix domain socket adapter 实现
-- [ ] CLI status 命令可用
-- [ ] CLI select 命令可用
-- [ ] CLI events --tail 命令可用
-- [ ] 文件系统权限保护生效
-- [ ] 相同 API 语义在 HTTP 和 IPC 上一致
+- [x] Unix domain socket adapter 实现
+- [x] CLI status 命令可用
+- [x] CLI select 命令可用
+- [x] CLI events --tail 命令可用
+- [x] 文件系统权限保护生效
+- [x] 相同 API 语义在 HTTP 和 IPC 上一致

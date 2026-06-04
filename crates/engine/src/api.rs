@@ -5,7 +5,7 @@ use zero_api::{
     AdapterCapability, ApiCapabilities, ApiError, ApiErrorCode, CommandRequest, CommandResponse,
     CommandService, ConfigApplyCommand, ConfigValidateCommand, EventFilter, EventSource,
     FlowFilter, FlowSnapshot, Network as ApiNetwork, Permission, QueryRequest, QueryResponse,
-    QueryService, RawApiEvent, SinkCapability, SinkStatusSnapshot,
+    QueryService, RawApiEvent, SinkCapability,
 };
 use zero_config::{ModeConfig, RuntimeConfig};
 
@@ -139,9 +139,16 @@ fn query_engine(engine: &Engine, request: QueryRequest) -> zero_api::ApiResult<Q
                 "udp_upstream": stats.udp_upstream,
             })))
         }
-        QueryRequest::Sinks(_) => Ok(QueryResponse::Sinks(SinkStatusSnapshot::default())),
+        QueryRequest::Sinks(_) => {
+            let sinks = engine.sink_status_snapshot();
+            Ok(QueryResponse::Sinks(sinks))
+        }
         QueryRequest::TunStatus(_) => Ok(QueryResponse::TunStatus(
             zero_api::TunStatusSnapshot::default(),
+        )),
+        QueryRequest::Unknown(_) => Err(ApiError::new(
+            ApiErrorCode::Unsupported,
+            "unknown query type",
         )),
     }
 }

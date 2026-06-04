@@ -20,6 +20,7 @@ mod view;
 pub use api::register_build_features;
 pub use completed_sessions::CompletedSessionRecord;
 pub use error::EngineError;
+pub use event_log::EventsSinceResult;
 // Re-export snapshot types from zero-api so downstream code doesn't need
 // to import from two different crates for the same logical types.
 pub use zero_api::{

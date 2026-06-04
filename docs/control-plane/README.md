@@ -35,38 +35,38 @@
 ### 阶段路线图
 
 ```
-Phase 1: 核心模型收敛
+Phase 1: 核心模型收敛 ✅
   └─ Query/Command/Event trait 定义
 
-Phase 2: In-process Adapter
+Phase 2: In-process Adapter ✅
   └─ EngineHandle 封装
 
-Phase 3: HTTP JSON Adapter
+Phase 3: HTTP JSON Adapter ✅
   └─ Router, Handlers, Auth Middleware
 
-Phase 4: 事件 Sink 框架
+Phase 4: 事件 Sink 框架 ✅
   └─ FileSink, HttpSink, SinkManager
 
-Phase 5: 基础限流
+Phase 5: 基础限流 ✅
   └─ 带宽/并发/速率限制
 
-Phase 6: Hook 扩展点
+Phase 6: Hook 扩展点 ✅
   └─ FlowHook ABI
 
-Phase 7: Connector
+Phase 7: Connector ✅
   └─ 主动上报, 心跳, 指令接收
 ```
 
 ### 核心能力
 
-| 能力 | 状态 |
-| --- | --- |
-| Query API | 规划中 |
-| Command API | 规划中 |
-| 事件订阅 (SSE) | 规划中 |
-| 事件投递 (File/Http Sink) | 规划中 |
-| Bearer Token 认证 | 规划中 |
-| 权限控制 | 规划中 |
+| 能力 | 状态 | 代码位置 |
+| --- | --- | --- |
+| Query API (13 种) | ✅ 已实现 | `crates/api/src/query.rs`、`crates/engine/src/api.rs` |
+| Command API (11 种) | ✅ 已实现 | `crates/api/src/command.rs`、`crates/engine/src/api.rs` |
+| 事件订阅 (SSE + IPC) | ✅ 已实现 | `src/http_adapter/sse.rs`、`src/ipc/connection.rs` |
+| 事件投递 (File/Webhook/Memory/DeadLetter) | ✅ 已实现 | `crates/api/src/sink.rs`、`crates/connector/src/` |
+| Bearer Token 认证 | ✅ 已实现 | `src/http_adapter/mod.rs` |
+| 权限控制 (4 级) | ✅ 已实现 | `crates/api/src/auth.rs` |
 
 ---
 
