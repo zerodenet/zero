@@ -74,7 +74,7 @@ API 版本和能力列表。
 
 ```json
 {
-  "engine_version": "0.0.2",
+  "engine_version": "0.0.9",
   "started_at_unix_ms": 1713500000000,
   "healthy": true
 }

@@ -89,9 +89,9 @@ zero version
 显示版本号、构建时间和 git 描述：
 
 ```
-zero 0.0.8
-build: 2026-06-01T12:00:00Z
-git: v0.0.8-0-g7f27f96
+zero 0.0.9
+build: 2026-06-04T12:00:00Z
+git: v0.0.9-0-gfcc1645
 ```
 
 ### zero validate
