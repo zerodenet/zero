@@ -6,14 +6,14 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ApiError, API_VERSION};
+use crate::{ApiError, API_ID};
 
 // ── Error body ──────────────────────────────────────────────────────
 
 /// Unified error body for all control plane channels.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnvelopeError {
-    /// Machine-readable error code (kebab-case).
+    /// Machine-readable error code (snake_case).
     pub code: String,
     /// Human-readable error message.
     pub message: String,
@@ -37,10 +37,10 @@ impl EnvelopeError {
 /// Generic response envelope for all control plane channels.
 ///
 /// Both HTTP and IPC servers construct responses using this type.
-/// The `api_version` field is always included for protocol identification.
+/// The `api_id` field is always included for protocol identification.
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T: Serialize> {
-    pub api_version: &'static str,
+    pub api_id: &'static str,
     /// Request correlation ID for multiplexed connections (IPC) or
     /// request tracing (HTTP).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -55,7 +55,7 @@ pub struct ApiResponse<T: Serialize> {
 impl<T: Serialize> ApiResponse<T> {
     pub fn ok(result: T) -> Self {
         Self {
-            api_version: API_VERSION,
+            api_id: API_ID,
             id: None,
             ok: true,
             result: Some(result),
@@ -65,7 +65,7 @@ impl<T: Serialize> ApiResponse<T> {
 
     pub fn ok_with_id(id: Option<u64>, result: T) -> Self {
         Self {
-            api_version: API_VERSION,
+            api_id: API_ID,
             id,
             ok: true,
             result: Some(result),
@@ -84,7 +84,7 @@ impl<T: Serialize> ApiResponse<T> {
     /// Callers should use `ApiResponse::<()>::from_api_error(...)`.
     pub fn from_api_error(error: &ApiError) -> ApiResponse<()> {
         ApiResponse {
-            api_version: API_VERSION,
+            api_id: API_ID,
             id: None,
             ok: false,
             result: None,
@@ -103,7 +103,7 @@ impl ApiResponse<()> {
     /// Construct an error response from a code string and message.
     pub fn error_msg(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
-            api_version: API_VERSION,
+            api_id: API_ID,
             id: None,
             ok: false,
             result: None,
@@ -121,7 +121,7 @@ impl ApiResponse<()> {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RawResponse {
     #[serde(default)]
-    pub api_version: Option<String>,
+    pub api_id: Option<String>,
     #[serde(default)]
     pub id: Option<u64>,
     pub ok: bool,

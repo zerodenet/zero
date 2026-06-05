@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use serde_json::json;
 use zero_api::{
-    event_type, ApiEvent, AuthContext, AuthInfo, CommandRequest, ConfigValidateCommand,
-    EndpointRef, FlowEventPayload, FlowOutcome, FlowTiming, Network, Permission,
-    PolicySelectCommand, RouteDecision, TargetAddress, TrafficStats, EVENT_SCHEMA_VERSION,
+    event_type, ApiErrorCode, ApiEvent, AuthContext, AuthInfo, CommandRequest,
+    ConfigValidateCommand, EndpointRef, FlowEventPayload, FlowOutcome, FlowTiming, Network,
+    Permission, PolicySelectCommand, RouteDecision, TargetAddress, TrafficStats, EVENT_SCHEMA_ID,
 };
 
 #[test]
@@ -33,6 +33,17 @@ fn command_request_serializes_with_stable_method_name() {
     assert_eq!(value["method"], "policies.select");
     assert_eq!(value["params"]["policy_tag"], "proxy");
     assert_eq!(value["params"]["target_tag"], "direct");
+}
+
+#[test]
+fn api_error_codes_serialize_as_snake_case() {
+    let value = serde_json::to_value(ApiErrorCode::PermissionDenied).expect("serialize");
+
+    assert_eq!(value, "permission_denied");
+    assert_eq!(
+        ApiErrorCode::FeatureDisabled.as_code_str(),
+        "feature_disabled"
+    );
 }
 
 #[test]
@@ -104,7 +115,7 @@ fn flow_completed_event_serializes_as_normalized_envelope() {
 
     let value = serde_json::to_value(event).expect("serialize event");
 
-    assert_eq!(value["schema_version"], EVENT_SCHEMA_VERSION);
+    assert_eq!(value["schema_id"], EVENT_SCHEMA_ID);
     assert_eq!(value["event_type"], "flow.completed");
     assert_eq!(value["principal_key"], "user:10003");
     assert_eq!(value["payload"]["network"], "udp");
@@ -113,7 +124,7 @@ fn flow_completed_event_serializes_as_normalized_envelope() {
         "vless-user-10003-phone"
     );
     assert_eq!(value["payload"]["traffic"]["bytes_down"], 8800);
-    assert_eq!(value["payload"]["outcome"], "chained-relayed");
+    assert_eq!(value["payload"]["outcome"], "chained_relayed");
 }
 
 #[test]

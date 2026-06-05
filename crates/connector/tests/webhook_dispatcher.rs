@@ -1,4 +1,4 @@
-#![cfg(feature = "panel-connector")]
+#![cfg(feature = "panel_connector")]
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};

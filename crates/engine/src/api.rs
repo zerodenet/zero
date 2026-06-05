@@ -57,7 +57,7 @@ fn query_engine(engine: &Engine, request: QueryRequest) -> zero_api::ApiResult<Q
     match request {
         QueryRequest::Capabilities(_) => Ok(QueryResponse::Capabilities(capabilities())),
         QueryRequest::Health(_) => Ok(QueryResponse::Health(zero_api::HealthSnapshot {
-            engine_version: env!("CARGO_PKG_VERSION").to_owned(),
+            engine_build_id: env!("CARGO_PKG_VERSION").to_owned(),
             started_at_unix_ms: Some(engine.started_at_unix_ms()),
             healthy: true,
         })),
@@ -95,10 +95,7 @@ fn query_engine(engine: &Engine, request: QueryRequest) -> zero_api::ApiResult<Q
             }
 
             let completed = engine.completed_sessions();
-            if let Some(record) = completed
-                .iter()
-                .find(|s| s.id.to_string() == query.flow_id)
-            {
+            if let Some(record) = completed.iter().find(|s| s.id.to_string() == query.flow_id) {
                 // Flow variant holds FlowSnapshot; for completed flows we
                 // convert the common fields. The consumer can check the
                 // `outcome` field on the diagnostics endpoint for completion.
@@ -156,7 +153,9 @@ fn query_engine(engine: &Engine, request: QueryRequest) -> zero_api::ApiResult<Q
 /// Convert a completed session to a FlowSnapshot for the `Flow` query variant.
 /// The completed-specific fields (outcome, duration) are lost here; consumers
 /// should use the RecentFlows query for full completed-session details.
-fn session_to_flow_from_completed(record: &super::completed_sessions::CompletedSessionRecord) -> FlowSnapshot {
+fn session_to_flow_from_completed(
+    record: &super::completed_sessions::CompletedSessionRecord,
+) -> FlowSnapshot {
     use super::export::address_to_snapshot;
     use super::export::auth_to_snapshot;
     FlowSnapshot {
@@ -310,7 +309,7 @@ fn validate_config_command(command: ConfigValidateCommand) -> zero_api::ApiResul
 fn capabilities() -> ApiCapabilities {
     let mut capabilities = ApiCapabilities::new();
     capabilities.adapters = vec![AdapterCapability {
-        kind: "in-process".to_owned(),
+        kind: "in_process".to_owned(),
         enabled: true,
     }];
     capabilities.sinks = vec![SinkCapability {
@@ -319,10 +318,10 @@ fn capabilities() -> ApiCapabilities {
     }];
     capabilities.features = vec![
         "query".to_owned(),
-        "config-snapshot".to_owned(),
-        "runtime-snapshot".to_owned(),
-        "flow-snapshot".to_owned(),
-        "policy-snapshot".to_owned(),
+        "config_snapshot".to_owned(),
+        "runtime_snapshot".to_owned(),
+        "flow_snapshot".to_owned(),
+        "policy_snapshot".to_owned(),
     ];
     capabilities.build_features = build_features();
     capabilities.permissions = vec![Permission::Read];
@@ -403,7 +402,7 @@ fn api_network_name(network: ApiNetwork) -> &'static str {
 fn protocol_name(protocol: zero_core::ProtocolType) -> &'static str {
     match protocol {
         zero_core::ProtocolType::Socks5 => "socks5",
-        zero_core::ProtocolType::HttpConnect => "http-connect",
+        zero_core::ProtocolType::HttpConnect => "http_connect",
         zero_core::ProtocolType::Vless => "vless",
         zero_core::ProtocolType::Hysteria2 => "hysteria2",
         zero_core::ProtocolType::Shadowsocks => "shadowsocks",

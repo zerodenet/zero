@@ -29,9 +29,9 @@ pub enum EngineError {
     InvalidPlan { message: String },
     #[error("inbound task exited unexpectedly")]
     InboundTaskExited,
-    #[error("urltest group `{tag}` is invalid: {message}")]
+    #[error("url_test group `{tag}` is invalid: {message}")]
     InvalidUrlTestGroup { tag: String, message: String },
-    #[error("urltest task exited unexpectedly")]
+    #[error("url_test task exited unexpectedly")]
     UrlTestTaskExited,
     #[error("selector group `{tag}` does not exist")]
     SelectorGroupNotFound { tag: String },

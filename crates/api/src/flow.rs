@@ -88,7 +88,7 @@ pub struct FlowTiming {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum FlowOutcome {
     DirectRelayed,
     ChainedRelayed,

@@ -19,7 +19,7 @@ use crate::{ConnectorError, ConnectorResult};
 ///
 /// **Heartbeat** — POST `/api/v1/nodes/{node_id}/heartbeat`
 /// ```json
-/// {"node_id":"node-001","version":"0.0.2","uptime_seconds":3600,"active_flows":42,...}
+/// {"node_id":"node-001","build_id":"0.0.2","uptime_seconds":3600,"active_flows":42,...}
 /// ```
 /// Response: `{"ok":true}` or `{"ok":true,"commands":[{"method":"policies.select",...}]}`
 ///
@@ -51,7 +51,7 @@ pub fn spawn_push_connector<C>(
     active_flows: impl Fn() -> usize + Send + Sync + 'static,
     bytes_up: impl Fn() -> u64 + Send + Sync + 'static,
     bytes_down: impl Fn() -> u64 + Send + Sync + 'static,
-    version: &str,
+    build_id: &str,
 ) -> ConnectorResult<Option<PushConnectorHandle>>
 where
     C: CommandService + Clone + Send + Sync + 'static,
@@ -74,7 +74,7 @@ where
     let heartbeat_interval = Duration::from_secs(config.heartbeat_interval_seconds);
     let pull_commands = config.pull_commands;
     let command_poll_interval = Duration::from_secs(config.command_poll_interval_seconds);
-    let version = version.to_owned();
+    let build_id = build_id.to_owned();
 
     let info_url = url.clone();
     let info_node_id = node_id.clone();
@@ -90,7 +90,7 @@ where
             heartbeat_interval,
             pull_commands,
             command_poll_interval,
-            version,
+            build_id,
             command_service,
             uptime_seconds,
             active_flows,
@@ -121,7 +121,7 @@ async fn run_panel_connector<C>(
     heartbeat_interval: Duration,
     pull_commands: bool,
     command_poll_interval: Duration,
-    version: String,
+    build_id: String,
     command_service: C,
     uptime_seconds: impl Fn() -> u64,
     active_flows: impl Fn() -> usize,
@@ -159,7 +159,7 @@ async fn run_panel_connector<C>(
             _ = tick.tick() => {
                 let hb = Heartbeat {
                     node_id: node_id.clone(),
-                    version: version.clone(),
+                    build_id: build_id.clone(),
                     uptime_seconds: uptime_seconds(),
                     active_flows: active_flows(),
                     bytes_up: bytes_up(),
@@ -415,7 +415,7 @@ fn resolve_api_key(
 #[derive(Debug, Serialize)]
 struct Heartbeat {
     node_id: String,
-    version: String,
+    build_id: String,
     uptime_seconds: u64,
     active_flows: usize,
     bytes_up: u64,

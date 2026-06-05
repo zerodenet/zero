@@ -118,8 +118,7 @@ where
     // Shared stats: populated by the dispatcher thread after sink construction,
     // read by the handle on demand.  Created empty here; tags are filled in
     // before the init signal so the handle always sees valid data.
-    let sink_stats: Arc<Mutex<Vec<(String, Arc<PerSinkStats>)>>> =
-        Arc::new(Mutex::new(Vec::new()));
+    let sink_stats: Arc<Mutex<Vec<(String, Arc<PerSinkStats>)>>> = Arc::new(Mutex::new(Vec::new()));
     let stats_for_handle = sink_stats.clone();
     let stats_for_thread = sink_stats.clone();
 
@@ -157,7 +156,14 @@ where
         });
 
         let _ = init_tx.send(Ok(true));
-        run_event_dispatcher(source, sinks, &stats_for_thread, options, shutdown_rx, dead_letter);
+        run_event_dispatcher(
+            source,
+            sinks,
+            &stats_for_thread,
+            options,
+            shutdown_rx,
+            dead_letter,
+        );
     });
 
     let init_result = init_rx
@@ -169,10 +175,7 @@ where
     }
 
     // Stats are now populated; take them out of the mutex for the handle.
-    let stats_snapshot = stats_for_handle
-        .lock()
-        .expect("sink stats")
-        .clone();
+    let stats_snapshot = stats_for_handle.lock().expect("sink stats").clone();
 
     Ok(EventDispatcherHandle {
         shutdown: Some(shutdown_tx),

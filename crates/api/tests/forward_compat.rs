@@ -4,7 +4,6 @@
 /// These tests simulate what happens when a newer server sends responses
 /// with extra fields to an older client that deserializes with the same
 /// type definition — `#[serde(default)]` ensures silent default-filling.
-
 use serde_json::json;
 use zero_api::{
     ConfigSnapshot, FlowSnapshot, HealthSnapshot, QueryResponse, RuntimeSnapshot, StatsSnapshot,
@@ -74,11 +73,11 @@ fn flow_snapshot_tolerates_missing_optional_fields() {
 #[test]
 fn health_snapshot_defaults_missing_fields() {
     let json = json!({
-        "engine_version": "0.0.10",
+        "engine_build_id": "0.0.10",
         "healthy": true
     });
     let result: HealthSnapshot = serde_json::from_value(json).expect("should parse");
-    assert_eq!(result.engine_version, "0.0.10");
+    assert_eq!(result.engine_build_id, "0.0.10");
     assert!(result.healthy);
     assert_eq!(result.started_at_unix_ms, None); // Missing → default
 }

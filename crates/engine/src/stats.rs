@@ -207,8 +207,8 @@ pub enum SessionOutcome {
 impl SessionOutcome {
     pub fn kind(self) -> &'static str {
         match self {
-            SessionOutcome::DirectRelayed => "direct-relayed",
-            SessionOutcome::ChainedRelayed => "chained-relayed",
+            SessionOutcome::DirectRelayed => "direct_relayed",
+            SessionOutcome::ChainedRelayed => "chained_relayed",
             SessionOutcome::Blocked => "blocked",
             SessionOutcome::Failed => "failed",
             SessionOutcome::Cancelled => "cancelled",

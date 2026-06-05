@@ -42,7 +42,9 @@ impl<'de> Deserialize<'de> for QueryRequest {
             return Err(D::Error::custom("expected JSON object for QueryRequest"));
         };
         let Some((key, inner)) = obj.iter().next() else {
-            return Err(D::Error::custom("expected non-empty object for QueryRequest"));
+            return Err(D::Error::custom(
+                "expected non-empty object for QueryRequest",
+            ));
         };
         match key.as_str() {
             "capabilities" => serde_json::from_value(inner.clone())
@@ -145,7 +147,9 @@ impl<'de> Deserialize<'de> for QueryResponse {
             return Err(D::Error::custom("expected JSON object for QueryResponse"));
         };
         let Some((key, inner)) = obj.iter().next() else {
-            return Err(D::Error::custom("expected non-empty object for QueryResponse"));
+            return Err(D::Error::custom(
+                "expected non-empty object for QueryResponse",
+            ));
         };
         match key.as_str() {
             "capabilities" => serde_json::from_value(inner.clone())
@@ -244,7 +248,7 @@ pub struct PolicyGetQuery {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HealthSnapshot {
     #[serde(default)]
-    pub engine_version: String,
+    pub engine_build_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at_unix_ms: Option<u64>,
     #[serde(default)]

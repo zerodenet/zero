@@ -227,7 +227,7 @@ fn network_str(net: Network) -> &'static str {
 fn protocol_str(proto: ProtocolType) -> &'static str {
     match proto {
         ProtocolType::Socks5 => "socks5",
-        ProtocolType::HttpConnect => "http-connect",
+        ProtocolType::HttpConnect => "http_connect",
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Shadowsocks => "shadowsocks",

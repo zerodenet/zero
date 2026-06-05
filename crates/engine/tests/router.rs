@@ -127,22 +127,22 @@ fn rule_set_routes_domain_and_cidr_targets() {
                         "tag": "ads",
                         "type": "file",
                         "path": "{}",
-                        "format": "domain-list"
+                        "format": "domain_list"
                     }},
                     {{
                         "tag": "lan",
                         "type": "file",
                         "path": "{}",
-                        "format": "cidr-list"
+                        "format": "cidr_list"
                     }}
                 ],
                 "rules": [
                     {{
-                        "condition": {{ "type": "rule-set", "tag": "ads" }},
+                        "condition": {{ "type": "rule_set", "tag": "ads" }},
                         "action": {{ "type": "route", "outbound": "block" }}
                     }},
                     {{
-                        "condition": {{ "type": "rule-set", "tag": "lan" }},
+                        "condition": {{ "type": "rule_set", "tag": "lan" }},
                         "action": {{ "type": "route", "outbound": "direct" }}
                     }}
                 ],

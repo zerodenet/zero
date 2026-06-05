@@ -38,7 +38,7 @@ fn webhook_event_sink_posts_normalized_json_event() {
 
     let body = request_body(&request);
     let posted = serde_json::from_str::<Value>(body).expect("posted event json");
-    assert_eq!(posted["schema_version"], "zero.event.v1");
+    assert_eq!(posted["schema_id"], "zero.event.v1");
     assert_eq!(posted["event_id"], "event-1");
     assert_eq!(posted["event_type"], "flow.completed");
     assert_eq!(posted["payload"]["value"], "event-1");

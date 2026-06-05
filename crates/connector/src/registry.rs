@@ -1,5 +1,5 @@
 use std::path::Path;
-#[cfg(feature = "sink-jsonl")]
+#[cfg(feature = "sink_jsonl")]
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -77,7 +77,7 @@ fn build_event_sink(
     }
 }
 
-#[cfg(feature = "sink-jsonl")]
+#[cfg(feature = "sink_jsonl")]
 fn build_json_line_sink(
     tag: &str,
     path: &str,
@@ -106,7 +106,7 @@ fn build_json_line_sink(
     })
 }
 
-#[cfg(not(feature = "sink-jsonl"))]
+#[cfg(not(feature = "sink_jsonl"))]
 fn build_json_line_sink(
     tag: &str,
     _path: &str,
@@ -115,7 +115,7 @@ fn build_json_line_sink(
     _source_dir: Option<&Path>,
 ) -> ConnectorResult<ConfiguredEventSink> {
     Err(ConnectorError::FeatureDisabled {
-        feature: "sink-jsonl",
+        feature: "sink_jsonl",
         sink_type: "jsonl",
         tag: tag.to_owned(),
     })
@@ -158,7 +158,7 @@ fn build_webhook_sink(
     _allow_insecure: bool,
 ) -> ConnectorResult<ConfiguredEventSink> {
     Err(ConnectorError::FeatureDisabled {
-        feature: "panel-connector",
+        feature: "panel_connector",
         sink_type: "webhook",
         tag: tag.to_owned(),
     })
@@ -186,7 +186,7 @@ fn resolve_api_key(
     Ok(value)
 }
 
-#[cfg(feature = "sink-jsonl")]
+#[cfg(feature = "sink_jsonl")]
 fn resolve_path(path: &str, source_dir: Option<&Path>) -> PathBuf {
     let path = PathBuf::from(path);
     if path.is_absolute() {

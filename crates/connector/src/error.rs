@@ -35,7 +35,7 @@ pub enum ConnectorError {
     Request(String),
 }
 
-#[cfg(feature = "panel-connector")]
+#[cfg(feature = "panel_connector")]
 impl From<reqwest::Error> for ConnectorError {
     fn from(e: reqwest::Error) -> Self {
         ConnectorError::Request(e.to_string())

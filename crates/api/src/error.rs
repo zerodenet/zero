@@ -31,15 +31,15 @@ impl ApiError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum ApiErrorCode {
-    #[error("not-found")]
+    #[error("not_found")]
     NotFound,
-    #[error("invalid-argument")]
+    #[error("invalid_argument")]
     InvalidArgument,
-    #[error("permission-denied")]
+    #[error("permission_denied")]
     PermissionDenied,
-    #[error("feature-disabled")]
+    #[error("feature_disabled")]
     FeatureDisabled,
     #[error("conflict")]
     Conflict,
@@ -51,13 +51,13 @@ pub enum ApiErrorCode {
 
 impl ApiErrorCode {
     /// Stable string code used in JSON error responses.
-    /// Returns kebab-case, matching the serde wire format.
+    /// Returns snake_case, matching the serde wire format.
     pub fn as_code_str(&self) -> &'static str {
         match self {
-            Self::NotFound => "not-found",
-            Self::InvalidArgument => "invalid-argument",
-            Self::PermissionDenied => "permission-denied",
-            Self::FeatureDisabled => "feature-disabled",
+            Self::NotFound => "not_found",
+            Self::InvalidArgument => "invalid_argument",
+            Self::PermissionDenied => "permission_denied",
+            Self::FeatureDisabled => "feature_disabled",
             Self::Conflict => "conflict",
             Self::Unsupported => "unsupported",
             Self::Internal => "internal",

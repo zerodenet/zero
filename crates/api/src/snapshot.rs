@@ -114,7 +114,7 @@ pub struct PolicySnapshot {
     #[serde(default)]
     pub effective_chains: Vec<Vec<String>>,
     #[serde(default)]
-    pub urltest_members: Vec<PolicyMemberSnapshot>,
+    pub url_test_members: Vec<PolicyMemberSnapshot>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

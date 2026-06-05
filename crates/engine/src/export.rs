@@ -1,4 +1,4 @@
-//! Engine export — converts internal types to `zero-api` snapshot types.
+//! Engine export --converts internal types to `zero-api` snapshot types.
 //!
 //! Free conversion functions are used instead of `From` impls because the
 //! snapshot types live in `zero-api` (foreign crate). This satisfies the
@@ -62,11 +62,7 @@ impl Engine {
                 .collect(),
             pid: self.pid,
             config_path: self.config_path().map(|p| p.display().to_string()),
-            active_sessions: self
-                .active_sessions()
-                .iter()
-                .map(session_to_flow)
-                .collect(),
+            active_sessions: self.active_sessions().iter().map(session_to_flow).collect(),
             recent_completed_sessions: self
                 .completed_sessions()
                 .iter()
@@ -252,8 +248,7 @@ fn build_policy_snapshot(
     let group = plan
         .target(group_id)
         .expect("engine plan should resolve outbound group");
-    let effective_chains =
-        view.render_target_chains(&resolve_target_chains(plan, state, group_id));
+    let effective_chains = view.render_target_chains(&resolve_target_chains(plan, state, group_id));
 
     if let Some(selector) = group.as_selector() {
         PolicySnapshot {
@@ -267,7 +262,7 @@ fn build_policy_snapshot(
             latency_ms: None,
             last_checked_unix_ms: None,
             effective_chains,
-            urltest_members: Vec::new(),
+            url_test_members: Vec::new(),
         }
     } else if let Some(fallback) = group.as_fallback() {
         PolicySnapshot {
@@ -281,13 +276,13 @@ fn build_policy_snapshot(
             latency_ms: None,
             last_checked_unix_ms: None,
             effective_chains,
-            urltest_members: Vec::new(),
+            url_test_members: Vec::new(),
         }
     } else if let Some(urltest) = group.as_urltest() {
         let runtime = state.urltest_state(group_id);
         PolicySnapshot {
             tag: group.tag().to_owned(),
-            kind: "urltest".to_owned(),
+            kind: "url_test".to_owned(),
             outbounds: view.target_tags(urltest.members()),
             selected: runtime
                 .as_ref()
@@ -298,12 +293,10 @@ fn build_policy_snapshot(
                 .as_ref()
                 .and_then(|current| current.last_checked_unix_ms),
             effective_chains,
-            urltest_members: urltest
+            url_test_members: urltest
                 .members()
                 .iter()
-                .map(|member_id| {
-                    build_policy_member_snapshot(plan, *member_id, runtime.as_ref())
-                })
+                .map(|member_id| build_policy_member_snapshot(plan, *member_id, runtime.as_ref()))
                 .collect(),
         }
     } else if let Some(relay) = group.as_relay() {
@@ -315,12 +308,12 @@ fn build_policy_snapshot(
             latency_ms: None,
             last_checked_unix_ms: None,
             effective_chains,
-            urltest_members: Vec::new(),
+            url_test_members: Vec::new(),
         }
     } else if let Some(lb) = group.as_loadbalance() {
         PolicySnapshot {
             tag: group.tag().to_owned(),
-            kind: "loadbalance".to_owned(),
+            kind: "load_balance".to_owned(),
             outbounds: view.target_tags(lb.members()),
             selected: lb
                 .members()
@@ -329,7 +322,7 @@ fn build_policy_snapshot(
             latency_ms: None,
             last_checked_unix_ms: None,
             effective_chains,
-            urltest_members: Vec::new(),
+            url_test_members: Vec::new(),
         }
     } else {
         unreachable!("outbound group export requires a group target")
@@ -367,7 +360,7 @@ fn build_policy_member_snapshot(
 fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
     match protocol {
         InboundProtocolConfig::Socks5 { .. } => "socks5",
-        InboundProtocolConfig::HttpConnect => "http-connect",
+        InboundProtocolConfig::HttpConnect => "http_connect",
         InboundProtocolConfig::Mixed { .. } => "mixed",
         InboundProtocolConfig::Vless { .. } => "vless",
         InboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
@@ -382,7 +375,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
 fn protocol_name(protocol: ProtocolType) -> &'static str {
     match protocol {
         ProtocolType::Socks5 => "socks5",
-        ProtocolType::HttpConnect => "http-connect",
+        ProtocolType::HttpConnect => "http_connect",
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Shadowsocks => "shadowsocks",

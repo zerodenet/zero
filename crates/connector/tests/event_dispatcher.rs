@@ -1,4 +1,4 @@
-#![cfg(feature = "sink-jsonl")]
+#![cfg(feature = "sink_jsonl")]
 
 use std::fs;
 use std::sync::{Arc, Mutex};

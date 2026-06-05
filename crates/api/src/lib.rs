@@ -39,15 +39,16 @@ pub use sink::{
 };
 pub use snapshot::{
     AddressSnapshot, AuthSnapshot, CompletedFlowSnapshot, ConfigSnapshot, FlowSnapshot,
-    ListenerSnapshot, ModeSnapshot, OutboundTargetSnapshot, OutboundTrafficStats, PolicyMemberSnapshot,
-    PolicySnapshot, RuntimeSnapshot, StatsSnapshot, StatusSnapshot, UdpUpstreamStats,
+    ListenerSnapshot, ModeSnapshot, OutboundTargetSnapshot, OutboundTrafficStats,
+    PolicyMemberSnapshot, PolicySnapshot, RuntimeSnapshot, StatsSnapshot, StatusSnapshot,
+    UdpUpstreamStats,
 };
 pub use traits::{ApiAuth, ApiCodec, CommandService, EventSink, EventSource, QueryService};
 #[cfg(feature = "webhook")]
 pub use webhook::{WebhookEventSink, WebhookEventSinkConfig};
 
-pub const API_VERSION: &str = "zero.api.v1";
-pub const EVENT_SCHEMA_VERSION: &str = "zero.event.v1";
+pub const API_ID: &str = "zero.api.v1";
+pub const EVENT_SCHEMA_ID: &str = "zero.event.v1";
 
 pub type ApiResult<T> = Result<T, ApiError>;
 pub type RawApiEvent = ApiEvent<serde_json::Value>;

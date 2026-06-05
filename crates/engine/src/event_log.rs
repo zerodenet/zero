@@ -15,7 +15,7 @@ use super::completed_sessions::CompletedSessionRecord;
 use super::session_registry::ActiveSession;
 use super::stats::SessionOutcome;
 
-/// Result of [`EngineEventLog::events_since`] — includes the actual start
+/// Result of [`EngineEventLog::events_since`] ->?includes the actual start
 /// sequence so consumers can detect if events were evicted from the ring buffer.
 pub struct EventsSinceResult {
     /// Sequence number of the first event actually returned.
@@ -51,13 +51,13 @@ impl EngineEventLog {
         Arc::new(Self::default())
     }
 
-    pub fn push_engine_started(&self, version: &str) {
+    pub fn push_engine_started(&self, build_id: &str) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
         let payload = json!({
-            "version": version,
+            "build_id": build_id,
             "started_at_unix_ms": now_ms,
         });
         let event = ApiEvent::new("engine-1", event_type::ENGINE_STARTED, now_ms, payload);
@@ -292,7 +292,12 @@ impl EngineEventLog {
     ///
     /// If `actual_from > since + 1`, some events were evicted from the ring
     /// buffer and the consumer has a gap.  Used for SSE `Last-Event-ID` / `?since=` resumption.
-    pub fn events_since(&self, since: u64, limit: usize, filter: &EventFilter) -> EventsSinceResult {
+    pub fn events_since(
+        &self,
+        since: u64,
+        limit: usize,
+        filter: &EventFilter,
+    ) -> EventsSinceResult {
         let events: Vec<RawApiEvent> = self
             .inner
             .lock()
@@ -305,10 +310,7 @@ impl EngineEventLog {
             .cloned()
             .collect();
 
-        let actual_from = events
-            .first()
-            .and_then(|e| e.sequence)
-            .unwrap_or(since + 1);
+        let actual_from = events.first().and_then(|e| e.sequence).unwrap_or(since + 1);
 
         EventsSinceResult {
             actual_from,
@@ -468,7 +470,7 @@ fn api_outcome(outcome: SessionOutcome) -> FlowOutcome {
 fn protocol_name(protocol: ProtocolType) -> &'static str {
     match protocol {
         ProtocolType::Socks5 => "socks5",
-        ProtocolType::HttpConnect => "http-connect",
+        ProtocolType::HttpConnect => "http_connect",
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Shadowsocks => "shadowsocks",

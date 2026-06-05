@@ -135,7 +135,7 @@ impl Engine {
 
         let event_log = EngineEventLog::shared();
 
-        info!(version = env!("CARGO_PKG_VERSION"), "engine started");
+        info!(build_id = env!("CARGO_PKG_VERSION"), "engine started");
         event_log.push_engine_started(env!("CARGO_PKG_VERSION"));
 
         let mode = Arc::new(std::sync::Mutex::new(config.mode.clone()));
@@ -369,10 +369,7 @@ impl Engine {
 
     /// Update the external sink status snapshot (called by the event dispatcher).
     pub fn update_sink_status(&self, status: Vec<zero_api::SinkStatus>) {
-        *self
-            .sink_status
-            .lock()
-            .expect("sink status lock poisoned") = status;
+        *self.sink_status.lock().expect("sink status lock poisoned") = status;
     }
 
     /// Read the current sink status snapshot.

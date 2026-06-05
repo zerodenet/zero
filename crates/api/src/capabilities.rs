@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{Permission, API_VERSION, EVENT_SCHEMA_VERSION};
+use crate::{Permission, API_ID, EVENT_SCHEMA_ID};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApiCapabilities {
     #[serde(default)]
-    pub api_version: String,
+    pub api_id: String,
     #[serde(default)]
-    pub schema_version: String,
+    pub schema_id: String,
     #[serde(default)]
     pub adapters: Vec<AdapterCapability>,
     #[serde(default)]
@@ -24,8 +24,8 @@ pub struct ApiCapabilities {
 impl ApiCapabilities {
     pub fn new() -> Self {
         Self {
-            api_version: API_VERSION.to_owned(),
-            schema_version: EVENT_SCHEMA_VERSION.to_owned(),
+            api_id: API_ID.to_owned(),
+            schema_id: EVENT_SCHEMA_ID.to_owned(),
             adapters: Vec::new(),
             sinks: Vec::new(),
             features: Vec::new(),

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::EVENT_SCHEMA_VERSION;
+use crate::EVENT_SCHEMA_ID;
 
 pub mod event_type {
     pub const FLOW_STARTED: &str = "flow.started";
@@ -44,7 +44,7 @@ pub mod event_type {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ApiEvent<P = serde_json::Value> {
-    pub schema_version: String,
+    pub schema_id: String,
     pub event_id: String,
     pub event_type: String,
     pub occurred_at_unix_ms: u64,
@@ -63,7 +63,7 @@ impl<P> ApiEvent<P> {
         payload: P,
     ) -> Self {
         Self {
-            schema_version: EVENT_SCHEMA_VERSION.to_owned(),
+            schema_id: EVENT_SCHEMA_ID.to_owned(),
             event_id: event_id.into(),
             event_type: event_type.into(),
             occurred_at_unix_ms,

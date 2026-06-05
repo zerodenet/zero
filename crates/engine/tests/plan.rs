@@ -33,7 +33,7 @@ fn builds_engine_plan_for_nested_groups() {
                 },
                 {
                     "tag": "probe",
-                    "type": "urltest",
+                    "type": "url_test",
                     "outbounds": ["proxy", "direct"],
                     "url": "http://example.com/",
                     "interval_seconds": 30
@@ -165,9 +165,9 @@ fn builds_engine_plan_for_loadbalance_group() {
             "outbound_groups": [
                 {
                     "tag": "lb",
-                    "type": "loadbalance",
+                    "type": "load_balance",
                     "outbounds": ["direct", "block"],
-                    "strategy": "round-robin"
+                    "strategy": "round_robin"
                 }
             ],
             "mode": { "type": "global", "outbound": "lb" },
