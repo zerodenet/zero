@@ -7,6 +7,8 @@ use std::io;
 use std::sync::Arc;
 
 use zero_core::Session;
+#[cfg(feature = "socks5")]
+use zero_traits::TcpTunnelProtocol;
 
 use crate::runtime::upstream::VlessUpstream;
 use crate::runtime::Proxy;
@@ -333,11 +335,33 @@ impl Proxy {
     }
 
     /// Connect through a relay chain sequentially.
-    async fn establish_relay_chain(
+    async fn establish_relay_chain<'a>(
         &self,
         session: &Session,
-        chain: Vec<ResolvedLeafOutbound<'_>>,
+        chain: Vec<ResolvedLeafOutbound<'a>>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        let (mut stream, final_hop) = self.establish_relay_prefix(chain).await?;
+
+        send_hop_protocol_request(self, &mut stream, &final_hop, session)
+            .await
+            .map_err(|error| TcpOutboundFailure {
+                stage: "relay_last",
+                error,
+                upstream_endpoint: None,
+            })?;
+
+        Ok(EstablishedTcpOutbound::Relay { upstream: stream })
+    }
+
+    /// Establish all relay hops before the final protocol hop.
+    ///
+    /// The returned stream is connected to the final hop server through the
+    /// preceding relay hops. The caller is responsible for running the final
+    /// hop protocol handshake on that stream.
+    pub(crate) async fn establish_relay_prefix<'a>(
+        &self,
+        chain: Vec<ResolvedLeafOutbound<'a>>,
+    ) -> Result<(TcpRelayStream, ResolvedLeafOutbound<'a>), TcpOutboundFailure> {
         let mut hops = chain.into_iter();
         let first = hops.next().expect("relay chain must have at least 2 hops");
         let second = hops.next().expect("relay chain must have at least 2 hops");
@@ -394,15 +418,7 @@ impl Proxy {
             current_hop = next_hop;
         }
 
-        send_hop_protocol_request(self, &mut stream, &current_hop, session)
-            .await
-            .map_err(|error| TcpOutboundFailure {
-                stage: "relay_last",
-                error,
-                upstream_endpoint: None,
-            })?;
-
-        Ok(EstablishedTcpOutbound::Relay { upstream: stream })
+        Ok((stream, current_hop))
     }
 }
 
@@ -420,35 +436,49 @@ async fn send_hop_protocol_request(
         } => proxy
             .protocols
             .socks5_outbound
-            .establish_tunnel_with_auth(
+            .establish_tcp_tunnel(
                 stream,
-                session,
-                username
-                    .zip(*password)
-                    .map(|(u, p)| socks5::Socks5OutboundAuth {
-                        username: u,
-                        password: p,
-                    }),
+                &socks5::Socks5TcpTunnelTarget {
+                    session,
+                    auth: username
+                        .zip(*password)
+                        .map(|(u, p)| socks5::Socks5OutboundAuth {
+                            username: u,
+                            password: p,
+                        }),
+                },
             )
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e))),
         #[cfg(feature = "vless")]
         ResolvedLeafOutbound::Vless { id, flow, .. } => {
             let uuid = vless::parse_uuid(id)?;
-            if let Some(f) = flow {
-                proxy
-                    .protocols
-                    .vless_outbound
-                    .establish_tcp_tunnel_with_flow(stream, session, &uuid, Some(f))
-                    .await
-                    .map_err(|e| EngineError::Io(std::io::Error::other(e)))
+            if flow.is_some() {
+                use zero_traits::TcpTunnelProtocol;
+                <vless::VlessOutbound as TcpTunnelProtocol<
+                    vless::VlessFlowTcpTunnelTarget,
+                >>::establish_tcp_tunnel(
+                    &proxy.protocols.vless_outbound,
+                    stream,
+                    &vless::VlessFlowTcpTunnelTarget {
+                        session,
+                        id: &uuid,
+                        flow: flow.map(|f| f),
+                    },
+                )
+                .await
+                .map_err(|e| EngineError::Io(std::io::Error::other(e)))
             } else {
-                proxy
-                    .protocols
-                    .vless_outbound
-                    .establish_tcp_tunnel(stream, session, &uuid)
-                    .await
-                    .map_err(|e| EngineError::Io(std::io::Error::other(e)))
+                use zero_traits::TcpTunnelProtocol;
+                <vless::VlessOutbound as TcpTunnelProtocol<
+                    vless::VlessTcpTunnelTarget,
+                >>::establish_tcp_tunnel(
+                    &proxy.protocols.vless_outbound,
+                    stream,
+                    &vless::VlessTcpTunnelTarget { session, id: &uuid },
+                )
+                .await
+                .map_err(|e| EngineError::Io(std::io::Error::other(e)))
             }
         }
         #[cfg(feature = "shadowsocks")]
@@ -456,23 +486,33 @@ async fn send_hop_protocol_request(
             password, cipher, ..
         } => {
             use shadowsocks::{CipherKind, ShadowsocksOutbound};
+            use zero_traits::TcpSessionProtocol;
             let kind = CipherKind::from_str(cipher).ok_or_else(|| {
                 EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     format!("unknown ss cipher: {cipher}"),
                 ))
             })?;
-            ShadowsocksOutbound
-                .send_request(stream, session, kind, password.as_bytes())
-                .await
-                .map(|_| ())
-                .map_err(|e| EngineError::Io(std::io::Error::other(e)))
+            <ShadowsocksOutbound as TcpSessionProtocol<
+                shadowsocks::ShadowsocksTcpTarget,
+            >>::establish_tcp_session(
+                &ShadowsocksOutbound,
+                stream,
+                &shadowsocks::ShadowsocksTcpTarget {
+                    session,
+                    cipher: kind,
+                    password: password.as_bytes(),
+                },
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| EngineError::Io(std::io::Error::other(e)))
         }
         #[cfg(feature = "trojan")]
         ResolvedLeafOutbound::Trojan { password, .. } => proxy
             .protocols
             .trojan_outbound
-            .send_request(stream, session, password)
+            .establish_tcp_tunnel(stream, &trojan::TrojanTcpTunnelTarget { session, password })
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e))),
         #[cfg(feature = "vmess")]
@@ -486,10 +526,20 @@ async fn send_hop_protocol_request(
                     format!("vmess unknown cipher: {cipher}"),
                 ))
             })?;
-            vmess::VmessOutbound
-                .establish_tcp_tunnel(stream, session, &uuid, vmess_cipher)
-                .await
-                .map_err(|e| EngineError::Io(std::io::Error::other(e)))
+            use zero_traits::TcpTunnelProtocol;
+            <vmess::VmessOutbound as TcpTunnelProtocol<
+                vmess::VmessTcpTunnelTarget,
+            >>::establish_tcp_tunnel(
+                &vmess::VmessOutbound,
+                stream,
+                &vmess::VmessTcpTunnelTarget {
+                    session,
+                    uuid: &uuid,
+                    cipher: vmess_cipher,
+                },
+            )
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(e)))
         }
         #[cfg(feature = "mieru")]
         ResolvedLeafOutbound::Mieru { .. } => Err(EngineError::Io(std::io::Error::new(

@@ -2,6 +2,8 @@ use zero_config::{ClientTlsConfig, GrpcConfig, H2Config, QuicConfig, RealityConf
 use zero_core::Session;
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
+#[cfg(feature = "socks5")]
+use zero_traits::TcpTunnelProtocol;
 
 #[cfg(feature = "trojan")]
 use tokio::io::AsyncWriteExt;
@@ -46,10 +48,15 @@ impl Proxy {
 
         self.protocols
             .socks5_outbound
-            .establish_tunnel_with_auth(
+            .establish_tcp_tunnel(
                 &mut upstream,
-                session,
-                auth.map(|(username, password)| socks5::Socks5OutboundAuth { username, password }),
+                &socks5::Socks5TcpTunnelTarget {
+                    session,
+                    auth: auth.map(|(username, password)| socks5::Socks5OutboundAuth {
+                        username,
+                        password,
+                    }),
+                },
             )
             .await?;
         self.record_session_outbound_traffic(session.id, upstream.drain_traffic());
@@ -132,9 +139,17 @@ impl Proxy {
         let mut metered = crate::transport::MeteredStream::new(stream);
 
         if is_reality {
+            use zero_traits::DeferredTcpTunnelProtocol;
             self.protocols
                 .vless_outbound
-                .send_tcp_request_with_flow(&mut metered, session, &id, flow)
+                .send_deferred_tcp_tunnel_request(
+                    &mut metered,
+                    &vless::VlessFlowTcpTunnelTarget {
+                        session,
+                        id: &id,
+                        flow,
+                    },
+                )
                 .await?;
             self.record_session_outbound_traffic(session.id, metered.drain_traffic());
 
@@ -142,10 +157,15 @@ impl Proxy {
                 vless::DeferredVlessResponseStream::new(metered.into_inner()),
             ))
         } else {
-            self.protocols
-                .vless_outbound
-                .establish_tcp_tunnel_with_flow(&mut metered, session, &id, flow)
-                .await?;
+            use zero_traits::TcpTunnelProtocol;
+            <vless::VlessOutbound as TcpTunnelProtocol<
+                vless::VlessFlowTcpTunnelTarget,
+            >>::establish_tcp_tunnel(
+                &self.protocols.vless_outbound,
+                &mut metered,
+                &vless::VlessFlowTcpTunnelTarget { session, id: &id, flow },
+            )
+            .await?;
             self.record_session_outbound_traffic(session.id, metered.drain_traffic());
 
             Ok(metered.into_inner())
@@ -233,11 +253,19 @@ impl Proxy {
             ))
         })?;
         let password_bytes = password.as_bytes().to_vec();
-        let ss_session = self
-            .protocols
-            .shadowsocks_outbound
-            .send_request(&mut metered, session, cipher_kind, &password_bytes)
-            .await?;
+        use zero_traits::TcpSessionProtocol;
+        let ss_session = <shadowsocks::ShadowsocksOutbound as TcpSessionProtocol<
+            shadowsocks::ShadowsocksTcpTarget,
+        >>::establish_tcp_session(
+            &self.protocols.shadowsocks_outbound,
+            &mut metered,
+            &shadowsocks::ShadowsocksTcpTarget {
+                session,
+                cipher: cipher_kind,
+                password: &password_bytes,
+            },
+        )
+        .await?;
         self.record_session_outbound_traffic(session.id, metered.drain_traffic());
         let upstream = metered.into_inner();
         let (app_stream, ss_plain_stream) = tokio::io::duplex(64 * 1024);
@@ -283,6 +311,7 @@ impl Proxy {
         grpc: Option<&zero_config::GrpcConfig>,
     ) -> Result<TcpRelayStream, EngineError> {
         use vmess::{parse_uuid, VmessCipher, VmessOutbound};
+        use zero_traits::TcpTunnelProtocol;
 
         let uuid = parse_uuid(id).map_err(|e| {
             EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
@@ -352,9 +381,16 @@ impl Proxy {
         };
 
         let mut sock = crate::transport::MeteredStream::new(stream);
-        VmessOutbound
-            .establish_tcp_tunnel(&mut sock, session, &uuid, vmess_cipher)
-            .await?;
+        <VmessOutbound as TcpTunnelProtocol<vmess::VmessTcpTunnelTarget>>::establish_tcp_tunnel(
+            &VmessOutbound,
+            &mut sock,
+            &vmess::VmessTcpTunnelTarget {
+                session,
+                uuid: &uuid,
+                cipher: vmess_cipher,
+            },
+        )
+        .await?;
         self.record_session_outbound_traffic(session.id, sock.drain_traffic());
         Ok(sock.into_inner())
     }
@@ -413,7 +449,10 @@ impl Proxy {
         let mut metered = crate::transport::MeteredStream::new(tls_stream);
         self.protocols
             .trojan_outbound
-            .send_request(&mut metered, session, password)
+            .establish_tcp_tunnel(
+                &mut metered,
+                &trojan::TrojanTcpTunnelTarget { session, password },
+            )
             .await?;
         metered.flush().await?;
         let traffic = metered.drain_traffic();
@@ -484,12 +523,16 @@ impl Proxy {
         // Wrap in TcpRelayStream for AsyncSocket compatibility
         let mut stream = TcpRelayStream::new(socket);
 
-        let outbound = mieru::MieruOutbound::connect(
+        use zero_traits::TcpSessionProtocol;
+        let outbound = <mieru::MieruProtocol as TcpSessionProtocol<mieru::MieruTcpTarget>>::establish_tcp_session(
+            &mieru::MieruProtocol,
             &mut stream,
-            username,
-            password,
-            &session.target,
-            session.port,
+            &mieru::MieruTcpTarget {
+                target: &session.target,
+                port: session.port,
+                username,
+                password,
+            },
         )
         .await
         .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru handshake: {e}"))))?;

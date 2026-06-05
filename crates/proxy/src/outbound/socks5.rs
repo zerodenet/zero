@@ -8,6 +8,7 @@ use socks5::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
+use zero_traits::UdpRelayProtocol;
 
 use crate::logging::{
     log_udp_upstream_association_created, log_udp_upstream_association_dropped,
@@ -62,9 +63,14 @@ impl ActiveUpstreamSocks5UdpAssociation {
         let (relay_address, relay_port) = proxy
             .protocols
             .socks5_outbound
-            .establish_udp_association_with_auth(
+            .establish_udp_relay(
                 &mut control,
-                auth.map(|(username, password)| socks5::Socks5OutboundAuth { username, password }),
+                &socks5::Socks5UdpRelayTarget {
+                    auth: auth.map(|(username, password)| socks5::Socks5OutboundAuth {
+                        username,
+                        password,
+                    }),
+                },
             )
             .await?;
         proxy.record_session_outbound_traffic(session_id, control.drain_traffic());
