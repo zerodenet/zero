@@ -423,6 +423,8 @@ pub async fn read_exact<S: AsyncSocket>(stream: &mut S, buf: &mut [u8]) -> Resul
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
+
     use super::*;
 
     #[test]

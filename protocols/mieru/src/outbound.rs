@@ -197,3 +197,12 @@ async fn read_exact<S: AsyncSocket>(
     }
     Ok(())
 }
+
+/// Target parameters for Mieru TCP session.
+#[derive(Debug, Clone, Copy)]
+pub struct MieruTcpTarget<'a> {
+    pub target: &'a Address,
+    pub port: u16,
+    pub username: &'a str,
+    pub password: &'a str,
+}

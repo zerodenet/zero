@@ -4,15 +4,20 @@
 extern crate alloc;
 
 mod inbound;
+mod metadata;
 mod outbound;
 pub mod shared;
 
 #[cfg(feature = "crypto")]
 pub use inbound::ShadowsocksAccept;
 pub use inbound::ShadowsocksInbound;
+pub use metadata::ShadowsocksProtocol;
 pub use outbound::ShadowsocksOutbound;
 #[cfg(feature = "crypto")]
-pub use outbound::ShadowsocksOutboundSession;
+pub use outbound::{
+    ShadowsocksOutboundSession, ShadowsocksTcpTarget, ShadowsocksUdpDecodeContext,
+    ShadowsocksUdpPacket, ShadowsocksUdpPacketTarget,
+};
 #[cfg(feature = "blake3")]
 pub use shared::derive_key_blake3;
 #[cfg(feature = "crypto")]

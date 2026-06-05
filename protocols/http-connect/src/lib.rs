@@ -4,6 +4,8 @@
 extern crate alloc;
 
 mod inbound;
+mod metadata;
 mod parse;
 
 pub use inbound::{HttpConnectInbound, HttpConnectResponse};
+pub use metadata::HttpConnectProtocol;

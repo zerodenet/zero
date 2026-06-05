@@ -7,11 +7,16 @@
 #![allow(async_fn_in_trait)]
 
 mod inbound;
+mod metadata;
 mod outbound;
 pub mod shared;
 
 pub use inbound::{TrojanAccept, TrojanInbound};
-pub use outbound::{build_udp_request, TrojanOutbound};
+pub use metadata::TrojanProtocol;
+pub use outbound::{
+    build_udp_request, TrojanOutbound, TrojanTcpTunnelTarget, TrojanUdpPacket,
+    TrojanUdpPacketTunnelTarget,
+};
 pub use shared::{
     build_udp_packet, read_password, read_request, read_udp_packet, write_password, write_request,
     write_udp_packet, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, CMD_TCP, CMD_UDP, CRLF, PASSWORD_HASH_LEN,

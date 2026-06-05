@@ -8,6 +8,7 @@ mod deferred_response;
 #[cfg(feature = "reality")]
 mod flow;
 mod inbound;
+pub mod metadata;
 pub mod mux;
 #[cfg(feature = "reality")]
 mod mux_crypto;
@@ -26,6 +27,7 @@ pub use flow::{
     FLOW_XTLS_RPRX_VISION_UDP,
 };
 pub use inbound::{VlessInbound, VlessUser, VlessUserStore};
+pub use metadata::VlessProtocol;
 pub use mux::{
     encode_frame, encode_new_stream, encode_new_stream_response, parse_new_stream_payload,
     parse_new_stream_response, MuxClient, MuxClientStream, MuxFrame, MuxServer,
@@ -33,7 +35,11 @@ pub use mux::{
 };
 #[cfg(feature = "reality")]
 pub use mux_crypto::MuxCrypto;
-pub use outbound::VlessOutbound;
+#[cfg(feature = "reality")]
+pub use outbound::VlessFlowTcpTunnelTarget;
+pub use outbound::{
+    VlessOutbound, VlessTcpTunnelTarget, VlessUdpPacketTarget, VlessUdpPacketTunnelTarget,
+};
 #[cfg(feature = "reality")]
 pub use reality::{
     generate_reality_key_pair, upgrade_reality_client, upgrade_reality_server,

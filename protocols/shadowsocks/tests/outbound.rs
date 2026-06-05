@@ -4,10 +4,11 @@ use std::io;
 
 use shadowsocks::{
     decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, derive_key, parse_target_data, CipherKind,
-    ShadowsocksOutbound, TCP_CHUNK_SIZE_LEN,
+    ShadowsocksOutbound, ShadowsocksUdpDecodeContext, ShadowsocksUdpPacketTarget,
+    TCP_CHUNK_SIZE_LEN,
 };
 use zero_core::{Address, Network, ProtocolType, Session};
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, UdpDatagramFraming};
 
 #[derive(Default)]
 struct RecordingSocket {
@@ -79,4 +80,77 @@ async fn outbound_writes_salt_and_first_chunk_in_one_write() {
     assert_eq!(target, Address::Domain("www.gstatic.com".to_owned()));
     assert_eq!(port, 80);
     assert_eq!(&plain[payload_offset..], b"");
+}
+
+#[test]
+fn udp_datagram_framing_roundtrips_aead_packet() {
+    let cipher = CipherKind::Aes128Gcm;
+    let password = b"test-password";
+
+    let datagram = <ShadowsocksOutbound as UdpDatagramFraming<
+        ShadowsocksUdpPacketTarget,
+        ShadowsocksUdpDecodeContext,
+    >>::encode_udp_datagram(
+        &ShadowsocksOutbound,
+        &ShadowsocksUdpPacketTarget {
+            target: &Address::Ipv4([8, 8, 8, 8]),
+            port: 53,
+            payload: b"query",
+            cipher,
+            password,
+        },
+    )
+    .expect("encode udp datagram");
+
+    assert!(datagram.len() > cipher.salt_len() + cipher.tag_len());
+
+    let decoded = <ShadowsocksOutbound as UdpDatagramFraming<
+        ShadowsocksUdpPacketTarget,
+        ShadowsocksUdpDecodeContext,
+    >>::decode_udp_datagram(
+        &ShadowsocksOutbound,
+        &ShadowsocksUdpDecodeContext { cipher, password },
+        &datagram,
+    )
+    .expect("decode udp datagram");
+
+    assert_eq!(decoded.target, Address::Ipv4([8, 8, 8, 8]));
+    assert_eq!(decoded.port, 53);
+    assert_eq!(decoded.payload, b"query");
+}
+
+#[cfg(feature = "blake3")]
+#[test]
+fn udp_datagram_framing_roundtrips_2022_blake3_packet() {
+    let cipher = CipherKind::Blake3Aes128Gcm;
+    let password = b"test-password";
+
+    let datagram = <ShadowsocksOutbound as UdpDatagramFraming<
+        ShadowsocksUdpPacketTarget,
+        ShadowsocksUdpDecodeContext,
+    >>::encode_udp_datagram(
+        &ShadowsocksOutbound,
+        &ShadowsocksUdpPacketTarget {
+            target: &Address::Domain("dns.google".to_owned()),
+            port: 53,
+            payload: b"query",
+            cipher,
+            password,
+        },
+    )
+    .expect("encode udp datagram");
+
+    let decoded = <ShadowsocksOutbound as UdpDatagramFraming<
+        ShadowsocksUdpPacketTarget,
+        ShadowsocksUdpDecodeContext,
+    >>::decode_udp_datagram(
+        &ShadowsocksOutbound,
+        &ShadowsocksUdpDecodeContext { cipher, password },
+        &datagram,
+    )
+    .expect("decode udp datagram");
+
+    assert_eq!(decoded.target, Address::Domain("dns.google".to_owned()));
+    assert_eq!(decoded.port, 53);
+    assert_eq!(decoded.payload, b"query");
 }

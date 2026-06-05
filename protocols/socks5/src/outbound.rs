@@ -2,7 +2,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use zero_core::{Address, Error, ProtocolType, Session};
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, TcpTunnelProtocol, UdpRelayProtocol};
 
 use crate::shared::{
     read_address, read_exact, write_address, CMD_CONNECT, CMD_UDP_ASSOCIATE, METHOD_NO_AUTH,
@@ -18,6 +18,12 @@ pub struct Socks5Outbound;
 pub struct Socks5OutboundAuth<'a> {
     pub username: &'a str,
     pub password: &'a str,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Socks5TcpTunnelTarget<'a> {
+    pub session: &'a Session,
+    pub auth: Option<Socks5OutboundAuth<'a>>,
 }
 
 impl Socks5Outbound {
@@ -95,6 +101,45 @@ impl Socks5Outbound {
             .map_err(|_| Error::Io("failed to write SOCKS5 outbound udp associate request"))?;
 
         read_response(stream).await
+    }
+}
+
+impl<'a> TcpTunnelProtocol<Socks5TcpTunnelTarget<'a>> for Socks5Outbound {
+    type Error = Error;
+
+    async fn establish_tcp_tunnel<S>(
+        &self,
+        stream: &mut S,
+        target: &Socks5TcpTunnelTarget<'a>,
+    ) -> Result<(), Self::Error>
+    where
+        S: AsyncSocket,
+    {
+        self.establish_tunnel_with_auth(stream, target.session, target.auth)
+            .await
+    }
+}
+
+/// Target parameters for SOCKS5 UDP relay association.
+#[derive(Debug, Clone, Copy)]
+pub struct Socks5UdpRelayTarget<'a> {
+    pub auth: Option<Socks5OutboundAuth<'a>>,
+}
+
+impl<'a> UdpRelayProtocol<Socks5UdpRelayTarget<'a>> for Socks5Outbound {
+    type Error = Error;
+    type RelayEndpoint = (Address, u16);
+
+    async fn establish_udp_relay<S>(
+        &self,
+        control_stream: &mut S,
+        target: &Socks5UdpRelayTarget<'a>,
+    ) -> Result<Self::RelayEndpoint, Self::Error>
+    where
+        S: AsyncSocket,
+    {
+        self.establish_udp_association_with_auth(control_stream, target.auth)
+            .await
     }
 }
 

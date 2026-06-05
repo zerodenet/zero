@@ -6,6 +6,9 @@ use vless::{
 };
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
+#[cfg(feature = "reality")]
+use zero_traits::DeferredTcpTunnelProtocol;
+use zero_traits::UdpPacketTunnelProtocol;
 
 const USER_ID: &str = "11111111-2222-3333-4444-555555555555";
 
@@ -170,6 +173,81 @@ async fn outbound_establishes_tcp_tunnel_for_ipv4_target() {
         127, 0, 0, 1,
     ]);
     assert_eq!(socket.writes, expected);
+}
+
+#[cfg(feature = "reality")]
+#[tokio::test]
+async fn outbound_deferred_tcp_tunnel_request_does_not_read_response() {
+    let id = parse_uuid(USER_ID).expect("uuid");
+    let mut socket = MockSocket::new(&[]);
+    let session = Session::new(
+        0,
+        Address::Ipv4([127, 0, 0, 1]),
+        8080,
+        Network::Tcp,
+        ProtocolType::Vless,
+    );
+
+    VlessOutbound
+        .send_deferred_tcp_tunnel_request(
+            &mut socket,
+            &vless::VlessFlowTcpTunnelTarget {
+                session: &session,
+                id: &id,
+                flow: None,
+            },
+        )
+        .await
+        .expect("deferred tunnel request");
+
+    let mut expected = vec![0x00];
+    expected.extend_from_slice(&id);
+    expected.extend_from_slice(&[
+        0x00, // addon length
+        0x01, // tcp command
+        0x1f, 0x90, // port 8080
+        0x01, // ipv4
+        127, 0, 0, 1,
+    ]);
+    assert_eq!(socket.writes, expected);
+}
+
+#[tokio::test]
+async fn outbound_establishes_udp_packet_tunnel_and_consumes_response() {
+    let id = parse_uuid(USER_ID).expect("uuid");
+    let mut socket = MockSocket::new(&[
+        0x00, 0x00, // response version + addon length
+    ]);
+    let session = Session::new(
+        0,
+        Address::Ipv4([127, 0, 0, 1]),
+        5353,
+        Network::Udp,
+        ProtocolType::Vless,
+    );
+
+    <VlessOutbound as UdpPacketTunnelProtocol<vless::VlessUdpPacketTunnelTarget>>::establish_udp_packet_tunnel(
+        &VlessOutbound,
+        &mut socket,
+        &vless::VlessUdpPacketTunnelTarget {
+            session: &session,
+            id: &id,
+        },
+    )
+    .await
+    .expect("udp packet tunnel");
+
+    let mut expected = vec![0x00];
+    expected.extend_from_slice(&id);
+    expected.extend_from_slice(&[
+        0x00, // addon length
+        0x02, // udp command
+        0x14, 0xe9, // port 5353
+        0x01, // ipv4
+        127, 0, 0, 1,
+    ]);
+    assert_eq!(socket.writes, expected);
+    assert!(socket.reads.is_empty());
 }
 
 #[tokio::test]

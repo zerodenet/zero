@@ -4,11 +4,13 @@
 extern crate alloc;
 
 mod inbound;
+mod metadata;
 mod outbound;
 pub mod shared;
 pub mod udp;
 
 pub use inbound::{Hysteria2Inbound, Hysteria2User, Hysteria2UserStore};
+pub use metadata::Hysteria2Protocol;
 pub use outbound::Hysteria2Outbound;
 pub use shared::{
     build_auth_error, build_auth_frame, build_auth_ok, build_connect_error, build_connect_ok,

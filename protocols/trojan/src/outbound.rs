@@ -1,7 +1,9 @@
 //! Trojan outbound protocol handler.
 
 use zero_core::{Address, Error, ProtocolType, Session};
-use zero_traits::AsyncSocket;
+use zero_traits::{
+    AsyncSocket, TcpTunnelProtocol, UdpPacketStreamFraming, UdpPacketTunnelProtocol,
+};
 
 use super::shared::{CMD_TCP, CMD_UDP};
 
@@ -29,6 +31,92 @@ impl TrojanOutbound {
             .write_all(&request)
             .await
             .map_err(|_| Error::Io("trojan: write failed"))
+    }
+}
+
+/// Target parameters for Trojan TCP tunnel.
+#[derive(Debug, Clone, Copy)]
+pub struct TrojanTcpTunnelTarget<'a> {
+    pub session: &'a Session,
+    pub password: &'a str,
+}
+
+impl<'a> TcpTunnelProtocol<TrojanTcpTunnelTarget<'a>> for TrojanOutbound {
+    type Error = Error;
+
+    async fn establish_tcp_tunnel<S>(
+        &self,
+        stream: &mut S,
+        target: &TrojanTcpTunnelTarget<'a>,
+    ) -> Result<(), Self::Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_request(stream, target.session, target.password)
+            .await
+    }
+}
+
+/// Target parameters for Trojan UDP packet tunnel over a connected stream.
+#[derive(Debug, Clone, Copy)]
+pub struct TrojanUdpPacketTunnelTarget<'a> {
+    pub session: &'a Session,
+    pub password: &'a str,
+}
+
+impl<'a> UdpPacketTunnelProtocol<TrojanUdpPacketTunnelTarget<'a>> for TrojanOutbound {
+    type Error = Error;
+
+    async fn establish_udp_packet_tunnel<S>(
+        &self,
+        stream: &mut S,
+        target: &TrojanUdpPacketTunnelTarget<'a>,
+    ) -> Result<(), Self::Error>
+    where
+        S: AsyncSocket,
+    {
+        let request =
+            build_udp_request(target.password, &target.session.target, target.session.port)?;
+        stream
+            .write_all(&request)
+            .await
+            .map_err(|_| Error::Io("trojan: write udp request failed"))
+    }
+}
+
+/// One Trojan UDP packet carried over a connected stream.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanUdpPacket {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+}
+
+impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {
+    type Error = Error;
+    type Decoded = TrojanUdpPacket;
+
+    async fn write_udp_packet<S>(
+        &self,
+        stream: &mut S,
+        packet: &TrojanUdpPacket,
+    ) -> Result<(), Self::Error>
+    where
+        S: AsyncSocket,
+    {
+        super::shared::write_udp_packet(stream, &packet.target, packet.port, &packet.payload).await
+    }
+
+    async fn read_udp_packet<S>(&self, stream: &mut S) -> Result<Self::Decoded, Self::Error>
+    where
+        S: AsyncSocket,
+    {
+        let (target, port, payload) = super::shared::read_udp_packet(stream).await?;
+        Ok(TrojanUdpPacket {
+            target,
+            port,
+            payload,
+        })
     }
 }
 

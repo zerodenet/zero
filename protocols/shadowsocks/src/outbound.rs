@@ -2,9 +2,9 @@
 
 use zero_core::ProtocolType;
 #[cfg(feature = "crypto")]
-use zero_core::{Error, Session};
+use zero_core::{Address, Error, Session};
 #[cfg(feature = "crypto")]
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, TcpSessionProtocol, UdpDatagramFraming};
 
 /// Shadowsocks outbound handler.
 #[derive(Debug, Default, Clone, Copy)]
@@ -73,6 +73,140 @@ impl ShadowsocksOutbound {
             session_key: key,
             next_upload_nonce: nonce,
             cipher,
+        })
+    }
+}
+
+/// Target parameters for Shadowsocks TCP session.
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, Copy)]
+pub struct ShadowsocksTcpTarget<'a> {
+    pub session: &'a Session,
+    pub cipher: super::shared::CipherKind,
+    pub password: &'a [u8],
+}
+
+#[cfg(feature = "crypto")]
+impl<'a> TcpSessionProtocol<ShadowsocksTcpTarget<'a>> for ShadowsocksOutbound {
+    type Error = Error;
+    type Session = ShadowsocksOutboundSession;
+
+    async fn establish_tcp_session<S>(
+        &self,
+        stream: &mut S,
+        target: &ShadowsocksTcpTarget<'a>,
+    ) -> Result<Self::Session, Self::Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_request(stream, target.session, target.cipher, target.password)
+            .await
+    }
+}
+
+/// One plaintext UDP payload to encode into a Shadowsocks UDP datagram.
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, Copy)]
+pub struct ShadowsocksUdpPacketTarget<'a> {
+    pub target: &'a Address,
+    pub port: u16,
+    pub payload: &'a [u8],
+    pub cipher: super::shared::CipherKind,
+    pub password: &'a [u8],
+}
+
+/// Decryption context for a Shadowsocks UDP datagram received from upstream.
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, Copy)]
+pub struct ShadowsocksUdpDecodeContext<'a> {
+    pub cipher: super::shared::CipherKind,
+    pub password: &'a [u8],
+}
+
+/// One decoded Shadowsocks UDP datagram.
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksUdpPacket {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+}
+
+#[cfg(feature = "crypto")]
+impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecodeContext<'a>>
+    for ShadowsocksOutbound
+{
+    type Error = Error;
+    type Decoded = ShadowsocksUdpPacket;
+
+    fn encode_udp_datagram(
+        &self,
+        packet: &ShadowsocksUdpPacketTarget<'a>,
+    ) -> Result<Vec<u8>, Self::Error> {
+        use super::shared::{aead_encrypt_udp, build_target_data, derive_key};
+
+        let target_data = build_target_data(packet.target, packet.port, packet.payload)?;
+        let mut salt = vec![0u8; packet.cipher.salt_len()];
+        use ring::rand::SecureRandom;
+        ring::rand::SystemRandom::new()
+            .fill(&mut salt)
+            .map_err(|_| Error::Protocol("ss: random failed"))?;
+
+        let key = if packet.cipher.is_blake3() {
+            #[cfg(feature = "blake3")]
+            {
+                super::shared::derive_key_blake3(packet.password, &salt, packet.cipher.key_len())?
+            }
+            #[cfg(not(feature = "blake3"))]
+            return Err(Error::Unsupported("ss: blake3 feature not enabled"));
+        } else {
+            derive_key(packet.password, &salt, packet.cipher.key_len())?
+        };
+
+        let encrypted = aead_encrypt_udp(packet.cipher, &key, &[0u8; 12], &target_data)?;
+        let mut datagram = Vec::with_capacity(salt.len() + encrypted.len());
+        datagram.extend_from_slice(&salt);
+        datagram.extend_from_slice(&encrypted);
+        Ok(datagram)
+    }
+
+    fn decode_udp_datagram(
+        &self,
+        context: &ShadowsocksUdpDecodeContext<'a>,
+        datagram: &[u8],
+    ) -> Result<Self::Decoded, Self::Error> {
+        use super::shared::{aead_decrypt_udp, derive_key, parse_target_data};
+
+        let salt_len = context.cipher.salt_len();
+        if datagram.len() < salt_len + context.cipher.tag_len() {
+            return Err(Error::Protocol("ss: udp datagram too short"));
+        }
+
+        let key = if context.cipher.is_blake3() {
+            #[cfg(feature = "blake3")]
+            {
+                super::shared::derive_key_blake3(
+                    context.password,
+                    &datagram[..salt_len],
+                    context.cipher.key_len(),
+                )?
+            }
+            #[cfg(not(feature = "blake3"))]
+            return Err(Error::Unsupported("ss: blake3 feature not enabled"));
+        } else {
+            derive_key(
+                context.password,
+                &datagram[..salt_len],
+                context.cipher.key_len(),
+            )?
+        };
+
+        let plain = aead_decrypt_udp(context.cipher, &key, &[0u8; 12], &datagram[salt_len..])?;
+        let (target, port, payload_offset) = parse_target_data(&plain)?;
+        Ok(ShadowsocksUdpPacket {
+            target,
+            port,
+            payload: plain[payload_offset..].to_vec(),
         })
     }
 }

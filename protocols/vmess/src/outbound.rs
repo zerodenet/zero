@@ -1,6 +1,6 @@
 use rand::Rng;
 use zero_core::{Error, ProtocolType, Session};
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, TcpTunnelProtocol};
 
 use crate::crypto::{
     aead_decrypt, aead_encrypt, compute_auth_id, current_timestamp, derive_body_key_nonce,
@@ -40,6 +40,30 @@ impl VmessOutbound {
         read_response(stream, uuid, cipher).await?;
 
         Ok(())
+    }
+}
+
+/// Target parameters for VMess TCP tunnel.
+#[derive(Debug, Clone, Copy)]
+pub struct VmessTcpTunnelTarget<'a> {
+    pub session: &'a Session,
+    pub uuid: &'a [u8; 16],
+    pub cipher: VmessCipher,
+}
+
+impl<'a> TcpTunnelProtocol<VmessTcpTunnelTarget<'a>> for VmessOutbound {
+    type Error = Error;
+
+    async fn establish_tcp_tunnel<S>(
+        &self,
+        stream: &mut S,
+        target: &VmessTcpTunnelTarget<'a>,
+    ) -> Result<(), Self::Error>
+    where
+        S: AsyncSocket,
+    {
+        self.establish_tcp_tunnel(stream, target.session, target.uuid, target.cipher)
+            .await
     }
 }
 

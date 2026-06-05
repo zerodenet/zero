@@ -119,7 +119,7 @@ pub async fn read_udp_packet<S: AsyncSocket>(
     Ok((addr, port, payload))
 }
 
-// ── internal helpers ────────────────────────────────────────────────
+// Internal helpers.
 
 fn build_address_body(addr: &Address, port: u16, payload: &[u8]) -> Vec<u8> {
     let mut body = Vec::new();
