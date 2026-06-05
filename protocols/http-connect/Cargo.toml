@@ -1,5 +1,5 @@
 [package]
-name = "http-connect"
+name = "http_connect"
 version = "0.0.1"  # RFC 7231, no upstream reference
 edition.workspace = true
 authors.workspace = true

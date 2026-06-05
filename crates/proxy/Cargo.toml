@@ -10,21 +10,21 @@ homepage.workspace = true
 [features]
 default = [
     "socks5",
-    "http-connect",
+    "http_connect",
     "mixed",
     "vless",
 ]
 socks5 = ["dep:socks5"]
-http-connect = ["dep:http-connect"]
-mixed = ["socks5", "http-connect"]
+http_connect = ["dep:http_connect"]
+mixed = ["socks5", "http_connect"]
 vless = [
     "zero-platform-tokio/vless-reality",
     "zero-transport/tls",
     "zero-transport/ws",
     "zero-transport/grpc",
     "zero-transport/h2",
-    "zero-transport/http-upgrade",
-    "zero-transport/split-http",
+    "zero-transport/http_upgrade",
+    "zero-transport/split_http",
     "zero-transport/quic",
     "dep:vless",
     "vless/reality",
@@ -62,7 +62,7 @@ mieru = [
     "dep:mieru",
     "mieru/crypto",
 ]
-dns-udp = ["zero-dns/udp"]
+dns = ["zero-dns/udp"]
 
 [dependencies]
 async-trait = "0.1"
@@ -78,7 +78,7 @@ zero-core = { path = "../core" }
 zero-dns = { path = "../dns" }
 zero-engine = { path = "../engine" }
 zero-platform-tokio = { path = "../platform/tokio" }
-http-connect = { path = "../../protocols/http-connect", optional = true }
+http_connect = { path = "../../protocols/http-connect", optional = true }
 socks5 = { path = "../../protocols/socks5", optional = true }
 vless = { path = "../../protocols/vless", optional = true, default-features = false }
 hysteria2 = { path = "../../protocols/hysteria2", optional = true, default-features = false }

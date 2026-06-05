@@ -8,10 +8,10 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-default = ["full", "status-api"]
+default = ["full", "status_api"]
 full = [
     "socks5",
-    "http-connect",
+    "http_connect",
     "mixed",
     "vless",
     "hysteria2",
@@ -19,11 +19,11 @@ full = [
     "trojan",
     "vmess",
     "mieru",
-    "dns-udp",
+    "dns",
 ]
-dns-udp = ["zero-proxy/dns-udp"]
+dns = ["zero-proxy/dns"]
 socks5 = ["zero-proxy/socks5"]
-http-connect = ["zero-proxy/http-connect"]
+http_connect = ["zero-proxy/http_connect"]
 mixed = ["zero-proxy/mixed"]
 vless = ["zero-proxy/vless"]
 hysteria2 = ["zero-proxy/hysteria2"]
@@ -31,11 +31,11 @@ shadowsocks = ["zero-proxy/shadowsocks"]
 trojan = ["zero-proxy/trojan"]
 vmess = ["zero-proxy/vmess"]
 mieru = ["zero-proxy/mieru"]
-status-api = []
-event-dispatcher = ["dep:zero-connector", "zero-connector/event-dispatcher"]
-sink-jsonl = ["event-dispatcher", "zero-connector/sink-jsonl"]
-panel-connector = ["status-api", "event-dispatcher", "zero-connector/panel-connector"]
-grpc-api = ["dep:zero-grpc"]
+status_api = []
+event_dispatcher = ["dep:zero-connector", "zero-connector/event_dispatcher"]
+sink_jsonl = ["event_dispatcher", "zero-connector/sink_jsonl"]
+panel_connector = ["status_api", "event_dispatcher", "zero-connector/panel_connector"]
+grpc_api = ["dep:zero-grpc"]
 
 [workspace]
 members = [

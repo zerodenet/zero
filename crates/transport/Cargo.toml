@@ -11,13 +11,13 @@ homepage.workspace = true
 default = []
 grpc = []
 h2 = []
-http-upgrade = []
-split-http = []
+http_upgrade = []
+split_http = []
 quic = []
 tls = []
 ws = []
 hysteria2 = []
-vless = ["grpc", "h2", "http-upgrade", "split-http", "quic", "tls", "ws"]
+vless = ["grpc", "h2", "http_upgrade", "split_http", "quic", "tls", "ws"]
 
 [dependencies]
 bytes = "1"

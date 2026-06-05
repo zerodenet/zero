@@ -9,10 +9,10 @@ homepage.workspace = true
 
 [features]
 default = []
-event-dispatcher = []
-sink-jsonl = ["event-dispatcher"]
-webhook = ["event-dispatcher", "zero-api/webhook"]
-panel-connector = ["webhook", "dep:reqwest"]
+event_dispatcher = []
+sink_jsonl = ["event_dispatcher"]
+webhook = ["event_dispatcher", "zero-api/webhook"]
+panel_connector = ["webhook", "dep:reqwest"]
 
 [dependencies]
 serde.workspace = true
