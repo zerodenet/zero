@@ -16,7 +16,7 @@
 
 ```
 → {"type":"query","id":1,"request":{"health":{}}}\n
-← {"api_id":"zero.api.v1","ok":true,"id":1,"result":{"engine_build_id":"0.0.9",...}}\n
+← {"api_id":"zero.api.v1","ok":true,"id":1,"result":{"engine_build_id":"build-id",...}}\n
 ```
 
 ## 请求类型
@@ -139,7 +139,7 @@ IPC 响应使用统一信封格式（`zero_api::ApiResponse`），包含 `api_id
   "id": 1,
   "result": {
     "health": {
-      "engine_build_id": "0.0.9",
+      "engine_build_id": "build-id",
       "started_at_unix_ms": 1713500000000,
       "healthy": true
     }
@@ -164,7 +164,7 @@ IPC 响应使用统一信封格式（`zero_api::ApiResponse`），包含 `api_id
 | `QueryRequest::Sinks` | `"sinks"` | `{sinks: [{name, total_delivered, ...}]}` |
 | `QueryRequest::TunStatus` | `"tun_status"` | `{running, name, addr, tag}` |
 
-> **注意：** 这是 IPC 通道的格式。HTTP 通道的 `result` 字段**不包含**变体名 key——直接就是内部数据。例如 HTTP `GET /api/v1/health` 返回 `result: {"engine_build_id":"0.0.9",...}`，而 IPC 返回 `result: {"health":{"engine_build_id":"0.0.9",...}}`。
+> **注意：** 这是 IPC 通道的格式。HTTP 通道的 `result` 字段**不包含**变体名 key——直接就是内部数据。例如 HTTP `GET /api/v1/health` 返回 `result: {"engine_build_id":"build-id",...}`，而 IPC 返回 `result: {"health":{"engine_build_id":"build-id",...}}`。
 
 错误响应：
 ```json

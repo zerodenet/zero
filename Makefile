@@ -92,7 +92,7 @@ docs-dev:
 	cd docs && npm run dev
 
 docs-build:
-	cd docs && npm run build
+	cd docs && npm run check
 
 docs-preview:
 	cd docs && npm run preview

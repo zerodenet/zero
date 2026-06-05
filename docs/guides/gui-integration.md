@@ -90,7 +90,7 @@ JSON-line 帧格式，一行一个 JSON 对象，`\n` 分隔。
 
 ```
 → {"type":"query","id":1,"request":{"health":{}}}
-← {"api_id":"zero.api.v1","ok":true,"id":1,"result":{"health":{"engine_build_id":"0.0.9",...}}}
+← {"api_id":"zero.api.v1","ok":true,"id":1,"result":{"health":{"engine_build_id":"build-id",...}}}
 ```
 
 > **注意**：`request` 是一个 JSON 对象，**不是**字符串。`"request":"runtime"` 是错误的。`"request":{"type":"runtime"}` 也是错误的。

@@ -109,6 +109,44 @@ Adding a new cross-cutting capability only requires changing `serve_inbound()` -
 
 Protocols are feature-gated into `zero-proxy`. The core decision layer always compiles; protocols and control plane capabilities are selectively compiled, avoiding pulling modules not needed for embedded scenarios.
 
+Protocol capability facts exposed to GUI and control-plane consumers are filled
+from the proxy runtime protocol inventory for the current binary. `zero-api`
+defines the wire model; `zero-engine` does not maintain a protocol matrix.
+The neutral descriptor and behavior traits live in `zero-traits::protocol`, so
+protocol crates can expose metadata and TCP/UDP behavior without depending on
+the API or proxy runtime crates. Each protocol crate owns its
+`ProtocolMetadata` descriptor and implements protocol behavior traits where the
+handshake semantics fit those traits. `TcpTunnelProtocol` covers stream-level
+tunnel handshakes such as SOCKS5, Trojan, VMess, and VLESS. `TcpSessionProtocol`
+covers handshakes that return protocol state, such as Shadowsocks and Mieru.
+`DeferredTcpTunnelProtocol` covers handshakes that write the request now and
+defer response validation to a stream wrapper, such as VLESS Reality
+single-hop.
+`UdpRelayProtocol` covers UDP relay-association handshakes such as SOCKS5 UDP
+ASSOCIATE.
+`UdpPacketTunnelProtocol`, `UdpPacketFraming`, and
+`UdpPacketStreamFraming` cover UDP-over-stream protocols. `UdpDatagramFraming`
+covers protocols that carry one complete protocol packet in one UDP datagram,
+such as Shadowsocks UDP. VLESS uses packet framing for tunnel bytes; Trojan
+uses stream framing for length-prefixed UDP packets; Shadowsocks uses datagram
+framing. Mieru and Hysteria2 UDP are integrated through proxy runtime managers
+because their session state is coupled to encrypted stream or QUIC connection
+management. Protocol crates own packet handshake and framing semantics where
+those semantics can be separated cleanly, while the proxy owns transport setup,
+socket setup, routing, session lifecycle, stats, events, and response bridging.
+
+`TcpTunnelProtocol` is only for protocol handshakes that return an established
+tunnel over the same stream. `TcpSessionProtocol` is for protocol handshakes
+that return state needed by later relay code. `DeferredTcpTunnelProtocol` is
+for cases where consuming the response during establishment would break the
+stream semantics required by the relay path. `UdpPacketTunnelProtocol` is for
+establishing a UDP packet tunnel over a connected stream, and
+`UdpPacketFraming` is for per-datagram tunnel bytes. `UdpPacketStreamFraming`
+is for protocols whose packet boundary is part of the connected stream format.
+`UdpDatagramFraming` is for protocol datagrams transported directly over UDP.
+Transport setup such as TLS, Reality, WebSocket, gRPC, H2, QUIC, and
+HTTPUpgrade remains in the proxy/transport layer.
+
 ## Network Stack Layer
 
 - `zero-stack`
@@ -122,21 +160,21 @@ Two implementations share the same trait:
 | `UserNetworkStack` | User-space TCP state machine (`UserTcpStack`) | SYN/SYN-ACK/ACK handshake, seq tracking, MSS negotiation, FIN/RST handling | TUN device |
 | `SystemStack` | OS kernel TCP listener (`SystemTcpStack`) | Delegated to OS kernel | None on Linux/macOS |
 
-The stack is pluggable: the TUN inbound handler consumes `NetworkStack`, so the choice of `UserStack` vs `SystemStack` is a configuration decision — no code changes needed.
+The stack is pluggable: the TUN inbound handler consumes `NetworkStack`, so the choice of `UserStack` vs `SystemStack` is a configuration decision; no code changes are needed.
 
 ### User-space TCP (zero-stack/src/tcp.rs)
 
 `UserTcpStack` maintains a minimal per-connection TCP state machine:
-- **SYN → SYN-ACK (with MSS option)**
-- **ACK → Established → data transfer**
-- **FIN → ACK → CloseWait → FIN-ACK → closed**
-- **RST → immediate teardown**
+- **SYN -> SYN-ACK (with MSS option)**
+- **ACK -> Established -> data transfer**
+- **FIN -> ACK -> CloseWait -> FIN-ACK -> closed**
+- **RST -> immediate teardown**
 
-Payload extraction feeds into the proxy pipeline via mpsc channels. Response packets (SYN-ACK, ACK, FIN) are emitted through an outbound channel → TUN device writer task.
+Payload extraction feeds into the proxy pipeline via mpsc channels. Response packets (SYN-ACK, ACK, FIN) are emitted through an outbound channel to the TUN device writer task.
 
 ### System TCP (zero-stack/src/system.rs)
 
-`SystemTcpStack` wraps a `tokio::net::TcpListener` — traffic must be redirected to this listener by the OS:
+`SystemTcpStack` wraps a `tokio::net::TcpListener`; traffic must be redirected to this listener by the OS:
 - Linux: `iptables -t nat REDIRECT`
 - macOS: `pf.conf rdr rule`
 - Windows: requires a TUN device (wintun) or system proxy
@@ -153,21 +191,23 @@ Platform-agnostic `TunDevice` trait (`AsyncRead + AsyncWrite`) for virtual netwo
 | macOS | utun socket | Kernel built-in |
 | Windows | Wintun driver | `wintun.dll` (deployed by GUI/installer) |
 
-On Windows, `wintun.dll` is a platform dependency — like how Linux requires `/dev/net/tun` and macOS requires utun. The kernel crate (`zero-tun`) declares the dependency via the `wintun` crate; deployment of the DLL to the target system is the GUI/installer layer's responsibility.
+On Windows, `wintun.dll` is a platform dependency, like how Linux requires `/dev/net/tun` and macOS requires utun. The kernel crate (`zero-tun`) declares the dependency via the `wintun` crate; deployment of the DLL to the target system is the GUI/installer layer's responsibility.
 
 ### TUN inbound (zero-proxy/src/inbound/tun.rs)
 
 The TUN inbound handler reads raw IP packets from a `TunDevice`, feeds them to a `NetworkStack`, and dispatches established TCP connections through `serve_inbound()`:
 
 ```
-TunDevice::read() → packet → TcpStack::feed()
-     ↑                              ↓
-outbound writer task ← SYN-ACK/ACK/FIN
+TunDevice::read() -> packet -> TcpStack::feed()
+     ->                             -> outbound writer task -> SYN-ACK/ACK/FIN
      
-TcpStack::accept() → UserTcpStream → serve_inbound()
+TcpStack::accept() -> UserTcpStream -> serve_inbound()
 ```
 
-UDP datagrams are forwarded through a local relay socket with non-blocking response polling.
+UDP datagrams are handled by the kernel UDP dispatch path. The dispatch layer
+owns route decision, fallback candidate selection, session lifecycle, stats, and
+event integration for UDP flows. Current per-protocol UDP support is exposed by
+`capabilities.protocols`; UDP relay chains are not supported yet.
 
 ## Transport Layer
 
@@ -193,7 +233,8 @@ Runtime-agnostic abstractions:
 | Trait | Purpose |
 |-------|---------|
 | `AsyncSocket` / `TcpListener` / `DatagramSocket` | I/O |
-| `TcpStack` / `UdpStack` / `NetworkStack` | Network packet → stream/datagram conversion |
+| `TcpStack` / `UdpStack` / `NetworkStack` | Network packet to stream/datagram conversion |
+| `ProtocolMetadata` / `TcpTunnelProtocol` / `DeferredTcpTunnelProtocol` / `TcpSessionProtocol` / `UdpRelayProtocol` / `UdpPacketTunnelProtocol` / `UdpPacketFraming` / `UdpPacketStreamFraming` / `UdpDatagramFraming` | Protocol metadata and outbound behavior boundaries |
 | `DnsResolver` / `TlsConnector` / `TlsAcceptor` | Platform services |
 
 ## Platform Layer
@@ -215,9 +256,9 @@ All inbound handlers implement `InboundProtocol` and feed into `serve_inbound()`
 | `vless` | VLESS | TCP + UDP-over-TCP |
 | `hysteria2` | Hysteria2 | QUIC |
 | `shadowsocks` | Shadowsocks | AEAD + 2022-blake3 |
-| `trojan` | Trojan | TCP |
+| `trojan` | Trojan | TCP + UDP |
 | `vmess` | VMess | Experimental AEAD implementation; not compatible with `cipher: auto` exports yet |
-| `mieru` | Mieru | Registered adapter; TCP single-hop outbound uses encrypted stream wrapper; relay-chain hop not supported yet |
+| `mieru` | Mieru | TCP + UDP over encrypted stream wrapper; relay-chain hop not supported yet |
 | `direct` | Direct | Fixed-target forwarder, no handshake |
 | `tun` | TUN | Virtual network interface, consumes `NetworkStack` |
 | `system` | System | OS-level traffic redirect, consumes `SystemTcpStack` |
@@ -226,12 +267,12 @@ All inbound handlers implement `InboundProtocol` and feed into `serve_inbound()`
 
 Top-down only:
 
-- `zero` → `config`, `engine`, `proxy`, `api`, `connector` (optional), `grpc` (optional)
-- `proxy` → `engine`, `config`, `protocols/*`, `transport`, `stack`, `tun`, `dns`
-- `engine` → `config`, `router`, `core`, `api`
-- `stack` → `traits`
-- `tun` → `traits`
-- `protocols/*` → `core`
-- `core` → `traits`
+- `zero` -> `config`, `engine`, `proxy`, `api`, `connector` (optional), `grpc` (optional)
+- `proxy` -> `engine`, `config`, `protocols/*`, `transport`, `stack`, `tun`, `dns`
+- `engine` -> `config`, `router`, `core`, `api`
+- `stack` -> `traits`
+- `tun` -> `traits`
+- `protocols/*` -> `core`
+- `core` -> `traits`
 
 No reverse dependencies.

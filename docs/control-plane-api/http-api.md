@@ -43,7 +43,7 @@ HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiRespons
 | `error.message` | string | 人类可读错误信息 |
 | `error.field_path` | string? | 参数校验错误时的字段路径 |
 
-> **HTTP 和 IPC 的 `result` 格式不同**：HTTP 的 `result` 直接包含端点数据（如 `{engine_build_id:"0.0.9",...}`）。IPC 的 `result` 包含一个变体名 key 包裹（如 `{"health":{engine_build_id:"0.0.9",...}}`）。详见 [ipc-protocol.md](./ipc-protocol.md)。
+> **HTTP 和 IPC 的 `result` 格式不同**：HTTP 的 `result` 直接包含端点数据（如 `{engine_build_id:"build-id",...}`）。IPC 的 `result` 包含一个变体名 key 包裹（如 `{"health":{engine_build_id:"build-id",...}}`）。详见 [ipc-protocol.md](./ipc-protocol.md)。
 
 错误码（snake_case，与 JSON serde 格式一致）：
 
@@ -72,9 +72,36 @@ API 能力列表。
   "adapters": [{ "kind": "in_process", "enabled": true }],
   "sinks": [{ "kind": "none", "enabled": false }],
   "features": ["query", "config_snapshot", "runtime_snapshot", "flow_snapshot", "policy_snapshot"],
+  "protocols": [
+    {
+      "protocol": "socks5",
+      "feature": "socks5",
+      "compiled": true,
+      "status": "supported",
+      "compatibility_baseline": "rfc_1928_rfc_1929",
+      "inbound": {
+        "tcp": { "supported": true, "level": "supported", "notes": [] },
+        "udp": { "supported": true, "level": "supported", "notes": [] }
+      },
+      "outbound": {
+        "tcp": { "supported": true, "level": "supported", "notes": [] },
+        "udp": { "supported": true, "level": "supported", "notes": [] }
+      },
+      "transports": ["tcp"],
+      "mux": { "supported": false, "level": "not_applicable", "notes": [] },
+      "limitations": []
+    }
+  ],
+  "build_features": ["status_api", "socks5", "http_connect", "mixed", "vless"],
   "permissions": ["read"]
 }
 ```
+
+`protocols` is the machine-readable protocol matrix for GUI and external
+control-plane consumers. `zero-api` defines this wire model; the proxy runtime
+fills it from the compiled protocol inventory for the current binary. See
+[protocol-capabilities.md](../project/protocol-capabilities.md) for the current
+TCP/UDP capability model and limitation codes.
 
 ### GET /api/v1/health
 
@@ -82,7 +109,7 @@ API 能力列表。
 
 ```json
 {
-  "engine_build_id": "0.0.9",
+  "engine_build_id": "build-id",
   "started_at_unix_ms": 1713500000000,
   "healthy": true
 }

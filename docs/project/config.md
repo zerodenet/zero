@@ -201,9 +201,9 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 - `vless` -- TCP/TLS/WS/WSS, Reality, gRPC, H2, HTTPUpgrade, QUIC, SplitHTTP; MUX + Vision flow + UDP over TCP
 - `hysteria2` -- QUIC, TCP streams and UDP datagram forwarding
 - `shadowsocks` -- AEAD cipher (chacha20-ietf-poly1305, aes-128-gcm, aes-256-gcm); 2022-blake3
-- `trojan` -- TLS + SHA224 password auth, TCP streams
+- `trojan` -- TLS + SHA224 password auth, TCP streams and UDP packet relay
 - `vmess` -- TCP streams using the in-tree VMess AEAD implementation; current compatibility does not include Xray/Clash `cipher: auto`
-- `mieru` -- TCP streams using XChaCha20-Poly1305 session framing; registered for single-hop TCP paths, with relay-chain limitations below
+- `mieru` -- TCP streams and UDP packet relay using XChaCha20-Poly1305 session framing; registered for single-hop paths, with relay-chain limitations below
 - `direct` -- fixed-target TCP forwarder; accepts raw TCP with no handshake, outbound determined by normal route rules
 - `tun` -- virtual network interface; started at runtime via CLI/API commands, routes traffic through normal rule matching
 
@@ -448,7 +448,7 @@ Trojan inbound config fields:
 
 ### Mieru inbound
 
-Mieru inbound is available in config and accepts encrypted TCP sessions from in-tree clients:
+Mieru inbound is available in config and accepts encrypted TCP sessions and UDP relay sessions from in-tree clients:
 
 ```json
 {
@@ -466,7 +466,7 @@ Mieru inbound is available in config and accepts encrypted TCP sessions from in-
 Mieru inbound config fields:
 - `users` -- required, non-empty list of username/password pairs
 
-Mieru TCP framing uses protocol-level encrypted segments. The proxy keeps Mieru-specific framing in the Mieru stream wrapper instead of using the generic raw TCP relay directly. Current compatibility work has focused on single-hop outbound; treat inbound interoperability with external Mieru clients as experimental until it has real-client coverage.
+Mieru framing uses protocol-level encrypted segments. The proxy keeps Mieru-specific framing in the Mieru stream wrapper instead of using the generic raw TCP relay directly. Current compatibility work has focused on in-tree single-hop behavior; treat interoperability with external Mieru clients and servers as experimental until it has real-client coverage.
 
 ### Per-inbound rate limits (rate_limits)
 
@@ -750,9 +750,13 @@ Mieru outbound config fields:
 - `username` -- required, upstream username
 - `password` -- required, upstream password
 
-Mieru outbound is supported for direct single-hop TCP routing through the encrypted Mieru stream wrapper. Using Mieru as an intermediate member of a `relay` chain is not supported yet.
+Mieru outbound is supported for direct single-hop TCP routing and UDP packet relay through the encrypted Mieru stream wrapper. Using Mieru as an intermediate member of a `relay` chain is not supported yet.
 
-UDP currently supports only `direct`, `block`, and upstream `socks5`; upstream `vless` is not yet supported.
+UDP outbound selection is handled by the kernel UDP dispatch path. Current TCP,
+UDP, MUX, transport, and limitation facts are exposed through
+`capabilities.protocols` and documented in
+[protocol-capabilities.md](protocol-capabilities.md). UDP relay chains are not
+supported yet.
 
 ### Outbound circuit breaker
 

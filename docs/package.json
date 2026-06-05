@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vitepress dev . --host=0.0.0.0",
     "build": "vitepress build .",
-    "preview": "vitepress preview ."
+    "preview": "vitepress preview .",
+    "check": "npm run build && node scripts/check-docs.mjs"
   },
   "devDependencies": {
     "vitepress": "^1.0.0"

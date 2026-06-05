@@ -90,18 +90,24 @@ cargo build --release --features full,status_api,panel_connector
 
 ```
 Client scenario:  full + status_api  (default)
-                  ├─ Inbound/outbound protocols
-                  ├─ DNS
-                  └─ HTTP status endpoint (local debugging)
+                  - Inbound/outbound protocols
+                  - DNS
+                  - HTTP status endpoint (local debugging)
 
 Server scenario:  + panel_connector
-                  ├─ Event dispatch (→ webhook / jsonl)
-                  └─ Panel heartbeat reporting + remote commands
+                  - Event dispatch (webhook / jsonl)
+                  - Panel heartbeat reporting + remote commands
 ```
 
 ## Relation to Protocol Implementations
 
 Protocol crates are compiled through the root Cargo features listed above. Protocol presence in the workspace does not by itself mean production compatibility with every external ecosystem export.
+
+The machine-readable protocol matrix is exposed as `capabilities.protocols`.
+It records current TCP, UDP, MUX, transport, compatibility baseline, and
+limitation facts for the current binary. `zero-api` defines the response shape;
+the proxy runtime fills protocol facts from its compiled protocol inventory.
+See [protocol-capabilities.md](protocol-capabilities.md).
 
 | Protocol | Feature | Notes |
 |------|---------|------|
@@ -215,33 +221,30 @@ TUN creates a virtual network interface that captures IP packets at Layer 3 and 
 ### Architecture
 
 ```
-TunDevice (zero-tun)          → platform backends (Linux ioctl, macOS utun, Windows Wintun)
-    ↓
-NetworkStack (zero-traits)    → TcpStack / UdpStack traits
-    ↓
-UserTcpStack (zero-stack)     → user-space TCP state machine (SYN→SYN-ACK→ACK→data→FIN)
-    ↓
-TUN inbound (zero-proxy)      → tokio::select!{ read packets → feed stack → accept → serve_inbound() }
+TunDevice (zero-tun)          -> platform backends (Linux ioctl, macOS utun, Windows Wintun)
+    -> NetworkStack (zero-traits)    -> TcpStack / UdpStack traits
+    -> UserTcpStack (zero-stack)     -> user-space TCP state machine (SYN -> SYN-ACK -> ACK -> data -> FIN)
+    -> TUN inbound (zero-proxy)      -> tokio::select!{ read packets -> feed stack -> accept -> serve_inbound() }
 ```
 
 ### Network Stack Trait
 
-`zero-traits` defines `TcpStack` / `UdpStack` / `NetworkStack` — the boundary between raw IP packets and connection-oriented I/O. Two implementations:
+`zero-traits` defines `TcpStack` / `UdpStack` / `NetworkStack`; this is the boundary between raw IP packets and connection-oriented I/O. Two implementations:
 
 | Implementation | Strategy | Driver |
 |---------------|----------|--------|
-| `UserNetworkStack` | User-space TCP state machine (SYN→Established→CloseWait, MSS option, seq/ack tracking) | TUN device required |
-| `SystemStack` | OS TCP listener (iptables/pf redirect → accept TcpStream) | None on Linux/macOS |
+| `UserNetworkStack` | User-space TCP state machine (SYN -> Established -> CloseWait, MSS option, seq/ack tracking) | TUN device required |
+| `SystemStack` | OS TCP listener (iptables/pf redirect -> accept TcpStream) | None on Linux/macOS |
 
-The stack is pluggable via the trait — switching implementations requires zero changes to the inbound handler.
+The stack is pluggable via the trait; switching implementations requires zero changes to the inbound handler.
 
 ### TCP State Machine (UserTcpStack)
 
-- **SYN** → SYN-ACK with MSS option → stored in SynReceived state
-- **ACK** → transition to Established → available via `TcpStack::accept()`
-- **Data** → payload extracted, forwarded to proxy via channel, ACK sent
-- **FIN** → ACK sent, transition to CloseWait → proxy shutdown triggers our FIN
-- **RST** → immediate teardown
+- **SYN** -> SYN-ACK with MSS option -> stored in SynReceived state
+- **ACK** -> transition to Established -> available via `TcpStack::accept()`
+- **Data** -> payload extracted, forwarded to proxy via channel, ACK sent
+- **FIN** -> ACK sent, transition to CloseWait -> proxy shutdown triggers our FIN
+- **RST** -> immediate teardown
 
 ### Platform Support
 
@@ -251,7 +254,7 @@ The stack is pluggable via the trait — switching implementations requires zero
 | macOS | utun socket | Kernel built-in | OS |
 | Windows | Wintun driver | `wintun.dll` | GUI / installer |
 
-On Windows, `wintun.dll` is a platform resource like `/dev/net/tun` on Linux — it must be present on the target system, but the kernel only *declares* the dependency (via the `wintun` crate), it does not manage DLL lifecycle.
+On Windows, `wintun.dll` is a platform resource like `/dev/net/tun` on Linux; it must be present on the target system, but the kernel only *declares* the dependency (via the `wintun` crate), it does not manage DLL lifecycle.
 
 ### CLI Commands
 
