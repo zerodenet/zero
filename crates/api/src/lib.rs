@@ -13,7 +13,10 @@ pub mod traits;
 pub mod webhook;
 
 pub use auth::{AuthContext, Permission};
-pub use capabilities::{AdapterCapability, ApiCapabilities, SinkCapability};
+pub use capabilities::{
+    AdapterCapability, ApiCapabilities, CapabilityState, ProtocolCapability,
+    ProtocolNetworkCapability, SinkCapability,
+};
 pub use command::{
     CommandRequest, CommandResponse, ConfigApplyCommand, ConfigValidateCommand,
     DiagnosticsDnsLookupCommand, DiagnosticsProbeTargetCommand, DiagnosticsTraceRouteCommand,

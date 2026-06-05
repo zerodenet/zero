@@ -308,6 +308,7 @@ fn validate_config_command(command: ConfigValidateCommand) -> zero_api::ApiResul
 
 fn capabilities() -> ApiCapabilities {
     let mut capabilities = ApiCapabilities::new();
+    let build_features = build_features();
     capabilities.adapters = vec![AdapterCapability {
         kind: "in_process".to_owned(),
         enabled: true,
@@ -323,7 +324,7 @@ fn capabilities() -> ApiCapabilities {
         "flow_snapshot".to_owned(),
         "policy_snapshot".to_owned(),
     ];
-    capabilities.build_features = build_features();
+    capabilities.build_features = build_features;
     capabilities.permissions = vec![Permission::Read];
     capabilities
 }
