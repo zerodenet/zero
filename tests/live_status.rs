@@ -95,7 +95,7 @@ fn local_status_listener_exposes_live_runtime_view() {
 
     accepted_rx.recv().expect("wait for echo accept");
 
-    let runtime_response = http_get(status_port, "/runtime");
+    let runtime_response = http_get(status_port, "/api/v1/runtime");
     let runtime_body = runtime_response
         .split("\r\n\r\n")
         .nth(1)
@@ -114,7 +114,7 @@ fn local_status_listener_exposes_live_runtime_view() {
     assert_eq!(runtime["result"]["active_sessions"][0]["network"], "tcp");
     assert_eq!(runtime["result"]["active_sessions"][0]["mode"], "rule");
 
-    let config_response = http_get(status_port, "/config");
+    let config_response = http_get(status_port, "/api/v1/config");
     let config_body = config_response.split("\r\n\r\n").nth(1).expect("http body");
     let config_json: serde_json::Value =
         serde_json::from_str(config_body).expect("parse config json");
@@ -124,7 +124,7 @@ fn local_status_listener_exposes_live_runtime_view() {
         socks_port
     );
 
-    let status_response = http_get(status_port, "/status");
+    let status_response = http_get(status_port, "/api/v1/runtime");
     let status_body = status_response.split("\r\n\r\n").nth(1).expect("http body");
     let status_json: serde_json::Value =
         serde_json::from_str(status_body).expect("parse status json");
@@ -139,7 +139,7 @@ fn local_status_listener_exposes_live_runtime_view() {
 
     thread::sleep(Duration::from_millis(100));
 
-    let runtime_after_response = http_get(status_port, "/runtime");
+    let runtime_after_response = http_get(status_port, "/api/v1/runtime");
     let runtime_after_body = runtime_after_response
         .split("\r\n\r\n")
         .nth(1)
@@ -223,7 +223,7 @@ fn local_status_listener_can_switch_selector_group() {
     wait_for_port(status_port);
     wait_for_port(socks_port);
 
-    let initial_config = http_get(status_port, "/config");
+    let initial_config = http_get(status_port, "/api/v1/config");
     let initial_body = initial_config.split("\r\n\r\n").nth(1).expect("http body");
     let initial_json: serde_json::Value =
         serde_json::from_str(initial_body).expect("parse config json");
@@ -260,14 +260,24 @@ fn local_status_listener_can_switch_selector_group() {
     assert_eq!(blocked_response[1], 0x02);
     drop(blocked);
 
-    let update_response = http_post(status_port, "/selectors/proxy/direct");
+    let update_response = http_post_json(
+        status_port,
+        "/api/v1/commands",
+        r#"{
+            "method": "policies.select",
+            "params": {
+                "policy_tag": "proxy",
+                "target_tag": "direct"
+            }
+        }"#,
+    );
     assert!(update_response.starts_with("HTTP/1.1 200 OK"));
     let update_body = update_response.split("\r\n\r\n").nth(1).expect("http body");
     let update_json: serde_json::Value =
-        serde_json::from_str(update_body).expect("parse config json");
-    assert_eq!(update_json["outbound_groups"][0]["selected"], "direct");
+        serde_json::from_str(update_body).expect("parse command json");
+    assert_eq!(update_json["result"]["result"]["selected"], "direct");
 
-    let config_after = http_get(status_port, "/config");
+    let config_after = http_get(status_port, "/api/v1/config");
     let config_after_body = config_after.split("\r\n\r\n").nth(1).expect("http body");
     let config_after_json: serde_json::Value =
         serde_json::from_str(config_after_body).expect("parse config json");
@@ -431,10 +441,10 @@ fn configured_control_api_requires_api_key() {
     wait_for_port(status_port);
     wait_for_port(socks_port);
 
-    let unauthorized = http_get(status_port, "/api/v1/status");
+    let unauthorized = http_get(status_port, "/api/v1/runtime");
     assert!(unauthorized.starts_with("HTTP/1.1 401 Unauthorized"));
 
-    let authorized = http_get_with_api_key(status_port, "/api/v1/status", "node-secret");
+    let authorized = http_get_with_api_key(status_port, "/api/v1/runtime", "node-secret");
     assert!(authorized.starts_with("HTTP/1.1 200 OK"));
 
     child.kill().expect("kill zero process");

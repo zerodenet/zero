@@ -50,7 +50,7 @@ async fn relays_tcp_through_urltest_group_with_nested_group_member() {
                 }},
                 {{
                     "tag": "proxy",
-                    "type": "urltest",
+                    "type": "url_test",
                     "outbounds": ["fallback-proxy"],
                     "url": "http://127.0.0.1:{probe_port}/",
                     "interval_seconds": 1
@@ -116,7 +116,7 @@ async fn relays_tcp_through_urltest_group_with_nested_group_member() {
         ]
     );
     let nested_member = group
-        .urltest_members
+        .url_test_members
         .iter()
         .find(|member| member.member_tag == "fallback-proxy")
         .expect("find nested member probe");

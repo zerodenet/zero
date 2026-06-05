@@ -28,7 +28,7 @@ async fn relays_tcp_through_http_connect_direct_outbound() {
                 {{
                     "tag": "http-in",
                     "listen": {{ "address": "127.0.0.1", "port": {proxy_port} }},
-                    "protocol": {{ "type": "http-connect" }}
+                    "protocol": {{ "type": "http_connect" }}
                 }}
             ],
             "outbounds": [],
@@ -81,7 +81,7 @@ async fn rejects_http_connect_blocked_domain_via_route_rule() {
                 {{
                     "tag": "http-in",
                     "listen": {{ "address": "127.0.0.1", "port": {proxy_port} }},
-                    "protocol": {{ "type": "http-connect" }}
+                    "protocol": {{ "type": "http_connect" }}
                 }}
             ],
             "outbounds": [],

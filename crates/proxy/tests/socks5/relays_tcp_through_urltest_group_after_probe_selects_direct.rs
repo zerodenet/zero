@@ -45,7 +45,7 @@ async fn relays_tcp_through_urltest_group_after_probe_selects_direct() {
             "outbound_groups": [
                 {{
                     "tag": "proxy",
-                    "type": "urltest",
+                    "type": "url_test",
                     "outbounds": ["chain-a", "direct"],
                     "url": "http://127.0.0.1:{probe_port}/",
                     "interval_seconds": 1
@@ -82,16 +82,16 @@ async fn relays_tcp_through_urltest_group_after_probe_selects_direct() {
         group.effective_chains,
         vec![vec!["proxy".to_owned(), "direct".to_owned()]]
     );
-    assert_eq!(group.urltest_members.len(), 2);
+    assert_eq!(group.url_test_members.len(), 2);
     let chain_a = group
-        .urltest_members
+        .url_test_members
         .iter()
         .find(|member| member.member_tag == "chain-a")
         .expect("find chain-a probe");
     assert!(!chain_a.healthy);
     assert!(chain_a.last_error.is_some());
     let direct = group
-        .urltest_members
+        .url_test_members
         .iter()
         .find(|member| member.member_tag == "direct")
         .expect("find direct probe");

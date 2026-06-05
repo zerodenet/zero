@@ -53,7 +53,7 @@ async fn relays_udp_through_urltest_group_with_nested_group_member() {
                 }},
                 {{
                     "tag": "proxy",
-                    "type": "urltest",
+                    "type": "url_test",
                     "outbounds": ["fallback-proxy"],
                     "url": "http://127.0.0.1:{probe_port}/",
                     "interval_seconds": 1

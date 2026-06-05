@@ -1,4 +1,4 @@
-#![cfg(all(feature = "http-connect", feature = "trojan"))]
+#![cfg(all(feature = "http_connect", feature = "trojan"))]
 
 mod support;
 
@@ -26,7 +26,7 @@ async fn trojan_raw_outbound_does_not_negotiate_h2_alpn() {
                 {{
                     "tag": "http-in",
                     "listen": {{ "address": "127.0.0.1", "port": {outer_port} }},
-                    "protocol": {{ "type": "http-connect" }}
+                    "protocol": {{ "type": "http_connect" }}
                 }}
             ],
             "outbounds": [

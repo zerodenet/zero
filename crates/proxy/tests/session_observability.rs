@@ -172,7 +172,7 @@ async fn tracks_live_bytes_and_completed_session_history() {
     assert!(!completed.is_empty());
     assert_eq!(completed[0].network, zero_core::Network::Tcp);
     assert_eq!(completed[0].mode, "rule");
-    assert_eq!(completed[0].outcome.kind(), "direct-relayed");
+    assert_eq!(completed[0].outcome.kind(), "direct_relayed");
     assert_eq!(completed[0].bytes_up, 16);
     assert_eq!(completed[0].bytes_down, 16);
     assert_eq!(completed[0].inbound_rx_bytes, 8);
@@ -342,7 +342,7 @@ async fn tracks_udp_flow_with_tcp_session_observability_shape() {
     assert_eq!(completed[0].protocol, zero_core::ProtocolType::Socks5);
     assert_eq!(completed[0].mode, "rule");
     assert_eq!(completed[0].outbound_tag.as_deref(), Some("direct"));
-    assert_eq!(completed[0].outcome.kind(), "direct-relayed");
+    assert_eq!(completed[0].outcome.kind(), "direct_relayed");
     assert_eq!(completed[0].bytes_up, 31);
     assert_eq!(completed[0].bytes_down, 30);
     assert_eq!(completed[0].inbound_rx_bytes, 27);

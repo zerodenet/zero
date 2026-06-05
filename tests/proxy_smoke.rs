@@ -64,7 +64,7 @@ fn zero_binary_relays_tcp_through_http_connect() {
                 {{
                     "tag": "http-in",
                     "listen": {{ "address": "127.0.0.1", "port": {proxy_port} }},
-                    "protocol": {{ "type": "http-connect" }}
+                    "protocol": {{ "type": "http_connect" }}
                 }}
             ],
             "outbounds": [],
@@ -74,7 +74,7 @@ fn zero_binary_relays_tcp_through_http_connect() {
             }}
         }}"#
     );
-    let config_path = write_temp_config(&config, "proxy-smoke-http-connect");
+    let config_path = write_temp_config(&config, "proxy-smoke-http_connect");
 
     let echo_thread = spawn_echo_server(echo_port);
     let mut child = spawn_zero(&["run", config_path.to_str().expect("utf-8 config path")]);
@@ -210,22 +210,22 @@ fn zero_binary_applies_file_backed_rule_sets() {
                         "tag": "ads",
                         "type": "file",
                         "path": "rules/ads.txt",
-                        "format": "domain-list"
+                        "format": "domain_list"
                     }},
                     {{
                         "tag": "lan",
                         "type": "file",
                         "path": "rules/lan.txt",
-                        "format": "cidr-list"
+                        "format": "cidr_list"
                     }}
                 ],
                 "rules": [
                     {{
-                        "condition": {{ "type": "rule-set", "tag": "ads" }},
+                        "condition": {{ "type": "rule_set", "tag": "ads" }},
                         "action": {{ "type": "reject" }}
                     }},
                     {{
-                        "condition": {{ "type": "rule-set", "tag": "lan" }},
+                        "condition": {{ "type": "rule_set", "tag": "lan" }},
                         "action": {{ "type": "route", "outbound": "direct" }}
                     }}
                 ],

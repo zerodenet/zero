@@ -154,7 +154,7 @@ async fn relays_udp_through_upstream_socks5_udp_associate() {
             .map(|session| {
                 session.network == zero_core::Network::Udp
                     && session.outbound_tag.as_deref() == Some("chain")
-                    && session.outcome.kind() == "chained-relayed"
+                    && session.outcome.kind() == "chained_relayed"
                     && session.bytes_up == 71
                     && session.bytes_down == 54
             })

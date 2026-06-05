@@ -3,9 +3,9 @@ mod support;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use zero_api::{
-    event_type, ApiErrorCode, CommandRequest, CommandService, ConfigQuery, ConfigValidateCommand,
-    EventFilter, EventSource, FlowCloseCommand, FlowFilter, FlowGetQuery, FlowListQuery,
-    PoliciesQuery, PolicySelectCommand, QueryRequest, QueryResponse, QueryService,
+    event_type, ApiErrorCode, CapabilitiesQuery, CommandRequest, CommandService, ConfigQuery,
+    ConfigValidateCommand, EventFilter, EventSource, FlowCloseCommand, FlowFilter, FlowGetQuery,
+    FlowListQuery, PoliciesQuery, PolicySelectCommand, QueryRequest, QueryResponse, QueryService,
 };
 use zero_config::RuntimeConfig;
 use zero_proxy::Proxy as Engine;
@@ -417,6 +417,36 @@ fn engine_query_service_exposes_config_and_policy_snapshots() {
     assert_eq!(policies.len(), 1);
     assert_eq!(policies[0].tag, "proxy");
     assert_eq!(policies[0].selected.as_deref(), Some("block"));
+}
+
+#[test]
+fn capabilities_use_snake_case_wire_names() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("parse config");
+
+    let engine = Engine::new(config).expect("build engine");
+    let response = engine
+        .query(QueryRequest::Capabilities(CapabilitiesQuery))
+        .expect("query capabilities");
+    let QueryResponse::Capabilities(capabilities) = response else {
+        panic!("expected capabilities query response");
+    };
+
+    assert_eq!(capabilities.adapters[0].kind, "in_process");
+    assert!(capabilities
+        .features
+        .iter()
+        .all(|feature| !feature.contains('-')));
+    assert!(capabilities
+        .features
+        .contains(&"config_snapshot".to_owned()));
 }
 
 #[test]

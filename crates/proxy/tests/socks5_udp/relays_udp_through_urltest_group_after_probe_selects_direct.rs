@@ -48,7 +48,7 @@ async fn relays_udp_through_urltest_group_after_probe_selects_direct() {
             "outbound_groups": [
                 {{
                     "tag": "proxy",
-                    "type": "urltest",
+                    "type": "url_test",
                     "outbounds": ["chain-a", "direct"],
                     "url": "http://127.0.0.1:{probe_port}/",
                     "interval_seconds": 1
