@@ -4,7 +4,7 @@
 
 ```powershell
 $env:RUST_LOG="debug"
-cargo run -- run examples/v0.0.1/basic.json
+cargo run -- run config.json
 ```
 
 ## 目标

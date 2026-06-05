@@ -36,7 +36,7 @@ zero-engine ───────▶│  Event Producer │───────
 // crates/api/src/event.rs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventEnvelope {
-    pub schema_version: &'static str,
+    pub schema_id: &'static str,
     pub event_id: String,
     pub event_type: String,
     pub occurred_at_unix_ms: u64,

@@ -3,19 +3,18 @@
 ## 基础信息
 
 - 稳定前缀：`/api/v1/`
-- 兼容端点（已废弃，v0.2.0 移除）：`/status`、`/runtime`、`/config`、`POST /selectors/{group}/{target}`
 - 认证：`Authorization: Bearer <token>` 或 `X-Zero-Api-Key: <token>`（未配置时无认证模式，默认所有权限）
 - CORS：所有端点返回 `Access-Control-Allow-Origin: *`
 - 限流：Query 100/s，Command 10/s，SSE 5 并发
 
 ## 通用响应格式
 
-HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiResponse`）。`api_version` 字段始终存在，用于协议版本识别。
+HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiResponse`）。`api_id` 字段始终存在，用于协议标识。
 
 成功：
 ```json
 {
-  "api_version": "zero.api.v1",
+  "api_id": "zero.api.v1",
   "ok": true,
   "result": { }
 }
@@ -24,10 +23,10 @@ HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiRespons
 失败：
 ```json
 {
-  "api_version": "zero.api.v1",
+  "api_id": "zero.api.v1",
   "ok": false,
   "error": {
-    "code": "not-found",
+    "code": "not_found",
     "message": "Policy not found",
     "field_path": "policy_tag"
   }
@@ -36,24 +35,24 @@ HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiRespons
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `api_version` | string | 协议版本，始终为 `"zero.api.v1"` |
+| `api_id` | string | 协议标识，始终为 `"zero.api.v1"` |
 | `id` | u64? | 请求关联 ID（IPC 多路复用时使用，HTTP 通常为 null） |
 | `ok` | bool | 成功标志 |
 | `result` | object? | 成功时的响应数据 |
-| `error.code` | string | 机器可读错误码（kebab-case） |
+| `error.code` | string | 机器可读错误码（snake_case） |
 | `error.message` | string | 人类可读错误信息 |
 | `error.field_path` | string? | 参数校验错误时的字段路径 |
 
-> **HTTP 和 IPC 的 `result` 格式不同**：HTTP 的 `result` 直接包含端点数据（如 `{engine_version:"0.0.9",...}`）。IPC 的 `result` 包含一个变体名 key 包裹（如 `{"health":{engine_version:"0.0.9",...}}`）。详见 [ipc-protocol.md](./ipc-protocol.md)。
+> **HTTP 和 IPC 的 `result` 格式不同**：HTTP 的 `result` 直接包含端点数据（如 `{engine_build_id:"0.0.9",...}`）。IPC 的 `result` 包含一个变体名 key 包裹（如 `{"health":{engine_build_id:"0.0.9",...}}`）。详见 [ipc-protocol.md](./ipc-protocol.md)。
 
-错误码（kebab-case，与 JSON serde 格式一致）：
+错误码（snake_case，与 JSON serde 格式一致）：
 
 | code | HTTP | 说明 |
 |------|------|------|
-| `not-found` | 404 | 资源不存在 |
-| `invalid-argument` | 400 | 参数无效 |
-| `permission-denied` | 403 | 权限不足 |
-| `feature-disabled` | 501 | 功能未编译 |
+| `not_found` | 404 | 资源不存在 |
+| `invalid_argument` | 400 | 参数无效 |
+| `permission_denied` | 403 | 权限不足 |
+| `feature_disabled` | 501 | 功能未编译 |
 | `conflict` | 409 | 状态冲突 |
 | `unsupported` | 501 | 不支持的操作 |
 | `internal` | 500 | 内部错误 |
@@ -64,15 +63,15 @@ HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiRespons
 
 ### GET /api/v1/capabilities
 
-API 版本和能力列表。
+API 能力列表。
 
 ```json
 {
-  "api_version": "zero.api.v1",
-  "schema_version": "zero.event.v1",
-  "adapters": [{ "kind": "in-process", "enabled": true }],
+  "api_id": "zero.api.v1",
+  "schema_id": "zero.event.v1",
+  "adapters": [{ "kind": "in_process", "enabled": true }],
   "sinks": [{ "kind": "none", "enabled": false }],
-  "features": ["query", "config-snapshot", "runtime-snapshot", "flow-snapshot", "policy-snapshot"],
+  "features": ["query", "config_snapshot", "runtime_snapshot", "flow_snapshot", "policy_snapshot"],
   "permissions": ["read"]
 }
 ```
@@ -83,7 +82,7 @@ API 版本和能力列表。
 
 ```json
 {
-  "engine_version": "0.0.9",
+  "engine_build_id": "0.0.9",
   "started_at_unix_ms": 1713500000000,
   "healthy": true
 }
@@ -107,13 +106,13 @@ API 版本和能力列表。
   "outbound_groups": [
     {
       "tag": "auto",
-      "kind": "urltest",
+      "kind": "url_test",
       "outbounds": ["server-a", "server-b"],
       "selected": "server-a",
       "latency_ms": 120,
       "last_checked_unix_ms": 1713500000000,
       "effective_chains": [["server-a"]],
-      "urltest_members": [
+      "url_test_members": [
         {
           "member_tag": "server-a",
           "healthy": true,
@@ -135,7 +134,7 @@ API 版本和能力列表。
 | `rule_count` | 规则数量 |
 | `listeners` | 入站监听列表（tag, protocol, listen_address, listen_port） |
 | `outbounds` | 出站列表（tag, protocol, server?, port?） |
-| `outbound_groups` | 出站组（selector/fallback/urltest/relay/loadbalance） |
+| `outbound_groups` | 出站组（selector/fallback/url_test/relay/load_balance） |
 
 ### GET /api/v1/runtime
 
@@ -192,7 +191,7 @@ API 版本和能力列表。
 
 ### GET /api/v1/policies
 
-所有 policy 状态（selector / fallback / urltest），包含当前选择和健康探测结果。
+所有 policy 状态（selector / fallback / url_test / load_balance），包含当前选择和健康探测结果。
 
 ### GET /api/v1/policies/{policy_tag}
 
@@ -265,7 +264,7 @@ Response：
 
 #### policies.probe
 
-触发 urltest 立即执行一轮探测。
+触发 `url_test` 立即执行一轮探测。
 
 Params：`policy_tag` (string)
 
@@ -274,7 +273,7 @@ Response：
 { "policy_tag": "auto", "probe_triggered": true }
 ```
 
-错误：`not_found` — policy 不存在或不是 urltest 类型
+错误：`not_found` — policy 不存在或不是 `url_test` 类型
 
 #### flows.close
 
@@ -300,7 +299,7 @@ Response：
 { "valid": true }
 ```
 
-错误：`invalid-argument` — 配置无效（cause 字段包含详情）
+错误：`invalid_argument` — 配置无效（cause 字段包含详情）
 
 #### config.apply
 
@@ -313,7 +312,7 @@ Response：
 { "applied": true }
 ```
 
-错误：`invalid-argument` — 配置无效
+错误：`invalid_argument` — 配置无效
 
 权限：`config`
 
@@ -329,8 +328,8 @@ Response：
 ```
 
 错误：
-- `invalid-argument` — mode 值无效，或 global 缺少 outbound
-- `invalid-argument` — outbound tag 不存在
+- `invalid_argument` — mode 值无效，或 global 缺少 outbound
+- `invalid_argument` — outbound tag 不存在
 
 权限：`admin`
 
@@ -377,7 +376,7 @@ Response：
 }
 ```
 
-错误：`not-found` — target 不存在
+错误：`not_found` — target 不存在
 
 权限：`admin`
 
@@ -421,12 +420,13 @@ Response：
 
 ## 鉴权
 
-内核采用简单的 Bearer Token 鉴权，不做细粒度权限隔离：
+内核采用 Bearer Token 鉴权和粗粒度权限门禁：
 
-- **未配置 token**（本地监听 `127.0.0.1`）：所有端点无鉴权，全部可用
-- **已配置 token**：所有请求必须携带 `Authorization: Bearer <token>` 或 `X-Zero-Api-Key: <token>`，认证通过后全部端点可用
+- **未配置 token**（例如 CLI `--status-listen` 的本地调试模式）：所有端点无鉴权，默认授予 `read`、`control`、`config`、`admin`
+- **已配置 token**：所有请求必须携带 `Authorization: Bearer <token>` 或 `X-Zero-Api-Key: <token>`；当前配置 token 映射为 `admin`
+- **权限名称**：`read`、`control`、`config`、`admin`，对外序列化使用 snake_case
 
-这是一个内核，不是多租户 SaaS。权限隔离应在上层面板/网关实现，不应侵入内核。
+这是一个内核，不是多租户 SaaS。内核只提供控制面能力边界；租户、角色、审计等业务权限应在上层面板/网关实现。
 
 ---
 
@@ -446,7 +446,7 @@ Server-Sent Events (SSE) 实时事件流。
 ```
 id: 42
 event: flow.completed
-data: {"schema_version":"zero.event.v1","event_id":"...","event_type":"flow.completed",...}
+data: {"schema_id":"zero.event.v1","event_id":"...","event_type":"flow.completed",...}
 ```
 
 连接断开后可使用 `Last-Event-ID` 续传，服务端先发送追赶事件再切回实时流。详见 [events.md](./events.md)。
@@ -454,16 +454,3 @@ data: {"schema_version":"zero.event.v1","event_id":"...","event_type":"flow.comp
 ### GET /api/v1/events
 
 事件快照（一次性返回当前事件日志中的所有事件）。不如 `/events/stream` 实时，适合一次性调试。
-
----
-
-## 兼容端点（过渡）
-
-| 旧路径 | 映射到 |
-|--------|--------|
-| `GET /status` | `GET /api/v1/runtime` |
-| `GET /config` | `GET /api/v1/config` |
-| `GET /runtime` | `GET /api/v1/runtime` |
-| `GET /events` | `GET /api/v1/events` (快照) |
-| `POST /commands` | `POST /api/v1/commands` |
-| `POST /selectors/{group}/{target}` | `policies.select` 命令 |

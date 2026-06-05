@@ -42,26 +42,20 @@ features:
     details: 用户态 TCP 状态机，IPv4/IPv6 双栈，跨平台支持（Linux / macOS / Windows Wintun）。
 ---
 
-## 当前版本
-
-**latest** — [https://github.com/zerodenet/zero/releases/latest](https://github.com/zerodenet/zero/releases/latest)
-
 ## 一分钟跑起来
 
 ```bash
-# 下载
-curl -L -o zero https://github.com/zerodenet/zero/releases/latest/download/zero-linux-x86_64.tar.gz
-tar xzf zero-linux-x86_64.tar.gz
-chmod +x zero
+# 构建
+cargo build --release
 
 # 运行
-./zero run config.json
+./target/release/zero run config.json
 
 # 管理
-./zero status
-./zero select proxy trojan-node
-./zero mode global proxy
-./zero validate config.json
+./target/release/zero status
+./target/release/zero select proxy trojan-node
+./target/release/zero mode global proxy
+./target/release/zero validate config.json
 ```
 
 ## 架构
@@ -72,17 +66,17 @@ chmod +x zero
   ▼
 ┌───────────────────────────────────────┐
 │ Inbound                               │
-│ socks5 · http-connect · mixed · vless │
+│ socks5 · http_connect · mixed · vless │
 │ hysteria2 · shadowsocks · trojan      │
 │ vmess · mieru · direct · tun          │
 ├───────────────────────────────────────┤
 │ Router                                │
 │ domain · ip · geoip · sni · keyword   │
-│ regex · rule-set · and · or           │
+│ regex · rule_set · and · or           │
 ├───────────────────────────────────────┤
 │ Outbound Group                        │
-│ selector · fallback · urltest         │
-│ relay · loadbalance                   │
+│ selector · fallback · url_test        │
+│ relay · load_balance                  │
 ├───────────────────────────────────────┤
 │ Outbound                              │
 │ direct · block · socks5 · vless       │

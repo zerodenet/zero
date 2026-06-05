@@ -318,17 +318,17 @@ impl SharingDetectionHook {
 
 ## 七、实现阶段
 
-### Phase 1: 内核基础限流 (v0.1)
+### Phase 1: 内核基础限流
 - 入站全局带宽限制
 - 单 IP 并发连接数限制
 - 总并发连接数限制
 
-### Phase 2: Hook 扩展点 (v0.2)
+### Phase 2: Hook 扩展点
 - FlowHook trait 定义
 - Hook 注册机制
 - 转发路径集成
 
-### Phase 3: Connector 业务限流 (v0.3)
+### Phase 3: Connector 业务限流
 - 设备数限制 Hook 实现
 - 积分控制 Hook 实现
 - 与中心控制面联动

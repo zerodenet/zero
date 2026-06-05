@@ -8,7 +8,7 @@
 
 ```
 中心控制面 → 轮询 N 个节点
-    (HTTP GET /status)
+    (HTTP GET /api/v1/runtime)
 ```
 
 问题：
@@ -94,8 +94,8 @@ Connector 插件 ────────────── 主动连接中心
 POST /v1/nodes/register
 {
   "node_id": "node-uuid-123",
-  "version": "zero-0.1.0",
-  "features": ["vmess", "vless", "urltest"],
+  "build_id": "<build-id>",
+  "features": ["vmess", "vless", "url_test"],
   "listen_addrs": ["0.0.0.0:443"],
   "tags": ["region:us-west", "bandwidth:10G"],
   "secret": "node-shared-secret"
@@ -108,8 +108,8 @@ POST /v1/nodes/register
 {
   "node_id": "node-uuid-123",
   "server_time": 1713500000000,
-  "heartbeat_interval_ms": 5000,
-  "report_interval_ms": 30000,
+  "heartbeat_interval_ms": 10000,
+  "report_interval_ms": 60000,
   "config_hash": "abc123def",
   "commands_endpoint": "/v1/nodes/node-uuid-123/commands",
   "events_endpoint": "/v1/nodes/node-uuid-123/events"
@@ -138,7 +138,7 @@ POST /v1/nodes/node-uuid-123/heartbeat
 }
 ```
 
-心跳间隔：5s（可配置）
+心跳间隔由中心响应或本地 connector 配置决定。该间隔只用于远程节点存活判断，不影响本地控制面查询的新鲜度。
 超时判定：3 次心跳无响应 = 节点离线
 
 ---
@@ -176,7 +176,7 @@ POST /v1/nodes/node-uuid-123/stats
 }
 ```
 
-上报间隔：30s（可配置）
+上报间隔由中心响应或本地 connector 配置决定。远程上报发送聚合窗口；本地 HTTP `GET /api/v1/stats` 和 IPC `{"stats":{}}` 始终返回调用时的当前内存快照。
 
 ---
 
@@ -335,7 +335,7 @@ connector:
     timeout_ms: 3000
 
   stats_report:
-    interval_ms: 30000
+    interval_ms: 60000
     include_per_principal: true   # 是否上报按用户统计
     include_per_outbound: true    # 是否上报按出站统计
 
@@ -361,7 +361,7 @@ nodes:
   auth_secret: "global-node-secret"
   heartbeat_timeout_ms: 15000
   default_heartbeat_interval_ms: 5000
-  default_stats_interval_ms: 30000
+  default_stats_interval_ms: 60000
 ```
 
 ---

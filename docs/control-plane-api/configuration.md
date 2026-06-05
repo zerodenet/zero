@@ -1,6 +1,6 @@
 # Configuration Model Reference
 
-All control plane configuration lives under the `api` key. This page documents `v0.0.4` API configuration fields.
+All control plane configuration lives under the `api` key. This page documents the current API configuration fields.
 
 For the full configuration model (inbounds, outbounds, route, runtime), see [config.md](../project/config.md).
 
@@ -133,7 +133,7 @@ Event delivery target array.
 
 | Field | Type | Default | Description |
 |------|------|------|------|
-| `type` | string | -- | `"jsonl"` or alias `"file"` |
+| `type` | string | -- | `"jsonl"` |
 | `tag` | string | -- | Unique identifier |
 | `path` | string | -- | File path; relative paths resolve against the config directory |
 | `events` | string[] | `[]` | Event type whitelist; empty = accept all |
@@ -180,15 +180,15 @@ Dead letter file format: one JSON object per line, containing `dead_lettered_at_
 zero status  # includes sink delivery statistics
 ```
 
-## v0.0.4 Config Additions (non-API)
+## Related Runtime Fields
 
-The following new configuration fields were added in v0.0.4. They live outside the `api` section but are visible via `GET /api/v1/config` and relevant to control plane consumers.
+The following configuration fields live outside the `api` section but are visible via `GET /api/v1/config` and relevant to control plane consumers.
 
 | Field | Location | Description |
 |------|------|------|
 | `idle_timeout_secs` | `inbounds[*]` | TCP relay idle timeout in seconds (default 300) |
 | `url_rewrite` | `route.url_rewrite[]` | Domain rewrite rules (`from` / `from_regex` -> `to`) before routing |
-| `domain-regex` | `route.rules[*].condition` | New condition type matching domains against regex patterns |
+| `domain_regex` | `route.rules[*].condition` | Condition type matching domains against regex patterns |
 | `up_bps` / `down_bps` | `inbounds[*].protocol` (Hysteria2, Shadowsocks, Trojan) | Per-inbound GCRA rate limits |
 
 For full details, see [config.md](../project/config.md).

@@ -6,7 +6,7 @@
 
 ```json
 {
-  "schema_version": "zero.event.v1",
+  "schema_id": "zero.event.v1",
   "event_id": "flow.completed:42:1713500000000",
   "event_type": "flow.completed",
   "occurred_at_unix_ms": 1713500000000,
@@ -20,7 +20,7 @@
 
 | 字段 | 说明 |
 |------|------|
-| `schema_version` | 事件格式版本 |
+| `schema_id` | 事件格式标识 |
 | `event_id` | 唯一标识，格式 `{type}:{flow_id}:{timestamp}` |
 | `event_type` | 事件类型，用于过滤 |
 | `occurred_at_unix_ms` | 事件时间戳（毫秒） |
@@ -41,8 +41,8 @@
 | `flow.updated` | 活动 flow 流量快照 | 每 10s / flow |
 | `flow.completed` | flow 结束/被关闭/被阻断 | 每个结束的 flow |
 | `policy.selected` | selector 切换 | 按需 |
-| `policy.probe.completed` | urltest 完成一轮探测 | 按探测间隔 |
-| `stats.sampled` | 统计采样 | 每 30s |
+| `policy.probe.completed` | url_test 完成一轮探测 | 按探测间隔 |
+| `stats.sampled` | 统计采样 | 每 1s |
 | `ipc.connected` | IPC 客户端连接 | 按需 |
 | `ipc.disconnected` | IPC 客户端断开 | 按需 |
 
@@ -54,7 +54,7 @@
 
 ```json
 {
-  "version": "0.0.9",
+  "build_id": "<build-id>",
   "started_at_unix_ms": 1713500000000
 }
 ```
@@ -107,7 +107,7 @@
   "outbound": { "tag": "server-a", "protocol": "vless" },
   "traffic": { "bytes_up": 0, "bytes_down": 0, "packets_up": null, "packets_down": null },
   "timing": { "started_at_unix_ms": 1713500000000, "ended_at_unix_ms": null, "duration_ms": null },
-  "outcome": "direct-relayed"
+  "outcome": "direct_relayed"
 }
 ```
 
@@ -164,7 +164,7 @@ flow 终结事件，是流量统计和计费的核心数据来源。
     "ended_at_unix_ms": 1713500000000,
     "duration_ms": 12000
   },
-  "outcome": "direct-relayed"
+  "outcome": "direct_relayed"
 }
 ```
 
@@ -192,8 +192,8 @@ outcome 值：
 
 | 值 | 说明 |
 |-----|------|
-| `direct-relayed` | 直连成功 |
-| `chained-relayed` | 链式转发成功 |
+| `direct_relayed` | 直连成功 |
+| `chained_relayed` | 链式转发成功 |
 | `blocked` | 被路由规则拒绝 |
 | `failed` | 连接失败 |
 | `cancelled` | 被 `flows.close` 关闭 |
@@ -211,7 +211,7 @@ outcome 值：
 
 ### policy.probe.completed
 
-urltest 探测完成后发射，包含每个成员的探测结果。
+url_test 探测完成后发射，包含每个成员的探测结果。
 
 ```json
 {
@@ -226,6 +226,8 @@ urltest 探测完成后发射，包含每个成员的探测结果。
 ```
 
 ### stats.sampled
+
+本地控制面默认每 1 秒发射一次。该事件面向 GUI 和本地观测，远程面板心跳/批量上报应使用独立间隔，不应直接绑定本地采样频率。查询接口（HTTP `GET /api/v1/stats` / IPC `{"stats":{}}`）始终返回调用时的当前快照。
 
 ```json
 {

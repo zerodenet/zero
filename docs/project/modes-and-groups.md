@@ -8,7 +8,7 @@
 - `mode` 运行时切换（`zero mode rule|direct|global <outbound>`）
 - `fallback`
 - `group -> group`
-- `urltest`
+- `url_test`
 - `reload` 热加载（route + mode + DNS 热换，inbounds/outbounds 需重启）
 
 还没落地的部分：
@@ -57,12 +57,12 @@ IPC 等价命令：
   - 当前支持运行时切换
 - `fallback`
   - 前一个成员建连失败时，顺序切到下一个
-- `urltest`
+- `url_test`
   - 周期探测后，选择可用且延迟更低的成员
 - `relay`
   - 链式代理，流量依次经过每个节点
-- `loadbalance`
-  - 负载均衡，按策略（round-robin / random）分发连接
+- `load_balance`
+  - 负载均衡，按策略（round_robin / random）分发连接
 
 这三类组的成员现在都可以引用另一个组。运行时会递归解析，配置阶段会拦掉循环引用。
 
@@ -82,15 +82,12 @@ selected > default > outbounds[0]
 
 `default` 仅用于初始值——一旦通过 API/CLI 切换过，`default` 就不再生效。`selected` 是持久选择，重启后依然生效。
 
-Fallback 和 UrlTest 固定从 `outbounds[0]` 开始。
+Fallback 和 URL test 固定从 `outbounds[0]` 开始。
 
 客户端只负责改”当前选哪个”或”当前 mode 是什么”。真正的选择逻辑、健康检查和最终出站决策都在内核里。
 
-当前本地最小控制入口复用了 `--status-listen`，支持：
-
-```text
-POST /selectors/{group_tag}/{target_tag}
-```
+当前本地控制入口使用 `POST /api/v1/commands`，selector 切换通过
+`method: "policies.select"` 完成。
 
 ## 配置草案
 
@@ -122,7 +119,7 @@ POST /selectors/{group_tag}/{target_tag}
     },
     {
       "tag": "probe",
-      "type": "urltest",
+      "type": "url_test",
       "outbounds": ["fallback-proxy", "node-b", "direct"],
       "url": "http://example.com/",
       "interval_seconds": 300
@@ -134,9 +131,9 @@ POST /selectors/{group_tag}/{target_tag}
     },
     {
       "tag": "lb",
-      "type": "loadbalance",
+      "type": "load_balance",
       "outbounds": ["node-a", "node-b", "node-c"],
-      "strategy": "round-robin"
+      "strategy": "round_robin"
     }
   ],
   "mode": {

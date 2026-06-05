@@ -21,7 +21,7 @@ The control plane and observability model follow Zero's own conventions. Externa
 
 `zero-config` owns configuration models and parsing. `zero-router` owns rule matching. `zero-engine` owns compilation of config into executable plans, routing decisions, target resolution, mode and group state, sessions, statistics, events, and state export.
 
-Mode semantics (`direct / global / rule`) and outbound group semantics (`selector / urltest / fallback`) also belong to this layer, not the client.
+Mode semantics (`direct / global / rule`) and outbound group semantics (`selector / url_test / fallback`) also belong to this layer, not the client.
 
 `zero-engine` is not bound to Tokio, does not start listeners, does not hold protocol implementations, and does not directly establish socket connections. `direct` / `block` are built-in target semantics within this layer; actual network execution is performed by the proxy runtime layer.
 
@@ -47,14 +47,14 @@ The hot path prefers reading plan/state and passing references along borrow boun
 - Starts inbound listeners
 - Invokes protocol implementations for handshake and framing
 - Establishes direct or upstream outbound connections
-- Runs TCP relay, UDP association, TLS, urltest probing, and circuit breaker health checks
+- Runs TCP relay, UDP association, TLS, url_test probing, and circuit breaker health checks
 - Validates that the current build has compiled the protocol features referenced by config
 
 This layer may depend on the Tokio backend, protocol crates, and `zero-engine`. It does not re-interpret config semantics or maintain a separate set of mode, group, or route state.
 
 ### InboundProtocol trait and `serve_inbound()` kernel pipeline
 
-As of v0.0.4, all TCP protocol inbound handlers are unified through a single trait and a single kernel entry point.
+All TCP protocol inbound handlers are unified through a single trait and a single kernel entry point.
 
 **`InboundProtocol` trait** -- the protocol-server boundary:
 
@@ -181,7 +181,7 @@ Unified transport abstractions: TLS, WebSocket, gRPC, H2, HTTPUpgrade, QUIC, Spl
 - `zero-connector` -- event dispatcher connectors (JSONL sink, webhook, push)
 - `zero-logging` -- structured logging
 - `zero-ffi` -- C-compatible embedded interface
-- `zero-grpc` -- gRPC control plane adapter (`grpc-api` feature)
+- `zero-grpc` -- gRPC control plane adapter (`grpc_api` feature)
 - `zero-dns` -- DNS subsystem (system / UDP / DoH / DoT / Fake IP)
 
 ## Abstraction Layer
@@ -210,7 +210,7 @@ All inbound handlers implement `InboundProtocol` and feed into `serve_inbound()`
 | Handler | Protocol | Notes |
 |---------|----------|-------|
 | `socks5` | SOCKS5 | CONNECT + UDP ASSOCIATE |
-| `http-connect` | HTTP CONNECT | |
+| `http_connect` | HTTP CONNECT | |
 | `mixed` | Auto-detect | SOCKS5 / HTTP CONNECT on one port |
 | `vless` | VLESS | TCP + UDP-over-TCP |
 | `hysteria2` | Hysteria2 | QUIC |

@@ -31,7 +31,7 @@ zero status --socket /tmp/zero.sock  # 指定 socket
 离线模式：指定配置路径时直接读取配置文件（不连接守护进程）：
 
 ```bash
-zero status examples/v0.0.1/basic.json
+zero status config.json
 ```
 
 ### zero select
@@ -80,18 +80,18 @@ zero events
 zero help
 ```
 
-### zero version
+### zero build_info
 
 ```bash
-zero version
+zero build_info
 ```
 
-显示版本号、构建时间和 git 描述：
+显示构建信息：
 
 ```
-zero 0.0.9
-build: 2026-06-04T12:00:00Z
-git: v0.0.9-0-gfcc1645
+build_id: <build-id>
+build_time: <build-time>
+git: <git-describe>
 ```
 
 ### zero validate
@@ -138,7 +138,7 @@ zero reload config.json
 - route 规则、mode、DNS 配置
 - outbound_groups 调整
 
-不支持热换（需重启）：
+需要重启后生效：
 - inbounds/outbounds 增删改
 
 ### zero tun

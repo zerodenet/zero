@@ -229,7 +229,7 @@ impl AuthService {
 ```rust
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T> {
-    pub api_version: &'static str,
+    pub api_id: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub ok: bool,
@@ -323,19 +323,11 @@ async fn start_api_server(&self, config: &ApiConfig, engine_handle: EngineHandle
 
 ---
 
-## 兼容性处理
+## 路由边界
 
-保留现有端点作为兼容层，内部转发到新的 handler：
-
-```rust
-pub fn compatibility_router() -> Router {
-    Router::new()
-        .route("/status", get(|| async { redirect("/api/v1/runtime") }))
-        .route("/runtime", get(runtime_compat))
-        .route("/config", get(config_compat))
-        .route("/selectors/:group/:target", post(select_compat))
-}
-```
+HTTP adapter 只暴露 `/api/v1/*` 控制面端点。所有控制命令进入
+`POST /api/v1/commands`，再交给 `zero_api::CommandRequest` 反序列化和
+`CommandService` 执行。adapter 不维护旧路径映射，也不直接操作 engine 内部结构。
 
 ---
 
@@ -396,4 +388,4 @@ async fn test_capabilities_endpoint() {
 6. **Phase 6**: 集成测试
    - 所有端点的集成测试
    - 认证和权限测试
-   - 兼容性测试
+   - 路由边界测试

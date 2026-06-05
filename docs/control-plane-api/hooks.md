@@ -93,7 +93,7 @@ pub struct FlowContext {
 **flow_end** — fire-and-forget（不读响应）：
 
 ```
-→ {"type":"flow_end","flow_id":42,"inbound_tag":"socks5","target_host":"example.com","target_port":443,"network":"tcp","principal_key":null,"outcome":"direct-relayed","bytes_up":1024000,"bytes_down":5120000,"duration_ms":30000}
+→ {"type":"flow_end","flow_id":42,"inbound_tag":"socks5","target_host":"example.com","target_port":443,"network":"tcp","principal_key":null,"outcome":"direct_relayed","bytes_up":1024000,"bytes_down":5120000,"duration_ms":30000}
 ```
 
 ### 安全策略

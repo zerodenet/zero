@@ -145,12 +145,15 @@ The current control plane uses `Authorization: Bearer <api-key>` or `X-Zero-Api-
 Current HTTP control plane supports:
 
 ```text
-GET  /api/v1/status
+GET  /api/v1/capabilities
+GET  /api/v1/health
 GET  /api/v1/config
 GET  /api/v1/runtime
+GET  /api/v1/stats
+GET  /api/v1/flows
+GET  /api/v1/policies
 GET  /api/v1/events
 POST /api/v1/commands
-POST /api/v1/selectors/{group}/{target}
 ```
 
 `POST /api/v1/commands` uses a unified command JSON, e.g.:
@@ -193,9 +196,8 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 ### Currently supported protocols
 
 - `socks5`
-- `http-connect`
-- `http` (alias)
-- `mixed` -- same port auto-detects `socks5` and `http-connect`
+- `http_connect`
+- `mixed` -- same port auto-detects `socks5` and `http_connect`
 - `vless` -- TCP/TLS/WS/WSS, Reality, gRPC, H2, HTTPUpgrade, QUIC, SplitHTTP; MUX + Vision flow + UDP over TCP
 - `hysteria2` -- QUIC, TCP streams and UDP datagram forwarding
 - `shadowsocks` -- AEAD cipher (chacha20-ietf-poly1305, aes-128-gcm, aes-256-gcm); 2022-blake3
@@ -764,9 +766,9 @@ Five outbound group types are currently implemented:
 
 - `selector`
 - `fallback`
-- `urltest`
+- `url_test`
 - `relay`
-- `loadbalance`
+- `load_balance`
 
 Group members may be either concrete outbounds or other outbound groups. Circular references are rejected at config validation.
 
@@ -781,19 +783,20 @@ Group members may be either concrete outbounds or other outbound groups. Circula
 }
 ```
 
-`selector` supports runtime switching. When launched with `--status-listen`, use the local endpoint:
+`selector` supports runtime switching through `POST /api/v1/commands` with
+`method: "policies.select"`.
 
-```text
-POST /selectors/{group_tag}/{target_tag}
+```json
+{
+  "method": "policies.select",
+  "params": {
+    "policy_tag": "proxy",
+    "target_tag": "direct"
+  }
+}
 ```
 
-For example:
-
-```text
-POST /selectors/proxy/direct
-```
-
-After a successful switch, `outbound_groups[*].selected` in `/config` and `/status` immediately reflects the new selection.
+After a successful switch, `outbound_groups[*].selected` in `/api/v1/config` and `/api/v1/runtime` immediately reflects the new selection.
 
 ### fallback
 
@@ -812,12 +815,12 @@ Semantics:
 - Once a connection succeeds, fix on that member for the session
 - Circuit breaker quarantines unhealthy members before the connection attempt, causing automatic fall-through
 
-### urltest
+### url_test
 
 ```json
 {
   "tag": "proxy",
-  "type": "urltest",
+  "type": "url_test",
   "outbounds": ["node-a", "node-b", "direct"],
   "url": "http://example.com/",
   "interval_seconds": 300
@@ -848,22 +851,22 @@ Semantics:
 - Connection failure at any hop terminates the chain
 - Circuit breaker applies to each chained member individually
 
-### loadbalance
+### load_balance
 
 ```json
 {
   "tag": "lb",
-  "type": "loadbalance",
+  "type": "load_balance",
   "outbounds": ["node-a", "node-b", "node-c"],
-  "strategy": "round-robin"
+  "strategy": "round_robin"
 }
 ```
 
-Loadbalance config fields:
+Load balance config fields:
 - `outbounds` -- required, list of outbound tags to balance across
 - `default` -- optional, initial outbound selection; falls back to `outbounds[0]` if not set
-- `strategy` -- optional, distribution strategy, default `round-robin`
-  - `round-robin` -- distribute connections sequentially across members
+- `strategy` -- optional, distribution strategy, default `round_robin`
+  - `round_robin` -- distribute connections sequentially across members
   - `random` -- pick a random member for each connection
 
 Group members may be either concrete outbounds or other outbound groups. Circular references are rejected at config validation.
@@ -899,10 +902,10 @@ Rules are `condition + action`:
 Currently supported conditions:
 
 - `domain` -- domain matching, supports `example.com` exact and `*.example.com` wildcard
-- `domain-keyword` -- match if domain contains keyword
-- `domain-regex` -- match domain against one or more regex patterns
+- `domain_keyword` -- match if domain contains keyword
+- `domain_regex` -- match domain against one or more regex patterns
 - `ip` -- CIDR matching
-- `rule-set` -- reference external rule set files
+- `rule_set` -- reference external rule set files
 - `geoip` -- MaxMind GeoLite2-Country mmdb country code matching
 - `sni` -- TLS ClientHello SNI domain matching (same syntax as domain)
 - `and` -- all sub-conditions must match
@@ -912,21 +915,20 @@ Currently supported actions:
 
 - `direct`
 - `reject`
-- `block` (alias)
 - `route`
 
-### domain-regex condition
+### domain_regex condition
 
-The `domain-regex` condition matches the target domain against one or more regex patterns. Patterns are compiled at startup. Matches against the target domain extracted from the session. Supports composition with `and` / `or`.
+The `domain_regex` condition matches the target domain against one or more regex patterns. Patterns are compiled at startup. Matches against the target domain extracted from the session. Supports composition with `and` / `or`.
 
 ```json
 {
-  "condition": { "type": "domain-regex", "values": ["^.*\\.google\\..*$", "^.*\\.youtube\\..*$"] },
+  "condition": { "type": "domain_regex", "values": ["^.*\\.google\\..*$", "^.*\\.youtube\\..*$"] },
   "action": { "type": "route", "outbound": "proxy" }
 }
 ```
 
-Note: capture groups in `domain-regex` patterns are not used for routing context. For capture-based domain substitution, use `url_rewrite.from_regex` instead.
+Note: capture groups in `domain_regex` patterns are not used for routing context. For capture-based domain substitution, use `url_rewrite.from_regex` instead.
 
 ### url_rewrite
 
@@ -967,8 +969,8 @@ Currently supported:
 
 - `type = file`
 - `type = url` (remote fetch with local cache)
-- `format = domain-list`
-- `format = cidr-list`
+- `format = domain_list`
+- `format = cidr_list`
 
 ```json
 {
@@ -978,22 +980,22 @@ Currently supported:
         "tag": "ads",
         "type": "file",
         "path": "rules/ads.txt",
-        "format": "domain-list"
+        "format": "domain_list"
       },
       {
         "tag": "lan",
         "type": "file",
         "path": "rules/lan.txt",
-        "format": "cidr-list"
+        "format": "cidr_list"
       }
     ],
     "rules": [
       {
-        "condition": { "type": "rule-set", "tag": "ads" },
+        "condition": { "type": "rule_set", "tag": "ads" },
         "action": { "type": "reject" }
       },
       {
-        "condition": { "type": "rule-set", "tag": "lan" },
+        "condition": { "type": "rule_set", "tag": "lan" },
         "action": { "type": "route", "outbound": "direct" }
       }
     ],
@@ -1005,8 +1007,8 @@ Currently supported:
 Notes:
 
 - `path` supports relative paths, resolved against the config file directory by default
-- `domain-list` loads as a domain list
-- `cidr-list` loads as a CIDR list
+- `domain_list` loads as a domain list
+- `cidr_list` loads as a CIDR list
 - Blank lines are ignored
 - Lines starting with `#` or `//` are ignored
 - Rule files only contain match data, not actions
@@ -1033,9 +1035,9 @@ Notes:
 - `outbound_groups[*].selected`
   - Currently selected member for the group
 - `outbound_groups[*].latency_ms`
-  - `urltest` most recent successful probe latency
+  - `url_test` most recent successful probe latency
 - `outbound_groups[*].last_checked_unix_ms`
-  - `urltest` most recent probe completion time
+  - `url_test` most recent probe completion time
 
 ## Constraints
 
@@ -1047,19 +1049,19 @@ Notes:
 - VLESS outbound `reality.public_key` must be a 32-byte base64url no padding value; `reality.short_id` max 16 hex characters; `reality` cannot be combined with `tls` or `ws`
 - Tags within the same object type must not be duplicated
 - The same `address:port` can only have one inbound
-- Use `mixed` when the same port needs both `socks5` and `http-connect`
+- Use `mixed` when the same port needs both `socks5` and `http_connect`
 - Targets referenced by `route` and `global mode` must exist
 - Members in outbound groups must be defined outbounds or defined groups
 - Outbound groups must not have circular references
 - `runtime.udp_upstream_idle_timeout_seconds` must be greater than `0`
 - `rule_sets[*].tag` must not be empty and must not duplicate
-- `rule-set` condition referenced `tag` must exist
-- `urltest.url` must currently be `http://`
-- `urltest.interval_seconds` must be greater than `0`
+- `rule_set` condition referenced `tag` must exist
+- `url_test.url` must currently be `http://`
+- `url_test.interval_seconds` must be greater than `0`
 - Hysteria2 inbound `password` must not be empty; outbound `server` must not be empty, `port` must be greater than `0`
 - Shadowsocks inbound and outbound `password` must not be empty
 - Trojan inbound must configure `tls` with non-empty `cert_path` and `key_path`, `password` must not be empty; outbound `server` must not be empty, `port` must be greater than `0`, `password` must not be empty
-- `domain-regex` condition requires at least one pattern in `values`
+- `domain_regex` condition requires at least one pattern in `values`
 - `url_rewrite` rules require at least one of `from` or `from_regex`, and `to` must not be empty
 - `idle_timeout_secs` must be greater than `0` if set
 
@@ -1107,26 +1109,10 @@ config valid: 2 inbounds, 3 outbounds, 1 groups, 5 rules
 zero select <group-tag> <target-tag>
 ```
 
-Equivalent HTTP API: `POST /api/v1/selectors/{group}/{target}`
+Equivalent HTTP API: `POST /api/v1/commands` with `method: "policies.select"`.
 
 ## Examples
 
-- [basic.json](../../examples/v0.0.1/basic.json)
-- [mixed.json](../../examples/v0.0.1/mixed.json)
-- [blocked-route.json](../../examples/v0.0.1/blocked-route.json)
-- [chained-socks5.json](../../examples/v0.0.1/chained-socks5.json)
-- [global-selector.json](../../examples/v0.0.1/global-selector.json)
-- [rule-set-files.json](../../examples/v0.0.1/rule-set-files.json)
-- [server-socks5.json](../../examples/v0.0.1/server-socks5.json)
-- [udp-socks5.json](../../examples/v0.0.1/udp-socks5.json)
-- [fallback.json](../../examples/v0.0.2/fallback.json)
-- [nested-groups.json](../../examples/v0.0.2/nested-groups.json)
-- [urltest.json](../../examples/v0.0.2/urltest.json)
-- [vless.json](../../examples/v0.0.2/vless.json)
-- [vless-tls.json](../../examples/v0.0.2/vless-tls.json)
-- [vless-ws.json](../../examples/v0.0.2/vless-ws.json)
-- [chained-vless-tls.json](../../examples/v0.0.2/chained-vless-tls.json)
-- [chained-vless-reality.json](../../examples/v0.0.2/chained-vless-reality.json)
-- [hysteria2.json](../../examples/v0.1.0/hysteria2.json)
-- [shadowsocks.json](../../examples/v0.1.0/shadowsocks.json)
-- [trojan.json](../../examples/v0.1.0/trojan.json)
+`examples/` contains runnable configuration samples for basic inbounds, chained
+outbounds, selector/fallback/url_test groups, rule sets, VLESS, Hysteria2,
+Shadowsocks, and Trojan.

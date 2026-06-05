@@ -46,9 +46,9 @@
 
 1. **核心类型定义**
    - `Flow` 类型：活动 flow 和已完成 flow 的统一视图
-   - `Policy` 类型：`selector`、`fallback`、`urltest` 的状态表示
+   - `Policy` 类型：`selector`、`fallback`、`url_test` 的状态表示
    - `Stats` 类型：运行时统计的归一化结构
-   - `RuntimeInfo` 类型：进程、版本、启动时间、监听信息
+   - `RuntimeInfo` 类型：进程、构建标识、启动时间、监听信息
 
 2. **能力 Trait**
    - `QueryService` trait：定义所有只读查询方法签名
@@ -62,10 +62,10 @@
    - 认证 trait 定义
 
 **验收标准**：
-- 现有 `/status`、`/runtime`、`/config` 的所有字段能映射到核心类型
-- 现有 `POST /selectors/{group}/{target}` 能映射到 `CommandService`
-- 现有 `flow.completed` 事件能映射到 `EventSource`
-- 现有 webhook sink 能实现 `EventSink` trait
+- `/api/v1/runtime`、`/api/v1/config`、`/api/v1/stats` 的字段能映射到核心类型
+- `POST /api/v1/commands` 的 `policies.select` 能映射到 `CommandService`
+- `flow.completed` 事件能映射到 `EventSource`
+- webhook sink 能实现 `EventSink` trait
 
 ---
 
@@ -274,7 +274,7 @@
 |------|--------|----------|
 | 1 · 核心模型 | 6 个 trait、13 种 Query、11 种 Command、12 种事件、7 种错误码、4 级权限 | `crates/api/src/` |
 | 2 · In-process | `EngineHandle`（Query + Command + EventSource）+ 内存事件总线 | `crates/engine/src/handle.rs`、`api.rs` |
-| 3 · HTTP | 11 个 `/api/v1/*` 端点 + 5 个兼容端点 + Bearer Token + 限流 + SSE | `src/http_adapter/` |
+| 3 · HTTP | `/api/v1/*` 端点 + Bearer Token + 限流 + SSE | `src/http_adapter/` |
 | 4 · Sink | 6 种 Sink 实现 + SinkManager + 事件分发器 + DeadLetter | `crates/api/src/sink.rs`、`crates/connector/src/` |
 | 5 · IPC | Unix Socket + Windows Named Pipe + 多路复用 + CLI 集成 | `src/ipc/` |
 

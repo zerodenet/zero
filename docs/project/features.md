@@ -6,15 +6,15 @@ Zero uses Cargo features to control which capability subsets are included in the
 
 | Preset | Includes | Use case |
 |--------|---------|----------|
-| `default` | `full` + `status-api` | Client-side local use |
-| `full` | All inbound/outbound protocols + DNS UDP | Full proxy node |
+| `default` | `full` + `status_api` | Client-side local use |
+| `full` | All inbound/outbound protocols + DNS | Full proxy node |
 
 ```bash
 # Default build (client scenario, no connectors needed)
 cargo build --release
 
 # Equivalent
-cargo build --release --features full,status-api
+cargo build --release --features full,status_api
 ```
 
 ## Inbound Protocols
@@ -24,8 +24,8 @@ Each inbound protocol is independently feature-gated and may be trimmed as neede
 | Feature | Protocol | Extra dependencies |
 |---------|------|----------|
 | `socks5` | SOCKS5 inbound | -- |
-| `http-connect` | HTTP CONNECT inbound | -- |
-| `mixed` | Mixed inbound (same port SOCKS5 + HTTP CONNECT) | Implies `socks5` + `http-connect` |
+| `http_connect` | HTTP CONNECT inbound | -- |
+| `mixed` | Mixed inbound (same port SOCKS5 + HTTP CONNECT) | Implies `socks5` + `http_connect` |
 | `vless` | VLESS inbound | TLS / Reality / WebSocket / gRPC / H2 / QUIC transport |
 | `hysteria2` | Hysteria2 inbound | QUIC (quinn) |
 | `shadowsocks` | Shadowsocks inbound | AEAD encryption + 2022-blake3 |
@@ -38,7 +38,7 @@ Each inbound protocol is independently feature-gated and may be trimmed as neede
 ```bash
 # Trim example: SOCKS5 + HTTP CONNECT only
 cargo build --release --no-default-features \
-  --features socks5,http-connect,status-api
+  --features socks5,http_connect,status_api
 ```
 
 ## Outbound Protocols
@@ -59,9 +59,9 @@ cargo build --release --no-default-features \
 
 | Feature | Description |
 |---------|------|
-| `dns-udp` | UDP DNS server backend (for self-hosted DNS resolution) |
+| `dns` | DNS resolver, cache, routing, Fake IP, and UDP DNS backend |
 
-> When `dns-udp` is not enabled, DNS falls back to the system resolver (`tokio::net::lookup_host`). DNS caching and Fake IP are always available, no feature gate required.
+> When `dns` is not enabled, DNS falls back to the system resolver (`tokio::net::lookup_host`).
 
 ## Control Plane (Server Deployment)
 
@@ -69,32 +69,32 @@ The following features deploy Zero as a server/panel node and are **not in the d
 
 | Feature | Description | Implies |
 |---------|------|------|
-| `status-api` | HTTP status API (`/api/v1/*`) | -- |
-| `grpc-api` | gRPC control plane endpoint | `dep:zero-grpc` |
-| `event-dispatcher` | Event dispatcher: delivers zero events to external sinks | `dep:zero-connector` |
-| `sink-jsonl` | JSON Lines file sink (event persistence) | `event-dispatcher` |
-| `panel-connector` | Panel connector: heartbeat + remote commands, node reporting | `status-api` + `event-dispatcher` |
+| `status_api` | HTTP status API (`/api/v1/*`) | -- |
+| `grpc_api` | gRPC control plane endpoint | `dep:zero-grpc` |
+| `event_dispatcher` | Event dispatcher: delivers zero events to external sinks | `dep:zero-connector` |
+| `sink_jsonl` | JSON Lines file sink (event persistence) | `event_dispatcher` |
+| `panel_connector` | Panel connector: heartbeat + remote commands, node reporting | `status_api` + `event_dispatcher` |
 
 ```bash
 # Server build (with panel connector)
-cargo build --release --features full,status-api,panel-connector
+cargo build --release --features full,status_api,panel_connector
 ```
 
-**`panel-connector` dependency surface:**
+**`panel_connector` dependency surface:**
 
-- `status-api` -- HTTP control endpoint
-- `event-dispatcher` -- event delivery infrastructure
+- `status_api` -- HTTP control endpoint
+- `event_dispatcher` -- event delivery infrastructure
 - `zero-connector` crate -- PushConnector (heartbeat/command polling), EventDispatcher (event distribution), Webhook sink
 
 ## Client vs Server
 
 ```
-Client scenario:  full + status-api  (default)
+Client scenario:  full + status_api  (default)
                   ├─ Inbound/outbound protocols
-                  ├─ DNS UDP
+                  ├─ DNS
                   └─ HTTP status endpoint (local debugging)
 
-Server scenario:  + panel-connector
+Server scenario:  + panel_connector
                   ├─ Event dispatch (→ webhook / jsonl)
                   └─ Panel heartbeat reporting + remote commands
 ```
@@ -115,12 +115,12 @@ Asymmetric inbound/outbound features are normal -- some protocols do not need th
 
 | Features | Binary size (release, stripped) |
 |----------|-------------------------------|
-| `default` (`full` + `status-api`) | ~15 MB |
+| `default` (`full` + `status_api`) | ~15 MB |
 | `--no-default-features` + SOCKS5 inbound/outbound + direct | ~5 MB |
 
 ---
 
-# Kernel Primitives (v0.0.4)
+# Kernel Primitives
 
 These cross-cutting capabilities live in the kernel pipeline and apply to all TCP protocols uniformly.
 
@@ -168,18 +168,18 @@ Domain-based URL rewriting applied before routing. Rules are matched first-match
 }
 ```
 
-## Domain-Regex Router Condition
+## Domain Regex Router Condition
 
-New route condition type `domain-regex` matches the target domain against one or more regex patterns.
+Route condition type `domain_regex` matches the target domain against one or more regex patterns.
 
-- **Config**: `{ "type": "domain-regex", "values": ["^.*\\.google\\..*$", "^.*\\.youtube\\..*$"] }`
+- **Config**: `{ "type": "domain_regex", "values": ["^.*\\.google\\..*$", "^.*\\.youtube\\..*$"] }`
 - **Matching**: Patterns are compiled once at startup (`regex::Regex`), then matched against the target domain at decision time
 - **Capture groups**: Not used for routing -- purely for matching. Use `url_rewrite.from_regex` for capture-based rewriting
 - **Scope**: Part of the rule condition system, composable with `and`/`or`
 
 ```json
 {
-  "condition": { "type": "domain-regex", "values": ["^.*\\.google\\..*$"] },
+  "condition": { "type": "domain_regex", "values": ["^.*\\.google\\..*$"] },
   "action": { "type": "route", "outbound": "proxy" }
 }
 ```

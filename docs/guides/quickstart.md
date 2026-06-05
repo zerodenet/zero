@@ -56,7 +56,7 @@ cargo build --release
 输出：
 
 ```
-engine started  version=0.0.8
+engine started  build_id=<build-id>
 loaded proxy configuration  config=config.json
 ipc server ready  socket=/home/user/.zero/control.sock
 ```
@@ -138,7 +138,7 @@ curl -s http://127.0.0.1:9090/api/v1/runtime
   "outbound_groups": [
     {
       "tag": "auto",
-      "type": "urltest",
+      "type": "url_test",
       "outbounds": ["server-a", "server-b"],
       "url": "http://www.gstatic.com/generate_204",
       "interval_seconds": 300
@@ -168,9 +168,9 @@ curl -s http://127.0.0.1:9090/api/v1/runtime
   "outbound_groups": [
     {
       "tag": "lb",
-      "type": "loadbalance",
+      "type": "load_balance",
       "outbounds": ["server-a", "server-b", "server-c"],
-      "strategy": "round-robin"
+      "strategy": "round_robin"
     }
   ]
 }

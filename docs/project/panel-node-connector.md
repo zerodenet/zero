@@ -22,17 +22,17 @@
 面板对接能力必须是可选编译能力：
 
 ```text
-event-dispatcher
+event_dispatcher
   启用事件分发循环和 sink registry。
 
-sink-jsonl
+sink_jsonl
   启用本地 JSON Lines 事件落盘。
 
-panel-connector
+panel_connector
   启用 webhook 事件投递和 API key 控制入口，用于面板通讯。
 ```
 
-不需要面板通讯时，不应编译 `panel-connector`。只需要本地观测时，使用 `event-dispatcher + sink-jsonl` 即可。
+不需要面板通讯时，不应编译 `panel_connector`。只需要本地观测时，使用 `event_dispatcher + sink_jsonl` 即可。
 
 ## 节点到面板
 
@@ -48,7 +48,7 @@ Content-Type: application/json
 
 ```json
 {
-  "schema_version": "zero.event.v1",
+  "schema_id": "zero.event.v1",
   "event_id": "flow.completed:42:1760000005000",
   "event_type": "flow.completed",
   "occurred_at_unix_ms": 1760000005000,
@@ -120,12 +120,15 @@ Content-Type: application/json
 首批可开放的能力：
 
 ```text
-GET  /api/v1/status
+GET  /api/v1/capabilities
+GET  /api/v1/health
 GET  /api/v1/config
 GET  /api/v1/runtime
+GET  /api/v1/stats
+GET  /api/v1/flows
+GET  /api/v1/policies
 GET  /api/v1/events
 POST /api/v1/commands
-POST /api/v1/selectors/{group}/{target}
 ```
 
 `POST /api/v1/commands` 接收 `zero-api` 的 `CommandRequest` JSON。当前已接入：
@@ -140,7 +143,7 @@ POST /api/v1/selectors/{group}/{target}
 }
 ```
 
-`POST /api/v1/selectors/{group}/{target}` 是兼容旧调试路径的过渡入口，内部同样映射到 `policies.select`。后续新增 command 时，需要先定义 `CommandRequest`，再由 transport adapter 暴露。面板不应该依赖旧的调试路径作为长期契约。
+新增 command 时，需要先定义 `CommandRequest`，再由 transport adapter 暴露。面板只依赖通用 command/query 能力，不直接绑定 engine 内部结构。
 
 ## Connector 规则
 
@@ -151,4 +154,4 @@ POST /api/v1/selectors/{group}/{target}
 - `EventSink` 负责投递到文件、webhook、gRPC 或自定义目标。
 - retry、spool、dead-letter 是每个 connector/sink 的投递策略。
 
-当前最小实现可以先提供内存重试；持久 spool 和 dead-letter 后续再接入文件或本地状态库。
+当前 connector 可以使用内存重试；需要持久化投递状态时由 sink 或外部 connector 自行维护。
