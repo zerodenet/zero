@@ -19,14 +19,8 @@ impl ProtocolMetadata for MieruProtocol {
         let unsupported = ProtocolCapabilityState::unsupported(&[]);
         let experimental =
             ProtocolCapabilityState::experimental(&["external_interop_coverage_is_incomplete"]);
-        let partial = ProtocolCapabilityState::partial(&[
-            "udp_relay_chain_is_not_supported",
-            "external_interop_coverage_is_incomplete",
-        ]);
-        let partial_out = ProtocolCapabilityState::partial(&[
-            "relay_chain_hop_is_not_supported",
-            "external_interop_coverage_is_incomplete",
-        ]);
+        let partial =
+            ProtocolCapabilityState::partial(&["external_interop_coverage_is_incomplete"]);
 
         ProtocolCapabilityDescriptor {
             protocol: "mieru",
@@ -34,14 +28,10 @@ impl ProtocolMetadata for MieruProtocol {
             status: ProtocolCapabilityLevel::Partial,
             compatibility_baseline: "mieru",
             inbound: ProtocolNetworkCapability::new(experimental, partial),
-            outbound: ProtocolNetworkCapability::new(partial_out, partial),
+            outbound: ProtocolNetworkCapability::new(partial, partial),
             transports: &["tcp", "udp"],
             mux: unsupported,
-            limitations: &[
-                "udp_relay_chain_is_not_supported",
-                "external_interop_coverage_is_incomplete",
-                "relay_chain_hop_is_not_supported",
-            ],
+            limitations: &["external_interop_coverage_is_incomplete"],
         }
     }
 }

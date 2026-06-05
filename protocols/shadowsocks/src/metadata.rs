@@ -11,7 +11,7 @@ impl ProtocolMetadata for ShadowsocksProtocol {
         let unsupported = ProtocolCapabilityState::unsupported(&[]);
         let supported = ProtocolCapabilityState::supported();
         let partial = ProtocolCapabilityState::partial(&[
-            "udp_relay_chain_is_not_supported",
+            "udp_relay_chain_tcp_prefix_is_not_supported",
             "external_interop_coverage_is_incomplete",
         ]);
 
@@ -25,7 +25,7 @@ impl ProtocolMetadata for ShadowsocksProtocol {
             transports: &["tcp", "udp"],
             mux: unsupported,
             limitations: &[
-                "udp_relay_chain_is_not_supported",
+                "udp_relay_chain_tcp_prefix_is_not_supported",
                 "external_interop_coverage_is_incomplete",
             ],
         }
