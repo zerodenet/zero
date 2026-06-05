@@ -71,7 +71,7 @@ resolver = "2"
 version = "0.0.9"
 edition = "2021"
 authors = ["zerodenet <https://zerodenet.org>"]
-license = "MIT"
+license = "MPL-2.0"
 repository = "https://github.com/zerodenet/zero"
 homepage = "https://zerodenet.org"
 
