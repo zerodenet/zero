@@ -83,6 +83,7 @@ pub(crate) enum UdpFlowOutbound {
         port: u16,
         username: String,
         password: String,
+        relay_chain: bool,
     },
 }
 

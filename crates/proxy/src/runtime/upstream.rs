@@ -267,18 +267,11 @@ impl Proxy {
         )
         .await?;
         self.record_session_outbound_traffic(session.id, metered.drain_traffic());
-        let upstream = metered.into_inner();
-        let (app_stream, ss_plain_stream) = tokio::io::duplex(64 * 1024);
-        tokio::spawn(async move {
-            let _ = relay_shadowsocks_outbound(
-                ss_plain_stream,
-                upstream.into(),
-                ss_session,
-                password_bytes,
-            )
-            .await;
-        });
-        Ok(crate::transport::TcpRelayStream::new(app_stream))
+        Ok(wrap_shadowsocks_outbound_stream(
+            metered.into_inner().into(),
+            ss_session,
+            password_bytes,
+        ))
     }
 
     #[cfg(not(feature = "shadowsocks"))]
@@ -541,6 +534,19 @@ impl Proxy {
             crate::outbound::mieru::MieruTcpStream::new(stream, outbound),
         ))
     }
+}
+
+#[cfg(feature = "shadowsocks")]
+pub(crate) fn wrap_shadowsocks_outbound_stream(
+    upstream: TcpRelayStream,
+    ss_session: shadowsocks::ShadowsocksOutboundSession,
+    password: Vec<u8>,
+) -> TcpRelayStream {
+    let (app_stream, ss_plain_stream) = tokio::io::duplex(64 * 1024);
+    tokio::spawn(async move {
+        let _ = relay_shadowsocks_outbound(ss_plain_stream, upstream, ss_session, password).await;
+    });
+    TcpRelayStream::new(app_stream)
 }
 
 #[cfg(feature = "shadowsocks")]

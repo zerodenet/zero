@@ -727,12 +727,11 @@ mod mieru_manager {
     use std::sync::Arc;
 
     use mieru::{unwrap_udp_associate, wrap_udp_associate, MieruOutbound};
-    use tokio::io::AsyncWriteExt;
-    use tokio::sync::{broadcast, mpsc};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::sync::{broadcast, mpsc, Mutex};
     use tokio::task::JoinSet;
     use zero_core::{Address, Session};
     use zero_engine::EngineError;
-    use zero_traits::AsyncSocket;
 
     use super::{ChainTask, FlowFailure};
     use crate::runtime::Proxy;
@@ -741,11 +740,25 @@ mod mieru_manager {
     type RecvItem = (Address, u16, Vec<u8>);
 
     pub(super) struct MieruChainManager {
-        upstreams: HashMap<(String, u16, String, String), MieruEntry>,
+        upstreams: HashMap<MieruKey, MieruEntry>,
     }
 
     struct MieruEntry {
         send_tx: mpsc::Sender<Vec<u8>>,
+        recv_tx: broadcast::Sender<RecvItem>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    enum MieruKey {
+        Leaf {
+            server: String,
+            port: u16,
+            username: String,
+            password: String,
+        },
+        Relay {
+            session_id: u64,
+        },
     }
 
     impl MieruChainManager {
@@ -760,7 +773,78 @@ mod mieru_manager {
             chain_tasks: &mut JoinSet<ChainTask>,
             session_id: u64,
             proxy: &Proxy,
-            session: &Session,
+            _session: &Session,
+            server: &str,
+            port: u16,
+            username: &str,
+            password: &str,
+            relay_chain: bool,
+            target: &Address,
+            target_port: u16,
+            payload: &[u8],
+        ) -> Result<usize, FlowFailure> {
+            let sent = payload.len();
+            let key = if relay_chain {
+                MieruKey::Relay { session_id }
+            } else {
+                MieruKey::Leaf {
+                    server: server.to_owned(),
+                    port,
+                    username: username.to_owned(),
+                    password: password.to_owned(),
+                }
+            };
+
+            if let Some(entry) = self.upstreams.get(&key) {
+                Self::spawn_bridge(chain_tasks, entry.recv_tx.clone(), session_id);
+                let wrapped =
+                    Self::packet(target, target_port, payload).map_err(|error| FlowFailure {
+                        stage: "mieru_udp_packet",
+                        error,
+                        upstream: Some((server.to_owned(), port)),
+                    })?;
+                let _ = entry.send_tx.send(wrapped).await;
+                return Ok(sent);
+            }
+
+            if relay_chain {
+                return Err(FlowFailure {
+                    stage: "mieru_relay_upstream",
+                    error: EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::NotConnected,
+                        "mieru relay upstream is not established",
+                    )),
+                    upstream: Some((server.to_owned(), port)),
+                });
+            }
+
+            let entry = Self::establish_direct(proxy, server, port, username, password)
+                .await
+                .map_err(|e| FlowFailure {
+                    stage: "mieru_establish",
+                    error: e,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
+
+            Self::spawn_bridge(chain_tasks, entry.recv_tx.clone(), session_id);
+            let send_tx = entry.send_tx.clone();
+            self.upstreams.insert(key, entry);
+
+            let wrapped =
+                Self::packet(target, target_port, payload).map_err(|error| FlowFailure {
+                    stage: "mieru_udp_packet",
+                    error,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
+            let _ = send_tx.send(wrapped).await;
+            Ok(sent)
+        }
+
+        pub(super) async fn send_relay(
+            &mut self,
+            chain_tasks: &mut JoinSet<ChainTask>,
+            session_id: u64,
+            stream: TcpRelayStream,
             server: &str,
             port: u16,
             username: &str,
@@ -769,90 +853,50 @@ mod mieru_manager {
             target_port: u16,
             payload: &[u8],
         ) -> Result<usize, FlowFailure> {
-            let sent = payload.len();
-            let key = (
-                server.to_owned(),
-                port,
-                username.to_owned(),
-                password.to_owned(),
-            );
-
-            if let Some(entry) = self.upstreams.get(&key) {
-                let packet =
-                    socks5::build_udp_packet(target, target_port, payload).map_err(|error| {
-                        FlowFailure {
-                            stage: "mieru_udp_packet",
-                            error: EngineError::from(error),
-                            upstream: Some((server.to_owned(), port)),
-                        }
-                    })?;
-                let wrapped = wrap_udp_associate(&packet);
-                let _ = entry.send_tx.send(wrapped).await;
-                return Ok(sent);
-            }
-
-            // Cache miss: establish new upstream.
-            let send_tx = Self::establish(
-                proxy,
-                chain_tasks,
-                session_id,
-                session,
-                server,
-                port,
-                username,
-                password,
-                target,
-                target_port,
-            )
-            .await
-            .map_err(|e| FlowFailure {
-                stage: "mieru_establish",
-                error: e,
-                upstream: Some((server.to_owned(), port)),
-            })?;
-
-            self.upstreams.insert(
-                key,
-                MieruEntry {
-                    send_tx: send_tx.clone(),
-                },
-            );
-
-            let packet =
-                socks5::build_udp_packet(target, target_port, payload).map_err(|error| {
-                    FlowFailure {
-                        stage: "mieru_udp_packet",
-                        error: EngineError::from(error),
-                        upstream: Some((server.to_owned(), port)),
-                    }
+            let key = MieruKey::Relay { session_id };
+            let entry = Self::establish_packet_stream(stream, username, password)
+                .await
+                .map_err(|e| FlowFailure {
+                    stage: "mieru_relay_establish",
+                    error: e,
+                    upstream: Some((server.to_owned(), port)),
                 })?;
-            let wrapped = wrap_udp_associate(&packet);
+
+            Self::spawn_bridge(chain_tasks, entry.recv_tx.clone(), session_id);
+            let send_tx = entry.send_tx.clone();
+            self.upstreams.insert(key, entry);
+
+            let wrapped =
+                Self::packet(target, target_port, payload).map_err(|error| FlowFailure {
+                    stage: "mieru_udp_packet",
+                    error,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
             let _ = send_tx.send(wrapped).await;
-            Ok(sent)
+            Ok(payload.len())
         }
 
-        async fn establish(
+        async fn establish_direct(
             proxy: &Proxy,
-            chain_tasks: &mut JoinSet<ChainTask>,
-            session_id: u64,
-            _session: &Session,
             server: &str,
             port: u16,
             username: &str,
             password: &str,
-            _target: &Address,
-            _target_port: u16,
-        ) -> Result<mpsc::Sender<Vec<u8>>, EngineError> {
-            // TCP connect
+        ) -> Result<MieruEntry, EngineError> {
             let socket = proxy
                 .protocols
                 .direct_outbound
                 .connect_host(server, port, proxy.resolver.as_ref())
                 .await?;
 
-            let mut stream = TcpRelayStream::new(socket);
+            Self::establish_packet_stream(TcpRelayStream::new(socket), username, password).await
+        }
 
-            // Mieru handshake
+        async fn establish_packet_stream(
+            mut stream: TcpRelayStream,
+            username: &str,
+            password: &str,
+        ) -> Result<MieruEntry, EngineError> {
             let udp_associate_target = Address::Ipv4([0, 0, 0, 0]);
             let outbound =
                 MieruOutbound::connect(&mut stream, username, password, &udp_associate_target, 0)
@@ -864,47 +908,45 @@ mod mieru_manager {
             let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
             let (recv_tx, _) = broadcast::channel::<RecvItem>(32);
 
-            let shared_outbound = Arc::new(tokio::sync::Mutex::new(outbound));
-            let shared_stream = Arc::new(tokio::sync::Mutex::new(stream));
+            let shared_outbound = Arc::new(Mutex::new(outbound));
+            let (mut read_half, mut write_half) = tokio::io::split(stream);
 
-            // Send task
             let send_outbound = shared_outbound.clone();
-            let send_stream = shared_stream.clone();
             tokio::spawn(async move {
                 while let Some(payload) = send_rx.recv().await {
-                    let mut ob = send_outbound.lock().await;
-                    match ob.encrypt_client_data(&payload) {
-                        Ok(encrypted) => {
-                            let mut s = send_stream.lock().await;
-                            if AsyncWriteExt::write_all(&mut *s, &encrypted).await.is_err() {
-                                break;
-                            }
-                            if AsyncWriteExt::flush(&mut *s).await.is_err() {
-                                break;
-                            }
+                    let encrypted = {
+                        let mut ob = send_outbound.lock().await;
+                        match ob.encrypt_client_data(&payload) {
+                            Ok(encrypted) => encrypted,
+                            Err(_) => break,
                         }
-                        Err(_) => break,
+                    };
+                    if write_half.write_all(&encrypted).await.is_err() {
+                        break;
+                    }
+                    if write_half.flush().await.is_err() {
+                        break;
                     }
                 }
             });
 
-            // Recv task
             let recv_outbound = shared_outbound.clone();
-            let recv_stream = shared_stream.clone();
             let recv_tx2 = recv_tx.clone();
             tokio::spawn(async move {
                 let mut raw = Vec::new();
                 loop {
                     let mut scratch = [0u8; 4096];
-                    let mut s = recv_stream.lock().await;
-                    match s.read(&mut scratch).await {
+                    match read_half.read(&mut scratch).await {
                         Ok(0) => break,
                         Ok(n) => raw.extend_from_slice(&scratch[..n]),
                         Err(_) => break,
                     }
                     loop {
-                        let mut ob = recv_outbound.lock().await;
-                        match ob.decrypt_server_data_with_consumed(&raw) {
+                        let decrypted = {
+                            let mut ob = recv_outbound.lock().await;
+                            ob.decrypt_server_data_with_consumed(&raw)
+                        };
+                        match decrypted {
                             Ok((segment, consumed)) => {
                                 raw.drain(..consumed);
                                 if !segment.payload.is_empty() {
@@ -929,7 +971,14 @@ mod mieru_manager {
                 }
             });
 
-            // Spawn one-shot bridge task for the response
+            Ok(MieruEntry { send_tx, recv_tx })
+        }
+
+        fn spawn_bridge(
+            chain_tasks: &mut JoinSet<ChainTask>,
+            recv_tx: broadcast::Sender<RecvItem>,
+            session_id: u64,
+        ) {
             let mut recv_rx = recv_tx.subscribe();
             chain_tasks.spawn(async move {
                 let (target, port, payload) = recv_rx
@@ -938,8 +987,16 @@ mod mieru_manager {
                     .map_err(|_| EngineError::Io(std::io::Error::other("mieru upstream closed")))?;
                 Ok((target, port, payload, Some(session_id)))
             });
+        }
 
-            Ok(send_tx)
+        fn packet(
+            target: &Address,
+            target_port: u16,
+            payload: &[u8],
+        ) -> Result<Vec<u8>, EngineError> {
+            let packet = socks5::build_udp_packet(target, target_port, payload)
+                .map_err(EngineError::from)?;
+            Ok(wrap_udp_associate(&packet))
         }
     }
 }
@@ -961,6 +1018,31 @@ mod mieru_manager {
             _sid: u64,
             _proxy: &Proxy,
             _sess: &Session,
+            _server: &str,
+            _port: u16,
+            _username: &str,
+            _password: &str,
+            _relay_chain: bool,
+            _target: &Address,
+            _tp: u16,
+            _payload: &[u8],
+        ) -> Result<usize, FlowFailure> {
+            Err(FlowFailure {
+                stage: "mieru_feature",
+                error: zero_engine::EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Mieru requires feature `mieru`",
+                )),
+                upstream: None,
+            })
+        }
+
+        #[allow(unused_variables)]
+        pub(super) async fn send_relay(
+            &mut self,
+            _tasks: &mut JoinSet<ChainTask>,
+            _sid: u64,
+            _stream: crate::transport::TcpRelayStream,
             _server: &str,
             _port: u16,
             _username: &str,
@@ -1765,6 +1847,7 @@ impl UdpDispatch {
                 port,
                 username,
                 password,
+                relay_chain,
             } => {
                 match self
                     .mieru_manager
@@ -1777,6 +1860,7 @@ impl UdpDispatch {
                         *port,
                         username.as_str(),
                         password.as_str(),
+                        *relay_chain,
                         &flow.session.target,
                         flow.session.port,
                         payload,
@@ -2120,6 +2204,7 @@ impl UdpDispatch {
                         port,
                         username,
                         password,
+                        false,
                         &session.target,
                         session.port,
                         payload,
@@ -2138,6 +2223,7 @@ impl UdpDispatch {
                         port,
                         username: username.to_owned(),
                         password: password.to_owned(),
+                        relay_chain: false,
                     },
                     tx_bytes: sent as u64,
                 })
@@ -2292,6 +2378,42 @@ impl UdpDispatch {
                         sni: sni.map(|s| s.to_owned()),
                         insecure,
                         client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
+                        relay_chain: true,
+                    },
+                    tx_bytes: sent as u64,
+                })
+            }
+            #[cfg(feature = "mieru")]
+            ResolvedLeafOutbound::Mieru {
+                tag,
+                server,
+                port,
+                username,
+                password,
+            } => {
+                let sent = self
+                    .mieru_manager
+                    .send_relay(
+                        &mut self.chain_tasks,
+                        session.id,
+                        stream,
+                        server,
+                        port,
+                        username,
+                        password,
+                        &session.target,
+                        session.port,
+                        payload,
+                    )
+                    .await?;
+
+                Ok(FlowStartResult::Flow {
+                    outbound: UdpFlowOutbound::Mieru {
+                        tag: tag.to_owned(),
+                        server: server.to_owned(),
+                        port,
+                        username: username.to_owned(),
+                        password: password.to_owned(),
                         relay_chain: true,
                     },
                     tx_bytes: sent as u64,
