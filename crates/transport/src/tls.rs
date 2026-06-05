@@ -196,6 +196,75 @@ pub async fn connect_tls_upstream(
     Ok(TcpRelayStream::new(stream))
 }
 
+pub async fn connect_tls_stream<S>(
+    stream: S,
+    tls: &ClientTlsConfig,
+    base_dir: Option<&Path>,
+    default_server_name: &str,
+) -> Result<TcpRelayStream, EngineError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    let server_name = tls
+        .server_name
+        .as_deref()
+        .unwrap_or(default_server_name)
+        .to_owned();
+
+    let mut roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    if let Some(path) = &tls.ca_cert_path {
+        for cert in load_certs(&resolve_path(base_dir, path))? {
+            roots
+                .add(cert)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+        }
+    }
+
+    if tls
+        .client_fingerprint
+        .as_deref()
+        .and_then(crate::fingerprint::lookup_fingerprint)
+        .is_some()
+    {
+        return Err(EngineError::Io(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "tls client fingerprint over relay stream is not supported",
+        )));
+    }
+
+    let mut config = if tls.insecure {
+        ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(InsecureCertVerifier))
+            .with_no_client_auth()
+    } else {
+        ClientConfig::builder()
+            .with_root_certificates(roots)
+            .with_no_client_auth()
+    };
+
+    if tls.disable_sni {
+        config.enable_sni = false;
+    }
+
+    if !tls.alpn.is_empty() {
+        config.alpn_protocols = tls
+            .alpn
+            .iter()
+            .map(|proto| proto.as_bytes().to_vec())
+            .collect();
+    }
+
+    let connector = TlsConnector::from(Arc::new(config));
+    let server_name = rustls::pki_types::ServerName::try_from(server_name.as_str())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid tls server_name"))?
+        .to_owned();
+
+    let stream = connector.connect(server_name, stream).await?;
+
+    Ok(TcpRelayStream::new(stream))
+}
+
 /// Connect using our custom TLS 1.3 stack with the requested
 /// fingerprint's cipher suites and ClientHello control.
 async fn connect_tls13_upstream(

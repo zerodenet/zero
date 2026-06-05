@@ -6,6 +6,7 @@
 
 use std::path::Path;
 
+use tokio::io::{AsyncRead, AsyncWrite};
 use zero_config::{
     ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, RealityConfig, SplitHttpConfig,
     WebSocketConfig,
@@ -37,7 +38,7 @@ pub async fn build_vless_outbound_transport(
     server: &str,
     port: u16,
 ) -> Result<TcpRelayStream, EngineError> {
-    // ── SplitHTTP (handled first — mutually exclusive with other transports) ──
+    // SplitHTTP is handled first because it is mutually exclusive with other transports.
     if let Some(cfg) = split_http_config {
         let peer = socket.peer_addr().map_err(EngineError::Io)?;
         let stream: TcpRelayStream = match tls_config {
@@ -52,7 +53,7 @@ pub async fn build_vless_outbound_transport(
                             {
                                 Ok(s) => s,
                                 Err(e) => {
-                                    // GET TLS connect failed — drop POST on the floor
+                                    // GET TLS connect failed; drop the POST stream.
                                     drop(post_stream);
                                     return Err(e);
                                 }
@@ -62,7 +63,7 @@ pub async fn build_vless_outbound_transport(
                         )
                     }
                     Err(e) => {
-                        // Cannot open GET TCP — release POST
+                        // Cannot open GET TCP; release the POST stream.
                         drop(post_stream);
                         return Err(EngineError::Io(io::Error::new(
                             io::ErrorKind::ConnectionRefused,
@@ -84,7 +85,7 @@ pub async fn build_vless_outbound_transport(
         return Ok(stream);
     }
 
-    // ── HTTPUpgrade (handled separately - mutually exclusive with WS/gRPC/H2) ──
+    // HTTP Upgrade is mutually exclusive with WS/gRPC/H2.
     if let Some(cfg) = http_upgrade_config {
         let stream: TcpRelayStream = match tls_config {
             Some(tls) => {
@@ -97,7 +98,7 @@ pub async fn build_vless_outbound_transport(
     }
 
     match (tls_config, reality, ws_config, grpc_config, h2_config) {
-        // ── gRPC ──
+        // gRPC
         (Some(tls), None, None, Some(grpc), None) => {
             let tls_stream = tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
             let grpc_stream = grpc::connect_grpc(tls_stream, &grpc.service_names).await?;
@@ -108,7 +109,7 @@ pub async fn build_vless_outbound_transport(
             Ok(TcpRelayStream::new(grpc_stream))
         }
 
-        // ── H2 ──
+        // H2
         (Some(tls), None, None, None, Some(h2_config)) => {
             let tls_stream = tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
             let h2_stream = h2::connect_h2(tls_stream, h2_config, server, port).await?;
@@ -119,7 +120,7 @@ pub async fn build_vless_outbound_transport(
             Ok(TcpRelayStream::new(h2_stream))
         }
 
-        // ── WebSocket ──
+        // WebSocket
         (Some(tls), None, Some(ws), None, None) => {
             let tls_stream = tls::connect_tls_upstream(socket, tls, source_dir, server).await?;
             let ws_stream = ws::connect_ws(tls_stream, ws, server, port).await?;
@@ -130,12 +131,12 @@ pub async fn build_vless_outbound_transport(
             Ok(TcpRelayStream::new(ws_stream))
         }
 
-        // ── TLS only ──
+        // TLS only
         (Some(tls), None, None, None, None) => {
             tls::connect_tls_upstream(socket, tls, source_dir, server).await
         }
 
-        // ── Reality ──
+        // Reality
         (None, Some(reality), None, None, None) => {
             let server_name = reality.server_name.as_deref().unwrap_or(server);
             let reality_stream = upgrade_reality_client(
@@ -151,7 +152,7 @@ pub async fn build_vless_outbound_transport(
             Ok(TcpRelayStream::new(reality_stream))
         }
 
-        // ── Raw TCP ──
+        // Raw TCP
         (None, None, None, None, None) => Ok(socket.into()),
 
         _ => Err(EngineError::Io(std::io::Error::new(
@@ -161,7 +162,99 @@ pub async fn build_vless_outbound_transport(
     }
 }
 
-// ── TransportConnector impl ──
+// TransportConnector impl
+
+/// Wrap an already established relay stream with the configured VLESS transport layer.
+///
+/// This is used after a relay prefix has connected to the final hop server.
+/// Transports that need a second connection or a non-TCP carrier are rejected
+/// here instead of being emulated in the proxy runtime.
+pub async fn build_vless_outbound_transport_over_stream<S>(
+    stream: S,
+    tls_config: Option<&ClientTlsConfig>,
+    reality: Option<&RealityConfig>,
+    ws_config: Option<&WebSocketConfig>,
+    grpc_config: Option<&GrpcConfig>,
+    h2_config: Option<&H2Config>,
+    http_upgrade_config: Option<&HttpUpgradeConfig>,
+    split_http_config: Option<&SplitHttpConfig>,
+    source_dir: Option<&Path>,
+    server: &str,
+    port: u16,
+) -> Result<TcpRelayStream, EngineError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    if split_http_config.is_some() {
+        return Err(EngineError::Io(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "split_http final hop over relay stream is not supported",
+        )));
+    }
+
+    if let Some(cfg) = http_upgrade_config {
+        let stream: TcpRelayStream = match tls_config {
+            Some(tls) => {
+                let tls_stream = tls::connect_tls_stream(stream, tls, source_dir, server).await?;
+                TcpRelayStream::new(http_upgrade::connect_http_upgrade(tls_stream, cfg).await?)
+            }
+            None => TcpRelayStream::new(http_upgrade::connect_http_upgrade(stream, cfg).await?),
+        };
+        return Ok(stream);
+    }
+
+    match (tls_config, reality, ws_config, grpc_config, h2_config) {
+        (Some(tls), None, None, Some(grpc), None) => {
+            let tls_stream = tls::connect_tls_stream(stream, tls, source_dir, server).await?;
+            let grpc_stream = grpc::connect_grpc(tls_stream, &grpc.service_names).await?;
+            Ok(TcpRelayStream::new(grpc_stream))
+        }
+        (None, None, None, Some(grpc), None) => {
+            let grpc_stream = grpc::connect_grpc(stream, &grpc.service_names).await?;
+            Ok(TcpRelayStream::new(grpc_stream))
+        }
+        (Some(tls), None, None, None, Some(h2_config)) => {
+            let tls_stream = tls::connect_tls_stream(stream, tls, source_dir, server).await?;
+            let h2_stream = h2::connect_h2(tls_stream, h2_config, server, port).await?;
+            Ok(TcpRelayStream::new(h2_stream))
+        }
+        (None, None, None, None, Some(h2_config)) => {
+            let h2_stream = h2::connect_h2(stream, h2_config, server, port).await?;
+            Ok(TcpRelayStream::new(h2_stream))
+        }
+        (Some(tls), None, Some(ws), None, None) => {
+            let tls_stream = tls::connect_tls_stream(stream, tls, source_dir, server).await?;
+            let ws_stream = ws::connect_ws(tls_stream, ws, server, port).await?;
+            Ok(TcpRelayStream::new(ws_stream))
+        }
+        (None, None, Some(ws), None, None) => {
+            let ws_stream = ws::connect_ws(stream, ws, server, port).await?;
+            Ok(TcpRelayStream::new(ws_stream))
+        }
+        (Some(tls), None, None, None, None) => {
+            tls::connect_tls_stream(stream, tls, source_dir, server).await
+        }
+        (None, Some(reality), None, None, None) => {
+            let server_name = reality.server_name.as_deref().unwrap_or(server);
+            let reality_stream = upgrade_reality_client(
+                stream,
+                RealityClientOptions {
+                    public_key: &reality.public_key,
+                    short_id: &reality.short_id,
+                    server_name,
+                    cipher_suites: &reality.cipher_suites,
+                },
+            )
+            .await?;
+            Ok(TcpRelayStream::new(reality_stream))
+        }
+        (None, None, None, None, None) => Ok(TcpRelayStream::new(stream)),
+        _ => Err(EngineError::Io(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid vless final-hop transport combination",
+        ))),
+    }
+}
 
 /// VLESS transport connector that implements [`TransportConnector`].
 ///

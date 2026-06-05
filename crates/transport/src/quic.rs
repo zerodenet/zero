@@ -57,8 +57,15 @@ pub async fn connect_quic(
         .parse::<std::net::SocketAddr>()
         .map_err(|e| EngineError::Io(io::Error::other(format!("quic bind addr: {e}"))))?;
 
-    let mut endpoint = quinn::Endpoint::client(bind_addr)
-        .map_err(|e| EngineError::Io(io::Error::other(format!("quic endpoint: {e}"))))?;
+    let socket = std::net::UdpSocket::bind(bind_addr)
+        .map_err(|e| EngineError::Io(io::Error::other(format!("quic bind socket: {e}"))))?;
+    let mut endpoint = quinn::Endpoint::new(
+        quinn::EndpointConfig::default(),
+        None,
+        socket,
+        Arc::new(quinn::TokioRuntime),
+    )
+    .map_err(|e| EngineError::Io(io::Error::other(format!("quic endpoint: {e}"))))?;
 
     endpoint.set_default_client_config(client_cfg);
 
@@ -124,19 +131,34 @@ impl QuicInbound {
                 EngineError::Io(io::Error::other("quic key file contains no private key"))
             })?;
 
-        let mut server_cfg = quinn::ServerConfig::with_single_cert(certs, key)
+        let mut tls_config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .map_err(|e| EngineError::Io(io::Error::other(format!("quic server tls cfg: {e}"))))?;
+        tls_config.alpn_protocols = vec![b"h3".to_vec(), b"hysteria2".to_vec()];
+
+        let quic_cfg = quinn::crypto::rustls::QuicServerConfig::try_from(tls_config)
             .map_err(|e| EngineError::Io(io::Error::other(format!("quic server cfg: {e}"))))?;
+        let mut server_cfg = quinn::ServerConfig::with_crypto(Arc::new(quic_cfg));
 
         let mut transport = quinn::TransportConfig::default();
         transport.max_idle_timeout(Some(std::time::Duration::from_secs(30).try_into().unwrap()));
+        transport.datagram_receive_buffer_size(Some(65536));
         server_cfg.transport_config(Arc::new(transport));
 
         let bind_addr = listen_addr
             .parse::<std::net::SocketAddr>()
             .map_err(|e| EngineError::Io(io::Error::other(format!("quic bind addr: {e}"))))?;
 
-        let endpoint = quinn::Endpoint::server(server_cfg, bind_addr)
-            .map_err(|e| EngineError::Io(io::Error::other(format!("quic endpoint: {e}"))))?;
+        let socket = std::net::UdpSocket::bind(bind_addr)
+            .map_err(|e| EngineError::Io(io::Error::other(format!("quic bind socket: {e}"))))?;
+        let endpoint = quinn::Endpoint::new(
+            quinn::EndpointConfig::default(),
+            Some(server_cfg),
+            socket,
+            Arc::new(quinn::TokioRuntime),
+        )
+        .map_err(|e| EngineError::Io(io::Error::other(format!("quic endpoint: {e}"))))?;
 
         Ok(Self { endpoint })
     }

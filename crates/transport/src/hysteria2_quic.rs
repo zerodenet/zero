@@ -79,9 +79,7 @@ impl AsyncSocket for Hysteria2Stream {
 
 // ── Hysteria2Connector ──
 
-use hysteria2::{
-    build_auth_frame, build_tcp_connect_header, derive_salt, parse_auth_response, sign_hmac,
-};
+use hysteria2::{build_auth_frame, build_tcp_connect_header, parse_auth_response, sign_hmac};
 use std::sync::Arc;
 use zero_core::Session;
 use zero_engine::EngineError;
@@ -157,9 +155,19 @@ impl Hysteria2Connector {
         transport.datagram_receive_buffer_size(Some(65536));
         client_cfg.transport_config(Arc::new(transport));
 
-        let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap()).map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!("hysteria2 endpoint: {e}")))
+        let bind_addr: std::net::SocketAddr = "0.0.0.0:0".parse().map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!("hysteria2 bind addr: {e}")))
         })?;
+        let socket = std::net::UdpSocket::bind(bind_addr).map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!("hysteria2 bind socket: {e}")))
+        })?;
+        let mut endpoint = quinn::Endpoint::new(
+            quinn::EndpointConfig::default(),
+            None,
+            socket,
+            Arc::new(quinn::TokioRuntime),
+        )
+        .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 endpoint: {e}"))))?;
         endpoint.set_default_client_config(client_cfg);
 
         let server_addr = format!("{}:{}", self.server, self.port)
@@ -174,8 +182,10 @@ impl Hysteria2Connector {
                 EngineError::Io(std::io::Error::other(format!("hysteria2 connection: {e}")))
             })?;
 
-        // HMAC auth
-        let salt = derive_salt(&server_addr.to_string(), &self.password);
+        // HMAC auth is bound to this QUIC connection.
+        let mut salt = [0u8; 32];
+        conn.export_keying_material(&mut salt, b"hysteria2 auth", &[])
+            .map_err(|_| EngineError::Io(std::io::Error::other("hysteria2 key export failed")))?;
         let hmac_bytes = sign_hmac(&self.password, &salt);
 
         let (mut send, mut recv) = conn.open_bi().await.map_err(|e| {
@@ -273,6 +283,10 @@ impl rustls::client::danger::ServerCertVerifier for SkipVerify {
         Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
     }
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        vec![rustls::SignatureScheme::RSA_PKCS1_SHA256]
+        vec![
+            rustls::SignatureScheme::RSA_PKCS1_SHA256,
+            rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+            rustls::SignatureScheme::ED25519,
+        ]
     }
 }
