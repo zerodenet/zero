@@ -71,7 +71,7 @@ pub(super) fn validate_inbound_protocol(
             }
             if let Some(grpc) = grpc {
                 for name in &grpc.service_names {
-                    validate_inbound_optional_non_empty("vless grpc.service_name", name)?;
+                    validate_inbound_optional_non_empty("vless grpc.service_names", name)?;
                 }
             }
             if let Some(h2) = h2 {
@@ -217,7 +217,7 @@ pub(super) fn validate_outbound_protocol(
             }
             if let Some(grpc) = grpc {
                 for name in &grpc.service_names {
-                    validate_outbound_optional_non_empty("vless grpc.service_name", name)?;
+                    validate_outbound_optional_non_empty("vless grpc.service_names", name)?;
                 }
             }
             if let Some(h2) = h2 {

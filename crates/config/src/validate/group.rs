@@ -30,23 +30,23 @@ impl OutboundGroupConfig {
                 url,
                 interval_seconds,
             } => {
-                validate_group_outbounds("urltest", outbounds, target_tags)?;
+                validate_group_outbounds("url_test", outbounds, target_tags)?;
 
                 if url.trim().is_empty() {
                     return Err(ConfigError::InvalidOutboundGroup(
-                        "`urltest` group requires a non-empty `url`".to_owned(),
+                        "`url_test` group requires a non-empty `url`".to_owned(),
                     ));
                 }
 
                 if !url.starts_with("http://") {
                     return Err(ConfigError::InvalidOutboundGroup(
-                        "`urltest` group currently only supports `http://` probe urls".to_owned(),
+                        "`url_test` group currently only supports `http://` probe urls".to_owned(),
                     ));
                 }
 
                 if *interval_seconds == 0 {
                     return Err(ConfigError::InvalidOutboundGroup(
-                        "`urltest` group `interval_seconds` must be greater than 0".to_owned(),
+                        "`url_test` group `interval_seconds` must be greater than 0".to_owned(),
                     ));
                 }
 
@@ -68,7 +68,7 @@ impl OutboundGroupConfig {
                 default,
                 strategy: _,
             } => {
-                validate_group_outbounds("loadbalance", outbounds, target_tags)?;
+                validate_group_outbounds("load_balance", outbounds, target_tags)?;
 
                 if let Some(default) = default {
                     validate_selector_choice("default", default, outbounds)?;

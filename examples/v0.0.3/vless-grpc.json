@@ -11,7 +11,7 @@
           "key_path": "certs/privkey.pem"
         },
         "grpc": {
-          "service_name": "/v2ray.core.proxy.vless.encap.GrpcService/Tun"
+          "service_names": ["/v2ray.core.proxy.vless.encap.GrpcService/Tun"]
         }
       }
     }

@@ -50,19 +50,19 @@
         "tag": "ads",
         "type": "file",
         "path": "rules/ads.txt",
-        "format": "domain-list"
+        "format": "domain_list"
       },
       {
         "tag": "lan",
         "type": "file",
         "path": "rules/lan.txt",
-        "format": "cidr-list"
+        "format": "cidr_list"
       }
     ],
     "rules": [
       {
         "condition": {
-          "type": "rule-set",
+          "type": "rule_set",
           "tag": "ads"
         },
         "action": {
@@ -71,7 +71,7 @@
       },
       {
         "condition": {
-          "type": "rule-set",
+          "type": "rule_set",
           "tag": "lan"
         },
         "action": {

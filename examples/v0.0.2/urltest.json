@@ -23,7 +23,7 @@
   "outbound_groups": [
     {
       "tag": "proxy",
-      "type": "urltest",
+      "type": "url_test",
       "outbounds": ["node-a", "direct"],
       "url": "http://example.com/",
       "interval_seconds": 300

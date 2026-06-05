@@ -121,7 +121,7 @@
     },
     {
       "tag": "auto",
-      "type": "urltest",
+      "type": "url_test",
       "outbounds": [
         "vless-tls",
         "hysteria2-node",
@@ -150,22 +150,22 @@
         "tag": "private",
         "type": "file",
         "path": "rules/private.txt",
-        "format": "domain-list"
+        "format": "domain_list"
       },
       {
         "tag": "lan",
         "type": "file",
         "path": "rules/lan.txt",
-        "format": "cidr-list"
+        "format": "cidr_list"
       }
     ],
     "rules": [
       {
-        "condition": { "type": "rule-set", "tag": "private" },
+        "condition": { "type": "rule_set", "tag": "private" },
         "action": { "type": "direct" }
       },
       {
-        "condition": { "type": "rule-set", "tag": "lan" },
+        "condition": { "type": "rule_set", "tag": "lan" },
         "action": { "type": "direct" }
       },
       {

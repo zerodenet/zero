@@ -99,7 +99,7 @@ impl RuleConditionConfig {
             Self::RuleSet { tag } => {
                 if tag.trim().is_empty() {
                     return Err(ConfigError::InvalidRuleCondition(
-                        "`rule-set` condition requires a non-empty `tag`".to_owned(),
+                        "`rule_set` condition requires a non-empty `tag`".to_owned(),
                     ));
                 }
                 if !rule_set_tags.contains(tag) {
@@ -110,7 +110,7 @@ impl RuleConditionConfig {
             Self::DomainKeyword { values } => {
                 if values.is_empty() {
                     return Err(ConfigError::InvalidRuleCondition(
-                        "`domain-keyword` condition requires at least one value".to_owned(),
+                        "`domain_keyword` condition requires at least one value".to_owned(),
                     ));
                 }
                 Ok(())
@@ -118,7 +118,7 @@ impl RuleConditionConfig {
             Self::DomainRegex { values } => {
                 if values.is_empty() {
                     return Err(ConfigError::InvalidRuleCondition(
-                        "`domain-regex` condition requires at least one pattern".to_owned(),
+                        "`domain_regex` condition requires at least one pattern".to_owned(),
                     ));
                 }
                 Ok(())

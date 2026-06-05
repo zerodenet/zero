@@ -22,7 +22,7 @@ pub struct RuntimeConfig {
     pub route: RouteConfig,
     #[serde(default)]
     pub api: ApiConfig,
-    /// Node push connector — actively reports to an external management
+    /// Node push connector ->?actively reports to an external management
     /// endpoint.  Generic: the receiver can be a panel, monitoring system,
     /// or any HTTP service.
     #[serde(default)]
@@ -162,7 +162,7 @@ pub struct ApiConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", deny_unknown_fields)]
 pub enum EventSinkConfig {
-    #[serde(rename = "jsonl", alias = "file")]
+    #[serde(rename = "jsonl")]
     JsonLines {
         tag: String,
         path: String,
@@ -303,11 +303,11 @@ pub enum InboundProtocolConfig {
         #[serde(default)]
         users: Vec<Socks5UserConfig>,
     },
-    #[serde(rename = "http-connect", alias = "http")]
+    #[serde(rename = "http_connect")]
     HttpConnect,
     #[serde(rename = "mixed")]
     Mixed {
-        #[serde(default, alias = "users")]
+        #[serde(default)]
         socks5_users: Vec<Socks5UserConfig>,
     },
     #[serde(rename = "vless")]
@@ -566,7 +566,7 @@ pub struct ClientTlsConfig {
     pub alpn: Vec<String>,
     /// TLS client fingerprint preset: "chrome", "firefox", "safari",
     /// "ios", "edge", "randomized", or empty/"none" for rustls defaults.
-    #[serde(default, alias = "client-fingerprint")]
+    #[serde(default)]
     pub client_fingerprint: Option<String>,
 }
 
@@ -611,7 +611,6 @@ fn default_ws_path() -> String {
 #[serde(deny_unknown_fields)]
 pub struct GrpcConfig {
     #[serde(
-        alias = "service_name",
         default = "default_grpc_service_names",
         deserialize_with = "deserialize_service_names"
     )]
@@ -792,7 +791,7 @@ pub enum OutboundProtocolConfig {
         password: String,
         #[serde(default)]
         insecure: bool,
-        #[serde(default, alias = "client-fingerprint")]
+        #[serde(default)]
         client_fingerprint: Option<String>,
     },
     #[serde(rename = "shadowsocks")]
@@ -812,7 +811,7 @@ pub enum OutboundProtocolConfig {
         sni: Option<String>,
         #[serde(default)]
         insecure: bool,
-        #[serde(default, alias = "client-fingerprint")]
+        #[serde(default)]
         client_fingerprint: Option<String>,
     },
     #[serde(rename = "vmess")]
@@ -892,7 +891,7 @@ impl OutboundGroupConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum LoadBalanceStrategy {
     #[default]
     RoundRobin,
@@ -912,7 +911,7 @@ pub enum OutboundGroupKind {
     },
     #[serde(rename = "fallback")]
     Fallback { outbounds: Vec<String> },
-    #[serde(rename = "urltest")]
+    #[serde(rename = "url_test")]
     UrlTest {
         outbounds: Vec<String>,
         url: String,
@@ -921,7 +920,7 @@ pub enum OutboundGroupKind {
     },
     #[serde(rename = "relay")]
     Relay { proxies: Vec<String> },
-    #[serde(rename = "loadbalance")]
+    #[serde(rename = "load_balance")]
     LoadBalance {
         outbounds: Vec<String>,
         #[serde(default)]
@@ -993,7 +992,7 @@ pub struct RouteConfig {
     pub url_rewrite: Vec<UrlRewriteRule>,
 }
 
-/// Domain rewrite rule: `from` or `from_regex` → `to`.
+/// Domain rewrite rule: `from` or `from_regex` ->`to`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UrlRewriteRule {
@@ -1045,9 +1044,9 @@ pub enum RuleSetSourceType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RuleSetFormatConfig {
-    #[serde(rename = "domain-list")]
+    #[serde(rename = "domain_list")]
     DomainList,
-    #[serde(rename = "cidr-list")]
+    #[serde(rename = "cidr_list")]
     CidrList,
 }
 
@@ -1067,13 +1066,13 @@ pub struct RouteRuleConfig {
 pub enum RuleConditionConfig {
     #[serde(rename = "domain")]
     Domain { values: Vec<String> },
-    #[serde(rename = "domain-keyword")]
+    #[serde(rename = "domain_keyword")]
     DomainKeyword { values: Vec<String> },
-    #[serde(rename = "domain-regex")]
+    #[serde(rename = "domain_regex")]
     DomainRegex { values: Vec<String> },
     #[serde(rename = "ip")]
     Ip { values: Vec<IpNet> },
-    #[serde(rename = "rule-set")]
+    #[serde(rename = "rule_set")]
     RuleSet { tag: String },
     #[serde(rename = "geoip")]
     GeoIp { values: Vec<String> },
@@ -1090,7 +1089,7 @@ pub enum RuleConditionConfig {
 pub enum RouteActionConfig {
     #[serde(rename = "direct")]
     Direct,
-    #[serde(rename = "reject", alias = "block")]
+    #[serde(rename = "reject")]
     Reject,
     #[serde(rename = "route")]
     Route { outbound: String },
@@ -1148,7 +1147,7 @@ pub enum DnsServerConfig {
     #[serde(rename = "udp")]
     Udp {
         address: String,
-        #[serde(default = "default_dns_udp_port")]
+        #[serde(default = "default_dns_port")]
         port: u16,
     },
     /// DNS-over-HTTPS (v2).
@@ -1169,7 +1168,7 @@ pub enum DnsServerConfig {
     },
 }
 
-const fn default_dns_udp_port() -> u16 {
+const fn default_dns_port() -> u16 {
     53
 }
 const fn default_dns_dot_port() -> u16 {

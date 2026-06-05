@@ -20,7 +20,7 @@ fn parses_config_into_adts() {
                 {
                     "tag": "http-in",
                     "listen": { "address": "127.0.0.1", "port": 8080 },
-                    "protocol": { "type": "http-connect" }
+                    "protocol": { "type": "http_connect" }
                 }
             ],
             "outbounds": [
@@ -714,8 +714,8 @@ fn rejects_undefined_outbound_reference() {
 }
 
 #[test]
-fn accepts_http_alias_and_block_action_alias() {
-    let config = RuntimeConfig::parse(
+fn rejects_removed_protocol_and_action_aliases() {
+    let protocol_error = RuntimeConfig::parse(
         r#"{
             "inbounds": [
                 {
@@ -726,19 +726,30 @@ fn accepts_http_alias_and_block_action_alias() {
             ],
             "route": {
                 "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("http alias should be rejected");
+
+    assert!(matches!(
+        protocol_error,
+        zero_config::ConfigError::ParseConfig(_)
+    ));
+
+    let action_error = RuntimeConfig::parse(
+        r#"{
+            "route": {
+                "rules": [],
                 "final": { "type": "block" }
             }
         }"#,
     )
-    .expect("config should parse");
+    .expect_err("block action alias should be rejected");
 
     assert!(matches!(
-        config.inbounds[0].protocol,
-        InboundProtocolConfig::HttpConnect
-    ));
-    assert!(matches!(
-        config.route.final_action,
-        RouteActionConfig::Reject
+        action_error,
+        zero_config::ConfigError::ParseConfig(_)
     ));
 }
 
@@ -874,7 +885,7 @@ fn rejects_duplicate_inbound_listen_endpoint() {
                 {
                     "tag": "http-in",
                     "listen": { "address": "127.0.0.1", "port": 1080 },
-                    "protocol": { "type": "http-connect" }
+                    "protocol": { "type": "http_connect" }
                 }
             ],
             "route": {
@@ -1024,7 +1035,7 @@ fn accepts_urltest_group_type() {
             "outbound_groups": [
                 {
                     "tag": "proxy",
-                    "type": "urltest",
+                    "type": "url_test",
                     "outbounds": ["chain", "direct"],
                     "url": "http://127.0.0.1:8081/",
                     "interval_seconds": 15
@@ -1059,9 +1070,9 @@ fn accepts_loadbalance_group_type() {
             "outbound_groups": [
                 {
                     "tag": "proxy",
-                    "type": "loadbalance",
+                    "type": "load_balance",
                     "outbounds": ["chain", "direct"],
-                    "strategy": "round-robin"
+                    "strategy": "round_robin"
                 }
             ],
             "mode": { "type": "global", "outbound": "proxy" },
@@ -1094,7 +1105,7 @@ fn loadbalance_group_defaults_to_round_robin_strategy() {
             "outbound_groups": [
                 {
                     "tag": "lb",
-                    "type": "loadbalance",
+                    "type": "load_balance",
                     "outbounds": ["s5", "direct"]
                 }
             ],
@@ -1121,7 +1132,7 @@ fn accepts_loadbalance_random_strategy() {
             "outbound_groups": [
                 {
                     "tag": "lb",
-                    "type": "loadbalance",
+                    "type": "load_balance",
                     "outbounds": ["s5", "direct"],
                     "strategy": "random"
                 }
@@ -1149,7 +1160,7 @@ fn loadbalance_group_with_default() {
             "outbound_groups": [
                 {
                     "tag": "lb",
-                    "type": "loadbalance",
+                    "type": "load_balance",
                     "outbounds": ["s5", "direct"],
                     "default": "direct"
                 }
@@ -1173,7 +1184,7 @@ fn loadbalance_group_requires_defined_member_outbounds() {
             "outbound_groups": [
                 {
                     "tag": "lb",
-                    "type": "loadbalance",
+                    "type": "load_balance",
                     "outbounds": ["missing", "direct"]
                 }
             ],
@@ -1295,12 +1306,12 @@ fn loads_rule_set_from_relative_file_path() {
                         "tag": "ads",
                         "type": "file",
                         "path": "rules/ads.txt",
-                        "format": "domain-list"
+                        "format": "domain_list"
                     }
                 ],
                 "rules": [
                     {
-                        "condition": { "type": "rule-set", "tag": "ads" },
+                        "condition": { "type": "rule_set", "tag": "ads" },
                         "action": { "type": "route", "outbound": "block" }
                     }
                 ],
@@ -1328,7 +1339,7 @@ fn rejects_undefined_rule_set_reference() {
             "route": {
                 "rules": [
                     {
-                        "condition": { "type": "rule-set", "tag": "ads" },
+                        "condition": { "type": "rule_set", "tag": "ads" },
                         "action": { "type": "direct" }
                     }
                 ],
@@ -1361,12 +1372,12 @@ fn rejects_invalid_cidr_rule_set_entry() {
                         "tag": "lan",
                         "type": "file",
                         "path": "rules/lan.txt",
-                        "format": "cidr-list"
+                        "format": "cidr_list"
                     }
                 ],
                 "rules": [
                     {
-                        "condition": { "type": "rule-set", "tag": "lan" },
+                        "condition": { "type": "rule_set", "tag": "lan" },
                         "action": { "type": "direct" }
                     }
                 ],
