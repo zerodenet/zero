@@ -2,52 +2,52 @@ use std::io;
 
 use zero_api::{
     ApiError, ApiErrorCode, AuthContext, CommandRequest, CommandService, EventFilter, EventSource,
-    FlowGetQuery, FlowListQuery, PolicySelectCommand, QueryRequest, QueryResponse, QueryService,
+    FlowGetQuery, FlowListQuery, QueryRequest, QueryResponse, QueryService,
 };
-use zero_engine::EngineHandle;
+use zero_proxy::ProxyHandle;
 
 use super::response::api_error_status;
 use zero_api::ApiResponse;
 
 /// Handle GET /api/v1/capabilities.
-pub fn capabilities(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+pub fn capabilities(handle: &ProxyHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Capabilities(Default::default()));
     serialize_query(resp)
 }
 
 /// Handle GET /api/v1/health.
-pub fn health(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+pub fn health(handle: &ProxyHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Health(Default::default()));
     serialize_query(resp)
 }
 
 /// Handle GET /api/v1/config.
-pub fn config(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+pub fn config(handle: &ProxyHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Config(Default::default()));
     serialize_query(resp)
 }
 
 /// Handle GET /api/v1/runtime.
-pub fn runtime(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+pub fn runtime(handle: &ProxyHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Runtime(Default::default()));
     serialize_query(resp)
 }
 
 /// Handle GET /api/v1/stats.
-pub fn stats(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+pub fn stats(handle: &ProxyHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Stats(Default::default()));
     serialize_query(resp)
 }
 
 /// Handle GET /api/v1/flows (active flows list).
-pub fn flows_list(handle: &EngineHandle, query: &str) -> io::Result<Vec<u8>> {
+pub fn flows_list(handle: &ProxyHandle, query: &str) -> io::Result<Vec<u8>> {
     let params = parse_flow_list_params(query);
     let resp = handle.query(QueryRequest::ActiveFlows(params));
     serialize_query(resp)
 }
 
 /// Handle GET /api/v1/flows/{flow_id}.
-pub fn flow_get(handle: &EngineHandle, flow_id: &str) -> io::Result<Vec<u8>> {
+pub fn flow_get(handle: &ProxyHandle, flow_id: &str) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Flow(FlowGetQuery {
         flow_id: flow_id.to_owned(),
     }));
@@ -55,13 +55,13 @@ pub fn flow_get(handle: &EngineHandle, flow_id: &str) -> io::Result<Vec<u8>> {
 }
 
 /// Handle GET /api/v1/policies.
-pub fn policies_list(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+pub fn policies_list(handle: &ProxyHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Policies(Default::default()));
     serialize_query(resp)
 }
 
 /// Handle GET /api/v1/policies/{policy_tag}.
-pub fn policy_get(handle: &EngineHandle, policy_tag: &str) -> io::Result<Vec<u8>> {
+pub fn policy_get(handle: &ProxyHandle, policy_tag: &str) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Policy(zero_api::PolicyGetQuery {
         policy_tag: policy_tag.to_owned(),
     }));
@@ -69,27 +69,30 @@ pub fn policy_get(handle: &EngineHandle, policy_tag: &str) -> io::Result<Vec<u8>
 }
 
 /// Handle GET /api/v1/sinks.
-pub fn sinks(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+pub fn sinks(handle: &ProxyHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Sinks(Default::default()));
     serialize_query(resp)
 }
 
 /// Handle GET /api/v1/tun_status.
-pub fn tun_status(handle: &EngineHandle) -> io::Result<Vec<u8>> {
+pub fn tun_status(handle: &ProxyHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::TunStatus(Default::default()));
     serialize_query(resp)
 }
 
 /// Handle GET /api/v1/events (snapshot).
-pub fn events_snapshot(handle: &EngineHandle) -> io::Result<Vec<u8>> {
-    let events = handle.inner().events_snapshot(&EventFilter::default());
+pub fn events_snapshot(handle: &ProxyHandle) -> io::Result<Vec<u8>> {
+    let events = handle
+        .engine_handle()
+        .inner()
+        .events_snapshot(&EventFilter::default());
     let body = ApiResponse::ok(events);
     serde_json::to_vec_pretty(&body).map_err(io::Error::other)
 }
 
 /// Handle POST /api/v1/commands.
 pub fn commands(
-    handle: &EngineHandle,
+    handle: &ProxyHandle,
     body: &[u8],
     auth_ctx: &AuthContext,
 ) -> Result<Vec<u8>, (&'static str, Vec<u8>)> {
@@ -101,8 +104,8 @@ pub fn commands(
             cause: Some(error.to_string()),
         };
         let status = api_error_status(&api_error);
-        let body =
-            serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&api_error)).unwrap_or_default();
+        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&api_error))
+            .unwrap_or_default();
         (status, body)
     })?;
 
@@ -111,7 +114,8 @@ pub fn commands(
     if !auth_ctx.allows(required) {
         let error = ApiError::permission_denied(required);
         let status = api_error_status(&error);
-        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&error)).unwrap_or_default();
+        let body = serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&error))
+            .unwrap_or_default();
         return Err((status, body));
     }
 
@@ -122,32 +126,8 @@ pub fn commands(
         }
         Err(error) => {
             let status = api_error_status(&error);
-            let body =
-                serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&error)).unwrap_or_default();
-            Err((status, body))
-        }
-    }
-}
-
-/// Handle POST /selectors/{group}/{target} (compatibility).
-pub fn selector_update(
-    handle: &EngineHandle,
-    group_tag: &str,
-    target_tag: &str,
-) -> Result<Vec<u8>, (&'static str, Vec<u8>)> {
-    let command = CommandRequest::PolicySelect(PolicySelectCommand {
-        policy_tag: group_tag.to_owned(),
-        target_tag: target_tag.to_owned(),
-    });
-
-    match handle.execute(command) {
-        Ok(_) => {
-            let config = handle.inner().export_config();
-            Ok(serde_json::to_vec_pretty(&config).unwrap_or_default())
-        }
-        Err(error) => {
-            let status = api_error_status(&error);
-            let body = serde_json::to_vec_pretty(&error).unwrap_or_default();
+            let body = serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&error))
+                .unwrap_or_default();
             Err((status, body))
         }
     }
@@ -159,7 +139,7 @@ pub fn selector_update(
 /// missed events when the client provides `?since=<seq>` or
 /// `Last-Event-ID: <seq>`.
 pub fn events_stream(
-    handle: &EngineHandle,
+    handle: &ProxyHandle,
     query: &str,
     headers: &[(String, String)],
 ) -> Result<(zero_engine::EventSubscriber, Vec<zero_api::RawApiEvent>), (&'static str, Vec<u8>)> {
@@ -180,7 +160,7 @@ pub fn events_stream(
 
     let catch_up = match since {
         Some(s) => {
-            let result = handle.inner().events_since(s, 256, &filter);
+            let result = handle.engine_handle().inner().events_since(s, 256, &filter);
             if result.has_gap {
                 tracing::warn!(
                     requested_since = s,
@@ -212,7 +192,7 @@ pub fn events_stream(
 /// This keeps HTTP responses flat and predictable:
 ///
 /// ```json
-/// {"api_version":"zero.api.v1","ok":true,"result":{"engine_version":"0.0.9",...}}
+/// {"api_id":"zero.api.v1","ok":true,"result":{"engine_build_id":"0.0.9",...}}
 /// ```
 ///
 /// IPC responses preserve the externally-tagged enum for typed dispatch.
@@ -235,7 +215,6 @@ fn serialize_query(resp: Result<QueryResponse, ApiError>) -> io::Result<Vec<u8>>
 /// This is the HTTP-specific serialization: the variant tag is stripped
 /// so consumers get the data directly without wrapping.
 fn unwrap_query_response(resp: QueryResponse) -> serde_json::Value {
-    use serde::Serialize;
     match resp {
         QueryResponse::Capabilities(v) => serde_json::to_value(v),
         QueryResponse::Health(v) => serde_json::to_value(v),

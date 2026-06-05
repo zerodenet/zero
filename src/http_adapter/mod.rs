@@ -13,7 +13,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use tracing::{debug, error, info, warn};
 use zero_api::{AuthContext, Permission};
-use zero_engine::EngineHandle;
+use zero_proxy::ProxyHandle;
 
 use router::{HttpRequest, RouteResult};
 
@@ -37,14 +37,14 @@ struct TokenEntry {
 /// Multi-token authentication store for the HTTP API.
 ///
 /// If `tokens` is empty (no auth configured), all requests are treated as
-/// admin — this preserves backward compatibility with local-only setups.
+/// admin for local-only control plane usage.
 #[derive(Debug, Clone)]
 pub struct HttpServerAuth {
     tokens: Vec<TokenEntry>,
 }
 
 impl HttpServerAuth {
-    /// Create an auth store with a single admin-scoped key (legacy mode).
+    /// Create an auth store with a single admin-scoped key.
     pub fn single_admin(api_key: String) -> Self {
         Self {
             tokens: vec![TokenEntry {
@@ -75,7 +75,7 @@ impl HttpServerHandle {
 }
 
 pub async fn spawn_http_server(
-    engine_handle: EngineHandle,
+    proxy_handle: ProxyHandle,
     listen: &str,
     auth: Option<HttpServerAuth>,
 ) -> io::Result<HttpServerHandle> {
@@ -84,7 +84,7 @@ pub async fn spawn_http_server(
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
     let task =
-        tokio::spawn(async move { run_server(listener, engine_handle, auth, shutdown_rx).await });
+        tokio::spawn(async move { run_server(listener, proxy_handle, auth, shutdown_rx).await });
 
     info!(listen = %local_addr, "http api server ready");
 
@@ -96,7 +96,7 @@ pub async fn spawn_http_server(
 
 async fn run_server(
     listener: TcpListener,
-    handle: EngineHandle,
+    handle: ProxyHandle,
     auth: Option<HttpServerAuth>,
     mut shutdown: oneshot::Receiver<()>,
 ) -> io::Result<()> {
@@ -146,7 +146,7 @@ async fn run_server(
 
 async fn serve_connection(
     mut stream: TcpStream,
-    handle: EngineHandle,
+    handle: ProxyHandle,
     auth: Option<&HttpServerAuth>,
     limiters: &ratelimit::ApiRateLimiters,
 ) -> io::Result<()> {
@@ -298,7 +298,7 @@ fn content_length(headers: &[(String, String)]) -> io::Result<usize> {
 
 /// Authenticate the HTTP request and return an `AuthContext`.
 ///
-/// - No auth configured → admin access (backward compatible).
+/// - No auth configured → admin access for local-only control.
 /// - Valid token → permissions from the matching token entry.
 /// - Invalid / missing token → empty permissions (handler gates will reject).
 fn authenticate(request: &HttpRequest, auth: Option<&HttpServerAuth>) -> AuthContext {
@@ -411,7 +411,7 @@ fn rate_limit_category(request: &HttpRequest) -> RateLimitCategory {
     if path.contains("/events/stream") {
         return RateLimitCategory::Sse;
     }
-    if method == "POST" || path.contains("/commands") || path.contains("/selectors") {
+    if method == "POST" || path.contains("/commands") {
         return RateLimitCategory::Command;
     }
     RateLimitCategory::Query
