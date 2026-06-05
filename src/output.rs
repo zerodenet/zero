@@ -105,7 +105,7 @@ pub fn render_status(status: &StatusSnapshot) -> String {
                 )),
             }
 
-            for member in &group.urltest_members {
+            for member in &group.url_test_members {
                 match (
                     member.healthy,
                     member.latency_ms,

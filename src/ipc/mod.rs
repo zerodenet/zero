@@ -1,6 +1,6 @@
 pub mod client;
-mod events;
 mod connection;
+mod events;
 pub mod protocol;
 
 #[cfg(unix)]

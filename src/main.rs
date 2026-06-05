@@ -9,7 +9,7 @@ use zero_proxy::{Proxy, ProxyHandle};
 mod cli;
 mod error_report;
 mod hooks;
-#[cfg(feature = "status-api")]
+#[cfg(feature = "status_api")]
 mod http_adapter;
 mod ipc;
 mod output;
@@ -89,7 +89,7 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
                 Ok(resp) => {
                     if resp.ok {
                         let what = if let Some(ref o) = outbound {
-                            format!("global → {o}")
+                            format!("global ->?{o}")
                         } else {
                             mode.clone()
                         };
@@ -196,9 +196,9 @@ async fn try_main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        cli::Command::Version => {
-            println!("zero {}", env!("CARGO_PKG_VERSION"));
-            println!("build: {}", env!("ZERO_BUILD_TIME"));
+        cli::Command::BuildInfo => {
+            println!("build_id: {}", env!("CARGO_PKG_VERSION"));
+            println!("build_time: {}", env!("ZERO_BUILD_TIME"));
             if let Some(hash) = option_env!("ZERO_GIT_DESCRIBE") {
                 println!("git: {hash}");
             } else if let Some(hash) = option_env!("ZERO_GIT_HASH") {
@@ -241,7 +241,7 @@ async fn run_command(
     let engine_handle = EngineHandle::new(engine.clone());
     let ipc_handle = ProxyHandle::new(engine_handle.clone(), proxy.clone());
 
-    // Bridge tracing warn/error → engine.warning events.
+    // Bridge tracing warn/error ->?engine.warning events.
     {
         let e = engine.clone();
         zero_logging::set_warning_sink(move |code: &str, msg: &str| {
@@ -249,13 +249,13 @@ async fn run_command(
         });
     }
 
-    #[cfg(not(any(feature = "status-api", feature = "grpc-api")))]
+    #[cfg(not(any(feature = "status_api", feature = "grpc_api")))]
     ensure_status_api_not_configured(&engine, status_listen)?;
 
     let event_dispatcher = spawn_event_dispatcher_if_configured(&engine)?;
 
-    // Bridge dispatcher sink status → Engine so /api/v1/sinks is live.
-    #[cfg(feature = "event-dispatcher")]
+    // Bridge dispatcher sink status into Engine so /api/v1/sinks is live.
+    #[cfg(feature = "event_dispatcher")]
     if let Some(ref dispatcher) = event_dispatcher {
         engine.update_sink_status(dispatcher.sink_status());
         // Periodically refresh sink status in the background.
@@ -276,15 +276,15 @@ async fn run_command(
     let ipc_socket_path = ipc::resolve_ipc_path(control_socket)?;
     let ipc_server = ipc::spawn_ipc_server(ipc_handle.clone(), &ipc_socket_path).await?;
 
-    #[cfg(any(feature = "status-api", feature = "grpc-api"))]
+    #[cfg(any(feature = "status_api", feature = "grpc_api"))]
     let status_spec = status_server_spec(&engine, status_listen)?;
 
-    #[cfg(feature = "status-api")]
+    #[cfg(feature = "status_api")]
     let http_server = {
         if let Some(ref status) = status_spec {
             Some(
                 http_adapter::spawn_http_server(
-                    engine_handle.clone(),
+                    ipc_handle.clone(),
                     &status.listen,
                     status.auth.clone(),
                 )
@@ -295,7 +295,7 @@ async fn run_command(
         }
     };
 
-    #[cfg(feature = "grpc-api")]
+    #[cfg(feature = "grpc_api")]
     let grpc_server = {
         if let Some(ref status) = status_spec {
             let addr: std::net::SocketAddr = status
@@ -323,11 +323,11 @@ async fn run_command(
 
     shutdown_event_dispatcher(event_dispatcher).await;
     ipc_server.shutdown().await?;
-    #[cfg(feature = "status-api")]
+    #[cfg(feature = "status_api")]
     if let Some(s) = http_server {
         s.shutdown().await?;
     }
-    #[cfg(feature = "grpc-api")]
+    #[cfg(feature = "grpc_api")]
     if let Some(s) = grpc_server {
         s.shutdown().await;
     }
@@ -336,16 +336,16 @@ async fn run_command(
     Ok(())
 }
 
-#[cfg(any(feature = "status-api", feature = "grpc-api"))]
+#[cfg(any(feature = "status_api", feature = "grpc_api"))]
 struct StatusServerSpec {
     listen: String,
-    #[cfg(feature = "grpc-api")]
+    #[cfg(feature = "grpc_api")]
     grpc_listen: String,
-    #[cfg(feature = "status-api")]
+    #[cfg(feature = "status_api")]
     auth: Option<http_adapter::HttpServerAuth>,
 }
 
-#[cfg(any(feature = "status-api", feature = "grpc-api"))]
+#[cfg(any(feature = "status_api", feature = "grpc_api"))]
 fn status_server_spec(
     engine: &Engine,
     cli_listen: Option<&str>,
@@ -362,9 +362,9 @@ fn status_server_spec(
     if let Some(listen) = cli_listen {
         return Ok(Some(StatusServerSpec {
             listen: listen.to_owned(),
-            #[cfg(feature = "grpc-api")]
+            #[cfg(feature = "grpc_api")]
             grpc_listen: next_port(listen),
-            #[cfg(feature = "status-api")]
+            #[cfg(feature = "status_api")]
             auth: None,
         }));
     }
@@ -378,7 +378,7 @@ fn status_server_spec(
         .as_ref()
         .expect("config validation requires api.control.listen");
 
-    #[cfg(feature = "status-api")]
+    #[cfg(feature = "status_api")]
     let auth = {
         let key = config_api_key(control.api_key.as_ref(), control.api_key_env.as_ref())?;
         Some(http_adapter::HttpServerAuth::single_admin(key))
@@ -386,14 +386,14 @@ fn status_server_spec(
 
     Ok(Some(StatusServerSpec {
         listen: format!("{}:{}", listen.address, listen.port),
-        #[cfg(feature = "grpc-api")]
+        #[cfg(feature = "grpc_api")]
         grpc_listen: format!("{}:{}", listen.address, listen.port + 1),
-        #[cfg(feature = "status-api")]
+        #[cfg(feature = "status_api")]
         auth,
     }))
 }
 
-#[cfg(feature = "grpc-api")]
+#[cfg(feature = "grpc_api")]
 fn next_port(listen: &str) -> String {
     if let Some(idx) = listen.rfind(':') {
         let (host, port_str) = listen.split_at(idx + 1);
@@ -405,21 +405,21 @@ fn next_port(listen: &str) -> String {
     format!("{listen}:9091")
 }
 
-#[cfg(not(any(feature = "status-api", feature = "grpc-api")))]
+#[cfg(not(any(feature = "status_api", feature = "grpc_api")))]
 fn ensure_status_api_not_configured(
     engine: &Engine,
     cli_listen: Option<&str>,
 ) -> Result<(), Box<dyn Error>> {
     if let Some(status_listen) = cli_listen {
         return Err(std::io::Error::other(format!(
-            "`--status-listen {status_listen}` requires Cargo feature `status-api`"
+            "`--status-listen {status_listen}` requires Cargo feature `status_api`"
         ))
         .into());
     }
 
     if engine.config().api.control.enabled {
         return Err(std::io::Error::other(
-            "`api.control.enabled` requires Cargo feature `status-api`",
+            "`api.control.enabled` requires Cargo feature `status_api`",
         )
         .into());
     }
@@ -427,7 +427,7 @@ fn ensure_status_api_not_configured(
     Ok(())
 }
 
-#[cfg(feature = "status-api")]
+#[cfg(feature = "status_api")]
 fn config_api_key(
     api_key: Option<&String>,
     api_key_env: Option<&String>,
@@ -456,7 +456,7 @@ async fn wait_for_shutdown_signal() {
     }
 }
 
-#[cfg(feature = "event-dispatcher")]
+#[cfg(feature = "event_dispatcher")]
 fn spawn_event_dispatcher_if_configured(
     engine: &Engine,
 ) -> Result<Option<zero_connector::EventDispatcherHandle>, Box<dyn Error>> {
@@ -470,7 +470,7 @@ fn spawn_event_dispatcher_if_configured(
     Ok(dispatcher)
 }
 
-#[cfg(not(feature = "event-dispatcher"))]
+#[cfg(not(feature = "event_dispatcher"))]
 fn spawn_event_dispatcher_if_configured(
     engine: &Engine,
 ) -> Result<Option<EventDispatcherUnavailable>, Box<dyn Error>> {
@@ -478,20 +478,20 @@ fn spawn_event_dispatcher_if_configured(
         return Ok(None);
     }
 
-    Err(std::io::Error::other("`api.event_sinks` requires Cargo feature `event-dispatcher`").into())
+    Err(std::io::Error::other("`api.event_sinks` requires Cargo feature `event_dispatcher`").into())
 }
 
-#[cfg(feature = "event-dispatcher")]
+#[cfg(feature = "event_dispatcher")]
 async fn shutdown_event_dispatcher(dispatcher: Option<zero_connector::EventDispatcherHandle>) {
     if let Some(dispatcher) = dispatcher {
         dispatcher.shutdown().await;
     }
 }
 
-#[cfg(not(feature = "event-dispatcher"))]
+#[cfg(not(feature = "event_dispatcher"))]
 async fn shutdown_event_dispatcher(_dispatcher: Option<EventDispatcherUnavailable>) {}
 
-#[cfg(feature = "panel-connector")]
+#[cfg(feature = "panel_connector")]
 fn spawn_push_connector_if_configured(
     engine: &Engine,
 ) -> Result<Option<zero_connector::PushConnectorHandle>, Box<dyn Error>> {
@@ -501,7 +501,7 @@ fn spawn_push_connector_if_configured(
     }
 
     let engine_clone = engine.clone();
-    let version = env!("CARGO_PKG_VERSION").to_owned();
+    let build_id = env!("CARGO_PKG_VERSION").to_owned();
 
     let handle = zero_connector::spawn_push_connector(
         config,
@@ -533,38 +533,38 @@ fn spawn_push_connector_if_configured(
             let engine = engine.clone();
             move || engine.stats_snapshot().bytes_down
         },
-        &version,
+        &build_id,
     )?;
 
     Ok(handle)
 }
 
-#[cfg(not(feature = "panel-connector"))]
+#[cfg(not(feature = "panel_connector"))]
 fn spawn_push_connector_if_configured(
     engine: &Engine,
 ) -> Result<Option<PushConnectorUnavailable>, Box<dyn Error>> {
     if engine.config().push.enabled() {
         return Err(
-            std::io::Error::other("`push` requires Cargo feature `panel-connector`").into(),
+            std::io::Error::other("`push` requires Cargo feature `panel_connector`").into(),
         );
     }
     Ok(None)
 }
 
-#[cfg(feature = "panel-connector")]
+#[cfg(feature = "panel_connector")]
 async fn shutdown_push_connector(connector: Option<zero_connector::PushConnectorHandle>) {
     if let Some(c) = connector {
         c.shutdown().await;
     }
 }
 
-#[cfg(not(feature = "panel-connector"))]
+#[cfg(not(feature = "panel_connector"))]
 async fn shutdown_push_connector(_connector: Option<PushConnectorUnavailable>) {}
 
-#[cfg(not(feature = "panel-connector"))]
+#[cfg(not(feature = "panel_connector"))]
 struct PushConnectorUnavailable;
 
-#[cfg(not(feature = "event-dispatcher"))]
+#[cfg(not(feature = "event_dispatcher"))]
 struct EventDispatcherUnavailable;
 
 // ── IPC client commands ───────────────────────────────────────────────
@@ -590,7 +590,7 @@ fn resolve_socket(socket_path: Option<&str>) -> Result<String, Box<dyn Error>> {
     })?;
     if !path.exists() {
         return Err(std::io::Error::other(format!(
-            "control socket not found at {} — is zero running?",
+            "control socket not found at {} --is zero running?",
             path.display()
         ))
         .into());
@@ -672,7 +672,7 @@ fn select_command(
     };
     let response = ipc::client::send_request(&socket, &request)?;
     if response.ok {
-        println!("selector `{policy_tag}` → `{target_tag}`");
+        println!("selector `{policy_tag}` ->?`{target_tag}`");
     } else {
         let msg = response
             .error
@@ -764,7 +764,7 @@ fn init_tracing_from_config(config_path: &str) {
 
 fn spawn_stats_sampler(engine: Engine) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let mut stats_tick = tokio::time::interval(std::time::Duration::from_secs(30));
+        let mut stats_tick = tokio::time::interval(std::time::Duration::from_secs(1));
         let mut flow_tick = tokio::time::interval(std::time::Duration::from_secs(10));
         loop {
             tokio::select! {
@@ -784,7 +784,7 @@ fn reload_command(config_path: &str, socket_path: Option<&str>) -> Result<(), Bo
     let request = crate::ipc::protocol::IpcRequest::Command {
         id: None,
         method: "config.apply".to_owned(),
-        params: config_value,
+        params: serde_json::json!({ "config": config_value }),
     };
     let response = ipc::client::send_request(&socket, &request)?;
     if response.ok {
@@ -804,20 +804,50 @@ fn reload_command(config_path: &str, socket_path: Option<&str>) -> Result<(), Bo
 /// Collect compiled feature flags for the capabilities endpoint.
 fn collect_build_features() -> Vec<String> {
     let mut features = Vec::new();
-    if cfg!(feature = "status-api")        { features.push("status-api".to_owned()); }
-    if cfg!(feature = "event-dispatcher")  { features.push("event-dispatcher".to_owned()); }
-    if cfg!(feature = "sink-jsonl")        { features.push("sink-jsonl".to_owned()); }
-    if cfg!(feature = "panel-connector")   { features.push("panel-connector".to_owned()); }
-    if cfg!(feature = "grpc-api")          { features.push("grpc-api".to_owned()); }
-    if cfg!(feature = "socks5")            { features.push("socks5".to_owned()); }
-    if cfg!(feature = "http-connect")      { features.push("http-connect".to_owned()); }
-    if cfg!(feature = "mixed")             { features.push("mixed".to_owned()); }
-    if cfg!(feature = "vless")             { features.push("vless".to_owned()); }
-    if cfg!(feature = "hysteria2")         { features.push("hysteria2".to_owned()); }
-    if cfg!(feature = "shadowsocks")       { features.push("shadowsocks".to_owned()); }
-    if cfg!(feature = "trojan")            { features.push("trojan".to_owned()); }
-    if cfg!(feature = "vmess")             { features.push("vmess".to_owned()); }
-    if cfg!(feature = "mieru")             { features.push("mieru".to_owned()); }
-    if cfg!(feature = "dns-udp")           { features.push("dns-udp".to_owned()); }
+    if cfg!(feature = "status_api") {
+        features.push("status_api".to_owned());
+    }
+    if cfg!(feature = "event_dispatcher") {
+        features.push("event_dispatcher".to_owned());
+    }
+    if cfg!(feature = "sink_jsonl") {
+        features.push("sink_jsonl".to_owned());
+    }
+    if cfg!(feature = "panel_connector") {
+        features.push("panel_connector".to_owned());
+    }
+    if cfg!(feature = "grpc_api") {
+        features.push("grpc_api".to_owned());
+    }
+    if cfg!(feature = "socks5") {
+        features.push("socks5".to_owned());
+    }
+    if cfg!(feature = "http_connect") {
+        features.push("http_connect".to_owned());
+    }
+    if cfg!(feature = "mixed") {
+        features.push("mixed".to_owned());
+    }
+    if cfg!(feature = "vless") {
+        features.push("vless".to_owned());
+    }
+    if cfg!(feature = "hysteria2") {
+        features.push("hysteria2".to_owned());
+    }
+    if cfg!(feature = "shadowsocks") {
+        features.push("shadowsocks".to_owned());
+    }
+    if cfg!(feature = "trojan") {
+        features.push("trojan".to_owned());
+    }
+    if cfg!(feature = "vmess") {
+        features.push("vmess".to_owned());
+    }
+    if cfg!(feature = "mieru") {
+        features.push("mieru".to_owned());
+    }
+    if cfg!(feature = "dns") {
+        features.push("dns".to_owned());
+    }
     features
 }

@@ -24,7 +24,10 @@ mod imp {
         stream_impl(&stream, request, on_event)
     }
 
-    fn send_impl(mut stream: &std::os::unix::net::UnixStream, request: &IpcRequest) -> io::Result<()> {
+    fn send_impl(
+        mut stream: &std::os::unix::net::UnixStream,
+        request: &IpcRequest,
+    ) -> io::Result<()> {
         let frame = serialize_frame(request).map_err(io::Error::other)?;
         stream.write_all(&frame)?;
         Ok(())

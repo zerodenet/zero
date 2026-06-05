@@ -41,8 +41,8 @@ pub fn config_path_from_args(args: &[String]) -> Option<&str> {
             None
         }
         // Commands that talk to a running daemon via IPC — no config needed.
-        "select" | "flows" | "policies" | "events" | "version" | "mode" | "help" | "--help"
-        | "-h" | "--version" | "-V" => None,
+        "select" | "flows" | "policies" | "events" | "build_info" | "mode" | "help" | "--help"
+        | "-h" => None,
         _ if first.starts_with('-') => None,
         _ => Some(first),
     }
@@ -101,7 +101,7 @@ pub enum Command {
     TunStatus {
         socket_path: Option<String>,
     },
-    Version,
+    BuildInfo,
     Help,
 }
 
@@ -168,7 +168,7 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
                 )),
             }
         }
-        "version" | "--version" | "-V" => Ok(Command::Version),
+        "build_info" => Ok(Command::BuildInfo),
         "help" | "--help" | "-h" => Ok(Command::Help),
         _ if first.starts_with('-') => Err(CliError::new(format!(
             "unknown option `{first}`\n\n{}",
@@ -195,7 +195,7 @@ pub fn usage() -> &'static str {
   zero tun start --addr IP --tag TAG [--name NAME] [--mask MASK] [--mtu MTU] [--socket PATH]
   zero tun stop [--socket PATH]
   zero tun status [--socket PATH]
-  zero version
+  zero build_info
   zero help
 
 Examples:

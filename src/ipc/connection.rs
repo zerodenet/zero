@@ -98,19 +98,17 @@ where
                 let resp = ipc_ok(req_id, "pong");
                 write_ipc_response(&mut *writer.lock().await, &resp).await?;
             }
-            IpcRequest::Query { request, .. } => {
-                match handle.query(request) {
-                    Ok(query_resp) => {
-                        let value = serde_json::to_value(query_resp).map_err(io::Error::other)?;
-                        let resp = ipc_ok(req_id, value);
-                        write_ipc_response(&mut *writer.lock().await, &resp).await?;
-                    }
-                    Err(error) => {
-                        let resp = ipc_api_error(req_id, &error);
-                        write_ipc_response(&mut *writer.lock().await, &resp).await?;
-                    }
+            IpcRequest::Query { request, .. } => match handle.query(request) {
+                Ok(query_resp) => {
+                    let value = serde_json::to_value(query_resp).map_err(io::Error::other)?;
+                    let resp = ipc_ok(req_id, value);
+                    write_ipc_response(&mut *writer.lock().await, &resp).await?;
                 }
-            }
+                Err(error) => {
+                    let resp = ipc_api_error(req_id, &error);
+                    write_ipc_response(&mut *writer.lock().await, &resp).await?;
+                }
+            },
             IpcRequest::Command { method, params, .. } => {
                 let command = parse_command(&method, &params);
                 match command {

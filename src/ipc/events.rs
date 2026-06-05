@@ -25,7 +25,12 @@ pub(crate) fn emit_connected(handle: &ProxyHandle, active: u64, pipe: &str) {
 }
 
 /// Emit an `ipc.disconnected` event.
-pub(crate) fn emit_disconnected(handle: &ProxyHandle, active: u64, pipe: &str, error: Option<&str>) {
+pub(crate) fn emit_disconnected(
+    handle: &ProxyHandle,
+    active: u64,
+    pipe: &str,
+    error: Option<&str>,
+) {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
