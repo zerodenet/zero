@@ -15,10 +15,7 @@ use crate::transport::{ClientStream, MeteredStream, StreamTraffic};
 use zero_core::{Address, ProtocolType};
 use zero_engine::EngineError;
 
-pub(crate) mod context;
 pub(crate) mod helpers;
-mod outbound;
-mod request;
 pub(crate) mod sessions;
 
 use crate::outbound::socks5::UpstreamAssociationCloseReason;
@@ -57,7 +54,7 @@ impl Proxy {
 
         info!(
             inbound_tag = inbound_tag,
-            protocol = "socks5-udp",
+            protocol = "socks5_udp",
             relay = %relay_addr,
             "socks5 udp association ready"
         );
@@ -99,7 +96,7 @@ impl Proxy {
                         ).await {
                             warn!(
                                 inbound_tag = inbound_tag,
-                                protocol = "socks5-udp",
+                                protocol = "socks5_udp",
                                 error = %error,
                                 "failed to process UDP packet"
                             );
@@ -147,7 +144,7 @@ impl Proxy {
                             Err(error) => {
                                 warn!(
                                     inbound_tag = inbound_tag,
-                                    protocol = "socks5-udp",
+                                    protocol = "socks5_udp",
                                     error = %error,
                                     "failed to forward direct UDP response"
                                 );

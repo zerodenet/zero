@@ -52,6 +52,7 @@ pub(crate) enum UdpFlowOutbound {
         username: Option<String>,
         password: Option<String>,
     },
+    #[allow(dead_code)]
     Shadowsocks {
         tag: String,
         server: String,
@@ -74,6 +75,7 @@ pub(crate) enum UdpFlowOutbound {
         sni: Option<String>,
         insecure: bool,
         client_fingerprint: Option<String>,
+        relay_chain: bool,
     },
     Mieru {
         tag: String,
