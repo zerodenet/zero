@@ -3,9 +3,17 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+pub mod protocol;
 
-// ── Address types ─────────────────────────────────────────────────────
+use alloc::vec::Vec;
+pub use protocol::{
+    DeferredTcpTunnelProtocol, ProtocolCapabilityDescriptor, ProtocolCapabilityLevel,
+    ProtocolCapabilityState, ProtocolMetadata, ProtocolNetworkCapability, TcpSessionProtocol,
+    TcpTunnelProtocol, UdpDatagramFraming, UdpPacketFraming, UdpPacketStreamFraming,
+    UdpPacketTunnelProtocol, UdpRelayProtocol,
+};
+
+// Address types
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IpAddress {
@@ -23,7 +31,7 @@ impl IpAddress {
     }
 }
 
-/// Network socket address — an IP address and port.
+/// Network socket address: an IP address and port.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SocketAddress {
     pub ip: IpAddress,
@@ -36,7 +44,7 @@ impl SocketAddress {
     }
 }
 
-// ── I/O traits ────────────────────────────────────────────────────────
+// I/O traits
 
 pub trait AsyncSocket: Send + Sync + Unpin {
     type Error;
@@ -60,7 +68,7 @@ pub trait DatagramSocket: Send + Sync + Unpin {
     async fn send_to(&self, buf: &[u8], addr: IpAddress, port: u16) -> Result<(), Self::Error>;
 }
 
-// ── Network stack traits ──────────────────────────────────────────────
+// Network stack traits
 
 /// Error from a network stack operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,7 +105,7 @@ pub trait TcpStack: Send + Sync {
     ///
     /// Non-TCP packets are silently ignored.  The stack parses the
     /// TCP header, updates internal connection state, and may emit
-    /// response packets (SYN-ACK, ACK, FIN, …) through an internal
+    /// response packets (SYN-ACK, ACK, FIN, etc.) through an internal
     /// outbound channel.
     async fn feed(&self, packet: &[u8]);
 
@@ -150,7 +158,7 @@ pub trait NetworkStack: Send + Sync + 'static {
     fn udp(&self) -> &Self::Udp;
 }
 
-// ── Other abstractions ────────────────────────────────────────────────
+// Other abstractions
 
 pub trait DnsResolver: Send + Sync {
     type Error;
