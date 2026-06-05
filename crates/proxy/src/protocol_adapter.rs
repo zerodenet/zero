@@ -10,12 +10,15 @@ use std::sync::Arc;
 
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
+use zero_traits::ProtocolMetadata;
+
+use crate::protocol_capability::{protocol_capability, protocol_descriptor};
 
 /// A protocol adapter registered in the proxy.
 ///
 /// Implementations are behind `#[cfg(feature = "...")]` gates so only
 /// compiled-in protocols appear in the registry.
-pub trait ProtocolAdapter: Send + Sync + fmt::Debug {
+pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     /// Protocol name used in config `"type"` field and exported status.
     fn name(&self) -> &'static str;
 
@@ -81,6 +84,35 @@ impl ProtocolRegistry {
                 .map(|a| a.name()),
         );
         names
+    }
+
+    pub fn capabilities(&self) -> Vec<zero_api::ProtocolCapability> {
+        let mut descriptors = self
+            .adapters
+            .iter()
+            .map(|adapter| adapter.descriptor())
+            .collect::<Vec<_>>();
+
+        if !descriptors
+            .iter()
+            .any(|descriptor| descriptor.protocol == "block")
+        {
+            descriptors.push(protocol_descriptor("block", "core"));
+        }
+        if cfg!(feature = "mixed")
+            && !descriptors
+                .iter()
+                .any(|descriptor| descriptor.protocol == "mixed")
+        {
+            descriptors.push(protocol_descriptor("mixed", "mixed"));
+        }
+
+        let mut capabilities = descriptors
+            .into_iter()
+            .map(protocol_capability)
+            .collect::<Vec<_>>();
+        capabilities.sort_by(|a, b| a.protocol.cmp(&b.protocol));
+        capabilities
     }
 
     /// Validate that every inbound in the config has a compiled-in adapter.
@@ -156,7 +188,7 @@ impl ProtocolRegistry {
         if matches!(config, InboundProtocolConfig::Mixed { .. }) {
             return "mixed";
         }
-        "protocol-not-compiled"
+        "protocol_not_compiled"
     }
 
     /// Human-readable label for an outbound protocol config.
@@ -182,7 +214,7 @@ impl ProtocolRegistry {
         }
         match config {
             OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => "core",
-            _ => "protocol-not-compiled",
+            _ => "protocol_not_compiled",
         }
     }
 }
