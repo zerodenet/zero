@@ -8,7 +8,9 @@ use zero_api::{
     FlowListQuery, PoliciesQuery, PolicySelectCommand, QueryRequest, QueryResponse, QueryService,
 };
 use zero_config::RuntimeConfig;
+use zero_engine::EngineHandle;
 use zero_proxy::Proxy as Engine;
+use zero_proxy::ProxyHandle;
 
 use serde_json::json;
 use support::{free_port, spawn_engine, wait_for, wait_for_listener};
@@ -447,6 +449,137 @@ fn capabilities_use_snake_case_wire_names() {
     assert!(capabilities
         .features
         .contains(&"config_snapshot".to_owned()));
+    assert!(
+        capabilities.protocols.is_empty(),
+        "engine capabilities should not own the protocol capability matrix"
+    );
+
+    let json = serde_json::to_value(&capabilities).expect("serialize capabilities");
+    assert_snake_case_capability_strings(&json);
+}
+
+#[test]
+fn proxy_handle_capabilities_use_protocol_inventory() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("parse config");
+
+    let proxy = Engine::new(config).expect("build proxy");
+    let handle = ProxyHandle::new(EngineHandle::new(proxy.engine().clone()), proxy);
+    let response = handle
+        .query(QueryRequest::Capabilities(CapabilitiesQuery))
+        .expect("query capabilities");
+    let QueryResponse::Capabilities(capabilities) = response else {
+        panic!("expected capabilities query response");
+    };
+
+    assert!(capabilities
+        .protocols
+        .iter()
+        .any(|p| p.protocol == "direct"));
+    assert!(capabilities.protocols.iter().any(|p| p.protocol == "block"));
+    assert!(capabilities.protocols.iter().any(|p| p.protocol == "mixed"));
+    assert!(capabilities
+        .protocols
+        .iter()
+        .any(|p| p.protocol == "socks5"));
+    assert!(capabilities
+        .protocols
+        .iter()
+        .all(|protocol| protocol.compiled));
+
+    let socks5 = capabilities
+        .protocols
+        .iter()
+        .find(|protocol| protocol.protocol == "socks5")
+        .expect("socks5 capability");
+    assert_eq!(socks5.status, "supported");
+    assert!(socks5.inbound.tcp.supported);
+    assert!(socks5.inbound.udp.supported);
+    assert!(socks5.outbound.tcp.supported);
+    assert!(socks5.outbound.udp.supported);
+
+    let http_connect = capabilities
+        .protocols
+        .iter()
+        .find(|protocol| protocol.protocol == "http_connect")
+        .expect("http_connect capability");
+    assert_eq!(http_connect.inbound.udp.level, "not_applicable");
+    assert_eq!(http_connect.outbound.tcp.level, "unsupported");
+
+    let vless = capabilities
+        .protocols
+        .iter()
+        .find(|protocol| protocol.protocol == "vless")
+        .expect("vless capability");
+    assert_eq!(vless.status, "partial");
+    assert_eq!(vless.outbound.udp.level, "partial");
+    assert!(vless
+        .outbound
+        .udp
+        .notes
+        .contains(&"udp_relay_chain_final_transport_limited".to_owned()));
+
+    if let Some(mieru) = capabilities
+        .protocols
+        .iter()
+        .find(|protocol| protocol.protocol == "mieru")
+    {
+        assert_eq!(mieru.outbound.tcp.level, "partial");
+        assert_eq!(mieru.outbound.udp.level, "partial");
+        assert!(!mieru
+            .limitations
+            .contains(&"relay_chain_hop_is_not_supported".to_owned()));
+        assert!(!mieru
+            .limitations
+            .contains(&"udp_relay_chain_is_not_supported".to_owned()));
+    }
+
+    for protocol_name in ["shadowsocks", "hysteria2"] {
+        if let Some(protocol) = capabilities
+            .protocols
+            .iter()
+            .find(|protocol| protocol.protocol == protocol_name)
+        {
+            assert!(protocol
+                .limitations
+                .contains(&"udp_relay_chain_tcp_prefix_is_not_supported".to_owned()));
+            assert!(!protocol
+                .limitations
+                .contains(&"udp_relay_chain_is_not_supported".to_owned()));
+        }
+    }
+
+    let json = serde_json::to_value(&capabilities).expect("serialize capabilities");
+    assert_snake_case_capability_strings(&json);
+}
+
+fn assert_snake_case_capability_strings(value: &serde_json::Value) {
+    match value {
+        serde_json::Value::String(s) => {
+            assert!(
+                !s.contains('-') && !s.contains(' '),
+                "capability string should be snake_case-like: {s}"
+            );
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                assert_snake_case_capability_strings(value);
+            }
+        }
+        serde_json::Value::Object(values) => {
+            for value in values.values() {
+                assert_snake_case_capability_strings(value);
+            }
+        }
+        _ => {}
+    }
 }
 
 #[test]

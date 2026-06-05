@@ -26,6 +26,9 @@ mod relays_tcp_through_socks5_chained_outbound;
 mod relays_tcp_through_socks5_direct_outbound;
 #[path = "socks5/relays_tcp_through_socks5_inbound_with_username_password_auth.rs"]
 mod relays_tcp_through_socks5_inbound_with_username_password_auth;
+#[cfg(all(feature = "socks5", feature = "mieru"))]
+#[path = "socks5/relays_tcp_through_socks5_to_mieru_to_socks5_relay_chain.rs"]
+mod relays_tcp_through_socks5_to_mieru_to_socks5_relay_chain;
 #[path = "socks5/relays_tcp_through_urltest_group_after_probe_selects_direct.rs"]
 mod relays_tcp_through_urltest_group_after_probe_selects_direct;
 #[path = "socks5/relays_tcp_through_urltest_group_with_nested_group_member.rs"]
