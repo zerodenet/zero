@@ -137,7 +137,7 @@ pub(crate) fn log_session_failed(
 fn protocol_name(protocol: ProtocolType) -> &'static str {
     match protocol {
         ProtocolType::Socks5 => "socks5",
-        ProtocolType::HttpConnect => "http-connect",
+        ProtocolType::HttpConnect => "http_connect",
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Shadowsocks => "shadowsocks",
@@ -163,14 +163,14 @@ pub(crate) fn log_urltest_group_target_changed(
 ) {
     match previous {
         Some(previous) if previous == selected => debug!(
-            group_kind = "urltest",
+            group_kind = "url_test",
             group_tag = group_tag,
             selected = selected,
             latency_ms = latency_ms,
             "outbound group probe refreshed"
         ),
         Some(previous) => info!(
-            group_kind = "urltest",
+            group_kind = "url_test",
             group_tag = group_tag,
             previous = previous,
             selected = selected,
@@ -178,7 +178,7 @@ pub(crate) fn log_urltest_group_target_changed(
             "outbound group target changed"
         ),
         None => info!(
-            group_kind = "urltest",
+            group_kind = "url_test",
             group_tag = group_tag,
             selected = selected,
             latency_ms = latency_ms,

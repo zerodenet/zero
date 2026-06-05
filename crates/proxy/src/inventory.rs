@@ -6,7 +6,7 @@ use crate::adapters::build_registry;
 use crate::protocol_adapter::ProtocolRegistry;
 use crate::transport::DirectConnector;
 
-#[cfg(feature = "http-connect")]
+#[cfg(feature = "http_connect")]
 use http_connect::HttpConnectInbound;
 #[cfg(feature = "hysteria2")]
 use hysteria2::Hysteria2Inbound;
@@ -39,7 +39,7 @@ pub struct ProtocolInventory {
     pub socks5_inbound: Socks5Inbound,
     #[cfg(feature = "socks5")]
     pub socks5_outbound: Socks5Outbound,
-    #[cfg(feature = "http-connect")]
+    #[cfg(feature = "http_connect")]
     pub http_connect_inbound: HttpConnectInbound,
     #[cfg(feature = "vless")]
     pub vless_inbound: VlessInbound,
@@ -72,7 +72,7 @@ impl Default for ProtocolInventory {
             socks5_inbound: Socks5Inbound,
             #[cfg(feature = "socks5")]
             socks5_outbound: Socks5Outbound,
-            #[cfg(feature = "http-connect")]
+            #[cfg(feature = "http_connect")]
             http_connect_inbound: HttpConnectInbound,
             #[cfg(feature = "vless")]
             vless_inbound: VlessInbound,

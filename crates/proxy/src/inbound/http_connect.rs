@@ -86,7 +86,7 @@ impl Proxy {
 
         info!(
             inbound_tag = %inbound.tag,
-            protocol = "http-connect",
+            protocol = "http_connect",
             listen = %local_addr,
             "inbound listener ready"
         );
@@ -141,21 +141,21 @@ impl Proxy {
                                     Err(err) => {
                                         let engine_err = EngineError::from(err);
                                         log_listener_connection_error(
-                                            "http-connect", &tag, &source_addr, &engine_err,
+                                            "http_connect", &tag, &source_addr, &engine_err,
                                         );
                                     }
                                 }
                             });
                         }
                         Err(e) => {
-                            error!(error = %e, "http-connect: accept error");
+                            error!(error = %e, "http_connect: accept error");
                         }
                     }
                 }
                 result = connections.join_next(), if !connections.is_empty() => {
                     if let Some(Err(error)) = result {
                         if !error.is_cancelled() {
-                            error!(error = %error, "http-connect connection task panicked");
+                            error!(error = %error, "http_connect connection task panicked");
                         }
                     }
                 }
@@ -166,12 +166,12 @@ impl Proxy {
         while let Some(result) = connections.join_next().await {
             if let Err(error) = result {
                 if !error.is_cancelled() {
-                    error!(error = %error, "http-connect connection task panicked during shutdown");
+                    error!(error = %error, "http_connect connection task panicked during shutdown");
                 }
             }
         }
 
-        info!(inbound_tag = %inbound.tag, protocol = "http-connect", listen = %local_addr, "inbound listener stopped");
+        info!(inbound_tag = %inbound.tag, protocol = "http_connect", listen = %local_addr, "inbound listener stopped");
         Ok(())
     }
 }

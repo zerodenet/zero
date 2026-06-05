@@ -1,5 +1,5 @@
 mod direct;
-#[cfg(feature = "http-connect")]
+#[cfg(feature = "http_connect")]
 mod http_connect;
 #[cfg(feature = "hysteria2")]
 mod hysteria2;

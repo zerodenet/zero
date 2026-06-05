@@ -511,14 +511,21 @@ impl Proxy {
 
 /// Encrypt plaintext with SS AEAD and send via socket.
 fn ss_send_encrypted(
-    socket: &UdpSocket, cipher: CipherKind, password: &str,
-    plain: &[u8], client: SocketAddr,
+    socket: &UdpSocket,
+    cipher: CipherKind,
+    password: &str,
+    plain: &[u8],
+    client: SocketAddr,
 ) {
     use ring::rand::SecureRandom;
     let mut salt = vec![0u8; cipher.salt_len()];
     let _ = ring::rand::SystemRandom::new().fill(&mut salt);
-    let Ok(key) = ss_derive_key(cipher, password.as_bytes(), &salt) else { return };
-    let Ok(encrypted) = aead_encrypt_udp(cipher, &key, &[0u8; 12], plain) else { return };
+    let Ok(key) = ss_derive_key(cipher, password.as_bytes(), &salt) else {
+        return;
+    };
+    let Ok(encrypted) = aead_encrypt_udp(cipher, &key, &[0u8; 12], plain) else {
+        return;
+    };
     let mut resp = salt;
     resp.extend_from_slice(&encrypted);
     let _ = tokio::runtime::Handle::try_current().and_then(|rt| {

@@ -46,8 +46,8 @@ protocol_adapter!(Socks5Adapter, proto: "socks5", feature: "socks5",
     inbound: InboundProtocolConfig::Socks5 { .. },
     outbound: OutboundProtocolConfig::Socks5 { .. });
 
-#[cfg(feature = "http-connect")]
-protocol_adapter!(HttpConnectAdapter, proto: "http-connect", feature: "http-connect",
+#[cfg(feature = "http_connect")]
+protocol_adapter!(HttpConnectAdapter, proto: "http_connect", feature: "http_connect",
     inbound: InboundProtocolConfig::HttpConnect,
     outbound: OutboundProtocolConfig::Direct);
 
@@ -112,7 +112,7 @@ pub(crate) fn build_registry() -> super::protocol_adapter::ProtocolRegistry {
 
     #[cfg(feature = "socks5")]
     r.register(Arc::new(Socks5Adapter));
-    #[cfg(feature = "http-connect")]
+    #[cfg(feature = "http_connect")]
     r.register(Arc::new(HttpConnectAdapter));
     #[cfg(feature = "vless")]
     r.register(Arc::new(VlessAdapter));

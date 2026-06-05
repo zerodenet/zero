@@ -127,7 +127,7 @@ impl Proxy {
         let mut urltests: JoinSet<Result<(), EngineError>> = JoinSet::new();
 
         let reload_rx = self.engine.subscribe_reload();
-        // Bridge std mpsc (blocking) → async via a spawn_blocking task.
+        // Bridge std mpsc (blocking) ->?async via a spawn_blocking task.
         // Uses recv_timeout so the thread can detect when the async
         // receiver is dropped (e.g. during shutdown) and exit cleanly
         // instead of blocking tokio runtime teardown.
@@ -224,7 +224,7 @@ impl Proxy {
                         &mut listener_stops,
                         &mut listeners,
                     );
-                    // Remove old urltest groups — they detect config
+                    // Remove old urltest groups --they detect config
                     // changes via the plan swap and exit cleanly next cycle.
                     // Spawn new ones.
                     reconcile_urltests(self, &new_config, &shutdown_rx, &mut urltests);
@@ -425,7 +425,7 @@ fn spawn_inbound_listener(
     shutdown_rx: watch::Receiver<bool>,
     listeners: &mut JoinSet<Result<(), EngineError>>,
 ) -> Result<(), EngineError> {
-    // Validate via registry — single source of truth for feature gates.
+    // Validate via registry --single source of truth for feature gates.
     proxy
         .protocols
         .check_inbound_enabled(&inbound.protocol, &inbound.tag)?;
@@ -438,7 +438,7 @@ fn spawn_inbound_listener(
         InboundProtocolConfig::Socks5 { .. } => {
             listeners.spawn(async move { p.run_socks5_listener(b, shutdown_rx).await });
         }
-        #[cfg(feature = "http-connect")]
+        #[cfg(feature = "http_connect")]
         InboundProtocolConfig::HttpConnect => {
             listeners.spawn(async move { p.run_http_connect_listener(b, shutdown_rx).await });
         }
