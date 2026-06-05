@@ -4,7 +4,6 @@
 //! that handles QUIC stream I/O (not raw TCP).
 
 use std::io;
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -20,7 +19,6 @@ use zero_config::InboundConfig;
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
-use zero_traits::DnsResolver;
 
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
@@ -375,7 +373,6 @@ impl Proxy {
         let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(&inbound_tag).await?;
         let mut h2_flows: std::collections::HashMap<u64, u16> = std::collections::HashMap::new();
 
-        let mut dg_buf = [0u8; 65536];
         let mut direct_buf = [0u8; 65536];
 
         loop {

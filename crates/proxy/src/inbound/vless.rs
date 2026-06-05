@@ -738,7 +738,7 @@ impl Proxy {
 
         info!(
             inbound_tag = inbound_tag,
-            protocol = "vless-udp",
+            protocol = "vless_udp",
             "vless udp session started"
         );
 
@@ -758,7 +758,7 @@ impl Proxy {
                 _ = tokio::time::sleep_until(last_activity + timeout) => {
                     info!(
                         inbound_tag = inbound_tag,
-                        protocol = "vless-udp",
+                        protocol = "vless_udp",
                         "vless udp session idle timeout"
                     );
                     break;
@@ -891,7 +891,7 @@ impl Proxy {
 
         info!(
             inbound_tag = inbound_tag,
-            protocol = "vless-udp",
+            protocol = "vless_udp",
             "vless udp session ended"
         );
 

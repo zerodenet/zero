@@ -1,5 +1,6 @@
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig, RuntimeConfig};
 
+use zero_api::ProtocolCapability;
 use zero_engine::EngineError;
 
 use crate::adapters::build_registry;
@@ -107,6 +108,10 @@ impl ProtocolInventory {
 
     pub fn supported_outbounds(&self) -> Vec<&'static str> {
         self.registry.outbound_names()
+    }
+
+    pub fn protocol_capabilities(&self) -> Vec<ProtocolCapability> {
+        self.registry.capabilities()
     }
 
     pub fn validate_config(&self, config: &RuntimeConfig) -> Result<(), EngineError> {

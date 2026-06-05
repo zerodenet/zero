@@ -9,8 +9,8 @@ use std::task::{Context, Poll};
 use async_trait::async_trait;
 use ring::rand::SecureRandom;
 use shadowsocks::{
-    aead_decrypt_udp, aead_encrypt_udp, build_target_data, parse_target_data, CipherKind,
-    ShadowsocksInbound,
+    CipherKind, ShadowsocksInbound, ShadowsocksOutbound, ShadowsocksUdpDecodeContext,
+    ShadowsocksUdpPacketTarget,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::UdpSocket;
@@ -21,6 +21,7 @@ use tracing::{error, info, warn};
 use zero_config::InboundConfig;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
+use zero_traits::UdpDatagramFraming;
 
 use crate::logging::log_listener_connection_error;
 use crate::runtime::bind_listener;
@@ -447,20 +448,24 @@ impl Proxy {
                     };
                     let packet = &buf[..n];
 
-                    let salt_len = cipher.salt_len();
-                    if packet.len() < salt_len + cipher.tag_len() { continue; }
-                    let salt = &packet[..salt_len];
-                    let encrypted = &packet[salt_len..];
-
-                    let Ok(key) = ss_derive_key(cipher, password.as_bytes(), salt) else { continue };
-                    let Ok(plain) = aead_decrypt_udp(cipher, &key, &[0u8; 12], encrypted) else { continue };
-                    let Ok((target, port, payload_offset)) = parse_target_data(&plain) else { continue };
-                    let payload = &plain[payload_offset..];
+                    let Ok(decoded) = <ShadowsocksOutbound as UdpDatagramFraming<
+                        ShadowsocksUdpPacketTarget,
+                        ShadowsocksUdpDecodeContext,
+                    >>::decode_udp_datagram(
+                        &ShadowsocksOutbound,
+                        &ShadowsocksUdpDecodeContext {
+                            cipher,
+                            password: password.as_bytes(),
+                        },
+                        packet,
+                    ) else {
+                        continue;
+                    };
 
                     let mut sa = zero_core::SessionAuth::new("shadowsocks");
                     sa.principal_key = Some(password.to_owned());
                     match dispatch.dispatch(
-                        self, target, port, payload,
+                        self, decoded.target, decoded.port, &decoded.payload,
                         ProtocolType::Shadowsocks, Some(&sa),
                     ).await {
                         Ok(session_id) => {
@@ -478,8 +483,11 @@ impl Proxy {
                         if let Some(&client) = client_sessions.get(&sid) {
                             ss_send_encrypted(
                                 udp_socket.as_ref(), cipher, password,
-                                &direct_buf[..n], client,
-                            );
+                                &address_from_socket_addr(sender),
+                                sender.port(),
+                                &direct_buf[..n],
+                                client,
+                            ).await;
                         }
                     }
                 }
@@ -489,10 +497,10 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             if let Some(sid) = session_id {
                                 if let Some(&client) = client_sessions.get(&sid) {
-                                    let Ok(td) = build_target_data(&target, port, &payload) else { continue };
                                     ss_send_encrypted(
-                                        udp_socket.as_ref(), cipher, password, &td, client,
-                                    );
+                                        udp_socket.as_ref(), cipher, password,
+                                        &target, port, &payload, client,
+                                    ).await;
                                 }
                             }
                         }
@@ -509,30 +517,32 @@ impl Proxy {
     }
 }
 
-/// Encrypt plaintext with SS AEAD and send via socket.
-fn ss_send_encrypted(
+/// Encode and send one Shadowsocks UDP response datagram.
+async fn ss_send_encrypted(
     socket: &UdpSocket,
     cipher: CipherKind,
     password: &str,
-    plain: &[u8],
+    target: &Address,
+    port: u16,
+    payload: &[u8],
     client: SocketAddr,
 ) {
-    use ring::rand::SecureRandom;
-    let mut salt = vec![0u8; cipher.salt_len()];
-    let _ = ring::rand::SystemRandom::new().fill(&mut salt);
-    let Ok(key) = ss_derive_key(cipher, password.as_bytes(), &salt) else {
+    let Ok(resp) = <ShadowsocksOutbound as UdpDatagramFraming<
+        ShadowsocksUdpPacketTarget,
+        ShadowsocksUdpDecodeContext,
+    >>::encode_udp_datagram(
+        &ShadowsocksOutbound,
+        &ShadowsocksUdpPacketTarget {
+            target,
+            port,
+            payload,
+            cipher,
+            password: password.as_bytes(),
+        },
+    ) else {
         return;
     };
-    let Ok(encrypted) = aead_encrypt_udp(cipher, &key, &[0u8; 12], plain) else {
-        return;
-    };
-    let mut resp = salt;
-    resp.extend_from_slice(&encrypted);
-    let _ = tokio::runtime::Handle::try_current().and_then(|rt| {
-        Ok(rt.block_on(async {
-            let _ = socket.send_to(&resp, client).await;
-        }))
-    });
+    let _ = socket.send_to(&resp, client).await;
 }
 fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<SocketAddr> {
     addr.map(|ip| match ip {
@@ -545,14 +555,10 @@ fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<SocketA
     })
 }
 
-fn addr_to_socket(addr: &Address, port: u16) -> Option<SocketAddr> {
-    match addr {
-        Address::Ipv4(b) => Some(SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(b[0], b[1], b[2], b[3])),
-            port,
-        )),
-        Address::Ipv6(b) => Some(SocketAddr::new(std::net::IpAddr::V6((*b).into()), port)),
-        Address::Domain(_) => None,
+fn address_from_socket_addr(addr: SocketAddr) -> Address {
+    match addr.ip() {
+        std::net::IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
+        std::net::IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
     }
 }
 
@@ -575,32 +581,4 @@ fn download_key_for_client(
     salt: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
     ss_derive_key(cipher, password, salt)
-}
-
-async fn resolve_socket_addr(
-    addr: &Address,
-    port: u16,
-    resolver: &impl zero_traits::DnsResolver,
-) -> Option<SocketAddr> {
-    match addr {
-        Address::Ipv4(b) => Some(SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(b[0], b[1], b[2], b[3])),
-            port,
-        )),
-        Address::Ipv6(b) => Some(SocketAddr::new(std::net::IpAddr::V6((*b).into()), port)),
-        Address::Domain(domain) => {
-            let ips = resolver.resolve(domain).await.ok()?;
-            let ip = ips.first()?;
-            let addr = match ip {
-                zero_traits::IpAddress::V4(b) => SocketAddr::new(
-                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(b[0], b[1], b[2], b[3])),
-                    port,
-                ),
-                zero_traits::IpAddress::V6(b) => {
-                    SocketAddr::new(std::net::IpAddr::V6((*b).into()), port)
-                }
-            };
-            Some(addr)
-        }
-    }
 }

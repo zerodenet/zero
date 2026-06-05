@@ -30,6 +30,8 @@ pub(crate) use zero_transport::split_http::{accept_split_http, SplitHttpRegistry
 #[cfg(any(feature = "vless", feature = "trojan", feature = "vmess"))]
 pub(crate) use zero_transport::tls::{build_tls_acceptor, InboundTlsStream, TlsAcceptor};
 #[cfg(feature = "vless")]
+pub(crate) use zero_transport::vless_transport::build_vless_outbound_transport_over_stream;
+#[cfg(feature = "vless")]
 pub(crate) use zero_transport::vless_transport::VlessTransportConnector;
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::ws::accept_ws;

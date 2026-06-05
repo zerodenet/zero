@@ -11,6 +11,7 @@ mod logging;
 mod outbound;
 mod process_lookup;
 mod protocol_adapter;
+mod protocol_capability;
 mod runtime;
 mod transport;
 
