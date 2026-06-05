@@ -1,16 +1,16 @@
 # Shadowsocks
 
-> 参照 shadowsocks-rust v1.21.2 | Crate: `shadowsocks`
+> 参照 shadowsocks-rust | Crate: `shadowsocks`
 
 Shadowsocks 是一种加密代理协议，使用预共享密钥 + AEAD 密码进行加密传输。
 
-## 版本追踪
+## 协议来源
 
-| 项目 | 版本 |
+| 项目 | 来源 |
 |------|------|
-| 参照实现 | [shadowsocks-rust](https://github.com/shadowsocks/shadowsocks-rust) v1.21.2 |
+| 参照实现 | [shadowsocks-rust](https://github.com/shadowsocks/shadowsocks-rust) |
 | 密码套件 | AES-128-GCM、AES-256-GCM、ChaCha20-IETF-Poly1305、2022-Blake3 |
-| 本实现 | `shadowsocks` crate v1.21.2 |
+| 本实现 | `shadowsocks` crate |
 
 ## 功能对齐状态
 

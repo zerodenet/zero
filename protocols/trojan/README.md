@@ -1,15 +1,15 @@
 # Trojan
 
-> 参照 trojan-go v0.10.6 | Crate: `trojan`
+> 参照 trojan-go | Crate: `trojan`
 
 Trojan 是一种基于 TLS 的代理协议，通过将代理流量伪装为 HTTPS 来绕过检测。
 
-## 版本追踪
+## 协议来源
 
-| 项目 | 版本 |
+| 项目 | 来源 |
 |------|------|
-| 参照实现 | [trojan-go](https://github.com/p4gefau1t/trojan-go) v0.10.6 |
-| 本实现 | `trojan` crate v0.10.6 |
+| 参照实现 | [trojan-go](https://github.com/p4gefau1t/trojan-go) |
+| 本实现 | `trojan` crate |
 
 ## 功能对齐状态
 

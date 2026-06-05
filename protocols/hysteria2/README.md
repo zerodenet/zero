@@ -1,15 +1,15 @@
 # Hysteria2
 
-> 参照 hysteria v2.6.1 | Crate: `hysteria2`
+> 参照 hysteria | Crate: `hysteria2`
 
 Hysteria2 是基于 QUIC 的代理协议，针对不稳定和高延迟网络进行优化，使用 HMAC 进行认证。
 
-## 版本追踪
+## 协议来源
 
-| 项目 | 版本 |
+| 项目 | 来源 |
 |------|------|
-| 参照实现 | [hysteria](https://github.com/apernet/hysteria) v2.6.1 |
-| 本实现 | `hysteria2` crate v2.6.1 |
+| 参照实现 | [hysteria](https://github.com/apernet/hysteria) |
+| 本实现 | `hysteria2` crate |
 
 ## 功能对齐状态
 

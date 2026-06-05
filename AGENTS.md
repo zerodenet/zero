@@ -2,14 +2,16 @@
 
 ## Structure
 
-Root `src/main.rs` builds the `zero` binary. Reusable crates live under `crates/`: `api`, `core`, `traits`, `config`, `router`, `engine`, `proxy`, and `platform/tokio`. External protocol implementations live under `protocols/`: `socks5`, `http-connect`, `vless`. Versioned docs live under `docs/versions/vX.X.X/`. Long-term project notes live under `docs/project/`. Example configs live under `examples/vX.X.X/`.
+Root `src/main.rs` builds the `zero` binary. Reusable crates live under `crates/`: `api`, `core`, `traits`, `config`, `router`, `engine`, `proxy`, and `platform/tokio`. External protocol implementations live under `protocols/`: `socks5`, `http-connect`, `vless`. Long-term project notes live under `docs/project/`. Example configs live under `examples/`.
 
 ## Features & Build
 
-Default build is `--features full,status-api`. Optional features:
-- `inbound-socks5`, `inbound-http-connect`, `inbound-mixed`, `inbound-vless`
-- `outbound-socks5`, `outbound-vless`
-- `status-api` enables runtime status endpoint and selector switching
+Default build is `--features full,status_api`. Optional features:
+- `socks5`, `http_connect`, `mixed`, `vless`
+- `hysteria2`, `shadowsocks`, `trojan`, `vmess`, `mieru`, `dns`
+- `status_api` enables runtime control endpoint and selector switching
+- `event_dispatcher`, `sink_jsonl`, `panel_connector` enable event delivery and panel connector support
+- `grpc_api` enables the gRPC control plane adapter
 
 If a config references an uncompiled protocol, it fails early with a clear error.
 
@@ -56,6 +58,5 @@ If you change protocol behavior, config parsing, routing, or runtime wiring, run
 
 ## Docs
 
-When changing config, protocol scope, or release boundaries, update matching docs in the same change:
+When changing config, protocol scope, or control surface, update matching docs in the same change:
 - `docs/project/` for long-term rules
-- `docs/versions/vX.X.X/` for version-specific release notes

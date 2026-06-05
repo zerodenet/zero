@@ -1,15 +1,15 @@
 # SOCKS5
 
-> RFC 1928 — 自有版本 v0.0.1 | Crate: `socks5`
+> RFC 1928 | Crate: `socks5`
 
 SOCKS5 是标准的互联网代理协议，定义于 RFC 1928。
 
-## 版本追踪
+## 协议来源
 
-| 项目 | 版本 |
+| 项目 | 来源 |
 |------|------|
 | 协议规范 | [RFC 1928](https://tools.ietf.org/html/rfc1928) |
-| 本实现 | `socks5` crate v0.0.1 (自有版本) |
+| 本实现 | `socks5` crate |
 
 ## 功能对齐状态
 

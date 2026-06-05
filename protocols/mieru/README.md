@@ -1,15 +1,15 @@
 # Mieru
 
-> 参照 mieru v3.33.0 | Crate: `mieru`
+> 参照 mieru | Crate: `mieru`
 
 Mieru 是一种基于 TCP 的加密代理协议，使用 XChaCha20-Poly1305 进行加密，支持 UDP over TCP。
 
-## 版本追踪
+## 协议来源
 
-| 项目 | 版本 |
+| 项目 | 来源 |
 |------|------|
-| 参照实现 | [mieru](https://github.com/enfein/mieru) v3.33.0 |
-| 本实现 | `mieru` crate v3.33.0 |
+| 参照实现 | [mieru](https://github.com/enfein/mieru) |
+| 本实现 | `mieru` crate |
 
 ## 功能对齐状态
 

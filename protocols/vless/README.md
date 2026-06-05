@@ -1,16 +1,16 @@
 # VLESS
 
-> 参照 Xray-core v25.3.1 | Crate: `vless`
+> 参照 Xray-core | Crate: `vless`
 
 VLESS 是 Xray 项目的核心入站/出站协议，无状态、轻量级，使用 UUID 身份验证，依赖外层 TLS 提供加密，自身不实现加密层。
 
-## 版本追踪
+## 协议来源
 
-| 项目 | 版本 |
+| 项目 | 来源 |
 |------|------|
-| 参照实现 | [Xray-core](https://github.com/XTLS/Xray-core) v25.3.1 |
-| 协议版本 | VLESS v0（协议头 version 字段恒为 0） |
-| 本实现 | `vless` crate v25.3.1 |
+| 参照实现 | [Xray-core](https://github.com/XTLS/Xray-core) |
+| 协议头 | `version` 字段恒为 `0x00` |
+| 本实现 | `vless` crate |
 
 ## 协议帧
 

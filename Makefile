@@ -1,12 +1,12 @@
 .DEFAULT_GOAL := help
 
 CARGO ?= cargo
-CONFIG ?= examples/v0.0.1/basic.json
+CONFIG ?= config.json
 STATUS_LISTEN ?= 127.0.0.1:9090
 PREFIX ?= /usr/local
-VERSION := $(shell grep -m1 'version = ' Cargo.toml | sed 's/.*= *"//;s/".*//')
+BUILD_ID := $(shell grep -m1 'version = ' Cargo.toml | sed 's/.*= *"//;s/".*//')
 
-.PHONY: help fmt check test clippy build build-full release release-full strip clean install uninstall run run-status status status-json version docs-dev docs-build docs-preview docs-install
+.PHONY: help fmt check test clippy build build-full release release-full strip clean install uninstall run run-status status status-json build-info docs-dev docs-build docs-preview docs-install
 
 help:
 	@echo Available targets:
@@ -15,9 +15,9 @@ help:
 	@echo   make test         - cargo test --workspace
 	@echo   make clippy       - cargo clippy --workspace --all-targets
 	@echo   make build        - cargo build
-	@echo   make build-full   - cargo build --features full,status-api
+	@echo   make build-full   - cargo build --features full,status_api
 	@echo   make release      - cargo build --release
-	@echo   make release-full - cargo build --release --features full,status-api (正式版本)
+	@echo   make release-full - cargo build --release --features full,status_api
 	@echo   make strip        - strip release binary (减小文件大小)
 	@echo   make clean        - cargo clean
 	@echo   make install      - install to $(PREFIX)/bin
@@ -26,7 +26,7 @@ help:
 	@echo   make run-status   - run zero with local status endpoint
 	@echo   make status       - print text status for CONFIG=$(CONFIG)
 	@echo   make status-json  - print JSON status for CONFIG=$(CONFIG)
-	@echo   make version     - show version
+	@echo   make build-info  - show build info
 	@echo   make docs-dev    - start VitePress dev server
 	@echo   make docs-build  - build static docs site
 	@echo   make docs-preview- preview built docs site
@@ -48,13 +48,13 @@ build:
 	$(CARGO) build
 
 build-full:
-	$(CARGO) build --features full,status-api
+	$(CARGO) build --features full,status_api
 
 release:
 	$(CARGO) build --release
 
 release-full:
-	$(CARGO) build --release --features full,status-api
+	$(CARGO) build --release --features full,status_api
 
 strip:
 	strip target/release/zero
@@ -80,8 +80,8 @@ status:
 status-json:
 	$(CARGO) run -- status --json $(CONFIG)
 
-version:
-	@echo v$(VERSION)
+build-info:
+	@echo $(BUILD_ID)
 
 # ── Documentation ──────────────────────────────────────────────────────
 

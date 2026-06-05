@@ -1,16 +1,16 @@
 # VMess
 
-> 参照 Xray-core v25.3.1 | Crate: `vmess`
+> 参照 Xray-core | Crate: `vmess`
 
 VMess 是 V2Ray/Xray 项目的原始代理协议，使用 UUID + 时间戳进行身份验证，内置加密传输。
 
-## 版本追踪
+## 协议来源
 
-| 项目 | 版本 |
+| 项目 | 来源 |
 |------|------|
-| 参照实现 | [Xray-core](https://github.com/XTLS/Xray-core) v25.3.1 |
-| 协议版本 | VMess AEAD（已完成对旧版 VMess MD5 的替代） |
-| 本实现 | `vmess` crate v25.3.1（stub，功能正在开发中） |
+| 参照实现 | [Xray-core](https://github.com/XTLS/Xray-core) |
+| 协议形态 | VMess AEAD |
+| 本实现 | `vmess` crate（stub，功能正在开发中） |
 
 ## 功能对齐状态
 
