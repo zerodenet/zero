@@ -42,4 +42,6 @@ pub use segment::{
     build_data_segment, build_session_segment, parse_segment, Segment, MAX_FRAGMENT,
 };
 pub use session::MieruSession;
-pub use udp::{unwrap_udp_associate, wrap_udp_associate};
+pub use udp::{
+    unwrap_udp_associate, wrap_udp_associate, MieruUdpAssociatePacket, MieruUdpAssociatePayload,
+};

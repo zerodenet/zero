@@ -9,6 +9,18 @@ use alloc::vec::Vec;
 
 use zero_core::Error;
 
+/// One raw UDP datagram to wrap for Mieru UDP associate.
+#[derive(Debug, Clone, Copy)]
+pub struct MieruUdpAssociatePacket<'a> {
+    pub payload: &'a [u8],
+}
+
+/// One unwrapped Mieru UDP associate payload.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MieruUdpAssociatePayload {
+    pub payload: Vec<u8>,
+}
+
 /// Wrap a raw UDP datagram for transmission through mieru TCP/UDP proxy.
 ///
 /// Format: 0x00 || data_length(u16 BE) || data || 0xff
@@ -61,5 +73,28 @@ mod tests {
         assert!(unwrap_udp_associate(&[]).is_err());
         assert!(unwrap_udp_associate(&[0x01, 0x00, 0x01, 0x00, 0xff]).is_err());
         assert!(unwrap_udp_associate(&[0x00, 0x00, 0x05, 0x00]).is_err());
+    }
+
+    #[test]
+    fn udp_packet_framing_trait_roundtrips_associate_payload() {
+        use crate::MieruProtocol;
+        use zero_traits::UdpPacketFraming;
+
+        let encoded =
+            <MieruProtocol as UdpPacketFraming<MieruUdpAssociatePacket<'_>>>::encode_udp_packet(
+                &MieruProtocol,
+                &MieruUdpAssociatePacket {
+                    payload: b"mieru udp",
+                },
+            )
+            .expect("encode mieru udp associate payload");
+        let decoded =
+            <MieruProtocol as UdpPacketFraming<MieruUdpAssociatePacket<'_>>>::decode_udp_packet(
+                &MieruProtocol,
+                &encoded,
+            )
+            .expect("decode mieru udp associate payload");
+
+        assert_eq!(decoded.payload, b"mieru udp");
     }
 }

@@ -1,13 +1,19 @@
+use alloc::vec::Vec;
+
+use zero_core::Error;
+#[cfg(feature = "crypto")]
+use zero_traits::TcpSessionProtocol;
 use zero_traits::{
     ProtocolCapabilityDescriptor, ProtocolCapabilityLevel, ProtocolCapabilityState,
-    ProtocolMetadata, ProtocolNetworkCapability, TcpSessionProtocol,
+    ProtocolMetadata, ProtocolNetworkCapability, UdpPacketFraming,
 };
 
 #[cfg(feature = "crypto")]
-use zero_core::Error;
-#[cfg(feature = "crypto")]
 use zero_traits::AsyncSocket;
 
+use crate::{
+    unwrap_udp_associate, wrap_udp_associate, MieruUdpAssociatePacket, MieruUdpAssociatePayload,
+};
 #[cfg(feature = "crypto")]
 use crate::{MieruOutbound, MieruTcpTarget};
 
@@ -33,6 +39,24 @@ impl ProtocolMetadata for MieruProtocol {
             mux: unsupported,
             limitations: &["external_interop_coverage_is_incomplete"],
         }
+    }
+}
+
+impl<'a> UdpPacketFraming<MieruUdpAssociatePacket<'a>> for MieruProtocol {
+    type Error = Error;
+    type Decoded = MieruUdpAssociatePayload;
+
+    fn encode_udp_packet(
+        &self,
+        packet: &MieruUdpAssociatePacket<'a>,
+    ) -> Result<Vec<u8>, Self::Error> {
+        Ok(wrap_udp_associate(packet.payload))
+    }
+
+    fn decode_udp_packet(&self, packet: &[u8]) -> Result<Self::Decoded, Self::Error> {
+        Ok(MieruUdpAssociatePayload {
+            payload: unwrap_udp_associate(packet)?,
+        })
     }
 }
 
