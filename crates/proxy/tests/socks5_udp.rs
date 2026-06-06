@@ -32,6 +32,9 @@ mod relays_udp_through_shadowsocks_outbound;
 #[cfg(all(feature = "socks5", feature = "mieru"))]
 #[path = "socks5_udp/relays_udp_through_socks5_to_mieru_relay_chain.rs"]
 mod relays_udp_through_socks5_to_mieru_relay_chain;
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+#[path = "socks5_udp/relays_udp_through_socks5_to_shadowsocks_relay_chain.rs"]
+mod relays_udp_through_socks5_to_shadowsocks_relay_chain;
 #[cfg(all(feature = "socks5", feature = "trojan"))]
 #[path = "socks5_udp/relays_udp_through_socks5_to_trojan_relay_chain.rs"]
 mod relays_udp_through_socks5_to_trojan_relay_chain;

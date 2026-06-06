@@ -541,19 +541,30 @@ fn proxy_handle_capabilities_use_protocol_inventory() {
             .contains(&"udp_relay_chain_is_not_supported".to_owned()));
     }
 
-    for protocol_name in ["shadowsocks", "hysteria2"] {
-        if let Some(protocol) = capabilities
-            .protocols
-            .iter()
-            .find(|protocol| protocol.protocol == protocol_name)
-        {
-            assert!(protocol
-                .limitations
-                .contains(&"udp_relay_chain_tcp_prefix_is_not_supported".to_owned()));
-            assert!(!protocol
-                .limitations
-                .contains(&"udp_relay_chain_is_not_supported".to_owned()));
-        }
+    if let Some(shadowsocks) = capabilities
+        .protocols
+        .iter()
+        .find(|protocol| protocol.protocol == "shadowsocks")
+    {
+        assert!(shadowsocks
+            .limitations
+            .contains(&"udp_relay_chain_packet_path_limited".to_owned()));
+        assert!(!shadowsocks
+            .limitations
+            .contains(&"udp_relay_chain_is_not_supported".to_owned()));
+    }
+
+    if let Some(hysteria2) = capabilities
+        .protocols
+        .iter()
+        .find(|protocol| protocol.protocol == "hysteria2")
+    {
+        assert!(hysteria2
+            .limitations
+            .contains(&"udp_relay_chain_quic_path_not_supported".to_owned()));
+        assert!(!hysteria2
+            .limitations
+            .contains(&"udp_relay_chain_is_not_supported".to_owned()));
     }
 
     let json = serde_json::to_value(&capabilities).expect("serialize capabilities");
