@@ -16,10 +16,19 @@ mod rejects_blocked_domain_via_route_rule;
 mod relays_tcp_through_authenticated_socks5_upstream;
 #[path = "socks5/relays_tcp_through_fallback_group_when_primary_unreachable.rs"]
 mod relays_tcp_through_fallback_group_when_primary_unreachable;
+#[cfg(all(feature = "socks5", feature = "hysteria2"))]
+#[path = "socks5/relays_tcp_through_hysteria2_outbound.rs"]
+mod relays_tcp_through_hysteria2_outbound;
+#[cfg(all(feature = "socks5", feature = "mieru"))]
+#[path = "socks5/relays_tcp_through_mieru_outbound.rs"]
+mod relays_tcp_through_mieru_outbound;
 #[path = "socks5/relays_tcp_through_nested_group_target.rs"]
 mod relays_tcp_through_nested_group_target;
 #[path = "socks5/relays_tcp_through_selector_group_in_global_mode.rs"]
 mod relays_tcp_through_selector_group_in_global_mode;
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+#[path = "socks5/relays_tcp_through_shadowsocks_outbound.rs"]
+mod relays_tcp_through_shadowsocks_outbound;
 #[path = "socks5/relays_tcp_through_socks5_chained_outbound.rs"]
 mod relays_tcp_through_socks5_chained_outbound;
 #[path = "socks5/relays_tcp_through_socks5_direct_outbound.rs"]
@@ -29,6 +38,9 @@ mod relays_tcp_through_socks5_inbound_with_username_password_auth;
 #[cfg(all(feature = "socks5", feature = "mieru"))]
 #[path = "socks5/relays_tcp_through_socks5_to_mieru_to_socks5_relay_chain.rs"]
 mod relays_tcp_through_socks5_to_mieru_to_socks5_relay_chain;
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+#[path = "socks5/relays_tcp_through_socks5_to_shadowsocks_to_socks5_relay_chain.rs"]
+mod relays_tcp_through_socks5_to_shadowsocks_to_socks5_relay_chain;
 #[path = "socks5/relays_tcp_through_urltest_group_after_probe_selects_direct.rs"]
 mod relays_tcp_through_urltest_group_after_probe_selects_direct;
 #[path = "socks5/relays_tcp_through_urltest_group_with_nested_group_member.rs"]
