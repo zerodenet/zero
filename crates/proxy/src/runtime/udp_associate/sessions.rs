@@ -59,6 +59,7 @@ pub(crate) enum UdpFlowOutbound {
         port: u16,
         password: String,
         cipher: String,
+        packet_path_carrier: Option<UdpPacketPathCarrier>,
     },
     Hysteria2 {
         tag: String,
@@ -85,6 +86,20 @@ pub(crate) enum UdpFlowOutbound {
         password: String,
         relay_chain: bool,
     },
+}
+
+/// Carrier parameters for a UDP packet path relay chain hop.
+///
+/// Stores the connection parameters for the packet path provider (e.g. a
+/// SOCKS5 UDP ASSOCIATE) so that an existing flow can re-dispatch packets
+/// through the same carrier without re-resolving the chain.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UdpPacketPathCarrier {
+    pub(crate) tag: String,
+    pub(crate) server: String,
+    pub(crate) port: u16,
+    pub(crate) username: Option<String>,
+    pub(crate) password: Option<String>,
 }
 
 impl UdpFlowOutbound {

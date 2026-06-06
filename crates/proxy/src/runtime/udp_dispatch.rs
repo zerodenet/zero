@@ -9,6 +9,18 @@
 //! All outbound types: direct, block, socks5, vless, shadowsocks, hysteria2,
 //! trojan, mieru.
 //!
+//! # UDP relay chain model
+//!
+//! The relay chain model is:
+//!
+//! ```text
+//! previous hop provides a packet path (send/recv raw payloads)
+//! next hop encodes its protocol datagram through that path
+//! ```
+//!
+//! Adding new datagram-over-packet-path combinations requires implementing
+//! [`UdpPacketPath`] and [`DatagramCodec`], not creating protocol-pair modules.
+//!
 //! # Usage
 //!
 //! ```ignore
@@ -45,6 +57,8 @@ use zero_platform_tokio::TokioDatagramSocket;
 use zero_traits::UdpPacketFraming;
 
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+use crate::runtime::udp_associate::sessions::UdpPacketPathCarrier;
 use crate::runtime::udp_associate::sessions::{
     CompletedUdpFlow, UdpFlowOutbound, UdpFlowSnapshot, UdpSessionFlows,
 };
@@ -53,6 +67,40 @@ use crate::runtime::vless_udp::{
     establish_vless_udp_upstream_over_stream, VlessUdpOutboundManager, VlessUdpTransport,
 };
 use crate::runtime::Proxy;
+
+// ── Packet path chain abstractions ─────────────────────────────────────
+//
+// These traits define the "previous hop packet path carries next hop
+// datagram" model for UDP relay chains. They live here (not in
+// `zero-traits`) because packet path resolution is a runtime orchestration
+// concern, not a protocol behavior boundary.
+
+/// A packet-oriented transport that carries raw UDP payloads.
+///
+/// Models a carrier that provides send/recv for raw datagrams.
+/// Implementations handle their own transport framing (e.g. SOCKS5 UDP
+/// header); callers provide and receive plain payloads only.
+#[allow(async_fn_in_trait)]
+trait UdpPacketPath: Send + Sync + 'static {
+    /// Send `payload` to `target:port` through this transport.
+    async fn send_to(&self, target: &Address, port: u16, payload: &[u8])
+        -> Result<(), EngineError>;
+
+    /// Receive the next datagram, stripping transport framing.
+    ///
+    /// Returns the number of inner payload bytes written to `buf`.
+    async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError>;
+}
+
+/// Encode/decode UDP datagrams for the inner protocol of a relay chain.
+///
+/// Each protocol that can be the final hop of a datagram-over-packet-path
+/// chain implements this. The codec captures protocol-specific parameters
+/// (cipher, password, etc.) so the manager stays protocol-agnostic.
+trait DatagramCodec: Send + Sync + 'static {
+    fn encode(&self, target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, EngineError>;
+    fn decode(&self, data: &[u8]) -> Option<(Address, u16, Vec<u8>)>;
+}
 
 // Chain response types.
 
@@ -289,6 +337,326 @@ mod ss_manager {
 }
 #[cfg(feature = "shadowsocks")]
 use ss_manager::SsChainManager;
+
+// ── Datagram-over-packet-path chain manager ────────────────────────────
+//
+// Replaces the former protocol-pair-specific carrier manager.
+// Expresses the pattern: "previous hop provides a packet path, next hop's
+// encoded datagram goes through it."
+//
+// Adding new combinations requires implementing `UdpPacketPath` and
+// `DatagramCodec` for the new types, not creating new protocol-pair modules.
+
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+mod packet_path_chain {
+    use std::collections::{HashMap, VecDeque};
+    use std::sync::{Arc, Mutex};
+
+    use tokio::sync::oneshot;
+    use tokio::task::JoinSet;
+    use zero_core::Address;
+    use zero_engine::EngineError;
+    use zero_traits::UdpDatagramFraming;
+
+    use super::{ChainTask, DatagramCodec, FlowFailure, UdpPacketPath};
+    use crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation;
+    use crate::runtime::Proxy;
+
+    type RecvItem = (Address, u16, Vec<u8>);
+
+    // ── Packet path: SOCKS5 UDP ASSOCIATE ──────────────────────────────
+
+    pub(super) struct Socks5PacketPath {
+        association: Arc<ActiveUpstreamSocks5UdpAssociation>,
+    }
+
+    impl UdpPacketPath for Socks5PacketPath {
+        async fn send_to(
+            &self,
+            target: &Address,
+            port: u16,
+            payload: &[u8],
+        ) -> Result<(), EngineError> {
+            self.association.send_packet(target, port, payload).await?;
+            Ok(())
+        }
+
+        async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+            let read = self.association.recv_packet(buf).await?;
+            let packet = socks5::parse_udp_packet(&buf[..read])
+                .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
+            let len = packet.payload.len();
+            buf[..len].copy_from_slice(&packet.payload);
+            Ok(len)
+        }
+    }
+
+    // ── Datagram codec: Shadowsocks ────────────────────────────────────
+
+    struct ShadowsocksDatagramCodec {
+        cipher: shadowsocks::CipherKind,
+        password: String,
+    }
+
+    impl DatagramCodec for ShadowsocksDatagramCodec {
+        fn encode(
+            &self,
+            target: &Address,
+            port: u16,
+            payload: &[u8],
+        ) -> Result<Vec<u8>, EngineError> {
+            use shadowsocks::{ShadowsocksOutbound, ShadowsocksUdpPacketTarget};
+
+            <ShadowsocksOutbound as UdpDatagramFraming<
+                ShadowsocksUdpPacketTarget,
+                shadowsocks::ShadowsocksUdpDecodeContext,
+            >>::encode_udp_datagram(
+                &ShadowsocksOutbound,
+                &ShadowsocksUdpPacketTarget {
+                    target,
+                    port,
+                    payload,
+                    cipher: self.cipher,
+                    password: self.password.as_bytes(),
+                },
+            )
+            .map_err(|e| EngineError::Io(std::io::Error::other(e)))
+        }
+
+        fn decode(&self, data: &[u8]) -> Option<(Address, u16, Vec<u8>)> {
+            use shadowsocks::{ShadowsocksOutbound, ShadowsocksUdpDecodeContext};
+
+            let decoded = <ShadowsocksOutbound as UdpDatagramFraming<
+                shadowsocks::ShadowsocksUdpPacketTarget,
+                ShadowsocksUdpDecodeContext,
+            >>::decode_udp_datagram(
+                &ShadowsocksOutbound,
+                &ShadowsocksUdpDecodeContext {
+                    cipher: self.cipher,
+                    password: self.password.as_bytes(),
+                },
+                data,
+            )
+            .ok()?;
+            Some((decoded.target, decoded.port, decoded.payload))
+        }
+    }
+
+    // ── Manager ────────────────────────────────────────────────────────
+
+    struct Waiter {
+        target: Address,
+        port: u16,
+        tx: oneshot::Sender<RecvItem>,
+    }
+
+    struct Entry {
+        path: Arc<Socks5PacketPath>,
+        waiters: Arc<Mutex<VecDeque<Waiter>>>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    struct PathKey {
+        carrier_tag: String,
+        carrier_server: String,
+        carrier_port: u16,
+        carrier_username: Option<String>,
+        carrier_password: Option<String>,
+        datagram_server: String,
+        datagram_port: u16,
+        datagram_password: String,
+        datagram_cipher: String,
+    }
+
+    pub(super) struct PacketPathManager {
+        upstreams: HashMap<PathKey, Entry>,
+    }
+
+    /// Resolved parameters for a datagram-over-packet-path relay chain.
+    ///
+    /// Produced by [`super::resolve_udp_packet_path_chain`] from a resolved
+    /// outbound chain. Contains both the carrier (packet path) parameters and
+    /// the inner datagram protocol parameters.
+    pub(super) struct PacketPathChainParams<'a> {
+        pub(super) datagram_tag: &'a str,
+        pub(super) carrier_tag: &'a str,
+        pub(super) carrier_server: &'a str,
+        pub(super) carrier_port: u16,
+        pub(super) carrier_username: Option<&'a str>,
+        pub(super) carrier_password: Option<&'a str>,
+        pub(super) datagram_server: &'a str,
+        pub(super) datagram_port: u16,
+        pub(super) datagram_password: &'a str,
+        pub(super) datagram_cipher: &'a str,
+    }
+
+    impl PacketPathManager {
+        pub(super) fn new() -> Self {
+            Self {
+                upstreams: HashMap::new(),
+            }
+        }
+
+        pub(super) async fn send(
+            &mut self,
+            chain_tasks: &mut JoinSet<ChainTask>,
+            session_id: u64,
+            proxy: &Proxy,
+            params: &PacketPathChainParams<'_>,
+            udp_target: &Address,
+            udp_target_port: u16,
+            payload: &[u8],
+        ) -> Result<usize, FlowFailure> {
+            let cipher_kind = shadowsocks::CipherKind::from_str(params.datagram_cipher)
+                .ok_or_else(|| FlowFailure {
+                    stage: "packet_path_cipher",
+                    error: EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("unknown datagram cipher: {}", params.datagram_cipher),
+                    )),
+                    upstream: Some((params.datagram_server.to_owned(), params.datagram_port)),
+                })?;
+
+            let entry = self
+                .ensure_entry(proxy, params, cipher_kind)
+                .await
+                .map_err(|error| FlowFailure {
+                    stage: "packet_path_establish",
+                    error,
+                    upstream: Some((params.carrier_server.to_owned(), params.carrier_port)),
+                })?;
+
+            let codec = ShadowsocksDatagramCodec {
+                cipher: cipher_kind,
+                password: params.datagram_password.to_owned(),
+            };
+            let packet = codec
+                .encode(udp_target, udp_target_port, payload)
+                .map_err(|error| FlowFailure {
+                    stage: "packet_path_encode",
+                    error: EngineError::Io(std::io::Error::other(error)),
+                    upstream: Some((params.datagram_server.to_owned(), params.datagram_port)),
+                })?;
+
+            let (response_tx, response_rx) = oneshot::channel();
+            entry
+                .waiters
+                .lock()
+                .expect("packet path waiters lock poisoned")
+                .push_back(Waiter {
+                    target: udp_target.clone(),
+                    port: udp_target_port,
+                    tx: response_tx,
+                });
+
+            let datagram_target = Address::Domain(params.datagram_server.to_owned());
+            if let Err(error) = entry
+                .path
+                .send_to(&datagram_target, params.datagram_port, &packet)
+                .await
+            {
+                remove_waiter(&entry.waiters, udp_target, udp_target_port);
+                return Err(FlowFailure {
+                    stage: "packet_path_send",
+                    error,
+                    upstream: Some((params.datagram_server.to_owned(), params.datagram_port)),
+                });
+            }
+
+            chain_tasks.spawn(async move {
+                match response_rx.await {
+                    Ok((target, port, payload)) => Ok((target, port, payload, Some(session_id))),
+                    Err(_) => Err(EngineError::Io(std::io::Error::other(
+                        "packet path upstream closed",
+                    ))),
+                }
+            });
+
+            Ok(payload.len())
+        }
+
+        async fn ensure_entry(
+            &mut self,
+            proxy: &Proxy,
+            params: &PacketPathChainParams<'_>,
+            cipher_kind: shadowsocks::CipherKind,
+        ) -> Result<&Entry, EngineError> {
+            let key = PathKey {
+                carrier_tag: params.carrier_tag.to_owned(),
+                carrier_server: params.carrier_server.to_owned(),
+                carrier_port: params.carrier_port,
+                carrier_username: params.carrier_username.map(ToOwned::to_owned),
+                carrier_password: params.carrier_password.map(ToOwned::to_owned),
+                datagram_server: params.datagram_server.to_owned(),
+                datagram_port: params.datagram_port,
+                datagram_password: params.datagram_password.to_owned(),
+                datagram_cipher: params.datagram_cipher.to_owned(),
+            };
+
+            if !self.upstreams.contains_key(&key) {
+                let association = Arc::new(
+                    ActiveUpstreamSocks5UdpAssociation::establish(
+                        proxy,
+                        params.carrier_tag,
+                        params.carrier_server,
+                        params.carrier_port,
+                        params.carrier_username.zip(params.carrier_password),
+                        0,
+                    )
+                    .await?,
+                );
+                let path = Arc::new(Socks5PacketPath { association });
+                let waiters = Arc::new(Mutex::new(VecDeque::new()));
+                let codec: Arc<dyn DatagramCodec> = Arc::new(ShadowsocksDatagramCodec {
+                    cipher: cipher_kind,
+                    password: params.datagram_password.to_owned(),
+                });
+                tokio::spawn(recv_loop(path.clone(), waiters.clone(), codec));
+                self.upstreams.insert(key.clone(), Entry { path, waiters });
+            }
+
+            Ok(self
+                .upstreams
+                .get(&key)
+                .expect("packet path entry inserted"))
+        }
+    }
+
+    async fn recv_loop(
+        path: Arc<Socks5PacketPath>,
+        waiters: Arc<Mutex<VecDeque<Waiter>>>,
+        codec: Arc<dyn DatagramCodec>,
+    ) {
+        let mut buf = vec![0u8; 64 * 1024];
+        loop {
+            let read = match path.recv_from(&mut buf).await {
+                Ok(read) => read,
+                Err(_) => break,
+            };
+            let decoded = match codec.decode(&buf[..read]) {
+                Some(d) => d,
+                None => continue,
+            };
+            if let Some(waiter) = remove_waiter(&waiters, &decoded.0, decoded.1) {
+                let _ = waiter.tx.send(decoded);
+            }
+        }
+    }
+
+    fn remove_waiter(
+        waiters: &Mutex<VecDeque<Waiter>>,
+        target: &Address,
+        port: u16,
+    ) -> Option<Waiter> {
+        let mut waiters = waiters.lock().expect("packet path waiters lock poisoned");
+        let index = waiters
+            .iter()
+            .position(|waiter| waiter.target == *target && waiter.port == port)?;
+        waiters.remove(index)
+    }
+}
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+use packet_path_chain::{PacketPathChainParams, PacketPathManager};
 
 // Trojan chain manager.
 
@@ -726,12 +1094,13 @@ mod mieru_manager {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use mieru::{unwrap_udp_associate, wrap_udp_associate, MieruOutbound};
+    use mieru::{MieruOutbound, MieruProtocol, MieruUdpAssociatePacket};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::sync::{broadcast, mpsc, Mutex};
     use tokio::task::JoinSet;
     use zero_core::{Address, Session};
     use zero_engine::EngineError;
+    use zero_traits::UdpPacketFraming;
 
     use super::{ChainTask, FlowFailure};
     use crate::runtime::Proxy;
@@ -950,8 +1319,12 @@ mod mieru_manager {
                             Ok((segment, consumed)) => {
                                 raw.drain(..consumed);
                                 if !segment.payload.is_empty() {
-                                    if let Ok(unwrapped) = unwrap_udp_associate(&segment.payload) {
-                                        if let Ok(packet) = socks5::parse_udp_packet(&unwrapped) {
+                                    if let Ok(unwrapped) =
+                                        Self::decode_associate_packet(&segment.payload)
+                                    {
+                                        if let Ok(packet) =
+                                            socks5::parse_udp_packet(&unwrapped.payload)
+                                        {
                                             if recv_tx2
                                                 .send((packet.target, packet.port, packet.payload))
                                                 .is_err()
@@ -996,7 +1369,25 @@ mod mieru_manager {
         ) -> Result<Vec<u8>, EngineError> {
             let packet = socks5::build_udp_packet(target, target_port, payload)
                 .map_err(EngineError::from)?;
-            Ok(wrap_udp_associate(&packet))
+            Self::encode_associate_packet(&packet)
+        }
+
+        fn encode_associate_packet(payload: &[u8]) -> Result<Vec<u8>, EngineError> {
+            <MieruProtocol as UdpPacketFraming<MieruUdpAssociatePacket<'_>>>::encode_udp_packet(
+                &MieruProtocol,
+                &MieruUdpAssociatePacket { payload },
+            )
+            .map_err(EngineError::from)
+        }
+
+        fn decode_associate_packet(
+            payload: &[u8],
+        ) -> Result<mieru::MieruUdpAssociatePayload, EngineError> {
+            <MieruProtocol as UdpPacketFraming<MieruUdpAssociatePacket<'_>>>::decode_udp_packet(
+                &MieruProtocol,
+                payload,
+            )
+            .map_err(EngineError::from)
         }
     }
 }
@@ -1071,11 +1462,12 @@ mod h2_manager {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use hysteria2::{build_udp_datagram, parse_udp_datagram};
+    use hysteria2::{Hysteria2Outbound, Hysteria2UdpPacket, Hysteria2UdpPacketTarget};
     use tokio::sync::broadcast;
     use tokio::task::JoinSet;
     use zero_core::Address;
     use zero_engine::EngineError;
+    use zero_traits::UdpDatagramFraming;
 
     use super::{ChainTask, FlowFailure};
     use crate::runtime::Proxy;
@@ -1116,8 +1508,12 @@ mod h2_manager {
 
             // Cache hit
             if let Some(entry) = self.upstreams.get(&key) {
-                let dg = build_udp_datagram(0, 0, target, target_port, payload)
-                    .expect("h2 build datagram");
+                let dg =
+                    Self::packet(target, target_port, payload).map_err(|error| FlowFailure {
+                        stage: "h2_udp_packet",
+                        error,
+                        upstream: Some((server.to_owned(), port)),
+                    })?;
                 let _ = entry.send_tx.send(dg).await;
                 return Ok(sent);
             }
@@ -1177,7 +1573,7 @@ mod h2_manager {
             let conn_send = conn.clone();
             tokio::spawn(async move {
                 // Send initial payload first.
-                if let Ok(dg) = build_udp_datagram(0, 0, &target_owned, port_owned, &init_payload) {
+                if let Ok(dg) = Self::packet(&target_owned, port_owned, &init_payload) {
                     if conn_send.send_datagram(dg.into()).is_err() {
                         return;
                     }
@@ -1196,7 +1592,7 @@ mod h2_manager {
                 loop {
                     match conn_recv.read_datagram().await {
                         Ok(data) => {
-                            if let Ok(pkt) = parse_udp_datagram(&data) {
+                            if let Ok(pkt) = Self::decode_packet(&data) {
                                 if recv_tx2.send((pkt.target, pkt.port, pkt.payload)).is_err() {
                                     break;
                                 }
@@ -1217,6 +1613,33 @@ mod h2_manager {
             });
 
             Ok(send_tx)
+        }
+
+        fn packet(
+            target: &Address,
+            target_port: u16,
+            payload: &[u8],
+        ) -> Result<Vec<u8>, EngineError> {
+            <Hysteria2Outbound as UdpDatagramFraming<Hysteria2UdpPacketTarget<'_>, ()>>::encode_udp_datagram(
+                &Hysteria2Outbound,
+                &Hysteria2UdpPacketTarget {
+                    session_id: 0,
+                    packet_id: 0,
+                    target,
+                    port: target_port,
+                    payload,
+                },
+            )
+            .map_err(EngineError::from)
+        }
+
+        fn decode_packet(payload: &[u8]) -> Result<Hysteria2UdpPacket, EngineError> {
+            <Hysteria2Outbound as UdpDatagramFraming<Hysteria2UdpPacketTarget<'_>, ()>>::decode_udp_datagram(
+                &Hysteria2Outbound,
+                &(),
+                payload,
+            )
+            .map_err(EngineError::from)
         }
     }
 }
@@ -1278,6 +1701,45 @@ enum UdpCandidate<'a> {
     Relay(Vec<ResolvedLeafOutbound<'a>>),
 }
 
+/// Resolve a relay chain into packet-path + datagram parameters.
+///
+/// Returns `Some` when the chain matches the "packet path carrier → datagram
+/// protocol" pattern. Currently recognises `[SOCKS5, Shadowsocks]`. Adding
+/// new combinations only requires extending this function and implementing
+/// [`UdpPacketPath`] + [`DatagramCodec`] — no new protocol-pair modules.
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+fn resolve_udp_packet_path_chain<'a>(
+    chain: &[ResolvedLeafOutbound<'a>],
+) -> Option<PacketPathChainParams<'a>> {
+    match chain {
+        [ResolvedLeafOutbound::Socks5 {
+            tag: carrier_tag,
+            server: carrier_server,
+            port: carrier_port,
+            username: carrier_username,
+            password: carrier_password,
+        }, ResolvedLeafOutbound::Shadowsocks {
+            tag: datagram_tag,
+            server: datagram_server,
+            port: datagram_port,
+            password: datagram_password,
+            cipher: datagram_cipher,
+        }] => Some(PacketPathChainParams {
+            datagram_tag,
+            carrier_tag,
+            carrier_server,
+            carrier_port: *carrier_port,
+            carrier_username: *carrier_username,
+            carrier_password: *carrier_password,
+            datagram_server,
+            datagram_port: *datagram_port,
+            datagram_password,
+            datagram_cipher,
+        }),
+        _ => None,
+    }
+}
+
 /// Failure details for a flow start attempt.
 struct FlowFailure {
     stage: &'static str,
@@ -1313,6 +1775,10 @@ pub(crate) struct UdpDispatch {
     /// Per-dispatcher SS chain manager. Caches upstream sockets.
     #[cfg(feature = "shadowsocks")]
     ss_manager: SsChainManager,
+    /// Per-dispatcher datagram-over-packet-path manager for UDP relay chains.
+    /// Caches packet path carrier connections.
+    #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+    packet_path_manager: PacketPathManager,
     /// Per-dispatcher Trojan chain manager. Caches TLS upstream streams.
     trojan_manager: TrojanChainManager,
     /// Per-dispatcher Mieru chain manager. Caches encrypted upstream streams.
@@ -1336,6 +1802,8 @@ impl UdpDispatch {
             chain_tasks: JoinSet::new(),
             #[cfg(feature = "shadowsocks")]
             ss_manager: SsChainManager::new(),
+            #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+            packet_path_manager: PacketPathManager::new(),
             trojan_manager: TrojanChainManager::new(),
             mieru_manager: MieruChainManager::new(),
             h2_manager: H2ChainManager::new(),
@@ -1356,6 +1824,8 @@ impl UdpDispatch {
             chain_tasks: JoinSet::new(),
             #[cfg(feature = "shadowsocks")]
             ss_manager: SsChainManager::new(),
+            #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+            packet_path_manager: PacketPathManager::new(),
             trojan_manager: TrojanChainManager::new(),
             mieru_manager: MieruChainManager::new(),
             h2_manager: H2ChainManager::new(),
@@ -1706,8 +2176,50 @@ impl UdpDispatch {
                 port,
                 password,
                 cipher,
+                packet_path_carrier,
             } => {
-                match self
+                #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+                let result = if let Some(carrier) = packet_path_carrier {
+                    self.packet_path_manager
+                        .send(
+                            &mut self.chain_tasks,
+                            flow.session.id,
+                            proxy,
+                            &PacketPathChainParams {
+                                datagram_tag: "",
+                                carrier_tag: carrier.tag.as_str(),
+                                carrier_server: carrier.server.as_str(),
+                                carrier_port: carrier.port,
+                                carrier_username: carrier.username.as_deref(),
+                                carrier_password: carrier.password.as_deref(),
+                                datagram_server: server.as_str(),
+                                datagram_port: *port,
+                                datagram_password: password.as_str(),
+                                datagram_cipher: cipher.as_str(),
+                            },
+                            &flow.session.target,
+                            flow.session.port,
+                            payload,
+                        )
+                        .await
+                } else {
+                    self.ss_manager
+                        .send(
+                            &mut self.chain_tasks,
+                            flow.session.id,
+                            server.as_str(),
+                            *port,
+                            password.as_str(),
+                            cipher.as_str(),
+                            &flow.session.target,
+                            flow.session.port,
+                            payload,
+                        )
+                        .await
+                };
+
+                #[cfg(all(not(feature = "socks5"), feature = "shadowsocks"))]
+                let result = self
                     .ss_manager
                     .send(
                         &mut self.chain_tasks,
@@ -1720,8 +2232,9 @@ impl UdpDispatch {
                         flow.session.port,
                         payload,
                     )
-                    .await
-                {
+                    .await;
+
+                match result {
                     Ok(sent) => {
                         proxy.record_session_outbound_tx(flow.session.id, sent as u64);
                     }
@@ -2111,6 +2624,7 @@ impl UdpDispatch {
                             port,
                             password: password.to_owned(),
                             cipher: cipher.to_owned(),
+                            packet_path_carrier: None,
                         },
                         tx_bytes: sent as u64,
                     })
@@ -2259,6 +2773,42 @@ impl UdpDispatch {
         session: &Session,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
+        // Datagram-over-packet-path: previous hop provides a packet path,
+        // next hop encodes its datagram through it.
+        #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+        if let Some(params) = resolve_udp_packet_path_chain(&chain) {
+            let sent = self
+                .packet_path_manager
+                .send(
+                    &mut self.chain_tasks,
+                    session.id,
+                    proxy,
+                    &params,
+                    &session.target,
+                    session.port,
+                    payload,
+                )
+                .await?;
+
+            return Ok(FlowStartResult::Flow {
+                outbound: UdpFlowOutbound::Shadowsocks {
+                    tag: params.datagram_tag.to_owned(),
+                    server: params.datagram_server.to_owned(),
+                    port: params.datagram_port,
+                    password: params.datagram_password.to_owned(),
+                    cipher: params.datagram_cipher.to_owned(),
+                    packet_path_carrier: Some(UdpPacketPathCarrier {
+                        tag: params.carrier_tag.to_owned(),
+                        server: params.carrier_server.to_owned(),
+                        port: params.carrier_port,
+                        username: params.carrier_username.map(ToOwned::to_owned),
+                        password: params.carrier_password.map(ToOwned::to_owned),
+                    }),
+                },
+                tx_bytes: sent as u64,
+            });
+        }
+
         let (stream, final_hop) = proxy
             .establish_relay_prefix(chain)
             .await
