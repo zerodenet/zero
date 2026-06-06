@@ -532,6 +532,13 @@ impl UdpDispatch {
     }
 
     /// Forward a packet to an existing flow.
+    /// Forward a packet to an existing flow.
+    ///
+    /// Dispatches by path category:
+    /// - **Direct** — raw socket send
+    /// - **Relay** — SOCKS5 UDP ASSOCIATE
+    /// - **Datagram** — Shadowsocks / Hysteria2 encode + manager send
+    /// - **StreamPacket** — Trojan / Mieru stream packet send
     async fn forward_existing(
         &mut self,
         proxy: &Proxy,
@@ -542,6 +549,7 @@ impl UdpDispatch {
         proxy.record_session_inbound_rx(flow.session.id, payload.len() as u64);
 
         match &flow.outbound {
+            // ── Direct path ─────────────────────────────────────────
             UdpFlowOutbound::Direct { target_addr, .. } => {
                 match send_direct_udp_packet(&self.direct_socket, *target_addr, payload).await {
                     Ok(sent) => {
@@ -553,6 +561,8 @@ impl UdpDispatch {
                     }
                 }
             }
+
+            // ── Relay path ──────────────────────────────────────────
             UdpFlowOutbound::Socks5 {
                 tag,
                 server,
@@ -580,6 +590,8 @@ impl UdpDispatch {
                     return Err(error);
                 }
             },
+
+            // ── Datagram path ──────────────────────────────────────
             #[cfg(feature = "shadowsocks")]
             UdpFlowOutbound::Shadowsocks {
                 tag: _,
@@ -645,20 +657,7 @@ impl UdpDispatch {
                     )
                     .await;
 
-                match result {
-                    Ok(sent) => {
-                        proxy.record_session_outbound_tx(flow.session.id, sent as u64);
-                    }
-                    Err(failure) => {
-                        self.fail_flow_with_msg(
-                            &flow,
-                            started_at,
-                            failure.stage,
-                            &failure.error.to_string(),
-                        );
-                        return Err(failure.error);
-                    }
-                }
+                self.record_or_fail(flow, proxy, started_at, result)?;
             }
             #[cfg(not(feature = "shadowsocks"))]
             UdpFlowOutbound::Shadowsocks { .. } => {
@@ -675,7 +674,7 @@ impl UdpDispatch {
                 password,
                 client_fingerprint,
             } => {
-                match self
+                let result = self
                     .h2_manager
                     .send(
                         &mut self.chain_tasks,
@@ -689,21 +688,8 @@ impl UdpDispatch {
                         flow.session.port,
                         payload,
                     )
-                    .await
-                {
-                    Ok(sent) => {
-                        proxy.record_session_outbound_tx(flow.session.id, sent as u64);
-                    }
-                    Err(failure) => {
-                        self.fail_flow_with_msg(
-                            &flow,
-                            started_at,
-                            failure.stage,
-                            &failure.error.to_string(),
-                        );
-                        return Err(failure.error);
-                    }
-                }
+                    .await;
+                self.record_or_fail(flow, proxy, started_at, result)?;
             }
             #[cfg(not(feature = "hysteria2"))]
             UdpFlowOutbound::Hysteria2 { .. } => {
@@ -712,6 +698,8 @@ impl UdpDispatch {
                     "Hysteria2 UDP outbound requires feature `hysteria2`",
                 )));
             }
+
+            // ── Stream packet path ────────────────────────────────
             #[cfg(feature = "trojan")]
             UdpFlowOutbound::Trojan {
                 tag: _,
@@ -723,7 +711,7 @@ impl UdpDispatch {
                 client_fingerprint,
                 relay_chain,
             } => {
-                match self
+                let result = self
                     .trojan_manager
                     .send(
                         &mut self.chain_tasks,
@@ -741,21 +729,8 @@ impl UdpDispatch {
                         flow.session.port,
                         payload,
                     )
-                    .await
-                {
-                    Ok(sent) => {
-                        proxy.record_session_outbound_tx(flow.session.id, sent as u64);
-                    }
-                    Err(failure) => {
-                        self.fail_flow_with_msg(
-                            &flow,
-                            started_at,
-                            failure.stage,
-                            &failure.error.to_string(),
-                        );
-                        return Err(failure.error);
-                    }
-                }
+                    .await;
+                self.record_or_fail(flow, proxy, started_at, result)?;
             }
             #[cfg(not(feature = "trojan"))]
             UdpFlowOutbound::Trojan { .. } => {
@@ -773,7 +748,7 @@ impl UdpDispatch {
                 password,
                 relay_chain,
             } => {
-                match self
+                let result = self
                     .mieru_manager
                     .send(
                         &mut self.chain_tasks,
@@ -789,21 +764,8 @@ impl UdpDispatch {
                         flow.session.port,
                         payload,
                     )
-                    .await
-                {
-                    Ok(sent) => {
-                        proxy.record_session_outbound_tx(flow.session.id, sent as u64);
-                    }
-                    Err(failure) => {
-                        self.fail_flow_with_msg(
-                            &flow,
-                            started_at,
-                            failure.stage,
-                            &failure.error.to_string(),
-                        );
-                        return Err(failure.error);
-                    }
-                }
+                    .await;
+                self.record_or_fail(flow, proxy, started_at, result)?;
             }
             #[cfg(not(feature = "mieru"))]
             UdpFlowOutbound::Mieru { .. } => {
@@ -1498,5 +1460,31 @@ impl UdpDispatch {
     ) {
         let error = EngineError::Io(std::io::Error::other(msg.to_string()));
         self.fail_flow(flow, started_at, stage, &error);
+    }
+
+    /// Record outbound bytes or fail the flow, for the common
+    /// manager-based dispatch pattern in [`forward_existing()`].
+    fn record_or_fail(
+        &mut self,
+        flow: &UdpFlowSnapshot,
+        proxy: &Proxy,
+        started_at: Instant,
+        result: Result<usize, FlowFailure>,
+    ) -> Result<(), EngineError> {
+        match result {
+            Ok(sent) => {
+                proxy.record_session_outbound_tx(flow.session.id, sent as u64);
+                Ok(())
+            }
+            Err(failure) => {
+                self.fail_flow_with_msg(
+                    flow,
+                    started_at,
+                    failure.stage,
+                    &failure.error.to_string(),
+                );
+                Err(failure.error)
+            }
+        }
     }
 }

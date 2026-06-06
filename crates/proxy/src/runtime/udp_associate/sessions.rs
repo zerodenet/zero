@@ -39,12 +39,44 @@ impl UdpUpstreamResponseKey {
     }
 }
 
+/// UDP outbound path category.
+///
+/// Classifies every `UdpFlowOutbound` variant into one of four transport
+/// categories used by the UDP dispatch runtime:
+///
+/// | Category | Variants | Transport |
+/// |----------|----------|-----------|
+/// | `Direct` | `Direct` | Raw socket, no upstream manager |
+/// | `Relay` | `Socks5` | UDP ASSOCIATE relay through control stream |
+/// | `StreamPacket` | `Trojan`, `Mieru` | UDP packets over established stream |
+/// | `Datagram` | `Shadowsocks`, `Hysteria2` | Datagram encode/decode over socket or QUIC |
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UdpPathCategory {
+    Direct,
+    Relay,
+    StreamPacket,
+    Datagram,
+}
+
+/// Outbound type tracked per UDP flow.
+///
+/// Variant layout follows the path category model:
+///
+/// - **Direct path** — raw socket send, no upstream manager.
+/// - **Relay path** — `Socks5` UDP ASSOCIATE relay through a control stream.
+/// - **Stream packet path** — `Trojan`, `Mieru`: UDP packets sent over an
+///   already established encrypted stream.
+/// - **Datagram path** — `Shadowsocks`, `Hysteria2`: protocol datagrams
+///   encoded and sent over a raw UDP socket or QUIC connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UdpFlowOutbound {
+    // ── Direct path ─────────────────────────────────────────────────────
     Direct {
         tag: String,
         target_addr: SocketAddr,
     },
+
+    // ── Relay path ─────────────────────────────────────────────────────
     Socks5 {
         tag: String,
         server: String,
@@ -52,6 +84,8 @@ pub(crate) enum UdpFlowOutbound {
         username: Option<String>,
         password: Option<String>,
     },
+
+    // ── Datagram path ──────────────────────────────────────────────────
     #[allow(dead_code)]
     Shadowsocks {
         tag: String,
@@ -68,6 +102,8 @@ pub(crate) enum UdpFlowOutbound {
         password: String,
         client_fingerprint: Option<String>,
     },
+
+    // ── Stream packet path ─────────────────────────────────────────────
     Trojan {
         tag: String,
         server: String,
@@ -111,6 +147,16 @@ impl UdpFlowOutbound {
             | Self::Hysteria2 { tag, .. }
             | Self::Trojan { tag, .. }
             | Self::Mieru { tag, .. } => tag,
+        }
+    }
+
+    /// Return the path category for this outbound.
+    pub(crate) fn path_category(&self) -> UdpPathCategory {
+        match self {
+            Self::Direct { .. } => UdpPathCategory::Direct,
+            Self::Socks5 { .. } => UdpPathCategory::Relay,
+            Self::Shadowsocks { .. } | Self::Hysteria2 { .. } => UdpPathCategory::Datagram,
+            Self::Trojan { .. } | Self::Mieru { .. } => UdpPathCategory::StreamPacket,
         }
     }
 
