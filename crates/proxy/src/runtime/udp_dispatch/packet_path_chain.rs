@@ -19,7 +19,9 @@ pub(super) struct Socks5PacketPath {
     association: Arc<ActiveUpstreamSocks5UdpAssociation>,
 }
 
-impl UdpPacketPath for Socks5PacketPath {
+impl UdpPacketPath<Address> for Socks5PacketPath {
+    type Error = EngineError;
+
     async fn send_to(
         &self,
         target: &Address,
@@ -47,7 +49,9 @@ struct ShadowsocksDatagramCodec {
     password: String,
 }
 
-impl DatagramCodec for ShadowsocksDatagramCodec {
+impl DatagramCodec<Address> for ShadowsocksDatagramCodec {
+    type Error = EngineError;
+
     fn encode(&self, target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, EngineError> {
         use shadowsocks::{ShadowsocksOutbound, ShadowsocksUdpPacketTarget};
 
@@ -253,10 +257,11 @@ impl PacketPathManager {
             );
             let path = Arc::new(Socks5PacketPath { association });
             let waiters = Arc::new(Mutex::new(VecDeque::new()));
-            let codec: Arc<dyn DatagramCodec> = Arc::new(ShadowsocksDatagramCodec {
-                cipher: cipher_kind,
-                password: params.datagram_password.to_owned(),
-            });
+            let codec: Arc<dyn DatagramCodec<Address, Error = EngineError>> =
+                Arc::new(ShadowsocksDatagramCodec {
+                    cipher: cipher_kind,
+                    password: params.datagram_password.to_owned(),
+                });
             tokio::spawn(recv_loop(path.clone(), waiters.clone(), codec));
             self.upstreams.insert(key.clone(), Entry { path, waiters });
         }
@@ -271,7 +276,7 @@ impl PacketPathManager {
 async fn recv_loop(
     path: Arc<Socks5PacketPath>,
     waiters: Arc<Mutex<VecDeque<Waiter>>>,
-    codec: Arc<dyn DatagramCodec>,
+    codec: Arc<dyn DatagramCodec<Address, Error = EngineError>>,
 ) {
     let mut buf = vec![0u8; 64 * 1024];
     loop {

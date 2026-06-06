@@ -7,10 +7,10 @@ pub mod protocol;
 
 use alloc::vec::Vec;
 pub use protocol::{
-    DeferredTcpTunnelProtocol, ProtocolCapabilityDescriptor, ProtocolCapabilityLevel,
-    ProtocolCapabilityState, ProtocolMetadata, ProtocolNetworkCapability, TcpSessionProtocol,
-    TcpTunnelProtocol, UdpDatagramFraming, UdpPacketFraming, UdpPacketStreamFraming,
-    UdpPacketTunnelProtocol, UdpRelayProtocol,
+    DatagramCodec, DeferredTcpTunnelProtocol, ProtocolCapabilityDescriptor,
+    ProtocolCapabilityLevel, ProtocolCapabilityState, ProtocolMetadata, ProtocolNetworkCapability,
+    TcpSessionProtocol, TcpTunnelProtocol, UdpDatagramFraming, UdpPacketFraming, UdpPacketPath,
+    UdpPacketStreamFraming, UdpPacketTunnelProtocol, UdpRelayProtocol,
 };
 
 // Address types

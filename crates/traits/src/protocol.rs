@@ -252,6 +252,43 @@ pub trait UdpDatagramFraming<Packet: ?Sized, DecodeContext: ?Sized>: Send + Sync
     ) -> Result<Self::Decoded, Self::Error>;
 }
 
+/// A packet-oriented transport that carries raw UDP payloads for relay chains.
+///
+/// Models a carrier that provides send/recv for raw datagrams.
+/// Implementations handle their own transport framing (e.g. SOCKS5 UDP
+/// header); callers provide and receive plain payloads only.
+///
+/// Adding new packet path carriers only requires implementing this trait,
+/// not creating protocol-pair-specific modules in the proxy runtime.
+#[allow(async_fn_in_trait)]
+pub trait UdpPacketPath<Target: ?Sized>: Send + Sync + 'static {
+    type Error;
+
+    /// Send `payload` to `target:port` through this transport.
+    async fn send_to(&self, target: &Target, port: u16, payload: &[u8]) -> Result<(), Self::Error>;
+
+    /// Receive the next datagram, stripping transport framing.
+    ///
+    /// Returns the number of inner payload bytes written to `buf`.
+    async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+}
+
+/// Encode/decode UDP datagrams for the inner protocol of a relay chain.
+///
+/// Each protocol that can be the final hop of a datagram-over-packet-path
+/// chain implements this. The codec captures protocol-specific parameters
+/// (cipher, password, etc.) so the manager stays protocol-agnostic.
+///
+/// Adding new inner datagram protocols only requires implementing this trait,
+/// not creating protocol-pair-specific modules in the proxy runtime.
+pub trait DatagramCodec<Target>: Send + Sync + 'static {
+    type Error;
+
+    fn encode(&self, target: &Target, port: u16, payload: &[u8]) -> Result<Vec<u8>, Self::Error>;
+
+    fn decode(&self, data: &[u8]) -> Option<(Target, u16, Vec<u8>)>;
+}
+
 /// Protocol TCP outbound behavior that returns session state.
 ///
 /// For protocols whose handshake produces stream or session state (e.g.
