@@ -5,6 +5,16 @@ use alloc::vec::Vec;
 
 use zero_core::{Address, Error};
 
+/// One plaintext UDP payload to encode into a Hysteria2 UDP datagram.
+#[derive(Debug, Clone, Copy)]
+pub struct Hysteria2UdpPacketTarget<'a> {
+    pub session_id: u16,
+    pub packet_id: u16,
+    pub target: &'a Address,
+    pub port: u16,
+    pub payload: &'a [u8],
+}
+
 /// Parsed Hysteria2 UDP datagram.
 #[derive(Debug, Clone)]
 pub struct Hysteria2UdpPacket {
@@ -116,5 +126,39 @@ mod tests {
         let datagram = build_udp_datagram(0, 0, &addr, 53, b"dns").unwrap();
         let parsed = parse_udp_datagram(&datagram).unwrap();
         assert_eq!(parsed.target, addr);
+    }
+
+    #[test]
+    fn udp_datagram_framing_trait_roundtrips_packet() {
+        use crate::Hysteria2Outbound;
+        use zero_traits::UdpDatagramFraming;
+
+        let target = Address::Domain("example.com".into());
+        let datagram = <Hysteria2Outbound as UdpDatagramFraming<
+            Hysteria2UdpPacketTarget<'_>,
+            (),
+        >>::encode_udp_datagram(
+            &Hysteria2Outbound,
+            &Hysteria2UdpPacketTarget {
+                session_id: 7,
+                packet_id: 9,
+                target: &target,
+                port: 8443,
+                payload: b"h2",
+            },
+        )
+        .expect("encode hysteria2 udp datagram");
+
+        let decoded = <Hysteria2Outbound as UdpDatagramFraming<
+            Hysteria2UdpPacketTarget<'_>,
+            (),
+        >>::decode_udp_datagram(&Hysteria2Outbound, &(), &datagram)
+        .expect("decode hysteria2 udp datagram");
+
+        assert_eq!(decoded.session_id, 7);
+        assert_eq!(decoded.packet_id, 9);
+        assert_eq!(decoded.target, target);
+        assert_eq!(decoded.port, 8443);
+        assert_eq!(decoded.payload, b"h2");
     }
 }

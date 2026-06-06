@@ -20,4 +20,6 @@ pub use shared::{
 };
 #[cfg(feature = "crypto")]
 pub use shared::{derive_salt, sign_hmac, verify_hmac};
-pub use udp::{build_udp_datagram, parse_udp_datagram, Hysteria2UdpPacket};
+pub use udp::{
+    build_udp_datagram, parse_udp_datagram, Hysteria2UdpPacket, Hysteria2UdpPacketTarget,
+};

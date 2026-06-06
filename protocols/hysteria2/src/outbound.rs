@@ -1,8 +1,11 @@
 // Hysteria2 outbound protocol — outbound.rs
 
+use alloc::vec::Vec;
+
 use crate::shared::build_tcp_connect_header;
+use crate::{parse_udp_datagram, Hysteria2UdpPacket, Hysteria2UdpPacketTarget};
 use zero_core::{Error, ProtocolType, Session};
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, UdpDatagramFraming};
 
 /// Hysteria2 outbound handler — sends auth and opens streams.
 #[derive(Debug, Default, Clone, Copy)]
@@ -66,5 +69,31 @@ impl Hysteria2Outbound {
             return Err(Error::Protocol("hysteria2: connect rejected"));
         }
         Ok(())
+    }
+}
+
+impl<'a> UdpDatagramFraming<Hysteria2UdpPacketTarget<'a>, ()> for Hysteria2Outbound {
+    type Error = Error;
+    type Decoded = Hysteria2UdpPacket;
+
+    fn encode_udp_datagram(
+        &self,
+        packet: &Hysteria2UdpPacketTarget<'a>,
+    ) -> Result<Vec<u8>, Self::Error> {
+        crate::build_udp_datagram(
+            packet.session_id,
+            packet.packet_id,
+            packet.target,
+            packet.port,
+            packet.payload,
+        )
+    }
+
+    fn decode_udp_datagram(
+        &self,
+        _context: &(),
+        datagram: &[u8],
+    ) -> Result<Self::Decoded, Self::Error> {
+        parse_udp_datagram(datagram)
     }
 }
