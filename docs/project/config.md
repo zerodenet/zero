@@ -203,7 +203,7 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 - `shadowsocks` -- AEAD cipher (chacha20-ietf-poly1305, aes-128-gcm, aes-256-gcm); 2022-blake3
 - `trojan` -- TLS + SHA224 password auth, TCP streams and UDP packet relay
 - `vmess` -- TCP streams using the in-tree VMess AEAD implementation; current compatibility does not include Xray/Clash `cipher: auto`
-- `mieru` -- TCP streams and UDP packet relay using XChaCha20-Poly1305 session framing; registered for single-hop paths, with relay-chain limitations below
+- `mieru` -- TCP streams and UDP packet relay using XChaCha20-Poly1305 session framing
 - `direct` -- fixed-target TCP forwarder; accepts raw TCP with no handshake, outbound determined by normal route rules
 - `tun` -- virtual network interface; started at runtime via CLI/API commands, routes traffic through normal rule matching
 

@@ -258,7 +258,7 @@ All inbound handlers implement `InboundProtocol` and feed into `serve_inbound()`
 | `shadowsocks` | Shadowsocks | AEAD + 2022-blake3 |
 | `trojan` | Trojan | TCP + UDP |
 | `vmess` | VMess | Experimental AEAD implementation; not compatible with `cipher: auto` exports yet |
-| `mieru` | Mieru | TCP + UDP over encrypted stream wrapper; relay-chain hop not supported yet |
+| `mieru` | Mieru | TCP + UDP over encrypted stream wrapper |
 | `direct` | Direct | Fixed-target forwarder, no handshake |
 | `tun` | TUN | Virtual network interface, consumes `NetworkStack` |
 | `system` | System | OS-level traffic redirect, consumes `SystemTcpStack` |
