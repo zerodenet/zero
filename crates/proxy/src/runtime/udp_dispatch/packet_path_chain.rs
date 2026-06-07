@@ -5,7 +5,6 @@ use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use zero_core::Address;
 use zero_engine::EngineError;
-use zero_traits::UdpDatagramFraming;
 
 use super::{ChainTask, DatagramCodec, FlowFailure, UdpPacketPath};
 use crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation;
@@ -39,54 +38,6 @@ impl UdpPacketPath<Address> for Socks5PacketPath {
         let len = packet.payload.len();
         buf[..len].copy_from_slice(&packet.payload);
         Ok(len)
-    }
-}
-
-// ── Datagram codec: Shadowsocks ────────────────────────────────────
-
-struct ShadowsocksDatagramCodec {
-    cipher: shadowsocks::CipherKind,
-    password: String,
-}
-
-impl DatagramCodec<Address> for ShadowsocksDatagramCodec {
-    type Error = EngineError;
-
-    fn encode(&self, target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, EngineError> {
-        use shadowsocks::{ShadowsocksOutbound, ShadowsocksUdpPacketTarget};
-
-        <ShadowsocksOutbound as UdpDatagramFraming<
-            ShadowsocksUdpPacketTarget,
-            shadowsocks::ShadowsocksUdpDecodeContext,
-        >>::encode_udp_datagram(
-            &ShadowsocksOutbound,
-            &ShadowsocksUdpPacketTarget {
-                target,
-                port,
-                payload,
-                cipher: self.cipher,
-                password: self.password.as_bytes(),
-            },
-        )
-        .map_err(|e| EngineError::Io(std::io::Error::other(e)))
-    }
-
-    fn decode(&self, data: &[u8]) -> Option<(Address, u16, Vec<u8>)> {
-        use shadowsocks::{ShadowsocksOutbound, ShadowsocksUdpDecodeContext};
-
-        let decoded = <ShadowsocksOutbound as UdpDatagramFraming<
-            shadowsocks::ShadowsocksUdpPacketTarget,
-            ShadowsocksUdpDecodeContext,
-        >>::decode_udp_datagram(
-            &ShadowsocksOutbound,
-            &ShadowsocksUdpDecodeContext {
-                cipher: self.cipher,
-                password: self.password.as_bytes(),
-            },
-            data,
-        )
-        .ok()?;
-        Some((decoded.target, decoded.port, decoded.payload))
     }
 }
 
@@ -176,15 +127,15 @@ impl PacketPathManager {
                 upstream: Some((params.carrier_server.to_owned(), params.carrier_port)),
             })?;
 
-        let codec = ShadowsocksDatagramCodec {
+        let codec = shadowsocks::ShadowsocksDatagramCodec {
             cipher: cipher_kind,
-            password: params.datagram_password.to_owned(),
+            password: params.datagram_password.as_bytes().to_vec(),
         };
         let packet = codec
             .encode(udp_target, udp_target_port, payload)
             .map_err(|error| FlowFailure {
                 stage: "packet_path_encode",
-                error: EngineError::Io(std::io::Error::other(error)),
+                error: error.into(),
                 upstream: Some((params.datagram_server.to_owned(), params.datagram_port)),
             })?;
 
@@ -257,10 +208,10 @@ impl PacketPathManager {
             );
             let path = Arc::new(Socks5PacketPath { association });
             let waiters = Arc::new(Mutex::new(VecDeque::new()));
-            let codec: Arc<dyn DatagramCodec<Address, Error = EngineError>> =
-                Arc::new(ShadowsocksDatagramCodec {
+            let codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>> =
+                Arc::new(shadowsocks::ShadowsocksDatagramCodec {
                     cipher: cipher_kind,
-                    password: params.datagram_password.to_owned(),
+                    password: params.datagram_password.as_bytes().to_vec(),
                 });
             tokio::spawn(recv_loop(path.clone(), waiters.clone(), codec));
             self.upstreams.insert(key.clone(), Entry { path, waiters });
@@ -276,7 +227,7 @@ impl PacketPathManager {
 async fn recv_loop(
     path: Arc<Socks5PacketPath>,
     waiters: Arc<Mutex<VecDeque<Waiter>>>,
-    codec: Arc<dyn DatagramCodec<Address, Error = EngineError>>,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 ) {
     let mut buf = vec![0u8; 64 * 1024];
     loop {

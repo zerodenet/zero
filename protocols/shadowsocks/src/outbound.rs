@@ -4,7 +4,7 @@ use zero_core::ProtocolType;
 #[cfg(feature = "crypto")]
 use zero_core::{Address, Error, Session};
 #[cfg(feature = "crypto")]
-use zero_traits::{AsyncSocket, TcpSessionProtocol, UdpDatagramFraming};
+use zero_traits::{AsyncSocket, DatagramCodec, TcpSessionProtocol, UdpDatagramFraming};
 
 /// Shadowsocks outbound handler.
 #[derive(Debug, Default, Clone, Copy)]
@@ -208,5 +208,60 @@ impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecode
             port,
             payload: plain[payload_offset..].to_vec(),
         })
+    }
+}
+
+/// Codec state for a Shadowsocks UDP datagram chain hop.
+///
+/// Captures the cipher and password needed to encode/decode Shadowsocks
+/// UDP datagrams in a relay chain. Implements [`DatagramCodec`] from
+/// `zero-traits` so the proxy runtime can use it without protocol-specific
+/// adapter code.
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone)]
+pub struct ShadowsocksDatagramCodec {
+    pub cipher: super::shared::CipherKind,
+    pub password: alloc::vec::Vec<u8>,
+}
+
+#[cfg(feature = "crypto")]
+impl DatagramCodec<Address> for ShadowsocksDatagramCodec {
+    type Error = Error;
+
+    fn encode(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<alloc::vec::Vec<u8>, Self::Error> {
+        <ShadowsocksOutbound as UdpDatagramFraming<
+            ShadowsocksUdpPacketTarget<'_>,
+            ShadowsocksUdpDecodeContext<'_>,
+        >>::encode_udp_datagram(
+            &ShadowsocksOutbound,
+            &ShadowsocksUdpPacketTarget {
+                target,
+                port,
+                payload,
+                cipher: self.cipher,
+                password: &self.password,
+            },
+        )
+    }
+
+    fn decode(&self, data: &[u8]) -> Option<(Address, u16, alloc::vec::Vec<u8>)> {
+        let decoded = <ShadowsocksOutbound as UdpDatagramFraming<
+            ShadowsocksUdpPacketTarget<'_>,
+            ShadowsocksUdpDecodeContext<'_>,
+        >>::decode_udp_datagram(
+            &ShadowsocksOutbound,
+            &ShadowsocksUdpDecodeContext {
+                cipher: self.cipher,
+                password: &self.password,
+            },
+            data,
+        )
+        .ok()?;
+        Some((decoded.target, decoded.port, decoded.payload))
     }
 }
