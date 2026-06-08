@@ -243,10 +243,11 @@ pub(super) fn validate_outbound_protocol(
         OutboundProtocolConfig::Shadowsocks {
             server,
             port,
-            password: _,
+            password,
             cipher,
         } => {
             validate_outbound_endpoint("shadowsocks", server, *port)?;
+            validate_outbound_optional_non_empty("shadowsocks password", password)?;
             validate_shadowsocks_cipher("outbound", cipher)?;
             Ok(())
         }
@@ -629,6 +630,7 @@ fn validate_shadowsocks_cipher(kind: &'static str, cipher: &str) -> Result<(), C
         "chacha20-ietf-poly1305",
         "2022-blake3-aes-128-gcm",
         "2022-blake3-aes-256-gcm",
+        "2022-blake3-chacha20-poly1305",
     ];
     if !VALID_CIPHERS.iter().any(|c| *c == cipher) {
         return Err(match kind {

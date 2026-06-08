@@ -549,6 +549,119 @@ fn rejects_invalid_vless_uuid() {
 }
 
 #[test]
+fn accepts_all_shadowsocks_supported_ciphers() {
+    const CIPHERS: &[&str] = &[
+        "aes-128-gcm",
+        "aes-256-gcm",
+        "chacha20-ietf-poly1305",
+        "2022-blake3-aes-128-gcm",
+        "2022-blake3-aes-256-gcm",
+        "2022-blake3-chacha20-poly1305",
+    ];
+
+    for cipher in CIPHERS {
+        let config = RuntimeConfig::parse(&format!(
+            r#"{{
+                "inbounds": [
+                    {{
+                        "tag": "ss-in",
+                        "listen": {{ "address": "127.0.0.1", "port": 8388 }},
+                        "protocol": {{
+                            "type": "shadowsocks",
+                            "password": "secret",
+                            "cipher": "{cipher}"
+                        }}
+                    }}
+                ],
+                "outbounds": [
+                    {{
+                        "tag": "ss-out",
+                        "protocol": {{
+                            "type": "shadowsocks",
+                            "server": "127.0.0.1",
+                            "port": 8389,
+                            "password": "secret",
+                            "cipher": "{cipher}"
+                        }}
+                    }}
+                ],
+                "route": {{
+                    "rules": [],
+                    "final": {{ "type": "route", "outbound": "ss-out" }}
+                }}
+            }}"#
+        ))
+        .expect("shadowsocks cipher should parse");
+
+        match &config.inbounds[0].protocol {
+            InboundProtocolConfig::Shadowsocks { cipher: parsed, .. } => assert_eq!(parsed, cipher),
+            _ => panic!("expected shadowsocks inbound"),
+        }
+        match &config.outbounds[0].protocol {
+            OutboundProtocolConfig::Shadowsocks { cipher: parsed, .. } => {
+                assert_eq!(parsed, cipher)
+            }
+            _ => panic!("expected shadowsocks outbound"),
+        }
+    }
+}
+
+#[test]
+fn rejects_invalid_shadowsocks_cipher_and_empty_outbound_password() {
+    let cipher_error = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "ss-in",
+                    "listen": { "address": "127.0.0.1", "port": 8388 },
+                    "protocol": {
+                        "type": "shadowsocks",
+                        "password": "secret",
+                        "cipher": "unsupported"
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("invalid shadowsocks cipher should fail");
+
+    assert!(matches!(
+        cipher_error,
+        zero_config::ConfigError::InvalidInbound(_)
+    ));
+
+    let password_error = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "ss-out",
+                    "protocol": {
+                        "type": "shadowsocks",
+                        "server": "127.0.0.1",
+                        "port": 8389,
+                        "password": ""
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "ss-out" }
+            }
+        }"#,
+    )
+    .expect_err("empty shadowsocks outbound password should fail");
+
+    assert!(matches!(
+        password_error,
+        zero_config::ConfigError::InvalidOutbound(_)
+    ));
+}
+
+#[test]
 fn parses_api_event_sinks_and_control_config() {
     let config = RuntimeConfig::parse(
         r#"{
