@@ -625,7 +625,7 @@ impl UdpDispatch {
             _ => Err(FlowFailure {
                 stage: "udp_relay_final_hop",
                 error: zero_core::Error::Unsupported(
-                    "UDP relay chain final hop does not support stream packet UDP",
+                    "UDP relay chain final hop not supported (supported: VLESS, Trojan, Mieru)",
                 )
                 .into(),
                 upstream: None,
