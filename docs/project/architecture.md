@@ -206,8 +206,15 @@ TcpStack::accept() -> UserTcpStream -> serve_inbound()
 
 UDP datagrams are handled by the kernel UDP dispatch path. The dispatch layer
 owns route decision, fallback candidate selection, session lifecycle, stats, and
-event integration for UDP flows. Current per-protocol UDP support is exposed by
-`capabilities.protocols`; UDP relay chains are not supported yet.
+event integration for UDP flows. Per-protocol UDP support is exposed by
+`capabilities.protocols`.
+
+Outbound flows are classified by [`UdpPathCategory`] (Direct, Relay, Datagram,
+StreamPacket) and dispatched accordingly. UDP relay chains use the generic
+[`UdpPacketPath`] + [`DatagramCodec`] trait model: the previous hop provides a
+packet path (send/recv raw payloads), and the next hop encodes its protocol
+datagram through that path. Adding new chain combinations requires implementing
+the two traits, not creating protocol-pair modules.
 
 ## Transport Layer
 

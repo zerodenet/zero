@@ -171,6 +171,9 @@ outbound/         # Outbound implementations: direct, socks5, vless, hysteria2, 
 runtime/          # Protocol-agnostic runtime
                   #   inbound_protocol.rs — InboundProtocol trait + serve_inbound() unified pipeline entry point
                   #   tcp_outbound.rs — route_and_establish_tcp, establish_tcp_outbound (with circuit breaker)
+                  #   udp_dispatch/ — UDP dispatch module: mod.rs (struct, dispatch orchestration),
+                  #     forward.rs (forward_existing by UdpPathCategory), start.rs (start_flow, start_relay_flow),
+                  #     ss_manager, h2_manager, trojan_manager, mieru_manager, packet_path_chain
                   #   udp_helpers.rs / vless_udp.rs — shared UDP types moved from outbound/
                   #   engine_facade.rs, udp_associate.rs / udp_associate/, mux_pool.rs, upstream.rs
 transport/        # Low-level I/O
