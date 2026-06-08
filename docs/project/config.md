@@ -197,17 +197,17 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 
 - `socks5`
 - `http_connect`
-- `mixed` -- same port auto-detects `socks5` and `http_connect`
+- `mixed` -- same port auto-detects SOCKS5 and HTTP CONNECT; the SOCKS5 branch supports TCP CONNECT and UDP ASSOCIATE, and the HTTP CONNECT branch is TCP-only
 - `vless` -- TCP/TLS/WS/WSS, Reality, gRPC, H2, HTTPUpgrade, QUIC, SplitHTTP; MUX + Vision flow + UDP over TCP
 - `hysteria2` -- QUIC, TCP streams and UDP datagram forwarding
-- `shadowsocks` -- AEAD cipher (chacha20-ietf-poly1305, aes-128-gcm, aes-256-gcm); 2022-blake3
+- `shadowsocks` -- AEAD TCP stream and UDP datagram support
 - `trojan` -- TLS + SHA224 password auth, TCP streams and UDP packet relay
 - `vmess` -- TCP streams using the in-tree VMess AEAD implementation; current compatibility does not include Xray/Clash `cipher: auto`
 - `mieru` -- TCP streams and UDP packet relay using XChaCha20-Poly1305 session framing
 - `direct` -- fixed-target TCP forwarder; accepts raw TCP with no handshake, outbound determined by normal route rules
 - `tun` -- virtual network interface; started at runtime via CLI/API commands, routes traffic through normal rule matching
 
-`mixed` is not an external protocol, but a config entry for "same port multi-protocol inbound".
+`mixed` is not an external protocol, but a config entry for same-port inbound multiplexing. It dispatches SOCKS5 TCP CONNECT and SOCKS5 UDP ASSOCIATE into the SOCKS5 runtime paths, and dispatches HTTP CONNECT into the HTTP TCP runtime path.
 
 `mieru` is registered in the protocol inventory and the single-hop outbound path uses the encrypted Mieru stream wrapper. It is not yet supported as an intermediate `relay` chain hop because that path must replace the active stream with the Mieru encrypted wrapper after the hop handshake.
 
@@ -414,7 +414,7 @@ Shadowsocks inbound uses AEAD cipher for encrypted transport:
 
 Shadowsocks config fields:
 - `password` -- required, encryption password
-- `cipher` -- optional, encryption algorithm, default `chacha20-ietf-poly1305`
+- `cipher` -- optional, encryption algorithm, default `chacha20-ietf-poly1305`; supported values are `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`, `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`, and `2022-blake3-chacha20-poly1305`
 - `up_bps` -- optional, upload rate limit in bytes/sec (kernel GCRA)
 - `down_bps` -- optional, download rate limit in bytes/sec (kernel GCRA)
 
@@ -671,7 +671,7 @@ Shadowsocks outbound config fields:
 - `server` -- required, upstream server address
 - `port` -- required, upstream port, must be greater than 0
 - `password` -- required, encryption password
-- `cipher` -- optional, encryption algorithm, default `chacha20-ietf-poly1305`
+- `cipher` -- optional, encryption algorithm, default `chacha20-ietf-poly1305`; supported values are `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`, `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`, and `2022-blake3-chacha20-poly1305`
 
 ### Trojan outbound
 
@@ -747,16 +747,16 @@ Connect to an upstream Mieru node:
 Mieru outbound config fields:
 - `server` -- required, upstream server address
 - `port` -- required, upstream port, must be greater than 0
-- `username` -- required, upstream username
+- `username` -- optional, upstream username; when omitted, the kernel uses `password` as the username
 - `password` -- required, upstream password
 
-Mieru outbound is supported for direct single-hop TCP routing and UDP packet relay through the encrypted Mieru stream wrapper. Using Mieru as an intermediate member of a `relay` chain is not supported yet.
+Mieru outbound is supported for direct single-hop TCP routing, TCP relay-chain
+composition, and UDP packet relay through the encrypted Mieru stream wrapper.
 
 UDP outbound selection is handled by the kernel UDP dispatch path. Current TCP,
 UDP, MUX, transport, and limitation facts are exposed through
 `capabilities.protocols` and documented in
-[protocol-capabilities.md](protocol-capabilities.md). UDP relay chains are not
-supported yet.
+[protocol-capabilities.md](protocol-capabilities.md).
 
 ### Outbound circuit breaker
 
@@ -1058,7 +1058,7 @@ Notes:
 - VLESS outbound `reality.public_key` must be a 32-byte base64url no padding value; `reality.short_id` max 16 hex characters; `reality` cannot be combined with `tls` or `ws`
 - Tags within the same object type must not be duplicated
 - The same `address:port` can only have one inbound
-- Use `mixed` when the same port needs both `socks5` and `http_connect`
+- Use `mixed` when the same port needs SOCKS5 TCP/UDP and HTTP CONNECT TCP
 - Targets referenced by `route` and `global mode` must exist
 - Members in outbound groups must be defined outbounds or defined groups
 - Outbound groups must not have circular references
@@ -1068,7 +1068,7 @@ Notes:
 - `url_test.url` must currently be `http://`
 - `url_test.interval_seconds` must be greater than `0`
 - Hysteria2 inbound `password` must not be empty; outbound `server` must not be empty, `port` must be greater than `0`
-- Shadowsocks inbound and outbound `password` must not be empty
+- Shadowsocks inbound and outbound `password` must not be empty; `cipher` must be one of the supported Shadowsocks cipher names
 - Trojan inbound must configure `tls` with non-empty `cert_path` and `key_path`, `password` must not be empty; outbound `server` must not be empty, `port` must be greater than `0`, `password` must not be empty
 - `domain_regex` condition requires at least one pattern in `values`
 - `url_rewrite` rules require at least one of `from` or `from_regex`, and `to` must not be empty

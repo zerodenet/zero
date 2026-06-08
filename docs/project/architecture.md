@@ -290,7 +290,7 @@ All inbound handlers implement `InboundProtocol` and feed into `serve_inbound()`
 |---------|----------|-------|
 | `socks5` | SOCKS5 | CONNECT + UDP ASSOCIATE |
 | `http_connect` | HTTP CONNECT | |
-| `mixed` | Auto-detect | SOCKS5 / HTTP CONNECT on one port |
+| `mixed` | Auto-detect | SOCKS5 TCP CONNECT, SOCKS5 UDP ASSOCIATE, and HTTP CONNECT TCP on one port |
 | `vless` | VLESS | TCP + UDP-over-TCP |
 | `hysteria2` | Hysteria2 | QUIC |
 | `shadowsocks` | Shadowsocks | AEAD + 2022-blake3 |

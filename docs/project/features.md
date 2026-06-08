@@ -25,7 +25,7 @@ Each inbound protocol is independently feature-gated and may be trimmed as neede
 |---------|------|----------|
 | `socks5` | SOCKS5 inbound | -- |
 | `http_connect` | HTTP CONNECT inbound | -- |
-| `mixed` | Mixed inbound (same port SOCKS5 + HTTP CONNECT) | Implies `socks5` + `http_connect` |
+| `mixed` | Mixed inbound (same port SOCKS5 TCP/UDP + HTTP CONNECT TCP) | Implies `socks5` + `http_connect` |
 | `vless` | VLESS inbound | TLS / Reality / WebSocket / gRPC / H2 / QUIC transport |
 | `hysteria2` | Hysteria2 inbound | QUIC (quinn) |
 | `shadowsocks` | Shadowsocks inbound | AEAD encryption + 2022-blake3 |

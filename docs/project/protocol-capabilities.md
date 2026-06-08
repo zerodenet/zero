@@ -82,7 +82,7 @@ that the non-VMess baseline proxy surface is present, while the top-level
 | `mixed` | `supported` | `supported` | `supported` | `unsupported` | `unsupported` | `not_applicable` | `kernel_builtin` |
 | `vless` | `partial` | `supported` | `partial` | `supported` | `partial` | `partial` | `xray_core_vless` |
 | `hysteria2` | `partial` | `supported` | `partial` | `supported` | `partial` | `not_applicable` | `hysteria` |
-| `shadowsocks` | `partial` | `supported` | `partial` | `supported` | `partial` | `not_applicable` | `shadowsocks_rust_sip022` |
+| `shadowsocks` | `partial` | `supported` | `supported` | `supported` | `supported` | `not_applicable` | `shadowsocks_rust_sip022` |
 | `trojan` | `partial` | `supported` | `partial` | `supported` | `partial` | `unsupported` | `trojan_go` |
 | `vmess` | `experimental` | `experimental` | `unsupported` | `experimental` | `unsupported` | `unsupported` | `xray_core_vmess_aead` |
 | `mieru` | `partial` | `experimental` | `partial` | `partial` | `partial` | `not_applicable` | `mieru` |
@@ -93,7 +93,6 @@ The main protocol gaps are:
 
 - `udp_relay_chain_final_transport_limited`: VLESS UDP relay chains support a TCP relay prefix and VLESS final hops that can wrap an already established TCP relay stream: raw TCP, TLS, Reality, WebSocket, gRPC, H2, and HTTP Upgrade. SplitHTTP needs an additional TCP connection and QUIC needs a non-TCP carrier, so they are not supported as UDP relay-chain final-hop transports. TLS `client_fingerprint` is not supported over relay streams because that path depends on raw socket handshake control.
 - `udp_relay_chain_quic_path_not_supported`: Hysteria2 UDP uses QUIC datagrams. UDP chaining through the QUIC packet path is not implemented.
-- `udp_relay_chain_packet_path_limited`: Shadowsocks UDP chaining uses the generic datagram-over-packet-path model (`UdpPacketPath` carrier + `DatagramCodec` inner protocol). Currently only the SOCKS5 UDP packet path is implemented. Other packet paths are not implemented.
 - `external_interop_coverage_is_incomplete`: in-tree packet handling exists, but end-to-end tests against the baseline upstream implementation are not complete enough to call the path production-compatible.
 - `relay_stream_tls_client_fingerprint_is_not_supported`: relay-chain final-hop TLS can run over an already established TCP stream, but custom TLS fingerprint handshakes that require raw socket control are not supported on that path.
 - `mux_udp_is_not_implemented`: VLESS MUX handles TCP sub-connections; UDP MUX sub-connections are not implemented.
@@ -115,10 +114,10 @@ case is complete.
 | `block` | Complete | No remaining protocol gap |
 | `socks5` | Complete | No remaining protocol gap |
 | `http_connect` | Complete | UDP is not applicable |
-| `mixed` | Complete | Mixed is a kernel inbound multiplexor, not an external protocol crate |
+| `mixed` | Complete | Mixed is a kernel inbound multiplexor: SOCKS5 TCP CONNECT and UDP ASSOCIATE use the SOCKS5 runtime paths; HTTP CONNECT uses the HTTP TCP runtime path |
 | `vless` | Complete for baseline TCP and UDP-over-stream paths | UDP MUX, some UDP relay-chain final transports, and non-Reality TLS fingerprint passthrough are incomplete |
 | `trojan` | Complete for baseline TCP and UDP-over-stream paths | External interoperability coverage and relay-stream TLS fingerprint behavior are incomplete |
-| `shadowsocks` | Complete for baseline TCP and UDP datagram paths | External interoperability coverage and additional UDP packet paths are incomplete |
+| `shadowsocks` | Complete for baseline TCP and UDP datagram paths, including Shadowsocks UDP over SOCKS5 and Shadowsocks packet-path relay chains | External interoperability coverage is incomplete |
 | `hysteria2` | Complete for baseline QUIC TCP stream and UDP datagram paths | External interoperability coverage and QUIC UDP chain path are incomplete |
 | `mieru` | Complete for baseline TCP stream and UDP associate paths | External interoperability coverage is incomplete; inbound TCP remains experimental in the descriptor |
 | `vmess` | Experimental | UDP, MUX, `cipher_auto`, and full AEAD compatibility remain separate work |
@@ -152,7 +151,7 @@ case is complete.
 9. `UdpRelayProtocol` is implemented for SOCKS5 UDP ASSOCIATE. The protocol crate owns authentication negotiation and association response parsing; the proxy owns control-stream dialing, UDP socket binding, relay endpoint resolution, association cache, idle timeout, stats, events, and fallback behavior.
 10. `UdpPacketTunnelProtocol` and `UdpPacketFraming` are implemented for VLESS UDP over an established stream. The VLESS crate owns the UDP tunnel request/response handshake and VLESS UDP packet encoding/decoding; the proxy owns transport setup, relay-prefix setup, routing, fallback, session lifecycle, stats, events, and response bridging. UDP relay chains are implemented for a TCP relay prefix with VLESS final-hop transports that can operate over an already established TCP stream.
 11. `UdpPacketTunnelProtocol` and `UdpPacketStreamFraming` are implemented for Trojan UDP over an established TLS stream. The Trojan crate owns the `CMD_UDP` request and length-prefixed UDP packet read/write behavior; the proxy owns TLS setup, relay-prefix setup, upstream caching, task scheduling, routing, fallback, session lifecycle, stats, events, and response bridging. UDP relay chains are implemented for a TCP relay prefix with a Trojan TLS final hop.
-12. `UdpDatagramFraming` is implemented for Shadowsocks UDP datagrams. The Shadowsocks crate owns target-data encoding, salt generation, AEAD/2022 KDF selection, UDP encryption, UDP decryption, and target-data parsing. The proxy owns UDP sockets, upstream cache, response matching, routing, fallback, session lifecycle, stats, events, and response bridging. UDP relay chains use the generic datagram-over-packet-path model: a `UdpPacketPath` carrier (currently SOCKS5 UDP ASSOCIATE) carries `DatagramCodec`-encoded datagrams (currently Shadowsocks). Adding new combinations requires implementing these two traits, not creating protocol-pair-specific modules.
+12. `UdpDatagramFraming` is implemented for Shadowsocks UDP datagrams. The Shadowsocks crate owns target-data encoding, salt generation, AEAD/2022 KDF selection, UDP encryption, UDP decryption, and target-data parsing. The proxy owns UDP sockets, upstream cache, response matching, routing, fallback, session lifecycle, stats, events, and response bridging. UDP relay chains use the generic datagram-over-packet-path model: a `UdpPacketPath` carrier carries `DatagramCodec`-encoded datagrams. Implemented Shadowsocks final-hop carriers are SOCKS5 UDP ASSOCIATE and Shadowsocks UDP. Adding new combinations requires implementing these two traits, not creating protocol-pair-specific modules.
     Shadowsocks TCP inbound accept returns `ShadowsocksAccept`, and the
     protocol crate owns the AEAD stream wrapper, server-to-client response salt
     generation, download-key derivation, chunk encryption, and chunk

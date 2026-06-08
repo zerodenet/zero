@@ -72,7 +72,7 @@ Baseline protocol behavior is in scope:
 | `block` | TCP and UDP rejection semantics |
 | `socks5` | TCP CONNECT, UDP ASSOCIATE, inbound and outbound |
 | `http_connect` | TCP CONNECT inbound |
-| `mixed` | SOCKS5 and HTTP CONNECT inbound multiplexing |
+| `mixed` | Same-port inbound multiplexing for SOCKS5 TCP CONNECT, SOCKS5 UDP ASSOCIATE, and HTTP CONNECT TCP |
 | `vless` | TCP and UDP-over-stream baseline paths over supported transports |
 | `trojan` | TCP and UDP-over-stream baseline paths |
 | `shadowsocks` | TCP stream and UDP datagram baseline paths |

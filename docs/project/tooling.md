@@ -1,61 +1,97 @@
 # 工程规则
 
-## 命名
+This document describes the current workspace layout, build entry points, and
+feature policy. It records current facts, not release history.
 
-- package 名用 `zero-*`
-- 目录名保持短名，比如 `crates/engine`、`crates/proxy`、`protocols/socks5`
-- 主程序放根目录 `src/main.rs`
+## Naming
 
-## 基线
+- Package names use `zero-*`.
+- External field names, protocol names, status values, error codes, event names,
+  and capability codes use `snake_case`.
+- Directory names stay short, for example `crates/engine`, `crates/proxy`, and
+  `protocols/socks5`.
+- The root binary entry point is `src/main.rs`.
 
-- Rust 2021
-- Cargo workspace
-- `cargo fmt`
-- `cargo clippy`
-- `cargo test`
+## Workspace Commands
 
-## 编译特性
+Use workspace-wide commands by default:
 
-- 核心内核能力默认始终参与编译
-- 协议和控制面能力通过 Cargo feature 选择性编译
-- `zero` 根包只负责把协议 feature 转发到 `zero-proxy`
-- 嵌入式或裁剪场景优先使用 `--no-default-features` 再按需开启模块
+```powershell
+cargo fmt --all
+cargo fmt --all --check
+cargo check --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets
+cargo build --release
+```
 
-根包 `zero` 当前 feature：
+Run the proxy:
 
-| Feature | 说明 |
-|------|------|
-| `default` | 等同 `full,status_api` |
-| `full` | 启用全部协议能力和 `dns` |
-| `dns` | DNS 子系统 |
-| `socks5` | SOCKS5 inbound/outbound |
+```powershell
+cargo run -- run <config>
+cargo run -- status --json <config>
+```
+
+Run one test:
+
+```powershell
+cargo test <test_name>
+```
+
+Run the full test suite when changing protocol behavior, config parsing,
+routing, runtime wiring, or logging.
+
+## Root Features
+
+The root `zero` package is the external build entry point. It forwards protocol
+and control-plane features to internal crates.
+
+| Feature | Description |
+| --- | --- |
+| `default` | Same as `full,status_api` |
+| `full` | Enables all protocol capabilities and `dns` |
+| `dns` | DNS subsystem |
+| `socks5` | SOCKS5 inbound/outbound, including TCP CONNECT and UDP ASSOCIATE |
 | `http_connect` | HTTP CONNECT inbound |
-| `mixed` | 同端口自动识别 SOCKS5 / HTTP CONNECT，依赖 `socks5` 和 `http_connect` |
-| `vless` | VLESS inbound/outbound 及相关传输 |
+| `mixed` | Same-port inbound auto-detection for SOCKS5 TCP/UDP and HTTP CONNECT TCP; depends on `socks5` and `http_connect` |
+| `vless` | VLESS inbound/outbound and related transports |
 | `hysteria2` | Hysteria2 inbound/outbound |
 | `shadowsocks` | Shadowsocks inbound/outbound |
 | `trojan` | Trojan inbound/outbound |
 | `vmess` | VMess inbound/outbound |
 | `mieru` | Mieru inbound/outbound |
-| `status_api` | 本地 HTTP 控制面 |
-| `event_dispatcher` | 事件分发器基础能力 |
-| `sink_jsonl` | JSON Lines 事件 sink，依赖 `event_dispatcher` |
-| `panel_connector` | 面板/远程连接器，依赖 `status_api` 和 `event_dispatcher` |
-| `grpc_api` | gRPC 控制面 adapter |
+| `status_api` | Local HTTP control plane |
+| `event_dispatcher` | Event dispatch infrastructure |
+| `sink_jsonl` | JSON Lines event sink; depends on `event_dispatcher` |
+| `panel_connector` | Panel/remote connector; depends on `status_api` and `event_dispatcher` |
+| `grpc_api` | gRPC control-plane adapter |
 
-`zero-proxy` 内部还有面向传输 crate 的细分 feature，例如 VLESS 会转发启用 TLS、WebSocket、gRPC、H2、HTTPUpgrade、SplitHTTP 和 QUIC 相关能力。外部构建入口应优先使用根包 feature，不直接依赖内部 crate feature 形状。
+`zero-proxy` also has internal transport-oriented feature wiring. For example,
+VLESS enables TLS, WebSocket, gRPC, H2, HTTPUpgrade, SplitHTTP, and QUIC related
+transport capabilities. External build users should prefer root features rather
+than depending on internal crate feature shapes.
 
-## 代码边界
+If a config references an uncompiled protocol, the kernel fails early with a
+clear error.
 
-- `zero-traits` 和 `zero-core` 不绑 Tokio
-- 协议实现放 `protocols/*`
-- `zero-engine` 只保留决策、计划、状态、会话、统计和事件
-- `direct`、`block` 的目标语义留在 `zero-engine`，socket 级执行留在 `zero-proxy`
-- 监听、传输、Tokio 接线和协议运行时适配放 `zero-proxy`
-- 根包 `zero` 不要塞协议细节
+## Code Boundaries
 
-## 文档边界
+- `zero-traits` and `zero-core` do not bind to Tokio.
+- Protocol implementations live in `protocols/*`.
+- `zero-config` owns config ADTs and validation.
+- `zero-router` owns rule matching.
+- `zero-engine` owns decisions, plan/state, groups, sessions, stats, and events.
+- `direct` and `block` target semantics stay in `zero-engine`; socket-level
+  execution stays in `zero-proxy`.
+- Listener lifecycle, transports, Tokio wiring, and protocol runtime adapters
+  stay in `zero-proxy`.
+- The root `zero` binary does not implement protocol details.
 
-- 改配置格式，要更新配置文档和示例
-- 改协议范围，要更新项目文档和示例
-- 改分层，要更新 `docs/project/`
+## Documentation Boundaries
+
+- Config shape changes require matching config docs and examples.
+- Protocol scope changes require matching project docs, capability matrix, and
+  examples.
+- Runtime layering changes require matching `docs/project/` updates.
+- Documentation describes current facts only. It must not use version-history
+  wording such as "since" or "as of".
