@@ -62,12 +62,12 @@ impl Proxy {
                                     return;
                                 }
                                 let first_byte = first[0];
-                                let prefixed = PrefixedSocket::from_byte(stream, first_byte);
+                                let relay_stream = prefixed_relay_stream(stream, first_byte);
 
                                 if first_byte == 0x05 {
                                     // SOCKS5
                                     let mut metered = MeteredStream::new(
-                                        TcpRelayStream::new(prefixed),
+                                        relay_stream,
                                     );
                                     let auth = ConfiguredSocks5PasswordAuth {
                                         users: &socks5_h.users,
@@ -96,7 +96,7 @@ impl Proxy {
                                 } else {
                                     // HTTP CONNECT
                                     let mut metered = MeteredStream::new(
-                                        TcpRelayStream::new(prefixed),
+                                        relay_stream,
                                     );
                                     match http_h.http_connect_inbound()
                                         .accept_request(&mut metered).await
@@ -169,4 +169,17 @@ fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::ne
             std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), 0)
         }
     })
+}
+
+fn prefixed_relay_stream(
+    stream: zero_platform_tokio::TokioSocket,
+    first_byte: u8,
+) -> TcpRelayStream {
+    let local_addr = stream.local_addr().ok();
+    let prefixed = PrefixedSocket::from_byte(stream, first_byte);
+
+    match local_addr {
+        Some(addr) => TcpRelayStream::with_local_addr(prefixed, addr),
+        None => TcpRelayStream::new(prefixed),
+    }
 }

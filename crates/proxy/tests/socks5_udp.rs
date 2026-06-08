@@ -23,12 +23,18 @@ mod relays_udp_through_hysteria2_outbound;
 #[cfg(all(feature = "socks5", feature = "mieru"))]
 #[path = "socks5_udp/relays_udp_through_mieru_outbound.rs"]
 mod relays_udp_through_mieru_outbound;
+#[cfg(feature = "mixed")]
+#[path = "socks5_udp/relays_udp_through_mixed_udp_associate_direct_outbound.rs"]
+mod relays_udp_through_mixed_udp_associate_direct_outbound;
 #[cfg(feature = "socks5")]
 #[path = "socks5_udp/relays_udp_through_nested_group_target.rs"]
 mod relays_udp_through_nested_group_target;
 #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
 #[path = "socks5_udp/relays_udp_through_shadowsocks_outbound.rs"]
 mod relays_udp_through_shadowsocks_outbound;
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+#[path = "socks5_udp/relays_udp_through_shadowsocks_to_shadowsocks_relay_chain.rs"]
+mod relays_udp_through_shadowsocks_to_shadowsocks_relay_chain;
 #[cfg(all(feature = "socks5", feature = "mieru"))]
 #[path = "socks5_udp/relays_udp_through_socks5_to_mieru_relay_chain.rs"]
 mod relays_udp_through_socks5_to_mieru_relay_chain;
