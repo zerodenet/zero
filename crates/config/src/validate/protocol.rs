@@ -115,6 +115,7 @@ pub(super) fn validate_inbound_protocol(
         } => {
             validate_inbound_optional_non_empty("shadowsocks password", password)?;
             validate_shadowsocks_cipher("inbound", cipher)?;
+            validate_shadowsocks_password("inbound", cipher, password)?;
             Ok(())
         }
         InboundProtocolConfig::Trojan {
@@ -249,6 +250,7 @@ pub(super) fn validate_outbound_protocol(
             validate_outbound_endpoint("shadowsocks", server, *port)?;
             validate_outbound_optional_non_empty("shadowsocks password", password)?;
             validate_shadowsocks_cipher("outbound", cipher)?;
+            validate_shadowsocks_password("outbound", cipher, password)?;
             Ok(())
         }
         OutboundProtocolConfig::Trojan { server, port, .. } => {
@@ -645,4 +647,73 @@ fn validate_shadowsocks_cipher(kind: &'static str, cipher: &str) -> Result<(), C
         });
     }
     Ok(())
+}
+
+fn validate_shadowsocks_password(
+    kind: &'static str,
+    cipher: &str,
+    password: &str,
+) -> Result<(), ConfigError> {
+    let Some(expected_len) = shadowsocks_2022_key_len(cipher) else {
+        return Ok(());
+    };
+
+    let key = if matches!(
+        cipher,
+        "2022-blake3-aes-128-gcm" | "2022-blake3-aes-256-gcm"
+    ) {
+        password.rsplit(':').next().unwrap_or(password)
+    } else {
+        password
+    };
+
+    let actual_len = decode_shadowsocks_2022_key_len(key).ok_or_else(|| {
+        shadowsocks_password_error(
+            kind,
+            format!("`shadowsocks` {kind} 2022 password must be standard base64 key material"),
+        )
+    })?;
+
+    if actual_len != expected_len {
+        return Err(shadowsocks_password_error(
+            kind,
+            format!(
+                "`shadowsocks` {kind} 2022 password decoded length must be {expected_len} bytes, got {actual_len}"
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+fn shadowsocks_2022_key_len(cipher: &str) -> Option<usize> {
+    match cipher {
+        "2022-blake3-aes-128-gcm" => Some(16),
+        "2022-blake3-aes-256-gcm" | "2022-blake3-chacha20-poly1305" => Some(32),
+        _ => None,
+    }
+}
+
+fn decode_shadowsocks_2022_key_len(value: &str) -> Option<usize> {
+    use base64::{
+        alphabet,
+        engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig},
+        Engine,
+    };
+
+    const ENGINE: GeneralPurpose = GeneralPurpose::new(
+        &alphabet::STANDARD,
+        GeneralPurposeConfig::new()
+            .with_encode_padding(true)
+            .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+    );
+
+    ENGINE.decode(value).ok().map(|bytes| bytes.len())
+}
+
+fn shadowsocks_password_error(kind: &'static str, message: String) -> ConfigError {
+    match kind {
+        "inbound" => ConfigError::InvalidInbound(message),
+        _ => ConfigError::InvalidOutbound(message),
+    }
 }

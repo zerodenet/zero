@@ -11,9 +11,26 @@ response bridging.
 | TCP inbound | Accepts AEAD stream requests and returns `ShadowsocksAccept` |
 | TCP outbound | Writes the initial target request and returns `ShadowsocksOutboundSession` |
 | TCP stream | `ShadowsocksAeadStream` owns chunk encryption, decryption, response salt, and download key derivation |
-| UDP datagram | `UdpDatagramFraming` encodes and decodes Shadowsocks UDP packets |
+| UDP datagram | `UdpDatagramFraming` encodes and decodes Shadowsocks UDP packets; AEAD 2022 outbound client packets use the SIP022 UDP header format |
 | UDP composition | `ShadowsocksDatagramCodec` is used by generic packet-path orchestration; Shadowsocks final-hop UDP chains support SOCKS5 and Shadowsocks packet-path carriers |
 | MUX | Not applicable |
+
+## Validation
+
+In-tree validation covers these Shadowsocks paths:
+
+- TCP outbound through a SOCKS5 inbound to a Shadowsocks inbound for every
+  supported cipher listed below, including a large payload that crosses AEAD
+  chunk boundaries.
+- TCP authentication failure when the outbound password does not match the
+  upstream Shadowsocks inbound password; the flow is closed before reaching the
+  target service.
+- UDP outbound through SOCKS5 UDP ASSOCIATE to a Shadowsocks inbound.
+- UDP end-to-end relay for every supported cipher listed below.
+- Shadowsocks UDP packet-path relay chains where the carrier is SOCKS5 UDP
+  ASSOCIATE or Shadowsocks UDP.
+- Local external UDP interoperability against `shadowsocks-rust ssserver -U`
+  for every supported cipher listed below.
 
 Supported cipher names:
 
@@ -23,6 +40,13 @@ Supported cipher names:
 - `2022-blake3-aes-128-gcm`
 - `2022-blake3-aes-256-gcm`
 - `2022-blake3-chacha20-poly1305`
+
+For AEAD 2022 cipher names, `password` is standard base64 key material. The
+decoded length must match the method key length: 16 bytes for
+`2022-blake3-aes-128-gcm`, and 32 bytes for
+`2022-blake3-aes-256-gcm` and `2022-blake3-chacha20-poly1305`. AES 2022
+passwords may include colon-separated identity keys; Zero uses the last segment
+as the user PSK and does not emit EIH identity headers.
 
 ## Boundaries
 
@@ -37,4 +61,9 @@ src/metadata.rs  - protocol capability descriptor
 
 ## Known Limits
 
-- External interoperability coverage is incomplete.
+- AEAD 2022 TCP does not implement the SIP022 TCP request/response header
+  protocol, so external TCP interoperability for 2022 cipher names is
+  incomplete.
+- AEAD 2022 UDP outbound client packets interoperate with `shadowsocks-rust`.
+  Server-side AEAD 2022 UDP responses need a stateful response context before
+  Zero can act as a fully compatible external AEAD 2022 UDP server.

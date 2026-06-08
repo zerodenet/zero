@@ -8,6 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+base64 = "0.22"
 ipnet.workspace = true
 maxminddb.workspace = true
 serde.workspace = true
