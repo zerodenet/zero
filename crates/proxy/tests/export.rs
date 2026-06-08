@@ -546,6 +546,24 @@ fn proxy_handle_capabilities_use_protocol_inventory() {
         .iter()
         .find(|protocol| protocol.protocol == "shadowsocks")
     {
+        assert_eq!(shadowsocks.status, "partial");
+        assert_eq!(
+            shadowsocks.compatibility_baseline,
+            "shadowsocks_rust_sip022"
+        );
+        assert!(shadowsocks.inbound.tcp.supported);
+        assert_eq!(shadowsocks.inbound.tcp.level, "supported");
+        assert!(shadowsocks.inbound.udp.supported);
+        assert_eq!(shadowsocks.inbound.udp.level, "partial");
+        assert!(shadowsocks.outbound.tcp.supported);
+        assert_eq!(shadowsocks.outbound.tcp.level, "supported");
+        assert!(shadowsocks.outbound.udp.supported);
+        assert_eq!(shadowsocks.outbound.udp.level, "partial");
+        assert_eq!(shadowsocks.transports, vec!["tcp", "udp"]);
+        assert_eq!(shadowsocks.mux.level, "unsupported");
+        assert!(shadowsocks
+            .limitations
+            .contains(&"external_interop_coverage_is_incomplete".to_owned()));
         assert!(shadowsocks
             .limitations
             .contains(&"udp_relay_chain_packet_path_limited".to_owned()));
