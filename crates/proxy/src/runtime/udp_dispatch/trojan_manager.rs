@@ -1,19 +1,21 @@
 #[cfg(feature = "trojan")]
 use {
+    super::ChainTask,
     crate::transport::{MeteredStream, TcpRelayStream},
     std::collections::HashMap,
     std::io,
     tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
     tokio::sync::{broadcast, mpsc},
+    tokio::task::JoinSet,
     trojan::{TrojanOutbound, TrojanUdpPacket, TrojanUdpPacketTunnelTarget},
+    zero_core::Address,
     zero_traits::{AsyncSocket, UdpPacketStreamFraming, UdpPacketTunnelProtocol},
 };
 
-use tokio::task::JoinSet;
-use zero_core::{Address, Session};
+use zero_core::Session;
 use zero_engine::EngineError;
 
-use super::{ChainTask, FlowFailure};
+use super::{FlowFailure, TrojanUdpPeer, UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 
 #[cfg(feature = "trojan")]
@@ -50,77 +52,67 @@ impl TrojanChainManager {
 
     pub(super) async fn send(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        session_id: u64,
+        ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
         session: &Session,
-        server: &str,
-        port: u16,
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
-        relay_chain: bool,
-        target: &Address,
-        target_port: u16,
-        payload: &[u8],
+        peer: TrojanUdpPeer<'_>,
+        packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let sent = payload.len();
-        let key = if relay_chain {
+        let sent = packet_ref.payload.len();
+        let session_id = ctx.session_id;
+        let key = if peer.relay_chain {
             TrojanKey::Relay { session_id }
         } else {
             TrojanKey::Leaf {
-                server: server.to_owned(),
-                port,
-                password: password.to_owned(),
+                server: peer.endpoint.server.to_owned(),
+                port: peer.endpoint.port,
+                password: peer.password.to_owned(),
             }
         };
 
         if let Some(entry) = self.upstreams.get(&key) {
-            Self::spawn_bridge(chain_tasks, entry.recv_tx.clone(), session_id);
+            Self::spawn_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
             let _ = entry
                 .send_tx
-                .send(Self::packet(target, target_port, payload))
+                .send(Self::packet(
+                    packet_ref.target,
+                    packet_ref.port,
+                    packet_ref.payload,
+                ))
                 .await;
             return Ok(sent);
         }
 
-        if relay_chain {
+        if peer.relay_chain {
             return Err(FlowFailure {
                 stage: "trojan_relay_upstream",
                 error: EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::NotConnected,
                     "trojan relay upstream is not established",
                 )),
-                upstream: Some((server.to_owned(), port)),
+                upstream: Some(peer.endpoint.upstream()),
             });
         }
 
-        let entry = Self::establish_direct(
-            proxy,
-            session,
-            server,
-            port,
-            password,
-            sni,
-            insecure,
-            client_fingerprint,
-            target,
-            target_port,
-        )
-        .await
-        .map_err(|e| FlowFailure {
-            stage: "trojan_establish",
-            error: e,
-            upstream: Some((server.to_owned(), port)),
-        })?;
+        let entry =
+            Self::establish_direct(proxy, session, &peer, packet_ref.target, packet_ref.port)
+                .await
+                .map_err(|e| FlowFailure {
+                    stage: "trojan_establish",
+                    error: e,
+                    upstream: Some(peer.endpoint.upstream()),
+                })?;
 
-        Self::spawn_bridge(chain_tasks, entry.recv_tx.clone(), session_id);
+        Self::spawn_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
         let send_tx = entry.send_tx.clone();
         self.upstreams.insert(key, entry);
 
         let _ = send_tx
-            .send(Self::packet(target, target_port, payload))
+            .send(Self::packet(
+                packet_ref.target,
+                packet_ref.port,
+                packet_ref.payload,
+            ))
             .await;
 
         Ok(sent)
@@ -128,62 +120,50 @@ impl TrojanChainManager {
 
     pub(super) async fn send_relay(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        session_id: u64,
+        ctx: UdpFlowContext<'_>,
         stream: TcpRelayStream,
         tls_server_name: Option<&str>,
         proxy: &Proxy,
         session: &Session,
-        server: &str,
-        port: u16,
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
-        target: &Address,
-        target_port: u16,
-        payload: &[u8],
+        peer: TrojanUdpPeer<'_>,
+        packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
+        let session_id = ctx.session_id;
         let key = TrojanKey::Relay { session_id };
         let entry = Self::establish_over_relay_stream(
             stream,
             tls_server_name,
             proxy,
             session,
-            server,
-            password,
-            sni,
-            insecure,
-            client_fingerprint,
-            target,
-            target_port,
+            &peer,
+            packet_ref.target,
+            packet_ref.port,
         )
         .await
         .map_err(|e| FlowFailure {
             stage: "trojan_relay_establish",
             error: e,
-            upstream: Some((server.to_owned(), port)),
+            upstream: Some(peer.endpoint.upstream()),
         })?;
 
-        Self::spawn_bridge(chain_tasks, entry.recv_tx.clone(), session_id);
+        Self::spawn_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
         let send_tx = entry.send_tx.clone();
         self.upstreams.insert(key, entry);
         let _ = send_tx
-            .send(Self::packet(target, target_port, payload))
+            .send(Self::packet(
+                packet_ref.target,
+                packet_ref.port,
+                packet_ref.payload,
+            ))
             .await;
 
-        Ok(payload.len())
+        Ok(packet_ref.payload.len())
     }
 
     async fn establish_direct(
         proxy: &Proxy,
         session: &Session,
-        server: &str,
-        port: u16,
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
+        peer: &TrojanUdpPeer<'_>,
         target: &Address,
         target_port: u16,
     ) -> Result<TrojanEntry, EngineError> {
@@ -192,22 +172,26 @@ impl TrojanChainManager {
         let upstream = proxy
             .protocols
             .direct_outbound
-            .connect_host(server, port, proxy.resolver.as_ref())
+            .connect_host(
+                peer.endpoint.server,
+                peer.endpoint.port,
+                proxy.resolver.as_ref(),
+            )
             .await?;
 
         let tls_config = ClientTlsConfig {
-            server_name: sni.map(|s| s.to_owned()),
+            server_name: peer.sni.map(|s| s.to_owned()),
             disable_sni: false,
             ca_cert_path: None,
-            insecure,
+            insecure: peer.insecure,
             alpn: Vec::new(),
-            client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
+            client_fingerprint: peer.client_fingerprint.map(|s| s.to_owned()),
         };
         let tls_stream = zero_transport::tls::connect_tls_upstream(
             upstream,
             &tls_config,
             proxy.config.source_dir(),
-            server,
+            peer.endpoint.server,
         )
         .await?;
 
@@ -215,7 +199,7 @@ impl TrojanChainManager {
             proxy,
             session,
             TcpRelayStream::new(tls_stream),
-            password,
+            peer.password,
             target,
             target_port,
         )
@@ -227,35 +211,38 @@ impl TrojanChainManager {
         tls_server_name: Option<&str>,
         proxy: &Proxy,
         session: &Session,
-        server: &str,
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
+        peer: &TrojanUdpPeer<'_>,
         target: &Address,
         target_port: u16,
     ) -> Result<TrojanEntry, EngineError> {
         use zero_config::ClientTlsConfig;
 
         let tls_config = ClientTlsConfig {
-            server_name: sni.or(tls_server_name).map(|s| s.to_owned()),
+            server_name: peer.sni.or(tls_server_name).map(|s| s.to_owned()),
             disable_sni: false,
             ca_cert_path: None,
-            insecure,
+            insecure: peer.insecure,
             alpn: Vec::new(),
-            client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
+            client_fingerprint: peer.client_fingerprint.map(|s| s.to_owned()),
         };
 
         let tls_stream = zero_transport::tls::connect_tls_stream(
             stream,
             &tls_config,
             proxy.config.source_dir(),
-            server,
+            peer.endpoint.server,
         )
         .await?;
 
-        Self::establish_packet_stream(proxy, session, tls_stream, password, target, target_port)
-            .await
+        Self::establish_packet_stream(
+            proxy,
+            session,
+            tls_stream,
+            peer.password,
+            target,
+            target_port,
+        )
+        .await
     }
 
     async fn establish_packet_stream(
@@ -405,19 +392,11 @@ impl TrojanChainManager {
     #[allow(unused_variables)]
     pub(super) async fn send(
         &mut self,
-        _tasks: &mut JoinSet<ChainTask>,
-        _sid: u64,
+        _ctx: UdpFlowContext<'_>,
         _proxy: &Proxy,
         _sess: &Session,
-        _server: &str,
-        _port: u16,
-        _password: &str,
-        _sni: Option<&str>,
-        _insecure: bool,
-        _fp: Option<&str>,
-        _target: &Address,
-        _tp: u16,
-        _payload: &[u8],
+        _peer: TrojanUdpPeer<'_>,
+        _packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         Err(FlowFailure {
             stage: "trojan_feature",

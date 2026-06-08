@@ -7,6 +7,8 @@ use zero_engine::CompletedSessionRecord;
 use zero_engine::SessionHandle;
 use zero_engine::SessionOutcome;
 
+pub(crate) use crate::runtime::orchestration::UdpPathCategory;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct UdpFlowKey {
     target: Address,
@@ -50,33 +52,25 @@ impl UdpUpstreamResponseKey {
 /// | `Relay` | `Socks5` | UDP ASSOCIATE relay through control stream |
 /// | `StreamPacket` | `Trojan`, `Mieru` | UDP packets over established stream |
 /// | `Datagram` | `Shadowsocks`, `Hysteria2` | Datagram encode/decode over socket or QUIC |
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum UdpPathCategory {
-    Direct,
-    Relay,
-    StreamPacket,
-    Datagram,
-}
-
 /// Outbound type tracked per UDP flow.
 ///
 /// Variant layout follows the path category model:
 ///
-/// - **Direct path** — raw socket send, no upstream manager.
-/// - **Relay path** — `Socks5` UDP ASSOCIATE relay through a control stream.
-/// - **Stream packet path** — `Trojan`, `Mieru`: UDP packets sent over an
+/// - **Direct path**: raw socket send, no upstream manager.
+/// - **Relay path**: `Socks5` UDP ASSOCIATE relay through a control stream.
+/// - **Stream packet path**: `Trojan`, `Mieru`: UDP packets sent over an
 ///   already established encrypted stream.
-/// - **Datagram path** — `Shadowsocks`, `Hysteria2`: protocol datagrams
+/// - **Datagram path**: `Shadowsocks`, `Hysteria2`: protocol datagrams
 ///   encoded and sent over a raw UDP socket or QUIC connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UdpFlowOutbound {
-    // ── Direct path ─────────────────────────────────────────────────────
+    // Direct path.
     Direct {
         tag: String,
         target_addr: SocketAddr,
     },
 
-    // ── Relay path ─────────────────────────────────────────────────────
+    // Relay path.
     Socks5 {
         tag: String,
         server: String,
@@ -85,7 +79,7 @@ pub(crate) enum UdpFlowOutbound {
         password: Option<String>,
     },
 
-    // ── Datagram path ──────────────────────────────────────────────────
+    // Datagram path.
     #[allow(dead_code)]
     Shadowsocks {
         tag: String,
@@ -103,7 +97,7 @@ pub(crate) enum UdpFlowOutbound {
         client_fingerprint: Option<String>,
     },
 
-    // ── Stream packet path ─────────────────────────────────────────────
+    // Stream packet path.
     Trojan {
         tag: String,
         server: String,

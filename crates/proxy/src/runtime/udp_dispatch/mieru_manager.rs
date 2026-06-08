@@ -13,7 +13,7 @@ use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 
-use super::{ChainTask, FlowFailure};
+use super::{ChainTask, FlowFailure, MieruUdpPeer, UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 
 #[cfg(feature = "mieru")]
@@ -54,124 +54,117 @@ impl MieruChainManager {
 
     pub(super) async fn send(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        session_id: u64,
+        ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
         _session: &Session,
-        server: &str,
-        port: u16,
-        username: &str,
-        password: &str,
-        relay_chain: bool,
-        target: &Address,
-        target_port: u16,
-        payload: &[u8],
+        peer: MieruUdpPeer<'_>,
+        packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let sent = payload.len();
-        let key = if relay_chain {
+        let sent = packet_ref.payload.len();
+        let session_id = ctx.session_id;
+        let key = if peer.relay_chain {
             MieruKey::Relay { session_id }
         } else {
             MieruKey::Leaf {
-                server: server.to_owned(),
-                port,
-                username: username.to_owned(),
-                password: password.to_owned(),
+                server: peer.endpoint.server.to_owned(),
+                port: peer.endpoint.port,
+                username: peer.username.to_owned(),
+                password: peer.password.to_owned(),
             }
         };
 
         if let Some(entry) = self.upstreams.get(&key) {
-            Self::spawn_bridge(chain_tasks, entry.recv_tx.clone(), session_id);
-            let wrapped =
-                Self::packet(target, target_port, payload).map_err(|error| FlowFailure {
+            Self::spawn_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
+            let wrapped = Self::packet(packet_ref.target, packet_ref.port, packet_ref.payload)
+                .map_err(|error| FlowFailure {
                     stage: "mieru_udp_packet",
                     error,
-                    upstream: Some((server.to_owned(), port)),
+                    upstream: Some(peer.endpoint.upstream()),
                 })?;
             let _ = entry.send_tx.send(wrapped).await;
             return Ok(sent);
         }
 
-        if relay_chain {
+        if peer.relay_chain {
             return Err(FlowFailure {
                 stage: "mieru_relay_upstream",
                 error: EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::NotConnected,
                     "mieru relay upstream is not established",
                 )),
-                upstream: Some((server.to_owned(), port)),
+                upstream: Some(peer.endpoint.upstream()),
             });
         }
 
-        let entry = Self::establish_direct(proxy, server, port, username, password)
+        let entry = Self::establish_direct(proxy, &peer)
             .await
             .map_err(|e| FlowFailure {
                 stage: "mieru_establish",
                 error: e,
-                upstream: Some((server.to_owned(), port)),
+                upstream: Some(peer.endpoint.upstream()),
             })?;
 
-        Self::spawn_bridge(chain_tasks, entry.recv_tx.clone(), session_id);
+        Self::spawn_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
         let send_tx = entry.send_tx.clone();
         self.upstreams.insert(key, entry);
 
-        let wrapped = Self::packet(target, target_port, payload).map_err(|error| FlowFailure {
-            stage: "mieru_udp_packet",
-            error,
-            upstream: Some((server.to_owned(), port)),
-        })?;
+        let wrapped = Self::packet(packet_ref.target, packet_ref.port, packet_ref.payload)
+            .map_err(|error| FlowFailure {
+                stage: "mieru_udp_packet",
+                error,
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
         let _ = send_tx.send(wrapped).await;
         Ok(sent)
     }
 
     pub(super) async fn send_relay(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        session_id: u64,
+        ctx: UdpFlowContext<'_>,
         stream: TcpRelayStream,
-        server: &str,
-        port: u16,
-        username: &str,
-        password: &str,
-        target: &Address,
-        target_port: u16,
-        payload: &[u8],
+        peer: MieruUdpPeer<'_>,
+        packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
+        let session_id = ctx.session_id;
         let key = MieruKey::Relay { session_id };
-        let entry = Self::establish_packet_stream(stream, username, password)
+        let entry = Self::establish_packet_stream(stream, peer.username, peer.password)
             .await
             .map_err(|e| FlowFailure {
                 stage: "mieru_relay_establish",
                 error: e,
-                upstream: Some((server.to_owned(), port)),
+                upstream: Some(peer.endpoint.upstream()),
             })?;
 
-        Self::spawn_bridge(chain_tasks, entry.recv_tx.clone(), session_id);
+        Self::spawn_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
         let send_tx = entry.send_tx.clone();
         self.upstreams.insert(key, entry);
 
-        let wrapped = Self::packet(target, target_port, payload).map_err(|error| FlowFailure {
-            stage: "mieru_udp_packet",
-            error,
-            upstream: Some((server.to_owned(), port)),
-        })?;
+        let wrapped = Self::packet(packet_ref.target, packet_ref.port, packet_ref.payload)
+            .map_err(|error| FlowFailure {
+                stage: "mieru_udp_packet",
+                error,
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
         let _ = send_tx.send(wrapped).await;
-        Ok(payload.len())
+        Ok(packet_ref.payload.len())
     }
 
     async fn establish_direct(
         proxy: &Proxy,
-        server: &str,
-        port: u16,
-        username: &str,
-        password: &str,
+        peer: &MieruUdpPeer<'_>,
     ) -> Result<MieruEntry, EngineError> {
         let socket = proxy
             .protocols
             .direct_outbound
-            .connect_host(server, port, proxy.resolver.as_ref())
+            .connect_host(
+                peer.endpoint.server,
+                peer.endpoint.port,
+                proxy.resolver.as_ref(),
+            )
             .await?;
 
-        Self::establish_packet_stream(TcpRelayStream::new(socket), username, password).await
+        Self::establish_packet_stream(TcpRelayStream::new(socket), peer.username, peer.password)
+            .await
     }
 
     async fn establish_packet_stream(
@@ -308,18 +301,11 @@ impl MieruChainManager {
     #[allow(unused_variables)]
     pub(super) async fn send(
         &mut self,
-        _tasks: &mut JoinSet<ChainTask>,
-        _sid: u64,
+        _ctx: UdpFlowContext<'_>,
         _proxy: &Proxy,
         _sess: &Session,
-        _server: &str,
-        _port: u16,
-        _username: &str,
-        _password: &str,
-        _relay_chain: bool,
-        _target: &Address,
-        _tp: u16,
-        _payload: &[u8],
+        _peer: MieruUdpPeer<'_>,
+        _packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         Err(FlowFailure {
             stage: "mieru_feature",
@@ -334,16 +320,10 @@ impl MieruChainManager {
     #[allow(unused_variables)]
     pub(super) async fn send_relay(
         &mut self,
-        _tasks: &mut JoinSet<ChainTask>,
-        _sid: u64,
+        _ctx: UdpFlowContext<'_>,
         _stream: crate::transport::TcpRelayStream,
-        _server: &str,
-        _port: u16,
-        _username: &str,
-        _password: &str,
-        _target: &Address,
-        _tp: u16,
-        _payload: &[u8],
+        _peer: MieruUdpPeer<'_>,
+        _packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         Err(FlowFailure {
             stage: "mieru_feature",

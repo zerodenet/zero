@@ -2,17 +2,16 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::oneshot;
-use tokio::task::JoinSet;
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use super::{ChainTask, DatagramCodec, FlowFailure, UdpPacketPath};
+use super::{DatagramCodec, FlowFailure, UdpFlowContext, UdpPacketPath, UdpPacketRef};
 use crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation;
 use crate::runtime::Proxy;
 
 type RecvItem = (Address, u16, Vec<u8>);
 
-// ── Packet path: SOCKS5 UDP ASSOCIATE ──────────────────────────────
+// Packet path: SOCKS5 UDP ASSOCIATE.
 
 pub(super) struct Socks5PacketPath {
     association: Arc<ActiveUpstreamSocks5UdpAssociation>,
@@ -41,7 +40,7 @@ impl UdpPacketPath<Address> for Socks5PacketPath {
     }
 }
 
-// ── Manager ────────────────────────────────────────────────────────
+// Manager.
 
 struct Waiter {
     target: Address,
@@ -98,13 +97,10 @@ impl PacketPathManager {
 
     pub(super) async fn send(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        session_id: u64,
+        ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
         params: &PacketPathChainParams<'_>,
-        udp_target: &Address,
-        udp_target_port: u16,
-        payload: &[u8],
+        packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let cipher_kind =
             shadowsocks::CipherKind::from_str(params.datagram_cipher).ok_or_else(|| {
@@ -132,7 +128,7 @@ impl PacketPathManager {
             password: params.datagram_password.as_bytes().to_vec(),
         };
         let packet = codec
-            .encode(udp_target, udp_target_port, payload)
+            .encode(packet_ref.target, packet_ref.port, packet_ref.payload)
             .map_err(|error| FlowFailure {
                 stage: "packet_path_encode",
                 error: error.into(),
@@ -145,8 +141,8 @@ impl PacketPathManager {
             .lock()
             .expect("packet path waiters lock poisoned")
             .push_back(Waiter {
-                target: udp_target.clone(),
-                port: udp_target_port,
+                target: packet_ref.target.clone(),
+                port: packet_ref.port,
                 tx: response_tx,
             });
 
@@ -156,7 +152,7 @@ impl PacketPathManager {
             .send_to(&datagram_target, params.datagram_port, &packet)
             .await
         {
-            remove_waiter(&entry.waiters, udp_target, udp_target_port);
+            remove_waiter(&entry.waiters, packet_ref.target, packet_ref.port);
             return Err(FlowFailure {
                 stage: "packet_path_send",
                 error,
@@ -164,16 +160,16 @@ impl PacketPathManager {
             });
         }
 
-        chain_tasks.spawn(async move {
+        ctx.chain_tasks.spawn(async move {
             match response_rx.await {
-                Ok((target, port, payload)) => Ok((target, port, payload, Some(session_id))),
+                Ok((target, port, payload)) => Ok((target, port, payload, Some(ctx.session_id))),
                 Err(_) => Err(EngineError::Io(std::io::Error::other(
                     "packet path upstream closed",
                 ))),
             }
         });
 
-        Ok(payload.len())
+        Ok(packet_ref.payload.len())
     }
 
     async fn ensure_entry(

@@ -1,6 +1,6 @@
-//! TCP outbound establishment: routing pipeline and connection orchestration.
+//! TCP connection dispatch: routing pipeline and outbound orchestration.
 //!
-//! Moved from transport/tcp_outbound.rs — these methods are runtime orchestration,
+//! Moved from transport/tcp_outbound.rs; these methods are runtime orchestration,
 //! not transport I/O.
 
 use std::io;
@@ -10,7 +10,11 @@ use zero_core::Session;
 #[cfg(feature = "socks5")]
 use zero_traits::TcpTunnelProtocol;
 
-use crate::runtime::upstream::VlessUpstream;
+use crate::runtime::orchestration::{endpoint, health_tag, tcp_path_category, TcpPathCategory};
+use crate::runtime::upstream::{
+    Hysteria2Upstream, MieruUpstream, ShadowsocksUpstream, Socks5Upstream, TrojanUpstream,
+    VlessUpstream,
+};
 use crate::runtime::Proxy;
 use crate::transport::{
     extract_tcp_stream, EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream, TcpRouteResult,
@@ -22,7 +26,7 @@ impl Proxy {
     /// Execute the unified routing and outbound establishment pipeline.
     ///
     /// Caller MUST call `prepare_session` before this to assign a session ID.
-    pub(crate) async fn route_and_establish_tcp(
+    pub(crate) async fn dispatch_tcp(
         &self,
         session: &mut Session,
     ) -> Result<TcpRouteResult, EngineError> {
@@ -30,7 +34,7 @@ impl Proxy {
         let action = self.route_decision(session);
         let (resolved, _plan) = self.resolve_outbound(&action)?;
         let outbound = self
-            .establish_tcp_outbound(session, (resolved, _plan))
+            .dispatch_tcp_outbound(session, (resolved, _plan))
             .await
             .map_err(|f| EngineError::Io(io::Error::other(f.error)))?;
         let mut result = extract_tcp_stream(outbound)?;
@@ -38,22 +42,24 @@ impl Proxy {
         Ok(result)
     }
 
-    pub(crate) async fn establish_tcp_outbound(
+    async fn dispatch_tcp_outbound(
         &self,
         session: &Session,
         resolved: (ResolvedOutbound<'static>, Option<Arc<EnginePlan>>),
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
         let (resolved, _plan) = resolved;
         match resolved {
-            ResolvedOutbound::Relay { chain } => self.establish_relay_chain(session, chain).await,
+            ResolvedOutbound::Relay { chain } => {
+                self.dispatch_tcp_relay_chain(session, chain).await
+            }
             ResolvedOutbound::Single(candidate) => {
-                self.establish_tcp_candidate(session, candidate).await
+                self.dispatch_tcp_candidate(session, candidate).await
             }
             ResolvedOutbound::Fallback { candidates } => {
                 let mut last_failure = None;
 
                 for candidate in candidates {
-                    match self.establish_tcp_candidate(session, candidate).await {
+                    match self.dispatch_tcp_candidate(session, candidate).await {
                         Ok(outbound) => return Ok(outbound),
                         Err(failure) => last_failure = Some(failure),
                     }
@@ -65,15 +71,21 @@ impl Proxy {
         }
     }
 
-    pub(crate) async fn establish_tcp_candidate(
+    pub(crate) async fn dispatch_tcp_candidate(
         &self,
         session: &Session,
         candidate: ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        // ── Kernel primitive: circuit breaker ──
+        // Kernel primitive: circuit breaker.
         // Check health before connecting (skip for Direct / Block).
-        let chained_tag = extract_chained_tag(&candidate);
-        if let Some(ref tag) = chained_tag {
+        let path_category = tcp_path_category(&candidate);
+        let chained_tag = match path_category {
+            TcpPathCategory::Direct | TcpPathCategory::Block => None,
+            TcpPathCategory::Tunnel
+            | TcpPathCategory::Session
+            | TcpPathCategory::TransportSession => health_tag(&candidate).map(ToOwned::to_owned),
+        };
+        if let Some(tag) = chained_tag.as_deref() {
             if let Err(e) = self.check_outbound_health(tag) {
                 return Err(TcpOutboundFailure {
                     stage: "health_check",
@@ -113,7 +125,16 @@ impl Proxy {
                 password,
             } => {
                 match self
-                    .connect_via_socks5_upstream(session, server, port, username.zip(password))
+                    .connect_via_socks5_upstream(
+                        session,
+                        Socks5Upstream {
+                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
+                                server,
+                                port,
+                            },
+                            auth: username.zip(password),
+                        },
+                    )
                     .await
                 {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Socks5 {
@@ -150,8 +171,10 @@ impl Proxy {
                     .connect_via_vless_upstream(
                         session,
                         VlessUpstream {
-                            server,
-                            port,
+                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
+                                server,
+                                port,
+                            },
                             id,
                             flow,
                             mux_concurrency,
@@ -192,10 +215,14 @@ impl Proxy {
                 match self
                     .connect_via_hysteria2_upstream(
                         session,
-                        server,
-                        port,
-                        password,
-                        client_fingerprint,
+                        Hysteria2Upstream {
+                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
+                                server,
+                                port,
+                            },
+                            password,
+                            client_fingerprint,
+                        },
                     )
                     .await
                 {
@@ -220,7 +247,17 @@ impl Proxy {
                 cipher,
             } => {
                 match self
-                    .connect_via_shadowsocks_upstream(session, server, port, password, cipher)
+                    .connect_via_shadowsocks_upstream(
+                        session,
+                        ShadowsocksUpstream {
+                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
+                                server,
+                                port,
+                            },
+                            password,
+                            cipher,
+                        },
+                    )
                     .await
                 {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Shadowsocks {
@@ -248,12 +285,16 @@ impl Proxy {
                 match self
                     .connect_via_trojan_upstream(
                         session,
-                        server,
-                        port,
-                        password,
-                        sni,
-                        insecure,
-                        client_fingerprint,
+                        TrojanUpstream {
+                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
+                                server,
+                                port,
+                            },
+                            password,
+                            sni,
+                            insecure,
+                            client_fingerprint,
+                        },
                     )
                     .await
                 {
@@ -305,7 +346,17 @@ impl Proxy {
                 password,
             } => {
                 match self
-                    .connect_via_mieru_upstream(session, server, port, username, password)
+                    .connect_via_mieru_upstream(
+                        session,
+                        MieruUpstream {
+                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
+                                server,
+                                port,
+                            },
+                            username,
+                            password,
+                        },
+                    )
                     .await
                 {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Mieru {
@@ -323,8 +374,8 @@ impl Proxy {
             }
         };
 
-        // ── Record health after connection attempt ──
-        if let Some(ref tag) = chained_tag {
+        // Record health after connection attempt.
+        if let Some(tag) = chained_tag.as_deref() {
             match &result {
                 Ok(_) => self.record_outbound_success(tag),
                 Err(_) => self.record_outbound_failure(tag),
@@ -334,13 +385,13 @@ impl Proxy {
         result
     }
 
-    /// Connect through a relay chain sequentially.
-    async fn establish_relay_chain<'a>(
+    /// Dispatch through a relay chain sequentially.
+    async fn dispatch_tcp_relay_chain<'a>(
         &self,
         session: &Session,
         chain: Vec<ResolvedLeafOutbound<'a>>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        let (stream, final_hop) = self.establish_relay_prefix(chain).await?;
+        let (stream, final_hop) = self.dispatch_tcp_relay_prefix(chain).await?;
 
         let stream = apply_hop_protocol(self, stream, &final_hop, session)
             .await
@@ -358,7 +409,7 @@ impl Proxy {
     /// The returned stream is connected to the final hop server through the
     /// preceding relay hops. The caller is responsible for running the final
     /// hop protocol handshake on that stream.
-    pub(crate) async fn establish_relay_prefix<'a>(
+    pub(crate) async fn dispatch_tcp_relay_prefix<'a>(
         &self,
         chain: Vec<ResolvedLeafOutbound<'a>>,
     ) -> Result<(TcpRelayStream, ResolvedLeafOutbound<'a>), TcpOutboundFailure> {
@@ -368,14 +419,16 @@ impl Proxy {
 
         let mut session_for_next = Session::new(
             0,
-            hop_addr(&second),
-            hop_port(&second),
+            endpoint(&second)
+                .map(|endpoint| endpoint.address())
+                .unwrap_or_else(|| zero_core::Address::Domain("unknown".to_owned())),
+            endpoint(&second).map(|endpoint| endpoint.port).unwrap_or(0),
             zero_core::Network::Tcp,
             zero_core::ProtocolType::Unknown,
         );
 
         let outbound = self
-            .establish_tcp_candidate(&session_for_next, first)
+            .dispatch_tcp_candidate(&session_for_next, first)
             .await?;
         let mut stream = match outbound {
             EstablishedTcpOutbound::Direct { upstream, .. }
@@ -403,8 +456,12 @@ impl Proxy {
         for next_hop in hops {
             session_for_next = Session::new(
                 0,
-                hop_addr(&next_hop),
-                hop_port(&next_hop),
+                endpoint(&next_hop)
+                    .map(|endpoint| endpoint.address())
+                    .unwrap_or_else(|| zero_core::Address::Domain("unknown".to_owned())),
+                endpoint(&next_hop)
+                    .map(|endpoint| endpoint.port)
+                    .unwrap_or(0),
                 zero_core::Network::Tcp,
                 zero_core::ProtocolType::Unknown,
             );
@@ -586,47 +643,5 @@ async fn apply_hop_protocol(
             std::io::ErrorKind::Unsupported,
             "relay hop protocol not supported or disabled",
         ))),
-    }
-}
-
-/// Extract the outbound tag for health tracking.
-/// Returns None for Direct and Block (always healthy).
-fn extract_chained_tag(candidate: &ResolvedLeafOutbound<'_>) -> Option<String> {
-    match candidate {
-        ResolvedLeafOutbound::Direct { .. } | ResolvedLeafOutbound::Block { .. } => None,
-        ResolvedLeafOutbound::Socks5 { tag, .. } => Some(tag.to_string()),
-        ResolvedLeafOutbound::Vless { tag, .. } => Some(tag.to_string()),
-        ResolvedLeafOutbound::Hysteria2 { tag, .. } => Some(tag.to_string()),
-        ResolvedLeafOutbound::Shadowsocks { tag, .. } => Some(tag.to_string()),
-        ResolvedLeafOutbound::Trojan { tag, .. } => Some(tag.to_string()),
-        ResolvedLeafOutbound::Vmess { tag, .. } => Some(tag.to_string()),
-        ResolvedLeafOutbound::Mieru { tag, .. } => Some(tag.to_string()),
-    }
-}
-
-fn hop_addr(hop: &ResolvedLeafOutbound<'_>) -> zero_core::Address {
-    use zero_core::Address;
-    match hop {
-        ResolvedLeafOutbound::Socks5 { server, .. }
-        | ResolvedLeafOutbound::Vless { server, .. }
-        | ResolvedLeafOutbound::Hysteria2 { server, .. }
-        | ResolvedLeafOutbound::Shadowsocks { server, .. }
-        | ResolvedLeafOutbound::Trojan { server, .. }
-        | ResolvedLeafOutbound::Vmess { server, .. }
-        | ResolvedLeafOutbound::Mieru { server, .. } => Address::Domain(server.to_string()),
-        _ => Address::Domain("unknown".to_owned()),
-    }
-}
-
-fn hop_port(hop: &ResolvedLeafOutbound<'_>) -> u16 {
-    match hop {
-        ResolvedLeafOutbound::Socks5 { port, .. }
-        | ResolvedLeafOutbound::Vless { port, .. }
-        | ResolvedLeafOutbound::Hysteria2 { port, .. }
-        | ResolvedLeafOutbound::Shadowsocks { port, .. }
-        | ResolvedLeafOutbound::Trojan { port, .. }
-        | ResolvedLeafOutbound::Vmess { port, .. }
-        | ResolvedLeafOutbound::Mieru { port, .. } => *port,
-        _ => 0,
     }
 }

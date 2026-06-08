@@ -18,6 +18,7 @@ use zero_config::{InboundRealityConfig, VlessUserConfig};
 use zero_platform_tokio::TokioSocket;
 use zero_traits::AsyncSocket;
 
+use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_associate::helpers::{
     log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };
@@ -26,10 +27,7 @@ use crate::runtime::udp_dispatch::UdpDispatch;
 use super::super::logging::log_listener_connection_error;
 use super::super::runtime::{bind_listener, Proxy};
 use super::super::transport::{accept_ws, build_tls_acceptor, InboundTlsStream, PrefixedSocket};
-use crate::transport::{
-    relay_bidirectional_metered, ClientStream, EstablishedTcpOutbound, MeteredStream,
-    TcpRelayStream,
-};
+use crate::transport::{relay_bidirectional_metered, ClientStream, MeteredStream, TcpRelayStream};
 use async_trait::async_trait;
 use zero_engine::EngineError;
 
@@ -595,30 +593,13 @@ impl Proxy {
                                     session.apply_auth(a.clone());
                                 }
                                 self.prepare_session(&mut session, inbound_tag, None);
-                                self.resolve_fake_ip_target(&mut session).await;
-                let action = self.route_decision(&session);
-                                let Ok(resolved) = self.resolve_outbound(&action) else {
-                                    let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
-                                    let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
-                                    continue;
-                                };
-                                let upstream = match self.establish_tcp_outbound(&session, resolved).await {
-                                    Ok(outbound) => match outbound {
-                                        EstablishedTcpOutbound::Direct { upstream, .. } => upstream,
-                                        EstablishedTcpOutbound::Vless { upstream, .. } => upstream,
-                                        EstablishedTcpOutbound::Socks5 { upstream, .. } => upstream,
-                                        EstablishedTcpOutbound::Hysteria2 { upstream, .. } => upstream,
-                                        EstablishedTcpOutbound::Shadowsocks { upstream, .. } => upstream,
-                                        EstablishedTcpOutbound::Trojan { upstream, .. } => upstream,
-                                        EstablishedTcpOutbound::Vmess { upstream, .. } => upstream,
-                                        EstablishedTcpOutbound::Mieru { upstream, .. } => upstream,
-                                        EstablishedTcpOutbound::Relay { upstream } => upstream,
-                                        EstablishedTcpOutbound::Block { .. } => {
-                                            let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
-                                            let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
-                                            continue;
-                                        }
-                                    },
+                                let upstream = match TcpPipe::new(self)
+                                    .dispatch(TcpPipeInput {
+                                        session: &mut session,
+                                    })
+                                    .await
+                                {
+                                    Ok(result) => result.upstream,
                                     Err(_) => {
                                         let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
                                         let _ = mux.write_data(&mut client, MUX_STREAM_NEW, &resp).await;
@@ -898,7 +879,7 @@ impl Proxy {
         Ok(())
     }
 
-    /// Parse a VLESS UDP packet and dispatch via the generic `UdpDispatch`.
+    /// Parse a VLESS UDP packet and dispatch via the UDP kernel pipe.
     async fn vless_dispatch_packet(
         proxy: &Proxy,
         dispatch: &mut UdpDispatch,
@@ -909,15 +890,14 @@ impl Proxy {
 
         let udp_packet = parse_udp_packet(packet)?;
 
-        dispatch
-            .dispatch(
-                proxy,
-                udp_packet.target,
-                udp_packet.port,
-                &udp_packet.payload,
-                zero_core::ProtocolType::Vless,
-                auth.as_ref(),
-            )
+        UdpPipe::new(proxy, dispatch)
+            .dispatch(UdpPipeInput {
+                target: udp_packet.target,
+                port: udp_packet.port,
+                payload: &udp_packet.payload,
+                protocol: zero_core::ProtocolType::Vless,
+                auth: auth.as_ref(),
+            })
             .await
             .map(|_| ())
     }

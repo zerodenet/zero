@@ -257,7 +257,7 @@ impl Proxy {
             // handles ALL protocol types generically (Direct, Socks5,
             // Vless, Hysteria2, Shadowsocks, Trojan, Vmess, Mieru, etc.).
             let outbound = self
-                .establish_tcp_candidate(&probe_session, candidate)
+                .dispatch_tcp_candidate(&probe_session, candidate)
                 .await
                 .map_err(|f| f.error)?;
             let result = extract_tcp_stream(outbound)?;

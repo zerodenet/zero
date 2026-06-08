@@ -3,11 +3,10 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::oneshot;
-use tokio::task::JoinSet;
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use super::{ChainTask, FlowFailure};
+use super::{FlowFailure, SsUdpPeer, UdpFlowContext, UdpPacketRef};
 
 type SsRecvItem = (Address, u16, Vec<u8>);
 
@@ -35,15 +34,9 @@ impl SsChainManager {
 
     pub(super) async fn send(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        session_id: u64,
-        server: &str,
-        port: u16,
-        password: &str,
-        cipher: &str,
-        target: &Address,
-        target_port: u16,
-        payload: &[u8],
+        ctx: UdpFlowContext<'_>,
+        peer: SsUdpPeer<'_>,
+        packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         use shadowsocks::{
             CipherKind, ShadowsocksOutbound, ShadowsocksUdpDecodeContext,
@@ -51,16 +44,21 @@ impl SsChainManager {
         };
         use zero_traits::UdpDatagramFraming;
 
-        let cipher_kind = CipherKind::from_str(cipher).ok_or_else(|| FlowFailure {
+        let cipher_kind = CipherKind::from_str(peer.cipher).ok_or_else(|| FlowFailure {
             stage: "ss_cipher",
             error: EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("unknown shadowsocks cipher: {cipher}"),
+                format!("unknown shadowsocks cipher: {}", peer.cipher),
             )),
-            upstream: Some((server.to_owned(), port)),
+            upstream: Some(peer.endpoint.upstream()),
         })?;
 
-        let entry = self.ensure_entry(server, port, password, cipher_kind);
+        let entry = self.ensure_entry(
+            peer.endpoint.server,
+            peer.endpoint.port,
+            peer.password,
+            cipher_kind,
+        );
 
         let packet = <ShadowsocksOutbound as UdpDatagramFraming<
             ShadowsocksUdpPacketTarget,
@@ -68,30 +66,32 @@ impl SsChainManager {
         >>::encode_udp_datagram(
             &ShadowsocksOutbound,
             &ShadowsocksUdpPacketTarget {
-                target,
-                port: target_port,
-                payload,
+                target: packet_ref.target,
+                port: packet_ref.port,
+                payload: packet_ref.payload,
                 cipher: cipher_kind,
-                password: password.as_bytes(),
+                password: peer.password.as_bytes(),
             },
         )
         .map_err(|e| FlowFailure {
             stage: "ss_encode",
             error: EngineError::Io(std::io::Error::other(e)),
-            upstream: Some((server.to_owned(), port)),
+            upstream: Some(peer.endpoint.upstream()),
         })?;
 
-        let target_addr: SocketAddr =
-            format!("{server}:{port}")
-                .parse()
-                .map_err(|_| FlowFailure {
-                    stage: "ss_parse_addr",
-                    error: EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        format!("invalid ss upstream: {server}:{port}"),
-                    )),
-                    upstream: Some((server.to_owned(), port)),
-                })?;
+        let target_addr: SocketAddr = format!("{}:{}", peer.endpoint.server, peer.endpoint.port)
+            .parse()
+            .map_err(|_| FlowFailure {
+                stage: "ss_parse_addr",
+                error: EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "invalid ss upstream: {}:{}",
+                        peer.endpoint.server, peer.endpoint.port
+                    ),
+                )),
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
 
         let (response_tx, response_rx) = oneshot::channel();
         entry
@@ -99,30 +99,30 @@ impl SsChainManager {
             .lock()
             .expect("ss waiters lock poisoned")
             .push_back(SsResponseWaiter {
-                target: target.clone(),
-                port: target_port,
+                target: packet_ref.target.clone(),
+                port: packet_ref.port,
                 tx: response_tx,
             });
         if let Err(e) = entry.socket.send_to(&packet, target_addr).await {
-            remove_waiter(&entry.waiters, target, target_port);
+            remove_waiter(&entry.waiters, packet_ref.target, packet_ref.port);
             return Err(FlowFailure {
                 stage: "ss_send",
                 error: EngineError::from(e),
-                upstream: Some((server.to_owned(), port)),
+                upstream: Some(peer.endpoint.upstream()),
             });
         }
 
         // Spawn one-shot bridge task.
-        chain_tasks.spawn(async move {
+        ctx.chain_tasks.spawn(async move {
             match response_rx.await {
                 Ok((resp_target, resp_port, resp_payload)) => {
-                    Ok((resp_target, resp_port, resp_payload, Some(session_id)))
+                    Ok((resp_target, resp_port, resp_payload, Some(ctx.session_id)))
                 }
                 Err(_) => Err(EngineError::Io(std::io::Error::other("ss upstream closed"))),
             }
         });
 
-        Ok(payload.len())
+        Ok(packet_ref.payload.len())
     }
 
     fn ensure_entry(

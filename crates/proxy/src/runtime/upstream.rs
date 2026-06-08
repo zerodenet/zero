@@ -8,14 +8,19 @@ use zero_traits::TcpTunnelProtocol;
 #[cfg(feature = "trojan")]
 use tokio::io::AsyncWriteExt;
 
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::Proxy;
 #[cfg(feature = "socks5")]
 use crate::transport::MeteredStream;
 use crate::transport::TcpRelayStream;
 
+pub(crate) struct Socks5Upstream<'a> {
+    pub(crate) endpoint: OutboundEndpoint<'a>,
+    pub(crate) auth: Option<(&'a str, &'a str)>,
+}
+
 pub(crate) struct VlessUpstream<'a> {
-    pub server: &'a str,
-    pub port: u16,
+    pub endpoint: OutboundEndpoint<'a>,
     pub id: &'a str,
     pub flow: Option<&'a str>,
     pub mux_concurrency: Option<u32>,
@@ -30,19 +35,47 @@ pub(crate) struct VlessUpstream<'a> {
     pub quic: Option<&'a QuicConfig>,
 }
 
+pub(crate) struct Hysteria2Upstream<'a> {
+    pub(crate) endpoint: OutboundEndpoint<'a>,
+    pub(crate) password: &'a str,
+    pub(crate) client_fingerprint: Option<&'a str>,
+}
+
+pub(crate) struct ShadowsocksUpstream<'a> {
+    pub(crate) endpoint: OutboundEndpoint<'a>,
+    pub(crate) password: &'a str,
+    pub(crate) cipher: &'a str,
+}
+
+pub(crate) struct TrojanUpstream<'a> {
+    pub(crate) endpoint: OutboundEndpoint<'a>,
+    pub(crate) password: &'a str,
+    pub(crate) sni: Option<&'a str>,
+    pub(crate) insecure: bool,
+    pub(crate) client_fingerprint: Option<&'a str>,
+}
+
+pub(crate) struct MieruUpstream<'a> {
+    pub(crate) endpoint: OutboundEndpoint<'a>,
+    pub(crate) username: &'a str,
+    pub(crate) password: &'a str,
+}
+
 impl Proxy {
     #[cfg(feature = "socks5")]
     pub(crate) async fn connect_via_socks5_upstream(
         &self,
         session: &Session,
-        server: &str,
-        port: u16,
-        auth: Option<(&str, &str)>,
+        peer: Socks5Upstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         let upstream = self
             .protocols
             .direct_outbound
-            .connect_host(server, port, self.resolver.as_ref())
+            .connect_host(
+                peer.endpoint.server,
+                peer.endpoint.port,
+                self.resolver.as_ref(),
+            )
             .await?;
         let mut upstream = MeteredStream::new(upstream);
 
@@ -52,10 +85,12 @@ impl Proxy {
                 &mut upstream,
                 &socks5::Socks5TcpTunnelTarget {
                     session,
-                    auth: auth.map(|(username, password)| socks5::Socks5OutboundAuth {
-                        username,
-                        password,
-                    }),
+                    auth: peer
+                        .auth
+                        .map(|(username, password)| socks5::Socks5OutboundAuth {
+                            username,
+                            password,
+                        }),
                 },
             )
             .await?;
@@ -68,9 +103,7 @@ impl Proxy {
     pub(crate) async fn connect_via_socks5_upstream(
         &self,
         _session: &Session,
-        _server: &str,
-        _port: u16,
-        _auth: Option<(&str, &str)>,
+        _upstream: Socks5Upstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",
@@ -95,8 +128,8 @@ impl Proxy {
                 .open_stream(
                     self,
                     session,
-                    upstream.server.to_owned(),
-                    upstream.port,
+                    upstream.endpoint.server.to_owned(),
+                    upstream.endpoint.port,
                     &id,
                     upstream.tls,
                     upstream.reality,
@@ -106,18 +139,26 @@ impl Proxy {
                 .await;
         }
 
-        // QUIC uses UDP — handle before TCP connect entirely
+        // QUIC uses UDP; handle before TCP connect entirely.
         if let Some(quic) = upstream.quic {
-            let server_name = quic.server_name.as_deref().unwrap_or(upstream.server);
+            let server_name = quic
+                .server_name
+                .as_deref()
+                .unwrap_or(upstream.endpoint.server);
             let quic_stream =
-                crate::transport::connect_quic(server_name, upstream.port, quic.insecure).await?;
+                crate::transport::connect_quic(server_name, upstream.endpoint.port, quic.insecure)
+                    .await?;
             return Ok(TcpRelayStream::new(quic_stream));
         }
 
         let socket = self
             .protocols
             .direct_outbound
-            .connect_host(upstream.server, upstream.port, self.resolver.as_ref())
+            .connect_host(
+                upstream.endpoint.server,
+                upstream.endpoint.port,
+                self.resolver.as_ref(),
+            )
             .await?;
 
         let connector = crate::transport::VlessTransportConnector::new(
@@ -131,7 +172,7 @@ impl Proxy {
             self.config.source_dir(),
         );
         let stream = connector
-            .connect(socket, upstream.server, upstream.port)
+            .connect(socket, upstream.endpoint.server, upstream.endpoint.port)
             .await?;
 
         let flow = upstream.flow;
@@ -179,8 +220,8 @@ impl Proxy {
         upstream: VlessUpstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         let _ = (
-            upstream.server,
-            upstream.port,
+            upstream.endpoint.server,
+            upstream.endpoint.port,
             upstream.id,
             upstream.mux_concurrency,
             upstream.mux_idle_timeout_secs,
@@ -201,13 +242,14 @@ impl Proxy {
     pub(crate) async fn connect_via_hysteria2_upstream(
         &self,
         session: &Session,
-        server: &str,
-        port: u16,
-        password: &str,
-        client_fingerprint: Option<&str>,
+        peer: Hysteria2Upstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
-        let connector = crate::transport::Hysteria2Connector::new(server, port, password)
-            .with_fingerprint(client_fingerprint);
+        let connector = crate::transport::Hysteria2Connector::new(
+            peer.endpoint.server,
+            peer.endpoint.port,
+            peer.password,
+        )
+        .with_fingerprint(peer.client_fingerprint);
         let stream = connector.connect(session).await?;
         Ok(TcpRelayStream::new(stream))
     }
@@ -216,10 +258,7 @@ impl Proxy {
     pub(crate) async fn connect_via_hysteria2_upstream(
         &self,
         _session: &Session,
-        _server: &str,
-        _port: u16,
-        _password: &str,
-        _client_fingerprint: Option<&str>,
+        _peer: Hysteria2Upstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",
@@ -233,26 +272,27 @@ impl Proxy {
     pub(crate) async fn connect_via_shadowsocks_upstream(
         &self,
         session: &Session,
-        server: &str,
-        port: u16,
-        password: &str,
-        cipher: &str,
+        peer: ShadowsocksUpstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         use shadowsocks::CipherKind;
 
         let upstream = self
             .protocols
             .direct_outbound
-            .connect_host(server, port, self.resolver.as_ref())
+            .connect_host(
+                peer.endpoint.server,
+                peer.endpoint.port,
+                self.resolver.as_ref(),
+            )
             .await?;
         let mut metered = crate::transport::MeteredStream::new(upstream);
-        let cipher_kind = CipherKind::from_str(cipher).ok_or_else(|| {
+        let cipher_kind = CipherKind::from_str(peer.cipher).ok_or_else(|| {
             EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("unknown shadowsocks cipher: {cipher}"),
+                format!("unknown shadowsocks cipher: {}", peer.cipher),
             ))
         })?;
-        let password_bytes = password.as_bytes().to_vec();
+        let password_bytes = peer.password.as_bytes().to_vec();
         use zero_traits::TcpSessionProtocol;
         let ss_session = <shadowsocks::ShadowsocksOutbound as TcpSessionProtocol<
             shadowsocks::ShadowsocksTcpTarget,
@@ -278,10 +318,7 @@ impl Proxy {
     pub(crate) async fn connect_via_shadowsocks_upstream(
         &self,
         _session: &Session,
-        _server: &str,
-        _port: u16,
-        _password: &str,
-        _cipher: &str,
+        _peer: ShadowsocksUpstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",
@@ -412,31 +449,30 @@ impl Proxy {
     pub(crate) async fn connect_via_trojan_upstream(
         &self,
         session: &Session,
-        server: &str,
-        port: u16,
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
+        peer: TrojanUpstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         let upstream = self
             .protocols
             .direct_outbound
-            .connect_host(server, port, self.resolver.as_ref())
+            .connect_host(
+                peer.endpoint.server,
+                peer.endpoint.port,
+                self.resolver.as_ref(),
+            )
             .await?;
         let tls_config = ClientTlsConfig {
-            server_name: sni.map(|s| s.to_owned()),
+            server_name: peer.sni.map(|s| s.to_owned()),
             disable_sni: false,
             ca_cert_path: None,
-            insecure,
+            insecure: peer.insecure,
             alpn: Vec::new(),
-            client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
+            client_fingerprint: peer.client_fingerprint.map(|s| s.to_owned()),
         };
         let tls_stream = zero_transport::tls::connect_tls_upstream(
             upstream,
             &tls_config,
             self.config.source_dir(),
-            server,
+            peer.endpoint.server,
         )
         .await?;
         let mut metered = crate::transport::MeteredStream::new(tls_stream);
@@ -444,7 +480,10 @@ impl Proxy {
             .trojan_outbound
             .establish_tcp_tunnel(
                 &mut metered,
-                &trojan::TrojanTcpTunnelTarget { session, password },
+                &trojan::TrojanTcpTunnelTarget {
+                    session,
+                    password: peer.password,
+                },
             )
             .await?;
         metered.flush().await?;
@@ -464,12 +503,7 @@ impl Proxy {
     pub(crate) async fn connect_via_trojan_upstream(
         &self,
         _session: &Session,
-        _server: &str,
-        _port: u16,
-        _password: &str,
-        _sni: Option<&str>,
-        _insecure: bool,
-        _client_fingerprint: Option<&str>,
+        _peer: TrojanUpstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",
@@ -479,15 +513,12 @@ impl Proxy {
         })
     }
 
-    /// Mieru upstream (stub — feature disabled).
+    /// Mieru upstream stub for disabled feature builds.
     #[cfg(not(feature = "mieru"))]
     pub(crate) async fn connect_via_mieru_upstream(
         &self,
         _session: &Session,
-        _server: &str,
-        _port: u16,
-        _username: &str,
-        _password: &str,
+        _peer: MieruUpstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         Err(EngineError::CompiledFeatureDisabled {
             kind: "outbound",
@@ -497,20 +528,21 @@ impl Proxy {
         })
     }
 
-    /// Mieru upstream — connect + handshake, return raw TCP stream.
+    /// Mieru upstream: connect and handshake, return raw TCP stream.
     #[cfg(feature = "mieru")]
     pub(crate) async fn connect_via_mieru_upstream(
         &self,
         session: &Session,
-        server: &str,
-        port: u16,
-        username: &str,
-        password: &str,
+        peer: MieruUpstream<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         let socket = self
             .protocols
             .direct_outbound
-            .connect_host(server, port, self.resolver.as_ref())
+            .connect_host(
+                peer.endpoint.server,
+                peer.endpoint.port,
+                self.resolver.as_ref(),
+            )
             .await?;
 
         // Wrap in TcpRelayStream for AsyncSocket compatibility
@@ -519,14 +551,14 @@ impl Proxy {
         use zero_traits::TcpSessionProtocol;
         let outbound = <mieru::MieruProtocol as TcpSessionProtocol<mieru::MieruTcpTarget>>::establish_tcp_session(
             &mieru::MieruProtocol,
-            &mut stream,
-            &mieru::MieruTcpTarget {
-                target: &session.target,
-                port: session.port,
-                username,
-                password,
-            },
-        )
+                &mut stream,
+                &mieru::MieruTcpTarget {
+                    target: &session.target,
+                    port: session.port,
+                    username: peer.username,
+                    password: peer.password,
+                },
+            )
         .await
         .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru handshake: {e}"))))?;
 
@@ -542,100 +574,7 @@ pub(crate) fn wrap_shadowsocks_outbound_stream(
     ss_session: shadowsocks::ShadowsocksOutboundSession,
     password: Vec<u8>,
 ) -> TcpRelayStream {
-    let (app_stream, ss_plain_stream) = tokio::io::duplex(64 * 1024);
-    tokio::spawn(async move {
-        let _ = relay_shadowsocks_outbound(ss_plain_stream, upstream, ss_session, password).await;
-    });
-    TcpRelayStream::new(app_stream)
-}
-
-#[cfg(feature = "shadowsocks")]
-async fn relay_shadowsocks_outbound(
-    app_stream: tokio::io::DuplexStream,
-    upstream: TcpRelayStream,
-    ss_session: shadowsocks::ShadowsocksOutboundSession,
-    password: Vec<u8>,
-) -> std::io::Result<()> {
-    use shadowsocks::{decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, encrypt_tcp_chunk};
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-    let cipher = ss_session.cipher;
-    let (mut app_read, mut app_write) = tokio::io::split(app_stream);
-    let (mut upstream_read, mut upstream_write) = tokio::io::split(upstream);
-
-    let upload_key = ss_session.session_key;
-    let mut upload_nonce = ss_session.next_upload_nonce;
-    let upload = tokio::spawn(async move {
-        let mut buf = [0u8; 0x3fff];
-        loop {
-            let n = app_read.read(&mut buf).await?;
-            if n == 0 {
-                let _ = upstream_write.shutdown().await;
-                return Ok::<(), std::io::Error>(());
-            }
-            let chunk = encrypt_tcp_chunk(cipher, &upload_key, &mut upload_nonce, &buf[..n])
-                .map_err(protocol_to_io)?;
-            upstream_write.write_all(&chunk).await?;
-            upstream_write.flush().await?;
-        }
-    });
-
-    let download = tokio::spawn(async move {
-        let mut salt = vec![0u8; cipher.salt_len()];
-        upstream_read.read_exact(&mut salt).await?;
-        let download_key = ss_derive_outbound_key(cipher, &password, &salt)?;
-        let mut download_nonce = 0;
-
-        loop {
-            let mut encrypted_length = vec![0u8; 2 + cipher.tag_len()];
-            if upstream_read
-                .read_exact(&mut encrypted_length)
-                .await
-                .is_err()
-            {
-                let _ = app_write.shutdown().await;
-                return Ok::<(), std::io::Error>(());
-            }
-            let payload_len = decrypt_tcp_chunk_length(
-                cipher,
-                &download_key,
-                &mut download_nonce,
-                &encrypted_length,
-            )
-            .map_err(protocol_to_io)?;
-            let mut encrypted_payload = vec![0u8; payload_len + cipher.tag_len()];
-            upstream_read.read_exact(&mut encrypted_payload).await?;
-            let plain = decrypt_tcp_chunk_payload(
-                cipher,
-                &download_key,
-                &mut download_nonce,
-                payload_len,
-                &encrypted_payload,
-            )
-            .map_err(protocol_to_io)?;
-            app_write.write_all(&plain).await?;
-            app_write.flush().await?;
-        }
-    });
-
-    let _ = tokio::try_join!(upload, download);
-    Ok(())
-}
-
-#[cfg(feature = "shadowsocks")]
-fn ss_derive_outbound_key(
-    cipher: shadowsocks::CipherKind,
-    password: &[u8],
-    salt: &[u8],
-) -> std::io::Result<Vec<u8>> {
-    if cipher.is_blake3() {
-        shadowsocks::derive_key_blake3(password, salt, cipher.key_len()).map_err(protocol_to_io)
-    } else {
-        shadowsocks::derive_key(password, salt, cipher.key_len()).map_err(protocol_to_io)
-    }
-}
-
-#[cfg(feature = "shadowsocks")]
-fn protocol_to_io(error: zero_core::Error) -> std::io::Error {
-    std::io::Error::other(error.to_string())
+    TcpRelayStream::new(shadowsocks::ShadowsocksAeadStream::outbound(
+        upstream, ss_session, password,
+    ))
 }

@@ -1,7 +1,8 @@
 //! TCP outbound data types used by both transport and runtime layers.
 //!
-//! The runtime orchestration (route_and_establish_tcp, establish_tcp_outbound,
-//! establish_tcp_candidate, establish_relay_chain) lives in `crate::runtime::tcp_outbound`.
+//! The TCP pipe orchestration lives in `crate::runtime::tcp_dispatch`.
+//! This module only defines the data types exchanged between runtime
+//! orchestration and transport relay code.
 
 use std::io;
 

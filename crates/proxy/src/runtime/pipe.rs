@@ -1,0 +1,94 @@
+//! Kernel pipe abstraction.
+//!
+//! The proxy runtime is an orchestration engine. This trait is the top-level
+//! runtime boundary: TCP and UDP are the two core pipe implementations, while
+//! concrete protocols plug into those pipes through protocol traits and
+//! dispatch categories.
+
+use zero_core::{Address, Network, ProtocolType, Session, SessionAuth};
+use zero_engine::EngineError;
+
+use crate::runtime::udp_dispatch::UdpDispatch;
+use crate::runtime::Proxy;
+use crate::transport::TcpRouteResult;
+
+/// Common runtime pipe boundary for kernel orchestration.
+pub(crate) trait KernelPipe {
+    const NETWORK: Network;
+
+    type Input<'a>;
+    type Output;
+    type Error;
+
+    async fn dispatch(&mut self, input: Self::Input<'_>) -> Result<Self::Output, Self::Error>;
+}
+
+/// TCP connection pipe.
+pub(crate) struct TcpPipe<'a> {
+    proxy: &'a Proxy,
+}
+
+impl<'a> TcpPipe<'a> {
+    pub(crate) fn new(proxy: &'a Proxy) -> Self {
+        Self { proxy }
+    }
+}
+
+/// Input for one TCP connection dispatch.
+pub(crate) struct TcpPipeInput<'a> {
+    pub(crate) session: &'a mut Session,
+}
+
+impl KernelPipe for TcpPipe<'_> {
+    const NETWORK: Network = Network::Tcp;
+
+    type Input<'a> = TcpPipeInput<'a>;
+    type Output = TcpRouteResult;
+    type Error = EngineError;
+
+    async fn dispatch(&mut self, input: Self::Input<'_>) -> Result<Self::Output, Self::Error> {
+        self.proxy.dispatch_tcp(input.session).await
+    }
+}
+
+/// Input for one UDP packet dispatch within an inbound UDP association.
+pub(crate) struct UdpPipeInput<'a> {
+    pub(crate) target: Address,
+    pub(crate) port: u16,
+    pub(crate) payload: &'a [u8],
+    pub(crate) protocol: ProtocolType,
+    pub(crate) auth: Option<&'a SessionAuth>,
+}
+
+/// UDP datagram pipe.
+pub(crate) struct UdpPipe<'a> {
+    proxy: &'a Proxy,
+    dispatch: &'a mut UdpDispatch,
+}
+
+impl<'a> UdpPipe<'a> {
+    pub(crate) fn new(proxy: &'a Proxy, dispatch: &'a mut UdpDispatch) -> Self {
+        Self { proxy, dispatch }
+    }
+}
+
+impl KernelPipe for UdpPipe<'_> {
+    const NETWORK: Network = Network::Udp;
+
+    type Input<'a> = UdpPipeInput<'a>;
+    type Output = u64;
+    type Error = EngineError;
+
+    async fn dispatch(&mut self, input: Self::Input<'_>) -> Result<Self::Output, Self::Error> {
+        UdpDispatch::dispatch(
+            self.dispatch,
+            self.proxy,
+            input.target,
+            input.port,
+            input.payload,
+            input.protocol,
+            input.auth,
+        )
+        .await
+    }
+}

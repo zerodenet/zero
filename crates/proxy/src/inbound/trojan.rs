@@ -1,4 +1,4 @@
-﻿//! Trojan inbound: TLS accept, protocol auth, route, TCP/UDP relay.
+//! Trojan inbound: TLS accept, protocol auth, route, TCP/UDP relay.
 
 use std::io;
 
@@ -16,6 +16,7 @@ use zero_traits::{AsyncSocket, UdpPacketStreamFraming};
 
 use crate::runtime::bind_listener;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_associate::helpers::{
     log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };
@@ -214,14 +215,16 @@ impl Proxy {
                     match packet {
                         Ok(packet) => {
                             last_activity = TokioInstant::now();
-                            if let Err(error) = dispatch.dispatch(
-                                self,
-                                packet.target,
-                                packet.port,
-                                &packet.payload,
-                                zero_core::ProtocolType::Trojan,
-                                auth.as_ref(),
-                            ).await {
+                            if let Err(error) = UdpPipe::new(self, &mut dispatch)
+                                .dispatch(UdpPipeInput {
+                                    target: packet.target,
+                                    port: packet.port,
+                                    payload: &packet.payload,
+                                    protocol: zero_core::ProtocolType::Trojan,
+                                    auth: auth.as_ref(),
+                                })
+                                .await
+                            {
                                 warn!(error = %error, "failed to process trojan udp packet");
                             }
                         }

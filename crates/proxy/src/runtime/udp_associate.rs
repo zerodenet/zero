@@ -9,6 +9,7 @@ use zero_traits::DnsResolver;
 use crate::logging::{
     log_udp_upstream_association_dropped, log_udp_upstream_association_idle_timeout,
 };
+use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, StreamTraffic};
@@ -290,15 +291,14 @@ impl Proxy {
         }
 
         // ── Generic dispatch ─────────────────────────────────────────
-        let session_id = dispatch
-            .dispatch(
-                self,
-                udp_packet.target,
-                udp_packet.port,
-                &udp_packet.payload,
-                ProtocolType::Socks5,
-                None,
-            )
+        let session_id = UdpPipe::new(self, dispatch)
+            .dispatch(UdpPipeInput {
+                target: udp_packet.target,
+                port: udp_packet.port,
+                payload: &udp_packet.payload,
+                protocol: ProtocolType::Socks5,
+                auth: None,
+            })
             .await?;
 
         // Record protocol-specific overhead: TCP control traffic and

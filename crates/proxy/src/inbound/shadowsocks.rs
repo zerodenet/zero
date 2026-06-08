@@ -1,18 +1,13 @@
-//! Shadowsocks inbound — AEAD accept, route, AEAD-framed relay.
+//! Shadowsocks inbound: listener lifecycle, TCP pipe entry, and UDP pipe entry.
 
 use std::io;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 use async_trait::async_trait;
-use ring::rand::SecureRandom;
 use shadowsocks::{
-    CipherKind, ShadowsocksInbound, ShadowsocksOutbound, ShadowsocksUdpDecodeContext,
-    ShadowsocksUdpPacketTarget,
+    CipherKind, ShadowsocksAeadStream, ShadowsocksDatagramCodec, ShadowsocksInbound,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::watch;
@@ -21,52 +16,14 @@ use tracing::{error, info, warn};
 use zero_config::InboundConfig;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
-use zero_traits::UdpDatagramFraming;
+use zero_traits::DatagramCodec;
 
 use crate::logging::log_listener_connection_error;
 use crate::runtime::bind_listener;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::Proxy;
-use crate::transport::{MeteredStream, RateLimiter, TcpRelayStream};
-
-// ── Client stream wrapper (carries AEAD key + first-chunk payload) ────
-
-pub(crate) struct SsClientStream {
-    inner: TcpRelayStream,
-    upload_key: Vec<u8>,
-    download_key: Vec<u8>,
-    next_upload_nonce: u64,
-    response_salt: Vec<u8>,
-    remaining: Vec<u8>,
-}
-
-impl AsyncRead for SsClientStream {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_read(cx, buf)
-    }
-}
-
-impl AsyncWrite for SsClientStream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
-    }
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
-}
-
-// ── Handler ────────────────────────────────────────────────────────────
+use crate::transport::{MeteredStream, TcpRelayStream};
 
 #[derive(Clone)]
 pub(crate) struct ShadowsocksInboundHandler {
@@ -77,7 +34,7 @@ pub(crate) struct ShadowsocksInboundHandler {
 
 #[async_trait]
 impl InboundProtocol for ShadowsocksInboundHandler {
-    type ClientStream = SsClientStream;
+    type ClientStream = ShadowsocksAeadStream<TcpRelayStream>;
 
     async fn accept(
         &self,
@@ -89,113 +46,31 @@ impl InboundProtocol for ShadowsocksInboundHandler {
             .accept_request(&mut metered, self.cipher, &self.password)
             .await?;
 
-        let mut session = accept.session;
+        let mut session = accept.session.clone();
         let mut sa = zero_core::SessionAuth::new("shadowsocks");
         sa.principal_key = Some(String::from_utf8_lossy(&self.password).to_string());
         session.apply_auth(sa);
 
-        let mut response_salt = vec![0u8; self.cipher.salt_len()];
-        ring::rand::SystemRandom::new()
-            .fill(&mut response_salt)
-            .map_err(|_| {
-                EngineError::Io(io::Error::other("shadowsocks: response salt random failed"))
-            })?;
-        let download_key = download_key_for_client(self.cipher, &self.password, &response_salt)
-            .map_err(|e| EngineError::Io(io::Error::other(format!("shadowsocks: {e}"))))?;
+        let client = accept.into_aead_stream(metered.into_inner(), &self.password)?;
 
-        Ok((
-            session,
-            SsClientStream {
-                inner: metered.into_inner(),
-                upload_key: accept.session_key,
-                download_key,
-                next_upload_nonce: accept.next_upload_nonce,
-                response_salt,
-                remaining: accept.remaining_payload,
-            },
-        ))
+        Ok((session, client))
     }
 
-    async fn send_ok(&self, _client: &mut SsClientStream) -> Result<(), EngineError> {
+    async fn send_ok(&self, _client: &mut Self::ClientStream) -> Result<(), EngineError> {
         Ok(()) // Shadowsocks has no success response
     }
 
-    async fn send_blocked(&self, _client: &mut SsClientStream) -> Result<(), EngineError> {
+    async fn send_blocked(&self, _client: &mut Self::ClientStream) -> Result<(), EngineError> {
         Ok(())
     }
 
-    async fn send_upstream_failure(&self, _client: &mut SsClientStream) -> Result<(), EngineError> {
-        Ok(())
-    }
-
-    /// Custom AEAD-framed relay: decrypt upload, encrypt download.
-    /// Rate limiting uses the kernel's `RateLimiter` (unified GCRA).
-    async fn relay(
+    async fn send_upstream_failure(
         &self,
-        client: SsClientStream,
-        upstream: TcpRelayStream,
-        proxy: &Proxy,
-        session_id: u64,
-        up_bps: Option<u64>,
-        down_bps: Option<u64>,
+        _client: &mut Self::ClientStream,
     ) -> Result<(), EngineError> {
-        let response_salt = client.response_salt.clone();
-        let (client_read, mut client_write) = tokio::io::split(client.inner);
-        let (up_read, mut up_write) = tokio::io::split(upstream);
-
-        if !client.remaining.is_empty() {
-            if up_write.write_all(&client.remaining).await.is_ok() {
-                let bytes = client.remaining.len() as u64;
-                proxy.record_session_inbound_rx(session_id, bytes);
-                proxy.record_session_outbound_tx(session_id, bytes);
-            }
-        }
-
-        client_write.write_all(&response_salt).await?;
-        client_write.flush().await?;
-
-        let key_up = client.upload_key.clone();
-        let key_down = client.download_key;
-        let cipher = self.cipher;
-        let upload_nonce = client.next_upload_nonce;
-        let upload_proxy = proxy.clone();
-        let upload = tokio::spawn(async move {
-            let _ = ss_decrypt_upload(
-                client_read,
-                up_write,
-                cipher,
-                key_up,
-                upload_nonce,
-                up_bps,
-                move |bytes| {
-                    upload_proxy.record_session_inbound_rx(session_id, bytes);
-                    upload_proxy.record_session_outbound_tx(session_id, bytes);
-                },
-            )
-            .await;
-        });
-        let download_proxy = proxy.clone();
-        let download = tokio::spawn(async move {
-            let _ = ss_encrypt_download(
-                up_read,
-                client_write,
-                cipher,
-                key_down,
-                down_bps,
-                move |bytes| {
-                    download_proxy.record_session_outbound_rx(session_id, bytes);
-                    download_proxy.record_session_inbound_tx(session_id, bytes);
-                },
-            )
-            .await;
-        });
-
-        let _ = tokio::try_join!(upload, download);
         Ok(())
     }
 }
-
-// ── Listener ────────────────────────────────────────────────────────────
 
 impl Proxy {
     #[allow(clippy::too_many_lines)]
@@ -332,92 +207,7 @@ impl Proxy {
     }
 }
 
-// ── AEAD relay helpers ─────────────────────────────────────────────────
-
-async fn ss_decrypt_upload(
-    mut client: impl AsyncRead + Unpin + Send + 'static,
-    mut upstream: impl AsyncWrite + Unpin + Send + 'static,
-    cipher: CipherKind,
-    key: Vec<u8>,
-    next_nonce: u64,
-    rate_bps: Option<u64>,
-    mut on_bytes: impl FnMut(u64) + Send + 'static,
-) -> Result<(), ()> {
-    use shadowsocks::{decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload};
-
-    let mut limiter = rate_bps.filter(|b| *b > 0).map(RateLimiter::new);
-    let mut nonce = next_nonce;
-    loop {
-        let mut encrypted_length = vec![0u8; 2 + cipher.tag_len()];
-        if client.read_exact(&mut encrypted_length).await.is_err() {
-            break;
-        }
-        let Ok(payload_len) = decrypt_tcp_chunk_length(cipher, &key, &mut nonce, &encrypted_length)
-        else {
-            break;
-        };
-
-        let mut encrypted_payload = vec![0u8; payload_len + cipher.tag_len()];
-        if client.read_exact(&mut encrypted_payload).await.is_err() {
-            break;
-        }
-        match decrypt_tcp_chunk_payload(cipher, &key, &mut nonce, payload_len, &encrypted_payload) {
-            Ok(plain) => {
-                // Wait for rate-limit tokens before writing (kernel GCRA).
-                if let Some(ref mut lim) = limiter {
-                    while let Err(wait) = lim.check_n(plain.len() as u64) {
-                        tokio::time::sleep(wait).await;
-                    }
-                }
-                if upstream.write_all(&plain).await.is_err() {
-                    break;
-                }
-                on_bytes(plain.len() as u64);
-            }
-            Err(_) => break,
-        }
-    }
-    let _ = upstream.shutdown().await;
-    Ok(())
-}
-
-async fn ss_encrypt_download(
-    mut upstream: impl AsyncRead + Unpin,
-    mut client: impl AsyncWrite + Unpin,
-    cipher: CipherKind,
-    key: Vec<u8>,
-    rate_bps: Option<u64>,
-    mut on_bytes: impl FnMut(u64),
-) -> Result<(), ()> {
-    let mut limiter = rate_bps.filter(|b| *b > 0).map(RateLimiter::new);
-    let mut nonce: u64 = 0;
-    let mut buf = [0u8; 16384];
-    loop {
-        match upstream.read(&mut buf).await {
-            Ok(0) => break,
-            Ok(n) => match ShadowsocksInbound::encrypt_chunk(cipher, &key, &mut nonce, &buf[..n]) {
-                Ok(encrypted) => {
-                    // Wait for rate-limit tokens before writing (kernel GCRA).
-                    if let Some(ref mut lim) = limiter {
-                        while let Err(wait) = lim.check_n(encrypted.len() as u64) {
-                            tokio::time::sleep(wait).await;
-                        }
-                    }
-                    if client.write_all(&encrypted).await.is_err() {
-                        break;
-                    }
-                    on_bytes(n as u64);
-                }
-                Err(_) => break,
-            },
-            Err(_) => break,
-        }
-    }
-    let _ = client.shutdown().await;
-    Ok(())
-}
-
-// ── UDP relay (uses generic UdpDispatch for routing) ────────────────
+// UDP relay: protocol framing here, routing through the UDP pipe.
 
 impl Proxy {
     pub(crate) async fn ss_udp_relay_loop(
@@ -448,26 +238,30 @@ impl Proxy {
                     };
                     let packet = &buf[..n];
 
-                    let Ok(decoded) = <ShadowsocksOutbound as UdpDatagramFraming<
-                        ShadowsocksUdpPacketTarget,
-                        ShadowsocksUdpDecodeContext,
-                    >>::decode_udp_datagram(
-                        &ShadowsocksOutbound,
-                        &ShadowsocksUdpDecodeContext {
-                            cipher,
-                            password: password.as_bytes(),
-                        },
-                        packet,
-                    ) else {
+                    let codec = ShadowsocksDatagramCodec {
+                        cipher,
+                        password: password.as_bytes().to_vec(),
+                    };
+                    let Some((target, port, payload)) =
+                        <ShadowsocksDatagramCodec as DatagramCodec<Address>>::decode(
+                            &codec, packet,
+                        )
+                    else {
                         continue;
                     };
 
                     let mut sa = zero_core::SessionAuth::new("shadowsocks");
                     sa.principal_key = Some(password.to_owned());
-                    match dispatch.dispatch(
-                        self, decoded.target, decoded.port, &decoded.payload,
-                        ProtocolType::Shadowsocks, Some(&sa),
-                    ).await {
+                    match UdpPipe::new(self, &mut dispatch)
+                        .dispatch(UdpPipeInput {
+                            target,
+                            port,
+                            payload: &payload,
+                            protocol: ProtocolType::Shadowsocks,
+                            auth: Some(&sa),
+                        })
+                        .await
+                    {
                         Ok(session_id) => {
                             client_sessions.insert(session_id, client_addr);
                         }
@@ -527,19 +321,13 @@ async fn ss_send_encrypted(
     payload: &[u8],
     client: SocketAddr,
 ) {
-    let Ok(resp) = <ShadowsocksOutbound as UdpDatagramFraming<
-        ShadowsocksUdpPacketTarget,
-        ShadowsocksUdpDecodeContext,
-    >>::encode_udp_datagram(
-        &ShadowsocksOutbound,
-        &ShadowsocksUdpPacketTarget {
-            target,
-            port,
-            payload,
-            cipher,
-            password: password.as_bytes(),
-        },
-    ) else {
+    let codec = ShadowsocksDatagramCodec {
+        cipher,
+        password: password.as_bytes().to_vec(),
+    };
+    let Ok(resp) =
+        <ShadowsocksDatagramCodec as DatagramCodec<Address>>::encode(&codec, target, port, payload)
+    else {
         return;
     };
     let _ = socket.send_to(&resp, client).await;
@@ -560,25 +348,4 @@ fn address_from_socket_addr(addr: SocketAddr) -> Address {
         std::net::IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
         std::net::IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
     }
-}
-
-fn ss_derive_key(
-    cipher: CipherKind,
-    password: &[u8],
-    salt: &[u8],
-) -> Result<Vec<u8>, zero_core::Error> {
-    use shadowsocks::derive_key;
-    if cipher.is_blake3() {
-        shadowsocks::derive_key_blake3(password, salt, cipher.key_len())
-    } else {
-        derive_key(password, salt, cipher.key_len())
-    }
-}
-
-fn download_key_for_client(
-    cipher: CipherKind,
-    password: &[u8],
-    salt: &[u8],
-) -> Result<Vec<u8>, zero_core::Error> {
-    ss_derive_key(cipher, password, salt)
 }

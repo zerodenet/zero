@@ -1,4 +1,4 @@
-//! UDP flow start — new outbound establishment.
+//! UDP flow start: new outbound establishment.
 //!
 //! Contains [`UdpDispatch::start_flow`] (single-hop) and
 //! [`UdpDispatch::start_relay_flow`] (multi-hop chain) for establishing new
@@ -10,19 +10,22 @@ use zero_engine::ResolvedLeafOutbound;
 
 #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
 use super::packet_path_chain::PacketPathChainParams;
-use super::{FlowFailure, FlowStartResult, UdpCandidate, UdpDispatch};
+use super::{
+    FlowFailure, FlowStartResult, H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpCandidate,
+    UdpDispatch, UdpFlowContext, UdpPacketRef, UdpPeerEndpoint,
+};
 use crate::runtime::udp_associate::sessions::{UdpFlowOutbound, UdpPacketPathCarrier};
 use crate::runtime::vless_udp::{establish_vless_udp_upstream_over_stream, VlessUdpTransport};
 use crate::runtime::Proxy;
 
-// ── Chain resolution ─────────────────────────────────────────────────
+// Chain resolution.
 
 /// Resolve a relay chain into packet-path + datagram parameters.
 ///
-/// Returns `Some` when the chain matches the "packet path carrier → datagram
+/// Returns `Some` when the chain matches the "packet path carrier -> datagram
 /// protocol" pattern. Currently recognises `[SOCKS5, Shadowsocks]`. Adding
 /// new combinations only requires extending this function and implementing
-/// [`UdpPacketPath`] + [`DatagramCodec`] — no new protocol-pair modules.
+/// [`UdpPacketPath`] + [`DatagramCodec`]: no new protocol-pair modules.
 #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
 fn resolve_udp_packet_path_chain<'a>(
     chain: &[ResolvedLeafOutbound<'a>],
@@ -56,7 +59,7 @@ fn resolve_udp_packet_path_chain<'a>(
     }
 }
 
-// ── impl UdpDispatch ─────────────────────────────────────────────────
+// impl UdpDispatch.
 
 impl UdpDispatch {
     /// Start a new UDP flow by dispatching to the resolved outbound.
@@ -201,16 +204,20 @@ impl UdpDispatch {
                 let sent = self
                     .h2_manager
                     .send(
-                        &mut self.chain_tasks,
-                        session.id,
-                        proxy,
-                        server,
-                        port,
-                        password,
-                        client_fingerprint,
-                        &session.target,
-                        session.port,
-                        payload,
+                        UdpFlowContext {
+                            chain_tasks: &mut self.chain_tasks,
+                            session_id: session.id,
+                        },
+                        H2UdpPeer {
+                            endpoint: UdpPeerEndpoint { server, port },
+                            password,
+                            client_fingerprint,
+                        },
+                        UdpPacketRef {
+                            target: &session.target,
+                            port: session.port,
+                            payload,
+                        },
                     )
                     .await
                     .map_err(|f: FlowFailure| FlowFailure {
@@ -253,15 +260,20 @@ impl UdpDispatch {
                     let sent = self
                         .ss_manager
                         .send(
-                            &mut self.chain_tasks,
-                            session.id,
-                            server,
-                            port,
-                            password,
-                            cipher,
-                            &session.target,
-                            session.port,
-                            payload,
+                            UdpFlowContext {
+                                chain_tasks: &mut self.chain_tasks,
+                                session_id: session.id,
+                            },
+                            SsUdpPeer {
+                                endpoint: UdpPeerEndpoint { server, port },
+                                password,
+                                cipher,
+                            },
+                            UdpPacketRef {
+                                target: &session.target,
+                                port: session.port,
+                                payload,
+                            },
                         )
                         .await
                         .map_err(|f: FlowFailure| FlowFailure {
@@ -307,20 +319,25 @@ impl UdpDispatch {
                 let sent = self
                     .trojan_manager
                     .send(
-                        &mut self.chain_tasks,
-                        session.id,
+                        UdpFlowContext {
+                            chain_tasks: &mut self.chain_tasks,
+                            session_id: session.id,
+                        },
                         proxy,
                         session,
-                        server,
-                        port,
-                        password,
-                        sni,
-                        insecure,
-                        client_fingerprint,
-                        false,
-                        &session.target,
-                        session.port,
-                        payload,
+                        TrojanUdpPeer {
+                            endpoint: UdpPeerEndpoint { server, port },
+                            password,
+                            sni,
+                            insecure,
+                            client_fingerprint,
+                            relay_chain: false,
+                        },
+                        UdpPacketRef {
+                            target: &session.target,
+                            port: session.port,
+                            payload,
+                        },
                     )
                     .await
                     .map_err(|f: FlowFailure| FlowFailure {
@@ -363,18 +380,23 @@ impl UdpDispatch {
                 let sent = self
                     .mieru_manager
                     .send(
-                        &mut self.chain_tasks,
-                        session.id,
+                        UdpFlowContext {
+                            chain_tasks: &mut self.chain_tasks,
+                            session_id: session.id,
+                        },
                         proxy,
                         session,
-                        server,
-                        port,
-                        username,
-                        password,
-                        false,
-                        &session.target,
-                        session.port,
-                        payload,
+                        MieruUdpPeer {
+                            endpoint: UdpPeerEndpoint { server, port },
+                            username,
+                            password,
+                            relay_chain: false,
+                        },
+                        UdpPacketRef {
+                            target: &session.target,
+                            port: session.port,
+                            payload,
+                        },
                     )
                     .await
                     .map_err(|f: FlowFailure| FlowFailure {
@@ -433,13 +455,17 @@ impl UdpDispatch {
             let sent = self
                 .packet_path_manager
                 .send(
-                    &mut self.chain_tasks,
-                    session.id,
+                    UdpFlowContext {
+                        chain_tasks: &mut self.chain_tasks,
+                        session_id: session.id,
+                    },
                     proxy,
                     &params,
-                    &session.target,
-                    session.port,
-                    payload,
+                    UdpPacketRef {
+                        target: &session.target,
+                        port: session.port,
+                        payload,
+                    },
                 )
                 .await?;
 
@@ -462,14 +488,15 @@ impl UdpDispatch {
             });
         }
 
-        let (stream, final_hop) = proxy
-            .establish_relay_prefix(chain)
-            .await
-            .map_err(|failure| FlowFailure {
-                stage: failure.stage,
-                error: failure.error,
-                upstream: failure.upstream_endpoint,
-            })?;
+        let (stream, final_hop) =
+            proxy
+                .dispatch_tcp_relay_prefix(chain)
+                .await
+                .map_err(|failure| FlowFailure {
+                    stage: failure.stage,
+                    error: failure.error,
+                    upstream: failure.upstream_endpoint,
+                })?;
 
         match final_hop {
             ResolvedLeafOutbound::Vless {
@@ -554,21 +581,27 @@ impl UdpDispatch {
                 let sent = self
                     .trojan_manager
                     .send_relay(
-                        &mut self.chain_tasks,
-                        session.id,
+                        UdpFlowContext {
+                            chain_tasks: &mut self.chain_tasks,
+                            session_id: session.id,
+                        },
                         stream,
                         None,
                         proxy,
                         session,
-                        server,
-                        port,
-                        password,
-                        sni,
-                        insecure,
-                        client_fingerprint,
-                        &session.target,
-                        session.port,
-                        payload,
+                        TrojanUdpPeer {
+                            endpoint: UdpPeerEndpoint { server, port },
+                            password,
+                            sni,
+                            insecure,
+                            client_fingerprint,
+                            relay_chain: true,
+                        },
+                        UdpPacketRef {
+                            target: &session.target,
+                            port: session.port,
+                            payload,
+                        },
                     )
                     .await?;
 
@@ -597,16 +630,22 @@ impl UdpDispatch {
                 let sent = self
                     .mieru_manager
                     .send_relay(
-                        &mut self.chain_tasks,
-                        session.id,
+                        UdpFlowContext {
+                            chain_tasks: &mut self.chain_tasks,
+                            session_id: session.id,
+                        },
                         stream,
-                        server,
-                        port,
-                        username,
-                        password,
-                        &session.target,
-                        session.port,
-                        payload,
+                        MieruUdpPeer {
+                            endpoint: UdpPeerEndpoint { server, port },
+                            username,
+                            password,
+                            relay_chain: true,
+                        },
+                        UdpPacketRef {
+                            target: &session.target,
+                            port: session.port,
+                            payload,
+                        },
                     )
                     .await?;
 

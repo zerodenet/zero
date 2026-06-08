@@ -15,6 +15,7 @@ use zero_core::Session;
 use zero_engine::{EngineError, SessionOutcome};
 
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
+use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput};
 use crate::runtime::Proxy;
 use crate::transport::{is_block_error, relay_bidirectional_metered_throttled, TcpRelayStream};
 
@@ -114,7 +115,12 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
     let mut handle = proxy.track_session(session.id);
     let started_at = Instant::now();
 
-    let result = match proxy.route_and_establish_tcp(&mut session).await {
+    let result = match TcpPipe::new(proxy)
+        .dispatch(TcpPipeInput {
+            session: &mut session,
+        })
+        .await
+    {
         Ok(result) => {
             log_session_accepted(&session, &result.route_action, proxy.config.mode.kind());
 

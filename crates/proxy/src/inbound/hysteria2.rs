@@ -21,6 +21,7 @@ use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::Proxy;
 use crate::transport::{copy_one_way, Hysteria2Stream};
 
@@ -383,10 +384,15 @@ impl Proxy {
                     match dg {
                         Ok(data) => {
                             if let Ok(pkt) = parse_udp_datagram(&data) {
-                                let _ = dispatch.dispatch(
-                                    &proxy, pkt.target.clone(), pkt.port, &pkt.payload,
-                                    ProtocolType::Hysteria2, None,
-                                ).await.inspect(|sid| {
+                                let _ = UdpPipe::new(&proxy, &mut dispatch)
+                                    .dispatch(UdpPipeInput {
+                                        target: pkt.target.clone(),
+                                        port: pkt.port,
+                                        payload: &pkt.payload,
+                                        protocol: ProtocolType::Hysteria2,
+                                        auth: None,
+                                    })
+                                    .await.inspect(|sid| {
                                     h2_flows.insert(*sid, pkt.session_id);
                                 }).inspect_err(|e| {
                                     warn!(error = %e, "h2 udp dispatch failed");

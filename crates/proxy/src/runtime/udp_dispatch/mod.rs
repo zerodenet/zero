@@ -1,19 +1,20 @@
 //! Generic UDP dispatch: protocol-agnostic routing and outbound dispatch.
 //!
-//! [`UdpDispatch`] is the single entry point for all UDP packet routing.
-//! Each inbound protocol creates a `UdpDispatch` instance, calls [`dispatch()`]
-//! for each incoming packet, and polls for responses to deliver to its client.
+//! [`UdpDispatch`] is the UDP pipe state machine.
+//! Inbound protocols create one dispatcher per UDP association/session, submit
+//! packets through [`crate::runtime::pipe::UdpPipe`], and poll this dispatcher
+//! for responses to deliver to the client.
 //!
 //! # Module layout
 //!
-//! - [`forward`] — re-dispatch packets on existing outbound flows
-//! - [`start`] — establish new outbound flows (single-hop and relay chains)
-//! - [`ss_manager`] — Shadowsocks direct datagram manager
-//! - [`h2_manager`] — Hysteria2 QUIC datagram manager
-//! - [`trojan_manager`] — Trojan stream-packet manager
-//! - [`mieru_manager`] — Mieru stream-packet manager
-//! - [`packet_path_chain`] — generic datagram-over-packet-path manager for
-//!   relay chains (SOCKS5 → Shadowsocks etc.)
+//! - [`forward`]: re-dispatch packets on existing outbound flows
+//! - [`start`]: establish new outbound flows (single-hop and relay chains)
+//! - [`ss_manager`]: Shadowsocks direct datagram manager
+//! - [`h2_manager`]: Hysteria2 QUIC datagram manager
+//! - [`trojan_manager`]: Trojan stream-packet manager
+//! - [`mieru_manager`]: Mieru stream-packet manager
+//! - [`packet_path_chain`]: generic datagram-over-packet-path manager for
+//!   relay chains (SOCKS5 -> Shadowsocks etc.)
 //!
 //! # Supported outbounds
 //!
@@ -38,7 +39,7 @@
 //! let mut dispatch = UdpDispatch::new("inbound-tag").await?;
 //!
 //! // For each incoming packet:
-//! dispatch.dispatch(proxy, target, port, payload, ProtocolType::Vless, auth.as_ref()).await?;
+//! UdpPipe::new(proxy, &mut dispatch).dispatch(input).await?;
 //!
 //! // Poll for responses in a select loop:
 //! select! {
@@ -72,7 +73,7 @@ use crate::runtime::udp_associate::sessions::{
 use crate::runtime::vless_udp::VlessUdpOutboundManager;
 use crate::runtime::Proxy;
 
-// ── Sub-module declarations ──────────────────────────────────────────
+// Sub-module declarations.
 
 mod forward;
 mod start;
@@ -87,7 +88,7 @@ mod packet_path_chain;
 mod ss_manager;
 mod trojan_manager;
 
-// ── Re-exports ───────────────────────────────────────────────────────
+// Re-exports.
 
 use h2_manager::H2ChainManager;
 use mieru_manager::MieruChainManager;
@@ -95,6 +96,10 @@ use mieru_manager::MieruChainManager;
 use packet_path_chain::PacketPathManager;
 pub(crate) use packet_path_traits::ChainTask;
 pub(super) use packet_path_traits::{DatagramCodec, UdpPacketPath};
+use packet_path_traits::{
+    H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpFlowContext, UdpPacketRef,
+    UdpPeerEndpoint,
+};
 #[cfg(feature = "shadowsocks")]
 use ss_manager::SsChainManager;
 use trojan_manager::TrojanChainManager;

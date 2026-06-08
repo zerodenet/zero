@@ -12,8 +12,7 @@ use tokio::task::JoinSet;
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use super::{ChainTask, FlowFailure};
-use crate::runtime::Proxy;
+use super::{ChainTask, FlowFailure, H2UdpPeer, UdpFlowContext, UdpPacketRef};
 
 #[cfg(feature = "hysteria2")]
 type RecvItem = (Address, u16, Vec<u8>);
@@ -38,49 +37,38 @@ impl H2ChainManager {
 
     pub(super) async fn send(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        session_id: u64,
-        _proxy: &Proxy,
-        server: &str,
-        port: u16,
-        password: &str,
-        client_fingerprint: Option<&str>,
-        target: &Address,
-        target_port: u16,
-        payload: &[u8],
+        ctx: UdpFlowContext<'_>,
+        peer: H2UdpPeer<'_>,
+        packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let sent = payload.len();
-        let key = (server.to_owned(), port, password.to_owned());
+        let sent = packet_ref.payload.len();
+        let key = (
+            peer.endpoint.server.to_owned(),
+            peer.endpoint.port,
+            peer.password.to_owned(),
+        );
 
         // Cache hit
         if let Some(entry) = self.upstreams.get(&key) {
-            let dg = Self::packet(target, target_port, payload).map_err(|error| FlowFailure {
-                stage: "h2_udp_packet",
-                error,
-                upstream: Some((server.to_owned(), port)),
-            })?;
+            let dg = Self::packet(packet_ref.target, packet_ref.port, packet_ref.payload).map_err(
+                |error| FlowFailure {
+                    stage: "h2_udp_packet",
+                    error,
+                    upstream: Some(peer.endpoint.upstream()),
+                },
+            )?;
             let _ = entry.send_tx.send(dg).await;
             return Ok(sent);
         }
 
         // Cache miss: establish new upstream.
-        let send_tx = Self::establish(
-            chain_tasks,
-            session_id,
-            server,
-            port,
-            password,
-            client_fingerprint,
-            target,
-            target_port,
-            payload,
-        )
-        .await
-        .map_err(|e| FlowFailure {
-            stage: "h2_establish",
-            error: e,
-            upstream: Some((server.to_owned(), port)),
-        })?;
+        let send_tx = Self::establish(ctx.chain_tasks, ctx.session_id, &peer, packet_ref)
+            .await
+            .map_err(|e| FlowFailure {
+                stage: "h2_establish",
+                error: e,
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
 
         self.upstreams.insert(
             key,
@@ -95,24 +83,20 @@ impl H2ChainManager {
     async fn establish(
         chain_tasks: &mut JoinSet<ChainTask>,
         session_id: u64,
-        server: &str,
-        port: u16,
-        password: &str,
-        client_fingerprint: Option<&str>,
-        target: &Address,
-        target_port: u16,
-        initial_payload: &[u8],
+        peer: &H2UdpPeer<'_>,
+        initial_packet: UdpPacketRef<'_>,
     ) -> Result<tokio::sync::mpsc::Sender<Vec<u8>>, EngineError> {
         let connector =
-            Hysteria2Connector::new(server, port, password).with_fingerprint(client_fingerprint);
+            Hysteria2Connector::new(peer.endpoint.server, peer.endpoint.port, peer.password)
+                .with_fingerprint(peer.client_fingerprint);
         let conn = Arc::new(connector.connect_raw().await?);
 
         let (send_tx, mut send_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
         let (recv_tx, _) = broadcast::channel::<RecvItem>(32);
 
-        let target_owned = target.clone();
-        let port_owned = target_port;
-        let init_payload = initial_payload.to_vec();
+        let target_owned = initial_packet.target.clone();
+        let port_owned = initial_packet.port;
+        let init_payload = initial_packet.payload.to_vec();
 
         // Send task: reads outgoing datagrams, sends via QUIC.
         let conn_send = conn.clone();
@@ -195,16 +179,9 @@ impl H2ChainManager {
     #[allow(unused_variables)]
     pub(super) async fn send(
         &mut self,
-        _tasks: &mut JoinSet<ChainTask>,
-        _sid: u64,
-        _proxy: &Proxy,
-        _server: &str,
-        _port: u16,
-        _password: &str,
-        _fp: Option<&str>,
-        _target: &Address,
-        _tp: u16,
-        _payload: &[u8],
+        _ctx: UdpFlowContext<'_>,
+        _peer: H2UdpPeer<'_>,
+        _packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         Err(FlowFailure {
             stage: "h2_feature",
