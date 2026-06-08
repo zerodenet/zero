@@ -560,6 +560,7 @@ fn accepts_all_shadowsocks_supported_ciphers() {
     ];
 
     for cipher in CIPHERS {
+        let password = shadowsocks_password_for_cipher(cipher);
         let config = RuntimeConfig::parse(&format!(
             r#"{{
                 "inbounds": [
@@ -568,7 +569,7 @@ fn accepts_all_shadowsocks_supported_ciphers() {
                         "listen": {{ "address": "127.0.0.1", "port": 8388 }},
                         "protocol": {{
                             "type": "shadowsocks",
-                            "password": "secret",
+                            "password": "{password}",
                             "cipher": "{cipher}"
                         }}
                     }}
@@ -580,7 +581,7 @@ fn accepts_all_shadowsocks_supported_ciphers() {
                             "type": "shadowsocks",
                             "server": "127.0.0.1",
                             "port": 8389,
-                            "password": "secret",
+                            "password": "{password}",
                             "cipher": "{cipher}"
                         }}
                     }}
@@ -603,6 +604,16 @@ fn accepts_all_shadowsocks_supported_ciphers() {
             }
             _ => panic!("expected shadowsocks outbound"),
         }
+    }
+}
+
+fn shadowsocks_password_for_cipher(cipher: &str) -> &'static str {
+    match cipher {
+        "2022-blake3-aes-128-gcm" => "MDEyMzQ1Njc4OWFiY2RlZg==",
+        "2022-blake3-aes-256-gcm" | "2022-blake3-chacha20-poly1305" => {
+            "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+        }
+        _ => "secret",
     }
 }
 
@@ -657,6 +668,62 @@ fn rejects_invalid_shadowsocks_cipher_and_empty_outbound_password() {
 
     assert!(matches!(
         password_error,
+        zero_config::ConfigError::InvalidOutbound(_)
+    ));
+}
+
+#[test]
+fn rejects_invalid_shadowsocks_2022_password_key_material() {
+    let inbound_error = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "ss-in",
+                    "listen": { "address": "127.0.0.1", "port": 8388 },
+                    "protocol": {
+                        "type": "shadowsocks",
+                        "password": "secret",
+                        "cipher": "2022-blake3-aes-128-gcm"
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("invalid shadowsocks 2022 password should fail");
+
+    assert!(matches!(
+        inbound_error,
+        zero_config::ConfigError::InvalidInbound(_)
+    ));
+
+    let outbound_error = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "ss-out",
+                    "protocol": {
+                        "type": "shadowsocks",
+                        "server": "127.0.0.1",
+                        "port": 8389,
+                        "password": "MDEyMzQ1Njc4OWFiY2RlZg==",
+                        "cipher": "2022-blake3-aes-256-gcm"
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "ss-out" }
+            }
+        }"#,
+    )
+    .expect_err("wrong shadowsocks 2022 password length should fail");
+
+    assert!(matches!(
+        outbound_error,
         zero_config::ConfigError::InvalidOutbound(_)
     ));
 }

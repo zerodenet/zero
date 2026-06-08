@@ -1,39 +1,27 @@
 use super::*;
 
-const CIPHERS: &[&str] = &[
-    "aes-128-gcm",
-    "aes-256-gcm",
-    "chacha20-ietf-poly1305",
-    "2022-blake3-aes-128-gcm",
-    "2022-blake3-aes-256-gcm",
-    "2022-blake3-chacha20-poly1305",
-];
+use std::io::ErrorKind;
+
+const SERVER_PASSWORD: &str = "server-password";
+const CLIENT_PASSWORD: &str = "client-password";
+const CIPHER: &str = "aes-256-gcm";
 
 #[tokio::test]
 #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
-async fn relays_tcp_through_shadowsocks_outbound() {
-    for cipher in CIPHERS {
-        relays_tcp_through_shadowsocks_outbound_for_cipher(cipher).await;
-    }
-}
-
-async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
-    let password = password_for_cipher(cipher);
+async fn rejects_shadowsocks_outbound_with_wrong_password() {
     let echo_port = free_port();
     let upstream_port = free_port();
     let outer_port = free_port();
-    let payload = format!("tcp:{cipher}");
 
-    let expected = payload.clone();
     let echo_task = tokio::spawn(async move {
         let listener = TcpListener::bind(("127.0.0.1", echo_port))
             .await
             .expect("bind echo");
-        let (mut stream, _) = listener.accept().await.expect("accept echo");
-        let mut buf = vec![0_u8; expected.len()];
-        stream.read_exact(&mut buf).await.expect("read echo");
-        assert_eq!(buf, expected.as_bytes());
-        stream.write_all(&buf).await.expect("write echo");
+        let accept_result = timeout(Duration::from_secs(1), listener.accept()).await;
+        assert!(
+            accept_result.is_err(),
+            "wrong-password shadowsocks flow must not reach target"
+        );
     });
 
     let upstream_config = RuntimeConfig::parse(&format!(
@@ -44,8 +32,8 @@ async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
                     "listen": {{ "address": "127.0.0.1", "port": {upstream_port} }},
                     "protocol": {{
                         "type": "shadowsocks",
-                        "password": "{password}",
-                        "cipher": "{cipher}"
+                        "password": "{SERVER_PASSWORD}",
+                        "cipher": "{CIPHER}"
                     }}
                 }}
             ],
@@ -57,9 +45,7 @@ async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
         }}"#
     ))
     .expect("parse upstream config");
-    let upstream_engine = Engine::new(upstream_config).expect("build upstream engine");
-    let upstream_handle = spawn_engine(upstream_engine);
-
+    let upstream_handle = spawn_engine(Engine::new(upstream_config).expect("build upstream"));
     wait_for_listener(upstream_port).await;
 
     let outer_config = RuntimeConfig::parse(&format!(
@@ -78,8 +64,8 @@ async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
                         "type": "shadowsocks",
                         "server": "127.0.0.1",
                         "port": {upstream_port},
-                        "password": "{password}",
-                        "cipher": "{cipher}"
+                        "password": "{CLIENT_PASSWORD}",
+                        "cipher": "{CIPHER}"
                     }}
                 }}
             ],
@@ -90,12 +76,32 @@ async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
         }}"#
     ))
     .expect("parse outer config");
-    let outer_engine = Engine::new(outer_config).expect("build outer engine");
-    let outer_handle = spawn_engine(outer_engine);
-
+    let outer_handle = spawn_engine(Engine::new(outer_config).expect("build outer"));
     wait_for_listener(outer_port).await;
 
-    let mut client = TcpStream::connect(("127.0.0.1", outer_port))
+    let mut client = socks5_connect(outer_port, echo_port).await;
+    client
+        .write_all(b"must-not-arrive")
+        .await
+        .expect("write payload");
+    let mut echoed = [0_u8; 1];
+    let read_result = timeout(Duration::from_secs(3), client.read(&mut echoed))
+        .await
+        .expect("wrong-password flow should close in time");
+    match read_result {
+        Ok(0) => {}
+        Err(error) if error.kind() == ErrorKind::ConnectionReset => {}
+        Ok(read) => panic!("wrong-password flow returned {read} bytes"),
+        Err(error) => panic!("unexpected wrong-password close error: {error}"),
+    }
+
+    outer_handle.shutdown().await.expect("shutdown outer");
+    upstream_handle.shutdown().await.expect("shutdown upstream");
+    let _ = echo_task.await;
+}
+
+async fn socks5_connect(proxy_port: u16, target_port: u16) -> TcpStream {
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port))
         .await
         .expect("connect outer proxy");
     client
@@ -116,8 +122,8 @@ async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
         0,
         0,
         1,
-        ((echo_port >> 8) & 0xff) as u8,
-        (echo_port & 0xff) as u8,
+        ((target_port >> 8) & 0xff) as u8,
+        (target_port & 0xff) as u8,
     ];
     client.write_all(&request).await.expect("write request");
 
@@ -126,33 +132,7 @@ async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
         .read_exact(&mut response)
         .await
         .expect("read response");
-    assert_eq!(response[1], 0x00, "cipher: {cipher}");
+    assert_eq!(response[1], 0x00);
 
     client
-        .write_all(payload.as_bytes())
-        .await
-        .expect("write payload");
-    let mut echoed = vec![0_u8; payload.len()];
-    client.read_exact(&mut echoed).await.expect("read payload");
-    assert_eq!(echoed, payload.as_bytes(), "cipher: {cipher}");
-
-    outer_handle
-        .shutdown()
-        .await
-        .expect("shutdown outer engine");
-    upstream_handle
-        .shutdown()
-        .await
-        .expect("shutdown upstream engine");
-    let _ = echo_task.await;
-}
-
-fn password_for_cipher(cipher: &str) -> &'static str {
-    match cipher {
-        "2022-blake3-aes-128-gcm" => "MDEyMzQ1Njc4OWFiY2RlZg==",
-        "2022-blake3-aes-256-gcm" | "2022-blake3-chacha20-poly1305" => {
-            "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
-        }
-        _ => "test-password",
-    }
 }

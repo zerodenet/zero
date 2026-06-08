@@ -11,29 +11,29 @@ const CIPHERS: &[&str] = &[
 
 #[tokio::test]
 #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
-async fn relays_tcp_through_shadowsocks_outbound() {
+async fn relays_udp_through_shadowsocks_outbound_all_ciphers() {
     for cipher in CIPHERS {
-        relays_tcp_through_shadowsocks_outbound_for_cipher(cipher).await;
+        relays_udp_through_shadowsocks_outbound_for_cipher(cipher).await;
     }
 }
 
-async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
+async fn relays_udp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
     let password = password_for_cipher(cipher);
-    let echo_port = free_port();
+    let echo_port = free_udp_port();
     let upstream_port = free_port();
     let outer_port = free_port();
-    let payload = format!("tcp:{cipher}");
+    let payload = format!("udp:{cipher}");
 
-    let expected = payload.clone();
     let echo_task = tokio::spawn(async move {
-        let listener = TcpListener::bind(("127.0.0.1", echo_port))
+        let socket = UdpSocket::bind(("127.0.0.1", echo_port))
             .await
-            .expect("bind echo");
-        let (mut stream, _) = listener.accept().await.expect("accept echo");
-        let mut buf = vec![0_u8; expected.len()];
-        stream.read_exact(&mut buf).await.expect("read echo");
-        assert_eq!(buf, expected.as_bytes());
-        stream.write_all(&buf).await.expect("write echo");
+            .expect("bind udp echo");
+        let mut buf = [0_u8; 2048];
+        let (read, peer) = socket.recv_from(&mut buf).await.expect("recv udp");
+        socket
+            .send_to(&buf[..read], peer)
+            .await
+            .expect("send udp echo");
     });
 
     let upstream_config = RuntimeConfig::parse(&format!(
@@ -57,9 +57,7 @@ async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
         }}"#
     ))
     .expect("parse upstream config");
-    let upstream_engine = Engine::new(upstream_config).expect("build upstream engine");
-    let upstream_handle = spawn_engine(upstream_engine);
-
+    let upstream_handle = spawn_engine(Engine::new(upstream_config).expect("build upstream"));
     wait_for_listener(upstream_port).await;
 
     let outer_config = RuntimeConfig::parse(&format!(
@@ -73,7 +71,7 @@ async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
             ],
             "outbounds": [
                 {{
-                    "tag": "ss-out",
+                    "tag": "ss-udp-chain",
                     "protocol": {{
                         "type": "shadowsocks",
                         "server": "127.0.0.1",
@@ -85,65 +83,70 @@ async fn relays_tcp_through_shadowsocks_outbound_for_cipher(cipher: &str) {
             ],
             "route": {{
                 "rules": [],
-                "final": {{ "type": "route", "outbound": "ss-out" }}
+                "final": {{ "type": "route", "outbound": "ss-udp-chain" }}
             }}
         }}"#
     ))
     .expect("parse outer config");
-    let outer_engine = Engine::new(outer_config).expect("build outer engine");
-    let outer_handle = spawn_engine(outer_engine);
-
+    let outer_handle = spawn_engine(Engine::new(outer_config).expect("build outer"));
     wait_for_listener(outer_port).await;
 
-    let mut client = TcpStream::connect(("127.0.0.1", outer_port))
+    let mut control = TcpStream::connect(("127.0.0.1", outer_port))
         .await
         .expect("connect outer proxy");
-    client
+    control
         .write_all(&[0x05, 0x01, 0x00])
         .await
         .expect("write auth");
 
     let mut auth = [0_u8; 2];
-    client.read_exact(&mut auth).await.expect("read auth");
+    control.read_exact(&mut auth).await.expect("read auth");
     assert_eq!(auth, [0x05, 0x00]);
 
-    let request = [
-        0x05,
-        0x01,
-        0x00,
-        0x01,
-        127,
-        0,
-        0,
-        1,
-        ((echo_port >> 8) & 0xff) as u8,
-        (echo_port & 0xff) as u8,
-    ];
-    client.write_all(&request).await.expect("write request");
+    control
+        .write_all(&[
+            0x05, 0x03, 0x00, 0x01, // udp associate + ipv4
+            0, 0, 0, 0, 0x00, 0x00,
+        ])
+        .await
+        .expect("write udp associate");
 
     let mut response = [0_u8; 10];
-    client
+    control
         .read_exact(&mut response)
         .await
-        .expect("read response");
+        .expect("read udp associate response");
     assert_eq!(response[1], 0x00, "cipher: {cipher}");
+    let relay_port = u16::from_be_bytes([response[8], response[9]]);
 
+    let client = UdpSocket::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind udp client");
+    let packet = build_udp_packet(
+        &Address::Ipv4([127, 0, 0, 1]),
+        echo_port,
+        payload.as_bytes(),
+    )
+    .expect("build udp packet");
     client
-        .write_all(payload.as_bytes())
+        .send_to(&packet, ("127.0.0.1", relay_port))
         .await
-        .expect("write payload");
-    let mut echoed = vec![0_u8; payload.len()];
-    client.read_exact(&mut echoed).await.expect("read payload");
-    assert_eq!(echoed, payload.as_bytes(), "cipher: {cipher}");
+        .expect("send udp packet");
 
-    outer_handle
-        .shutdown()
+    let mut buf = [0_u8; 2048];
+    let (read, _) = timeout(Duration::from_secs(3), client.recv_from(&mut buf))
         .await
-        .expect("shutdown outer engine");
-    upstream_handle
-        .shutdown()
-        .await
-        .expect("shutdown upstream engine");
+        .unwrap_or_else(|_| panic!("udp recv timeout for cipher {cipher}"))
+        .expect("recv udp response");
+    let response = parse_udp_packet(&buf[..read]).expect("parse udp response");
+
+    assert_eq!(response.target, Address::Ipv4([127, 0, 0, 1]));
+    assert_eq!(response.port, echo_port);
+    assert_eq!(response.payload, payload.as_bytes(), "cipher: {cipher}");
+
+    drop(control);
+    outer_handle.shutdown().await.expect("shutdown outer");
+    upstream_handle.shutdown().await.expect("shutdown upstream");
     let _ = echo_task.await;
 }
 

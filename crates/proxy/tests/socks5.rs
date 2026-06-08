@@ -12,6 +12,12 @@ use support::{
 
 #[path = "socks5/rejects_blocked_domain_via_route_rule.rs"]
 mod rejects_blocked_domain_via_route_rule;
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+#[path = "socks5/rejects_shadowsocks_outbound_with_wrong_password.rs"]
+mod rejects_shadowsocks_outbound_with_wrong_password;
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+#[path = "socks5/relays_large_tcp_payload_through_shadowsocks_outbound.rs"]
+mod relays_large_tcp_payload_through_shadowsocks_outbound;
 #[path = "socks5/relays_tcp_through_authenticated_socks5_upstream.rs"]
 mod relays_tcp_through_authenticated_socks5_upstream;
 #[path = "socks5/relays_tcp_through_fallback_group_when_primary_unreachable.rs"]
