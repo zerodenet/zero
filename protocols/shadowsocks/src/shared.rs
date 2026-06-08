@@ -421,6 +421,51 @@ pub async fn read_exact<S: AsyncSocket>(stream: &mut S, buf: &mut [u8]) -> Resul
     Ok(())
 }
 
+// ── TCP stream helpers ──────────────────────────────────────────────────
+
+/// Derive the download key from password and salt.
+///
+/// Handles both standard (HKDF) and blake3 key derivation based on cipher type.
+/// For outbound connections, the download key is derived from the server's
+/// response salt. For inbound connections, from the client's request salt.
+#[cfg(feature = "crypto")]
+pub fn derive_download_key(
+    cipher: CipherKind,
+    password: &[u8],
+    salt: &[u8],
+) -> Result<Vec<u8>, Error> {
+    if cipher.is_blake3() {
+        #[cfg(feature = "blake3")]
+        return derive_key_blake3(password, salt, cipher.key_len());
+        #[cfg(not(feature = "blake3"))]
+        return Err(Error::Protocol(
+            "ss: blake3 key derivation requires `blake3` feature",
+        ));
+    }
+    derive_key(password, salt, cipher.key_len())
+}
+
+/// Encrypt a TCP chunk and write it to the stream.
+///
+/// Wraps [`encrypt_tcp_chunk`] + [`AsyncSocket::write_all`]. Each call
+/// consumes `payload.len()` plain bytes (up to [`MAX_TCP_PAYLOAD_SIZE`])
+/// and writes the encrypted AEAD chunk (encrypted length + encrypted payload)
+/// to the stream.
+#[cfg(feature = "crypto")]
+pub async fn write_tcp_chunk<S: AsyncSocket>(
+    stream: &mut S,
+    cipher: CipherKind,
+    key: &[u8],
+    nonce_counter: &mut u64,
+    payload: &[u8],
+) -> Result<(), Error> {
+    let chunk = encrypt_tcp_chunk(cipher, key, nonce_counter, payload)?;
+    stream
+        .write_all(&chunk)
+        .await
+        .map_err(|_| Error::Io("ss: write failed"))
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::vec;

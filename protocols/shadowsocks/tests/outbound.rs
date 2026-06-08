@@ -3,12 +3,43 @@
 use std::io;
 
 use shadowsocks::{
-    decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, derive_key, parse_target_data, CipherKind,
-    ShadowsocksOutbound, ShadowsocksUdpDecodeContext, ShadowsocksUdpPacketTarget,
-    TCP_CHUNK_SIZE_LEN,
+    decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, derive_download_key, derive_key,
+    encrypt_tcp_chunk, parse_target_data, CipherKind, ShadowsocksAccept, ShadowsocksAeadStream,
+    ShadowsocksOutbound, ShadowsocksOutboundSession, ShadowsocksUdpDecodeContext,
+    ShadowsocksUdpPacketTarget, TCP_CHUNK_SIZE_LEN,
 };
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, UdpDatagramFraming};
+
+fn supported_ciphers() -> Vec<CipherKind> {
+    let mut ciphers = vec![
+        CipherKind::Aes128Gcm,
+        CipherKind::Aes256Gcm,
+        CipherKind::Chacha20Poly1305,
+    ];
+    #[cfg(feature = "blake3")]
+    ciphers.extend([
+        CipherKind::Blake3Aes128Gcm,
+        CipherKind::Blake3Aes256Gcm,
+        CipherKind::Blake3Chacha20Poly1305,
+    ]);
+    ciphers
+}
+
+fn derive_test_key(cipher: CipherKind, password: &[u8], salt: &[u8]) -> Vec<u8> {
+    if cipher.is_blake3() {
+        #[cfg(feature = "blake3")]
+        {
+            return shadowsocks::derive_key_blake3(password, salt, cipher.key_len())
+                .expect("derive blake3 key");
+        }
+        #[cfg(not(feature = "blake3"))]
+        panic!("blake3 cipher tested without blake3 feature");
+    }
+
+    derive_key(password, salt, cipher.key_len()).expect("derive key")
+}
 
 #[derive(Default)]
 struct RecordingSocket {
@@ -29,6 +60,38 @@ impl AsyncSocket for RecordingSocket {
 
     async fn shutdown(&mut self) -> Result<(), Self::Error> {
         Ok(())
+    }
+}
+
+#[test]
+fn tcp_chunks_roundtrip_all_supported_ciphers() {
+    let password = b"test-password";
+    let plaintext = b"hello shadowsocks tcp";
+
+    for cipher in supported_ciphers() {
+        let salt = vec![0x42_u8; cipher.salt_len()];
+        let key = derive_test_key(cipher, password, &salt);
+        let mut encrypt_nonce = 0;
+        let chunk = encrypt_tcp_chunk(cipher, &key, &mut encrypt_nonce, plaintext)
+            .expect("encrypt tcp chunk");
+        assert_eq!(encrypt_nonce, 2);
+
+        let mut decrypt_nonce = 0;
+        let length_size = TCP_CHUNK_SIZE_LEN + cipher.tag_len();
+        let payload_len =
+            decrypt_tcp_chunk_length(cipher, &key, &mut decrypt_nonce, &chunk[..length_size])
+                .expect("decrypt tcp chunk length");
+        let plain = decrypt_tcp_chunk_payload(
+            cipher,
+            &key,
+            &mut decrypt_nonce,
+            payload_len,
+            &chunk[length_size..],
+        )
+        .expect("decrypt tcp chunk payload");
+
+        assert_eq!(decrypt_nonce, 2);
+        assert_eq!(plain, plaintext, "cipher: {cipher:?}");
     }
 }
 
@@ -80,6 +143,249 @@ async fn outbound_writes_salt_and_first_chunk_in_one_write() {
     assert_eq!(target, Address::Domain("www.gstatic.com".to_owned()));
     assert_eq!(port, 80);
     assert_eq!(&plain[payload_offset..], b"");
+}
+
+#[tokio::test]
+async fn aead_stream_roundtrips_all_supported_ciphers() {
+    let password = b"test-password".to_vec();
+
+    for cipher in supported_ciphers() {
+        let upload_salt = vec![0x11_u8; cipher.salt_len()];
+        let upload_key = derive_test_key(cipher, &password, &upload_salt);
+        let (client_io, mut server_io) = tokio::io::duplex(4096);
+
+        let outbound_session = ShadowsocksOutboundSession {
+            session_key: upload_key.clone(),
+            next_upload_nonce: 0,
+            cipher,
+        };
+        let mut stream =
+            ShadowsocksAeadStream::outbound(client_io, outbound_session, password.clone());
+
+        stream.write_all(b"ping").await.unwrap();
+        stream.flush().await.unwrap();
+
+        let mut encrypted_len = vec![0_u8; TCP_CHUNK_SIZE_LEN + cipher.tag_len()];
+        server_io.read_exact(&mut encrypted_len).await.unwrap();
+        let mut upload_nonce = 0;
+        let payload_len =
+            decrypt_tcp_chunk_length(cipher, &upload_key, &mut upload_nonce, &encrypted_len)
+                .unwrap();
+        let mut encrypted_payload = vec![0_u8; payload_len + cipher.tag_len()];
+        server_io.read_exact(&mut encrypted_payload).await.unwrap();
+        let plain = decrypt_tcp_chunk_payload(
+            cipher,
+            &upload_key,
+            &mut upload_nonce,
+            payload_len,
+            &encrypted_payload,
+        )
+        .unwrap();
+        assert_eq!(plain, b"ping", "upload cipher: {cipher:?}");
+
+        let response_salt = vec![0x22_u8; cipher.salt_len()];
+        let download_key = derive_download_key(cipher, &password, &response_salt).unwrap();
+        let mut download_nonce = 0;
+        let response =
+            encrypt_tcp_chunk(cipher, &download_key, &mut download_nonce, b"pong").unwrap();
+        server_io.write_all(&response_salt).await.unwrap();
+        server_io.write_all(&response).await.unwrap();
+
+        let mut buf = [0_u8; 4];
+        stream.read_exact(&mut buf).await.unwrap();
+        assert_eq!(&buf, b"pong", "download cipher: {cipher:?}");
+    }
+}
+
+#[tokio::test]
+async fn aead_stream_outbound_encrypts_upload_and_decrypts_download() {
+    let cipher = CipherKind::Aes128Gcm;
+    let password = b"test-password".to_vec();
+    let upload_salt = [0x11_u8; 16];
+    let upload_key = derive_key(&password, &upload_salt, cipher.key_len()).unwrap();
+    let (client_io, mut server_io) = tokio::io::duplex(4096);
+
+    let outbound_session = ShadowsocksOutboundSession {
+        session_key: upload_key.clone(),
+        next_upload_nonce: 0,
+        cipher,
+    };
+    let mut stream = ShadowsocksAeadStream::outbound(client_io, outbound_session, password.clone());
+
+    stream.write_all(b"ping").await.unwrap();
+    stream.flush().await.unwrap();
+
+    let mut encrypted_len = vec![0_u8; TCP_CHUNK_SIZE_LEN + cipher.tag_len()];
+    server_io.read_exact(&mut encrypted_len).await.unwrap();
+    let mut upload_nonce = 0;
+    let payload_len =
+        decrypt_tcp_chunk_length(cipher, &upload_key, &mut upload_nonce, &encrypted_len).unwrap();
+    let mut encrypted_payload = vec![0_u8; payload_len + cipher.tag_len()];
+    server_io.read_exact(&mut encrypted_payload).await.unwrap();
+    let plain = decrypt_tcp_chunk_payload(
+        cipher,
+        &upload_key,
+        &mut upload_nonce,
+        payload_len,
+        &encrypted_payload,
+    )
+    .unwrap();
+    assert_eq!(plain, b"ping");
+
+    let response_salt = [0x22_u8; 16];
+    let download_key = derive_download_key(cipher, &password, &response_salt).unwrap();
+    let mut download_nonce = 0;
+    let response = encrypt_tcp_chunk(cipher, &download_key, &mut download_nonce, b"pong").unwrap();
+    server_io.write_all(&response_salt).await.unwrap();
+    server_io.write_all(&response).await.unwrap();
+
+    let mut buf = [0_u8; 4];
+    stream.read_exact(&mut buf).await.unwrap();
+    assert_eq!(&buf, b"pong");
+}
+
+#[tokio::test]
+async fn aead_stream_inbound_serves_remaining_payload_and_encrypts_download() {
+    let cipher = CipherKind::Aes128Gcm;
+    let password = b"test-password";
+    let request_salt = [0x33_u8; 16];
+    let upload_key = derive_key(password, &request_salt, cipher.key_len()).unwrap();
+    let response_salt = vec![0x44_u8; 16];
+    let download_key = derive_download_key(cipher, password, &response_salt).unwrap();
+    let (server_io, mut client_io) = tokio::io::duplex(4096);
+
+    let mut stream = ShadowsocksAeadStream::inbound(
+        server_io,
+        cipher,
+        upload_key,
+        2,
+        download_key.clone(),
+        response_salt.clone(),
+        b"first".to_vec(),
+    );
+
+    let mut first = [0_u8; 5];
+    stream.read_exact(&mut first).await.unwrap();
+    assert_eq!(&first, b"first");
+
+    stream.write_all(b"reply").await.unwrap();
+    stream.flush().await.unwrap();
+
+    let mut salt = vec![0_u8; response_salt.len()];
+    client_io.read_exact(&mut salt).await.unwrap();
+    assert_eq!(salt, response_salt);
+
+    let mut encrypted_len = vec![0_u8; TCP_CHUNK_SIZE_LEN + cipher.tag_len()];
+    client_io.read_exact(&mut encrypted_len).await.unwrap();
+    let mut nonce = 0;
+    let payload_len =
+        decrypt_tcp_chunk_length(cipher, &download_key, &mut nonce, &encrypted_len).unwrap();
+    let mut encrypted_payload = vec![0_u8; payload_len + cipher.tag_len()];
+    client_io.read_exact(&mut encrypted_payload).await.unwrap();
+    let plain = decrypt_tcp_chunk_payload(
+        cipher,
+        &download_key,
+        &mut nonce,
+        payload_len,
+        &encrypted_payload,
+    )
+    .unwrap();
+    assert_eq!(plain, b"reply");
+}
+
+#[tokio::test]
+async fn accepted_inbound_stream_constructor_owns_response_key_derivation() {
+    let cipher = CipherKind::Aes128Gcm;
+    let password = b"test-password";
+    let request_salt = [0x55_u8; 16];
+    let upload_key = derive_key(password, &request_salt, cipher.key_len()).unwrap();
+    let response_salt = vec![0x66_u8; 16];
+    let download_key = derive_download_key(cipher, password, &response_salt).unwrap();
+    let session = Session::new(
+        0,
+        Address::Domain("example.com".to_owned()),
+        443,
+        Network::Tcp,
+        ProtocolType::Shadowsocks,
+    );
+    let accept = ShadowsocksAccept {
+        session,
+        remaining_payload: b"early".to_vec(),
+        session_key: upload_key,
+        cipher,
+        next_upload_nonce: 2,
+    };
+    let (server_io, mut client_io) = tokio::io::duplex(4096);
+
+    let mut stream = accept
+        .into_aead_stream_with_response_salt(server_io, password, response_salt.clone())
+        .expect("wrap accepted stream");
+
+    let mut early = [0_u8; 5];
+    stream.read_exact(&mut early).await.unwrap();
+    assert_eq!(&early, b"early");
+
+    stream.write_all(b"reply").await.unwrap();
+    stream.flush().await.unwrap();
+
+    let mut salt = vec![0_u8; response_salt.len()];
+    client_io.read_exact(&mut salt).await.unwrap();
+    assert_eq!(salt, response_salt);
+
+    let mut encrypted_len = vec![0_u8; TCP_CHUNK_SIZE_LEN + cipher.tag_len()];
+    client_io.read_exact(&mut encrypted_len).await.unwrap();
+    let mut nonce = 0;
+    let payload_len =
+        decrypt_tcp_chunk_length(cipher, &download_key, &mut nonce, &encrypted_len).unwrap();
+    let mut encrypted_payload = vec![0_u8; payload_len + cipher.tag_len()];
+    client_io.read_exact(&mut encrypted_payload).await.unwrap();
+    let plain = decrypt_tcp_chunk_payload(
+        cipher,
+        &download_key,
+        &mut nonce,
+        payload_len,
+        &encrypted_payload,
+    )
+    .unwrap();
+    assert_eq!(plain, b"reply");
+}
+
+#[test]
+fn udp_datagram_framing_roundtrips_all_supported_ciphers() {
+    let password = b"test-password";
+
+    for cipher in supported_ciphers() {
+        let datagram = <ShadowsocksOutbound as UdpDatagramFraming<
+            ShadowsocksUdpPacketTarget,
+            ShadowsocksUdpDecodeContext,
+        >>::encode_udp_datagram(
+            &ShadowsocksOutbound,
+            &ShadowsocksUdpPacketTarget {
+                target: &Address::Domain("dns.google".to_owned()),
+                port: 53,
+                payload: b"query",
+                cipher,
+                password,
+            },
+        )
+        .expect("encode udp datagram");
+
+        assert!(datagram.len() > cipher.salt_len() + cipher.tag_len());
+
+        let decoded = <ShadowsocksOutbound as UdpDatagramFraming<
+            ShadowsocksUdpPacketTarget,
+            ShadowsocksUdpDecodeContext,
+        >>::decode_udp_datagram(
+            &ShadowsocksOutbound,
+            &ShadowsocksUdpDecodeContext { cipher, password },
+            &datagram,
+        )
+        .expect("decode udp datagram");
+
+        assert_eq!(decoded.target, Address::Domain("dns.google".to_owned()));
+        assert_eq!(decoded.port, 53);
+        assert_eq!(decoded.payload, b"query", "cipher: {cipher:?}");
+    }
 }
 
 #[test]
