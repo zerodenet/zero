@@ -75,11 +75,15 @@ impl PerSinkStats {
     }
 }
 
-#[derive(Clone)]
 pub struct EventDispatcherHandle {
     shutdown: Option<mpsc::Sender<()>>,
     task: JoinHandle<()>,
     /// Per-sink delivery stats shared with the dispatcher thread.
+    sink_stats: Arc<Vec<(String, Arc<PerSinkStats>)>>,
+}
+
+#[derive(Clone)]
+pub struct EventDispatcherStatusHandle {
     sink_stats: Arc<Vec<(String, Arc<PerSinkStats>)>>,
 }
 
@@ -92,6 +96,19 @@ impl EventDispatcherHandle {
         let _ = self.task.await;
     }
 
+    /// Snapshot the current delivery status for all configured sinks.
+    pub fn sink_status(&self) -> Vec<SinkStatus> {
+        self.status_handle().sink_status()
+    }
+
+    pub fn status_handle(&self) -> EventDispatcherStatusHandle {
+        EventDispatcherStatusHandle {
+            sink_stats: self.sink_stats.clone(),
+        }
+    }
+}
+
+impl EventDispatcherStatusHandle {
     /// Snapshot the current delivery status for all configured sinks.
     pub fn sink_status(&self) -> Vec<SinkStatus> {
         self.sink_stats
@@ -177,11 +194,11 @@ where
     // Stats are now populated; take them out of the mutex for the handle.
     let stats_snapshot = stats_for_handle.lock().expect("sink stats").clone();
 
-    Ok(EventDispatcherHandle {
+    Ok(Some(EventDispatcherHandle {
         shutdown: Some(shutdown_tx),
         task,
         sink_stats: Arc::new(stats_snapshot),
-    })
+    }))
 }
 
 fn run_event_dispatcher<S>(

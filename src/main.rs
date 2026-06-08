@@ -260,12 +260,12 @@ async fn run_command(
         engine.update_sink_status(dispatcher.sink_status());
         // Periodically refresh sink status in the background.
         let engine_ref = engine.clone();
-        let dispatcher_ref = dispatcher.clone();
+        let dispatcher_status = dispatcher.status_handle();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
             loop {
                 interval.tick().await;
-                engine_ref.update_sink_status(dispatcher_ref.sink_status());
+                engine_ref.update_sink_status(dispatcher_status.sink_status());
             }
         });
     }
@@ -507,13 +507,7 @@ fn spawn_push_connector_if_configured(
         config,
         engine_clone,
         {
-            let engine = engine.clone();
             move || {
-                use std::time::{SystemTime, UNIX_EPOCH};
-                let now_ms = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
                 // uptime is approximated from the events log; use a simple counter.
                 // The engine doesn't store start time, so we track it here.
                 static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();

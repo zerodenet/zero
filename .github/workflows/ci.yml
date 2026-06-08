@@ -59,10 +59,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Check (full)
-        run: cargo check --workspace --features full,status-api
+        run: cargo check --workspace --features full,status_api
 
-      - name: Check (panel-connector)
-        run: cargo check --workspace --features full,status-api,panel-connector
+      - name: Check (panel_connector)
+        run: cargo check --workspace --features full,status_api,panel_connector
 
       - name: Test
-        run: cargo test --workspace --lib --features full,status-api
+        run: cargo test --workspace --lib --features full,status_api

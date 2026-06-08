@@ -22,6 +22,17 @@ impl EventSource for StaticEventSource {
     fn subscribe(&self, _filter: EventFilter) -> zero_api::ApiResult<Self::Stream> {
         Ok(self.events.lock().expect("events lock").clone())
     }
+
+    fn latest(&self, limit: usize, _filter: EventFilter) -> zero_api::ApiResult<Vec<RawApiEvent>> {
+        Ok(self
+            .events
+            .lock()
+            .expect("events lock")
+            .iter()
+            .take(limit)
+            .cloned()
+            .collect())
+    }
 }
 
 #[tokio::test]
@@ -49,6 +60,7 @@ async fn dispatcher_posts_events_to_panel_webhook_with_api_key() {
             allow_insecure: true,
         }],
         control: Default::default(),
+        ..Default::default()
     };
 
     let dispatcher = spawn_event_dispatcher(

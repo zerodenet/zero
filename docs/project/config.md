@@ -128,6 +128,12 @@ Panel webhook:
 
 `webhook` uses `Authorization: Bearer <api-key>`. Prefer `api_key_env`; `api_key` is also supported for testing. `http://` webhooks require explicit `allow_insecure: true`.
 
+When the `event_dispatcher` feature is compiled and `api.event_sinks` is not
+empty, the kernel starts one dispatcher owner for delivery lifecycle and exposes
+a separate read-only sink-status view to the control plane. `GET /api/v1/sinks`
+reports per-sink delivery counters, last success/failure timestamps, and last
+error text.
+
 ### control
 
 `api.control` enables the panel to actively query nodes and issue commands. It is off by default and requires an API key when enabled:
@@ -152,6 +158,7 @@ GET  /api/v1/runtime
 GET  /api/v1/stats
 GET  /api/v1/flows
 GET  /api/v1/policies
+GET  /api/v1/sinks
 GET  /api/v1/events
 POST /api/v1/commands
 ```

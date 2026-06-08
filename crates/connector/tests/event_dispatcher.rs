@@ -20,6 +20,17 @@ impl EventSource for StaticEventSource {
     fn subscribe(&self, _filter: EventFilter) -> zero_api::ApiResult<Self::Stream> {
         Ok(self.events.lock().expect("events lock").clone())
     }
+
+    fn latest(&self, limit: usize, _filter: EventFilter) -> zero_api::ApiResult<Vec<RawApiEvent>> {
+        Ok(self
+            .events
+            .lock()
+            .expect("events lock")
+            .iter()
+            .take(limit)
+            .cloned()
+            .collect())
+    }
 }
 
 #[tokio::test]
@@ -45,6 +56,7 @@ async fn dispatcher_writes_matching_events_to_jsonl_sink() {
             source_id: Some("test-source".to_owned()),
         }],
         control: Default::default(),
+        ..Default::default()
     };
 
     let dispatcher = spawn_event_dispatcher(
@@ -59,9 +71,15 @@ async fn dispatcher_writes_matching_events_to_jsonl_sink() {
     .expect("spawn dispatcher")
     .expect("dispatcher handle");
 
+    let status_handle = dispatcher.status_handle();
     let written = wait_for_file_contains(&path, "event-1").await;
+    let sink_status = status_handle.sink_status();
     dispatcher.shutdown().await;
     let _ = fs::remove_file(&path);
+
+    assert_eq!(sink_status.len(), 1);
+    assert_eq!(sink_status[0].name, "local-events");
+    assert!(sink_status[0].total_delivered >= 1);
 
     let line = written.lines().next().expect("jsonl line");
     let value = serde_json::from_str::<serde_json::Value>(line).expect("event json");

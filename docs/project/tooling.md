@@ -61,7 +61,7 @@ and control-plane features to internal crates.
 | `vmess` | VMess inbound/outbound |
 | `mieru` | Mieru inbound/outbound |
 | `status_api` | Local HTTP control plane |
-| `event_dispatcher` | Event dispatch infrastructure |
+| `event_dispatcher` | Event dispatch infrastructure and sink delivery status |
 | `sink_jsonl` | JSON Lines event sink; depends on `event_dispatcher` |
 | `panel_connector` | Panel/remote connector; depends on `status_api` and `event_dispatcher` |
 | `grpc_api` | gRPC control-plane adapter |

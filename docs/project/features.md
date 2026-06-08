@@ -71,7 +71,7 @@ The following features deploy Zero as a server/panel node and are **not in the d
 |---------|------|------|
 | `status_api` | HTTP status API (`/api/v1/*`) | -- |
 | `grpc_api` | gRPC control plane endpoint | `dep:zero-grpc` |
-| `event_dispatcher` | Event dispatcher: delivers zero events to external sinks | `dep:zero-connector` |
+| `event_dispatcher` | Event dispatcher: delivers zero events to external sinks and exposes sink delivery status | `dep:zero-connector` |
 | `sink_jsonl` | JSON Lines file sink (event persistence) | `event_dispatcher` |
 | `panel_connector` | Panel connector: heartbeat + remote commands, node reporting | `status_api` + `event_dispatcher` |
 
@@ -83,7 +83,7 @@ cargo build --release --features full,status_api,panel_connector
 **`panel_connector` dependency surface:**
 
 - `status_api` -- HTTP control endpoint
-- `event_dispatcher` -- event delivery infrastructure
+- `event_dispatcher` -- event delivery infrastructure and sink delivery status
 - `zero-connector` crate -- PushConnector (heartbeat/command polling), EventDispatcher (event distribution), Webhook sink
 
 ## Client vs Server
