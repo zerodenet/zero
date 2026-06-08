@@ -832,7 +832,8 @@ pub enum OutboundProtocolConfig {
     Mieru {
         server: String,
         port: u16,
-        username: String,
+        #[serde(default)]
+        username: Option<String>,
         password: String,
     },
 }

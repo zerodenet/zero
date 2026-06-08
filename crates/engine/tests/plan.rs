@@ -187,6 +187,45 @@ fn builds_engine_plan_for_loadbalance_group() {
     assert_eq!(plan.loadbalance_groups(), &[lb_id]);
 }
 
+#[test]
+fn mieru_outbound_defaults_username_to_password_in_plan() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "mieru-node",
+                    "protocol": {
+                        "type": "mieru",
+                        "server": "example.com",
+                        "port": 2999,
+                        "password": "318149df-2bab-4a35-9de1-870f3e410598"
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "mieru-node" }
+            }
+        }"#,
+    )
+    .expect("parse config");
+
+    let plan = EnginePlan::build(&config).expect("build engine plan");
+    let target_id = plan.target_id("mieru-node").expect("find mieru target");
+    let target = plan.target(target_id).expect("resolve mieru target");
+    let TargetKind::Outbound(outbound) = target.kind() else {
+        panic!("mieru-node should compile as an outbound");
+    };
+    let OutboundTarget::Mieru {
+        username, password, ..
+    } = outbound.as_ref()
+    else {
+        panic!("expected mieru outbound");
+    };
+    assert_eq!(username, password);
+    assert_eq!(username, "318149df-2bab-4a35-9de1-870f3e410598");
+}
+
 fn plan_tag(plan: &EnginePlan, target_id: TargetId) -> &str {
     plan.target(target_id).expect("resolve target").tag()
 }

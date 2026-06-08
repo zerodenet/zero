@@ -957,6 +957,40 @@ fn parses_socks5_inbound_and_outbound_auth() {
 }
 
 #[test]
+fn parses_mieru_outbound_with_username_defaulting_later() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "mieru-node",
+                    "protocol": {
+                        "type": "mieru",
+                        "server": "example.com",
+                        "port": 2999,
+                        "password": "318149df-2bab-4a35-9de1-870f3e410598"
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "mieru-node" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    match &config.outbounds[0].protocol {
+        OutboundProtocolConfig::Mieru {
+            username, password, ..
+        } => {
+            assert_eq!(username, &None);
+            assert_eq!(password, "318149df-2bab-4a35-9de1-870f3e410598");
+        }
+        _ => panic!("expected mieru outbound"),
+    }
+}
+
+#[test]
 fn rejects_partial_socks5_outbound_auth() {
     let error = RuntimeConfig::parse(
         r#"{

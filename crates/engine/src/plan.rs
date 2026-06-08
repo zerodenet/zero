@@ -147,7 +147,7 @@ impl EnginePlan {
                 } => TargetKind::Outbound(Box::new(OutboundTarget::Mieru {
                     server: server.clone(),
                     port: *port,
-                    username: username.clone(),
+                    username: username.clone().unwrap_or_else(|| password.clone()),
                     password: password.clone(),
                 })),
             };
