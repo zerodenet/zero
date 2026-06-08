@@ -10,24 +10,17 @@ impl ProtocolMetadata for ShadowsocksProtocol {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
         let unsupported = ProtocolCapabilityState::unsupported(&[]);
         let supported = ProtocolCapabilityState::supported();
-        let partial = ProtocolCapabilityState::partial(&[
-            "udp_relay_chain_packet_path_limited",
-            "external_interop_coverage_is_incomplete",
-        ]);
 
         ProtocolCapabilityDescriptor {
             protocol: "shadowsocks",
             feature: "shadowsocks",
             status: ProtocolCapabilityLevel::Partial,
             compatibility_baseline: "shadowsocks_rust_sip022",
-            inbound: ProtocolNetworkCapability::new(supported, partial),
-            outbound: ProtocolNetworkCapability::new(supported, partial),
+            inbound: ProtocolNetworkCapability::new(supported, supported),
+            outbound: ProtocolNetworkCapability::new(supported, supported),
             transports: &["tcp", "udp"],
             mux: unsupported,
-            limitations: &[
-                "udp_relay_chain_packet_path_limited",
-                "external_interop_coverage_is_incomplete",
-            ],
+            limitations: &["external_interop_coverage_is_incomplete"],
         }
     }
 }

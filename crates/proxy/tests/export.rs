@@ -554,17 +554,17 @@ fn proxy_handle_capabilities_use_protocol_inventory() {
         assert!(shadowsocks.inbound.tcp.supported);
         assert_eq!(shadowsocks.inbound.tcp.level, "supported");
         assert!(shadowsocks.inbound.udp.supported);
-        assert_eq!(shadowsocks.inbound.udp.level, "partial");
+        assert_eq!(shadowsocks.inbound.udp.level, "supported");
         assert!(shadowsocks.outbound.tcp.supported);
         assert_eq!(shadowsocks.outbound.tcp.level, "supported");
         assert!(shadowsocks.outbound.udp.supported);
-        assert_eq!(shadowsocks.outbound.udp.level, "partial");
+        assert_eq!(shadowsocks.outbound.udp.level, "supported");
         assert_eq!(shadowsocks.transports, vec!["tcp", "udp"]);
         assert_eq!(shadowsocks.mux.level, "unsupported");
         assert!(shadowsocks
             .limitations
             .contains(&"external_interop_coverage_is_incomplete".to_owned()));
-        assert!(shadowsocks
+        assert!(!shadowsocks
             .limitations
             .contains(&"udp_relay_chain_packet_path_limited".to_owned()));
         assert!(!shadowsocks

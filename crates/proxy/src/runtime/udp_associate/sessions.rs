@@ -120,16 +120,26 @@ pub(crate) enum UdpFlowOutbound {
 
 /// Carrier parameters for a UDP packet path relay chain hop.
 ///
-/// Stores the connection parameters for the packet path provider (e.g. a
-/// SOCKS5 UDP ASSOCIATE) so that an existing flow can re-dispatch packets
-/// through the same carrier without re-resolving the chain.
+/// Stores the connection parameters for the packet path provider so that an
+/// existing flow can re-dispatch packets through the same carrier without
+/// re-resolving the chain.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct UdpPacketPathCarrier {
-    pub(crate) tag: String,
-    pub(crate) server: String,
-    pub(crate) port: u16,
-    pub(crate) username: Option<String>,
-    pub(crate) password: Option<String>,
+pub(crate) enum UdpPacketPathCarrier {
+    #[cfg(feature = "socks5")]
+    Socks5 {
+        tag: String,
+        server: String,
+        port: u16,
+        username: Option<String>,
+        password: Option<String>,
+    },
+    Shadowsocks {
+        tag: String,
+        server: String,
+        port: u16,
+        password: String,
+        cipher: String,
+    },
 }
 
 impl UdpFlowOutbound {

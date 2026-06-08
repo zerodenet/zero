@@ -8,8 +8,8 @@
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
-#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
-use super::packet_path_chain::PacketPathChainParams;
+#[cfg(feature = "shadowsocks")]
+use super::packet_path_chain::{PacketPathCarrierParams, PacketPathChainParams};
 use super::{
     FlowFailure, FlowStartResult, H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpCandidate,
     UdpDispatch, UdpFlowContext, UdpPacketRef, UdpPeerEndpoint,
@@ -23,14 +23,16 @@ use crate::runtime::Proxy;
 /// Resolve a relay chain into packet-path + datagram parameters.
 ///
 /// Returns `Some` when the chain matches the "packet path carrier -> datagram
-/// protocol" pattern. Currently recognises `[SOCKS5, Shadowsocks]`. Adding
+/// protocol" pattern. Currently recognises `[Shadowsocks, Shadowsocks]` and,
+/// when the `socks5` feature is enabled, `[SOCKS5, Shadowsocks]`. Adding
 /// new combinations only requires extending this function and implementing
 /// [`UdpPacketPath`] + [`DatagramCodec`]: no new protocol-pair modules.
-#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+#[cfg(feature = "shadowsocks")]
 fn resolve_udp_packet_path_chain<'a>(
     chain: &[ResolvedLeafOutbound<'a>],
 ) -> Option<PacketPathChainParams<'a>> {
     match chain {
+        #[cfg(feature = "socks5")]
         [ResolvedLeafOutbound::Socks5 {
             tag: carrier_tag,
             server: carrier_server,
@@ -45,17 +47,78 @@ fn resolve_udp_packet_path_chain<'a>(
             cipher: datagram_cipher,
         }] => Some(PacketPathChainParams {
             datagram_tag,
-            carrier_tag,
-            carrier_server,
-            carrier_port: *carrier_port,
-            carrier_username: *carrier_username,
-            carrier_password: *carrier_password,
+            carrier: PacketPathCarrierParams::Socks5 {
+                tag: carrier_tag,
+                server: carrier_server,
+                port: *carrier_port,
+                username: *carrier_username,
+                password: *carrier_password,
+            },
+            datagram_server,
+            datagram_port: *datagram_port,
+            datagram_password,
+            datagram_cipher,
+        }),
+        [ResolvedLeafOutbound::Shadowsocks {
+            tag: carrier_tag,
+            server: carrier_server,
+            port: carrier_port,
+            password: carrier_password,
+            cipher: carrier_cipher,
+        }, ResolvedLeafOutbound::Shadowsocks {
+            tag: datagram_tag,
+            server: datagram_server,
+            port: datagram_port,
+            password: datagram_password,
+            cipher: datagram_cipher,
+        }] => Some(PacketPathChainParams {
+            datagram_tag,
+            carrier: PacketPathCarrierParams::Shadowsocks {
+                tag: carrier_tag,
+                server: carrier_server,
+                port: *carrier_port,
+                password: carrier_password,
+                cipher: carrier_cipher,
+            },
             datagram_server,
             datagram_port: *datagram_port,
             datagram_password,
             datagram_cipher,
         }),
         _ => None,
+    }
+}
+
+#[cfg(feature = "shadowsocks")]
+fn owned_packet_path_carrier(carrier: &PacketPathCarrierParams<'_>) -> UdpPacketPathCarrier {
+    match carrier {
+        #[cfg(feature = "socks5")]
+        PacketPathCarrierParams::Socks5 {
+            tag,
+            server,
+            port,
+            username,
+            password,
+        } => UdpPacketPathCarrier::Socks5 {
+            tag: (*tag).to_owned(),
+            server: (*server).to_owned(),
+            port: *port,
+            username: username.map(ToOwned::to_owned),
+            password: password.map(ToOwned::to_owned),
+        },
+        PacketPathCarrierParams::Shadowsocks {
+            tag,
+            server,
+            port,
+            password,
+            cipher,
+        } => UdpPacketPathCarrier::Shadowsocks {
+            tag: (*tag).to_owned(),
+            server: (*server).to_owned(),
+            port: *port,
+            password: (*password).to_owned(),
+            cipher: (*cipher).to_owned(),
+        },
     }
 }
 
@@ -264,6 +327,7 @@ impl UdpDispatch {
                                 chain_tasks: &mut self.chain_tasks,
                                 session_id: session.id,
                             },
+                            proxy,
                             SsUdpPeer {
                                 endpoint: UdpPeerEndpoint { server, port },
                                 password,
@@ -450,7 +514,7 @@ impl UdpDispatch {
     ) -> Result<FlowStartResult, FlowFailure> {
         // Datagram-over-packet-path: previous hop provides a packet path,
         // next hop encodes its datagram through it.
-        #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+        #[cfg(feature = "shadowsocks")]
         if let Some(params) = resolve_udp_packet_path_chain(&chain) {
             let sent = self
                 .packet_path_manager
@@ -476,13 +540,7 @@ impl UdpDispatch {
                     port: params.datagram_port,
                     password: params.datagram_password.to_owned(),
                     cipher: params.datagram_cipher.to_owned(),
-                    packet_path_carrier: Some(UdpPacketPathCarrier {
-                        tag: params.carrier_tag.to_owned(),
-                        server: params.carrier_server.to_owned(),
-                        port: params.carrier_port,
-                        username: params.carrier_username.map(ToOwned::to_owned),
-                        password: params.carrier_password.map(ToOwned::to_owned),
-                    }),
+                    packet_path_carrier: Some(owned_packet_path_carrier(&params.carrier)),
                 },
                 tx_bytes: sent as u64,
             });

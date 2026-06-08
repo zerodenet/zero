@@ -1,12 +1,14 @@
 use std::collections::{HashMap, VecDeque};
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::oneshot;
+use tracing::{debug, warn};
 use zero_core::Address;
 use zero_engine::EngineError;
 
 use super::{FlowFailure, SsUdpPeer, UdpFlowContext, UdpPacketRef};
+use crate::runtime::Proxy;
 
 type SsRecvItem = (Address, u16, Vec<u8>);
 
@@ -35,6 +37,7 @@ impl SsChainManager {
     pub(super) async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
+        proxy: &Proxy,
         peer: SsUdpPeer<'_>,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
@@ -53,11 +56,28 @@ impl SsChainManager {
             upstream: Some(peer.endpoint.upstream()),
         })?;
 
+        let target_addr = proxy
+            .protocols
+            .direct_outbound
+            .resolve_address(
+                &peer.endpoint.address(),
+                peer.endpoint.port,
+                proxy.resolver.as_ref(),
+                "failed to resolve shadowsocks udp upstream",
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "ss_resolve_addr",
+                error: error.into(),
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
+
         let entry = self.ensure_entry(
             peer.endpoint.server,
             peer.endpoint.port,
             peer.password,
             cipher_kind,
+            target_addr,
         );
 
         let packet = <ShadowsocksOutbound as UdpDatagramFraming<
@@ -78,20 +98,6 @@ impl SsChainManager {
             error: EngineError::Io(std::io::Error::other(e)),
             upstream: Some(peer.endpoint.upstream()),
         })?;
-
-        let target_addr: SocketAddr = format!("{}:{}", peer.endpoint.server, peer.endpoint.port)
-            .parse()
-            .map_err(|_| FlowFailure {
-                stage: "ss_parse_addr",
-                error: EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!(
-                        "invalid ss upstream: {}:{}",
-                        peer.endpoint.server, peer.endpoint.port
-                    ),
-                )),
-                upstream: Some(peer.endpoint.upstream()),
-            })?;
 
         let (response_tx, response_rx) = oneshot::channel();
         entry
@@ -131,6 +137,7 @@ impl SsChainManager {
         port: u16,
         password: &str,
         cipher_kind: shadowsocks::CipherKind,
+        target_addr: SocketAddr,
     ) -> Arc<SsUpstream> {
         let key = (
             server.to_owned(),
@@ -142,8 +149,12 @@ impl SsChainManager {
             return entry.clone();
         }
 
+        let bind_addr = match target_addr {
+            SocketAddr::V4(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+            SocketAddr::V6(_) => SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
+        };
         let socket = Arc::new({
-            let socket = std::net::UdpSocket::bind("0.0.0.0:0").expect("ss: bind");
+            let socket = std::net::UdpSocket::bind(bind_addr).expect("ss: bind");
             socket.set_nonblocking(true).expect("ss: nonblocking");
             tokio::net::UdpSocket::from_std(socket).expect("ss: tokio")
         });
@@ -175,9 +186,12 @@ impl SsChainManager {
         use zero_traits::UdpDatagramFraming;
         let mut buf = vec![0u8; 4096];
         loop {
-            let (n, _) = match socket.recv_from(&mut buf).await {
+            let (n, sender) = match socket.recv_from(&mut buf).await {
                 Ok(r) => r,
-                Err(_) => break,
+                Err(error) => {
+                    warn!(error = %error, "shadowsocks udp recv loop stopped");
+                    break;
+                }
             };
             let packet = &buf[..n];
             let Ok(decoded) = <ShadowsocksOutbound as UdpDatagramFraming<
@@ -191,13 +205,31 @@ impl SsChainManager {
                 },
                 packet,
             ) else {
+                warn!(
+                    upstream = %sender,
+                    bytes = n,
+                    "failed to decode shadowsocks udp response"
+                );
                 continue;
             };
+            debug!(
+                upstream = %sender,
+                target = ?decoded.target,
+                port = decoded.port,
+                bytes = decoded.payload.len(),
+                "decoded shadowsocks udp response"
+            );
             let waiter = remove_waiter(&upstream.waiters, &decoded.target, decoded.port);
             if let Some(waiter) = waiter {
                 let _ = waiter
                     .tx
                     .send((decoded.target, decoded.port, decoded.payload));
+            } else {
+                warn!(
+                    target = ?decoded.target,
+                    port = decoded.port,
+                    "no waiter for shadowsocks udp response"
+                );
             }
         }
     }

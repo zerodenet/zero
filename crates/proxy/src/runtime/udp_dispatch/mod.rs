@@ -14,7 +14,7 @@
 //! - [`trojan_manager`]: Trojan stream-packet manager
 //! - [`mieru_manager`]: Mieru stream-packet manager
 //! - [`packet_path_chain`]: generic datagram-over-packet-path manager for
-//!   relay chains (SOCKS5 -> Shadowsocks etc.)
+//!   relay chains (Shadowsocks -> Shadowsocks, SOCKS5 -> Shadowsocks, etc.)
 //!
 //! # Supported outbounds
 //!
@@ -82,7 +82,7 @@ mod packet_path_traits;
 
 mod h2_manager;
 mod mieru_manager;
-#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+#[cfg(feature = "shadowsocks")]
 mod packet_path_chain;
 #[cfg(feature = "shadowsocks")]
 mod ss_manager;
@@ -92,7 +92,7 @@ mod trojan_manager;
 
 use h2_manager::H2ChainManager;
 use mieru_manager::MieruChainManager;
-#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+#[cfg(feature = "shadowsocks")]
 use packet_path_chain::PacketPathManager;
 pub(crate) use packet_path_traits::ChainTask;
 pub(super) use packet_path_traits::{DatagramCodec, UdpPacketPath};
@@ -161,7 +161,7 @@ pub(crate) struct UdpDispatch {
     ss_manager: SsChainManager,
     /// Per-dispatcher datagram-over-packet-path manager for UDP relay chains.
     /// Caches packet path carrier connections.
-    #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+    #[cfg(feature = "shadowsocks")]
     packet_path_manager: PacketPathManager,
     /// Per-dispatcher Trojan chain manager. Caches TLS upstream streams.
     trojan_manager: TrojanChainManager,
@@ -186,7 +186,7 @@ impl UdpDispatch {
             chain_tasks: JoinSet::new(),
             #[cfg(feature = "shadowsocks")]
             ss_manager: SsChainManager::new(),
-            #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+            #[cfg(feature = "shadowsocks")]
             packet_path_manager: PacketPathManager::new(),
             trojan_manager: TrojanChainManager::new(),
             mieru_manager: MieruChainManager::new(),
@@ -208,7 +208,7 @@ impl UdpDispatch {
             chain_tasks: JoinSet::new(),
             #[cfg(feature = "shadowsocks")]
             ss_manager: SsChainManager::new(),
-            #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+            #[cfg(feature = "shadowsocks")]
             packet_path_manager: PacketPathManager::new(),
             trojan_manager: TrojanChainManager::new(),
             mieru_manager: MieruChainManager::new(),

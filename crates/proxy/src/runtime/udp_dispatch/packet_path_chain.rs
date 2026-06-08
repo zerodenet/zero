@@ -1,22 +1,26 @@
 use std::collections::{HashMap, VecDeque};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 
+use tokio::net::UdpSocket;
 use tokio::sync::oneshot;
+use tracing::{debug, warn};
 use zero_core::Address;
 use zero_engine::EngineError;
 
 use super::{DatagramCodec, FlowFailure, UdpFlowContext, UdpPacketPath, UdpPacketRef};
+#[cfg(feature = "socks5")]
 use crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation;
 use crate::runtime::Proxy;
 
 type RecvItem = (Address, u16, Vec<u8>);
 
-// Packet path: SOCKS5 UDP ASSOCIATE.
-
+#[cfg(feature = "socks5")]
 pub(super) struct Socks5PacketPath {
     association: Arc<ActiveUpstreamSocks5UdpAssociation>,
 }
 
+#[cfg(feature = "socks5")]
 impl UdpPacketPath<Address> for Socks5PacketPath {
     type Error = EngineError;
 
@@ -33,14 +37,123 @@ impl UdpPacketPath<Address> for Socks5PacketPath {
     async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
         let read = self.association.recv_packet(buf).await?;
         let packet = socks5::parse_udp_packet(&buf[..read])
-            .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
+            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
         let len = packet.payload.len();
         buf[..len].copy_from_slice(&packet.payload);
         Ok(len)
     }
 }
 
-// Manager.
+pub(super) struct ShadowsocksPacketPath {
+    socket: UdpSocket,
+    endpoint: SocketAddr,
+    codec: shadowsocks::ShadowsocksDatagramCodec,
+}
+
+impl ShadowsocksPacketPath {
+    async fn establish(
+        proxy: &Proxy,
+        server: &str,
+        port: u16,
+        password: &str,
+        cipher: shadowsocks::CipherKind,
+    ) -> Result<Self, EngineError> {
+        let endpoint = proxy
+            .protocols
+            .direct_outbound
+            .resolve_address(
+                &Address::Domain(server.to_owned()),
+                port,
+                proxy.resolver.as_ref(),
+                "failed to resolve shadowsocks packet path carrier",
+            )
+            .await?;
+        let bind_addr = match endpoint {
+            SocketAddr::V4(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+            SocketAddr::V6(_) => SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
+        };
+        let socket = UdpSocket::bind(bind_addr)
+            .await
+            .map_err(EngineError::from)?;
+        Ok(Self {
+            socket,
+            endpoint,
+            codec: shadowsocks::ShadowsocksDatagramCodec {
+                cipher,
+                password: password.as_bytes().to_vec(),
+            },
+        })
+    }
+}
+
+impl UdpPacketPath<Address> for ShadowsocksPacketPath {
+    type Error = EngineError;
+
+    async fn send_to(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        let packet = self
+            .codec
+            .encode(target, port, payload)
+            .map_err(EngineError::from)?;
+        self.socket
+            .send_to(&packet, self.endpoint)
+            .await
+            .map_err(EngineError::from)?;
+        Ok(())
+    }
+
+    async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        let (read, _) = self
+            .socket
+            .recv_from(buf)
+            .await
+            .map_err(EngineError::from)?;
+        let decoded = self.codec.decode(&buf[..read]).ok_or_else(|| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "failed to decode shadowsocks packet path response",
+            ))
+        })?;
+        let len = decoded.2.len();
+        buf[..len].copy_from_slice(&decoded.2);
+        Ok(len)
+    }
+}
+
+enum PacketPath {
+    #[cfg(feature = "socks5")]
+    Socks5(Socks5PacketPath),
+    Shadowsocks(ShadowsocksPacketPath),
+}
+
+impl UdpPacketPath<Address> for PacketPath {
+    type Error = EngineError;
+
+    async fn send_to(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        match self {
+            #[cfg(feature = "socks5")]
+            Self::Socks5(path) => path.send_to(target, port, payload).await,
+            Self::Shadowsocks(path) => path.send_to(target, port, payload).await,
+        }
+    }
+
+    async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        match self {
+            #[cfg(feature = "socks5")]
+            Self::Socks5(path) => path.recv_from(buf).await,
+            Self::Shadowsocks(path) => path.recv_from(buf).await,
+        }
+    }
+}
 
 struct Waiter {
     target: Address,
@@ -49,17 +162,32 @@ struct Waiter {
 }
 
 struct Entry {
-    path: Arc<Socks5PacketPath>,
+    path: Arc<PacketPath>,
     waiters: Arc<Mutex<VecDeque<Waiter>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum CarrierKey {
+    #[cfg(feature = "socks5")]
+    Socks5 {
+        tag: String,
+        server: String,
+        port: u16,
+        username: Option<String>,
+        password: Option<String>,
+    },
+    Shadowsocks {
+        tag: String,
+        server: String,
+        port: u16,
+        password: String,
+        cipher: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct PathKey {
-    carrier_tag: String,
-    carrier_server: String,
-    carrier_port: u16,
-    carrier_username: Option<String>,
-    carrier_password: Option<String>,
+    carrier: CarrierKey,
     datagram_server: String,
     datagram_port: u16,
     datagram_password: String,
@@ -70,18 +198,32 @@ pub(super) struct PacketPathManager {
     upstreams: HashMap<PathKey, Entry>,
 }
 
+pub(super) enum PacketPathCarrierParams<'a> {
+    #[cfg(feature = "socks5")]
+    Socks5 {
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        username: Option<&'a str>,
+        password: Option<&'a str>,
+    },
+    Shadowsocks {
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        password: &'a str,
+        cipher: &'a str,
+    },
+}
+
 /// Resolved parameters for a datagram-over-packet-path relay chain.
 ///
 /// Produced by [`super::resolve_udp_packet_path_chain`] from a resolved
-/// outbound chain. Contains both the carrier (packet path) parameters and
-/// the inner datagram protocol parameters.
+/// outbound chain. Contains both the carrier packet-path parameters and the
+/// inner datagram protocol parameters.
 pub(super) struct PacketPathChainParams<'a> {
     pub(super) datagram_tag: &'a str,
-    pub(super) carrier_tag: &'a str,
-    pub(super) carrier_server: &'a str,
-    pub(super) carrier_port: u16,
-    pub(super) carrier_username: Option<&'a str>,
-    pub(super) carrier_password: Option<&'a str>,
+    pub(super) carrier: PacketPathCarrierParams<'a>,
     pub(super) datagram_server: &'a str,
     pub(super) datagram_port: u16,
     pub(super) datagram_password: &'a str,
@@ -120,7 +262,7 @@ impl PacketPathManager {
             .map_err(|error| FlowFailure {
                 stage: "packet_path_establish",
                 error,
-                upstream: Some((params.carrier_server.to_owned(), params.carrier_port)),
+                upstream: Some(carrier_upstream(&params.carrier)),
             })?;
 
         let codec = shadowsocks::ShadowsocksDatagramCodec {
@@ -179,11 +321,7 @@ impl PacketPathManager {
         cipher_kind: shadowsocks::CipherKind,
     ) -> Result<&Entry, EngineError> {
         let key = PathKey {
-            carrier_tag: params.carrier_tag.to_owned(),
-            carrier_server: params.carrier_server.to_owned(),
-            carrier_port: params.carrier_port,
-            carrier_username: params.carrier_username.map(ToOwned::to_owned),
-            carrier_password: params.carrier_password.map(ToOwned::to_owned),
+            carrier: carrier_key(&params.carrier),
             datagram_server: params.datagram_server.to_owned(),
             datagram_port: params.datagram_port,
             datagram_password: params.datagram_password.to_owned(),
@@ -191,18 +329,7 @@ impl PacketPathManager {
         };
 
         if !self.upstreams.contains_key(&key) {
-            let association = Arc::new(
-                ActiveUpstreamSocks5UdpAssociation::establish(
-                    proxy,
-                    params.carrier_tag,
-                    params.carrier_server,
-                    params.carrier_port,
-                    params.carrier_username.zip(params.carrier_password),
-                    0,
-                )
-                .await?,
-            );
-            let path = Arc::new(Socks5PacketPath { association });
+            let path = Arc::new(build_packet_path(proxy, &params.carrier).await?);
             let waiters = Arc::new(Mutex::new(VecDeque::new()));
             let codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>> =
                 Arc::new(shadowsocks::ShadowsocksDatagramCodec {
@@ -220,8 +347,95 @@ impl PacketPathManager {
     }
 }
 
+async fn build_packet_path(
+    proxy: &Proxy,
+    carrier: &PacketPathCarrierParams<'_>,
+) -> Result<PacketPath, EngineError> {
+    match carrier {
+        #[cfg(feature = "socks5")]
+        PacketPathCarrierParams::Socks5 {
+            tag,
+            server,
+            port,
+            username,
+            password,
+        } => {
+            let association = Arc::new(
+                ActiveUpstreamSocks5UdpAssociation::establish(
+                    proxy,
+                    tag,
+                    server,
+                    *port,
+                    username.zip(*password),
+                    0,
+                )
+                .await?,
+            );
+            Ok(PacketPath::Socks5(Socks5PacketPath { association }))
+        }
+        PacketPathCarrierParams::Shadowsocks {
+            server,
+            port,
+            password,
+            cipher,
+            ..
+        } => {
+            let cipher_kind = shadowsocks::CipherKind::from_str(cipher).ok_or_else(|| {
+                EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("unknown carrier cipher: {cipher}"),
+                ))
+            })?;
+            let path =
+                ShadowsocksPacketPath::establish(proxy, server, *port, password, cipher_kind)
+                    .await?;
+            Ok(PacketPath::Shadowsocks(path))
+        }
+    }
+}
+
+fn carrier_key(carrier: &PacketPathCarrierParams<'_>) -> CarrierKey {
+    match carrier {
+        #[cfg(feature = "socks5")]
+        PacketPathCarrierParams::Socks5 {
+            tag,
+            server,
+            port,
+            username,
+            password,
+        } => CarrierKey::Socks5 {
+            tag: (*tag).to_owned(),
+            server: (*server).to_owned(),
+            port: *port,
+            username: username.map(ToOwned::to_owned),
+            password: password.map(ToOwned::to_owned),
+        },
+        PacketPathCarrierParams::Shadowsocks {
+            tag,
+            server,
+            port,
+            password,
+            cipher,
+        } => CarrierKey::Shadowsocks {
+            tag: (*tag).to_owned(),
+            server: (*server).to_owned(),
+            port: *port,
+            password: (*password).to_owned(),
+            cipher: (*cipher).to_owned(),
+        },
+    }
+}
+
+fn carrier_upstream(carrier: &PacketPathCarrierParams<'_>) -> (String, u16) {
+    match carrier {
+        #[cfg(feature = "socks5")]
+        PacketPathCarrierParams::Socks5 { server, port, .. } => ((*server).to_owned(), *port),
+        PacketPathCarrierParams::Shadowsocks { server, port, .. } => ((*server).to_owned(), *port),
+    }
+}
+
 async fn recv_loop(
-    path: Arc<Socks5PacketPath>,
+    path: Arc<PacketPath>,
     waiters: Arc<Mutex<VecDeque<Waiter>>>,
     codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 ) {
@@ -229,14 +443,32 @@ async fn recv_loop(
     loop {
         let read = match path.recv_from(&mut buf).await {
             Ok(read) => read,
-            Err(_) => break,
+            Err(error) => {
+                warn!(error = %error, "packet path recv loop stopped");
+                break;
+            }
         };
         let decoded = match codec.decode(&buf[..read]) {
             Some(d) => d,
-            None => continue,
+            None => {
+                warn!(bytes = read, "failed to decode inner datagram response");
+                continue;
+            }
         };
+        debug!(
+            target = ?decoded.0,
+            port = decoded.1,
+            bytes = decoded.2.len(),
+            "decoded packet path datagram response"
+        );
         if let Some(waiter) = remove_waiter(&waiters, &decoded.0, decoded.1) {
             let _ = waiter.tx.send(decoded);
+        } else {
+            warn!(
+                target = ?decoded.0,
+                port = decoded.1,
+                "no waiter for packet path datagram response"
+            );
         }
     }
 }

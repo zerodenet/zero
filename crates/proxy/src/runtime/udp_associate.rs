@@ -214,13 +214,35 @@ impl Proxy {
                                 self.record_session_outbound_rx(sid, payload.len() as u64);
                             }
                             if let Some(client_addr) = client_udp_addr {
-                                if let Ok(frame) = socks5::build_udp_packet(
-                                    &target, port, &payload,
-                                ) {
-                                    if let Ok(sent) = relay.send_to_addr(&frame, client_addr).await {
-                                        if let Some(sid) = session_id {
-                                            self.record_session_inbound_tx(sid, sent as u64);
+                                match socks5::build_udp_packet(&target, port, &payload) {
+                                    Ok(frame) => {
+                                        match relay.send_to_addr(&frame, client_addr).await {
+                                            Ok(sent) => {
+                                                if let Some(sid) = session_id {
+                                                    self.record_session_inbound_tx(sid, sent as u64);
+                                                }
+                                            }
+                                            Err(error) => {
+                                                warn!(
+                                                    inbound_tag = inbound_tag,
+                                                    protocol = "socks5_udp",
+                                                    ?target,
+                                                    port,
+                                                    error = %error,
+                                                    "failed to send UDP chain response to client"
+                                                );
+                                            }
                                         }
+                                    }
+                                    Err(error) => {
+                                        warn!(
+                                            inbound_tag = inbound_tag,
+                                            protocol = "socks5_udp",
+                                            ?target,
+                                            port,
+                                            error = %error,
+                                            "failed to build SOCKS5 UDP chain response"
+                                        );
                                     }
                                 }
                             }
