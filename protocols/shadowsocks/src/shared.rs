@@ -1,6 +1,6 @@
-// Shadowsocks protocol constants and helpers — shared.rs
+// Shadowsocks protocol constants and helpers.
 //
-// SIP003 AEAD ciphers: aes-128-gcm, aes-256-gcm, chacha20-poly1305.
+// SIP003 AEAD ciphers: aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -77,7 +77,7 @@ impl CipherKind {
     }
 }
 
-// — key derivation —
+// Key derivation.
 
 #[cfg(feature = "crypto")]
 pub fn derive_key(password: &[u8], salt: &[u8], key_len: usize) -> Result<Vec<u8>, Error> {
@@ -111,7 +111,7 @@ fn evp_bytes_to_key(password: &[u8], key_len: usize) -> Vec<u8> {
     key
 }
 
-// — 2022 Blake3 KDF —
+// 2022 Blake3 KDF.
 
 #[cfg(feature = "blake3")]
 pub fn derive_key_blake3(password: &[u8], salt: &[u8], key_len: usize) -> Result<Vec<u8>, Error> {
@@ -136,7 +136,7 @@ impl ring::hkdf::KeyType for ShadowsocksKeyLen {
     }
 }
 
-// — AEAD encrypt / decrypt —
+// AEAD encrypt / decrypt.
 
 #[cfg(feature = "crypto")]
 pub fn aead_encrypt(
@@ -278,7 +278,7 @@ pub async fn read_tcp_chunk<S: AsyncSocket>(
     decrypt_tcp_chunk_payload(cipher, key, nonce_counter, payload_len, &encrypted_payload)
 }
 
-// — UDP AEAD (no chunk length prefix, per-packet salt + nonce) —
+// UDP AEAD uses per-packet salt and a fixed zero nonce.
 
 #[cfg(feature = "crypto")]
 pub fn aead_encrypt_udp(
@@ -321,7 +321,7 @@ pub fn aead_decrypt_udp(
     Ok(decrypted.to_vec())
 }
 
-// — address encode / decode —
+// Address encode / decode.
 
 pub fn encode_address(addr: &Address) -> Result<Vec<u8>, Error> {
     match addr {
@@ -421,7 +421,7 @@ pub async fn read_exact<S: AsyncSocket>(stream: &mut S, buf: &mut [u8]) -> Resul
     Ok(())
 }
 
-// ── TCP stream helpers ──────────────────────────────────────────────────
+// TCP stream helpers.
 
 /// Derive the download key from password and salt.
 ///
@@ -486,6 +486,18 @@ mod tests {
             CipherKind::from_str("chacha20-ietf-poly1305"),
             Some(CipherKind::Chacha20Poly1305)
         );
+        assert_eq!(
+            CipherKind::from_str("2022-blake3-aes-128-gcm"),
+            Some(CipherKind::Blake3Aes128Gcm)
+        );
+        assert_eq!(
+            CipherKind::from_str("2022-blake3-aes-256-gcm"),
+            Some(CipherKind::Blake3Aes256Gcm)
+        );
+        assert_eq!(
+            CipherKind::from_str("2022-blake3-chacha20-poly1305"),
+            Some(CipherKind::Blake3Chacha20Poly1305)
+        );
         assert_eq!(CipherKind::from_str("nonexistent"), None);
     }
 
@@ -494,6 +506,9 @@ mod tests {
         assert_eq!(CipherKind::Aes128Gcm.key_len(), 16);
         assert_eq!(CipherKind::Aes256Gcm.key_len(), 32);
         assert_eq!(CipherKind::Chacha20Poly1305.key_len(), 32);
+        assert_eq!(CipherKind::Blake3Aes128Gcm.key_len(), 16);
+        assert_eq!(CipherKind::Blake3Aes256Gcm.key_len(), 32);
+        assert_eq!(CipherKind::Blake3Chacha20Poly1305.key_len(), 32);
     }
 
     #[test]

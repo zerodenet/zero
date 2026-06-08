@@ -1,4 +1,4 @@
-// Shadowsocks outbound protocol — outbound.rs
+// Shadowsocks outbound protocol.
 
 use zero_core::ProtocolType;
 #[cfg(feature = "crypto")]

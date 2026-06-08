@@ -1,4 +1,4 @@
-// Shadowsocks inbound protocol — inbound.rs
+// Shadowsocks inbound protocol.
 
 #[cfg(feature = "crypto")]
 use alloc::vec::Vec;
@@ -77,7 +77,7 @@ impl ShadowsocksInbound {
         })
     }
 
-    /// Encrypt a plaintext chunk for server→client direction.
+    /// Encrypt a plaintext chunk for the server-to-client direction.
     #[cfg(feature = "crypto")]
     pub fn encrypt_chunk(
         cipher: super::shared::CipherKind,
@@ -88,7 +88,7 @@ impl ShadowsocksInbound {
         super::shared::encrypt_tcp_chunk(cipher, key, nonce_counter, data)
     }
 
-    /// Decrypt a ciphertext chunk for client→server direction.
+    /// Decrypt a ciphertext chunk for the client-to-server direction.
     #[cfg(feature = "crypto")]
     pub fn decrypt_chunk(
         cipher: super::shared::CipherKind,
