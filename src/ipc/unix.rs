@@ -142,6 +142,8 @@ async fn run_ipc_server(
                         }
                     }
                 });
+            }
+            result = connections.join_next(), if !connections.is_empty() => {
                 if let Some(Err(error)) = result {
                     if !error.is_cancelled() {
                         error!(error = %error, "ipc connection task panicked");

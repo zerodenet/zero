@@ -8,8 +8,8 @@ use std::thread;
 use std::time::Duration;
 
 use support::{
-    acquire_port_lock, free_port, http_get, http_post, http_post_json, remove_temp_file,
-    wait_for_port, write_temp_config,
+    acquire_port_lock, free_port, http_get, http_post_json, remove_temp_file, wait_for_port,
+    write_temp_config,
 };
 
 #[test]
