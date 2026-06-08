@@ -760,7 +760,12 @@ supported yet.
 
 ### Outbound circuit breaker
 
-`zero-engine` maintains health state for every chained outbound tag. Before each connection attempt, `establish_tcp_candidate` calls `check_outbound_health()`. If 5 failures accumulate within a 30-second window, the outbound is quarantined for 60 seconds. After quarantine, a single probe connection is allowed; success clears the unhealthy state, failure resets the cooldown.
+`zero-engine` maintains health state for every chained outbound tag. Before each
+connection attempt, the TCP pipe's candidate establishment path calls
+`check_outbound_health()`. If 5 failures accumulate within a 30-second window,
+the outbound is quarantined for 60 seconds. After quarantine, a single probe
+connection is allowed; success clears the unhealthy state, failure resets the
+cooldown.
 
 This is a kernel primitive -- no configuration required. It applies automatically to all outbound connection paths except `direct` and `block`.
 

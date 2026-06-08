@@ -3,6 +3,16 @@
 This document defines the capability boundary for the first stable external
 integration surface. It is a planning boundary, not release history.
 
+The release boundary is gate-driven. Work that cannot be mapped to one of these
+gates should not enter the release path.
+
+| Gate | Objective | Exit condition |
+|------|-----------|----------------|
+| Gate 0 | Runtime architecture boundary | TCP and UDP traffic enter through the common kernel pipe model; protocol code does not bypass the runtime boundary |
+| Gate 1 | Protocol baseline closure | Protocol capability facts match implemented TCP/UDP baseline behavior and documented limitations |
+| Gate 2 | Control-plane integration closure | GUI and panel integrations can discover, validate, observe, and control the current binary through public APIs |
+| Gate 3 | Release freeze | Workspace validation, docs, examples, and capability exports are consistent |
+
 ## Principle
 
 The kernel first completes the common proxy core, chain proxy orchestration, and
@@ -12,6 +22,7 @@ paths are added after the core boundary is stable.
 
 Core protocol completeness means:
 
+- ordinary TCP/UDP inbound execution enters through the kernel pipe boundary;
 - the protocol's configured inbound and outbound directions are wired through
   routing, sessions, stats, logging, and events;
 - TCP and UDP are implemented when they are baseline capabilities of that
@@ -38,6 +49,7 @@ The initial boundary requires these kernel capabilities to be coherent:
 
 | Area | Boundary |
 |------|----------|
+| Runtime pipe | The proxy runtime exposes one common orchestration boundary with TCP and UDP pipe implementations |
 | Config | Current config schema parses, validates, and rejects uncompiled protocols early |
 | Routing | Direct, global, rule, selector, fallback, url_test, and relay groups execute through engine decisions |
 | TCP | Inbound accept, outbound connect, relay chains, rate limits, sessions, stats, logging, and events work through the shared runtime path |
@@ -110,6 +122,8 @@ remain tested, but new work should avoid adding one manager per protocol pair.
 
 The implementation is ready for the initial external integration boundary when:
 
+- the Gate 0 architecture boundary is closed and no ordinary inbound protocol
+  bypasses the TCP/UDP pipe entry points;
 - every capability exported by `capabilities` is backed by implementation and
   tests;
 - every known gap has a snake_case limitation code;

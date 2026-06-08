@@ -52,7 +52,29 @@ The hot path prefers reading plan/state and passing references along borrow boun
 
 This layer may depend on the Tokio backend, protocol crates, and `zero-engine`. It does not re-interpret config semantics or maintain a separate set of mode, group, or route state.
 
-### InboundProtocol trait and `serve_inbound()` kernel pipeline
+### Kernel pipe and inbound protocol pipeline
+
+The proxy runtime is organized around one common kernel pipe boundary:
+
+```text
+KernelPipe -> TcpPipe / UdpPipe -> protocol traits -> protocol crates
+```
+
+`KernelPipe` is a runtime orchestration boundary, not a protocol trait. It
+depends on runtime state such as routing, sessions, stats, events, transport
+setup, and task lifecycle, so it belongs to `zero-proxy`.
+
+`TcpPipe` owns TCP route execution and outbound establishment for ordinary TCP
+flows. `UdpPipe` owns UDP packet submission into the UDP runtime state machine.
+`UdpDispatch` remains the UDP pipe's internal state holder for direct sockets,
+upstream associations, cached managers, response tasks, session accounting, and
+fallback handling.
+
+Protocol crates do not implement `KernelPipe`. They implement neutral protocol
+behavior traits for handshakes, session state, stream packet framing, or
+datagram framing.
+
+### InboundProtocol trait and `serve_inbound()` TCP lifecycle
 
 All TCP protocol inbound handlers are unified through a single trait and a single kernel entry point.
 
@@ -84,21 +106,30 @@ pub trait InboundProtocol: Send + Sync {
 - `send_upstream_failure` -- notify the client the upstream is unreachable
 - `relay` -- bidirectional relay; default is raw TCP `io::copy` with optional rate limiting; override for AEAD-framed (Shadowsocks) or QUIC-stream (Hysteria2) relays
 
-**`serve_inbound()`** is the single kernel entry point for ALL TCP protocols. Protocol handlers never touch the engine, config, or resolver directly. The function owns every protocol-agnostic capability:
+**`serve_inbound()`** is the single TCP inbound lifecycle entry point for normal
+TCP protocols. Protocol handlers never touch the engine, config, or resolver
+directly. The function owns protocol-agnostic TCP lifecycle work and calls
+`TcpPipe` for route execution and outbound establishment:
 
 1. **URL rewrite** -- applies `route.url_rewrite` rules to rewrite the session target domain before routing
 2. **Kernel rate limits** -- applies per-inbound defaults from config (`up_bps` / `down_bps`); per-user limits set during `accept` take priority
 3. **Session preparation** -- `prepare_session` (engine-side metadata)
-4. **Route and establish** -- `route_and_establish_tcp` (condition matching + outbound connection)
+4. **Route and establish** -- `TcpPipe` (condition matching + outbound connection)
 5. **Protocol reply** -- `send_ok` / `send_blocked` / `send_upstream_failure` as appropriate
 6. **Idle timeout** -- wraps relay in `tokio::time::timeout` using `InboundConfig.idle_timeout_secs` (default 300s)
 7. **Session lifecycle** -- track / finish with `SessionOutcome`, structured logging
 
-Adding a new cross-cutting capability only requires changing `serve_inbound()` -- protocol handlers remain unaffected.
+Adding a new cross-cutting TCP lifecycle capability usually requires changing
+`serve_inbound()` or `TcpPipe`; protocol handlers remain unaffected.
 
 ### Kernel primitive: circuit breaker
 
-`zero-engine` maintains `OutboundHealth` per outbound tag. Before connecting to any outbound, `establish_tcp_candidate` checks health via `check_outbound_health()`. If 5 failures accumulate within a 30-second sliding window, the outbound is quarantined for 60 seconds. After quarantine, one probe connection is allowed; success clears the unhealthy state, failure resets the cooldown.
+`zero-engine` maintains `OutboundHealth` per outbound tag. Before connecting to
+any outbound, the TCP pipe's candidate establishment path checks health via
+`check_outbound_health()`. If 5 failures accumulate within a 30-second sliding
+window, the outbound is quarantined for 60 seconds. After quarantine, one probe
+connection is allowed; success clears the unhealthy state, failure resets the
+cooldown.
 
 ## Protocol Layer
 
