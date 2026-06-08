@@ -425,6 +425,12 @@ Shadowsocks config fields:
 - `up_bps` -- optional, upload rate limit in bytes/sec (kernel GCRA)
 - `down_bps` -- optional, download rate limit in bytes/sec (kernel GCRA)
 
+For AEAD 2022 cipher names, `password` must be standard base64 key material:
+16 decoded bytes for `2022-blake3-aes-128-gcm`, and 32 decoded bytes for
+`2022-blake3-aes-256-gcm` and `2022-blake3-chacha20-poly1305`. AES 2022
+passwords may be colon-separated identity-key chains; Zero validates and uses
+the last segment as the user PSK.
+
 ### Trojan inbound
 
 Trojan inbound requires TLS, performs password authentication inside the TLS tunnel then forwards the target address:
@@ -679,6 +685,12 @@ Shadowsocks outbound config fields:
 - `port` -- required, upstream port, must be greater than 0
 - `password` -- required, encryption password
 - `cipher` -- optional, encryption algorithm, default `chacha20-ietf-poly1305`; supported values are `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`, `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`, and `2022-blake3-chacha20-poly1305`
+
+For AEAD 2022 cipher names, `password` must be standard base64 key material:
+16 decoded bytes for `2022-blake3-aes-128-gcm`, and 32 decoded bytes for
+`2022-blake3-aes-256-gcm` and `2022-blake3-chacha20-poly1305`. AES 2022
+passwords may be colon-separated identity-key chains; Zero validates and uses
+the last segment as the user PSK.
 
 ### Trojan outbound
 
@@ -1075,7 +1087,7 @@ Notes:
 - `url_test.url` must currently be `http://`
 - `url_test.interval_seconds` must be greater than `0`
 - Hysteria2 inbound `password` must not be empty; outbound `server` must not be empty, `port` must be greater than `0`
-- Shadowsocks inbound and outbound `password` must not be empty; `cipher` must be one of the supported Shadowsocks cipher names
+- Shadowsocks inbound and outbound `password` must not be empty; `cipher` must be one of the supported Shadowsocks cipher names; AEAD 2022 passwords must decode to the method key length
 - Trojan inbound must configure `tls` with non-empty `cert_path` and `key_path`, `password` must not be empty; outbound `server` must not be empty, `port` must be greater than `0`, `password` must not be empty
 - `domain_regex` condition requires at least one pattern in `values`
 - `url_rewrite` rules require at least one of `from` or `from_regex`, and `to` must not be empty

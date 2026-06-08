@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Zero',
-  description: 'Zero — A modular network proxy kernel written in Rust',
+  description: 'Zero - A modular network proxy kernel written in Rust',
   lang: 'zh-CN',
   lastUpdated: true,
 
@@ -10,6 +10,7 @@ export default defineConfig({
     nav: [
       { text: '指南', link: '/guides/quickstart' },
       { text: '配置', link: '/project/config' },
+      { text: '协议', link: '/protocols/' },
       { text: '控制面', link: '/control-plane-api/' },
       { text: '参考', link: '/project/architecture' },
     ],
@@ -21,6 +22,18 @@ export default defineConfig({
           items: [
             { text: '快速上手', link: '/guides/quickstart' },
             { text: 'GUI 集成', link: '/guides/gui-integration' },
+          ],
+        },
+      ],
+
+      '/protocols/': [
+        {
+          text: '协议实现',
+          items: [
+            { text: '协议总览', link: '/protocols/' },
+            { text: '配置速查', link: '/protocols/configuration' },
+            { text: 'Shadowsocks', link: '/protocols/shadowsocks' },
+            { text: '未完成项', link: '/protocols/incomplete' },
           ],
         },
       ],
@@ -47,6 +60,7 @@ export default defineConfig({
             { text: '目标', link: '/project/goals' },
             { text: '工具链', link: '/project/tooling' },
             { text: 'Panel 连接器', link: '/project/panel-node-connector' },
+            { text: '协议能力矩阵', link: '/project/protocol-capabilities' },
           ],
         },
       ],
@@ -63,22 +77,6 @@ export default defineConfig({
             { text: 'Flow Hooks', link: '/control-plane-api/hooks' },
             { text: 'Push Connector', link: '/control-plane-api/push-connector' },
             { text: 'CLI 命令', link: '/control-plane-api/cli' },
-          ],
-        },
-      ],
-
-      '/versions/': [
-        {
-          text: '版本历史',
-          items: [
-            { text: '版本总览', link: '/versions/' },
-            { text: 'v0.0.8', link: '/versions/v0.0.8/' },
-            { text: 'v0.0.7', link: '/versions/v0.0.7/' },
-            { text: 'v0.0.6', link: '/versions/v0.0.6/' },
-            { text: 'v0.0.5', link: '/versions/v0.0.5/' },
-            { text: 'v0.0.4', link: '/versions/v0.0.4/' },
-            { text: 'v0.0.2', link: '/versions/v0.0.2/' },
-            { text: 'v0.0.1', link: '/versions/v0.0.1/' },
           ],
         },
       ],
