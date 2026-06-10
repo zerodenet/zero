@@ -148,8 +148,9 @@ protocol crates can expose metadata and TCP/UDP behavior without depending on
 the API or proxy runtime crates. Each protocol crate owns its
 `ProtocolMetadata` descriptor and implements protocol behavior traits where the
 handshake semantics fit those traits. `TcpTunnelProtocol` covers stream-level
-tunnel handshakes such as SOCKS5, Trojan, VMess, and VLESS. `TcpSessionProtocol`
-covers handshakes that return protocol state, such as Shadowsocks and Mieru.
+tunnel handshakes such as SOCKS5, Trojan, and VLESS. `TcpSessionProtocol`
+covers handshakes that return protocol state, such as Shadowsocks, VMess, and
+Mieru.
 `DeferredTcpTunnelProtocol` covers handshakes that write the request now and
 defer response validation to a stream wrapper, such as VLESS Reality
 single-hop.
@@ -295,7 +296,7 @@ All inbound handlers implement `InboundProtocol` and feed into `serve_inbound()`
 | `hysteria2` | Hysteria2 | QUIC |
 | `shadowsocks` | Shadowsocks | AEAD + 2022-blake3 |
 | `trojan` | Trojan | TCP + UDP |
-| `vmess` | VMess | Experimental AEAD implementation; not compatible with `cipher: auto` exports yet |
+| `vmess` | VMess | Experimental AEAD TCP, TCP/UDP MUX, and UDP-over-stream implementation; `cipher: auto` is normalized to the current AEAD baseline |
 | `mieru` | Mieru | TCP + UDP over encrypted stream wrapper |
 | `direct` | Direct | Fixed-target forwarder, no handshake |
 | `tun` | TUN | Virtual network interface, consumes `NetworkStack` |

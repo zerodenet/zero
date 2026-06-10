@@ -50,7 +50,7 @@ cargo build --release --no-default-features \
 | `hysteria2` | Hysteria2 outbound | QUIC (quinn) |
 | `shadowsocks` | Shadowsocks outbound | Same encryption as inbound |
 | `trojan` | Trojan outbound | TLS |
-| `vmess` | VMess outbound | Experimental AEAD implementation; `cipher: auto` is not supported yet |
+| `vmess` | VMess outbound | Experimental AEAD implementation; `cipher: auto` is normalized to the current AEAD baseline |
 | `mieru` | Mieru outbound | Single-hop TCP routing; relay-chain hop is not supported yet |
 
 `direct` and `block` outbounds are always available, no feature gate required -- they need no protocol implementation.
@@ -111,7 +111,7 @@ See [protocol-capabilities.md](protocol-capabilities.md).
 
 | Protocol | Feature | Notes |
 |------|---------|------|
-| VMess | `vmess` | Experimental AEAD implementation. `cipher: auto` from Xray/Clash exports is not supported yet |
+| VMess | `vmess` | Experimental AEAD implementation. `cipher: auto` from Xray/Clash exports is normalized to the current AEAD baseline |
 | Mieru | `mieru` | Registered adapter with single-hop TCP outbound support. Relay-chain hop support is not implemented |
 | HTTP CONNECT outbound | -- | Outbound direction not implemented |
 

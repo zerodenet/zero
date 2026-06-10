@@ -78,16 +78,16 @@ Baseline protocol behavior is in scope:
 | `shadowsocks` | TCP stream and UDP datagram baseline paths |
 | `mieru` | TCP stream session and UDP associate baseline paths |
 | `hysteria2` | TCP stream and UDP datagram baseline paths over QUIC |
-| `vmess` | Kept experimental until its baseline compatibility is completed |
+| `vmess` | TCP/UDP baseline compatibility over raw TLS, WS+TLS, and gRPC+TLS; MUX connection pool for TCP and UDP; Xray/sing-box/Mihomo interop validated; kept experimental until mainstream `cipher: zero` compatibility is resolved |
 
 Advanced protocol behavior is not required for the initial boundary:
 
 - every protocol-specific UDP chain transport path;
 - Hysteria2 UDP chaining through QUIC;
 - VLESS UDP over SplitHTTP or QUIC relay-chain final hops;
-- UDP MUX;
+- non-VMess UDP MUX gaps;
 - full TLS fingerprint passthrough outside the currently implemented paths;
-- VMess UDP, MUX, `cipher_auto`, and full upstream interoperability.
+- VMess `cipher: zero` mainstream external compatibility.
 
 ## Chain Proxy Boundary
 

@@ -209,7 +209,7 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 - `hysteria2` -- QUIC, TCP streams and UDP datagram forwarding
 - `shadowsocks` -- AEAD TCP stream and UDP datagram support
 - `trojan` -- TLS + SHA224 password auth, TCP streams and UDP packet relay
-- `vmess` -- TCP streams using the in-tree VMess AEAD implementation; current compatibility does not include Xray/Clash `cipher: auto`
+- `vmess` -- TCP streams, TCP/UDP MUX, and UDP-over-stream using the in-tree VMess AEAD implementation; `cipher: auto` is normalized to the current AEAD baseline
 - `mieru` -- TCP streams and UDP packet relay using XChaCha20-Poly1305 session framing
 - `direct` -- fixed-target TCP forwarder; accepts raw TCP with no handshake, outbound determined by normal route rules
 - `tun` -- virtual network interface; started at runtime via CLI/API commands, routes traffic through normal rule matching
@@ -218,7 +218,7 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 
 `mieru` is registered in the protocol inventory and the single-hop outbound path uses the encrypted Mieru stream wrapper. It is not yet supported as an intermediate `relay` chain hop because that path must replace the active stream with the Mieru encrypted wrapper after the hop handshake.
 
-`vmess` is still experimental. Configs using `cipher: auto` from Xray/Clash exports are rejected; forcing an AEAD cipher may still fail against standard Xray VMess AEAD nodes until the VMess wire format is reworked for full compatibility.
+`vmess` is still experimental. `cipher: auto` from Xray/Clash exports is accepted and normalized to the current AEAD baseline. TCP/UDP MUX is implemented. External TCP and UDP baseline interoperability is covered for Xray in both directions, Zero outbound to sing-box inbound, and Mihomo outbound to Zero inbound. Xray WS/gRPC TCP transport interoperability is covered in both directions.
 
 ### Direct inbound
 
@@ -286,6 +286,11 @@ SOCKS5 inbound defaults to no-auth. Configuring `users` enables RFC 1929 usernam
 }
 ```
 
+For SOCKS5 inbound users, `username` may be omitted. When omitted, the kernel
+uses `password` as the username. A user object with both `username` and
+`password` omitted is ignored; an empty resulting user list keeps the inbound in
+no-auth mode. A user object with only `username` is invalid.
+
 `mixed` inbound can also configure auth for the SOCKS5 branch:
 
 ```json
@@ -300,6 +305,9 @@ SOCKS5 inbound defaults to no-auth. Configuring `users` enables RFC 1929 usernam
   }
 }
 ```
+
+`mixed.socks5_users` follows the same username/password defaulting rules as
+SOCKS5 inbound users.
 
 VLESS inbound must configure user UUIDs. `credential_id` and `principal_key` are observability attribution fields that appear in `flow.completed`'s `auth` and the event top-level `principal_key`; UUIDs themselves are not sent back to the panel by default:
 
@@ -378,6 +386,34 @@ WebSocket can be combined with TLS (WSS):
   }
 }
 ```
+
+### VMess inbound
+
+VMess inbound is experimental and requires TLS. Each user must provide a VMess UUID. `credential_id` and `principal_key` are observability attribution fields, and `cipher` defaults to `aes-128-gcm` when omitted:
+
+```json
+{
+  "tag": "vmess-in",
+  "listen": { "address": "0.0.0.0", "port": 443 },
+  "protocol": {
+    "type": "vmess",
+    "users": [
+      {
+        "id": "11111111-2222-3333-4444-555555555555",
+        "cipher": "aes-128-gcm",
+        "credential_id": "node-user-1",
+        "principal_key": "user:10001"
+      }
+    ],
+    "tls": {
+      "cert_path": "certs/fullchain.pem",
+      "key_path": "certs/privkey.pem"
+    }
+  }
+}
+```
+
+VMess inbound supports raw TLS, WebSocket over TLS, and gRPC over TLS. `ws` and `grpc` are mutually exclusive. Supported cipher values are `auto`, `aes-128-gcm`, `chacha20-poly1305`, `none`, and `zero`; `auto` is normalized to the current AEAD baseline. `none` has Xray TCP interoperability coverage. `zero` is a Zero-to-Zero capability and should not be exposed as a mainstream external compatibility default.
 
 ### Hysteria2 inbound
 
@@ -477,9 +513,11 @@ Mieru inbound is available in config and accepts encrypted TCP sessions and UDP 
 ```
 
 Mieru inbound config fields:
-- `users` -- required, non-empty list of username/password pairs
+- `users` -- required, non-empty list of username/password pairs; `username` may be omitted and defaults to `password`
 
 Mieru framing uses protocol-level encrypted segments. The proxy keeps Mieru-specific framing in the Mieru stream wrapper instead of using the generic raw TCP relay directly. Current compatibility work has focused on in-tree single-hop behavior; treat interoperability with external Mieru clients and servers as experimental until it has real-client coverage.
+
+Mieru has no no-auth mode, so `password` remains required.
 
 ### Per-inbound rate limits (rate_limits)
 
@@ -514,7 +552,10 @@ Currently supported:
 - `vmess`
 - `mieru`
 
-SOCKS5 outbound defaults to no-auth. Configure `username` and `password` when connecting to an authenticated upstream:
+SOCKS5 outbound defaults to no-auth. Configure `password`, or both `username`
+and `password`, when connecting to an authenticated upstream. If `username` is
+omitted, the kernel uses `password` as the username. If both are omitted, the
+outbound uses SOCKS5 no-auth. Configuring only `username` is invalid:
 
 ```json
 {
@@ -720,7 +761,7 @@ Trojan outbound config fields:
 
 ### VMess outbound
 
-VMess outbound currently supports the in-tree AEAD implementation and explicit cipher names:
+VMess outbound currently supports the in-tree AEAD TCP and UDP-over-stream implementation and explicit cipher names:
 
 ```json
 {
@@ -739,12 +780,14 @@ VMess outbound config fields:
 - `server` -- required, upstream server address
 - `port` -- required, upstream port, must be greater than 0
 - `id` -- required, VMess UUID
-- `cipher` -- optional, default `aes-128-gcm`; supported values are `aes-128-gcm`, `aes-256-gcm`, and `chacha20-poly1305`
+- `cipher` -- optional, default `aes-128-gcm`; supported values are `auto`, `aes-128-gcm`, `chacha20-poly1305`, `none`, and `zero`; `auto` is normalized to the current AEAD baseline
 - `tls` -- optional, TLS transport wrapper
 - `ws` -- optional, WebSocket transport wrapper
 - `grpc` -- optional, gRPC transport wrapper
 
-Compatibility note: Xray/Clash exports commonly use `cipher: auto`; that alias is not supported yet, and the current VMess implementation is not considered compatible with standard Xray VMess AEAD nodes.
+`ws` and `grpc` are mutually exclusive. If `tls.server_name` or `tls.ca_cert_path` is set, it must be non-empty.
+
+Compatibility note: Xray/Clash exports commonly use `cipher: auto`; Zero accepts that alias. External TCP and UDP baseline interoperability is covered for Xray in both directions, Zero outbound to sing-box inbound, and Mihomo outbound to Zero inbound. Xray WS/gRPC TCP transport interoperability is covered in both directions. `cipher: none` has Xray TCP interoperability coverage. `cipher: zero` is not claimed as mainstream Xray/sing-box/Clash compatibility.
 
 ### Mieru outbound
 
@@ -768,6 +811,8 @@ Mieru outbound config fields:
 - `port` -- required, upstream port, must be greater than 0
 - `username` -- optional, upstream username; when omitted, the kernel uses `password` as the username
 - `password` -- required, upstream password
+
+Mieru has no no-auth mode, so `password` remains required.
 
 Mieru outbound is supported for direct single-hop TCP routing, TCP relay-chain
 composition, and UDP packet relay through the encrypted Mieru stream wrapper.
@@ -1070,8 +1115,9 @@ Notes:
 ## Constraints
 
 - `tag` must not be empty
-- SOCKS5 username/password must not be empty, max 255 bytes each
-- SOCKS5 outbound auth must configure both `username` and `password`, cannot configure only one
+- SOCKS5 username/password must not be empty after config normalization, max 255 bytes each
+- SOCKS5 inbound and mixed SOCKS5 users may omit `username`; it defaults to `password`
+- SOCKS5 outbound may omit both auth fields for no-auth, or omit only `username` to default it to `password`; configuring only `username` is invalid
 - VLESS inbound must have at least one user, `id` must be a UUID; when TLS is enabled, `cert_path` and `key_path` must not be empty; when WebSocket is enabled, `ws.path` must not be empty
 - VLESS outbound `server` must not be empty, `port` must be greater than `0`, `id` must be a UUID; `tls.server_name`, `tls.ca_cert_path`, and `reality.server_name` must not be empty if configured
 - VLESS outbound `reality.public_key` must be a 32-byte base64url no padding value; `reality.short_id` max 16 hex characters; `reality` cannot be combined with `tls` or `ws`

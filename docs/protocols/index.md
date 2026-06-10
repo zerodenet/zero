@@ -1,71 +1,43 @@
-# 协议总览
+# Protocol Overview
 
-本文跟踪 Zero 当前实现的协议能力、配置入口和未完成部分。这里描述的是当前代码事实；机器可读事实以控制面 `capabilities.protocols` 为准。
+This section tracks the protocol implementation surface in the current codebase. It is factual documentation for GUI authors, panel adapters, and kernel integrators. Runtime consumers should still treat `capabilities.protocols` as the machine-readable source of truth.
 
-## 状态含义
+## Status Terms
 
-| 状态 | 含义 |
+| Status | Meaning |
 |------|------|
-| `supported` | 作为常规内核能力使用，当前没有已知协议级缺口 |
-| `partial` | 基线路径存在，但仍有互通、特殊传输、MUX 或服务端/客户端方向缺口 |
-| `experimental` | 代码存在，但不能作为生产兼容能力假设 |
-| `unsupported` | 当前方向未实现 |
-| `not_applicable` | 协议本身不定义该方向 |
+| `supported` | Normal kernel capability with no known protocol-level gap |
+| `partial` | Baseline path exists, but interoperability, MUX, special transport, or server/client direction gaps remain |
+| `experimental` | Implemented, but not ready for production compatibility assumptions |
+| `unsupported` | Not implemented |
+| `not_applicable` | The protocol does not define this direction |
 
-## 实现矩阵
+## Matrix
 
-| 协议 | 配置名 | 状态 | TCP inbound | TCP outbound | UDP inbound | UDP outbound | 说明 |
-|------|--------|------|-------------|--------------|-------------|--------------|------|
-| SOCKS5 | `socks5` | `supported` | 支持 | 支持 | 支持 | 支持 | TCP CONNECT、UDP ASSOCIATE、用户名密码认证 |
-| HTTP CONNECT | `http_connect` | `supported` | 支持 | 不支持 | 不适用 | 不适用 | 仅作为入站 HTTP CONNECT |
-| Mixed | `mixed` | `supported` | 支持 | 不支持 | 支持 | 不支持 | 入站复用器，不是外部协议；同端口识别 SOCKS5 和 HTTP CONNECT |
-| VLESS | `vless` | `partial` | 支持 | 支持 | 部分支持 | 部分支持 | 基线 TCP 和 UDP-over-stream 可用，MUX UDP、部分 chain transport、TLS fingerprint 仍有限制 |
-| Hysteria2 | `hysteria2` | `partial` | 支持 | 支持 | 部分支持 | 部分支持 | QUIC TCP stream 和 UDP datagram 基线路径存在，外部互通覆盖不足 |
-| Shadowsocks | `shadowsocks` | `partial` | 支持 | 支持 | 支持 | 支持 | 常规 AEAD 已接近生产可用；AEAD 2022 仍有明确缺口 |
-| Trojan | `trojan` | `partial` | 支持 | 支持 | 部分支持 | 部分支持 | TCP 和 UDP-over-stream 基线路径存在，外部互通与 relay-stream TLS fingerprint 不完整 |
-| Mieru | `mieru` | `partial` | 实验 | 部分支持 | 部分支持 | 部分支持 | 单跳 TCP/UDP 基线路径存在，外部互通覆盖不足 |
-| VMess | `vmess` | `experimental` | 实验 | 实验 | 不支持 | 不支持 | 不作为当前生产兼容目标；`cipher: auto` 不支持 |
+| Protocol | Config type | Status | TCP inbound | TCP outbound | UDP inbound | UDP outbound | Tracking |
+|------|------|------|-------------|--------------|-------------|--------------|----------|
+| SOCKS5 | `socks5` | `supported` | `supported` | `supported` | `supported` | `supported` | [SOCKS5](./socks5.md) |
+| HTTP CONNECT | `http_connect` | `supported` | `supported` | `unsupported` | `not_applicable` | `not_applicable` | [HTTP CONNECT](./http-connect.md) |
+| Mixed | `mixed` | `supported` | `supported` | `unsupported` | `supported` | `unsupported` | [Mixed](./mixed.md) |
+| VLESS | `vless` | `partial` | `supported` | `supported` | `partial` | `partial` | [VLESS](./vless.md) |
+| Hysteria2 | `hysteria2` | `partial` | `supported` | `supported` | `partial` | `partial` | [Hysteria2](./hysteria2.md) |
+| Shadowsocks | `shadowsocks` | `partial` | `supported` | `supported` | `supported` | `supported` | [Shadowsocks](./shadowsocks.md) |
+| Trojan | `trojan` | `partial` | `supported` | `supported` | `partial` | `partial` | [Trojan](./trojan.md) |
+| Mieru | `mieru` | `partial` | `experimental` | `partial` | `partial` | `partial` | [Mieru](./mieru.md) |
+| VMess | `vmess` | `experimental` | `experimental` | `experimental` | `experimental` | `experimental` | [VMess](./vmess.md) |
 
-## 内核动作
+## Kernel Actions
 
-| 名称 | 状态 | 说明 |
+| Name | Status | Notes |
 |------|------|------|
-| `direct` | `supported` | 内核直连动作；outbound TCP/UDP 均可用 |
-| `block` | `supported` | 内核拒绝动作；TCP/UDP 均可作为路由结果 |
-| `tun` | `supported` | 三层虚拟网卡入口，通过控制面或 CLI 启停，不写入静态 JSON `inbounds` |
+| `direct` | `supported` | Kernel direct action; TCP and UDP outbound are available |
+| `block` | `supported` | Kernel reject action; TCP and UDP routing decisions can use it |
+| `tun` | `supported` | Layer-3 virtual interface controlled by CLI/control plane, not static JSON `inbounds` |
 
-## 配置入口
+## Documentation Layout
 
-每个入站或出站协议都通过 `protocol.type` 选择。完整配置字段见 [配置速查](./configuration.md) 和 [配置规范](../project/config.md)。
+Each protocol has its own tracking page under `docs/protocols/`. The per-protocol page owns the implementation facts, configuration notes, validation coverage, and incomplete items for that protocol. Shared pages keep only cross-protocol summaries:
 
-```json
-{
-  "tag": "socks-in",
-  "listen": { "address": "127.0.0.1", "port": 1080 },
-  "protocol": { "type": "mixed" }
-}
-```
-
-```json
-{
-  "tag": "proxy",
-  "protocol": {
-    "type": "shadowsocks",
-    "server": "example.com",
-    "port": 8388,
-    "password": "your-secret-password",
-    "cipher": "chacha20-ietf-poly1305"
-  }
-}
-```
-
-## 能力发现
-
-GUI 和控制面消费者不应硬编码某个协议一定可用。启动后先查询 `capabilities.protocols`，再根据 `compiled`、方向字段和 `limitations` 决定展示哪些配置项。
-
-文档页的职责：
-
-- 本页说明当前实现了哪些协议。
-- [配置速查](./configuration.md) 给出常见配置形状。
-- [Shadowsocks](./shadowsocks.md) 跟踪 SS 的生产边界。
-- [未完成项](./incomplete.md) 跟踪协议缺口。
+- [Configuration](./configuration.md): common config examples.
+- [Incomplete](./incomplete.md): cross-protocol gap index.
+- [Protocol Capabilities](../project/protocol-capabilities.md): descriptor and runtime capability model.

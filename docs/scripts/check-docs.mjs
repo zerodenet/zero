@@ -28,6 +28,7 @@ for (const path of [source, html]) {
   assertContains(path, '工程规则', 'UTF-8 Chinese heading');
   assertContains(path, 'status_api', 'current root feature');
   assertContains(path, 'event_dispatcher', 'current root feature');
+  assertNotContains(path, '\u5bb8\u30e7\u25bc\u7459\u52eb\u57af', 'mojibake tooling heading');
   assertNotContains(path, 'inbound-socks5', 'removed legacy feature naming');
   assertNotContains(path, 'status-api', 'removed legacy feature naming');
 }
