@@ -1,11 +1,13 @@
-use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
+use zero_core::{Error, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::AsyncSocket;
 
 use crate::crypto::{
-    aead_decrypt, aead_encrypt, compute_auth_id, current_timestamp, derive_body_key_nonce,
-    derive_cmd_key, derive_response_key_nonce, hex, GCM_TAG_LEN,
+    derive_xray_cmd_key, hex, open_xray_aead_header_length, open_xray_aead_header_payload,
+    seal_xray_response_header, GCM_TAG_LEN,
 };
-use crate::shared::{read_exact, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP, VERSION};
+use crate::shared::{
+    parse_address_from_bytes, read_exact, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP, VERSION,
+};
 
 #[derive(Clone)]
 pub struct VmessUser {
@@ -20,6 +22,21 @@ pub struct VmessUser {
 #[derive(Debug, Clone, Copy)]
 pub struct VmessInbound;
 
+pub struct VmessAccept {
+    pub session: Session,
+    pub upload_key: Vec<u8>,
+    pub upload_nonce: Vec<u8>,
+    pub download_key: Vec<u8>,
+    pub download_nonce: Vec<u8>,
+    pub cipher: VmessCipher,
+    pub authenticated_length: bool,
+    pub chunk_masking: bool,
+    pub global_padding: bool,
+    pub length_key_source: Vec<u8>,
+    pub length_nonce_source: Vec<u8>,
+    pub response_header: u8,
+}
+
 impl VmessInbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Vmess
@@ -31,10 +48,43 @@ impl VmessInbound {
         stream: &mut S,
         user: &VmessUser,
     ) -> Result<Session, Error> {
-        let buf = VmessReadBuffer::read(stream).await?;
-        let (session, body_key, auth_id, cipher) = try_user(&buf, user)?;
-        send_auth_response(stream, &body_key, &auth_id, cipher).await?;
-        Ok(session)
+        self.accept_tcp(stream, user)
+            .await
+            .map(|accepted| accepted.session)
+    }
+
+    pub async fn accept_tcp<S: AsyncSocket>(
+        &self,
+        stream: &mut S,
+        user: &VmessUser,
+    ) -> Result<VmessAccept, Error> {
+        let buf = VmessReadBuffer::read(stream, std::slice::from_ref(user)).await?;
+        let (
+            session,
+            body_key,
+            body_nonce,
+            response_header,
+            cipher,
+            authenticated_length,
+            chunk_masking,
+            global_padding,
+        ) = try_user(&buf, user)?;
+        let (download_key, download_nonce) =
+            send_auth_response(stream, &body_key, &body_nonce, response_header).await?;
+        Ok(VmessAccept {
+            session,
+            upload_key: body_key.clone(),
+            upload_nonce: body_nonce.clone(),
+            download_key,
+            download_nonce,
+            cipher,
+            authenticated_length,
+            chunk_masking,
+            global_padding,
+            length_key_source: body_key,
+            length_nonce_source: body_nonce,
+            response_header,
+        })
     }
 
     /// Read the wire auth packet once, then try each user in order.
@@ -45,14 +95,46 @@ impl VmessInbound {
         stream: &mut S,
         users: &[VmessUser],
     ) -> Result<Session, Error> {
-        let buf = VmessReadBuffer::read(stream).await?;
+        self.accept_tcp_multi(stream, users)
+            .await
+            .map(|accepted| accepted.session)
+    }
+
+    pub async fn accept_tcp_multi<S: AsyncSocket>(
+        &self,
+        stream: &mut S,
+        users: &[VmessUser],
+    ) -> Result<VmessAccept, Error> {
+        let buf = VmessReadBuffer::read(stream, users).await?;
 
         for user in users {
             match try_user(&buf, user) {
-                Ok((session, body_key, auth_id, cipher)) => {
-                    return send_auth_response(stream, &body_key, &auth_id, cipher)
-                        .await
-                        .map(|()| session);
+                Ok((
+                    session,
+                    body_key,
+                    body_nonce,
+                    response_header,
+                    cipher,
+                    authenticated_length,
+                    chunk_masking,
+                    global_padding,
+                )) => {
+                    let (download_key, download_nonce) =
+                        send_auth_response(stream, &body_key, &body_nonce, response_header).await?;
+                    return Ok(VmessAccept {
+                        session,
+                        upload_key: body_key.clone(),
+                        upload_nonce: body_nonce.clone(),
+                        download_key,
+                        download_nonce,
+                        cipher,
+                        authenticated_length,
+                        chunk_masking,
+                        global_padding,
+                        length_key_source: body_key,
+                        length_nonce_source: body_nonce,
+                        response_header,
+                    });
                 }
                 Err(_) => continue,
             }
@@ -68,25 +150,40 @@ impl VmessInbound {
 /// Buffered wire data read once, tried against multiple users.
 struct VmessReadBuffer {
     auth_id: [u8; AUTH_ID_LEN],
-    encrypted: Vec<u8>,
+    nonce: [u8; 8],
+    encrypted_payload: Vec<u8>,
 }
 
 impl VmessReadBuffer {
-    async fn read<S: AsyncSocket>(stream: &mut S) -> Result<Self, Error> {
+    async fn read<S: AsyncSocket>(stream: &mut S, users: &[VmessUser]) -> Result<Self, Error> {
         let mut auth_id = [0u8; AUTH_ID_LEN];
         read_exact(stream, &mut auth_id).await?;
 
-        let mut len_buf = [0u8; 2];
-        read_exact(stream, &mut len_buf).await?;
-        let body_len = u16::from_be_bytes(len_buf) as usize;
-        if body_len > 2048 {
-            return Err(Error::Protocol("vmess body too large"));
+        let mut encrypted_len = [0_u8; 18];
+        read_exact(stream, &mut encrypted_len).await?;
+        let mut nonce = [0_u8; 8];
+        read_exact(stream, &mut nonce).await?;
+
+        let mut header_len = None;
+        for user in users {
+            let cmd_key = derive_xray_cmd_key(&user.id);
+            if let Ok(len) =
+                open_xray_aead_header_length(&cmd_key, &auth_id, &encrypted_len, &nonce)
+            {
+                header_len = Some(len);
+                break;
+            }
         }
 
-        let mut encrypted = vec![0u8; body_len + GCM_TAG_LEN];
-        read_exact(stream, &mut encrypted).await?;
+        let header_len = header_len.ok_or(Error::Protocol("vmess: no user matched"))?;
+        let mut encrypted_payload = vec![0_u8; header_len + GCM_TAG_LEN];
+        read_exact(stream, &mut encrypted_payload).await?;
 
-        Ok(Self { auth_id, encrypted })
+        Ok(Self {
+            auth_id,
+            nonce,
+            encrypted_payload,
+        })
     }
 }
 
@@ -96,144 +193,143 @@ impl VmessReadBuffer {
 fn try_user(
     buf: &VmessReadBuffer,
     user: &VmessUser,
-) -> Result<(Session, Vec<u8>, [u8; AUTH_ID_LEN], VmessCipher), Error> {
-    let cmd_key = derive_cmd_key(&user.id, user.cipher.key_len());
-
-    let (body_key_bytes, body_nonce_bytes) =
-        derive_body_key_nonce(&cmd_key, &buf.auth_id, user.cipher.key_len());
-
-    let plaintext = aead_decrypt(
-        &body_key_bytes,
-        &body_nonce_bytes,
-        &buf.encrypted,
-        user.cipher,
-    )?;
-
-    let (timestamp, session) = parse_command_body(&plaintext, &user.id)?;
-
-    let expected_auth = compute_auth_id(&cmd_key, timestamp);
-    if buf.auth_id != expected_auth {
-        return Err(Error::Protocol("vmess auth verification failed"));
-    }
-
-    let now = current_timestamp();
-    let delta = timestamp.abs_diff(now);
-    if delta > 120 {
-        return Err(Error::Protocol("vmess timestamp expired"));
-    }
-
-    Ok((session, body_key_bytes, buf.auth_id, user.cipher))
+) -> Result<(Session, Vec<u8>, Vec<u8>, u8, VmessCipher, bool, bool, bool), Error> {
+    let cmd_key = derive_xray_cmd_key(&user.id);
+    let plaintext =
+        open_xray_aead_header_payload(&cmd_key, &buf.auth_id, &buf.nonce, &buf.encrypted_payload)?;
+    parse_command_body(&plaintext, user)
 }
 
-/// Parse the decrypted command body:
-/// [timestamp:8][random:4][options:1][padding_len:1][padding:P][version:1][cmd:1][port:2][atyp:1][address:var]
-fn parse_command_body(plaintext: &[u8], uuid: &[u8; 16]) -> Result<(u64, Session), Error> {
-    if plaintext.len() < 20 {
+/// Parse the decrypted command body.
+fn parse_command_body(
+    plaintext: &[u8],
+    user: &VmessUser,
+) -> Result<(Session, Vec<u8>, Vec<u8>, u8, VmessCipher, bool, bool, bool), Error> {
+    if plaintext.len() < 42 {
         return Err(Error::Protocol("vmess body too short"));
     }
 
-    let timestamp = u64::from_be_bytes(plaintext[0..8].try_into().unwrap());
-    let _random = &plaintext[8..12];
-    let _options = plaintext[12];
-    let padding_len = plaintext[13] as usize;
-
-    let cmd_start = 14 + padding_len;
-    if plaintext.len() < cmd_start + 5 {
-        return Err(Error::Protocol("vmess command section too short"));
-    }
-
-    let version = plaintext[cmd_start];
+    let version = plaintext[0];
     if version != VERSION {
         return Err(Error::Protocol("vmess unsupported version"));
     }
 
-    let command = plaintext[cmd_start + 1];
-    let port = u16::from_be_bytes(plaintext[cmd_start + 2..cmd_start + 4].try_into().unwrap());
-    let atyp = plaintext[cmd_start + 4];
+    let body_nonce = plaintext[1..17].to_vec();
+    let body_key = plaintext[17..33].to_vec();
+    let response_header = plaintext[33];
+    let options = plaintext[34];
+    let padding_len = (plaintext[35] >> 4) as usize;
+    let cipher = match plaintext[35] & 0x0f {
+        0x03 => VmessCipher::Aes128Gcm,
+        0x04 => VmessCipher::Chacha20Poly1305,
+        0x05 => VmessCipher::None,
+        0x06 => VmessCipher::Zero,
+        _ => user.cipher,
+    };
+    let command = plaintext[37];
+    let mut pos = 38;
 
-    // Read address from remaining bytes
-    let addr_len = match atyp {
-        0x01 => 4usize, // IPv4
-        0x02 => {
-            if plaintext.len() <= cmd_start + 6 {
-                return Err(Error::Protocol("vmess domain address truncated"));
-            }
-            1 + plaintext[cmd_start + 5] as usize // 1 byte len + domain
+    let target = if command == 0x03 {
+        zero_core::Address::Domain(crate::shared::MUX_COOL_DOMAIN.to_owned())
+    } else {
+        if plaintext.len() < pos + 3 {
+            return Err(Error::Protocol("vmess command section too short"));
         }
-        0x03 => 16usize, // IPv6
-        _ => return Err(Error::Protocol("vmess unknown address type")),
+        let port = u16::from_be_bytes([plaintext[pos], plaintext[pos + 1]]);
+        pos += 2;
+        let atyp = plaintext[pos];
+        pos += 1;
+        let addr_len = match atyp {
+            0x01 => 4usize,
+            0x02 => {
+                if plaintext.len() <= pos {
+                    return Err(Error::Protocol("vmess domain address truncated"));
+                }
+                1 + plaintext[pos] as usize
+            }
+            0x03 => 16usize,
+            _ => return Err(Error::Protocol("vmess unknown address type")),
+        };
+        let addr_end = pos + addr_len;
+        if plaintext.len() < addr_end {
+            return Err(Error::Protocol("vmess address truncated"));
+        }
+        let target = parse_address_from_bytes(atyp, &plaintext[pos..addr_end])?;
+        let network = match command {
+            CMD_TCP => Network::Tcp,
+            CMD_UDP => Network::Udp,
+            _ => return Err(Error::Protocol("vmess unsupported command")),
+        };
+        let mut session = Session::new(0, target, port, network, ProtocolType::Vmess);
+        apply_user_auth(&mut session, user);
+        return Ok((
+            session,
+            body_key,
+            body_nonce,
+            response_header,
+            cipher,
+            options & 0x10 != 0,
+            options & 0x04 != 0,
+            options & 0x08 != 0,
+        ));
     };
 
-    let addr_start = cmd_start + 5;
-    let addr_end = addr_start + addr_len;
-    if plaintext.len() < addr_end {
-        return Err(Error::Protocol("vmess address truncated"));
-    }
-
-    let target = parse_address_from_bytes(atyp, &plaintext[addr_start..addr_end])?;
-
-    let network = match command {
-        CMD_TCP => Network::Tcp,
-        CMD_UDP => Network::Udp,
-        _ => return Err(Error::Protocol("vmess unsupported command")),
-    };
-
-    let mut session = Session::new(0, target, port, network, ProtocolType::Vmess);
-
-    let auth = SessionAuth {
-        scheme: "vmess-uuid".into(),
-        credential_id: None,
-        principal_key: Some(hex::encode(uuid)),
-        up_bps: None,
-        down_bps: None,
-    };
-    session.apply_auth(auth);
-
-    Ok((timestamp, session))
+    let mut session = Session::new(
+        0,
+        target,
+        crate::shared::MUX_COOL_PORT,
+        Network::Tcp,
+        ProtocolType::Vmess,
+    );
+    apply_user_auth(&mut session, user);
+    let _ = padding_len;
+    Ok((
+        session,
+        body_key,
+        body_nonce,
+        response_header,
+        cipher,
+        options & 0x10 != 0,
+        options & 0x04 != 0,
+        options & 0x08 != 0,
+    ))
 }
 
-fn parse_address_from_bytes(atyp: u8, bytes: &[u8]) -> Result<Address, Error> {
-    match atyp {
-        0x01 => {
-            let addr: [u8; 4] = bytes[..4].try_into().unwrap();
-            Ok(Address::Ipv4(addr))
-        }
-        0x02 => {
-            let len = bytes[0] as usize;
-            let domain = std::str::from_utf8(&bytes[1..1 + len])
-                .map_err(|_| Error::Protocol("vmess domain not utf-8"))?;
-            Ok(Address::Domain(domain.to_owned()))
-        }
-        0x03 => {
-            let addr: [u8; 16] = bytes[..16].try_into().unwrap();
-            Ok(Address::Ipv6(addr))
-        }
-        _ => Err(Error::Protocol("vmess unexpected address type")),
-    }
+fn apply_user_auth(session: &mut Session, user: &VmessUser) {
+    let auth = SessionAuth {
+        scheme: "vmess-uuid".into(),
+        credential_id: user.credential_id.clone(),
+        principal_key: user
+            .principal_key
+            .clone()
+            .or_else(|| Some(hex::encode(&user.id))),
+        up_bps: user.up_bps,
+        down_bps: user.down_bps,
+    };
+    session.apply_auth(auth);
 }
 
 async fn send_auth_response<S: AsyncSocket>(
     stream: &mut S,
     body_key: &[u8],
-    auth_id: &[u8; 16],
-    cipher: VmessCipher,
-) -> Result<(), Error> {
-    let (resp_key, resp_nonce) = derive_response_key_nonce(body_key, auth_id, cipher.key_len());
+    body_nonce: &[u8],
+    response_header: u8,
+) -> Result<(Vec<u8>, Vec<u8>), Error> {
+    let resp_key = sha256_16(body_key)?;
+    let resp_nonce = sha256_16(body_nonce)?;
 
-    // Plaintext: [status:1] = 0x00 (success)
-    let plaintext = [0x00u8];
-    let encrypted = aead_encrypt(&resp_key, &resp_nonce, &plaintext, cipher)?;
-
-    // Send: [len:2 BE][encrypted_body][tag]
-    let body_len = (encrypted.len() - GCM_TAG_LEN) as u16;
-    let mut buf = Vec::with_capacity(2 + encrypted.len());
-    buf.extend_from_slice(&body_len.to_be_bytes());
-    buf.extend_from_slice(&encrypted);
+    let plaintext = [response_header, 0x00, 0x00, 0x00];
+    let buf = seal_xray_response_header(&resp_key, &resp_nonce, &plaintext)?;
 
     stream
         .write_all(&buf)
         .await
         .map_err(|_| Error::Io("vmess: failed to write response"))?;
 
-    Ok(())
+    Ok((resp_key, resp_nonce))
+}
+
+fn sha256_16(bytes: &[u8]) -> Result<Vec<u8>, Error> {
+    let digest = ring::digest::digest(&ring::digest::SHA256, bytes);
+    Ok(digest.as_ref()[..16].to_vec())
 }

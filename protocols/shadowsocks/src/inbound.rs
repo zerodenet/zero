@@ -38,26 +38,15 @@ impl ShadowsocksInbound {
         cipher: super::shared::CipherKind,
         password: &[u8],
     ) -> Result<ShadowsocksAccept, Error> {
-        use super::shared::{parse_target_data, read_exact, read_tcp_chunk};
+        use super::shared::{derive_session_key, parse_target_data, read_exact, read_tcp_chunk};
 
-        let key_len = cipher.key_len();
         let salt_len = cipher.salt_len();
 
         // Read salt
         let mut salt = vec![0u8; salt_len];
         read_exact(stream, &mut salt).await?;
 
-        // Derive key (SHA1 for legacy, Blake3 for 2022)
-        let key = if cipher.is_blake3() {
-            #[cfg(feature = "blake3")]
-            {
-                super::shared::derive_key_blake3(password, &salt, key_len)?
-            }
-            #[cfg(not(feature = "blake3"))]
-            return Err(Error::Unsupported("ss: blake3 feature not enabled"));
-        } else {
-            super::shared::derive_key(password, &salt, key_len)?
-        };
+        let key = derive_session_key(cipher, password, &salt)?;
 
         let mut nonce = 0;
         let plain = read_tcp_chunk(stream, cipher, &key, &mut nonce).await?;

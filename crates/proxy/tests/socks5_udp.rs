@@ -33,6 +33,9 @@ mod relays_udp_through_nested_group_target;
 #[path = "socks5_udp/relays_udp_through_shadowsocks_outbound.rs"]
 mod relays_udp_through_shadowsocks_outbound;
 #[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+#[path = "socks5_udp/relays_udp_through_shadowsocks_outbound_all_ciphers.rs"]
+mod relays_udp_through_shadowsocks_outbound_all_ciphers;
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
 #[path = "socks5_udp/relays_udp_through_shadowsocks_to_shadowsocks_relay_chain.rs"]
 mod relays_udp_through_shadowsocks_to_shadowsocks_relay_chain;
 #[cfg(all(feature = "socks5", feature = "mieru"))]
@@ -67,3 +70,6 @@ mod relays_udp_through_urltest_group_with_nested_group_member;
 #[cfg(all(feature = "socks5", feature = "vless"))]
 #[path = "socks5_udp/relays_udp_through_vless_outbound.rs"]
 mod relays_udp_through_vless_outbound;
+#[cfg(all(feature = "socks5", feature = "vmess"))]
+#[path = "socks5_udp/relays_udp_through_vmess_to_vmess_relay_chain.rs"]
+mod relays_udp_through_vmess_to_vmess_relay_chain;

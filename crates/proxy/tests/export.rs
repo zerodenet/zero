@@ -563,13 +563,44 @@ fn proxy_handle_capabilities_use_protocol_inventory() {
         assert_eq!(shadowsocks.mux.level, "unsupported");
         assert!(shadowsocks
             .limitations
-            .contains(&"external_interop_coverage_is_incomplete".to_owned()));
+            .contains(&"shadowsocks_2022_tcp_header_is_not_implemented".to_owned()));
+        assert!(shadowsocks.limitations.contains(
+            &"shadowsocks_2022_udp_server_response_context_is_not_implemented".to_owned()
+        ));
         assert!(!shadowsocks
             .limitations
             .contains(&"udp_relay_chain_packet_path_limited".to_owned()));
         assert!(!shadowsocks
             .limitations
             .contains(&"udp_relay_chain_is_not_supported".to_owned()));
+    }
+
+    if let Some(vmess) = capabilities
+        .protocols
+        .iter()
+        .find(|protocol| protocol.protocol == "vmess")
+    {
+        assert_eq!(vmess.status, "partial");
+        assert_eq!(vmess.inbound.tcp.level, "partial");
+        assert_eq!(vmess.inbound.udp.level, "partial");
+        assert_eq!(vmess.outbound.tcp.level, "partial");
+        assert_eq!(vmess.outbound.udp.level, "partial");
+        assert_eq!(vmess.mux.level, "partial");
+        assert!(vmess
+            .limitations
+            .contains(&"external_interop_coverage_is_incomplete".to_owned()));
+        assert!(vmess
+            .limitations
+            .contains(&"cipher_zero_mainstream_compatibility_is_incomplete".to_owned()));
+        assert!(!vmess
+            .limitations
+            .contains(&"vmess_none_zero_cipher_is_not_supported".to_owned()));
+        assert!(!vmess
+            .limitations
+            .contains(&"vmess_mux_udp_is_not_supported".to_owned()));
+        assert!(!vmess
+            .limitations
+            .contains(&"vmess_udp_is_not_implemented".to_owned()));
     }
 
     if let Some(hysteria2) = capabilities

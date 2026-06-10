@@ -16,6 +16,11 @@ use super::{
 };
 use crate::runtime::udp_associate::sessions::{UdpFlowOutbound, UdpPacketPathCarrier};
 use crate::runtime::vless_udp::{establish_vless_udp_upstream_over_stream, VlessUdpTransport};
+#[cfg(feature = "vmess")]
+use crate::runtime::vmess_udp::{
+    build_vmess_udp_transport_over_stream, establish_vmess_udp_upstream_over_stream,
+    VmessUdpTransport,
+};
 use crate::runtime::Proxy;
 
 // Chain resolution.
@@ -490,16 +495,56 @@ impl UdpDispatch {
                 .into(),
                 upstream: None,
             }),
-            #[cfg(feature = "trojan")]
+            #[cfg(feature = "vmess")]
+            ResolvedLeafOutbound::Vmess {
+                tag,
+                server,
+                port,
+                id,
+                cipher,
+                mux_concurrency,
+                mux_idle_timeout_secs: _,
+                tls,
+                ws,
+                grpc,
+            } => {
+                let transport = VmessUdpTransport { tls, ws, grpc };
+                let session_id = session.id;
+                let tag_owned = tag.to_owned();
+                self.vmess_manager
+                    .get_or_create_upstream(
+                        &mut self.chain_tasks,
+                        proxy,
+                        session,
+                        session.target.clone(),
+                        session.port,
+                        server.to_owned(),
+                        port,
+                        id.to_owned(),
+                        cipher.to_owned(),
+                        payload.to_vec(),
+                        Some(&transport),
+                        mux_concurrency,
+                    )
+                    .await
+                    .map_err(|error| FlowFailure {
+                        stage: "udp_vmess_upstream",
+                        error,
+                        upstream: Some((server.to_owned(), port)),
+                    })?;
+
+                Ok(FlowStartResult::VmessFlow {
+                    session_id,
+                    tag: tag_owned,
+                })
+            }
+            #[cfg(not(feature = "vmess"))]
             ResolvedLeafOutbound::Vmess { .. } => Err(FlowFailure {
-                stage: "vmess",
-                error: zero_core::Error::Unsupported("vmess UDP not supported").into(),
-                upstream: None,
-            }),
-            #[cfg(not(feature = "trojan"))]
-            ResolvedLeafOutbound::Vmess { .. } => Err(FlowFailure {
-                stage: "vmess",
-                error: zero_core::Error::Unsupported("vmess UDP not supported").into(),
+                stage: "udp_vmess_outbound",
+                error: zero_core::Error::Unsupported(
+                    "VMess UDP outbound requires Cargo feature `vmess`",
+                )
+                .into(),
                 upstream: None,
             }),
         }
@@ -719,10 +764,62 @@ impl UdpDispatch {
                     tx_bytes: sent as u64,
                 })
             }
+            #[cfg(feature = "vmess")]
+            ResolvedLeafOutbound::Vmess {
+                tag,
+                server,
+                port,
+                id,
+                cipher,
+                mux_concurrency: _,
+                mux_idle_timeout_secs: _,
+                tls,
+                ws,
+                grpc,
+            } => {
+                let session_id = session.id;
+                let tag_owned = tag.to_owned();
+                let key = (session.target.clone(), session.port);
+                let transport = VmessUdpTransport { tls, ws, grpc };
+                let stream = build_vmess_udp_transport_over_stream(
+                    stream,
+                    Some(&transport),
+                    proxy.config.source_dir(),
+                    server,
+                    port,
+                )
+                .await
+                .map_err(|error| FlowFailure {
+                    stage: "udp_vmess_relay_final_transport",
+                    error,
+                    upstream: Some((server.to_owned(), port)),
+                })?;
+                let (upstream, recv_tx) = establish_vmess_udp_upstream_over_stream(
+                    proxy, session, id, cipher, payload, stream,
+                )
+                .await
+                .map_err(|error| FlowFailure {
+                    stage: "udp_vmess_relay_chain",
+                    error,
+                    upstream: None,
+                })?;
+                self.vmess_manager.insert_upstream(key, upstream, recv_tx);
+                self.vmess_manager.spawn_bridge(
+                    &mut self.chain_tasks,
+                    session.target.clone(),
+                    session.port,
+                    session_id,
+                );
+
+                Ok(FlowStartResult::VmessFlow {
+                    session_id,
+                    tag: tag_owned,
+                })
+            }
             _ => Err(FlowFailure {
                 stage: "udp_relay_final_hop",
                 error: zero_core::Error::Unsupported(
-                    "UDP relay chain final hop not supported (supported: VLESS, Trojan, Mieru)",
+                    "UDP relay chain final hop not supported (supported: VLESS, Trojan, Mieru, VMess)",
                 )
                 .into(),
                 upstream: None,

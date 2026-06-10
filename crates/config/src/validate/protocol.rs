@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use crate::{
-    ConfigError, InboundProtocolConfig, InboundRealityConfig, OutboundProtocolConfig,
-    RealityConfig, Socks5UserConfig, VlessUserConfig, VmessUserConfig,
+    ConfigError, InboundProtocolConfig, InboundRealityConfig, MieruUserConfig,
+    OutboundProtocolConfig, RealityConfig, Socks5UserConfig, VlessUserConfig, VmessUserConfig,
 };
 
 pub(super) fn validate_inbound_protocol(
@@ -115,6 +115,7 @@ pub(super) fn validate_inbound_protocol(
         } => {
             validate_inbound_optional_non_empty("shadowsocks password", password)?;
             validate_shadowsocks_cipher("inbound", cipher)?;
+            validate_shadowsocks_password("inbound", cipher, password)?;
             Ok(())
         }
         InboundProtocolConfig::Trojan {
@@ -126,19 +127,36 @@ pub(super) fn validate_inbound_protocol(
             validate_inbound_optional_non_empty("trojan password", password)?;
             Ok(())
         }
-        InboundProtocolConfig::Vmess { users, .. } => {
+        InboundProtocolConfig::Vmess {
+            users,
+            tls,
+            ws,
+            grpc,
+        } => {
             validate_vmess_users(users)?;
-            Ok(())
-        }
-        InboundProtocolConfig::Direct { .. } => Ok(()),
-        InboundProtocolConfig::Mieru { users } => {
-            if users.is_empty() {
+            let tls = tls.as_ref().ok_or_else(|| {
+                ConfigError::InvalidInbound("`vmess` inbound requires `tls`".to_owned())
+            })?;
+            validate_inbound_optional_non_empty("vmess tls.cert_path", &tls.cert_path)?;
+            validate_inbound_optional_non_empty("vmess tls.key_path", &tls.key_path)?;
+            if ws.is_some() && grpc.is_some() {
                 return Err(ConfigError::InvalidInbound(
-                    "`mieru` inbound requires at least one user".to_owned(),
+                    "`vmess` inbound cannot set both `ws` and `grpc`".to_owned(),
                 ));
+            }
+            if let Some(ws) = ws {
+                validate_inbound_optional_non_empty("vmess ws.path", &ws.path)?;
+                validate_inbound_ws_headers("vmess ws.headers", &ws.headers)?;
+            }
+            if let Some(grpc) = grpc {
+                for name in &grpc.service_names {
+                    validate_inbound_optional_non_empty("vmess grpc.service_names", name)?;
+                }
             }
             Ok(())
         }
+        InboundProtocolConfig::Direct { .. } => Ok(()),
+        InboundProtocolConfig::Mieru { users } => validate_mieru_users(users),
     }
 }
 
@@ -249,6 +267,7 @@ pub(super) fn validate_outbound_protocol(
             validate_outbound_endpoint("shadowsocks", server, *port)?;
             validate_outbound_optional_non_empty("shadowsocks password", password)?;
             validate_shadowsocks_cipher("outbound", cipher)?;
+            validate_shadowsocks_password("outbound", cipher, password)?;
             Ok(())
         }
         OutboundProtocolConfig::Trojan { server, port, .. } => {
@@ -259,27 +278,80 @@ pub(super) fn validate_outbound_protocol(
             server,
             port,
             id,
-            cipher: _,
-            tls: _,
-            ws: _,
-            grpc: _,
+            cipher,
+            mux_concurrency,
+            mux_idle_timeout_secs,
+            tls,
+            ws,
+            grpc,
         } => {
             validate_outbound_endpoint("vmess", server, *port)?;
             validate_uuid_literal(id)
                 .map_err(|m| ConfigError::InvalidOutbound(format!("`vmess` outbound `id` {m}")))?;
+            validate_vmess_cipher("outbound", cipher)?;
+            if let Some(tls) = tls {
+                if let Some(server_name) = &tls.server_name {
+                    validate_outbound_optional_non_empty("vmess tls.server_name", server_name)?;
+                }
+                if let Some(ca_cert_path) = &tls.ca_cert_path {
+                    validate_outbound_optional_non_empty("vmess tls.ca_cert_path", ca_cert_path)?;
+                }
+            }
+            if ws.is_some() && grpc.is_some() {
+                return Err(ConfigError::InvalidOutbound(
+                    "`vmess` outbound cannot set both `ws` and `grpc`".to_owned(),
+                ));
+            }
+            validate_optional_positive("vmess mux_concurrency", mux_concurrency.map(u64::from))?;
+            validate_optional_positive("vmess mux_idle_timeout_secs", *mux_idle_timeout_secs)?;
+            if let Some(ws) = ws {
+                validate_outbound_optional_non_empty("vmess ws.path", &ws.path)?;
+                validate_outbound_ws_headers("vmess ws.headers", &ws.headers)?;
+            }
+            if let Some(grpc) = grpc {
+                for name in &grpc.service_names {
+                    validate_outbound_optional_non_empty("vmess grpc.service_names", name)?;
+                }
+            }
             Ok(())
         }
         OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => Ok(()),
         OutboundProtocolConfig::Mieru {
             server,
             port,
-            username: _,
-            password: _,
+            username,
+            password,
         } => {
             validate_outbound_endpoint("mieru", server, *port)?;
+            validate_outbound_optional_non_empty("mieru password", password)?;
+            if let Some(username) = username {
+                validate_outbound_optional_non_empty("mieru username", username)?;
+            }
             Ok(())
         }
     }
+}
+
+fn validate_mieru_users(users: &[MieruUserConfig]) -> Result<(), ConfigError> {
+    if users.is_empty() {
+        return Err(ConfigError::InvalidInbound(
+            "`mieru` inbound requires at least one user".to_owned(),
+        ));
+    }
+
+    let mut seen = HashSet::new();
+    for user in users {
+        validate_inbound_optional_non_empty("mieru username", &user.username)?;
+        validate_inbound_optional_non_empty("mieru password", &user.password)?;
+        if !seen.insert(user.username.as_str()) {
+            return Err(ConfigError::InvalidInbound(format!(
+                "`mieru` inbound contains duplicate username `{}`",
+                user.username
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 fn validate_vless_users(users: &[VlessUserConfig]) -> Result<(), ConfigError> {
@@ -319,22 +391,44 @@ fn validate_vmess_users(users: &[VmessUserConfig]) -> Result<(), ConfigError> {
         ));
     }
 
-    let valid_ciphers = ["aes-128-gcm", "aes-256-gcm", "chacha20-poly1305"];
+    let mut seen = HashSet::new();
     for user in users {
         validate_uuid_literal(&user.id).map_err(|message| {
             ConfigError::InvalidInbound(format!("`vmess` inbound user `id` {message}"))
         })?;
 
-        if !valid_ciphers.contains(&user.cipher.as_str()) {
-            return Err(ConfigError::InvalidInbound(format!(
-                "`vmess` inbound cipher `{}` is not valid; expected one of: {}",
-                user.cipher,
-                valid_ciphers.join(", ")
-            )));
+        if !seen.insert(normalize_uuid_key(&user.id)) {
+            return Err(ConfigError::InvalidInbound(
+                "`vmess` inbound contains duplicate user id".to_owned(),
+            ));
+        }
+
+        validate_vmess_cipher("inbound", &user.cipher)?;
+        if let Some(credential_id) = &user.credential_id {
+            validate_inbound_optional_non_empty("vmess credential_id", credential_id)?;
+        }
+        if let Some(principal_key) = &user.principal_key {
+            validate_inbound_optional_non_empty("vmess principal_key", principal_key)?;
         }
     }
 
     Ok(())
+}
+
+fn validate_vmess_cipher(kind: &'static str, cipher: &str) -> Result<(), ConfigError> {
+    let valid_ciphers = ["aes-128-gcm", "chacha20-poly1305", "none", "zero"];
+    if valid_ciphers.contains(&cipher) {
+        return Ok(());
+    }
+
+    let message = format!(
+        "`vmess` {kind} cipher `{cipher}` is not valid; expected one of: {}",
+        valid_ciphers.join(", ")
+    );
+    match kind {
+        "inbound" => Err(ConfigError::InvalidInbound(message)),
+        _ => Err(ConfigError::InvalidOutbound(message)),
+    }
 }
 
 fn validate_vless_inbound_reality(reality: &InboundRealityConfig) -> Result<(), ConfigError> {
@@ -645,4 +739,82 @@ fn validate_shadowsocks_cipher(kind: &'static str, cipher: &str) -> Result<(), C
         });
     }
     Ok(())
+}
+
+fn validate_optional_positive(name: &str, value: Option<u64>) -> Result<(), ConfigError> {
+    if value == Some(0) {
+        return Err(ConfigError::InvalidOutbound(format!(
+            "`{name}` must be greater than 0"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_shadowsocks_password(
+    kind: &'static str,
+    cipher: &str,
+    password: &str,
+) -> Result<(), ConfigError> {
+    let Some(expected_len) = shadowsocks_2022_key_len(cipher) else {
+        return Ok(());
+    };
+
+    let key = if matches!(
+        cipher,
+        "2022-blake3-aes-128-gcm" | "2022-blake3-aes-256-gcm"
+    ) {
+        password.rsplit(':').next().unwrap_or(password)
+    } else {
+        password
+    };
+
+    let actual_len = decode_shadowsocks_2022_key_len(key).ok_or_else(|| {
+        shadowsocks_password_error(
+            kind,
+            format!("`shadowsocks` {kind} 2022 password must be standard base64 key material"),
+        )
+    })?;
+
+    if actual_len != expected_len {
+        return Err(shadowsocks_password_error(
+            kind,
+            format!(
+                "`shadowsocks` {kind} 2022 password decoded length must be {expected_len} bytes, got {actual_len}"
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+fn shadowsocks_2022_key_len(cipher: &str) -> Option<usize> {
+    match cipher {
+        "2022-blake3-aes-128-gcm" => Some(16),
+        "2022-blake3-aes-256-gcm" | "2022-blake3-chacha20-poly1305" => Some(32),
+        _ => None,
+    }
+}
+
+fn decode_shadowsocks_2022_key_len(value: &str) -> Option<usize> {
+    use base64::{
+        alphabet,
+        engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig},
+        Engine,
+    };
+
+    const ENGINE: GeneralPurpose = GeneralPurpose::new(
+        &alphabet::STANDARD,
+        GeneralPurposeConfig::new()
+            .with_encode_padding(true)
+            .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+    );
+
+    ENGINE.decode(value).ok().map(|bytes| bytes.len())
+}
+
+fn shadowsocks_password_error(kind: &'static str, message: String) -> ConfigError {
+    match kind {
+        "inbound" => ConfigError::InvalidInbound(message),
+        _ => ConfigError::InvalidOutbound(message),
+    }
 }

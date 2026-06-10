@@ -1,13 +1,13 @@
-# API Contract
+# API 契约
 
-This page describes the current control plane contract for external consumers.
+本文档描述面向外部消费者的当前控制面契约。
 
-## Naming
+## 命名规范
 
-All external JSON field names, enum values, feature names, adapter names, sink
-names, command methods, query variants, and error codes use `snake_case`.
+所有对外 JSON 字段名、枚举值、功能名称、适配器名称、sink
+名称、命令方法、查询变体和错误码均使用 `snake_case`。
 
-Examples:
+示例：
 
 ```json
 {
@@ -17,7 +17,7 @@ Examples:
 }
 ```
 
-Command methods use dotted namespaces because they name kernel capabilities:
+命令方法使用点分隔的命名空间，因为它们命名的是内核能力：
 
 ```json
 {
@@ -29,78 +29,73 @@ Command methods use dotted namespaces because they name kernel capabilities:
 }
 ```
 
-## Response Envelope
+## 响应信封
 
-HTTP and IPC responses use `zero_api::ApiResponse`.
+HTTP 和 IPC 响应使用 `zero_api::ApiResponse`。
 
-| Field | Meaning |
+| 字段 | 含义 |
 |------|------|
-| `api_id` | Protocol identifier; current value is `"zero.api.v1"` |
-| `id` | Request correlation ID, mainly used by IPC multiplexing |
-| `ok` | Whether the request succeeded |
-| `result` | Successful response payload |
-| `error` | Structured error payload |
+| `api_id` | 协议标识；当前值为 `"zero.api.v1"` |
+| `id` | 请求关联 ID，主要由 IPC 多路复用时使用 |
+| `ok` | 请求是否成功 |
+| `result` | 成功的响应负载 |
+| `error` | 结构化的错误负载 |
 
-Consumers should branch on `ok` first, then parse either `result` or `error`.
+消费者应先判断 `ok`，再解析 `result` 或 `error`。
 
-## Event Envelope
+## 事件信封
 
-Events use `zero_api::ApiEvent`.
+事件使用 `zero_api::ApiEvent`。
 
-| Field | Meaning |
+| 字段 | 含义 |
 |------|------|
-| `schema_id` | Event schema identifier; current value is `"zero.event.v1"` |
-| `event_id` | Stable event identity for de-duplication |
-| `event_type` | Machine-readable event name |
-| `sequence` | Monotonic sequence within the event source |
-| `occurred_at_unix_ms` | Event timestamp |
-| `source_id` | Optional node/source identifier |
-| `principal_key` | Optional traffic attribution key |
-| `labels` | Optional external labels |
-| `payload` | Event-specific payload |
+| `schema_id` | 事件模式标识；当前值为 `"zero.event.v1"` |
+| `event_id` | 稳定的事件标识，用于去重 |
+| `event_type` | 机器可读的事件名称 |
+| `sequence` | 事件源内的单调递增序号 |
+| `occurred_at_unix_ms` | 事件时间戳 |
+| `source_id` | 可选的节点/源标识 |
+| `principal_key` | 可选的流量归因键 |
+| `labels` | 可选的外部标签 |
+| `payload` | 事件特定的负载 |
 
-Consumers should route by `event_type` string. Unknown event types should be
-ignored unless the consumer explicitly needs to fail closed.
+消费者应按 `event_type` 字符串路由。未知的事件类型应被忽略，除非消费者明确需要严格拒绝。
 
-## Capability Discovery
+## 能力发现
 
-Use `GET /api/v1/capabilities` or the IPC `capabilities` query to discover the
-current build and runtime surface.
+使用 `GET /api/v1/capabilities` 或 IPC 的 `capabilities` 查询来发现当前构建和运行时能力。
 
-The response reports:
+响应报告：
 
-- enabled adapters
-- configured event sinks
-- compiled or enabled features
-- permissions granted to the current caller
-- protocol and event schema identifiers
+- 已启用的适配器
+- 已配置的事件 sink
+- 已编译或已启用的功能
+- 当前调用者被授予的权限
+- 协议和事件模式标识
 
-Capability discovery is descriptive. It does not grant extra authority and does
-not expose panel-specific business concepts.
+能力发现是描述性的。它不授予额外权限，也不暴露面板特定的业务概念。
 
-## Error Handling
+## 错误处理
 
-Error codes are stable machine strings in `snake_case`.
+错误码是 `snake_case` 的稳定机器字符串。
 
-| Code | Meaning |
+| 错误码 | 含义 |
 |------|------|
-| `not_found` | Requested resource does not exist |
-| `invalid_argument` | Request shape or field value is invalid |
-| `permission_denied` | Caller lacks the required permission |
-| `feature_disabled` | Capability is not enabled in the current build/runtime |
-| `conflict` | Current state rejects the operation |
-| `unsupported` | Operation is not part of the current control surface |
-| `internal` | Kernel-side error |
+| `not_found` | 请求的资源不存在 |
+| `invalid_argument` | 请求格式或字段值无效 |
+| `permission_denied` | 调用者缺少所需权限 |
+| `feature_disabled` | 功能在当前构建/运行时中未启用 |
+| `conflict` | 当前状态拒绝该操作 |
+| `unsupported` | 操作不在当前控制面范围内 |
+| `internal` | 内核侧错误 |
 
-Do not parse `error.message` for control flow. It is human-readable context.
+不要解析 `error.message` 用于控制流。它是人类可读的上下文信息。
 
-## Consumer Shape
+## 消费者形态
 
-External GUI and panel integrations should keep their own business state outside
-the kernel:
+外部 GUI 和面板集成应将其自身的业务状态保留在内核之外：
 
-- user accounts, plans, quotas, billing, tenants, and audit policy stay in the
-  external system
-- kernel attribution uses `principal_key`, `source_id`, and `labels`
-- runtime decisions are made through query snapshots, events, and commands
-- direct mutation of engine internals is not part of the control plane
+- 用户账户、套餐、配额、计费、租户和审计策略保留在外部系统中
+- 内核归因使用 `principal_key`、`source_id` 和 `labels`
+- 运行时决策通过查询快照、事件和命令进行
+- 直接修改引擎内部结构不属于控制面范畴

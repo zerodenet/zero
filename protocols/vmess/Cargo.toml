@@ -14,6 +14,12 @@ default = []
 [dependencies]
 rand = "0.9"
 ring = "0.17"
+md5 = "0.7"
+crc32fast = "1"
+aes = "0.8"
+sha2 = "0.10"
+sha3 = "0.10"
+tokio.workspace = true
 zero-core = { path = "../../crates/core" }
 zero-traits = { path = "../../crates/traits" }
 

@@ -317,12 +317,25 @@ impl Proxy {
                 port,
                 id,
                 cipher,
+                mux_concurrency,
+                mux_idle_timeout_secs,
                 tls,
                 ws,
                 grpc,
             } => {
                 match self
-                    .connect_via_vmess_upstream(session, server, port, id, cipher, tls, ws, grpc)
+                    .connect_via_vmess_upstream(
+                        session,
+                        server,
+                        port,
+                        id,
+                        cipher,
+                        mux_concurrency,
+                        mux_idle_timeout_secs,
+                        tls,
+                        ws,
+                        grpc,
+                    )
                     .await
                 {
                     Ok(upstream) => Ok(EstablishedTcpOutbound::Vmess {
@@ -601,13 +614,13 @@ async fn apply_hop_protocol(
                     format!("vmess unknown cipher: {cipher}"),
                 ))
             })?;
-            use zero_traits::TcpTunnelProtocol;
-            <vmess::VmessOutbound as TcpTunnelProtocol<
-                vmess::VmessTcpTunnelTarget,
-            >>::establish_tcp_tunnel(
+            use zero_traits::TcpSessionProtocol;
+            let vmess_session = <vmess::VmessOutbound as TcpSessionProtocol<
+                vmess::VmessTcpSessionTarget,
+            >>::establish_tcp_session(
                 &vmess::VmessOutbound,
                 &mut stream,
-                &vmess::VmessTcpTunnelTarget {
+                &vmess::VmessTcpSessionTarget {
                     session,
                     uuid: &uuid,
                     cipher: vmess_cipher,
@@ -615,7 +628,10 @@ async fn apply_hop_protocol(
             )
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
-            Ok(stream)
+            Ok(TcpRelayStream::new(vmess::VmessAeadStream::outbound(
+                stream,
+                vmess_session,
+            )?))
         }
         #[cfg(feature = "mieru")]
         ResolvedLeafOutbound::Mieru {

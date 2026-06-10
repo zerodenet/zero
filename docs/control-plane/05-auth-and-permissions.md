@@ -69,10 +69,20 @@ impl Permission {
 | GET /api/v1/stats | ✓ | ✓ | ✓ | ✓ |
 | GET /api/v1/flows* | ✓ | ✓ | ✓ | ✓ |
 | GET /api/v1/policies* | ✓ | ✓ | ✓ | ✓ |
+| GET /api/v1/diagnostics | ✓ | ✓ | ✓ | ✓ |
+| GET /api/v1/sinks | ✓ | ✓ | ✓ | ✓ |
 | **Command 端点** | | | | |
 | policies.select | | ✓ | ✓ | ✓ |
 | flows.close | | ✓ | ✓ | ✓ |
+| policies.probe | | ✓ | ✓ | ✓ |
 | config.validate | | | ✓ | ✓ |
+| config.apply | | | | ✓ |
+| diagnostics.probe_target | | | | ✓ |
+| diagnostics.dns_lookup | | | | ✓ |
+| diagnostics.trace_route | | | | ✓ |
+| mode.set | | | | ✓ |
+| tun.start | | | | ✓ |
+| tun.stop | | | | ✓ |
 
 ---
 

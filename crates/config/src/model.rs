@@ -54,9 +54,20 @@ impl RuntimeConfig {
         let raw = raw.strip_prefix('\u{feff}').unwrap_or(raw);
         let mut config = serde_json::from_str::<Self>(raw)?;
         config.source_dir = source_dir;
+        config.normalize();
         config.validate()?;
 
         Ok(config)
+    }
+
+    fn normalize(&mut self) {
+        for inbound in &mut self.inbounds {
+            inbound.protocol.normalize();
+        }
+
+        for outbound in &mut self.outbounds {
+            outbound.protocol.normalize();
+        }
     }
 }
 
@@ -509,6 +520,7 @@ impl InboundProtocolConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MieruUserConfig {
+    #[serde(default)]
     pub username: String,
     pub password: String,
 }
@@ -516,7 +528,9 @@ pub struct MieruUserConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Socks5UserConfig {
+    #[serde(default)]
     pub username: String,
+    #[serde(default)]
     pub password: String,
     #[serde(default)]
     pub principal_key: Option<String>,
@@ -524,6 +538,47 @@ pub struct Socks5UserConfig {
     pub up_bps: Option<u64>,
     #[serde(default)]
     pub down_bps: Option<u64>,
+}
+
+impl InboundProtocolConfig {
+    fn normalize(&mut self) {
+        match self {
+            Self::Socks5 { users } => normalize_socks5_users(users),
+            Self::Mixed { socks5_users } => normalize_socks5_users(socks5_users),
+            Self::Mieru { users } => {
+                for user in users {
+                    if user.username.is_empty() {
+                        user.username = user.password.clone();
+                    }
+                }
+            }
+            Self::Vmess { users, .. } => {
+                for user in users {
+                    user.cipher = normalize_vmess_cipher_name(&user.cipher);
+                }
+            }
+            Self::HttpConnect
+            | Self::Vless { .. }
+            | Self::Hysteria2 { .. }
+            | Self::Shadowsocks { .. }
+            | Self::Trojan { .. }
+            | Self::Direct { .. } => {}
+        }
+    }
+}
+
+fn normalize_socks5_users(users: &mut Vec<Socks5UserConfig>) {
+    users.retain_mut(|user| {
+        if user.username.is_empty() && user.password.is_empty() {
+            return false;
+        }
+
+        if user.username.is_empty() {
+            user.username = user.password.clone();
+        }
+
+        true
+    });
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -822,6 +877,10 @@ pub enum OutboundProtocolConfig {
         #[serde(default = "default_vmess_cipher")]
         cipher: String,
         #[serde(default)]
+        mux_concurrency: Option<u32>,
+        #[serde(default)]
+        mux_idle_timeout_secs: Option<u64>,
+        #[serde(default)]
         tls: Option<ClientTlsConfig>,
         #[serde(default)]
         ws: Option<WebSocketConfig>,
@@ -836,6 +895,50 @@ pub enum OutboundProtocolConfig {
         username: Option<String>,
         password: String,
     },
+}
+
+impl OutboundProtocolConfig {
+    fn normalize(&mut self) {
+        match self {
+            Self::Socks5 {
+                username, password, ..
+            } => {
+                if username.as_deref() == Some("") {
+                    *username = None;
+                }
+                if username.is_none() {
+                    if let Some(password) =
+                        password.as_ref().filter(|password| !password.is_empty())
+                    {
+                        *username = Some(password.clone());
+                    }
+                }
+            }
+            Self::Mieru {
+                username, password, ..
+            } => {
+                if username.as_deref().is_none_or(str::is_empty) {
+                    *username = Some(password.clone());
+                }
+            }
+            Self::Vmess { cipher, .. } => {
+                *cipher = normalize_vmess_cipher_name(cipher);
+            }
+            Self::Direct
+            | Self::Block
+            | Self::Vless { .. }
+            | Self::Hysteria2 { .. }
+            | Self::Shadowsocks { .. }
+            | Self::Trojan { .. } => {}
+        }
+    }
+}
+
+fn normalize_vmess_cipher_name(cipher: &str) -> String {
+    match cipher {
+        "auto" => "aes-128-gcm".to_owned(),
+        _ => cipher.to_owned(),
+    }
 }
 
 fn default_vmess_cipher() -> String {

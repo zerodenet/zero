@@ -29,13 +29,6 @@ nc -l 127.0.0.1 8080
 
 ```json
 {
-  "inbounds": [
-    {
-      "tag": "tun-in",
-      "listen": { "address": "0.0.0.0", "port": 0 },
-      "protocol": { "type": "socks5" }
-    }
-  ],
   "outbounds": [
     { "tag": "direct", "protocol": { "type": "direct" } }
   ],
@@ -47,7 +40,8 @@ nc -l 127.0.0.1 8080
 ```
 
 ```bash
-cargo run -- run --tun-name tun0 --tun-addr 10.0.0.1/24 --tun-tag proxy config.json
+cargo run -- run config.json &
+cargo run -- tun start --addr 10.0.0.1/24 --tag proxy config.json
 ```
 
 ### 4. 通过 TUN 发请求

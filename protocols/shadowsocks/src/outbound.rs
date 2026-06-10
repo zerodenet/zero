@@ -31,9 +31,8 @@ impl ShadowsocksOutbound {
         cipher: super::shared::CipherKind,
         password: &[u8],
     ) -> Result<ShadowsocksOutboundSession, Error> {
-        use super::shared::{build_target_data, encrypt_tcp_chunk};
+        use super::shared::{build_target_data, derive_session_key, encrypt_tcp_chunk};
 
-        let key_len = cipher.key_len();
         let salt_len = cipher.salt_len();
 
         // Generate random salt
@@ -43,17 +42,7 @@ impl ShadowsocksOutbound {
             .fill(&mut salt)
             .map_err(|_| Error::Protocol("ss: random failed"))?;
 
-        // Derive key (SHA1 for legacy, Blake3 for 2022)
-        let key = if cipher.is_blake3() {
-            #[cfg(feature = "blake3")]
-            {
-                super::shared::derive_key_blake3(password, &salt, key_len)?
-            }
-            #[cfg(not(feature = "blake3"))]
-            return Err(Error::Unsupported("ss: blake3 feature not enabled"));
-        } else {
-            super::shared::derive_key(password, &salt, key_len)?
-        };
+        let key = derive_session_key(cipher, password, &salt)?;
 
         // Build target data
         let target_data = build_target_data(&session.target, session.port, &[])?;
@@ -143,25 +132,26 @@ impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecode
         &self,
         packet: &ShadowsocksUdpPacketTarget<'a>,
     ) -> Result<Vec<u8>, Self::Error> {
-        use super::shared::{aead_encrypt_udp, build_target_data, derive_key};
+        use super::shared::{aead_encrypt_udp, build_target_data, derive_udp_packet_key};
+
+        if packet.cipher.is_blake3() {
+            return super::shared::encode_udp_datagram_2022(
+                packet.cipher,
+                packet.password,
+                packet.target,
+                packet.port,
+                packet.payload,
+            );
+        }
 
         let target_data = build_target_data(packet.target, packet.port, packet.payload)?;
-        let mut salt = vec![0u8; packet.cipher.salt_len()];
+        let mut salt = vec![0u8; packet.cipher.udp_salt_len()];
         use ring::rand::SecureRandom;
         ring::rand::SystemRandom::new()
             .fill(&mut salt)
             .map_err(|_| Error::Protocol("ss: random failed"))?;
 
-        let key = if packet.cipher.is_blake3() {
-            #[cfg(feature = "blake3")]
-            {
-                super::shared::derive_key_blake3(packet.password, &salt, packet.cipher.key_len())?
-            }
-            #[cfg(not(feature = "blake3"))]
-            return Err(Error::Unsupported("ss: blake3 feature not enabled"));
-        } else {
-            derive_key(packet.password, &salt, packet.cipher.key_len())?
-        };
+        let key = derive_udp_packet_key(packet.cipher, packet.password, &salt)?;
 
         let encrypted = aead_encrypt_udp(packet.cipher, &key, &[0u8; 12], &target_data)?;
         let mut datagram = Vec::with_capacity(salt.len() + encrypted.len());
@@ -175,31 +165,27 @@ impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecode
         context: &ShadowsocksUdpDecodeContext<'a>,
         datagram: &[u8],
     ) -> Result<Self::Decoded, Self::Error> {
-        use super::shared::{aead_decrypt_udp, derive_key, parse_target_data};
+        use super::shared::{aead_decrypt_udp, derive_udp_packet_key, parse_target_data};
 
-        let salt_len = context.cipher.salt_len();
+        if context.cipher.is_blake3() {
+            let (target, port, payload) = super::shared::decode_udp_datagram_2022(
+                context.cipher,
+                context.password,
+                datagram,
+            )?;
+            return Ok(ShadowsocksUdpPacket {
+                target,
+                port,
+                payload,
+            });
+        }
+
+        let salt_len = context.cipher.udp_salt_len();
         if datagram.len() < salt_len + context.cipher.tag_len() {
             return Err(Error::Protocol("ss: udp datagram too short"));
         }
 
-        let key = if context.cipher.is_blake3() {
-            #[cfg(feature = "blake3")]
-            {
-                super::shared::derive_key_blake3(
-                    context.password,
-                    &datagram[..salt_len],
-                    context.cipher.key_len(),
-                )?
-            }
-            #[cfg(not(feature = "blake3"))]
-            return Err(Error::Unsupported("ss: blake3 feature not enabled"));
-        } else {
-            derive_key(
-                context.password,
-                &datagram[..salt_len],
-                context.cipher.key_len(),
-            )?
-        };
+        let key = derive_udp_packet_key(context.cipher, context.password, &datagram[..salt_len])?;
 
         let plain = aead_decrypt_udp(context.cipher, &key, &[0u8; 12], &datagram[salt_len..])?;
         let (target, port, payload_offset) = parse_target_data(&plain)?;

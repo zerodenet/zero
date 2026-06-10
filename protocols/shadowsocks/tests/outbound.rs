@@ -4,9 +4,9 @@ use std::io;
 
 use shadowsocks::{
     decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, derive_download_key, derive_key,
-    encrypt_tcp_chunk, parse_target_data, CipherKind, ShadowsocksAccept, ShadowsocksAeadStream,
-    ShadowsocksOutbound, ShadowsocksOutboundSession, ShadowsocksUdpDecodeContext,
-    ShadowsocksUdpPacketTarget, TCP_CHUNK_SIZE_LEN,
+    derive_session_key, encrypt_tcp_chunk, parse_target_data, CipherKind, ShadowsocksAccept,
+    ShadowsocksAeadStream, ShadowsocksOutbound, ShadowsocksOutboundSession,
+    ShadowsocksUdpDecodeContext, ShadowsocksUdpPacketTarget, TCP_CHUNK_SIZE_LEN,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use zero_core::{Address, Network, ProtocolType, Session};
@@ -28,17 +28,17 @@ fn supported_ciphers() -> Vec<CipherKind> {
 }
 
 fn derive_test_key(cipher: CipherKind, password: &[u8], salt: &[u8]) -> Vec<u8> {
-    if cipher.is_blake3() {
-        #[cfg(feature = "blake3")]
-        {
-            return shadowsocks::derive_key_blake3(password, salt, cipher.key_len())
-                .expect("derive blake3 key");
-        }
-        #[cfg(not(feature = "blake3"))]
-        panic!("blake3 cipher tested without blake3 feature");
-    }
+    derive_session_key(cipher, password, salt).expect("derive key")
+}
 
-    derive_key(password, salt, cipher.key_len()).expect("derive key")
+fn password_for_cipher(cipher: CipherKind) -> &'static [u8] {
+    match cipher {
+        CipherKind::Blake3Aes128Gcm => b"MDEyMzQ1Njc4OWFiY2RlZg==",
+        CipherKind::Blake3Aes256Gcm | CipherKind::Blake3Chacha20Poly1305 => {
+            b"MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+        }
+        _ => b"test-password",
+    }
 }
 
 #[derive(Default)]
@@ -65,10 +65,10 @@ impl AsyncSocket for RecordingSocket {
 
 #[test]
 fn tcp_chunks_roundtrip_all_supported_ciphers() {
-    let password = b"test-password";
     let plaintext = b"hello shadowsocks tcp";
 
     for cipher in supported_ciphers() {
+        let password = password_for_cipher(cipher);
         let salt = vec![0x42_u8; cipher.salt_len()];
         let key = derive_test_key(cipher, password, &salt);
         let mut encrypt_nonce = 0;
@@ -147,9 +147,8 @@ async fn outbound_writes_salt_and_first_chunk_in_one_write() {
 
 #[tokio::test]
 async fn aead_stream_roundtrips_all_supported_ciphers() {
-    let password = b"test-password".to_vec();
-
     for cipher in supported_ciphers() {
+        let password = password_for_cipher(cipher).to_vec();
         let upload_salt = vec![0x11_u8; cipher.salt_len()];
         let upload_key = derive_test_key(cipher, &password, &upload_salt);
         let (client_io, mut server_io) = tokio::io::duplex(4096);
@@ -352,9 +351,8 @@ async fn accepted_inbound_stream_constructor_owns_response_key_derivation() {
 
 #[test]
 fn udp_datagram_framing_roundtrips_all_supported_ciphers() {
-    let password = b"test-password";
-
     for cipher in supported_ciphers() {
+        let password = password_for_cipher(cipher);
         let datagram = <ShadowsocksOutbound as UdpDatagramFraming<
             ShadowsocksUdpPacketTarget,
             ShadowsocksUdpDecodeContext,
@@ -370,7 +368,7 @@ fn udp_datagram_framing_roundtrips_all_supported_ciphers() {
         )
         .expect("encode udp datagram");
 
-        assert!(datagram.len() > cipher.salt_len() + cipher.tag_len());
+        assert!(datagram.len() > cipher.udp_salt_len() + cipher.tag_len());
 
         let decoded = <ShadowsocksOutbound as UdpDatagramFraming<
             ShadowsocksUdpPacketTarget,
@@ -408,7 +406,7 @@ fn udp_datagram_framing_roundtrips_aead_packet() {
     )
     .expect("encode udp datagram");
 
-    assert!(datagram.len() > cipher.salt_len() + cipher.tag_len());
+    assert!(datagram.len() > cipher.udp_salt_len() + cipher.tag_len());
 
     let decoded = <ShadowsocksOutbound as UdpDatagramFraming<
         ShadowsocksUdpPacketTarget,
@@ -429,7 +427,7 @@ fn udp_datagram_framing_roundtrips_aead_packet() {
 #[test]
 fn udp_datagram_framing_roundtrips_2022_blake3_packet() {
     let cipher = CipherKind::Blake3Aes128Gcm;
-    let password = b"test-password";
+    let password = password_for_cipher(cipher);
 
     let datagram = <ShadowsocksOutbound as UdpDatagramFraming<
         ShadowsocksUdpPacketTarget,

@@ -1,6 +1,6 @@
-# Configuration
+# 配置
 
-Zero uses JSON. The current top-level structure is:
+Zero 使用 JSON。当前顶层结构如下：
 
 ```json
 {
@@ -32,19 +32,19 @@ Zero uses JSON. The current top-level structure is:
 }
 ```
 
-Only currently implemented configuration is documented here. Long-term design for modes and groups is in [modes-and-groups.md](modes-and-groups.md).
+这里仅记录当前已实现的配置。模式和节点组的长期设计见 [modes-and-groups.md](modes-and-groups.md)。
 
 ## runtime
 
-`runtime.udp_upstream_idle_timeout_seconds` controls the idle timeout for upstream `SOCKS5` UDP associations.
+`runtime.udp_upstream_idle_timeout_seconds` 控制上游 `SOCKS5` UDP 关联的空闲超时。
 
-- Default: `30`
-- Unit: seconds
-- Constraint: must be greater than `0`
+- 默认值：`30`
+- 单位：秒
+- 约束：必须大于 `0`
 
 ### DNS
 
-`runtime.dns` is the optional DNS subsystem configuration. When omitted, the system resolver is used, behavior unchanged.
+`runtime.dns` 是可选的 DNS 子系统配置。省略时使用系统解析器，行为不变。
 
 ```json
 {
@@ -67,41 +67,41 @@ Only currently implemented configuration is documented here. Long-term design fo
 }
 ```
 
-**servers** -- ordered DNS server list. All servers queried concurrently on resolution, fastest response wins.
+**servers** -- 有序 DNS 服务器列表。解析时并发查询所有服务器，最先返回的响应胜出。
 
-| Type | Fields | Description |
+| 类型 | 字段 | 描述 |
 |------|------|------|
-| `system` | -- | OS resolver (getaddrinfo) |
-| `udp` | `address`, `port` | Plain UDP DNS, default port 53 |
+| `system` | -- | OS 解析器 (getaddrinfo) |
+| `udp` | `address`, `port` | 纯 UDP DNS，默认端口 53 |
 | `doh` | `url`, `server_name` | DNS-over-HTTPS (v2) |
-| `dot` | `address`, `port`, `server_name` | DNS-over-TLS (v2), default port 853 |
+| `dot` | `address`, `port`, `server_name` | DNS-over-TLS (v2)，默认端口 853 |
 
-**cache** -- TTL-based LRU cache.
+**cache** -- 基于 TTL 的 LRU 缓存。
 
-| Field | Default | Description |
+| 字段 | 默认值 | 描述 |
 |------|------|------|
-| `max_entries` | `256` | Maximum cache entries |
-| `max_ttl_seconds` | -- | TTL ceiling; omitting uses DNS record TTL |
+| `max_entries` | `256` | 最大缓存条目数 |
+| `max_ttl_seconds` | -- | TTL 上限；省略则使用 DNS 记录的 TTL |
 
-**routes** -- domain-to-server routing. `domain` supports exact (`example.com`) and wildcard (`*.example.com`). `server` is `"system"` or a servers array index (`"0"`, `"1"`).
+**routes** -- 域名到服务器的路由。`domain` 支持精确匹配 (`example.com`) 和通配符 (`*.example.com`)。`server` 为 `"system"` 或服务器数组索引 (`"0"`, `"1"`)。
 
-**fake_ip** -- core of transparent proxying. Returns fake IPs for matching domains, maintains domain-to-fake-IP mapping, reverse-resolves to real domain for routing on connection.
+**fake_ip** -- 透明代理核心。对匹配的域名返回虚假 IP，维护域名到虚假 IP 的映射，在连接时反向解析为真实域名以进行路由。
 
-| Field | Default | Description |
+| 字段 | 默认值 | 描述 |
 |------|------|------|
-| `cidr` | -- | Fake IP pool CIDR, recommended `198.18.0.0/15` |
-| `ttl_seconds` | `86400` | Fake IP allocation lifetime |
-| `exclude_domains` | `[]` | Excluded domains, use real DNS |
+| `cidr` | -- | 虚假 IP 池 CIDR，推荐 `198.18.0.0/15` |
+| `ttl_seconds` | `86400` | 虚假 IP 分配生命周期 |
+| `exclude_domains` | `[]` | 排除的域名，使用真实 DNS |
 
 ## api
 
-`api` is the optional control plane and observability configuration. Related runtime capabilities are controlled by Cargo features; the presence of config does not guarantee default build support.
+`api` 是可选的管控面和可观测性配置。相关运行时能力由 Cargo features 控制；配置的存在不保证默认编译支持。
 
 ### event_sinks
 
-`api.event_sinks` describes delivery targets for normalized events. Event types must come from the event catalog in [api.md](api.md).
+`api.event_sinks` 描述归一化事件的投递目标。事件类型必须来自 [api.md](api.md) 中的事件目录。
 
-Local JSON Lines:
+本地 JSON Lines：
 
 ```json
 {
@@ -113,7 +113,7 @@ Local JSON Lines:
 }
 ```
 
-Panel webhook:
+面板 webhook：
 
 ```json
 {
@@ -126,17 +126,13 @@ Panel webhook:
 }
 ```
 
-`webhook` uses `Authorization: Bearer <api-key>`. Prefer `api_key_env`; `api_key` is also supported for testing. `http://` webhooks require explicit `allow_insecure: true`.
+`webhook` 使用 `Authorization: Bearer <api-key>`。推荐使用 `api_key_env`；`api_key` 也支持用于测试。`http://` webhook 需要显式 `allow_insecure: true`。
 
-When the `event_dispatcher` feature is compiled and `api.event_sinks` is not
-empty, the kernel starts one dispatcher owner for delivery lifecycle and exposes
-a separate read-only sink-status view to the control plane. `GET /api/v1/sinks`
-reports per-sink delivery counters, last success/failure timestamps, and last
-error text.
+当 `event_dispatcher` feature 已编译且 `api.event_sinks` 不为空时，内核启动一个 dispatcher owner 负责投递生命周期，并向管控面暴露一个只读的 sink 状态视图。`GET /api/v1/sinks` 报告每个 sink 的投递计数器、最近成功/失败时间戳和最近错误文本。
 
 ### control
 
-`api.control` enables the panel to actively query nodes and issue commands. It is off by default and requires an API key when enabled:
+`api.control` 使面板能够主动查询节点和下发命令。默认关闭，启用时需要 API key：
 
 ```json
 {
@@ -146,9 +142,9 @@ error text.
 }
 ```
 
-The current control plane uses `Authorization: Bearer <api-key>` or `X-Zero-Api-Key: <api-key>`. It is recommended to listen only on localhost, internal networks, or firewall-protected addresses.
+当前管控面使用 `Authorization: Bearer <api-key>` 或 `X-Zero-Api-Key: <api-key>`。建议仅监听 localhost、内网或受防火墙保护的地址。
 
-Current HTTP control plane supports:
+当前 HTTP 管控面支持：
 
 ```text
 GET  /api/v1/capabilities
@@ -163,7 +159,7 @@ GET  /api/v1/events
 POST /api/v1/commands
 ```
 
-`POST /api/v1/commands` uses a unified command JSON, e.g.:
+`POST /api/v1/commands` 使用统一的 command JSON，例如：
 
 ```json
 {
@@ -177,7 +173,7 @@ POST /api/v1/commands
 
 ## Inbounds
 
-Each inbound must have `tag`, `listen`, and `protocol`. An optional `idle_timeout_secs` field controls TCP idle timeout.
+每个入站必须包含 `tag`、`listen` 和 `protocol`。可选的 `idle_timeout_secs` 字段控制 TCP 空闲超时。
 
 ```json
 {
@@ -188,41 +184,41 @@ Each inbound must have `tag`, `listen`, and `protocol`. An optional `idle_timeou
 }
 ```
 
-| Field | Type | Default | Description |
+| 字段 | 类型 | 默认值 | 描述 |
 |------|------|------|------|
-| `tag` | string | (required) | Unique inbound identifier |
-| `listen.address` | string | (required) | Bind address |
-| `listen.port` | u16 | (required) | Bind port |
-| `protocol` | object | (required) | Protocol-specific configuration |
-| `idle_timeout_secs` | u64 | `300` | TCP relay idle timeout in seconds |
+| `tag` | string | (必填) | 唯一入站标识符 |
+| `listen.address` | string | (必填) | 绑定地址 |
+| `listen.port` | u16 | (必填) | 绑定端口 |
+| `protocol` | object | (必填) | 协议特定配置 |
+| `idle_timeout_secs` | u64 | `300` | TCP 中继空闲超时，单位秒 |
 
 ### idle_timeout_secs
 
-The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are transferred in either direction for `idle_timeout_secs`, the session is cleanly terminated. This is per-inbound; different listeners can have different timeouts. Omitting the field uses the kernel default of 300 seconds (5 minutes).
+内核将每个 TCP 中继包裹在 `tokio::time::timeout` 中。如果在 `idle_timeout_secs` 内任一方向没有数据传输，会话将被干净地终止。这是按入站配置的；不同的监听器可以有不同的超时时间。省略该字段时使用内核默认值 300 秒（5 分钟）。
 
-### Currently supported protocols
+### 当前支持的协议
 
 - `socks5`
 - `http_connect`
-- `mixed` -- same port auto-detects SOCKS5 and HTTP CONNECT; the SOCKS5 branch supports TCP CONNECT and UDP ASSOCIATE, and the HTTP CONNECT branch is TCP-only
-- `vless` -- TCP/TLS/WS/WSS, Reality, gRPC, H2, HTTPUpgrade, QUIC, SplitHTTP; MUX + Vision flow + UDP over TCP
-- `hysteria2` -- QUIC, TCP streams and UDP datagram forwarding
-- `shadowsocks` -- AEAD TCP stream and UDP datagram support
-- `trojan` -- TLS + SHA224 password auth, TCP streams and UDP packet relay
-- `vmess` -- TCP streams using the in-tree VMess AEAD implementation; current compatibility does not include Xray/Clash `cipher: auto`
-- `mieru` -- TCP streams and UDP packet relay using XChaCha20-Poly1305 session framing
-- `direct` -- fixed-target TCP forwarder; accepts raw TCP with no handshake, outbound determined by normal route rules
-- `tun` -- virtual network interface; started at runtime via CLI/API commands, routes traffic through normal rule matching
+- `mixed` -- 同一端口自动检测 SOCKS5 和 HTTP CONNECT；SOCKS5 分支支持 TCP CONNECT 和 UDP ASSOCIATE，HTTP CONNECT 分支仅支持 TCP
+- `vless` -- TCP/TLS/WS/WSS, Reality, gRPC, H2, HTTPUpgrade, QUIC, SplitHTTP；MUX + Vision flow + UDP over TCP
+- `hysteria2` -- QUIC，TCP 流和 UDP datagram 转发
+- `shadowsocks` -- AEAD TCP 流和 UDP datagram 支持
+- `trojan` -- TLS + SHA224 密码认证，TCP 流和 UDP 数据包中继
+- `vmess` -- TCP 流、TCP/UDP MUX 和基于内置 VMess AEAD 实现的 UDP-over-stream；`cipher: auto` 被规范化为当前 AEAD 基线
+- `mieru` -- TCP 流和 UDP 数据包中继，使用 XChaCha20-Poly1305 会话帧封装
+- `direct` -- 固定目标 TCP 转发器；接受无握手原始 TCP，出站由常规路由规则确定
+- `tun` -- 虚拟网络接口；通过 CLI/API 命令在运行时启动，流量经过常规规则匹配进行路由
 
-`mixed` is not an external protocol, but a config entry for same-port inbound multiplexing. It dispatches SOCKS5 TCP CONNECT and SOCKS5 UDP ASSOCIATE into the SOCKS5 runtime paths, and dispatches HTTP CONNECT into the HTTP TCP runtime path.
+`mixed` 不是外部协议，而是同端口入站多路复用的配置条目。它将 SOCKS5 TCP CONNECT 和 SOCKS5 UDP ASSOCIATE 分发到 SOCKS5 运行时路径，将 HTTP CONNECT 分发到 HTTP TCP 运行时路径。
 
-`mieru` is registered in the protocol inventory and the single-hop outbound path uses the encrypted Mieru stream wrapper. It is not yet supported as an intermediate `relay` chain hop because that path must replace the active stream with the Mieru encrypted wrapper after the hop handshake.
+`mieru` 已在协议清单中注册，单跳出站路径使用加密的 Mieru 流封装器。它暂不支持作为中间 `relay` 链跳跃节点，因为该路径必须在跳跃握手之后将活跃流替换为 Mieru 加密封装器。
 
-`vmess` is still experimental. Configs using `cipher: auto` from Xray/Clash exports are rejected; forcing an AEAD cipher may still fail against standard Xray VMess AEAD nodes until the VMess wire format is reworked for full compatibility.
+`vmess` 仍处于实验阶段。来自 Xray/Clash 导出的 `cipher: auto` 被接受并规范化为当前 AEAD 基线。TCP/UDP MUX 已实现。外部 TCP 和 UDP 基线互操作性已覆盖：Xray 双向、Zero 出站到 sing-box 入站、Mihomo 出站到 Zero 入站。Xray WS/gRPC TCP 传输互操作性已覆盖双向。
 
-### Direct inbound
+### Direct 入站
 
-`direct` inbound listens on a port, accepts raw TCP connections with no protocol handshake, and forwards all traffic through the normal route rules. The target address comes from the inbound config rather than the client. Outbound selection follows the standard routing pipeline -- `mode`, `rules`, `rule_sets`, and `final`.
+`direct` 入站监听端口，接受无协议握手的原始 TCP 连接，并将所有流量通过常规路由规则转发。目标地址来自入站配置而非客户端。出站选择遵循标准路由管道 -- `mode`、`rules`、`rule_sets` 和 `final`。
 
 ```json
 {
@@ -236,42 +232,42 @@ The kernel wraps every TCP relay in `tokio::time::timeout`. If no bytes are tran
 }
 ```
 
-Direct inbound config fields:
-- `target` -- optional, target address (IP or domain) for forwarded connections; must be present at runtime (defaults to nothing)
-- `port` -- optional, target port, default `443`
+Direct 入站配置字段：
+- `target` -- 可选，转发连接的目标地址（IP 或域名）；运行时必须存在（默认无）
+- `port` -- 可选，目标端口，默认 `443`
 
-### TUN inbound
+### TUN 入站
 
-`tun` is a virtual network interface inbound. Unlike other inbounds, it is not declared in the static JSON configuration. Instead, it is started and stopped at runtime via CLI, IPC, or HTTP control plane commands.
+`tun` 是虚拟网络接口入站。与其他入站不同，它不在静态 JSON 配置中声明，而是通过 CLI、IPC 或 HTTP 管控面命令在运行时启动和停止。
 
 ```bash
-# Start a TUN device
+# 启动 TUN 设备
 zero tun start --addr 10.0.0.1 --mask 255.255.255.0 --tag my-tun --name tun0
 
-# Check TUN status
+# 查看 TUN 状态
 zero tun status
 
-# Stop the TUN device
+# 停止 TUN 设备
 zero tun stop
 ```
 
-HTTP control plane equivalent (via `POST /api/v1/commands`):
+HTTP 管控面等价命令（通过 `POST /api/v1/commands`）：
 
 ```json
 { "method": "tun.start", "params": { "addr": "10.0.0.1", "mask": "255.255.255.0", "tag": "my-tun", "name": "tun0", "mtu": 1500 } }
 { "method": "tun.stop" }
 ```
 
-TUN start parameters:
-- `addr` -- required, IP address assigned to the virtual interface
-- `mask` -- netmask, default `255.255.255.0`
-- `tag` -- required, inbound tag used for routing decisions; TUN traffic matches route rules by this tag
-- `name` -- optional, OS-level device name (e.g. `tun0`, `utun8`); auto-assigned if omitted
-- `mtu` -- optional, MTU in bytes, default `1500`
+TUN 启动参数：
+- `addr` -- 必填，分配给虚拟接口的 IP 地址
+- `mask` -- 子网掩码，默认 `255.255.255.0`
+- `tag` -- 必填，用于路由决策的入站标签；TUN 流量通过此标签匹配路由规则
+- `name` -- 可选，OS 级别设备名称（如 `tun0`、`utun8`）；省略时自动分配
+- `mtu` -- 可选，MTU 字节数，默认 `1500`
 
-Internally, TUN reads raw IP packets from the virtual interface, parses TCP headers (IPv4 currently), maintains a minimal TCP state machine, and dispatches each TCP connection through `serve_inbound()` for unified routing and relay. The implementation is in `crates/proxy/src/inbound/tun.rs` with platform backends in `crates/tun/` (Linux ioctl, macOS utun, Windows Wintun).
+在内部，TUN 从虚拟接口读取原始 IP 数据包，解析 TCP 头部（当前支持 IPv4），维护最小 TCP 状态机，并将每个 TCP 连接通过 `serve_inbound()` 分发以进行统一路由和中继。实现位于 `crates/proxy/src/inbound/tun.rs`，平台后端位于 `crates/tun/`（Linux ioctl、macOS utun、Windows Wintun）。
 
-SOCKS5 inbound defaults to no-auth. Configuring `users` enables RFC 1929 username/password:
+SOCKS5 入站默认无认证。配置 `users` 启用 RFC 1929 用户名/密码认证：
 
 ```json
 {
@@ -286,7 +282,9 @@ SOCKS5 inbound defaults to no-auth. Configuring `users` enables RFC 1929 usernam
 }
 ```
 
-`mixed` inbound can also configure auth for the SOCKS5 branch:
+对于 SOCKS5 入站 users，`username` 可以省略。省略时内核使用 `password` 作为用户名。同时省略 `username` 和 `password` 的 user 对象会被忽略；空的 user 列表使入站保持无认证模式。只有 `username` 的 user 对象无效。
+
+`mixed` 入站也可以为 SOCKS5 分支配置认证：
 
 ```json
 {
@@ -301,7 +299,9 @@ SOCKS5 inbound defaults to no-auth. Configuring `users` enables RFC 1929 usernam
 }
 ```
 
-VLESS inbound must configure user UUIDs. `credential_id` and `principal_key` are observability attribution fields that appear in `flow.completed`'s `auth` and the event top-level `principal_key`; UUIDs themselves are not sent back to the panel by default:
+`mixed.socks5_users` 遵循与 SOCKS5 入站 users 相同的用户名/密码默认规则。
+
+VLESS 入站必须配置 user UUID。`credential_id` 和 `principal_key` 是可观测性归因字段，会出现在 `flow.completed` 的 `auth` 和事件顶层的 `principal_key` 中；UUID 本身默认不会发送给面板：
 
 ```json
 {
@@ -320,7 +320,7 @@ VLESS inbound must configure user UUIDs. `credential_id` and `principal_key` are
 }
 ```
 
-VLESS inbound with TLS, add `tls` inside the protocol:
+VLESS 入站使用 TLS，在 protocol 内部添加 `tls`：
 
 ```json
 {
@@ -339,7 +339,7 @@ VLESS inbound with TLS, add `tls` inside the protocol:
 }
 ```
 
-VLESS inbound supports WebSocket transport, enable with `ws`:
+VLESS 入站支持 WebSocket 传输，通过 `ws` 启用：
 
 ```json
 {
@@ -357,7 +357,7 @@ VLESS inbound supports WebSocket transport, enable with `ws`:
 }
 ```
 
-WebSocket can be combined with TLS (WSS):
+WebSocket 可以与 TLS 结合使用 (WSS)：
 
 ```json
 {
@@ -379,9 +379,37 @@ WebSocket can be combined with TLS (WSS):
 }
 ```
 
-### Hysteria2 inbound
+### VMess 入站
 
-Hysteria2 inbound carries TCP streams and UDP datagrams over QUIC. The server requires a certificate:
+VMess 入站处于实验阶段，需要 TLS。每个 user 必须提供 VMess UUID。`credential_id` 和 `principal_key` 是可观测性归因字段，`cipher` 省略时默认为 `aes-128-gcm`：
+
+```json
+{
+  "tag": "vmess-in",
+  "listen": { "address": "0.0.0.0", "port": 443 },
+  "protocol": {
+    "type": "vmess",
+    "users": [
+      {
+        "id": "11111111-2222-3333-4444-555555555555",
+        "cipher": "aes-128-gcm",
+        "credential_id": "node-user-1",
+        "principal_key": "user:10001"
+      }
+    ],
+    "tls": {
+      "cert_path": "certs/fullchain.pem",
+      "key_path": "certs/privkey.pem"
+    }
+  }
+}
+```
+
+VMess 入站支持原始 TLS、WebSocket over TLS 和 gRPC over TLS。`ws` 和 `grpc` 互斥。支持的 cipher 值为 `auto`、`aes-128-gcm`、`chacha20-poly1305`、`none` 和 `zero`；`auto` 被规范化为当前 AEAD 基线。`none` 具有 Xray TCP 互操作性覆盖。`zero` 是 Zero 到 Zero 的能力，不应作为主流外部兼容性默认值暴露。
+
+### Hysteria2 入站
+
+Hysteria2 入站通过 QUIC 承载 TCP 流和 UDP datagram。服务器需要证书：
 
 ```json
 {
@@ -396,16 +424,16 @@ Hysteria2 inbound carries TCP streams and UDP datagrams over QUIC. The server re
 }
 ```
 
-Hysteria2 config fields:
-- `password` -- required, client authentication password
-- `cert_path` -- optional, TLS certificate path
-- `key_path` -- optional, TLS private key path
-- `up_bps` -- optional, upload rate limit in bytes/sec (kernel GCRA)
-- `down_bps` -- optional, download rate limit in bytes/sec (kernel GCRA)
+Hysteria2 配置字段：
+- `password` -- 必填，客户端认证密码
+- `cert_path` -- 可选，TLS 证书路径
+- `key_path` -- 可选，TLS 私钥路径
+- `up_bps` -- 可选，上传速率限制，单位 bytes/sec（内核 GCRA）
+- `down_bps` -- 可选，下载速率限制，单位 bytes/sec（内核 GCRA）
 
-### Shadowsocks inbound
+### Shadowsocks 入站
 
-Shadowsocks inbound uses AEAD cipher for encrypted transport:
+Shadowsocks 入站使用 AEAD cipher 进行加密传输：
 
 ```json
 {
@@ -419,15 +447,17 @@ Shadowsocks inbound uses AEAD cipher for encrypted transport:
 }
 ```
 
-Shadowsocks config fields:
-- `password` -- required, encryption password
-- `cipher` -- optional, encryption algorithm, default `chacha20-ietf-poly1305`; supported values are `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`, `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`, and `2022-blake3-chacha20-poly1305`
-- `up_bps` -- optional, upload rate limit in bytes/sec (kernel GCRA)
-- `down_bps` -- optional, download rate limit in bytes/sec (kernel GCRA)
+Shadowsocks 配置字段：
+- `password` -- 必填，加密密码
+- `cipher` -- 可选，加密算法，默认 `chacha20-ietf-poly1305`；支持的值为 `aes-128-gcm`、`aes-256-gcm`、`chacha20-ietf-poly1305`、`2022-blake3-aes-128-gcm`、`2022-blake3-aes-256-gcm` 和 `2022-blake3-chacha20-poly1305`
+- `up_bps` -- 可选，上传速率限制，单位 bytes/sec（内核 GCRA）
+- `down_bps` -- 可选，下载速率限制，单位 bytes/sec（内核 GCRA）
 
-### Trojan inbound
+对于 AEAD 2022 cipher 名称，`password` 必须是标准 base64 密钥材料：`2022-blake3-aes-128-gcm` 需要 16 字节解码后密钥，`2022-blake3-aes-256-gcm` 和 `2022-blake3-chacha20-poly1305` 需要 32 字节解码后密钥。AES 2022 密码可以是冒号分隔的身份密钥链；Zero 验证并使用最后一段作为用户 PSK。
 
-Trojan inbound requires TLS, performs password authentication inside the TLS tunnel then forwards the target address:
+### Trojan 入站
+
+Trojan 入站需要 TLS，在 TLS 隧道内进行密码认证，然后转发目标地址：
 
 ```json
 {
@@ -444,18 +474,18 @@ Trojan inbound requires TLS, performs password authentication inside the TLS tun
 }
 ```
 
-Trojan inbound config fields:
-- `password` -- required, authentication password (SHA224 hashed for comparison)
-- `sni` -- optional, TLS SNI value
-- `tls` -- required, TLS certificate config
-  - `cert_path` -- certificate file path
-  - `key_path` -- private key file path
-- `up_bps` -- optional, upload rate limit in bytes/sec (kernel GCRA)
-- `down_bps` -- optional, download rate limit in bytes/sec (kernel GCRA)
+Trojan 入站配置字段：
+- `password` -- 必填，认证密码（SHA224 散列后比对）
+- `sni` -- 可选，TLS SNI 值
+- `tls` -- 必填，TLS 证书配置
+  - `cert_path` -- 证书文件路径
+  - `key_path` -- 私钥文件路径
+- `up_bps` -- 可选，上传速率限制，单位 bytes/sec（内核 GCRA）
+- `down_bps` -- 可选，下载速率限制，单位 bytes/sec（内核 GCRA）
 
-### Mieru inbound
+### Mieru 入站
 
-Mieru inbound is available in config and accepts encrypted TCP sessions and UDP relay sessions from in-tree clients:
+Mieru 入站可在配置中使用，接收来自内置客户端的加密 TCP 会话和 UDP 中继会话：
 
 ```json
 {
@@ -470,18 +500,20 @@ Mieru inbound is available in config and accepts encrypted TCP sessions and UDP 
 }
 ```
 
-Mieru inbound config fields:
-- `users` -- required, non-empty list of username/password pairs
+Mieru 入站配置字段：
+- `users` -- 必填，非空用户名/密码对列表；`username` 可省略，默认为 `password`
 
-Mieru framing uses protocol-level encrypted segments. The proxy keeps Mieru-specific framing in the Mieru stream wrapper instead of using the generic raw TCP relay directly. Current compatibility work has focused on in-tree single-hop behavior; treat interoperability with external Mieru clients and servers as experimental until it has real-client coverage.
+Mieru 帧封装使用协议级加密段。代理在 Mieru 流封装器中保留 Mieru 特定帧处理，而不是直接使用通用原始 TCP 中继。当前兼容性工作聚焦于内置单跳行为；在与外部 Mieru 客户端和服务器有实际客户端覆盖之前，将互操作性视为实验性。
 
-### Per-inbound rate limits (rate_limits)
+Mieru 没有无认证模式，因此 `password` 保持必填。
 
-Hysteria2, Shadowsocks, and Trojan inbound protocol configs support `up_bps` and `down_bps` fields for per-inbound GCRA rate limiting. These are the values returned by `InboundProtocolConfig::rate_limits()`.
+### 按入站速率限制 (rate_limits)
 
-The kernel applies these as defaults in `serve_inbound()` via `apply_kernel_rate_limits()`. If a protocol's accept handler already set per-user limits (e.g. SOCKS5 `AuthHandler::rate_limit_for()`), the per-inbound defaults are not applied -- per-user limits always take priority.
+Hysteria2、Shadowsocks 和 Trojan 入站协议配置支持 `up_bps` 和 `down_bps` 字段，用于按入站 GCRA 速率限制。这些是 `InboundProtocolConfig::rate_limits()` 返回的值。
 
-SOCKS5, HTTP CONNECT, Mixed, and VLESS inbounds do not currently support per-inbound rate limits in their protocol config (they return `(None, None)` from `rate_limits()`).
+内核在 `serve_inbound()` 中通过 `apply_kernel_rate_limits()` 将它们作为默认值应用。如果协议的 accept 处理程序已经设置了按用户限制（例如 SOCKS5 `AuthHandler::rate_limit_for()`），则不应用按入站默认值——按用户限制始终优先。
+
+SOCKS5、HTTP CONNECT、Mixed 和 VLESS 入站目前在其协议配置中不支持按入站速率限制（它们的 `rate_limits()` 返回 `(None, None)`）。
 
 ## Outbounds
 
@@ -496,7 +528,7 @@ SOCKS5, HTTP CONNECT, Mixed, and VLESS inbounds do not currently support per-inb
 }
 ```
 
-Currently supported:
+当前支持：
 
 - `direct`
 - `block`
@@ -508,7 +540,7 @@ Currently supported:
 - `vmess`
 - `mieru`
 
-SOCKS5 outbound defaults to no-auth. Configure `username` and `password` when connecting to an authenticated upstream:
+SOCKS5 出站默认无认证。连接需要认证的上游时，配置 `password`，或同时配置 `username` 和 `password`。如果省略 `username`，内核使用 `password` 作为用户名。如果两者都省略，出站使用 SOCKS5 无认证。只配置 `username` 无效：
 
 ```json
 {
@@ -523,7 +555,7 @@ SOCKS5 outbound defaults to no-auth. Configure `username` and `password` when co
 }
 ```
 
-VLESS outbound for connecting to upstream VLESS TCP nodes:
+VLESS 出站，用于连接到上游 VLESS TCP 节点：
 
 ```json
 {
@@ -537,7 +569,7 @@ VLESS outbound for connecting to upstream VLESS TCP nodes:
 }
 ```
 
-Connecting to a TLS VLESS upstream, configure `tls`. `server_name` defaults to `server`. Self-signed or private CA can use `ca_cert_path`. When the upstream does not depend on SNI or the target domain should be hidden, set `disable_sni: true`:
+连接到 TLS VLESS 上游，配置 `tls`。`server_name` 默认为 `server`。自签名或私有 CA 可使用 `ca_cert_path`。当上游不依赖 SNI 或需要隐藏目标域名时，设置 `disable_sni: true`：
 
 ```json
 {
@@ -557,14 +589,14 @@ Connecting to a TLS VLESS upstream, configure `tls`. `server_name` defaults to `
 }
 ```
 
-TLS config fields:
-- `server_name` -- optional, SNI and certificate verification domain, defaults to `server`
-- `ca_cert_path` -- optional, custom CA certificate path
-- `disable_sni` -- optional, do not send SNI extension, default `false`
-- `insecure` -- optional, skip certificate verification, default `false`
-- `alpn` -- optional, ALPN protocol list
+TLS 配置字段：
+- `server_name` -- 可选，SNI 和证书验证域名，默认为 `server`
+- `ca_cert_path` -- 可选，自定义 CA 证书路径
+- `disable_sni` -- 可选，不发送 SNI 扩展，默认 `false`
+- `insecure` -- 可选，跳过证书验证，默认 `false`
+- `alpn` -- 可选，ALPN 协议列表
 
-Connecting to a VLESS Reality upstream, configure `reality`. Reality is a VLESS TLS-like security layer and cannot be combined with `tls` or `ws`; current support is raw TCP outbound Reality:
+连接到 VLESS Reality 上游，配置 `reality`。Reality 是 VLESS TLS 风格的安全层，不能与 `tls` 或 `ws` 组合；当前支持原始 TCP 出站 Reality：
 
 ```json
 {
@@ -583,13 +615,13 @@ Connecting to a VLESS Reality upstream, configure `reality`. Reality is a VLESS 
 }
 ```
 
-Reality config fields:
-- `public_key` -- required, upstream Reality X25519 public key, base64url no padding encoding, must decode to 32 bytes
-- `short_id` -- optional, 0 to 16 hex characters, default empty
-- `server_name` -- optional, SNI used in Reality ClientHello, defaults to `server`
-- `cipher_suites` -- optional, TLS 1.3 cipher suite name list; supports `TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`, `TLS_CHACHA20_POLY1305_SHA256`
+Reality 配置字段：
+- `public_key` -- 必填，上游 Reality X25519 公钥，base64url 无填充编码，必须解码为 32 字节
+- `short_id` -- 可选，0 到 16 个十六进制字符，默认为空
+- `server_name` -- 可选，Reality ClientHello 中使用的 SNI，默认为 `server`
+- `cipher_suites` -- 可选，TLS 1.3 cipher suite 名称列表；支持 `TLS_AES_128_GCM_SHA256`、`TLS_AES_256_GCM_SHA384`、`TLS_CHACHA20_POLY1305_SHA256`
 
-VLESS outbound supports WebSocket transport, enable with `ws`:
+VLESS 出站支持 WebSocket 传输，通过 `ws` 启用：
 
 ```json
 {
@@ -609,7 +641,7 @@ VLESS outbound supports WebSocket transport, enable with `ws`:
 }
 ```
 
-WebSocket can be combined with TLS (WSS):
+WebSocket 可以与 TLS 结合使用 (WSS)：
 
 ```json
 {
@@ -629,13 +661,13 @@ WebSocket can be combined with TLS (WSS):
 }
 ```
 
-WebSocket config fields:
-- `path` -- WebSocket handshake path, must not be empty
-- `headers` -- optional, custom HTTP headers; must not include `Host`, `Connection`, `Upgrade`, `Sec-WebSocket-*` and other required handshake headers
+WebSocket 配置字段：
+- `path` -- WebSocket 握手路径，不能为空
+- `headers` -- 可选，自定义 HTTP headers；不得包含 `Host`、`Connection`、`Upgrade`、`Sec-WebSocket-*` 和其他必需的握手 headers
 
-### Hysteria2 outbound
+### Hysteria2 出站
 
-Connect to upstream Hysteria2 node, carrying TCP and UDP over QUIC:
+连接到上游 Hysteria2 节点，通过 QUIC 承载 TCP 和 UDP：
 
 ```json
 {
@@ -650,16 +682,16 @@ Connect to upstream Hysteria2 node, carrying TCP and UDP over QUIC:
 }
 ```
 
-Hysteria2 outbound config fields:
-- `server` -- required, upstream server address
-- `port` -- required, upstream port, must be greater than 0
-- `password` -- required, authentication password
-- `insecure` -- optional, skip certificate verification, default `false`
-- `client_fingerprint` -- optional, TLS client fingerprint preset: `chrome`, `firefox`, `safari`, `ios`, `edge`, `randomized`; omit for rustls defaults
+Hysteria2 出站配置字段：
+- `server` -- 必填，上游服务器地址
+- `port` -- 必填，上游端口，必须大于 0
+- `password` -- 必填，认证密码
+- `insecure` -- 可选，跳过证书验证，默认 `false`
+- `client_fingerprint` -- 可选，TLS 客户端指纹预设：`chrome`、`firefox`、`safari`、`ios`、`edge`、`randomized`；省略则使用 rustls 默认值
 
-### Shadowsocks outbound
+### Shadowsocks 出站
 
-Connect to upstream Shadowsocks node:
+连接到上游 Shadowsocks 节点：
 
 ```json
 {
@@ -674,15 +706,17 @@ Connect to upstream Shadowsocks node:
 }
 ```
 
-Shadowsocks outbound config fields:
-- `server` -- required, upstream server address
-- `port` -- required, upstream port, must be greater than 0
-- `password` -- required, encryption password
-- `cipher` -- optional, encryption algorithm, default `chacha20-ietf-poly1305`; supported values are `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`, `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`, and `2022-blake3-chacha20-poly1305`
+Shadowsocks 出站配置字段：
+- `server` -- 必填，上游服务器地址
+- `port` -- 必填，上游端口，必须大于 0
+- `password` -- 必填，加密密码
+- `cipher` -- 可选，加密算法，默认 `chacha20-ietf-poly1305`；支持的值为 `aes-128-gcm`、`aes-256-gcm`、`chacha20-ietf-poly1305`、`2022-blake3-aes-128-gcm`、`2022-blake3-aes-256-gcm` 和 `2022-blake3-chacha20-poly1305`
 
-### Trojan outbound
+对于 AEAD 2022 cipher 名称，`password` 必须是标准 base64 密钥材料：`2022-blake3-aes-128-gcm` 需要 16 字节解码后密钥，`2022-blake3-aes-256-gcm` 和 `2022-blake3-chacha20-poly1305` 需要 32 字节解码后密钥。AES 2022 密码可以是冒号分隔的身份密钥链；Zero 验证并使用最后一段作为用户 PSK。
 
-Connect to upstream Trojan node, authenticate via password inside a TLS tunnel then forward:
+### Trojan 出站
+
+连接到上游 Trojan 节点，在 TLS 隧道内通过密码认证，然后转发：
 
 ```json
 {
@@ -698,17 +732,17 @@ Connect to upstream Trojan node, authenticate via password inside a TLS tunnel t
 }
 ```
 
-Trojan outbound config fields:
-- `server` -- required, upstream server address
-- `port` -- required, upstream port, must be greater than 0
-- `password` -- required, authentication password (SHA224 hashed before sending)
-- `sni` -- optional, TLS SNI, defaults to `server`
-- `insecure` -- optional, skip certificate verification, default `false`
-- `client_fingerprint` -- optional, TLS client fingerprint preset: `chrome`, `firefox`, `safari`, `ios`, `edge`, `randomized`; omit for rustls defaults
+Trojan 出站配置字段：
+- `server` -- 必填，上游服务器地址
+- `port` -- 必填，上游端口，必须大于 0
+- `password` -- 必填，认证密码（发送前进行 SHA224 散列）
+- `sni` -- 可选，TLS SNI，默认为 `server`
+- `insecure` -- 可选，跳过证书验证，默认 `false`
+- `client_fingerprint` -- 可选，TLS 客户端指纹预设：`chrome`、`firefox`、`safari`、`ios`、`edge`、`randomized`；省略则使用 rustls 默认值
 
-### VMess outbound
+### VMess 出站
 
-VMess outbound currently supports the in-tree AEAD implementation and explicit cipher names:
+VMess 出站当前支持内置 AEAD TCP 和 UDP-over-stream 实现以及显式 cipher 名称：
 
 ```json
 {
@@ -723,20 +757,22 @@ VMess outbound currently supports the in-tree AEAD implementation and explicit c
 }
 ```
 
-VMess outbound config fields:
-- `server` -- required, upstream server address
-- `port` -- required, upstream port, must be greater than 0
-- `id` -- required, VMess UUID
-- `cipher` -- optional, default `aes-128-gcm`; supported values are `aes-128-gcm`, `aes-256-gcm`, and `chacha20-poly1305`
-- `tls` -- optional, TLS transport wrapper
-- `ws` -- optional, WebSocket transport wrapper
-- `grpc` -- optional, gRPC transport wrapper
+VMess 出站配置字段：
+- `server` -- 必填，上游服务器地址
+- `port` -- 必填，上游端口，必须大于 0
+- `id` -- 必填，VMess UUID
+- `cipher` -- 可选，默认 `aes-128-gcm`；支持的值为 `auto`、`aes-128-gcm`、`chacha20-poly1305`、`none` 和 `zero`；`auto` 被规范化为当前 AEAD 基线
+- `tls` -- 可选，TLS 传输封装
+- `ws` -- 可选，WebSocket 传输封装
+- `grpc` -- 可选，gRPC 传输封装
 
-Compatibility note: Xray/Clash exports commonly use `cipher: auto`; that alias is not supported yet, and the current VMess implementation is not considered compatible with standard Xray VMess AEAD nodes.
+`ws` 和 `grpc` 互斥。如果设置了 `tls.server_name` 或 `tls.ca_cert_path`，它们不能为空。
 
-### Mieru outbound
+兼容性说明：Xray/Clash 导出通常使用 `cipher: auto`；Zero 接受该别名。外部 TCP 和 UDP 基线互操作性已覆盖：Xray 双向、Zero 出站到 sing-box 入站、Mihomo 出站到 Zero 入站。Xray WS/gRPC TCP 传输互操作性已覆盖双向。`cipher: none` 具有 Xray TCP 互操作性覆盖。`cipher: zero` 不声称具有主流 Xray/sing-box/Clash 兼容性。
 
-Connect to an upstream Mieru node:
+### Mieru 出站
+
+连接到上游 Mieru 节点：
 
 ```json
 {
@@ -751,34 +787,27 @@ Connect to an upstream Mieru node:
 }
 ```
 
-Mieru outbound config fields:
-- `server` -- required, upstream server address
-- `port` -- required, upstream port, must be greater than 0
-- `username` -- optional, upstream username; when omitted, the kernel uses `password` as the username
-- `password` -- required, upstream password
+Mieru 出站配置字段：
+- `server` -- 必填，上游服务器地址
+- `port` -- 必填，上游端口，必须大于 0
+- `username` -- 可选，上游用户名；省略时内核使用 `password` 作为用户名
+- `password` -- 必填，上游密码
 
-Mieru outbound is supported for direct single-hop TCP routing, TCP relay-chain
-composition, and UDP packet relay through the encrypted Mieru stream wrapper.
+Mieru 没有无认证模式，因此 `password` 保持必填。
 
-UDP outbound selection is handled by the kernel UDP dispatch path. Current TCP,
-UDP, MUX, transport, and limitation facts are exposed through
-`capabilities.protocols` and documented in
-[protocol-capabilities.md](protocol-capabilities.md).
+Mieru 出站支持直接单跳 TCP 路由、TCP 中继链组合以及通过加密 Mieru 流封装器的 UDP 数据包中继。
 
-### Outbound circuit breaker
+UDP 出站选择由内核 UDP 分发路径处理。当前 TCP、UDP、MUX、传输和限制事实通过 `capabilities.protocols` 暴露，并记录在 [protocol-capabilities.md](protocol-capabilities.md) 中。
 
-`zero-engine` maintains health state for every chained outbound tag. Before each
-connection attempt, the TCP pipe's candidate establishment path calls
-`check_outbound_health()`. If 5 failures accumulate within a 30-second window,
-the outbound is quarantined for 60 seconds. After quarantine, a single probe
-connection is allowed; success clears the unhealthy state, failure resets the
-cooldown.
+### 出站熔断器
 
-This is a kernel primitive -- no configuration required. It applies automatically to all outbound connection paths except `direct` and `block`.
+`zero-engine` 为每个链式出站标签维护健康状态。在每次连接尝试之前，TCP 管道的候选建立路径会调用 `check_outbound_health()`。如果在 30 秒窗口内累积 5 次失败，该出站将被隔离 60 秒。隔离期满后，允许一个探测连接；成功则清除不健康状态，失败则重置冷却期。
+
+这是内核原语——无需配置。它自动应用于除 `direct` 和 `block` 之外的所有出站连接路径。
 
 ## Outbound Groups
 
-Five outbound group types are currently implemented:
+当前实现了五种出站组类型：
 
 - `selector`
 - `fallback`
@@ -786,7 +815,7 @@ Five outbound group types are currently implemented:
 - `relay`
 - `load_balance`
 
-Group members may be either concrete outbounds or other outbound groups. Circular references are rejected at config validation.
+组成员可以是具体出站或其他出站组。配置验证时拒绝循环引用。
 
 ### selector
 
@@ -799,8 +828,7 @@ Group members may be either concrete outbounds or other outbound groups. Circula
 }
 ```
 
-`selector` supports runtime switching through `POST /api/v1/commands` with
-`method: "policies.select"`.
+`selector` 支持通过 `POST /api/v1/commands` 使用 `method: "policies.select"` 进行运行时切换。
 
 ```json
 {
@@ -812,7 +840,7 @@ Group members may be either concrete outbounds or other outbound groups. Circula
 }
 ```
 
-After a successful switch, `outbound_groups[*].selected` in `/api/v1/config` and `/api/v1/runtime` immediately reflects the new selection.
+成功切换后，`/api/v1/config` 和 `/api/v1/runtime` 中的 `outbound_groups[*].selected` 立即反映新的选择。
 
 ### fallback
 
@@ -824,12 +852,12 @@ After a successful switch, `outbound_groups[*].selected` in `/api/v1/config` and
 }
 ```
 
-Semantics:
+语义：
 
-- Try members in configured order
-- On connection failure, automatically fall through to the next member
-- Once a connection succeeds, fix on that member for the session
-- Circuit breaker quarantines unhealthy members before the connection attempt, causing automatic fall-through
+- 按配置顺序尝试成员
+- 连接失败时自动回退到下一个成员
+- 一旦连接成功，该会话将固定在该成员上
+- 熔断器在连接尝试之前隔离不健康的成员，导致自动回退
 
 ### url_test
 
@@ -843,12 +871,12 @@ Semantics:
 }
 ```
 
-Semantics:
+语义：
 
-- Probe on `interval_seconds` interval
-- Currently only `http://` probe URLs are supported
-- Select the member with successful probe and lowest latency
-- If all probes fail this round, keep the current selection; before the first probe, default to the first member
+- 按 `interval_seconds` 间隔进行探测
+- 当前仅支持 `http://` 探测 URL
+- 选择探测成功且延迟最低的成员
+- 如果本轮所有探测都失败，保持当前选择；首次探测前默认使用第一个成员
 
 ### relay
 
@@ -860,12 +888,12 @@ Semantics:
 }
 ```
 
-Semantics:
+语义：
 
-- Chain members in order: traffic flows through each proxy in sequence
-- First member is the entry, last member is the exit
-- Connection failure at any hop terminates the chain
-- Circuit breaker applies to each chained member individually
+- 按顺序链式连接成员：流量按顺序流经每个代理
+- 第一个成员是入口，最后一个成员是出口
+- 任一跳的连接失败都会终止整条链
+- 熔断器分别应用于每个链式成员
 
 ### load_balance
 
@@ -878,24 +906,24 @@ Semantics:
 }
 ```
 
-Load balance config fields:
-- `outbounds` -- required, list of outbound tags to balance across
-- `default` -- optional, initial outbound selection; falls back to `outbounds[0]` if not set
-- `strategy` -- optional, distribution strategy, default `round_robin`
-  - `round_robin` -- distribute connections sequentially across members
-  - `random` -- pick a random member for each connection
+负载均衡配置字段：
+- `outbounds` -- 必填，要均衡的出站标签列表
+- `default` -- 可选，初始出站选择；未设置时回退到 `outbounds[0]`
+- `strategy` -- 可选，分配策略，默认 `round_robin`
+  - `round_robin` -- 按顺序在成员间分配连接
+  - `random` -- 为每个连接随机选择一个成员
 
-Group members may be either concrete outbounds or other outbound groups. Circular references are rejected at config validation.
+组成员可以是具体出站或其他出站组。配置验证时拒绝循环引用。
 
 ## Mode
 
-Currently supported:
+当前支持：
 
 - `rule`
 - `global`
 - `direct`
 
-`global` requires referencing an outbound or outbound group:
+`global` 需要引用一个出站或出站组：
 
 ```json
 {
@@ -906,7 +934,7 @@ Currently supported:
 
 ## Route
 
-Rules are `condition + action`:
+规则由 `condition + action` 组成：
 
 ```json
 {
@@ -915,27 +943,27 @@ Rules are `condition + action`:
 }
 ```
 
-Currently supported conditions:
+当前支持的 conditions：
 
-- `domain` -- domain matching, supports `example.com` exact and `*.example.com` wildcard
-- `domain_keyword` -- match if domain contains keyword
-- `domain_regex` -- match domain against one or more regex patterns
-- `ip` -- CIDR matching
-- `rule_set` -- reference external rule set files
-- `geoip` -- MaxMind GeoLite2-Country mmdb country code matching
-- `sni` -- TLS ClientHello SNI domain matching (same syntax as domain)
-- `and` -- all sub-conditions must match
-- `or` -- any sub-condition must match
+- `domain` -- 域名匹配，支持 `example.com` 精确匹配和 `*.example.com` 通配符匹配
+- `domain_keyword` -- 域名包含关键字时匹配
+- `domain_regex` -- 根据一个或多个正则表达式模式匹配域名
+- `ip` -- CIDR 匹配
+- `rule_set` -- 引用外部规则集文件
+- `geoip` -- MaxMind GeoLite2-Country mmdb 国家代码匹配
+- `sni` -- TLS ClientHello SNI 域名匹配（语法同 domain）
+- `and` -- 所有子条件必须匹配
+- `or` -- 任一子条件匹配即可
 
-Currently supported actions:
+当前支持的 actions：
 
 - `direct`
 - `reject`
 - `route`
 
-### domain_regex condition
+### domain_regex 条件
 
-The `domain_regex` condition matches the target domain against one or more regex patterns. Patterns are compiled at startup. Matches against the target domain extracted from the session. Supports composition with `and` / `or`.
+`domain_regex` 条件根据一个或多个正则表达式模式匹配目标域名。模式在启动时编译。匹配从会话中提取的目标域名。支持与 `and` / `or` 组合。
 
 ```json
 {
@@ -944,24 +972,24 @@ The `domain_regex` condition matches the target domain against one or more regex
 }
 ```
 
-Note: capture groups in `domain_regex` patterns are not used for routing context. For capture-based domain substitution, use `url_rewrite.from_regex` instead.
+注意：`domain_regex` 模式中的捕获组不用于路由上下文。如需基于捕获的域名替换，请改用 `url_rewrite.from_regex`。
 
 ### url_rewrite
 
-`route.url_rewrite` is an array of domain rewrite rules applied before routing. Rules are matched first-match-wins: the first rule whose `from` or `from_regex` matches the target domain wins, and no further rules are evaluated.
+`route.url_rewrite` 是在路由之前应用的域名重写规则数组。规则按首次匹配优先的方式执行：第一个 `from` 或 `from_regex` 匹配目标域名的规则胜出，不再评估后续规则。
 
-Each `UrlRewriteRule`:
+每个 `UrlRewriteRule`：
 
-| Field | Type | Default | Description |
+| 字段 | 类型 | 默认值 | 描述 |
 |------|------|------|------|
-| `from` | string | -- | Exact domain to match |
-| `from_regex` | string | -- | Regex pattern to match against the domain |
-| `to` | string | (required) | Replacement domain; supports `$1`, `$2`, etc. for regex captures |
-| `status_code` | u16 | -- | If set, return an HTTP redirect (e.g. `302`); HTTP-based protocols only |
+| `from` | string | -- | 精确匹配的域名 |
+| `from_regex` | string | -- | 匹配域名的正则表达式模式 |
+| `to` | string | (必填) | 替换域名；支持 `$1`、`$2` 等正则捕获引用 |
+| `status_code` | u16 | -- | 如果设置，返回 HTTP 重定向（如 `302`）；仅限基于 HTTP 的协议 |
 
-At least one of `from` or `from_regex` must be set.
+必须至少设置 `from` 或 `from_regex` 之一。
 
-`status_code` triggers a protocol-level HTTP redirect (for HTTP CONNECT). Non-HTTP protocols (SOCKS5, Shadowsocks, etc.) silently ignore `status_code` and always rewrite the target domain.
+`status_code` 触发协议级 HTTP 重定向（用于 HTTP CONNECT）。非 HTTP 协议（SOCKS5、Shadowsocks 等）静默忽略 `status_code`，始终重写目标域名。
 
 ```json
 {
@@ -977,14 +1005,14 @@ At least one of `from` or `from_regex` must be set.
 }
 ```
 
-## External Rule Sets
+## 外部规则集
 
-Match data can be placed in external files and referenced via `tag` in the main config.
+匹配数据可以放在外部文件中，通过主配置中的 `tag` 引用。
 
-Currently supported:
+当前支持：
 
 - `type = file`
-- `type = url` (remote fetch with local cache)
+- `type = url`（远程获取并使用本地缓存）
 - `format = domain_list`
 - `format = cidr_list`
 
@@ -1020,115 +1048,114 @@ Currently supported:
 }
 ```
 
-Notes:
+注意事项：
 
-- `path` supports relative paths, resolved against the config file directory by default
-- `domain_list` loads as a domain list
-- `cidr_list` loads as a CIDR list
-- Blank lines are ignored
-- Lines starting with `#` or `//` are ignored
-- Rule files only contain match data, not actions
-- `type = url` additionally requires a `url` field; the file at `path` serves as the local cache
+- `path` 支持相对路径，默认相对于配置文件所在目录解析
+- `domain_list` 作为域名列表加载
+- `cidr_list` 作为 CIDR 列表加载
+- 空行被忽略
+- 以 `#` 或 `//` 开头的行被忽略
+- 规则文件仅包含匹配数据，不包含动作
+- `type = url` 额外需要 `url` 字段；`path` 指定的文件用作本地缓存
 
-## Status Field Semantics
+## 状态字段语义
 
-`status --json` current field semantics related to sessions:
+`status --json` 与会话相关的当前字段语义：
 
 - `bytes_up` / `bytes_down`
-  - Cumulative application-layer link bytes from the flow perspective
-  - Includes SOCKS5 / HTTP CONNECT handshake, SOCKS5 UDP packet headers, and forwarded payload
-  - Excludes TCP/IP headers, TCP three-way handshake, and other kernel network stack overhead
-  - TCP stats per connection, SOCKS5 UDP stats per target flow
+  - 从流角度看的累计应用层链路字节数
+  - 包括 SOCKS5 / HTTP CONNECT 握手、SOCKS5 UDP 数据包头和转发载荷
+  - 不包括 TCP/IP 头部、TCP 三次握手和其他内核网络栈开销
+  - TCP 统计按连接计算，SOCKS5 UDP 统计按目标流计算
 - `inbound_rx_bytes` / `inbound_tx_bytes`
-  - Application-layer bytes actually read/written on the inbound side
+  - 入站端实际读/写的应用层字节数
 - `outbound_rx_bytes` / `outbound_tx_bytes`
-  - Application-layer bytes actually read/written on the outbound side
+  - 出站端实际读/写的应用层字节数
 - `throughput_up_bps` / `throughput_down_bps`
-  - 1-second sampled throughput
+  - 1 秒采样吞吐量
 - `recent_completed_sessions`
-  - Settlement records for recently completed sessions
-  - TCP connections and SOCKS5 UDP flows use the same field structure
+  - 最近完成的会话结算记录
+  - TCP 连接和 SOCKS5 UDP 流使用相同的字段结构
 - `outbound_groups[*].selected`
-  - Currently selected member for the group
+  - 该组当前选中的成员
 - `outbound_groups[*].latency_ms`
-  - `url_test` most recent successful probe latency
+  - `url_test` 最近一次成功探测的延迟
 - `outbound_groups[*].last_checked_unix_ms`
-  - `url_test` most recent probe completion time
+  - `url_test` 最近一次探测完成时间
 
-## Constraints
+## 约束
 
-- `tag` must not be empty
-- SOCKS5 username/password must not be empty, max 255 bytes each
-- SOCKS5 outbound auth must configure both `username` and `password`, cannot configure only one
-- VLESS inbound must have at least one user, `id` must be a UUID; when TLS is enabled, `cert_path` and `key_path` must not be empty; when WebSocket is enabled, `ws.path` must not be empty
-- VLESS outbound `server` must not be empty, `port` must be greater than `0`, `id` must be a UUID; `tls.server_name`, `tls.ca_cert_path`, and `reality.server_name` must not be empty if configured
-- VLESS outbound `reality.public_key` must be a 32-byte base64url no padding value; `reality.short_id` max 16 hex characters; `reality` cannot be combined with `tls` or `ws`
-- Tags within the same object type must not be duplicated
-- The same `address:port` can only have one inbound
-- Use `mixed` when the same port needs SOCKS5 TCP/UDP and HTTP CONNECT TCP
-- Targets referenced by `route` and `global mode` must exist
-- Members in outbound groups must be defined outbounds or defined groups
-- Outbound groups must not have circular references
-- `runtime.udp_upstream_idle_timeout_seconds` must be greater than `0`
-- `rule_sets[*].tag` must not be empty and must not duplicate
-- `rule_set` condition referenced `tag` must exist
-- `url_test.url` must currently be `http://`
-- `url_test.interval_seconds` must be greater than `0`
-- Hysteria2 inbound `password` must not be empty; outbound `server` must not be empty, `port` must be greater than `0`
-- Shadowsocks inbound and outbound `password` must not be empty; `cipher` must be one of the supported Shadowsocks cipher names
-- Trojan inbound must configure `tls` with non-empty `cert_path` and `key_path`, `password` must not be empty; outbound `server` must not be empty, `port` must be greater than `0`, `password` must not be empty
-- `domain_regex` condition requires at least one pattern in `values`
-- `url_rewrite` rules require at least one of `from` or `from_regex`, and `to` must not be empty
-- `idle_timeout_secs` must be greater than `0` if set
+- `tag` 不能为空
+- SOCKS5 用户名/密码在配置规范化后不能为空，各最多 255 字节
+- SOCKS5 入站和 mixed SOCKS5 users 可以省略 `username`；默认为 `password`
+- SOCKS5 出站可以省略两个认证字段以使用无认证模式，或仅省略 `username` 使其默认为 `password`；仅配置 `username` 无效
+- VLESS 入站必须至少有一个用户，`id` 必须是 UUID；启用 TLS 时 `cert_path` 和 `key_path` 不能为空；启用 WebSocket 时 `ws.path` 不能为空
+- VLESS 出站 `server` 不能为空，`port` 必须大于 `0`，`id` 必须是 UUID；`tls.server_name`、`tls.ca_cert_path` 和 `reality.server_name` 如果配置则不能为空
+- VLESS 出站 `reality.public_key` 必须是 32 字节 base64url 无填充值；`reality.short_id` 最多 16 个十六进制字符；`reality` 不能与 `tls` 或 `ws` 组合
+- 同一对象类型内的 tag 不能重复
+- 相同的 `address:port` 只能有一个入站
+- 同一端口需要 SOCKS5 TCP/UDP 和 HTTP CONNECT TCP 时，使用 `mixed`
+- `route` 和 `global mode` 引用的目标必须存在
+- 出站组的成员必须是已定义的出站或已定义的组
+- 出站组不能有循环引用
+- `runtime.udp_upstream_idle_timeout_seconds` 必须大于 `0`
+- `rule_sets[*].tag` 不能为空且不能重复
+- `rule_set` 条件引用的 `tag` 必须存在
+- `url_test.url` 当前必须是 `http://`
+- `url_test.interval_seconds` 必须大于 `0`
+- Hysteria2 入站 `password` 不能为空；出站 `server` 不能为空，`port` 必须大于 `0`
+- Shadowsocks 入站和出站 `password` 不能为空；`cipher` 必须是支持的 Shadowsocks cipher 名称之一；AEAD 2022 密码必须解码为对应方法密钥长度
+- Trojan 入站必须配置 `tls`，`cert_path` 和 `key_path` 不能为空，`password` 不能为空；出站 `server` 不能为空，`port` 必须大于 `0`，`password` 不能为空
+- `domain_regex` 条件要求在 `values` 中至少有一个模式
+- `url_rewrite` 规则要求至少设置 `from` 或 `from_regex` 之一，且 `to` 不能为空
+- `idle_timeout_secs` 如果设置则必须大于 `0`
 
-## Runtime Management
+## 运行时管理
 
-### Mode Switching
+### 模式切换
 
-Post-startup mode can be hot-switched via CLI, IPC, or HTTP API with no restart:
+启动后的模式可以通过 CLI、IPC 或 HTTP API 进行热切换，无需重启：
 
 ```bash
-zero mode rule              # Switch back to rule matching
-zero mode direct            # All direct
-zero mode global proxy      # Global via specified outbound
+zero mode rule              # 切换回规则匹配
+zero mode direct            # 全部直连
+zero mode global proxy      # 通过指定出站全局代理
 ```
 
-IPC equivalent:
+IPC 等价命令：
 
 ```json
 { "method": "mode.set", "params": { "mode": "global", "outbound": "proxy" } }
 ```
 
-### Hot Reload
+### 热重载
 
-`zero reload <config>` reloads the configuration file. The following changes take effect immediately:
+`zero reload <config>` 重新加载配置文件。以下更改立即生效：
 
-- route rules, mode, DNS config -- hot swap
-- outbound_groups adjustments -- hot swap
-- inbounds/outbounds additions/removals/changes -- require restart
+- 路由规则、模式、DNS 配置 -- 热交换
+- outbound_groups 调整 -- 热交换
+- inbounds/outbounds 添加/删除/修改 -- 需要重启
 
-### Config Validation
+### 配置验证
 
 ```bash
 zero validate config.json
 ```
 
-Validates config offline (does not connect to a running daemon). Prints a summary on success:
+离线验证配置（不连接运行中的守护进程）。成功时打印摘要：
 
 ```
 config valid: 2 inbounds, 3 outbounds, 1 groups, 5 rules
 ```
 
-### Selector Switching
+### 选择器切换
 
 ```bash
 zero select <group-tag> <target-tag>
 ```
 
-Equivalent HTTP API: `POST /api/v1/commands` with `method: "policies.select"`.
+等效 HTTP API：`POST /api/v1/commands`，`method: "policies.select"`。
 
-## Examples
+## 示例
 
-`examples/` contains runnable configuration samples for basic inbounds, chained
-outbounds, selector/fallback/url_test groups, rule sets, VLESS, Hysteria2,
-Shadowsocks, and Trojan.
+`examples/` 包含可运行的配置样本，涵盖基本入站、链式出站、selector/fallback/url_test 组、规则集、VLESS、Hysteria2、Shadowsocks 和 Trojan。

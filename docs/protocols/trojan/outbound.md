@@ -1,0 +1,62 @@
+# Trojan Outbound
+
+对应 `protocols/trojan/src/outbound.rs` — `TrojanOutbound`、`TrojanTcpTunnelTarget`、`TrojanUdpPacket`、`TrojanUdpPacketTunnelTarget`。
+
+## TrojanOutbound
+
+实现 `TcpTunnelProtocol` trait：
+
+```rust
+impl TcpTunnelProtocol for TrojanOutbound {
+    async fn establish_tcp_tunnel(
+        &self,
+        stream: T,
+        target: &Address,
+        port: u16,
+    ) -> Result<TrojanTcpTunnelTarget>
+}
+```
+
+1. 建立 TLS 连接
+2. 写入 Trojan request：`[PASSWORD_HASH][CRLF][CMD_TCP][ATYP][ADDR][PORT][CRLF]`
+3. 返回 `TrojanTcpTunnelTarget` — proxy 直接 relay TCP stream
+
+## TrojanTcpTunnelTarget
+
+```rust
+pub struct TrojanTcpTunnelTarget {
+    pub stream: T,
+}
+```
+
+默认 relay：proxy 将 TLS stream 与原 TCP stream 做双向 copy。无 AEAD wrapper。
+
+## UDP over Stream
+
+`TrojanUdpPacketTunnelTarget` — 用于 UDP-over-TLS-stream 的 tunnel target。
+
+`TrojanUdpPacket` — CMD_UDP packet 格式：
+```
+[ATYP][ADDR][PORT][2-byte length][PAYLOAD]
+```
+
+## Outbound 配置
+
+```json
+{
+  "tag": "trojan-out",
+  "protocol": {
+    "type": "trojan",
+    "server": "example.com",
+    "port": 443,
+    "password": "your-password",
+    "sni": "example.com",
+    "insecure": false
+  }
+}
+```
+
+- `password`: 必需
+- `sni`: 可选 TLS SNI
+- `insecure`: 可选，跳过 TLS 证书验证
+- `client_fingerprint`: 可选 TLS 指纹

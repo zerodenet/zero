@@ -15,6 +15,8 @@ use zero_platform_tokio::TokioListener;
 
 use crate::inventory::ProtocolInventory;
 use crate::runtime::mux_pool::MuxConnectionPool;
+#[cfg(feature = "vmess")]
+use crate::runtime::vmess_mux_pool::VmessMuxConnectionPool;
 
 mod engine_facade;
 pub(crate) mod inbound_protocol;
@@ -27,6 +29,10 @@ pub(crate) mod udp_dispatch;
 pub(crate) mod udp_helpers;
 pub(crate) mod upstream;
 pub(crate) mod vless_udp;
+#[cfg(feature = "vmess")]
+pub(crate) mod vmess_mux_pool;
+#[cfg(feature = "vmess")]
+pub(crate) mod vmess_udp;
 
 #[derive(Debug, Clone)]
 pub struct Proxy {
@@ -35,6 +41,8 @@ pub struct Proxy {
     pub(crate) resolver: Arc<DnsSystem>,
     pub(crate) protocols: ProtocolInventory,
     pub(crate) mux_pool: MuxConnectionPool,
+    #[cfg(feature = "vmess")]
+    pub(crate) vmess_mux_pool: VmessMuxConnectionPool,
     pub(crate) tun_shutdown: Arc<std::sync::Mutex<Option<tokio::sync::watch::Sender<bool>>>>,
     pub(crate) tun_info: Arc<std::sync::Mutex<Option<TunInfo>>>,
 }
@@ -68,6 +76,8 @@ impl Proxy {
             resolver: Arc::new(dns),
             protocols,
             mux_pool: MuxConnectionPool::new(),
+            #[cfg(feature = "vmess")]
+            vmess_mux_pool: VmessMuxConnectionPool::new(),
             tun_shutdown: Arc::new(std::sync::Mutex::new(None)),
             tun_info: Arc::new(std::sync::Mutex::new(None)),
         })
@@ -231,6 +241,8 @@ impl Proxy {
                     // Spawn new ones.
                     reconcile_urltests(self, &new_config, &shutdown_rx, &mut urltests);
                     self.mux_pool.evict_all();
+                    #[cfg(feature = "vmess")]
+                    self.vmess_mux_pool.evict_all();
                     info!(
                         inbound_count = new_config.inbounds.len(),
                         outbound_count = new_config.outbounds.len(),
