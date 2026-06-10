@@ -17,7 +17,8 @@ use crate::runtime::upstream::{
 };
 use crate::runtime::Proxy;
 use crate::transport::{
-    extract_tcp_stream, EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream, TcpRouteResult,
+    extract_tcp_stream, EstablishedTcpOutbound, RelayCarrier, TcpOutboundFailure, TcpRelayStream,
+    TcpRouteResult,
 };
 use zero_engine::{EngineError, EnginePlan};
 use zero_engine::{ResolvedLeafOutbound, ResolvedOutbound};
@@ -404,9 +405,9 @@ impl Proxy {
         session: &Session,
         chain: Vec<ResolvedLeafOutbound<'a>>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        let (stream, final_hop) = self.dispatch_tcp_relay_prefix(chain).await?;
+        let (carrier, final_hop) = self.dispatch_tcp_relay_prefix(chain).await?;
 
-        let stream = apply_hop_protocol(self, stream, &final_hop, session)
+        let stream = apply_hop_protocol(self, carrier.stream, &final_hop, session)
             .await
             .map_err(|error| TcpOutboundFailure {
                 stage: "relay_last",
@@ -425,7 +426,7 @@ impl Proxy {
     pub(crate) async fn dispatch_tcp_relay_prefix<'a>(
         &self,
         chain: Vec<ResolvedLeafOutbound<'a>>,
-    ) -> Result<(TcpRelayStream, ResolvedLeafOutbound<'a>), TcpOutboundFailure> {
+    ) -> Result<(RelayCarrier, ResolvedLeafOutbound<'a>), TcpOutboundFailure> {
         let mut hops = chain.into_iter();
         let first = hops.next().expect("relay chain must have at least 2 hops");
         let second = hops.next().expect("relay chain must have at least 2 hops");
@@ -488,7 +489,15 @@ impl Proxy {
             current_hop = next_hop;
         }
 
-        Ok((stream, current_hop))
+        let ep = endpoint(&current_hop).expect("final relay hop must have an endpoint");
+        Ok((
+            RelayCarrier {
+                stream,
+                server: ep.server.to_owned(),
+                port: ep.port,
+            },
+            current_hop,
+        ))
     }
 }
 

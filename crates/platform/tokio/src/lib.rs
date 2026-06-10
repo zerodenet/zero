@@ -341,6 +341,13 @@ impl AsyncWrite for TcpRelayStream {
     }
 }
 
+/// Carrier established by relay prefix hops, consumed by the final-hop transport builder.
+pub struct RelayCarrier {
+    pub stream: TcpRelayStream,
+    pub server: String,
+    pub port: u16,
+}
+
 // ── TransportConnector trait ──
 
 /// Establishes transport-layer connections over raw TCP sockets.

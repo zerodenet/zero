@@ -9,7 +9,7 @@ use zero_traits::AsyncSocket;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub(crate) use zero_platform_tokio::{ClientStream, TcpRelayStream};
+pub(crate) use zero_platform_tokio::{ClientStream, RelayCarrier, TcpRelayStream};
 
 #[derive(Debug)]
 pub(crate) struct PrefixedSocket {

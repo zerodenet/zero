@@ -591,7 +591,7 @@ impl UdpDispatch {
             });
         }
 
-        let (stream, final_hop) =
+        let (carrier, final_hop) =
             proxy
                 .dispatch_tcp_relay_prefix(chain)
                 .await
@@ -632,7 +632,7 @@ impl UdpDispatch {
                 let tag_owned = tag.to_owned();
                 let key = (session.target.clone(), session.port);
                 let stream = crate::transport::build_vless_outbound_transport_over_stream(
-                    stream,
+                    carrier,
                     tls,
                     reality,
                     ws,
@@ -641,8 +641,6 @@ impl UdpDispatch {
                     http_upgrade,
                     split_http,
                     proxy.config.source_dir(),
-                    server,
-                    port,
                 )
                 .await
                 .map_err(|error| FlowFailure {
@@ -688,7 +686,7 @@ impl UdpDispatch {
                             chain_tasks: &mut self.chain_tasks,
                             session_id: session.id,
                         },
-                        stream,
+                        carrier.stream,
                         None,
                         proxy,
                         session,
@@ -737,7 +735,7 @@ impl UdpDispatch {
                             chain_tasks: &mut self.chain_tasks,
                             session_id: session.id,
                         },
-                        stream,
+                        carrier.stream,
                         MieruUdpPeer {
                             endpoint: UdpPeerEndpoint { server, port },
                             username,
@@ -782,7 +780,7 @@ impl UdpDispatch {
                 let key = (session.target.clone(), session.port);
                 let transport = VmessUdpTransport { tls, ws, grpc };
                 let stream = build_vmess_udp_transport_over_stream(
-                    stream,
+                    carrier.stream,
                     Some(&transport),
                     proxy.config.source_dir(),
                     server,

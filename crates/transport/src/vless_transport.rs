@@ -6,13 +6,12 @@
 
 use std::path::Path;
 
-use tokio::io::{AsyncRead, AsyncWrite};
 use zero_config::{
     ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, RealityConfig, SplitHttpConfig,
     WebSocketConfig,
 };
 use zero_engine::EngineError;
-use zero_platform_tokio::{TcpRelayStream, TokioSocket};
+use zero_platform_tokio::{RelayCarrier, TcpRelayStream, TokioSocket};
 
 use std::io;
 
@@ -169,8 +168,8 @@ pub async fn build_vless_outbound_transport(
 /// This is used after a relay prefix has connected to the final hop server.
 /// Transports that need a second connection or a non-TCP carrier are rejected
 /// here instead of being emulated in the proxy runtime.
-pub async fn build_vless_outbound_transport_over_stream<S>(
-    stream: S,
+pub async fn build_vless_outbound_transport_over_stream(
+    carrier: RelayCarrier,
     tls_config: Option<&ClientTlsConfig>,
     reality: Option<&RealityConfig>,
     ws_config: Option<&WebSocketConfig>,
@@ -179,12 +178,14 @@ pub async fn build_vless_outbound_transport_over_stream<S>(
     http_upgrade_config: Option<&HttpUpgradeConfig>,
     split_http_config: Option<&SplitHttpConfig>,
     source_dir: Option<&Path>,
-    server: &str,
-    port: u16,
-) -> Result<TcpRelayStream, EngineError>
-where
-    S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
-{
+) -> Result<TcpRelayStream, EngineError> {
+    let RelayCarrier {
+        stream,
+        server,
+        port,
+    } = carrier;
+    // Shadow to match the original &str / u16 types used throughout the function.
+    let server: &str = &server;
     if split_http_config.is_some() {
         return Err(EngineError::Io(io::Error::new(
             io::ErrorKind::Unsupported,
