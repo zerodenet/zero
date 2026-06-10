@@ -1,79 +1,58 @@
-# Protocol Capabilities
+# 协议能力
 
-This document records the current protocol capability surface exposed by the
-kernel. It describes implementation facts, not release history.
+本文档记录内核暴露的当前协议能力范围。它描述实现事实，而非发布历史。
 
-External integrations should prefer the machine-readable `capabilities`
-response. The tables here explain the same model for humans.
+外部对接应优先使用机器可读的 `capabilities` 响应。此处的表格以人类可读的方式解释相同模型。
 
-`zero-api` defines the wire model for protocol capabilities. The concrete
-protocol facts are populated by the proxy runtime protocol inventory for the
-current binary. `zero-engine` reports generic control-plane capabilities and
-does not own the protocol capability matrix.
+`zero-api` 定义协议能力的传输模型。具体协议事实由代理运行时协议清单针对当前二进制填充。`zero-engine` 报告通用管控面能力，不维护协议能力矩阵。
 
-`zero-traits::protocol` defines the neutral descriptor and behavior boundary:
-`ProtocolCapabilityDescriptor`, `ProtocolMetadata`, `TcpTunnelProtocol`,
-`DeferredTcpTunnelProtocol`, `TcpSessionProtocol`, `UdpRelayProtocol`,
-`UdpPacketTunnelProtocol`, `UdpPacketFraming`, `UdpPacketStreamFraming`, and
-`UdpDatagramFraming`. Each protocol crate exposes its own
-`ProtocolMetadata` implementation (e.g. `socks5::Socks5Protocol`,
-`trojan::TrojanProtocol`) and the proxy adapter delegates to it. Protocol
-crates implement behavior traits to hide handshake, session-state, framing,
-stream packet boundaries, datagram packet boundaries, and association details
-behind neutral traits.
+`zero-traits::protocol` 定义中性描述符和行为边界：`ProtocolCapabilityDescriptor`、`ProtocolMetadata`、`TcpTunnelProtocol`、`DeferredTcpTunnelProtocol`、`TcpSessionProtocol`、`UdpRelayProtocol`、`UdpPacketTunnelProtocol`、`UdpPacketFraming`、`UdpPacketStreamFraming` 和 `UdpDatagramFraming`。每个协议 crate 暴露其自己的 `ProtocolMetadata` 实现（例如 `socks5::Socks5Protocol`、`trojan::TrojanProtocol`），代理适配器委托给它。协议 crates 实现行为特征，将握手、会话状态、帧封装、流数据包边界、datagram 数据包边界和关联细节隐藏在协议无关特征之后。
 
-## Capability Fields
+## 能力字段
 
-Each protocol capability uses snake_case field names and values:
+每个协议能力使用 snake_case 字段名称和值：
 
-| Field | Meaning |
+| 字段 | 含义 |
 |------|---------|
-| `protocol` | Protocol or kernel action name used in config and status exports |
-| `feature` | Cargo feature required to compile the protocol, or `core` |
-| `compiled` | Whether this binary has the feature compiled in |
-| `status` | Overall support level: `supported`, `partial`, or `experimental` |
-| `compatibility_baseline` | Upstream protocol document or implementation family used as the baseline |
-| `inbound.tcp` / `inbound.udp` | Whether the protocol can accept TCP or UDP flows |
-| `outbound.tcp` / `outbound.udp` | Whether the protocol can create TCP or UDP upstream flows |
-| `transports` | Transport names supported by the protocol adapter |
-| `mux` | MUX support state |
-| `limitations` | Machine-readable limitation codes |
+| `protocol` | 配置和状态导出中使用的协议或内核动作名称 |
+| `feature` | 编译该协议所需的 Cargo feature，或 `core` |
+| `compiled` | 该二进制文件是否已编译此 feature |
+| `status` | 总体支持级别：`supported`、`partial` 或 `experimental` |
+| `compatibility_baseline` | 用作基线的上游协议文档或实现族 |
+| `inbound.tcp` / `inbound.udp` | 协议是否可以接受 TCP 或 UDP 流 |
+| `outbound.tcp` / `outbound.udp` | 协议是否可以创建 TCP 或 UDP 上游流 |
+| `transports` | 协议适配器支持的传输名称 |
+| `mux` | MUX 支持状态 |
+| `limitations` | 机器可读的限制代码 |
 
-`CapabilityState.level` values are:
+`CapabilityState.level` 值为：
 
-| Level | Meaning |
+| 级别 | 含义 |
 |------|---------|
-| `supported` | Implemented as a normal kernel capability |
-| `partial` | Implemented, with documented gaps or incomplete interoperability coverage |
-| `experimental` | Present in code but not production-compatible enough for default assumptions |
-| `unsupported` | Not implemented for this direction/network |
-| `not_applicable` | The protocol does not define this direction/network |
+| `supported` | 作为正常内核能力实现 |
+| `partial` | 已实现，但有记录的缺口或不完整的互操作性覆盖 |
+| `experimental` | 代码中存在，但不足以用于生产环境的默认假设 |
+| `unsupported` | 此方向/网络未实现 |
+| `not_applicable` | 协议不定义此方向/网络 |
 
-`status` is not the same as baseline availability. A protocol can have its
-baseline TCP/UDP path implemented and still remain `partial` when external
-interoperability coverage, MUX behavior, fingerprint behavior, or a special
-chain transport path is incomplete. GUI and control-plane consumers should use
-the directional fields plus `limitations` for precise behavior, not only the
-top-level `status`.
+`status` 与基线可用性不同。一个协议可能已实现其基线 TCP/UDP 路径，但在外部互操作性覆盖、MUX 行为、指纹行为或特殊链传输路径不完整时仍保持 `partial`。GUI 和管控面消费者应使用方向字段和 `limitations` 来获得精确行为，而不仅是顶层 `status`。
 
-## Completion Terms
+## 完备性术语
 
-The capability matrix uses precise terms:
+能力矩阵使用精确术语：
 
-| Term | Meaning |
+| 术语 | 含义 |
 |------|---------|
-| Baseline complete | The normal configured TCP/UDP path is wired through routing, sessions, stats, events, runtime dispatch, and capability export |
-| `supported` | The protocol or kernel action is a normal stable kernel capability with no known protocol-level limitation |
-| `partial` | The baseline path can be implemented while interoperability, MUX, fingerprint, or special chain transport paths still have documented gaps |
-| Production complete | Baseline paths, upstream interoperability, advanced protocol options, and documented chain paths are all covered |
+| 基线完备 | 正常配置的 TCP/UDP 路径已通过路由、会话、统计、事件、运行时分发和能力导出连接 |
+| `supported` | 协议或内核动作是正常的稳定内核能力，没有已知的协议级别限制 |
+| `partial` | 基线路径可以实现，但互操作性、MUX、指纹或特殊链传输路径仍有记录的缺口 |
+| 生产级完备 | 基线路径、上游互操作性、高级协议选项和有记录的链路径全部覆盖 |
 
-The current matrix must not be read as "all protocols are complete". It says
-that baseline proxy paths are present where explicitly listed, while the
-top-level `status` and `limitations` still define the real external contract.
+当前矩阵不应被解读为"所有协议都完备"。它表示基线代理路径在明确列出的位置存在，而顶层 `status` 和 `limitations` 仍然定义真正的外部契约。
 
-## Current Matrix
+## 当前矩阵
 
-| Protocol | Status | Inbound TCP | Inbound UDP | Outbound TCP | Outbound UDP | MUX | Baseline |
+| 协议 | 状态 | 入站 TCP | 入站 UDP | 出站 TCP | 出站 UDP | MUX | 基线 |
 |---------|--------|-------------|-------------|--------------|--------------|-----|----------|
 | `direct` | `supported` | `supported` | `unsupported` | `supported` | `supported` | `not_applicable` | `kernel_builtin` |
 | `block` | `supported` | `unsupported` | `unsupported` | `supported` | `supported` | `not_applicable` | `kernel_builtin` |
@@ -84,49 +63,46 @@ top-level `status` and `limitations` still define the real external contract.
 | `hysteria2` | `partial` | `supported` | `partial` | `supported` | `partial` | `not_applicable` | `hysteria` |
 | `shadowsocks` | `partial` | `supported` | `supported` | `supported` | `supported` | `not_applicable` | `shadowsocks_rust_sip022` |
 | `trojan` | `partial` | `supported` | `partial` | `supported` | `partial` | `unsupported` | `trojan_go` |
-| `vmess` | `experimental` | `experimental` | `experimental` | `experimental` | `experimental` | `experimental` | `xray_core_vmess_aead` |
+| `vmess` | `partial` | `partial` | `partial` | `partial` | `partial` | `partial` | `xray_core_vmess_aead` |
 | `mieru` | `partial` | `experimental` | `partial` | `partial` | `partial` | `not_applicable` | `mieru` |
 
-## Kernel Gaps
+## 内核缺口
 
-The main protocol gaps are:
+主要协议缺口：
 
-- `udp_relay_chain_final_transport_limited`: VLESS UDP relay chains support a TCP relay prefix and VLESS final hops that can wrap an already established TCP relay stream: raw TCP, TLS, Reality, WebSocket, gRPC, H2, and HTTP Upgrade. SplitHTTP needs an additional TCP connection and QUIC needs a non-TCP carrier, so they are not supported as UDP relay-chain final-hop transports. TLS `client_fingerprint` is not supported over relay streams because that path depends on raw socket handshake control.
-- `udp_relay_chain_quic_path_not_supported`: Hysteria2 UDP uses QUIC datagrams. UDP chaining through the QUIC packet path is not implemented.
-- `external_interop_coverage_is_incomplete`: in-tree packet handling exists, but end-to-end tests against the baseline upstream implementation are not complete enough to call every advanced path production-compatible. For VMess, TCP and UDP baseline interoperability is covered for Xray in both directions (raw TLS `aes-128-gcm`/`none`, WS+TLS, gRPC+TLS), Zero outbound to sing-box inbound (TCP+UDP), and Mihomo outbound to Zero inbound (TCP `auto`+UDP `CMD_UDP` raw datagram). Evidence from those paths must not be generalized to untested transport combinations (e.g. H2, HTTPUpgrade, QUIC, SplitHTTP).
-- `shadowsocks_2022_tcp_header_is_not_implemented`: Shadowsocks AEAD 2022 TCP still uses the current AEAD stream wrapper and does not implement the SIP022 TCP request/response header protocol.
-- `shadowsocks_2022_udp_server_response_context_is_not_implemented`: Shadowsocks AEAD 2022 UDP outbound client packets are SIP022-compatible, but acting as an external AEAD 2022 UDP server requires carrying client/session control state into response encoding.
-- `relay_stream_tls_client_fingerprint_is_not_supported`: relay-chain final-hop TLS can run over an already established TCP stream, but custom TLS fingerprint handshakes that require raw socket control are not supported on that path.
-- `mux_udp_is_not_implemented`: VLESS MUX handles TCP sub-connections; UDP MUX sub-connections are not implemented.
-- `non_reality_tls_fingerprint_passthrough_is_incomplete`: the non-Reality VLESS TLS path does not fully pass fingerprint cipher suite and key-exchange preferences into the TLS implementation.
+- `udp_relay_chain_final_transport_limited`: VLESS UDP 中继链支持 TCP 中继前缀和可以包装已建立 TCP 中继流的 VLESS 最终跳传输：原始 TCP、TLS、Reality、WebSocket、gRPC、H2 和 HTTP Upgrade。SplitHTTP 需要额外的 TCP 连接，QUIC 需要非 TCP 载体，因此它们不支持作为 UDP 中继链最终跳传输。TLS `client_fingerprint` 不支持通过中继流，因为该路径依赖原始 socket 握手控制。
+- `udp_relay_chain_quic_path_not_supported`: Hysteria2 UDP 使用 QUIC datagram。通过 QUIC 数据包路径的 UDP 链式连接未实现。
+- `external_interop_coverage_is_incomplete`: 内置数据包处理存在，但针对基线上游实现的端到端测试不足以将每个高级路径称为生产级兼容。对于 VMess，TCP 和 UDP 基线互操作性已覆盖：Xray 双向（原始 TLS `aes-128-gcm`/`none`、WS+TLS、gRPC+TLS）、Zero 出站到 sing-box 入站（TCP+UDP）、Mihomo 出站到 Zero 入站（TCP `auto`+UDP `CMD_UDP` 原始 datagram）。这些路径的证据不得推广到未测试的传输组合（如 H2、HTTPUpgrade、QUIC、SplitHTTP）。
+- `shadowsocks_2022_tcp_header_is_not_implemented`: Shadowsocks AEAD 2022 TCP 仍使用当前的 AEAD 流封装器，未实现 SIP022 TCP 请求/响应头部协议。
+- `shadowsocks_2022_udp_server_response_context_is_not_implemented`: Shadowsocks AEAD 2022 UDP 出站客户端数据包兼容 SIP022，但作为外部 AEAD 2022 UDP 服务器需要将客户端/会话控制状态引入响应编码。
+- `relay_stream_tls_client_fingerprint_is_not_supported`: 中继链最终跳 TLS 可以在已建立的 TCP 流上运行，但需要原始 socket 控制的自定义 TLS 指纹握手不支持该路径。
+- `mux_udp_is_not_implemented`: VLESS MUX 处理 TCP 子连接；UDP MUX 子连接未实现。
+- `non_reality_tls_fingerprint_passthrough_is_incomplete`: 非 Reality VLESS TLS 路径未完全将指纹 cipher suite 和密钥交换偏好传递到 TLS 实现中。
 
-## Baseline Completion
+## 基线完备
 
-The baseline proxy surface is implemented for the directions listed below. This
-means those configured TCP/UDP directions are wired through routing, sessions,
-stats, events, and runtime dispatch. It does not mean every advanced protocol
-option or every external implementation compatibility case is complete.
+基线代理范围已为下列方向实现。这意味着这些已配置的 TCP/UDP 方向已通过路由、会话、统计、事件和运行时分发连接。这不意味着每个高级协议选项或每个外部实现兼容性案例都完备。
 
-| Protocol | Baseline State | Why status may remain below `supported` |
+| 协议 | 基线状态 | 为何 status 可能保持在 `supported` 以下 |
 |----------|----------------|------------------------------------------|
-| `direct` | Complete | No remaining protocol gap |
-| `block` | Complete | No remaining protocol gap |
-| `socks5` | Complete | No remaining protocol gap |
-| `http_connect` | Complete | UDP is not applicable |
-| `mixed` | Complete | Mixed is a kernel inbound multiplexor: SOCKS5 TCP CONNECT and UDP ASSOCIATE use the SOCKS5 runtime paths; HTTP CONNECT uses the HTTP TCP runtime path |
-| `vless` | Complete for baseline TCP and UDP-over-stream paths | UDP MUX, some UDP relay-chain final transports, and non-Reality TLS fingerprint passthrough are incomplete |
-| `trojan` | Complete for baseline TCP and UDP-over-stream paths | External interoperability coverage and relay-stream TLS fingerprint behavior are incomplete |
-| `shadowsocks` | Complete for ordinary AEAD TCP and UDP datagram paths, including Shadowsocks UDP over SOCKS5, large TCP payload chunking, wrong-password rejection, packet-path relay chains, and local external UDP outbound interoperability against `shadowsocks-rust` for every supported cipher | AEAD 2022 TCP and AEAD 2022 server-side UDP external interoperability are incomplete |
-| `hysteria2` | Complete for baseline QUIC TCP stream and UDP datagram paths | External interoperability coverage and QUIC UDP chain path are incomplete |
-| `mieru` | Complete for baseline TCP stream and UDP associate paths | External interoperability coverage is incomplete; inbound TCP remains experimental in the descriptor |
-| `vmess` | Experimental TCP handshake, TCP/UDP MUX, UDP-over-stream, same-protocol `vmess -> vmess` UDP relay-chain, and body relay are implemented for the in-tree runtime; raw TLS, WSS, gRPC, `cipher: auto` normalization, `cipher: none` / `cipher: zero`, local TCP MUX, local MUX UDP, local UDP single-hop relay, and local same-protocol UDP relay-chain have in-tree coverage; body AEAD supports authenticated length, chunk masking (SHAKE128), global padding, and periodic rekey (2^14 chunks); external TCP and UDP baseline interoperability is covered for Xray in both directions, Zero outbound to sing-box inbound, and Mihomo outbound to Zero inbound; Xray WS/gRPC TCP transport interoperability is covered in both directions | Mainstream `cipher: zero` compatibility remains incomplete |
+| `direct` | 完备 | 无剩余协议缺口 |
+| `block` | 完备 | 无剩余协议缺口 |
+| `socks5` | 完备 | 无剩余协议缺口 |
+| `http_connect` | 完备 | UDP 不适用 |
+| `mixed` | 完备 | Mixed 是内核入站多路复用器：SOCKS5 TCP CONNECT 和 UDP ASSOCIATE 使用 SOCKS5 运行时路径；HTTP CONNECT 使用 HTTP TCP 运行时路径 |
+| `vless` | TCP 和 UDP-over-stream 基线路径完备 | UDP MUX、部分 UDP 中继链最终传输和非 Reality TLS 指纹透传不完整 |
+| `trojan` | TCP 和 UDP-over-stream 基线路径完备 | 外部互操作性覆盖和中继流 TLS 指纹行为不完整 |
+| `shadowsocks` | 普通 AEAD TCP 和 UDP datagram 路径完备，包括 Shadowsocks UDP over SOCKS5、大 TCP 载荷分块、错误密码拒绝、数据包路径中继链以及针对 `shadowsocks-rust` 的本地外部 UDP 出站互操作性（覆盖所有支持的 cipher） | AEAD 2022 TCP 和 AEAD 2022 服务器端 UDP 外部互操作性不完整 |
+| `hysteria2` | QUIC TCP 流和 UDP datagram 基线路径完备 | 外部互操作性覆盖和 QUIC UDP 链路径不完整 |
+| `mieru` | TCP 流和 UDP associate 基线路径完备 | 外部互操作性覆盖不完整；入站 TCP 在描述符中保持 experimental |
+| `vmess` | 基线 TCP 握手、TCP/UDP MUX、UDP-over-stream、同协议 `vmess -> vmess` UDP 中继链和 body relay 已针对内置运行时实现；原始 TLS、WSS、gRPC、`cipher: auto` 规范化、`cipher: none` / `cipher: zero`、本地 TCP MUX、本地 MUX UDP、本地 UDP 单跳中继和本地同协议 UDP 中继链具有内置覆盖；body AEAD 支持认证长度、块掩码（SHAKE128）、全局填充和定期密钥旋转（2^14 块）；外部 TCP 和 UDP 基线互操作性已覆盖：Xray 双向、Zero 出站到 sing-box 入站、Mihomo 出站到 Zero 入站；Xray WS/gRPC TCP 传输互操作性已覆盖双向 | 外部互操作性覆盖和主流 `cipher: zero` 兼容性仍不完整 |
 
-## Current Landing State
+## 当前收口状态
 
-1. Runtime `capabilities.protocols` is the external source of truth for GUI and control-plane consumers.
-2. `zero-api` owns only the wire model. It does not own protocol facts or protocol behavior.
-3. `zero-engine` exposes generic control-plane capabilities. It does not maintain the protocol capability matrix.
-4. External protocol descriptors live in their protocol crates:
+1. 运行时 `capabilities.protocols` 是 GUI 和管控面消费者的外部权威来源。
+2. `zero-api` 仅拥有传输模型。它不拥有协议事实或协议行为。
+3. `zero-engine` 暴露通用管控面能力。它不维护协议能力矩阵。
+4. 外部协议描述符位于其协议 crates 中：
    - `socks5::Socks5Protocol`
    - `http_connect::HttpConnectProtocol`
    - `vless::VlessProtocol`
@@ -135,44 +111,32 @@ option or every external implementation compatibility case is complete.
    - `trojan::TrojanProtocol`
    - `vmess::VmessProtocol`
    - `mieru::MieruProtocol`
-5. Kernel actions remain in `zero-proxy` descriptor mapping because they are not external protocol crates: `direct`, `block`, and `mixed`.
-6. `TcpTunnelProtocol` is implemented for protocol handshakes that only need to establish a tunnel over an already connected stream:
+5. 内核动作保留在 `zero-proxy` 描述符映射中，因为它们不是外部协议 crates：`direct`、`block` 和 `mixed`。
+6. `TcpTunnelProtocol` 针对仅需在已连接流上建立隧道的协议握手实现：
    - SOCKS5 TCP CONNECT
-   - Trojan TCP request
-   - VLESS non-flow TCP request/response
-   - VLESS flow TCP request/response (Vision/Reality, when `reality` feature enabled)
-7. `TcpSessionProtocol` is implemented for protocol handshakes that return session/stream state:
-   - Shadowsocks TCP (returns `ShadowsocksOutboundSession` with AEAD key/nonce/cipher)
-   - VMess TCP (returns `VmessOutboundSession` with upload/download AEAD key/nonce/cipher)
-   - Mieru TCP (returns `MieruOutbound` with encryption state)
-8. `DeferredTcpTunnelProtocol` is implemented for protocol handshakes that must write a request now and defer response validation to a stream wrapper:
-   - VLESS flow TCP request for the Reality single-hop path. The proxy still owns transport setup, metering, and wrapping the connected stream with `DeferredVlessResponseStream`.
-9. `UdpRelayProtocol` is implemented for SOCKS5 UDP ASSOCIATE. The protocol crate owns authentication negotiation and association response parsing; the proxy owns control-stream dialing, UDP socket binding, relay endpoint resolution, association cache, idle timeout, stats, events, and fallback behavior.
-10. `UdpPacketTunnelProtocol` and `UdpPacketFraming` are implemented for VLESS UDP over an established stream. The VLESS crate owns the UDP tunnel request/response handshake and VLESS UDP packet encoding/decoding; the proxy owns transport setup, relay-prefix setup, routing, fallback, session lifecycle, stats, events, and response bridging. UDP relay chains are implemented for a TCP relay prefix with VLESS final-hop transports that can operate over an already established TCP stream.
-11. `UdpPacketTunnelProtocol` and `UdpPacketFraming` are implemented for VMess UDP over an established stream. The VMess crate owns the `CMD_UDP` request, AEAD stream state, and UDP packet encoding/decoding; the proxy owns transport setup, routing, session lifecycle, stats, events, upstream caching, response bridging, and payload-mode selection for external raw datagram implementations. The implemented VMess UDP relay-chain target is the same-protocol `vmess -> vmess` path. Local SOCKS5/Mixed only supplies the client entry packet and is not counted as cross-protocol chain support.
-12. `UdpPacketTunnelProtocol` and `UdpPacketStreamFraming` are implemented for Trojan UDP over an established TLS stream. The Trojan crate owns the `CMD_UDP` request and length-prefixed UDP packet read/write behavior; the proxy owns TLS setup, relay-prefix setup, upstream caching, task scheduling, routing, fallback, session lifecycle, stats, events, and response bridging. UDP relay chains are implemented for a TCP relay prefix with a Trojan TLS final hop.
-13. `UdpDatagramFraming` is implemented for Shadowsocks UDP datagrams. The Shadowsocks crate owns target-data encoding, salt generation, AEAD/2022 KDF selection, UDP encryption, UDP decryption, AEAD 2022 client-packet header handling, and target-data parsing. The proxy owns UDP sockets, upstream cache, response matching, routing, fallback, session lifecycle, stats, events, and response bridging. UDP relay chains use the generic datagram-over-packet-path model: a `UdpPacketPath` carrier carries `DatagramCodec`-encoded datagrams. Implemented Shadowsocks final-hop carriers are SOCKS5 UDP ASSOCIATE and Shadowsocks UDP. Adding new combinations requires implementing these two traits, not creating protocol-pair-specific modules.
-    Shadowsocks TCP inbound accept returns `ShadowsocksAccept`, and the
-    protocol crate owns the AEAD stream wrapper, server-to-client response salt
-    generation, download-key derivation, chunk encryption, and chunk
-    decryption. The proxy owns listener lifecycle, auth attribution, TCP pipe
-    entry, routing, metering, session lifecycle, stats, and events.
-    In-tree validation covers all supported Shadowsocks TCP ciphers, large TCP
-    payload chunking, wrong-password TCP rejection, SOCKS5-to-Shadowsocks UDP
-    relay, all supported Shadowsocks UDP ciphers, and Shadowsocks UDP relay
-    chains over the implemented packet-path carriers. Local external validation
-    covers SOCKS5 UDP ASSOCIATE through Shadowsocks outbound to
-    `shadowsocks-rust ssserver -U` for every supported cipher, including AEAD
-    2022 AES-GCM and AEAD 2022 XChaCha20Poly1305 UDP packet formats.
-    AEAD 2022 TCP still lacks the SIP022 TCP request/response header protocol.
-    AEAD 2022 UDP server-side responses still need a stateful response context
-    before Zero can act as a fully compatible external AEAD 2022 UDP server.
-14. `UdpDatagramFraming` is implemented for Hysteria2 UDP datagram payloads. The Hysteria2 crate owns UDP datagram target encoding/decoding; the proxy owns QUIC connection setup, authentication, UDP datagram send/receive, routing, fallback, session lifecycle, stats, events, and response bridging. Hysteria2 uses transport-specific connectors from the proxy runtime because QUIC connection setup is integrated with protocol negotiation and does not decompose into a stream-level handshake.
-15. Mieru TCP uses `TcpSessionProtocol` for encrypted stream session setup. In TCP relay chains, Mieru can be an intermediate hop because the proxy runs the Mieru session handshake and wraps the relay stream in `MieruTcpStream` before applying the next hop. `UdpPacketFraming` is implemented for Mieru UDP associate wrapping. Mieru UDP is integrated in the proxy UDP dispatch path over the encrypted Mieru stream; the protocol crate owns Mieru segment encryption/decryption state and UDP associate framing, while the proxy owns routing, relay-prefix setup, upstream caching, task scheduling, stats, events, and response bridging. UDP relay chains are implemented for a TCP relay prefix with Mieru as the final hop.
+   - Trojan TCP 请求
+   - VLESS 非 flow TCP 请求/响应
+   - VLESS flow TCP 请求/响应（Vision/Reality，`reality` feature 启用时）
+7. `TcpSessionProtocol` 针对返回会话/流状态的协议握手实现：
+   - Shadowsocks TCP（返回 `ShadowsocksOutboundSession`，包含 AEAD key/nonce/cipher）
+   - VMess TCP（返回 `VmessOutboundSession`，包含上传/下载 AEAD key/nonce/cipher）
+   - Mieru TCP（返回 `MieruOutbound`，包含加密状态）
+8. `DeferredTcpTunnelProtocol` 针对必须立即写入请求并将响应验证推迟到流封装器的协议握手实现：
+   - VLESS flow TCP 请求用于 Reality 单跳路径。代理仍拥有传输设置、计量和用 `DeferredVlessResponseStream` 包装已连接流。
+9. `UdpRelayProtocol` 针对 SOCKS5 UDP ASSOCIATE 实现。协议 crate 拥有认证协商和关联响应解析；代理拥有控制流拨号、UDP socket 绑定、中继端点解析、关联缓存、空闲超时、统计、事件和 fallback 行为。
+10. `UdpPacketTunnelProtocol` 和 `UdpPacketFraming` 针对 VLESS UDP over 已建立流实现。VLESS crate 拥有 UDP 隧道请求/响应握手和 VLESS UDP 数据包编码/解码；代理拥有传输设置、中继前缀设置、路由、fallback、会话生命周期、统计、事件和响应桥接。UDP 中继链针对 TCP 中继前缀和能够在已建立 TCP 流上操作的 VLESS 最终跳传输实现。
+11. `UdpPacketTunnelProtocol` 和 `UdpPacketFraming` 针对 VMess UDP over 已建立流实现。VMess crate 拥有 `CMD_UDP` 请求、AEAD 流状态和 UDP 数据包编码/解码；代理拥有传输设置、路由、会话生命周期、统计、事件、上游缓存、响应桥接和针对外部原始 datagram 实现的 payload 模式选择。已实现的 VMess UDP 中继链目标是同协议 `vmess -> vmess` 路径。本地 SOCKS5/Mixed 仅提供客户端入口数据包，不计为跨协议链支持。
+12. `UdpPacketTunnelProtocol` 和 `UdpPacketStreamFraming` 针对 Trojan UDP over 已建立 TLS 流实现。Trojan crate 拥有 `CMD_UDP` 请求和长度前缀 UDP 数据包读写行为；代理拥有 TLS 设置、中继前缀设置、上游缓存、任务调度、路由、fallback、会话生命周期、统计、事件和响应桥接。UDP 中继链针对 TCP 中继前缀和 Trojan TLS 最终跳实现。
+13. `UdpDatagramFraming` 针对 Shadowsocks UDP datagram 实现。Shadowsocks crate 拥有目标数据编码、盐生成、AEAD/2022 KDF 选择、UDP 加密、UDP 解密、AEAD 2022 客户端数据包头部处理和目标数据解析。代理拥有 UDP socket、上游缓存、响应匹配、路由、fallback、会话生命周期、统计、事件和响应桥接。UDP 中继链使用通用 datagram-over-packet-path 模型：`UdpPacketPath` 载体承载 `DatagramCodec` 编码的 datagram。已实现的 Shadowsocks 最终跳载体为 SOCKS5 UDP ASSOCIATE 和 Shadowsocks UDP。添加新组合需要实现这两个特征，而不是创建按协议对特定的模块。
+    Shadowsocks TCP 入站 accept 返回 `ShadowsocksAccept`，协议 crate 拥有 AEAD 流封装器、服务器到客户端响应盐生成、下载密钥派生、块加密和块解密。代理拥有监听器生命周期、认证归因、TCP 管道入口、路由、计量、会话生命周期、统计和事件。
+    内置验证覆盖所有支持的 Shadowsocks TCP cipher、大 TCP 载荷分块、错误密码 TCP 拒绝、SOCKS5-to-Shadowsocks UDP 中继、所有支持的 Shadowsocks UDP cipher 和基于已实现数据包路径载体的 Shadowsocks UDP 中继链。本地外部验证覆盖 SOCKS5 UDP ASSOCIATE 通过 Shadowsocks 出站到 `shadowsocks-rust ssserver -U`，覆盖所有支持的 cipher，包括 AEAD 2022 AES-GCM 和 AEAD 2022 XChaCha20Poly1305 UDP 数据包格式。
+    AEAD 2022 TCP 仍缺少 SIP022 TCP 请求/响应头部协议。AEAD 2022 UDP 服务器端响应仍需要状态化响应上下文，Zero 才能作为完全兼容的外部 AEAD 2022 UDP 服务器运行。
+14. `UdpDatagramFraming` 针对 Hysteria2 UDP datagram 载荷实现。Hysteria2 crate 拥有 UDP datagram 目标编码/解码；代理拥有 QUIC 连接设置、认证、UDP datagram 发送/接收、路由、fallback、会话生命周期、统计、事件和响应桥接。Hysteria2 使用代理运行时中的传输特定 connector，因为 QUIC 连接设置与协议协商集成，不分解为流级握手。
+15. Mieru TCP 使用 `TcpSessionProtocol` 进行加密流会话设置。在 TCP 中继链中，Mieru 可以作为中间跳，因为代理运行 Mieru 会话握手并在应用下一跳之前用 `MieruTcpStream` 包装中继流。`UdpPacketFraming` 针对 Mieru UDP associate 封装实现。Mieru UDP 通过加密 Mieru 流集成在代理 UDP 分发路径中；协议 crate 拥有 Mieru 段加密/解密状态和 UDP associate 帧封装，而代理拥有路由、中继前缀设置、上游缓存、任务调度、统计、事件和响应桥接。UDP 中继链针对 TCP 中继前缀和 Mieru 作为最终跳实现。
 
-## Remaining Work
+## 剩余工作
 
-1. Keep runtime dispatch focused on routing, lifecycle, stats, event export, fallback, health checks, and backpressure.
-2. Extend UDP chain packet-path support by implementing `UdpPacketPath` for new carriers and `DatagramCodec` for new inner protocols. Define the QUIC UDP path required by Hysteria2.
-3. Add upstream interoperability tests for the compatibility baselines before raising any `partial` protocol to `supported`.
-4. Treat VMess as a separate compatibility project: keep `cipher: zero` outside mainstream GUI defaults unless a baseline implementation accepts it, and do not broaden compatibility claims beyond the external paths that are actually tested.
+1. 保持运行时分发聚焦于路由、生命周期、统计、事件导出、fallback、健康检查和背压。
+2. 通过为新载体实现 `UdpPacketPath` 和为新的内部协议实现 `DatagramCodec` 来扩展 UDP 链数据包路径支持。定义 Hysteria2 所需的 QUIC UDP 路径。
+3. 在将任何 `partial` 协议提升到 `supported` 之前，添加兼容性基线的上游互操作性测试。
+4. VMess 现在为 `partial`：基线 TCP/UDP/MUX 路径已实现，在主流传输组合（原始 TLS、WS+TLS、gRPC+TLS）上具有生产级能力。`cipher: zero` 仍为已记录的限制，除非有基线实现接受它，否则应保持在主流 GUI 默认值之外。兼容性声明不得扩展到实际测试的外部路径之外。

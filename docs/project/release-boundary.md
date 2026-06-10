@@ -1,134 +1,105 @@
-# Initial Release Boundary
+# 初始发布边界
 
-This document defines the capability boundary for the first stable external
-integration surface. It is a planning boundary, not release history.
+本文档定义第一个稳定外部对接面的能力边界。这是一个规划边界，而非发布历史。
 
-The release boundary is gate-driven. Work that cannot be mapped to one of these
-gates should not enter the release path.
+发布边界由门控驱动。无法映射到以下门控之一的工作不应进入发布路径。
 
-| Gate | Objective | Exit condition |
+| 门控 | 目标 | 退出条件 |
 |------|-----------|----------------|
-| Gate 0 | Runtime architecture boundary | TCP and UDP traffic enter through the common kernel pipe model; protocol code does not bypass the runtime boundary |
-| Gate 1 | Protocol baseline closure | Protocol capability facts match implemented TCP/UDP baseline behavior and documented limitations |
-| Gate 2 | Control-plane integration closure | GUI and panel integrations can discover, validate, observe, and control the current binary through public APIs |
-| Gate 3 | Release freeze | Workspace validation, docs, examples, and capability exports are consistent |
+| Gate 0 | 运行时架构边界 | TCP 和 UDP 流量通过通用内核管道模型进入；协议代码不绕过运行时边界 |
+| Gate 1 | 协议基线收口 | 协议能力事实与已实现的 TCP/UDP 基线行为和已文档化的限制匹配 |
+| Gate 2 | 管控面对接收口 | GUI 和面板对接能够通过公开 API 发现、验证、观测和控制当前二进制 |
+| Gate 3 | 发布冻结 | workspace 验证、文档、示例和能力导出保持一致 |
 
-## Principle
+## 原则
 
-The kernel first completes the common proxy core, chain proxy orchestration, and
-each protocol's baseline TCP/UDP behavior. Protocol-specific extensions,
-optional transports, mux modes, advanced fingerprints, and special transport
-paths are added after the core boundary is stable.
+内核首先完成通用代理核心、链式代理编排以及每个协议的基线 TCP/UDP 行为。协议特定扩展、可选传输、mux 模式、高级指纹和特殊传输路径在核心边界稳定后添加。
 
-Core protocol completeness means:
+核心协议完备性意味着：
 
-- ordinary TCP/UDP inbound execution enters through the kernel pipe boundary;
-- the protocol's configured inbound and outbound directions are wired through
-  routing, sessions, stats, logging, and events;
-- TCP and UDP are implemented when they are baseline capabilities of that
-  protocol;
-- config validation fails early when a protocol or transport is not compiled;
-- protocol behavior lives in the protocol crate when it is a protocol handshake,
-  session state, packet boundary, or packet framing concern;
-- proxy runtime code owns transport setup, socket setup, relay orchestration,
-  route execution, fallback, health checks, task lifecycle, stats, and events;
-- exported capability facts match the runtime behavior of the current binary.
+- 普通 TCP/UDP 入站执行通过内核管道边界进入；
+- 协议已配置的入站和出站方向通过路由、会话、统计、日志和事件连接；
+- 当 TCP 和 UDP 是该协议的基线能力时，它们均已实现；
+- 当协议或传输未编译时，配置验证尽早失败；
+- 协议行为在协议 crate 中存在，当它涉及协议握手、会话状态、数据包边界或数据包帧封装时；
+- 代理运行时代码拥有传输设置、socket 设置、中继编排、路由执行、fallback、健康检查、任务生命周期、统计和事件；
+- 导出的能力事实与当前二进制的运行时行为匹配。
 
-Protocol completeness does not mean:
+协议完备性不意味着：
 
-- every upstream implementation has full interoperability coverage;
-- every optional transport, mux mode, fingerprint mode, or protocol extension is
-  available;
-- every special UDP transport path is implemented;
-- VMess blocks the baseline boundary while its compatibility work remains
-  experimental.
+- 每个上游实现都有完整的互操作性覆盖；
+- 每个可选传输、mux 模式、指纹模式或协议扩展都可用；
+- 每个特殊的 UDP 传输路径都已实现；
+- VMess 在其兼容性工作仍处于实验阶段时就阻塞基线边界。
 
-## Required Core Surface
+## 必需的核心范围
 
-The initial boundary requires these kernel capabilities to be coherent:
+初始边界需要以下内核能力保持一致：
 
-| Area | Boundary |
+| 领域 | 边界 |
 |------|----------|
-| Runtime pipe | The proxy runtime exposes one common orchestration boundary with TCP and UDP pipe implementations |
-| Config | Current config schema parses, validates, and rejects uncompiled protocols early |
-| Routing | Direct, global, rule, selector, fallback, url_test, and relay groups execute through engine decisions |
-| TCP | Inbound accept, outbound connect, relay chains, rate limits, sessions, stats, logging, and events work through the shared runtime path |
-| UDP | SOCKS5 UDP associate, direct UDP, UDP-capable outbound protocols, fallback/group dispatch, sessions, stats, and events work through the shared dispatch path |
-| Control plane | Queries, commands, event subscription, capabilities, config snapshots, flow views, policy views, and runtime stats use snake_case wire names |
-| Docs | Technical docs describe current facts and project policy, not version history |
-| Features | Cargo features expose coarse protocol/control-plane choices; referenced uncompiled protocols fail clearly |
+| 运行时管道 | 代理运行时暴露一个通用编排边界，配有 TCP 和 UDP 管道实现 |
+| 配置 | 当前配置模式解析、验证并尽早拒绝未编译的协议 |
+| 路由 | Direct、global、rule、selector、fallback、url_test 和 relay 组通过引擎决策执行 |
+| TCP | 入站 accept、出站 connect、中继链、速率限制、会话、统计、日志和事件通过共享运行时路径工作 |
+| UDP | SOCKS5 UDP associate、direct UDP、支持 UDP 的出站协议、fallback/组分发、会话、统计和事件通过共享分发路径工作 |
+| 管控面 | 查询、命令、事件订阅、能力、配置快照、流视图、策略视图和运行时统计使用 snake_case 传输名称 |
+| 文档 | 技术文档描述当前事实和项目策略，而非版本历史 |
+| Features | Cargo features 暴露粗粒度的协议/管控面选择；引用未编译的协议时明确失败 |
 
-## Protocol Boundary
+## 协议边界
 
-The capability matrix in `protocol-capabilities.md` is the source of truth for
-human-readable protocol status. The machine-readable `capabilities` response is
-the source of truth for GUI and control-plane consumers.
+`protocol-capabilities.md` 中的能力矩阵是人类可读协议状态的权威来源。机器可读的 `capabilities` 响应是 GUI 和管控面消费者的权威来源。
 
-Baseline protocol behavior is in scope:
+基线协议行为在范围内：
 
-| Protocol | Baseline boundary |
+| 协议 | 基线边界 |
 |----------|-------------------|
-| `direct` | TCP and UDP outbound execution |
-| `block` | TCP and UDP rejection semantics |
-| `socks5` | TCP CONNECT, UDP ASSOCIATE, inbound and outbound |
-| `http_connect` | TCP CONNECT inbound |
-| `mixed` | Same-port inbound multiplexing for SOCKS5 TCP CONNECT, SOCKS5 UDP ASSOCIATE, and HTTP CONNECT TCP |
-| `vless` | TCP and UDP-over-stream baseline paths over supported transports |
-| `trojan` | TCP and UDP-over-stream baseline paths |
-| `shadowsocks` | TCP stream and UDP datagram baseline paths |
-| `mieru` | TCP stream session and UDP associate baseline paths |
-| `hysteria2` | TCP stream and UDP datagram baseline paths over QUIC |
-| `vmess` | TCP/UDP baseline compatibility over raw TLS, WS+TLS, and gRPC+TLS; MUX connection pool for TCP and UDP; Xray/sing-box/Mihomo interop validated; kept experimental until mainstream `cipher: zero` compatibility is resolved |
+| `direct` | TCP 和 UDP 出站执行 |
+| `block` | TCP 和 UDP 拒绝语义 |
+| `socks5` | TCP CONNECT、UDP ASSOCIATE，入站和出站 |
+| `http_connect` | TCP CONNECT 入站 |
+| `mixed` | 同端口入站多路复用，支持 SOCKS5 TCP CONNECT、SOCKS5 UDP ASSOCIATE 和 HTTP CONNECT TCP |
+| `vless` | TCP 和 UDP-over-stream 基线路径，覆盖支持的传输 |
+| `trojan` | TCP 和 UDP-over-stream 基线路径 |
+| `shadowsocks` | TCP 流和 UDP datagram 基线路径 |
+| `mieru` | TCP 流会话和 UDP associate 基线路径 |
+| `hysteria2` | TCP 流和 UDP datagram 基线路径，通过 QUIC |
+| `vmess` | TCP/UDP 基线兼容性，覆盖原始 TLS、WS+TLS 和 gRPC+TLS；用于 TCP 和 UDP 的 MUX 连接池；Xray/sing-box/Mihomo 互操作已验证；在主流 `cipher: zero` 兼容性解决之前保持实验性 |
 
-Advanced protocol behavior is not required for the initial boundary:
+高级协议行为不要求初始边界包含：
 
-- every protocol-specific UDP chain transport path;
-- Hysteria2 UDP chaining through QUIC;
-- VLESS UDP over SplitHTTP or QUIC relay-chain final hops;
-- non-VMess UDP MUX gaps;
-- full TLS fingerprint passthrough outside the currently implemented paths;
-- VMess `cipher: zero` mainstream external compatibility.
+- 每个协议特定的 UDP 链传输路径；
+- Hysteria2 UDP 通过 QUIC 链式连接；
+- VLESS UDP over SplitHTTP 或 QUIC 中继链最终跳；
+- 非 VMess UDP MUX 缺口；
+- 当前已实现路径之外的完整 TLS 指纹透传；
+- VMess `cipher: zero` 主流外部兼容性。
 
-## Chain Proxy Boundary
+## 链式代理边界
 
-Chain proxy is a kernel composition capability. It should be treated as a core
-orchestration path: the previous hop provides a connected stream or packet path,
-and the next hop establishes its protocol layer over that path.
+链式代理是内核组合能力。应将其视为核心编排路径：上一跳提供已连接的流或数据包路径，下一跳在该路径上建立其协议层。
 
-TCP chaining is represented as a stream path. UDP chaining is represented as a
-packet path. The runtime may cache sockets, streams, associations, and response
-bridges, but protocol packet encoding and decoding remains in protocol crates or
-neutral protocol traits.
+TCP 链式连接表示为流路径。UDP 链式连接表示为数据包路径。运行时可以缓存 socket、流、关联和响应桥接，但协议数据包编码和解码保持在协议 crates 或中性协议特征中。
 
-Supported chain paths should be documented as implemented facts. Missing special
-transport paths should be represented as limitation codes instead of blocking
-the entire protocol baseline.
+支持的链式路径应作为已实现事实记录。缺失的特殊传输路径应以限制代码表示，而非阻塞整个协议基线。
 
-New chain work should be accepted when it satisfies one of these:
+新链式工作应在满足以下条件之一时接受：
 
-- it completes a baseline capability already represented by config and
-  capabilities;
-- it removes a false capability claim;
-- it creates a reusable kernel boundary that avoids per-protocol pair special
-  cases in `zero-proxy`;
-- it is required by a concrete integration path and can be described as a
-  protocol-neutral kernel primitive.
+- 它完成了配置和能力已表示的基线能力；
+- 它移除了错误的能力声明；
+- 它创建了可复用的内核边界，避免 `zero-proxy` 中出现按协议对的特例；
+- 它是具体对接路径所需的，并且可以被描述为协议无关的内核原语。
 
-Current UDP chain work should converge toward a unified packet-path
-orchestration boundary. Implemented paths such as `socks5 -> shadowsocks` should
-remain tested, but new work should avoid adding one manager per protocol pair.
+当前 UDP 链式工作应收敛到统一的数据包路径编排边界。已实现的路径（如 `socks5 -> shadowsocks`）应保持测试，但新工作应避免为每个协议对添加一个 manager。
 
-## Stop Condition
+## 停止条件
 
-The implementation is ready for the initial external integration boundary when:
+实现在满足以下条件时准备好初始外部对接边界：
 
-- the Gate 0 architecture boundary is closed and no ordinary inbound protocol
-  bypasses the TCP/UDP pipe entry points;
-- every capability exported by `capabilities` is backed by implementation and
-  tests;
-- every known gap has a snake_case limitation code;
-- core TCP and UDP flows work through in-tree end-to-end tests;
-- protocol special abilities are either implemented or explicitly documented as
-  future work;
-- no external-facing docs describe obsolete names, version history, or behavior
-  that the current binary cannot perform.
+- Gate 0 架构边界已收口，没有普通入站协议绕过 TCP/UDP 管道入口点；
+- `capabilities` 导出的每项能力都有实现和测试支撑；
+- 每个已知缺口都有 snake_case 限制代码；
+- 核心 TCP 和 UDP 流通过内置端到端测试运行；
+- 协议特殊能力要么已实现，要么明确记录为后续工作；
+- 没有面向外部的文档描述过时的名称、版本历史或当前二进制无法执行的行为。

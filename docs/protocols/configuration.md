@@ -276,7 +276,7 @@ AEAD 2022 password 规则与 inbound 相同。
 }
 ```
 
-VMess 是实验能力。TCP 握手、TCP/UDP MUX、UDP-over-stream 和 body relay 使用 in-tree 实现；raw TLS、WSS、gRPC TCP 路径、本地 TCP MUX、本地 MUX UDP、本地 VMess UDP 单跳闭环，以及 `cipher: none` / `cipher: zero` 均有 Zero 内部覆盖。`cipher: auto` 会被归一化为当前 AEAD 基线。
+VMess 是 `partial` 能力。TCP 握手、TCP/UDP MUX、UDP-over-stream 和 body relay 使用 in-tree 实现；raw TLS、WSS、gRPC TCP 路径、本地 TCP MUX、本地 MUX UDP、本地 VMess UDP 单跳闭环，以及 `cipher: none` / `cipher: zero` 均有 Zero 内部覆盖。`cipher: auto` 会被归一化为当前 AEAD 基线。
 
 已完成的外部互通覆盖包括：Zero outbound -> Xray inbound TCP/UDP、Xray outbound -> Zero inbound TCP/UDP、Zero outbound -> Xray inbound WS/gRPC TCP、Xray outbound -> Zero inbound WS/gRPC TCP、Zero outbound -> sing-box inbound TCP/UDP、Mihomo outbound -> Zero inbound TCP/UDP。`cipher: none` 已完成 Xray TCP 双向互通。`cipher: zero` 不作为主流外部兼容能力展示。
 

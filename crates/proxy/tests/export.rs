@@ -580,15 +580,18 @@ fn proxy_handle_capabilities_use_protocol_inventory() {
         .iter()
         .find(|protocol| protocol.protocol == "vmess")
     {
-        assert_eq!(vmess.status, "experimental");
-        assert_eq!(vmess.inbound.tcp.level, "experimental");
-        assert_eq!(vmess.inbound.udp.level, "experimental");
-        assert_eq!(vmess.outbound.tcp.level, "experimental");
-        assert_eq!(vmess.outbound.udp.level, "experimental");
-        assert_eq!(vmess.mux.level, "experimental");
+        assert_eq!(vmess.status, "partial");
+        assert_eq!(vmess.inbound.tcp.level, "partial");
+        assert_eq!(vmess.inbound.udp.level, "partial");
+        assert_eq!(vmess.outbound.tcp.level, "partial");
+        assert_eq!(vmess.outbound.udp.level, "partial");
+        assert_eq!(vmess.mux.level, "partial");
         assert!(vmess
             .limitations
             .contains(&"external_interop_coverage_is_incomplete".to_owned()));
+        assert!(vmess
+            .limitations
+            .contains(&"cipher_zero_mainstream_compatibility_is_incomplete".to_owned()));
         assert!(!vmess
             .limitations
             .contains(&"vmess_none_zero_cipher_is_not_supported".to_owned()));

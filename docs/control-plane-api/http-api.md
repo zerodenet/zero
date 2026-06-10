@@ -97,11 +97,7 @@ API 能力列表。
 }
 ```
 
-`protocols` is the machine-readable protocol matrix for GUI and external
-control-plane consumers. `zero-api` defines this wire model; the proxy runtime
-fills it from the compiled protocol inventory for the current binary. See
-[protocol-capabilities.md](../project/protocol-capabilities.md) for the current
-TCP/UDP capability model and limitation codes.
+`protocols` 是供 GUI 和外部控制面消费者使用的机器可读协议矩阵。`zero-api` 定义此线路模型；代理运行时会从当前二进制的编译协议清单中填充该字段。当前 TCP/UDP 能力模型和限制码详见 [protocol-capabilities.md](../project/protocol-capabilities.md)。
 
 ### GET /api/v1/health
 

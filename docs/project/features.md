@@ -1,166 +1,162 @@
-# Build Features
+# 构建特性
 
-Zero uses Cargo features to control which capability subsets are included in the compiled binary, allowing binary size and dependency surface to be trimmed on demand.
+Zero 使用 Cargo features 来控制哪些能力子集被包含在编译后的二进制文件中，允许按需裁剪二进制大小和依赖范围。
 
-## Presets
+## 预设
 
-| Preset | Includes | Use case |
+| 预设 | 包含内容 | 适用场景 |
 |--------|---------|----------|
-| `default` | `full` + `status_api` | Client-side local use |
-| `full` | All inbound/outbound protocols + DNS | Full proxy node |
+| `default` | `full` + `status_api` | 客户端本地使用 |
+| `full` | 所有入站/出站协议 + DNS | 完整代理节点 |
 
 ```bash
-# Default build (client scenario, no connectors needed)
+# 默认构建（客户端场景，无需 connector）
 cargo build --release
 
-# Equivalent
+# 等效命令
 cargo build --release --features full,status_api
 ```
 
-## Inbound Protocols
+## 入站协议
 
-Each inbound protocol is independently feature-gated and may be trimmed as needed.
+每个入站协议独立受 feature gate 控制，可按需裁剪。
 
-| Feature | Protocol | Extra dependencies |
+| Feature | 协议 | 额外依赖 |
 |---------|------|----------|
-| `socks5` | SOCKS5 inbound | -- |
-| `http_connect` | HTTP CONNECT inbound | -- |
-| `mixed` | Mixed inbound (same port SOCKS5 TCP/UDP + HTTP CONNECT TCP) | Implies `socks5` + `http_connect` |
-| `vless` | VLESS inbound | TLS / Reality / WebSocket / gRPC / H2 / QUIC transport |
-| `hysteria2` | Hysteria2 inbound | QUIC (quinn) |
-| `shadowsocks` | Shadowsocks inbound | AEAD encryption + 2022-blake3 |
-| `trojan` | Trojan inbound | TLS |
-| `vmess` | VMess inbound | Experimental AEAD implementation |
-| `mieru` | Mieru inbound | XChaCha20-Poly1305 session framing |
-| -- | `direct` inbound | Always compiled, no feature gate required (fixed-target forwarder) |
-| -- | `tun` inbound | Always compiled, no feature gate required (virtual network interface: Linux ioctl, macOS utun socket, Windows Wintun) |
+| `socks5` | SOCKS5 入站 | -- |
+| `http_connect` | HTTP CONNECT 入站 | -- |
+| `mixed` | Mixed 入站（同端口 SOCKS5 TCP/UDP + HTTP CONNECT TCP） | 隐含 `socks5` + `http_connect` |
+| `vless` | VLESS 入站 | TLS / Reality / WebSocket / gRPC / H2 / QUIC 传输 |
+| `hysteria2` | Hysteria2 入站 | QUIC (quinn) |
+| `shadowsocks` | Shadowsocks 入站 | AEAD 加密 + 2022-blake3 |
+| `trojan` | Trojan 入站 | TLS |
+| `vmess` | VMess 入站 | 实验性 AEAD 实现 |
+| `mieru` | Mieru 入站 | XChaCha20-Poly1305 会话帧封装 |
+| -- | `direct` 入站 | 始终编译，无需 feature gate（固定目标转发器） |
+| -- | `tun` 入站 | 始终编译，无需 feature gate（虚拟网络接口：Linux ioctl、macOS utun socket、Windows Wintun） |
 
 ```bash
-# Trim example: SOCKS5 + HTTP CONNECT only
+# 裁剪示例：仅 SOCKS5 + HTTP CONNECT
 cargo build --release --no-default-features \
   --features socks5,http_connect,status_api
 ```
 
-## Outbound Protocols
+## 出站协议
 
-| Feature | Protocol | Extra dependencies |
+| Feature | 协议 | 额外依赖 |
 |---------|------|----------|
-| `socks5` | SOCKS5 outbound | -- |
-| `vless` | VLESS outbound | Same transport stack as inbound |
-| `hysteria2` | Hysteria2 outbound | QUIC (quinn) |
-| `shadowsocks` | Shadowsocks outbound | Same encryption as inbound |
-| `trojan` | Trojan outbound | TLS |
-| `vmess` | VMess outbound | Experimental AEAD implementation; `cipher: auto` is normalized to the current AEAD baseline |
-| `mieru` | Mieru outbound | Single-hop TCP routing; relay-chain hop is not supported yet |
+| `socks5` | SOCKS5 出站 | -- |
+| `vless` | VLESS 出站 | 与入站相同的传输栈 |
+| `hysteria2` | Hysteria2 出站 | QUIC (quinn) |
+| `shadowsocks` | Shadowsocks 出站 | 与入站相同的加密 |
+| `trojan` | Trojan 出站 | TLS |
+| `vmess` | VMess 出站 | 实验性 AEAD 实现；`cipher: auto` 被规范化为当前 AEAD 基线 |
+| `mieru` | Mieru 出站 | 单跳 TCP 路由；TCP relay chain 可作为中间跳 |
 
-`direct` and `block` outbounds are always available, no feature gate required -- they need no protocol implementation.
+`direct` 和 `block` 出站始终可用，无需 feature gate——它们不需要协议实现。
 
 ## DNS
 
-| Feature | Description |
+| Feature | 描述 |
 |---------|------|
-| `dns` | DNS resolver, cache, routing, Fake IP, and UDP DNS backend |
+| `dns` | DNS 解析器、缓存、路由、Fake IP 和 UDP DNS 后端 |
 
-> When `dns` is not enabled, DNS falls back to the system resolver (`tokio::net::lookup_host`).
+> 当 `dns` 未启用时，DNS 退回到系统解析器（`tokio::net::lookup_host`）。
 
-## Control Plane (Server Deployment)
+## 管控面（服务器部署）
 
-The following features deploy Zero as a server/panel node and are **not in the default `full` preset**.
+以下 features 用于将 Zero 部署为服务器/面板节点，**不在默认 `full` 预设中**。
 
-| Feature | Description | Implies |
+| Feature | 描述 | 隐含 |
 |---------|------|------|
-| `status_api` | HTTP status API (`/api/v1/*`) | -- |
-| `grpc_api` | gRPC control plane endpoint | `dep:zero-grpc` |
-| `event_dispatcher` | Event dispatcher: delivers zero events to external sinks and exposes sink delivery status | `dep:zero-connector` |
-| `sink_jsonl` | JSON Lines file sink (event persistence) | `event_dispatcher` |
-| `panel_connector` | Panel connector: heartbeat + remote commands, node reporting | `status_api` + `event_dispatcher` |
+| `status_api` | HTTP 状态 API (`/api/v1/*`) | -- |
+| `grpc_api` | gRPC 管控面端点 | `dep:zero-grpc` |
+| `event_dispatcher` | 事件分发器：将 zero 事件投递到外部 sink 并暴露 sink 投递状态 | `dep:zero-connector` |
+| `sink_jsonl` | JSON Lines 文件 sink（事件持久化） | `event_dispatcher` |
+| `panel_connector` | 面板 connector：心跳 + 远程命令，节点上报 | `status_api` + `event_dispatcher` |
 
 ```bash
-# Server build (with panel connector)
+# 服务器构建（包含面板 connector）
 cargo build --release --features full,status_api,panel_connector
 ```
 
-**`panel_connector` dependency surface:**
+**`panel_connector` 依赖范围：**
 
-- `status_api` -- HTTP control endpoint
-- `event_dispatcher` -- event delivery infrastructure and sink delivery status
-- `zero-connector` crate -- PushConnector (heartbeat/command polling), EventDispatcher (event distribution), Webhook sink
+- `status_api` -- HTTP 控制端点
+- `event_dispatcher` -- 事件投递基础设施和 sink 投递状态
+- `zero-connector` crate -- PushConnector（心跳/命令轮询）、EventDispatcher（事件分发）、Webhook sink
 
-## Client vs Server
+## 客户端 vs 服务器
 
 ```
-Client scenario:  full + status_api  (default)
-                  - Inbound/outbound protocols
+客户端场景：  full + status_api  （默认）
+                  - 入站/出站协议
                   - DNS
-                  - HTTP status endpoint (local debugging)
+                  - HTTP 状态端点（本地调试）
 
-Server scenario:  + panel_connector
-                  - Event dispatch (webhook / jsonl)
-                  - Panel heartbeat reporting + remote commands
+服务器场景：  + panel_connector
+                  - 事件分发（webhook / jsonl）
+                  - 面板心跳上报 + 远程命令
 ```
 
-## Relation to Protocol Implementations
+## 与协议实现的关系
 
-Protocol crates are compiled through the root Cargo features listed above. Protocol presence in the workspace does not by itself mean production compatibility with every external ecosystem export.
+协议 crates 通过上述根 Cargo features 编译。协议在 workspace 中存在本身并不意味着与每个外部生态系统导出具有生产级兼容性。
 
-The machine-readable protocol matrix is exposed as `capabilities.protocols`.
-It records current TCP, UDP, MUX, transport, compatibility baseline, and
-limitation facts for the current binary. `zero-api` defines the response shape;
-the proxy runtime fills protocol facts from its compiled protocol inventory.
-See [protocol-capabilities.md](protocol-capabilities.md).
+机器可读的协议矩阵通过 `capabilities.protocols` 暴露。它记录当前二进制文件的当前 TCP、UDP、MUX、传输、兼容性基线和限制事实。`zero-api` 定义响应结构；代理运行时从已编译的协议清单中填充协议事实。参见 [protocol-capabilities.md](protocol-capabilities.md)。
 
-| Protocol | Feature | Notes |
+| 协议 | Feature | 备注 |
 |------|---------|------|
-| VMess | `vmess` | Experimental AEAD implementation. `cipher: auto` from Xray/Clash exports is normalized to the current AEAD baseline |
-| Mieru | `mieru` | Registered adapter with single-hop TCP outbound support. Relay-chain hop support is not implemented |
-| HTTP CONNECT outbound | -- | Outbound direction not implemented |
+| VMess | `vmess` | 实验性 AEAD 实现。来自 Xray/Clash 导出的 `cipher: auto` 被规范化为当前 AEAD 基线 |
+| Mieru | `mieru` | 已注册适配器，支持单跳 TCP 出站。中继链跳跃支持未实现 |
+| HTTP CONNECT 出站 | -- | 出站方向未实现 |
 
-Asymmetric inbound/outbound features are normal -- some protocols do not need the opposite direction.
+入站/出站 features 不对等是正常的——某些协议不需要相反方向。
 
-## Binary Size Reference
+## 二进制大小参考
 
-| Features | Binary size (release, stripped) |
+| Features | 二进制大小（release，strip 后） |
 |----------|-------------------------------|
 | `default` (`full` + `status_api`) | ~15 MB |
-| `--no-default-features` + SOCKS5 inbound/outbound + direct | ~5 MB |
+| `--no-default-features` + SOCKS5 入站/出站 + direct | ~5 MB |
 
 ---
 
-# Kernel Primitives
+# 内核原语
 
-These cross-cutting capabilities live in the kernel pipeline and apply to all TCP protocols uniformly.
+这些跨切面能力位于内核管道中，统一应用于所有 TCP 协议。
 
-## Idle Timeout
+## 空闲超时
 
-Every TCP relay is wrapped in an idle timeout. If no data flows in either direction for the configured duration, the session is cleanly terminated.
+每个 TCP 中继都包裹在空闲超时中。如果配置的持续时间内任一方向都没有数据流动，会话将被干净地终止。
 
-- **Default**: 300 seconds (5 minutes)
-- **Config**: `InboundConfig.idle_timeout_secs` (optional, per-inbound)
-- **Scope**: Applied in `serve_inbound()` via `tokio::time::timeout` around `protocol.relay()`
-- **Behavior**: Idle timeout is not an error -- the session finishes with its current outcome (`DirectRelayed` or `ChainedRelayed`)
+- **默认值**：300 秒（5 分钟）
+- **配置**：`InboundConfig.idle_timeout_secs`（可选，按入站配置）
+- **作用范围**：在 `serve_inbound()` 中通过 `tokio::time::timeout` 包裹 `protocol.relay()` 来应用
+- **行为**：空闲超时不是错误——会话以其当前结果（`DirectRelayed` 或 `ChainedRelayed`）结束
 
-## Outbound Health / Circuit Breaker
+## 出站健康 / 熔断器
 
-`zero-engine` maintains an `OutboundHealth` tracker per outbound tag. Before connecting to any outbound (except `direct` and `block`), the kernel checks whether the outbound is healthy.
+`zero-engine` 为每个出站标签维护一个 `OutboundHealth` 跟踪器。在连接到任何出站（除 `direct` 和 `block` 外）之前，内核检查该出站是否健康。
 
-- **Failure threshold**: 5 failures within a 30-second sliding window
-- **Quarantine duration**: 60 seconds -- the outbound is skipped for all new connections
-- **Probe**: After quarantine expires, one connection is allowed as a probe; success restores health, failure resets the cooldown
-- **Tracking**: `record_outbound_failure()` on connection errors, `record_outbound_success()` on relay completion
-- **Scope**: Applies to fallback group candidate selection and all chained outbound connections
-- **Error type**: `EngineError::UnhealthyOutbound { tag }` -- treated as a connection failure, triggering the next fallback candidate
+- **失败阈值**：30 秒滑动窗口内 5 次失败
+- **隔离时间**：60 秒——该出站被跳过，不接受所有新连接
+- **探测**：隔离期满后，允许一个连接作为探测；成功则恢复健康，失败则重置冷却期
+- **跟踪**：连接错误时调用 `record_outbound_failure()`，中继完成时调用 `record_outbound_success()`
+- **作用范围**：适用于 fallback 组候选选择和所有链式出站连接
+- **错误类型**：`EngineError::UnhealthyOutbound { tag }`——被视为连接失败，触发下一个 fallback 候选
 
-## URL Domain Rewrite
+## URL 域名重写
 
-Domain-based URL rewriting applied before routing. Rules are matched first-match-wins; once a rule fires, no further rules are evaluated.
+在路由之前应用的基于域名的 URL 重写。规则按首次匹配优先的方式执行；一旦某条规则匹配，不再评估后续规则。
 
-- **Config**: `route.url_rewrite` (array of `UrlRewriteRule`)
-- **Match types**:
-  - `from` -- exact domain match
-  - `from_regex` -- regex pattern match with capture group substitution (`$1`, `$2`, etc.)
-- **Replacement**: `to` field specifies the replacement domain
-- **HTTP redirect**: `status_code` field (e.g. `302`) triggers an HTTP redirect response for HTTP CONNECT; non-HTTP protocols silently rewrite
-- **Scope**: Applied in `serve_inbound()` before route lookup; also applied in HTTP CONNECT's own handler for immediate redirects
+- **配置**：`route.url_rewrite`（`UrlRewriteRule` 数组）
+- **匹配类型**：
+  - `from` -- 精确域名匹配
+  - `from_regex` -- 正则表达式模式匹配，支持捕获组替换（`$1`、`$2` 等）
+- **替换**：`to` 字段指定替换域名
+- **HTTP 重定向**：`status_code` 字段（如 `302`）对 HTTP CONNECT 触发 HTTP 重定向响应；非 HTTP 协议静默重写
+- **作用范围**：在 `serve_inbound()` 中进行路由查找之前应用；也在 HTTP CONNECT 自身处理程序中应用以进行即时重定向
 
 ```json
 {
@@ -174,14 +170,14 @@ Domain-based URL rewriting applied before routing. Rules are matched first-match
 }
 ```
 
-## Domain Regex Router Condition
+## 域名正则路由条件
 
-Route condition type `domain_regex` matches the target domain against one or more regex patterns.
+路由条件类型 `domain_regex` 根据一个或多个正则表达式模式匹配目标域名。
 
-- **Config**: `{ "type": "domain_regex", "values": ["^.*\\.google\\..*$", "^.*\\.youtube\\..*$"] }`
-- **Matching**: Patterns are compiled once at startup (`regex::Regex`), then matched against the target domain at decision time
-- **Capture groups**: Not used for routing -- purely for matching. Use `url_rewrite.from_regex` for capture-based rewriting
-- **Scope**: Part of the rule condition system, composable with `and`/`or`
+- **配置**：`{ "type": "domain_regex", "values": ["^.*\\.google\\..*$", "^.*\\.youtube\\..*$"] }`
+- **匹配**：模式在启动时编译一次（`regex::Regex`），然后在决策时与目标域名匹配
+- **捕获组**：不用于路由——仅用于匹配。如需基于捕获的重写，使用 `url_rewrite.from_regex`
+- **作用范围**：作为规则条件系统的一部分，可与 `and`/`or` 组合
 
 ```json
 {
@@ -190,16 +186,16 @@ Route condition type `domain_regex` matches the target domain against one or mor
 }
 ```
 
-## GCRA Rate Limiting
+## GCRA 速率限制
 
-Token-bucket rate limiting using the Generic Cell Rate Algorithm (GCRA). Limits per-byte throughput on TCP relay streams.
+使用通用信元速率算法（GCRA）的令牌桶速率限制。在 TCP 中继流上限制按字节吞吐量。
 
-- **Config**: Per-inbound `up_bps` and `down_bps` on `InboundProtocolConfig` (Hysteria2, Shadowsocks, Trojan)
-- **Per-user**: Protocol `accept` handlers can set per-user limits (e.g. SOCKS5 via `AuthHandler::rate_limit_for()`); per-user limits take priority over per-inbound defaults
-- **Kernel integration**: `apply_kernel_rate_limits()` in `serve_inbound()` fills in defaults for sessions where per-user limits were not set
-- **Transport**: `RateLimiter` wraps `AsyncWrite` in `tcp_relay.rs`; non-blocking -- integrates via `poll_write`
-- **Burst tolerance**: 16 KB headroom per stream to avoid starving small writes
-- **Scope**: Applied during `protocol.relay()` in the bidirectional relay path
+- **配置**：`InboundProtocolConfig` 上的按入站 `up_bps` 和 `down_bps`（Hysteria2、Shadowsocks、Trojan）
+- **按用户**：协议 `accept` 处理程序可以设置按用户限制（例如 SOCKS5 通过 `AuthHandler::rate_limit_for()`）；按用户限制优先于按入站默认值
+- **内核集成**：`serve_inbound()` 中的 `apply_kernel_rate_limits()` 为未设置按用户限制的会话填充默认值
+- **传输层**：`RateLimiter` 在 `tcp_relay.rs` 中包装 `AsyncWrite`；非阻塞——通过 `poll_write` 集成
+- **突发容忍度**：每个流 16 KB 余量，避免饿死小写入
+- **作用范围**：在双向中继路径中的 `protocol.relay()` 期间应用
 
 ```json
 {
@@ -214,54 +210,54 @@ Token-bucket rate limiting using the Generic Cell Rate Algorithm (GCRA). Limits 
 }
 ```
 
-## TUN (Virtual Network Interface)
+## TUN（虚拟网络接口）
 
-TUN creates a virtual network interface that captures IP packets at Layer 3 and routes them through the proxy kernel. Always compiled, no feature gate required.
+TUN 创建一个虚拟网络接口，在第 3 层捕获 IP 数据包并通过代理内核路由它们。始终编译，无需 feature gate。
 
-### Architecture
+### 架构
 
 ```
-TunDevice (zero-tun)          -> platform backends (Linux ioctl, macOS utun, Windows Wintun)
-    -> NetworkStack (zero-traits)    -> TcpStack / UdpStack traits
-    -> UserTcpStack (zero-stack)     -> user-space TCP state machine (SYN -> SYN-ACK -> ACK -> data -> FIN)
-    -> TUN inbound (zero-proxy)      -> tokio::select!{ read packets -> feed stack -> accept -> serve_inbound() }
+TunDevice (zero-tun)          -> 平台后端（Linux ioctl、macOS utun、Windows Wintun）
+    -> NetworkStack (zero-traits)    -> TcpStack / UdpStack 特征
+    -> UserTcpStack (zero-stack)     -> 用户空间 TCP 状态机（SYN -> SYN-ACK -> ACK -> 数据 -> FIN）
+    -> TUN 入站 (zero-proxy)      -> tokio::select!{ 读取数据包 -> 喂入栈 -> accept -> serve_inbound() }
 ```
 
-### Network Stack Trait
+### 网络栈特征
 
-`zero-traits` defines `TcpStack` / `UdpStack` / `NetworkStack`; this is the boundary between raw IP packets and connection-oriented I/O. Two implementations:
+`zero-traits` 定义 `TcpStack` / `UdpStack` / `NetworkStack`；这是原始 IP 数据包和面向连接的 I/O 之间的边界。两种实现：
 
-| Implementation | Strategy | Driver |
+| 实现 | 策略 | 驱动 |
 |---------------|----------|--------|
-| `UserNetworkStack` | User-space TCP state machine (SYN -> Established -> CloseWait, MSS option, seq/ack tracking) | TUN device required |
-| `SystemStack` | OS TCP listener (iptables/pf redirect -> accept TcpStream) | None on Linux/macOS |
+| `UserNetworkStack` | 用户空间 TCP 状态机（SYN -> Established -> CloseWait，MSS 选项，seq/ack 跟踪） | 需要 TUN 设备 |
+| `SystemStack` | OS TCP 监听器（iptables/pf redirect -> accept TcpStream） | Linux/macOS 无需 |
 
-The stack is pluggable via the trait; switching implementations requires zero changes to the inbound handler.
+该栈通过特征可插拔；切换实现不需要更改入站处理程序。
 
-### TCP State Machine (UserTcpStack)
+### TCP 状态机 (UserTcpStack)
 
-- **SYN** -> SYN-ACK with MSS option -> stored in SynReceived state
-- **ACK** -> transition to Established -> available via `TcpStack::accept()`
-- **Data** -> payload extracted, forwarded to proxy via channel, ACK sent
-- **FIN** -> ACK sent, transition to CloseWait -> proxy shutdown triggers our FIN
-- **RST** -> immediate teardown
+- **SYN** -> 发送 SYN-ACK 包含 MSS 选项 -> 存储在 SynReceived 状态
+- **ACK** -> 转换为 Established -> 可通过 `TcpStack::accept()` 获取
+- **数据** -> 提取载荷，通过 channel 转发到代理，发送 ACK
+- **FIN** -> 发送 ACK，转换为 CloseWait -> 代理关闭触发我们的 FIN
+- **RST** -> 立即拆除
 
-### Platform Support
+### 平台支持
 
-| Platform | Backend | Dependency | Provided by |
+| 平台 | 后端 | 依赖 | 提供方 |
 |----------|---------|------------|-------------|
-| Linux | `/dev/net/tun` ioctl | Kernel built-in | OS |
-| macOS | utun socket | Kernel built-in | OS |
-| Windows | Wintun driver | `wintun.dll` | GUI / installer |
+| Linux | `/dev/net/tun` ioctl | 内核内置 | OS |
+| macOS | utun socket | 内核内置 | OS |
+| Windows | Wintun 驱动 | `wintun.dll` | GUI / 安装器 |
 
-On Windows, `wintun.dll` is a platform resource like `/dev/net/tun` on Linux; it must be present on the target system, but the kernel only *declares* the dependency (via the `wintun` crate), it does not manage DLL lifecycle.
+在 Windows 上，`wintun.dll` 是平台资源，就像 Linux 上的 `/dev/net/tun`；它必须存在于目标系统上，但内核仅声明依赖（通过 `wintun` crate），不管理 DLL 生命周期。
 
-### CLI Commands
+### CLI 命令
 
 ```bash
-zero tun start --addr 10.0.0.1 --tag proxy    # start TUN
-zero tun stop                                  # stop TUN
-zero tun status                                # check status
+zero tun start --addr 10.0.0.1 --tag proxy    # 启动 TUN
+zero tun stop                                  # 停止 TUN
+zero tun status                                # 查看状态
 ```
 
-Commands are routed through IPC (`ProxyHandle` intercepts TUN commands before they reach the engine).
+命令通过 IPC 路由（`ProxyHandle` 在 TUN 命令到达 engine 之前拦截它们）。

@@ -1,10 +1,10 @@
-# Configuration Model Reference
+# 配置模型参考
 
-All control plane configuration lives under the `api` key. This page documents the current API configuration fields.
+所有控制面配置位于 `api` 键下。本文档记录当前 API 配置字段。
 
-For the full configuration model (inbounds, outbounds, route, runtime), see [config.md](../project/config.md).
+完整的配置模型（inbounds、outbounds、route、runtime）请参阅 [config.md](../project/config.md)。
 
-## Complete Example
+## 完整示例
 
 ```json
 {
@@ -45,50 +45,50 @@ For the full configuration model (inbounds, outbounds, route, runtime), see [con
 
 ## `api.control`
 
-Local HTTP control interface.
+本地 HTTP 控制接口。
 
-| Field | Type | Default | Description |
+| 字段 | 类型 | 默认值 | 说明 |
 |------|------|------|------|
-| `enabled` | bool | `false` | Whether to start the HTTP control server |
-| `listen` | object | -- | Listen address; required when `enabled=true` |
-| `listen.address` | string | -- | Bind IP, `127.0.0.1` for local only, `0.0.0.0` for public |
-| `listen.port` | u16 | -- | Listen port |
-| `api_key` | string | -- | Bearer token; no auth if unset (local only recommended) |
-| `api_key_env` | string | -- | Read api_key from env var; lower priority than `api_key` |
+| `enabled` | bool | `false` | 是否启动 HTTP 控制服务器 |
+| `listen` | object | -- | 监听地址；`enabled=true` 时必填 |
+| `listen.address` | string | -- | 绑定 IP，`127.0.0.1` 仅本地，`0.0.0.0` 公网 |
+| `listen.port` | u16 | -- | 监听端口 |
+| `api_key` | string | -- | Bearer token；未设置则不认证（建议仅本地使用） |
+| `api_key_env` | string | -- | 从环境变量读取 api_key；优先级低于 `api_key` |
 
-**CLI override**: `--status-listen 127.0.0.1:9090` takes priority over the config file. They cannot be used together.
+**CLI 覆盖**：`--status-listen 127.0.0.1:9090` 优先级高于配置文件。两者不能同时使用。
 
-### Rate Limiting
+### 限流
 
-Built-in rate limiting, no configuration required:
+内置限流，无需配置：
 
-| Category | Limit | Response |
+| 类别 | 限制 | 响应 |
 |------|------|------|
-| Query (GET) | 100 req/s | 429 Too Many Requests |
-| Command (POST) | 10 req/s | 429 Too Many Requests |
-| SSE concurrent | 5 connections | 429 Too Many Requests |
+| 查询 (GET) | 100 req/s | 429 Too Many Requests |
+| 命令 (POST) | 10 req/s | 429 Too Many Requests |
+| SSE 并发 | 5 连接 | 429 Too Many Requests |
 
 ## `api.hooks`
 
-Flow lifecycle hooks, executed in array order.
+Flow 生命周期钩子，按数组顺序执行。
 
 ```json
 { "type": "ipc", "socket": "/run/billing/hook.sock", "timeout_ms": 100 }
 ```
 
-| Field | Type | Default | Description |
+| 字段 | 类型 | 默认值 | 说明 |
 |------|------|------|------|
-| `type` | string | -- | Hook type, currently only `"ipc"` |
-| `socket` | string | -- | IPC socket path |
-| `timeout_ms` | u64 | `100` | Request timeout in milliseconds; fail-open on timeout |
+| `type` | string | -- | 钩子类型，目前仅支持 `"ipc"` |
+| `socket` | string | -- | IPC socket 路径 |
+| `timeout_ms` | u64 | `100` | 请求超时（毫秒）；超时则 fail-open 放行 |
 
-**CLI override**: `--ipc-hook-socket /run/billing/hook.sock` takes priority over the config file.
+**CLI 覆盖**：`--ipc-hook-socket /run/billing/hook.sock` 优先级高于配置文件。
 
-Hook protocol details: see [hooks.md](./hooks.md).
+钩子协议详情：参见 [hooks.md](./hooks.md)。
 
 ## `push`
 
-Node proactively reports to an external management endpoint. The receiver can be a panel, monitoring system, or any HTTP service.
+节点主动向外部管理端点上报。接收端可以是面板、监控系统或任意 HTTP 服务。
 
 ```json
 {
@@ -103,23 +103,23 @@ Node proactively reports to an external management endpoint. The receiver can be
 }
 ```
 
-| Field | Type | Default | Description |
+| 字段 | 类型 | 默认值 | 说明 |
 |------|------|------|------|
-| `url` | string | -- | Receiver URL; push is enabled when set |
-| `node_id` | string | -- | This node's identifier |
-| `api_key` | string | -- | Authentication key |
-| `api_key_env` | string | -- | Read api_key from env var |
-| `heartbeat_interval_seconds` | u64 | `30` | Heartbeat interval |
-| `pull_commands` | bool | `false` | Whether to poll for remote commands |
-| `command_poll_interval_seconds` | u64 | `10` | Command poll interval |
+| `url` | string | -- | 接收端 URL；设置后启用 push |
+| `node_id` | string | -- | 本节点标识 |
+| `api_key` | string | -- | 认证密钥 |
+| `api_key_env` | string | -- | 从环境变量读取 api_key |
+| `heartbeat_interval_seconds` | u64 | `30` | 心跳间隔 |
+| `pull_commands` | bool | `false` | 是否轮询远程命令 |
+| `command_poll_interval_seconds` | u64 | `10` | 命令轮询间隔 |
 
-Protocol details: see [push-connector.md](./push-connector.md).
+协议详情：参见 [push-connector.md](./push-connector.md)。
 
 ## `api.event_sinks`
 
-Event delivery target array.
+事件投递目标数组。
 
-### JSON Lines File
+### JSON Lines 文件
 
 ```json
 {
@@ -131,13 +131,13 @@ Event delivery target array.
 }
 ```
 
-| Field | Type | Default | Description |
+| 字段 | 类型 | 默认值 | 说明 |
 |------|------|------|------|
 | `type` | string | -- | `"jsonl"` |
-| `tag` | string | -- | Unique identifier |
-| `path` | string | -- | File path; relative paths resolve against the config directory |
-| `events` | string[] | `[]` | Event type whitelist; empty = accept all |
-| `source_id` | string | -- | Override event source_id |
+| `tag` | string | -- | 唯一标识 |
+| `path` | string | -- | 文件路径；相对路径相对于配置目录解析 |
+| `events` | string[] | `[]` | 事件类型白名单；空 = 接收所有 |
+| `source_id` | string | -- | 覆盖事件 source_id |
 
 ### Webhook
 
@@ -152,43 +152,43 @@ Event delivery target array.
 }
 ```
 
-| Field | Type | Default | Description |
+| 字段 | 类型 | 默认值 | 说明 |
 |------|------|------|------|
 | `type` | string | -- | `"webhook"` |
-| `tag` | string | -- | Unique identifier |
-| `url` | string | -- | Receiver endpoint |
-| `events` | string[] | `[]` | Event type whitelist |
-| `api_key` | string | -- | Request header `Authorization: Bearer {key}` |
-| `api_key_env` | string | -- | Read from env var |
-| `allow_insecure` | bool | `false` | Skip TLS certificate verification (testing only) |
+| `tag` | string | -- | 唯一标识 |
+| `url` | string | -- | 接收端点 |
+| `events` | string[] | `[]` | 事件类型白名单 |
+| `api_key` | string | -- | 请求头 `Authorization: Bearer {key}` |
+| `api_key_env` | string | -- | 从环境变量读取 |
+| `allow_insecure` | bool | `false` | 跳过 TLS 证书验证（仅测试用） |
 
-Failed deliveries automatically retry (exponential backoff 2s->4s->8s->...->64s, max 6 attempts).
+投递失败自动重试（指数退避 2s->4s->8s->...->64s，最多 6 次）。
 
 ## `api.dead_letter_path`
 
-Dead letter queue file path. Events exceeding max retry count are not discarded but written to this file for persistence.
+死信队列文件路径。超过最大重试次数的事件不会被丢弃，而是写入此文件持久化。
 
-| Field | Type | Description |
+| 字段 | 类型 | 说明 |
 |------|------|------|
-| `dead_letter_path` | string | Dead letter JSON Lines file path; events are eventually discarded if unset |
+| `dead_letter_path` | string | 死信 JSON Lines 文件路径；未设置则事件最终丢弃 |
 
-Dead letter file format: one JSON object per line, containing `dead_lettered_at_unix_ms` and `original_event`.
+死信文件格式：每行一个 JSON 对象，包含 `dead_lettered_at_unix_ms` 和 `original_event`。
 
-### Delivery Status Query
+### 投递状态查询
 
 ```bash
-zero status  # includes sink delivery statistics
+zero status  # 包含 sink 投递统计
 ```
 
-## Related Runtime Fields
+## 相关运行时字段
 
-The following configuration fields live outside the `api` section but are visible via `GET /api/v1/config` and relevant to control plane consumers.
+以下配置字段位于 `api` 部分之外，但可通过 `GET /api/v1/config` 获取，与控制面消费者相关。
 
-| Field | Location | Description |
+| 字段 | 位置 | 说明 |
 |------|------|------|
-| `idle_timeout_secs` | `inbounds[*]` | TCP relay idle timeout in seconds (default 300) |
-| `url_rewrite` | `route.url_rewrite[]` | Domain rewrite rules (`from` / `from_regex` -> `to`) before routing |
-| `domain_regex` | `route.rules[*].condition` | Condition type matching domains against regex patterns |
-| `up_bps` / `down_bps` | `inbounds[*].protocol` (Hysteria2, Shadowsocks, Trojan) | Per-inbound GCRA rate limits |
+| `idle_timeout_secs` | `inbounds[*]` | TCP 中继空闲超时（秒，默认 300） |
+| `url_rewrite` | `route.url_rewrite[]` | 路由前的域名重写规则（`from` / `from_regex` -> `to`） |
+| `domain_regex` | `route.rules[*].condition` | 按正则表达式匹配域名的条件类型 |
+| `up_bps` / `down_bps` | `inbounds[*].protocol`（Hysteria2、Shadowsocks、Trojan） | 每入站的 GCRA 速率限制 |
 
-For full details, see [config.md](../project/config.md).
+完整详情参见 [config.md](../project/config.md)。

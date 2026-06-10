@@ -2,25 +2,16 @@
 
 mod support;
 
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Once;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::Path;
 
-use ring::digest::{digest, SHA256};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{timeout, Duration};
 use zero_config::RuntimeConfig;
-use zero_core::Address;
 use zero_proxy::Proxy as Engine;
 
+use support::interop::*;
 use support::{free_port, free_udp_port, spawn_engine, wait_for_listener};
 
 const USER_ID: &str = "11111111-2222-3333-4444-555555555555";
-static NEXT_TEMP_DIR: AtomicU64 = AtomicU64::new(0);
-static LOG_INIT: Once = Once::new();
 const XRAY_WS_PATH: &str = "/zero-vmess-ws";
 const XRAY_GRPC_SERVICE_NAME: &str = "zero.vmess.grpc";
 const ZERO_GRPC_SERVICE_PATH: &str = "/zero.vmess.grpc/Tun";
@@ -59,7 +50,7 @@ async fn zero_vmess_outbound_none_interops_with_xray_vmess_inbound_tcp() {
 #[tokio::test]
 #[ignore = "requires XRAY_BIN pointing to an Xray executable"]
 async fn zero_vmess_outbound_interops_with_xray_vmess_inbound_udp() {
-    init_logs();
+    init_logs("vmess=debug");
     let material = TempMaterial::new("zero-xray-vmess-udp-out");
     let xray_port = free_port();
     let zero_socks_port = free_port();
@@ -122,7 +113,7 @@ async fn zero_vmess_outbound_interops_with_xray_vmess_inbound_udp() {
 #[tokio::test]
 #[ignore = "requires XRAY_BIN pointing to an Xray executable"]
 async fn zero_vmess_outbound_zero_is_rejected_by_xray_vmess_inbound_tcp() {
-    init_logs();
+    init_logs("vmess=debug");
     let material = TempMaterial::new("zero-xray-vmess-zero-out");
     let xray_port = free_port();
     let zero_socks_port = free_port();
@@ -194,7 +185,7 @@ async fn zero_vmess_outbound_interops_with_xray_vmess_inbound_tcp_inner(
     cipher: &str,
     transport: XrayTransport,
 ) {
-    init_logs();
+    init_logs("vmess=debug");
     let material = TempMaterial::new("zero-xray-vmess-out");
     let xray_port = free_port();
     let zero_socks_port = free_port();
@@ -305,7 +296,7 @@ async fn xray_vmess_outbound_interops_with_zero_vmess_inbound_tcp_inner(
     security: &str,
     transport: XrayTransport,
 ) {
-    init_logs();
+    init_logs("vmess=debug");
     let material = TempMaterial::new("xray-zero-vmess-out");
     let xray_socks_port = free_port();
     let zero_vmess_port = free_port();
@@ -379,7 +370,7 @@ async fn xray_vmess_outbound_interops_with_zero_vmess_inbound_tcp_inner(
 #[tokio::test]
 #[ignore = "requires XRAY_BIN pointing to an Xray executable"]
 async fn xray_vmess_outbound_interops_with_zero_vmess_inbound_udp() {
-    init_logs();
+    init_logs("vmess=debug");
     let material = TempMaterial::new("xray-zero-vmess-udp-out");
     let xray_socks_port = free_port();
     let zero_vmess_port = free_port();
@@ -452,7 +443,7 @@ async fn xray_vmess_outbound_interops_with_zero_vmess_inbound_udp() {
 #[tokio::test]
 #[ignore = "requires SING_BOX_BIN or downloaded sing-box under temp interop dir"]
 async fn zero_vmess_outbound_interops_with_sing_box_vmess_inbound_tcp() {
-    init_logs();
+    init_logs("vmess=debug");
     let material = TempMaterial::new("zero-sing-vmess-out");
     let sing_port = free_port();
     let zero_socks_port = free_port();
@@ -463,7 +454,7 @@ async fn zero_vmess_outbound_interops_with_sing_box_vmess_inbound_tcp() {
     std::fs::write(&sing_config, sing_box_vmess_inbound_config(sing_port))
         .expect("write sing-box config");
     let mut sing_box = ExternalProcess::start(
-        sing_box_bin(),
+        sing_box_bin("vmess"),
         &[
             "run",
             "-c",
@@ -529,7 +520,7 @@ async fn zero_vmess_outbound_interops_with_sing_box_vmess_inbound_tcp() {
 #[tokio::test]
 #[ignore = "requires SING_BOX_BIN or downloaded sing-box under temp interop dir"]
 async fn zero_vmess_outbound_interops_with_sing_box_vmess_inbound_udp() {
-    init_logs();
+    init_logs("vmess=debug");
     let material = TempMaterial::new("zero-sing-vmess-udp-out");
     let sing_port = free_port();
     let zero_socks_port = free_port();
@@ -540,7 +531,7 @@ async fn zero_vmess_outbound_interops_with_sing_box_vmess_inbound_udp() {
     std::fs::write(&sing_config, sing_box_vmess_inbound_config(sing_port))
         .expect("write sing-box config");
     let mut sing_box = ExternalProcess::start(
-        sing_box_bin(),
+        sing_box_bin("vmess"),
         &[
             "run",
             "-c",
@@ -602,7 +593,7 @@ async fn zero_vmess_outbound_interops_with_sing_box_vmess_inbound_udp() {
 #[tokio::test]
 #[ignore = "requires MIHOMO_BIN or downloaded mihomo under temp interop dir"]
 async fn mihomo_vmess_outbound_interops_with_zero_vmess_inbound_tcp() {
-    init_logs();
+    init_logs("vmess=debug");
     let material = TempMaterial::new("mihomo-zero-vmess-out");
     let mihomo_mixed_port = free_port();
     let zero_vmess_port = free_port();
@@ -643,7 +634,7 @@ async fn mihomo_vmess_outbound_interops_with_zero_vmess_inbound_tcp() {
     )
     .expect("write mihomo config");
     let mut mihomo = ExternalProcess::start(
-        mihomo_bin(),
+        mihomo_bin("vmess"),
         &[
             "-f",
             mihomo_config.to_str().expect("mihomo config path"),
@@ -678,7 +669,7 @@ async fn mihomo_vmess_outbound_interops_with_zero_vmess_inbound_tcp() {
 #[tokio::test]
 #[ignore = "requires MIHOMO_BIN or downloaded mihomo under temp interop dir"]
 async fn mihomo_vmess_outbound_interops_with_zero_vmess_inbound_udp() {
-    init_logs();
+    init_logs("vmess=debug");
     let material = TempMaterial::new("mihomo-zero-vmess-udp-out");
     let mihomo_mixed_port = free_port();
     let zero_vmess_port = free_port();
@@ -719,7 +710,7 @@ async fn mihomo_vmess_outbound_interops_with_zero_vmess_inbound_udp() {
     )
     .expect("write mihomo config");
     let mut mihomo = ExternalProcess::start(
-        mihomo_bin(),
+        mihomo_bin("vmess"),
         &[
             "-f",
             mihomo_config.to_str().expect("mihomo config path"),
@@ -899,40 +890,6 @@ rules:
     )
 }
 
-fn init_logs() {
-    LOG_INIT.call_once(|| {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(
-                std::env::var("RUST_LOG")
-                    .unwrap_or_else(|_| "zero_proxy=debug,vmess=debug".to_owned()),
-            )
-            .with_test_writer()
-            .try_init();
-    });
-}
-
-fn sing_box_bin() -> String {
-    std::env::var("SING_BOX_BIN").unwrap_or_else(|_| {
-        std::env::temp_dir()
-            .join("zero-vmess-interop")
-            .join("sing-box")
-            .join("sing-box.exe")
-            .display()
-            .to_string()
-    })
-}
-
-fn mihomo_bin() -> String {
-    std::env::var("MIHOMO_BIN").unwrap_or_else(|_| {
-        std::env::temp_dir()
-            .join("zero-vmess-interop")
-            .join("mihomo")
-            .join("mihomo.exe")
-            .display()
-            .to_string()
-    })
-}
-
 fn xray_vmess_outbound_tls_config(
     socks_port: u16,
     vmess_port: u16,
@@ -994,265 +951,4 @@ fn xray_outbound_stream_settings(transport: XrayTransport, cert_sha256_hex: &str
             }}{extra}
         }}"#
     )
-}
-
-async fn spawn_tcp_echo(port: u16, payload_len: usize) -> tokio::task::JoinHandle<()> {
-    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
-    let task = tokio::spawn(async move {
-        let listener = TcpListener::bind(("127.0.0.1", port))
-            .await
-            .expect("bind echo");
-        let _ = ready_tx.send(());
-        let (mut stream, _) = listener.accept().await.expect("accept echo");
-        let mut buf = vec![0_u8; payload_len];
-        stream.read_exact(&mut buf).await.expect("read echo");
-        stream.write_all(&buf).await.expect("write echo");
-    });
-    ready_rx.await.expect("echo ready");
-    task
-}
-
-async fn spawn_udp_echo(port: u16, _payload_len: usize) -> tokio::task::JoinHandle<()> {
-    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
-    let task = tokio::spawn(async move {
-        let socket = UdpSocket::bind(("127.0.0.1", port))
-            .await
-            .expect("bind udp echo");
-        let _ = ready_tx.send(());
-        let mut buf = vec![0_u8; 2048];
-        let (read, peer) = socket.recv_from(&mut buf).await.expect("recv udp echo");
-        socket
-            .send_to(&buf[..read], peer)
-            .await
-            .expect("send udp echo");
-    });
-    ready_rx.await.expect("udp echo ready");
-    task
-}
-
-async fn socks5_tcp_echo(proxy_port: u16, target_port: u16, payload: &[u8]) -> Vec<u8> {
-    let mut last_error = None;
-    for _ in 0..50 {
-        match socks5_tcp_echo_once(proxy_port, target_port, payload).await {
-            Ok(echoed) => return echoed,
-            Err(error) => {
-                last_error = Some(error);
-                sleep(Duration::from_millis(50)).await;
-            }
-        }
-    }
-    panic!("socks5 tcp echo failed: {:?}", last_error);
-}
-
-async fn socks5_tcp_echo_once(
-    proxy_port: u16,
-    target_port: u16,
-    payload: &[u8],
-) -> std::io::Result<Vec<u8>> {
-    let mut stream = TcpStream::connect(("127.0.0.1", proxy_port)).await?;
-    stream.write_all(&[0x05, 0x01, 0x00]).await?;
-    let mut auth = [0_u8; 2];
-    stream.read_exact(&mut auth).await?;
-    assert_eq!(auth, [0x05, 0x00]);
-
-    let mut request = vec![0x05, 0x01, 0x00, 0x01, 127, 0, 0, 1];
-    request.extend_from_slice(&target_port.to_be_bytes());
-    stream.write_all(&request).await?;
-    let mut response = [0_u8; 10];
-    stream.read_exact(&mut response).await?;
-    assert_eq!(response[1], 0x00, "socks connect failed: {response:?}");
-
-    stream.write_all(payload).await?;
-    let mut echoed = vec![0_u8; payload.len()];
-    stream.read_exact(&mut echoed).await?;
-    Ok(echoed)
-}
-
-async fn socks5_udp_echo(proxy_port: u16, target_port: u16, payload: &[u8]) -> Vec<u8> {
-    let mut control = TcpStream::connect(("127.0.0.1", proxy_port))
-        .await
-        .expect("connect socks5 control");
-    control
-        .write_all(&[0x05, 0x01, 0x00])
-        .await
-        .expect("write socks5 auth");
-    let mut auth = [0_u8; 2];
-    control
-        .read_exact(&mut auth)
-        .await
-        .expect("read socks5 auth");
-    assert_eq!(auth, [0x05, 0x00]);
-
-    control
-        .write_all(&[
-            0x05, 0x03, 0x00, 0x01, // UDP ASSOCIATE + IPv4
-            0, 0, 0, 0, 0, 0,
-        ])
-        .await
-        .expect("write udp associate");
-    let mut response = [0_u8; 10];
-    control
-        .read_exact(&mut response)
-        .await
-        .expect("read udp associate response");
-    assert_eq!(response[1], 0x00, "udp associate failed: {response:?}");
-    let relay_port = u16::from_be_bytes([response[8], response[9]]);
-
-    let client = UdpSocket::bind(("127.0.0.1", 0))
-        .await
-        .expect("bind udp client");
-    let packet = socks5::build_udp_packet(&Address::Ipv4([127, 0, 0, 1]), target_port, payload)
-        .expect("build socks5 udp packet");
-    client
-        .send_to(&packet, ("127.0.0.1", relay_port))
-        .await
-        .expect("send udp packet");
-
-    let mut buf = [0_u8; 2048];
-    let (read, _) = client.recv_from(&mut buf).await.expect("recv udp response");
-    let response = socks5::parse_udp_packet(&buf[..read]).expect("parse socks5 udp response");
-    assert_eq!(response.target, Address::Ipv4([127, 0, 0, 1]));
-    assert_eq!(response.port, target_port);
-    response.payload.to_vec()
-}
-
-struct XrayProcess {
-    inner: ExternalProcess,
-}
-
-impl XrayProcess {
-    fn start(config: &Path, material: &TempMaterial) -> Self {
-        let xray_bin = std::env::var("XRAY_BIN").expect("XRAY_BIN must point to xray executable");
-        Self {
-            inner: ExternalProcess::start(
-                xray_bin,
-                &["run", "-config", config.to_str().expect("xray config path")],
-                material,
-                "xray",
-            ),
-        }
-    }
-
-    fn kill(&mut self) {
-        self.inner.kill();
-    }
-
-    fn logs(&self) -> String {
-        self.inner.logs()
-    }
-}
-
-impl Drop for XrayProcess {
-    fn drop(&mut self) {
-        self.kill();
-    }
-}
-
-struct ExternalProcess {
-    child: Child,
-    stdout_path: PathBuf,
-    stderr_path: PathBuf,
-}
-
-impl ExternalProcess {
-    fn start(program: String, args: &[&str], material: &TempMaterial, name: &str) -> Self {
-        let stdout_path = material.path(&format!("{name}.stdout"));
-        let stderr_path = material.path(&format!("{name}.stderr"));
-        let stdout = std::fs::File::create(&stdout_path).expect("process stdout");
-        let stderr = std::fs::File::create(&stderr_path).expect("process stderr");
-        let child = Command::new(program)
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(stdout)
-            .stderr(stderr)
-            .spawn()
-            .unwrap_or_else(|error| panic!("start {name}: {error}"));
-        Self {
-            child,
-            stdout_path,
-            stderr_path,
-        }
-    }
-
-    fn kill(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-
-    fn logs(&self) -> String {
-        let stdout = std::fs::read_to_string(&self.stdout_path).unwrap_or_default();
-        let stderr = std::fs::read_to_string(&self.stderr_path).unwrap_or_default();
-        format!("stdout:\n{stdout}\nstderr:\n{stderr}")
-    }
-}
-
-impl Drop for ExternalProcess {
-    fn drop(&mut self) {
-        self.kill();
-    }
-}
-
-struct TempMaterial {
-    dir: PathBuf,
-}
-
-impl TempMaterial {
-    fn new(prefix: &str) -> Self {
-        let unique = NEXT_TEMP_DIR.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "{prefix}-{}-{}-{unique}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("system time")
-                .as_nanos(),
-        ));
-        std::fs::create_dir_all(&dir).expect("create temp dir");
-        Self { dir }
-    }
-
-    fn path(&self, name: &str) -> PathBuf {
-        self.dir.join(name)
-    }
-
-    fn tls(&self) -> TestTlsMaterial {
-        let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()])
-            .expect("generate self-signed cert");
-        let cert_path = self.path("server.crt");
-        let key_path = self.path("server.key");
-        let cert_sha256_hex = hex_lower(digest(&SHA256, certified.cert.der().as_ref()).as_ref());
-        std::fs::write(&cert_path, certified.cert.pem()).expect("write cert");
-        std::fs::write(&key_path, certified.signing_key.serialize_pem()).expect("write key");
-        TestTlsMaterial {
-            cert_path,
-            key_path,
-            cert_sha256_hex,
-        }
-    }
-}
-
-impl Drop for TempMaterial {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
-
-struct TestTlsMaterial {
-    cert_path: PathBuf,
-    key_path: PathBuf,
-    cert_sha256_hex: String,
-}
-
-fn escape_json_path(path: &Path) -> String {
-    path.display().to_string().replace('\\', "\\\\")
-}
-
-fn hex_lower(bytes: &[u8]) -> String {
-    const TABLE: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        out.push(TABLE[(byte >> 4) as usize] as char);
-        out.push(TABLE[(byte & 0x0f) as usize] as char);
-    }
-    out
 }

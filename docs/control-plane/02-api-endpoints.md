@@ -1,13 +1,12 @@
-# HTTP API Endpoints
+# HTTP API 端点
 
-This document is an index of the current local HTTP control plane. The detailed
-wire contract lives in [http-api.md](../control-plane-api/http-api.md).
+本文档是当前本地 HTTP 控制面的索引。详细的线路契约见 [http-api.md](../control-plane-api/http-api.md)。
 
-## Base Path
+## 基础路径
 
-All HTTP control endpoints are under `/api/v1/`.
+所有 HTTP 控制端点均在 `/api/v1/` 下。
 
-HTTP and IPC responses share the `zero_api::ApiResponse` envelope:
+HTTP 和 IPC 响应共享 `zero_api::ApiResponse` 信封：
 
 ```json
 {
@@ -17,41 +16,40 @@ HTTP and IPC responses share the `zero_api::ApiResponse` envelope:
 }
 ```
 
-Errors use `snake_case` machine codes:
+错误使用 `snake_case` 机器码：
 
-| Code | HTTP | Meaning |
+| 错误码 | HTTP | 含义 |
 |------|------|------|
-| `not_found` | 404 | Resource does not exist |
-| `invalid_argument` | 400 | Request argument is invalid |
-| `permission_denied` | 403 | Caller lacks permission |
-| `feature_disabled` | 501 | Capability is not enabled |
-| `conflict` | 409 | State conflict |
-| `unsupported` | 501 | Operation is not exposed |
-| `internal` | 500 | Internal error |
+| `not_found` | 404 | 资源不存在 |
+| `invalid_argument` | 400 | 请求参数无效 |
+| `permission_denied` | 403 | 调用者权限不足 |
+| `feature_disabled` | 501 | 功能未启用 |
+| `conflict` | 409 | 状态冲突 |
+| `unsupported` | 501 | 操作未暴露 |
+| `internal` | 500 | 内部错误 |
 
-## Query Endpoints
+## 查询端点
 
-| Endpoint | Meaning |
+| 端点 | 含义 |
 |------|------|
-| `GET /api/v1/capabilities` | Build/runtime capabilities, adapters, sinks, permissions |
-| `GET /api/v1/health` | Process health |
-| `GET /api/v1/config` | Current configuration snapshot |
-| `GET /api/v1/runtime` | Runtime snapshot with stats, flows, log state |
-| `GET /api/v1/stats` | Immediate statistics snapshot |
-| `GET /api/v1/flows` | Active flow list |
-| `GET /api/v1/flows/{flow_id}` | Single active flow |
-| `GET /api/v1/policies` | Policy/group state |
-| `GET /api/v1/policies/{policy_tag}` | Single policy/group state |
-| `GET /api/v1/sinks` | Event sink delivery status |
-| `GET /api/v1/tun_status` | TUN runtime state |
-| `GET /api/v1/events` | Event log snapshot |
+| `GET /api/v1/capabilities` | 构建/运行时能力、适配器、接收器、权限 |
+| `GET /api/v1/health` | 进程健康状态 |
+| `GET /api/v1/config` | 当前配置快照 |
+| `GET /api/v1/runtime` | 运行时快照，含统计、流、日志状态 |
+| `GET /api/v1/stats` | 即时统计快照 |
+| `GET /api/v1/flows` | 活动流列表 |
+| `GET /api/v1/flows/{flow_id}` | 单个活动流 |
+| `GET /api/v1/policies` | 策略/组状态 |
+| `GET /api/v1/policies/{policy_tag}` | 单个策略/组状态 |
+| `GET /api/v1/sinks` | 事件接收器投递状态 |
+| `GET /api/v1/tun_status` | TUN 运行时状态 |
+| `GET /api/v1/events` | 事件日志快照 |
 
-`GET /api/v1/stats` and the stats section inside `GET /api/v1/runtime` are
-computed from the current in-memory counters when the request is handled.
+`GET /api/v1/stats` 以及 `GET /api/v1/runtime` 中的统计部分是处理请求时根据当前内存计数器计算的。
 
-## Command Endpoint
+## 命令端点
 
-All write/control operations use `POST /api/v1/commands`.
+所有写入/控制操作使用 `POST /api/v1/commands`。
 
 ```json
 {
@@ -63,52 +61,49 @@ All write/control operations use `POST /api/v1/commands`.
 }
 ```
 
-Current command methods:
+当前命令方法：
 
-| Method | Meaning |
+| 方法 | 含义 |
 |------|------|
-| `policies.select` | Select a member for a selector policy |
-| `policies.probe` | Trigger a url_test probe |
-| `flows.close` | Close an active flow |
-| `config.validate` | Validate a config object |
-| `config.apply` | Apply a config object to runtime state |
-| `mode.set` | Set global routing mode |
-| `tun.start` | Start TUN |
-| `tun.stop` | Stop TUN |
-| `diagnostics.probe_target` | Probe a target TCP endpoint |
-| `diagnostics.dns_lookup` | Resolve a hostname |
-| `diagnostics.trace_route` | Trace routing decision for a target |
+| `policies.select` | 为 selector 策略选择成员 |
+| `policies.probe` | 触发 url_test 探测 |
+| `flows.close` | 关闭活动流 |
+| `config.validate` | 验证配置对象 |
+| `config.apply` | 将配置对象应用到运行时状态 |
+| `mode.set` | 设置全局路由模式 |
+| `tun.start` | 启动 TUN |
+| `tun.stop` | 停止 TUN |
+| `diagnostics.probe_target` | 探测目标 TCP 端点 |
+| `diagnostics.dns_lookup` | 解析主机名 |
+| `diagnostics.trace_route` | 追踪目标的路由决策 |
 
-## Event Stream
+## 事件流
 
-`GET /api/v1/events/stream` returns Server-Sent Events.
+`GET /api/v1/events/stream` 返回 Server-Sent Events。
 
-Query parameters:
+查询参数：
 
-| Parameter | Meaning |
+| 参数 | 含义 |
 |------|------|
-| `types` | Comma-separated event type whitelist |
-| `since` | Replay events after the given sequence |
+| `types` | 逗号分隔的事件类型白名单 |
+| `since` | 从指定序号之后回放事件 |
 
-The server also accepts `Last-Event-ID` for replay.
+服务端也接受 `Last-Event-ID` 进行断点续传。
 
-`stats.sampled` is emitted once per second while the runtime is active. It is a
-coarse system event for GUI refresh and sink delivery, not a replacement for
-on-demand query snapshots.
+`stats.sampled` 在运行时活动期间每秒发射一次。它是供 GUI 刷新和 sink 投递使用的粗粒度系统事件，不能替代按需查询快照。
 
-## Authentication
+## 认证
 
-When an API key is configured, callers use:
+配置了 API 密钥时，调用者使用：
 
 ```http
 Authorization: Bearer <token>
 ```
 
-or:
+或：
 
 ```http
 X-Zero-Api-Key: <token>
 ```
 
-Without configured HTTP auth, requests are treated as local administrative
-control. Public listeners should configure an API key and firewall boundary.
+未配置 HTTP 认证时，请求被视为本地管理控制。公网监听应配置 API 密钥和防火墙边界。

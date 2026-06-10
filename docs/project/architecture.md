@@ -1,84 +1,76 @@
-# Architecture
+# 架构
 
-The repository can be understood as the following layers.
+仓库可以从以下分层来理解。
 
-## Application Layer
+## 应用层
 
-- Root crate `zero`
+- 根 crate `zero`
 - `zero-api`
 
-Responsible for CLI arguments, config file paths, process startup, and status output.
+负责 CLI 参数、配置文件路径、进程启动和状态输出。
 
-The control plane and observability model follow Zero's own conventions. External ecosystems like Clash, sing-box, and Xray are treated as design references only; compatibility shims belong in adapters, gateways, or external tooling and should not constrain the kernel or long-term API.
+管控面和可观测性模型遵循 Zero 自身约定。Clash、sing-box 和 Xray 等外部生态系统仅作为设计参考对待；兼容性适配层应存在于适配器、网关或外部工具中，不应约束内核或长期 API。
 
-`zero-api` defines external control, observation, and event export capabilities. It is not synonymous with the HTTP service, nor are capabilities split along transport lines. HTTP/HTTPS, local IPC, file, gRPC, binary framing, Rust API, and FFI all attach to the same core capability set as trait implementations or feature-gated adapters/sinks.
+`zero-api` 定义外部控制、观测和事件导出能力。它不等同于 HTTP 服务，能力也不按传输线划分。HTTP/HTTPS、本地 IPC、文件、gRPC、二进制帧封装、Rust API 和 FFI 都作为特征实现或 feature-gated 适配器/sink 依附于同一核心能力集。
 
-## Configuration, Decision, and State Layer
+## 配置、决策和状态层
 
 - `zero-config`
 - `zero-engine`
 - `zero-router`
 
-`zero-config` owns configuration models and parsing. `zero-router` owns rule matching. `zero-engine` owns compilation of config into executable plans, routing decisions, target resolution, mode and group state, sessions, statistics, events, and state export.
+`zero-config` 拥有配置模型和解析。`zero-router` 拥有规则匹配。`zero-engine` 拥有将配置编译为可执行计划、路由决策、目标解析、模式和组状态、会话、统计、事件和状态导出。
 
-Mode semantics (`direct / global / rule`) and outbound group semantics (`selector / url_test / fallback`) also belong to this layer, not the client.
+模式语义（`direct / global / rule`）和出站组语义（`selector / url_test / fallback`）也属于此层，不属于客户端。
 
-`zero-engine` is not bound to Tokio, does not start listeners, does not hold protocol implementations, and does not directly establish socket connections. `direct` / `block` are built-in target semantics within this layer; actual network execution is performed by the proxy runtime layer.
+`zero-engine` 不绑定 Tokio，不启动监听器，不持有协议实现，也不直接建立 socket 连接。`direct` / `block` 是此层内内置的目标语义；实际的网络执行由代理运行时层执行。
 
-`zero-engine` currently operates across decision boundaries:
+`zero-engine` 当前跨越多个决策边界运行：
 
 - `RuntimeConfig`
-  - Input from `zero-config`
+  - 来自 `zero-config` 的输入
 - `EnginePlan`
-  - Immutable execution structures
+  - 不可变执行结构
 - `EngineState`
-  - Mutable runtime state, including `OutboundHealth` (circuit breaker)
+  - 可变运行时状态，包括 `OutboundHealth`（熔断器）
 - `view`
-  - Tag rendering for `status` / export / logging
+  - 用于 `status` / 导出 / 日志的标签渲染
 
-The hot path prefers reading plan/state and passing references along borrow boundaries; only the control plane and display surface go back to string tags.
+热路径优先读取 plan/state 并通过借用边界传递引用；仅管控面和展示面回到字符串标签。
 
-## Proxy Runtime Layer
+## 代理运行时层
 
 - `zero-proxy`
 
-`zero-proxy` translates `zero-engine` decisions into real proxy execution:
+`zero-proxy` 将 `zero-engine` 决策转化为实际代理执行：
 
-- Starts inbound listeners
-- Invokes protocol implementations for handshake and framing
-- Establishes direct or upstream outbound connections
-- Runs TCP relay, UDP association, TLS, url_test probing, and circuit breaker health checks
-- Validates that the current build has compiled the protocol features referenced by config
+- 启动入站监听器
+- 调用协议实现进行握手和帧封装
+- 建立直连或上游出站连接
+- 运行 TCP 中继、UDP 关联、TLS、url_test 探测和熔断器健康检查
+- 验证当前构建已编译配置引用的协议 features
 
-This layer may depend on the Tokio backend, protocol crates, and `zero-engine`. It does not re-interpret config semantics or maintain a separate set of mode, group, or route state.
+此层可以依赖 Tokio 后端、协议 crates 和 `zero-engine`。它不重新解释配置语义，也不维护独立的模式、组或路由状态集。
 
-### Kernel pipe and inbound protocol pipeline
+### 内核管道和入站协议管道
 
-The proxy runtime is organized around one common kernel pipe boundary:
+代理运行时围绕一个通用内核管道边界组织：
 
 ```text
-KernelPipe -> TcpPipe / UdpPipe -> protocol traits -> protocol crates
+KernelPipe -> TcpPipe / UdpPipe -> 协议特征 -> 协议 crates
 ```
 
-`KernelPipe` is a runtime orchestration boundary, not a protocol trait. It
-depends on runtime state such as routing, sessions, stats, events, transport
-setup, and task lifecycle, so it belongs to `zero-proxy`.
+`KernelPipe` 是运行时编排边界，不是协议特征。它依赖于运行时状态，如路由、会话、统计、事件、传输设置和任务生命周期，因此它属于 `zero-proxy`。
 
-`TcpPipe` owns TCP route execution and outbound establishment for ordinary TCP
-flows. `UdpPipe` owns UDP packet submission into the UDP runtime state machine.
-`UdpDispatch` remains the UDP pipe's internal state holder for direct sockets,
-upstream associations, cached managers, response tasks, session accounting, and
-fallback handling.
+`TcpPipe` 拥有常规 TCP 流的 TCP 路由执行和出站建立。`UdpPipe` 拥有将 UDP 数据包提交到 UDP 运行时状态机的功能。`UdpDispatch` 仍然是 UDP 管道的内部状态持有者，用于 direct socket、上游关联、缓存管理器、响应任务、会话核算和 fallback 处理。
 
-Protocol crates do not implement `KernelPipe`. They implement neutral protocol
-behavior traits for handshakes, session state, stream packet framing, or
-datagram framing.
+协议 crates 不实现 `KernelPipe`。它们实现协议无关的行为特征，用于握手、会话状态、流数据包帧封装或 datagram 帧封装。
 
-### InboundProtocol trait and `serve_inbound()` TCP lifecycle
+### InboundProtocol 特征和 `serve_inbound()` TCP 生命周期
 
-All TCP protocol inbound handlers are unified through a single trait and a single kernel entry point.
+所有 TCP 协议入站处理程序通过单一特征和单一内核入口点统一。
 
-**`InboundProtocol` trait** -- the protocol-server boundary:
+**`InboundProtocol` 特征** -- 协议-服务器边界：
 
 ```rust
 #[async_trait]
@@ -98,215 +90,163 @@ pub trait InboundProtocol: Send + Sync {
 }
 ```
 
-**Protocol implementors** (SOCKS5, HTTP CONNECT, VLESS, Hysteria2, Shadowsocks, Trojan, VMess, Mieru) only implement this trait. Each handler provides:
+**协议实现者**（SOCKS5、HTTP CONNECT、VLESS、Hysteria2、Shadowsocks、Trojan、VMess、Mieru）仅实现此特征。每个处理程序提供：
 
-- `accept` -- authenticate and extract the target address into a `Session`
-- `send_ok` -- notify the client that the tunnel is established (protocol-specific response)
-- `send_blocked` -- notify the client the request was blocked (protocol-specific error)
-- `send_upstream_failure` -- notify the client the upstream is unreachable
-- `relay` -- bidirectional relay; default is raw TCP `io::copy` with optional rate limiting; override for AEAD-framed (Shadowsocks) or QUIC-stream (Hysteria2) relays
+- `accept` -- 认证并提取目标地址到 `Session`
+- `send_ok` -- 通知客户端隧道已建立（协议特定响应）
+- `send_blocked` -- 通知客户端请求被阻止（协议特定错误）
+- `send_upstream_failure` -- 通知客户端上游不可达
+- `relay` -- 双向中继；默认为原始 TCP `io::copy`，支持可选速率限制；可覆盖用于 AEAD 帧封装（Shadowsocks）或 QUIC 流（Hysteria2）中继
 
-**`serve_inbound()`** is the single TCP inbound lifecycle entry point for normal
-TCP protocols. Protocol handlers never touch the engine, config, or resolver
-directly. The function owns protocol-agnostic TCP lifecycle work and calls
-`TcpPipe` for route execution and outbound establishment:
+**`serve_inbound()`** 是常规 TCP 协议的单一 TCP 入站生命周期入口点。协议处理程序从不直接接触 engine、config 或 resolver。该函数拥有协议无关的 TCP 生命周期工作，并调用 `TcpPipe` 进行路由执行和出站建立：
 
-1. **URL rewrite** -- applies `route.url_rewrite` rules to rewrite the session target domain before routing
-2. **Kernel rate limits** -- applies per-inbound defaults from config (`up_bps` / `down_bps`); per-user limits set during `accept` take priority
-3. **Session preparation** -- `prepare_session` (engine-side metadata)
-4. **Route and establish** -- `TcpPipe` (condition matching + outbound connection)
-5. **Protocol reply** -- `send_ok` / `send_blocked` / `send_upstream_failure` as appropriate
-6. **Idle timeout** -- wraps relay in `tokio::time::timeout` using `InboundConfig.idle_timeout_secs` (default 300s)
-7. **Session lifecycle** -- track / finish with `SessionOutcome`, structured logging
+1. **URL 重写** -- 在路由之前应用 `route.url_rewrite` 规则重写会话目标域名
+2. **内核速率限制** -- 应用来自配置的按入站默认值（`up_bps` / `down_bps`）；`accept` 期间设置的按用户限制优先
+3. **会话准备** -- `prepare_session`（引擎端元数据）
+4. **路由并建立** -- `TcpPipe`（条件匹配 + 出站连接）
+5. **协议回复** -- 视情况发送 `send_ok` / `send_blocked` / `send_upstream_failure`
+6. **空闲超时** -- 使用 `InboundConfig.idle_timeout_secs`（默认 300s）通过 `tokio::time::timeout` 包裹中继
+7. **会话生命周期** -- 用 `SessionOutcome` 跟踪 / 完成，结构化日志
 
-Adding a new cross-cutting TCP lifecycle capability usually requires changing
-`serve_inbound()` or `TcpPipe`; protocol handlers remain unaffected.
+添加新的跨切面 TCP 生命周期能力通常需要更改 `serve_inbound()` 或 `TcpPipe`；协议处理程序保持不变。
 
-### Kernel primitive: circuit breaker
+### 内核原语：熔断器
 
-`zero-engine` maintains `OutboundHealth` per outbound tag. Before connecting to
-any outbound, the TCP pipe's candidate establishment path checks health via
-`check_outbound_health()`. If 5 failures accumulate within a 30-second sliding
-window, the outbound is quarantined for 60 seconds. After quarantine, one probe
-connection is allowed; success clears the unhealthy state, failure resets the
-cooldown.
+`zero-engine` 为每个出站标签维护 `OutboundHealth`。在连接到任何出站之前，TCP 管道的候选建立路径通过 `check_outbound_health()` 检查健康状态。如果在 30 秒滑动窗口内累积 5 次失败，该出站被隔离 60 秒。隔离期满后，允许一个探测连接；成功则清除不健康状态，失败则重置冷却期。
 
-## Protocol Layer
+## 协议层
 
 - `zero-core`
 - `protocols/*`
 
-`zero-core` holds common types and interfaces. Specific protocols live under `protocols/*`.
+`zero-core` 持有通用类型和接口。特定协议位于 `protocols/*` 下。
 
-Protocols are feature-gated into `zero-proxy`. The core decision layer always compiles; protocols and control plane capabilities are selectively compiled, avoiding pulling modules not needed for embedded scenarios.
+协议通过 feature gate 编译到 `zero-proxy` 中。核心决策层始终编译；协议和管控面能力选择性编译，避免拉入嵌入式场景不需要的模块。
 
-Protocol capability facts exposed to GUI and control-plane consumers are filled
-from the proxy runtime protocol inventory for the current binary. `zero-api`
-defines the wire model; `zero-engine` does not maintain a protocol matrix.
-The neutral descriptor and behavior traits live in `zero-traits::protocol`, so
-protocol crates can expose metadata and TCP/UDP behavior without depending on
-the API or proxy runtime crates. Each protocol crate owns its
-`ProtocolMetadata` descriptor and implements protocol behavior traits where the
-handshake semantics fit those traits. `TcpTunnelProtocol` covers stream-level
-tunnel handshakes such as SOCKS5, Trojan, and VLESS. `TcpSessionProtocol`
-covers handshakes that return protocol state, such as Shadowsocks, VMess, and
-Mieru.
-`DeferredTcpTunnelProtocol` covers handshakes that write the request now and
-defer response validation to a stream wrapper, such as VLESS Reality
-single-hop.
-`UdpRelayProtocol` covers UDP relay-association handshakes such as SOCKS5 UDP
-ASSOCIATE.
-`UdpPacketTunnelProtocol`, `UdpPacketFraming`, and
-`UdpPacketStreamFraming` cover UDP-over-stream protocols. `UdpDatagramFraming`
-covers protocols that carry one complete protocol packet in one UDP datagram,
-such as Shadowsocks UDP. VLESS uses packet framing for tunnel bytes; Trojan
-uses stream framing for length-prefixed UDP packets; Shadowsocks uses datagram
-framing. Mieru and Hysteria2 UDP are integrated through proxy runtime managers
-because their session state is coupled to encrypted stream or QUIC connection
-management. Protocol crates own packet handshake and framing semantics where
-those semantics can be separated cleanly, while the proxy owns transport setup,
-socket setup, routing, session lifecycle, stats, events, and response bridging.
+暴露给 GUI 和管控面消费者的协议能力事实从代理运行时协议清单中为当前二进制填充。`zero-api` 定义传输模型；`zero-engine` 不维护协议矩阵。协议无关的描述符和行为特征位于 `zero-traits::protocol`，因此协议 crates 可以暴露元数据和 TCP/UDP 行为，而无需依赖 API 或代理运行时 crates。每个协议 crate 拥有其 `ProtocolMetadata` 描述符，并在握手语义匹配这些特征的地方实现协议行为特征。`TcpTunnelProtocol` 覆盖流级隧道握手，如 SOCKS5、Trojan 和 VLESS。`TcpSessionProtocol` 覆盖返回协议状态的握手，如 Shadowsocks、VMess 和 Mieru。`DeferredTcpTunnelProtocol` 覆盖立即写入请求并将响应验证推迟到流封装器的握手，如 VLESS Reality 单跳。`UdpRelayProtocol` 覆盖 UDP 中继关联握手，如 SOCKS5 UDP ASSOCIATE。`UdpPacketTunnelProtocol`、`UdpPacketFraming` 和 `UdpPacketStreamFraming` 覆盖 UDP-over-stream 协议。`UdpDatagramFraming` 覆盖在一个 UDP datagram 中承载一个完整协议数据包的协议，如 Shadowsocks UDP。VLESS 使用数据包帧封装处理隧道字节；Trojan 使用流帧封装处理长度前缀的 UDP 数据包；Shadowsocks 使用 datagram 帧封装。Mieru 和 Hysteria2 UDP 通过代理运行时 manager 集成，因为它们的会话状态与加密流或 QUIC 连接管理耦合。协议 crates 在可以干净分离的地方拥有数据包握手和帧封装语义，而代理拥有传输设置、socket 设置、路由、会话生命周期、统计、事件和响应桥接。
 
-`TcpTunnelProtocol` is only for protocol handshakes that return an established
-tunnel over the same stream. `TcpSessionProtocol` is for protocol handshakes
-that return state needed by later relay code. `DeferredTcpTunnelProtocol` is
-for cases where consuming the response during establishment would break the
-stream semantics required by the relay path. `UdpPacketTunnelProtocol` is for
-establishing a UDP packet tunnel over a connected stream, and
-`UdpPacketFraming` is for per-datagram tunnel bytes. `UdpPacketStreamFraming`
-is for protocols whose packet boundary is part of the connected stream format.
-`UdpDatagramFraming` is for protocol datagrams transported directly over UDP.
-Transport setup such as TLS, Reality, WebSocket, gRPC, H2, QUIC, and
-HTTPUpgrade remains in the proxy/transport layer.
+`TcpTunnelProtocol` 仅用于在同一流上返回已建立隧道的协议握手。`TcpSessionProtocol` 用于返回后续中继代码所需状态的协议握手。`DeferredTcpTunnelProtocol` 用于在建立期间消费响应会破坏中继路径所需的流语义的情况。`UdpPacketTunnelProtocol` 用于在已连接流上建立 UDP 数据包隧道，`UdpPacketFraming` 用于每个 datagram 的隧道字节。`UdpPacketStreamFraming` 用于数据包边界属于已连接流格式的协议。`UdpDatagramFraming` 用于直接在 UDP 上传输的协议 datagram。传输设置如 TLS、Reality、WebSocket、gRPC、H2、QUIC 和 HTTPUpgrade 保持在代理/传输层。
 
-## Network Stack Layer
+## 网络栈层
 
 - `zero-stack`
 
-Implements the `TcpStack` / `UdpStack` / `NetworkStack` traits (defined in `zero-traits`) to convert between raw IP packets and `AsyncRead + AsyncWrite` streams or datagram I/O.
+实现 `TcpStack` / `UdpStack` / `NetworkStack` 特征（定义在 `zero-traits` 中），在原始 IP 数据包和 `AsyncRead + AsyncWrite` 流或 datagram I/O 之间转换。
 
-Two implementations share the same trait:
+两种实现共享同一特征：
 
-| Stack | Strategy | TCP termination | Driver needed |
+| 栈 | 策略 | TCP 终止 | 所需驱动 |
 |-------|----------|-----------------|---------------|
-| `UserNetworkStack` | User-space TCP state machine (`UserTcpStack`) | SYN/SYN-ACK/ACK handshake, seq tracking, MSS negotiation, FIN/RST handling | TUN device |
-| `SystemStack` | OS kernel TCP listener (`SystemTcpStack`) | Delegated to OS kernel | None on Linux/macOS |
+| `UserNetworkStack` | 用户空间 TCP 状态机 (`UserTcpStack`) | SYN/SYN-ACK/ACK 握手、seq 跟踪、MSS 协商、FIN/RST 处理 | TUN 设备 |
+| `SystemStack` | OS 内核 TCP 监听器 (`SystemTcpStack`) | 委托给 OS 内核 | Linux/macOS 无需 |
 
-The stack is pluggable: the TUN inbound handler consumes `NetworkStack`, so the choice of `UserStack` vs `SystemStack` is a configuration decision; no code changes are needed.
+该栈可插拔：TUN 入站处理程序消费 `NetworkStack`，因此 `UserStack` 与 `SystemStack` 的选择是配置决策；无需代码更改。
 
-### User-space TCP (zero-stack/src/tcp.rs)
+### 用户空间 TCP (zero-stack/src/tcp.rs)
 
-`UserTcpStack` maintains a minimal per-connection TCP state machine:
-- **SYN -> SYN-ACK (with MSS option)**
-- **ACK -> Established -> data transfer**
-- **FIN -> ACK -> CloseWait -> FIN-ACK -> closed**
-- **RST -> immediate teardown**
+`UserTcpStack` 为每个连接维护最小 TCP 状态机：
+- **SYN -> SYN-ACK（包含 MSS 选项）**
+- **ACK -> Established -> 数据传输**
+- **FIN -> ACK -> CloseWait -> FIN-ACK -> 关闭**
+- **RST -> 立即拆除**
 
-Payload extraction feeds into the proxy pipeline via mpsc channels. Response packets (SYN-ACK, ACK, FIN) are emitted through an outbound channel to the TUN device writer task.
+载荷提取通过 mpsc channel 进入代理管道。响应数据包（SYN-ACK、ACK、FIN）通过出站 channel 发送到 TUN 设备写入任务。
 
-### System TCP (zero-stack/src/system.rs)
+### 系统 TCP (zero-stack/src/system.rs)
 
-`SystemTcpStack` wraps a `tokio::net::TcpListener`; traffic must be redirected to this listener by the OS:
-- Linux: `iptables -t nat REDIRECT`
-- macOS: `pf.conf rdr rule`
-- Windows: requires a TUN device (wintun) or system proxy
+`SystemTcpStack` 包装 `tokio::net::TcpListener`；流量必须由 OS 重定向到此监听器：
+- Linux：`iptables -t nat REDIRECT`
+- macOS：`pf.conf rdr rule`
+- Windows：需要 TUN 设备（wintun）或系统代理
 
-## TUN Device Layer
+## TUN 设备层
 
 - `zero-tun`
 
-Platform-agnostic `TunDevice` trait (`AsyncRead + AsyncWrite`) for virtual network interfaces:
+平台无关的 `TunDevice` 特征（`AsyncRead + AsyncWrite`），用于虚拟网络接口：
 
-| Platform | Backend | Dependency |
+| 平台 | 后端 | 依赖 |
 |----------|---------|------------|
-| Linux | `/dev/net/tun` ioctl | Kernel built-in |
-| macOS | utun socket | Kernel built-in |
-| Windows | Wintun driver | `wintun.dll` (deployed by GUI/installer) |
+| Linux | `/dev/net/tun` ioctl | 内核内置 |
+| macOS | utun socket | 内核内置 |
+| Windows | Wintun 驱动 | `wintun.dll`（由 GUI/安装器部署） |
 
-On Windows, `wintun.dll` is a platform dependency, like how Linux requires `/dev/net/tun` and macOS requires utun. The kernel crate (`zero-tun`) declares the dependency via the `wintun` crate; deployment of the DLL to the target system is the GUI/installer layer's responsibility.
+在 Windows 上，`wintun.dll` 是平台依赖，就像 Linux 需要 `/dev/net/tun` 和 macOS 需要 utun。内核 crate (`zero-tun`) 通过 `wintun` crate 声明依赖；DLL 到目标系统的部署是 GUI/安装器层的责任。
 
-### TUN inbound (zero-proxy/src/inbound/tun.rs)
+### TUN 入站 (zero-proxy/src/inbound/tun.rs)
 
-The TUN inbound handler reads raw IP packets from a `TunDevice`, feeds them to a `NetworkStack`, and dispatches established TCP connections through `serve_inbound()`:
+TUN 入站处理程序从 `TunDevice` 读取原始 IP 数据包，喂入 `NetworkStack`，并通过 `serve_inbound()` 分发已建立的 TCP 连接：
 
 ```
-TunDevice::read() -> packet -> TcpStack::feed()
-     ->                             -> outbound writer task -> SYN-ACK/ACK/FIN
+TunDevice::read() -> 数据包 -> TcpStack::feed()
+     ->                             -> 出站写入任务 -> SYN-ACK/ACK/FIN
      
 TcpStack::accept() -> UserTcpStream -> serve_inbound()
 ```
 
-UDP datagrams are handled by the kernel UDP dispatch path. The dispatch layer
-owns route decision, fallback candidate selection, session lifecycle, stats, and
-event integration for UDP flows. Per-protocol UDP support is exposed by
-`capabilities.protocols`.
+UDP datagram 由内核 UDP 分发路径处理。分发层拥有路由决策、fallback 候选选择、会话生命周期、统计和 UDP 流的事件集成。按协议 UDP 支持由 `capabilities.protocols` 暴露。
 
-Outbound flows are classified by [`UdpPathCategory`] (Direct, Relay, Datagram,
-StreamPacket) and dispatched accordingly. UDP relay chains use the generic
-[`UdpPacketPath`] + [`DatagramCodec`] trait model: the previous hop provides a
-packet path (send/recv raw payloads), and the next hop encodes its protocol
-datagram through that path. Adding new chain combinations requires implementing
-the two traits, not creating protocol-pair modules.
+出站流按 [`UdpPathCategory`]（Direct、Relay、Datagram、StreamPacket）分类并相应分发。UDP 中继链使用通用 [`UdpPacketPath`] + [`DatagramCodec`] 特征模型：上一跳提供数据包路径（发送/接收原始载荷），下一跳通过该路径编码其协议 datagram。添加新的链组合需要实现这两个特征，而不是创建按协议对模块。
 
-## Transport Layer
+## 传输层
 
 - `zero-transport`
 
-Unified transport abstractions: TLS, WebSocket, gRPC, H2, HTTPUpgrade, QUIC, SplitHTTP, Hysteria2 QUIC, VLESS transport. Also contains the shared `RateLimiter` (GCRA) used by the kernel relay path.
+统一传输抽象：TLS、WebSocket、gRPC、H2、HTTPUpgrade、QUIC、SplitHTTP、Hysteria2 QUIC、VLESS 传输。还包含内核中继路径使用的共享 `RateLimiter`（GCRA）。
 
-## Support Crates
+## 支撑 Crates
 
-- `zero-api` -- control plane API types
-- `zero-connector` -- event dispatcher connectors (JSONL sink, webhook, push)
-- `zero-logging` -- structured logging
-- `zero-ffi` -- C-compatible embedded interface
-- `zero-grpc` -- gRPC control plane adapter (`grpc_api` feature)
-- `zero-dns` -- DNS subsystem (system / UDP / DoH / DoT / Fake IP)
+- `zero-api` -- 管控面 API 类型
+- `zero-connector` -- 事件分发 connector（JSONL sink、webhook、push）
+- `zero-logging` -- 结构化日志
+- `zero-ffi` -- C 兼容嵌入式接口
+- `zero-grpc` -- gRPC 管控面适配器（`grpc_api` feature）
+- `zero-dns` -- DNS 子系统（system / UDP / DoH / DoT / Fake IP）
 
-## Abstraction Layer
+## 抽象层
 
 - `zero-traits`
 
-Runtime-agnostic abstractions:
+运行时无关的抽象：
 
-| Trait | Purpose |
+| 特征 | 用途 |
 |-------|---------|
 | `AsyncSocket` / `TcpListener` / `DatagramSocket` | I/O |
-| `TcpStack` / `UdpStack` / `NetworkStack` | Network packet to stream/datagram conversion |
-| `ProtocolMetadata` / `TcpTunnelProtocol` / `DeferredTcpTunnelProtocol` / `TcpSessionProtocol` / `UdpRelayProtocol` / `UdpPacketTunnelProtocol` / `UdpPacketFraming` / `UdpPacketStreamFraming` / `UdpDatagramFraming` | Protocol metadata and outbound behavior boundaries |
-| `DnsResolver` / `TlsConnector` / `TlsAcceptor` | Platform services |
+| `TcpStack` / `UdpStack` / `NetworkStack` | 网络数据包到流/datagram 的转换 |
+| `ProtocolMetadata` / `TcpTunnelProtocol` / `DeferredTcpTunnelProtocol` / `TcpSessionProtocol` / `UdpRelayProtocol` / `UdpPacketTunnelProtocol` / `UdpPacketFraming` / `UdpPacketStreamFraming` / `UdpDatagramFraming` | 协议元数据和出站行为边界 |
+| `DnsResolver` / `TlsConnector` / `TlsAcceptor` | 平台服务 |
 
-## Platform Layer
+## 平台层
 
 - `zero-platform-tokio`
-- Reserved directories for other platforms
+- 为其他平台预留的目录
 
-Currently only the Tokio backend is implemented.
+当前仅实现 Tokio 后端。
 
-## Inbound Protocols
+## 入站协议
 
-All inbound handlers implement `InboundProtocol` and feed into `serve_inbound()`:
+所有入站处理程序实现 `InboundProtocol` 并喂入 `serve_inbound()`：
 
-| Handler | Protocol | Notes |
+| 处理程序 | 协议 | 备注 |
 |---------|----------|-------|
 | `socks5` | SOCKS5 | CONNECT + UDP ASSOCIATE |
 | `http_connect` | HTTP CONNECT | |
-| `mixed` | Auto-detect | SOCKS5 TCP CONNECT, SOCKS5 UDP ASSOCIATE, and HTTP CONNECT TCP on one port |
+| `mixed` | 自动检测 | 同一端口上的 SOCKS5 TCP CONNECT、SOCKS5 UDP ASSOCIATE 和 HTTP CONNECT TCP |
 | `vless` | VLESS | TCP + UDP-over-TCP |
 | `hysteria2` | Hysteria2 | QUIC |
 | `shadowsocks` | Shadowsocks | AEAD + 2022-blake3 |
 | `trojan` | Trojan | TCP + UDP |
-| `vmess` | VMess | Experimental AEAD TCP, TCP/UDP MUX, and UDP-over-stream implementation; `cipher: auto` is normalized to the current AEAD baseline |
-| `mieru` | Mieru | TCP + UDP over encrypted stream wrapper |
-| `direct` | Direct | Fixed-target forwarder, no handshake |
-| `tun` | TUN | Virtual network interface, consumes `NetworkStack` |
-| `system` | System | OS-level traffic redirect, consumes `SystemTcpStack` |
+| `vmess` | VMess | 实验性 AEAD TCP、TCP/UDP MUX 和 UDP-over-stream 实现；`cipher: auto` 被规范化为当前 AEAD 基线 |
+| `mieru` | Mieru | TCP + UDP，通过加密流封装器 |
+| `direct` | Direct | 固定目标转发器，无握手 |
+| `tun` | TUN | 虚拟网络接口，消费 `NetworkStack` |
+| `system` | System | OS 级流量重定向，消费 `SystemTcpStack` |
 
-## Dependency Direction
+## 依赖方向
 
-Top-down only:
+仅自上而下：
 
-- `zero` -> `config`, `engine`, `proxy`, `api`, `connector` (optional), `grpc` (optional)
+- `zero` -> `config`, `engine`, `proxy`, `api`, `connector`（可选）, `grpc`（可选）
 - `proxy` -> `engine`, `config`, `protocols/*`, `transport`, `stack`, `tun`, `dns`
 - `engine` -> `config`, `router`, `core`, `api`
 - `stack` -> `traits`
@@ -314,4 +254,4 @@ Top-down only:
 - `protocols/*` -> `core`
 - `core` -> `traits`
 
-No reverse dependencies.
+无反向依赖。

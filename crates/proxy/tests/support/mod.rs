@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+pub mod interop;
+
 use std::net::TcpListener as StdTcpListener;
 use std::net::UdpSocket as StdUdpSocket;
 use std::sync::atomic::{AtomicUsize, Ordering};
