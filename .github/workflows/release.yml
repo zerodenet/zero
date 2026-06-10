@@ -73,36 +73,24 @@ jobs:
         shell: bash
         run: |
           cd target/${{ matrix.target }}/release
-
-          # versioned archive
-          tar czf zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} zero
-          sha256sum zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} \
-            > zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }}.sha256
-
-          # latest archive (fixed name for auto-download)
-          cp zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} zero-${{ matrix.name }}.${{ matrix.ext }}
-          cp zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }}.sha256 zero-${{ matrix.name }}.${{ matrix.ext }}.sha256
+          tar czf zero-${{ matrix.name }}.${{ matrix.ext }} zero
+          sha256sum zero-${{ matrix.name }}.${{ matrix.ext }} \
+            > zero-${{ matrix.name }}.${{ matrix.ext }}.sha256
 
       - name: Package (windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
           cd target/${{ matrix.target }}/release
-
-          # versioned archive
-          7z a zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} zero.exe
-          sha256sum zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} \
-            > zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }}.sha256
-
-          # latest archive (fixed name for auto-download)
-          cp zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }} zero-${{ matrix.name }}.${{ matrix.ext }}
-          cp zero-${{ github.ref_name }}-${{ matrix.name }}.${{ matrix.ext }}.sha256 zero-${{ matrix.name }}.${{ matrix.ext }}.sha256
+          7z a zero-${{ matrix.name }}.${{ matrix.ext }} zero.exe
+          sha256sum zero-${{ matrix.name }}.${{ matrix.ext }} \
+            > zero-${{ matrix.name }}.${{ matrix.ext }}.sha256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zero-${{ github.ref_name }}-${{ matrix.name }}
-          path: target/${{ matrix.target }}/release/zero-*.${{ matrix.ext }}*
+          name: zero-${{ matrix.name }}
+          path: target/${{ matrix.target }}/release/zero-${{ matrix.name }}.${{ matrix.ext }}*
 
   docs:
     name: Build Docs (non-blocking)
@@ -194,10 +182,10 @@ jobs:
             echo ""
             echo "| Platform | Archive |"
             echo "|----------|---------|"
-            echo "| Linux x86_64   | \`zero-${{ github.ref_name }}-linux-x86_64.tar.gz\`   |"
-            echo "| macOS x86_64   | \`zero-${{ github.ref_name }}-darwin-x86_64.tar.gz\`  |"
-            echo "| macOS aarch64  | \`zero-${{ github.ref_name }}-darwin-aarch64.tar.gz\` |"
-            echo "| Windows x86_64 | \`zero-${{ github.ref_name }}-windows-x86_64.zip\`    |"
+            echo "| Linux x86_64   | \`zero-linux-x86_64.tar.gz\`   |"
+            echo "| macOS x86_64   | \`zero-darwin-x86_64.tar.gz\`  |"
+            echo "| macOS aarch64  | \`zero-darwin-aarch64.tar.gz\` |"
+            echo "| Windows x86_64 | \`zero-windows-x86_64.zip\`    |"
             echo ""
             echo "> **Quick download (latest):** \`https://github.com/\${{ github.repository }}/releases/latest/download/zero-{platform}.{ext}\`"
             echo ""
