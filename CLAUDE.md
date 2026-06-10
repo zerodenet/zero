@@ -79,7 +79,7 @@ cargo run -- reload <config-path>              # hot reload
 cargo run -- tun start --addr IP --tag TAG    # start TUN
 cargo run -- tun stop                         # stop TUN
 cargo run -- tun status                       # TUN status
-cargo run -- build_info
+cargo run -- build_info      # also: zero version, zero -V, zero --version
 
 # Runtime command API (HTTP, when status-listen enabled)
 curl -X POST http://127.0.0.1:9090/api/v1/commands \

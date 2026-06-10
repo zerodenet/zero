@@ -84,6 +84,9 @@ zero help
 
 ```bash
 zero build_info
+zero version
+zero -V
+zero --version
 ```
 
 显示构建信息：

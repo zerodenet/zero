@@ -41,8 +41,8 @@ pub fn config_path_from_args(args: &[String]) -> Option<&str> {
             None
         }
         // Commands that talk to a running daemon via IPC — no config needed.
-        "select" | "flows" | "policies" | "events" | "build_info" | "mode" | "help" | "--help"
-        | "-h" => None,
+        "select" | "flows" | "policies" | "events" | "build_info" | "version" | "mode" | "help"
+        | "--help" | "-h" | "--version" | "-V" => None,
         _ if first.starts_with('-') => None,
         _ => Some(first),
     }
@@ -168,7 +168,7 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, Cli
                 )),
             }
         }
-        "build_info" => Ok(Command::BuildInfo),
+        "build_info" | "version" | "--version" | "-V" => Ok(Command::BuildInfo),
         "help" | "--help" | "-h" => Ok(Command::Help),
         _ if first.starts_with('-') => Err(CliError::new(format!(
             "unknown option `{first}`\n\n{}",
@@ -196,6 +196,8 @@ pub fn usage() -> &'static str {
   zero tun stop [--socket PATH]
   zero tun status [--socket PATH]
   zero build_info
+  zero version
+  zero -V, --version
   zero help
 
 Examples:
