@@ -8,8 +8,11 @@ pub struct VmessProtocol;
 
 impl ProtocolMetadata for VmessProtocol {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-        let unsupported = ProtocolCapabilityState::unsupported(&[]);
         let experimental =
+            ProtocolCapabilityState::experimental(&["external_interop_coverage_is_incomplete"]);
+        let experimental_udp =
+            ProtocolCapabilityState::experimental(&["external_interop_coverage_is_incomplete"]);
+        let experimental_mux =
             ProtocolCapabilityState::experimental(&["external_interop_coverage_is_incomplete"]);
 
         ProtocolCapabilityDescriptor {
@@ -17,15 +20,11 @@ impl ProtocolMetadata for VmessProtocol {
             feature: "vmess",
             status: ProtocolCapabilityLevel::Experimental,
             compatibility_baseline: "xray_core_vmess_aead",
-            inbound: ProtocolNetworkCapability::new(experimental, unsupported),
-            outbound: ProtocolNetworkCapability::new(experimental, unsupported),
+            inbound: ProtocolNetworkCapability::new(experimental, experimental_udp),
+            outbound: ProtocolNetworkCapability::new(experimental, experimental_udp),
             transports: &["tcp", "tls", "ws", "grpc"],
-            mux: unsupported,
-            limitations: &[
-                "external_interop_coverage_is_incomplete",
-                "vmess_udp_is_not_implemented",
-                "cipher_auto_is_not_supported",
-            ],
+            mux: experimental_mux,
+            limitations: &["external_interop_coverage_is_incomplete"],
         }
     }
 }

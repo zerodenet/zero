@@ -85,11 +85,10 @@ pub(crate) fn tcp_path_category(candidate: &ResolvedLeafOutbound<'_>) -> TcpPath
         ResolvedLeafOutbound::Block { .. } => TcpPathCategory::Block,
         ResolvedLeafOutbound::Socks5 { .. }
         | ResolvedLeafOutbound::Vless { .. }
-        | ResolvedLeafOutbound::Trojan { .. }
-        | ResolvedLeafOutbound::Vmess { .. } => TcpPathCategory::Tunnel,
-        ResolvedLeafOutbound::Shadowsocks { .. } | ResolvedLeafOutbound::Mieru { .. } => {
-            TcpPathCategory::Session
-        }
+        | ResolvedLeafOutbound::Trojan { .. } => TcpPathCategory::Tunnel,
+        ResolvedLeafOutbound::Shadowsocks { .. }
+        | ResolvedLeafOutbound::Vmess { .. }
+        | ResolvedLeafOutbound::Mieru { .. } => TcpPathCategory::Session,
         ResolvedLeafOutbound::Hysteria2 { .. } => TcpPathCategory::TransportSession,
     }
 }

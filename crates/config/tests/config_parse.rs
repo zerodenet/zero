@@ -161,6 +161,213 @@ fn parses_vless_inbound_and_outbound_config() {
 }
 
 #[test]
+fn parses_vmess_inbound_and_outbound_config() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vmess-in",
+                    "listen": { "address": "127.0.0.1", "port": 1082 },
+                    "protocol": {
+                        "type": "vmess",
+                        "users": [
+                            {
+                                "id": "11111111-2222-3333-4444-555555555555",
+                                "cipher": "chacha20-poly1305",
+                                "credential_id": "node-user-1",
+                                "principal_key": "user:10001"
+                            }
+                        ],
+                        "tls": {
+                            "cert_path": "certs/server.crt",
+                            "key_path": "certs/server.key"
+                        }
+                    }
+                }
+            ],
+            "outbounds": [
+                {
+                    "tag": "vmess-chain",
+                    "protocol": {
+                        "type": "vmess",
+                        "server": "example.com",
+                        "port": 443,
+                        "id": "11111111-2222-3333-4444-555555555555",
+                        "cipher": "chacha20-poly1305",
+                        "tls": {
+                            "server_name": "example.com",
+                            "ca_cert_path": "certs/ca.pem"
+                        }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "vmess-chain" }
+            }
+        }"#,
+    )
+    .expect("vmess config should parse");
+
+    assert!(matches!(
+        config.inbounds[0].protocol,
+        InboundProtocolConfig::Vmess { .. }
+    ));
+    assert!(matches!(
+        config.outbounds[0].protocol,
+        OutboundProtocolConfig::Vmess { .. }
+    ));
+}
+
+#[test]
+fn rejects_vmess_inbound_without_tls() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vmess-in",
+                    "listen": { "address": "127.0.0.1", "port": 1082 },
+                    "protocol": {
+                        "type": "vmess",
+                        "users": [
+                            { "id": "11111111-2222-3333-4444-555555555555" }
+                        ]
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("vmess inbound without tls should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidInbound(_)));
+}
+
+#[test]
+fn normalizes_vmess_cipher_auto_to_aead_baseline() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vmess-in",
+                    "listen": { "address": "127.0.0.1", "port": 1082 },
+                    "protocol": {
+                        "type": "vmess",
+                        "users": [
+                            {
+                                "id": "11111111-2222-3333-4444-555555555555",
+                                "cipher": "auto"
+                            }
+                        ],
+                        "tls": {
+                            "cert_path": "certs/server.crt",
+                            "key_path": "certs/server.key"
+                        }
+                    }
+                }
+            ],
+            "outbounds": [
+                {
+                    "tag": "vmess-chain",
+                    "protocol": {
+                        "type": "vmess",
+                        "server": "example.com",
+                        "port": 443,
+                        "id": "11111111-2222-3333-4444-555555555555",
+                        "cipher": "auto"
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "vmess-chain" }
+            }
+        }"#,
+    )
+    .expect("vmess cipher auto should normalize");
+
+    match &config.inbounds[0].protocol {
+        InboundProtocolConfig::Vmess { users, .. } => {
+            assert_eq!(users[0].cipher, "aes-128-gcm");
+        }
+        _ => panic!("expected vmess inbound"),
+    }
+
+    match &config.outbounds[0].protocol {
+        OutboundProtocolConfig::Vmess { cipher, .. } => {
+            assert_eq!(cipher, "aes-128-gcm");
+        }
+        _ => panic!("expected vmess outbound"),
+    }
+}
+
+#[test]
+fn rejects_unknown_vmess_cipher() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "vmess-chain",
+                    "protocol": {
+                        "type": "vmess",
+                        "server": "example.com",
+                        "port": 443,
+                        "id": "11111111-2222-3333-4444-555555555555",
+                        "cipher": "none"
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "vmess-chain" }
+            }
+        }"#,
+    )
+    .expect_err("unsupported vmess cipher should fail");
+
+    assert!(matches!(
+        error,
+        zero_config::ConfigError::InvalidOutbound(_)
+    ));
+}
+
+#[test]
+fn rejects_vmess_ws_and_grpc_together() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "vmess-in",
+                    "listen": { "address": "127.0.0.1", "port": 1082 },
+                    "protocol": {
+                        "type": "vmess",
+                        "users": [
+                            { "id": "11111111-2222-3333-4444-555555555555" }
+                        ],
+                        "tls": {
+                            "cert_path": "certs/server.crt",
+                            "key_path": "certs/server.key"
+                        },
+                        "ws": { "path": "/vmess" },
+                        "grpc": { "service_names": ["zero.vmess"] }
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("vmess inbound ws and grpc together should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidInbound(_)));
+}
+
+#[test]
 fn parses_vless_tls_config() {
     let config = RuntimeConfig::parse(
         r#"{
@@ -979,7 +1186,7 @@ fn parses_socks5_inbound_and_outbound_auth() {
                     "protocol": {
                         "type": "mixed",
                         "socks5_users": [
-                            { "username": "bob", "password": "secret" }
+                            { "password": "mixed-secret" }
                         ]
                     }
                 }
@@ -991,8 +1198,15 @@ fn parses_socks5_inbound_and_outbound_auth() {
                         "type": "socks5",
                         "server": "127.0.0.1",
                         "port": 2080,
-                        "username": "upstream",
-                        "password": "secret"
+                        "password": "upstream-secret"
+                    }
+                },
+                {
+                    "tag": "no-auth-chain",
+                    "protocol": {
+                        "type": "socks5",
+                        "server": "127.0.0.1",
+                        "port": 2081
                     }
                 }
             ],
@@ -1010,23 +1224,48 @@ fn parses_socks5_inbound_and_outbound_auth() {
     );
     assert_eq!(
         config.inbounds[1].protocol.socks5_users()[0].username,
-        "bob"
+        "mixed-secret"
+    );
+    assert_eq!(
+        config.inbounds[1].protocol.socks5_users()[0].password,
+        "mixed-secret"
     );
     match &config.outbounds[0].protocol {
         OutboundProtocolConfig::Socks5 {
             username, password, ..
         } => {
-            assert_eq!(username.as_deref(), Some("upstream"));
-            assert_eq!(password.as_deref(), Some("secret"));
+            assert_eq!(username.as_deref(), Some("upstream-secret"));
+            assert_eq!(password.as_deref(), Some("upstream-secret"));
+        }
+        _ => panic!("expected socks5 outbound"),
+    }
+    match &config.outbounds[1].protocol {
+        OutboundProtocolConfig::Socks5 {
+            username, password, ..
+        } => {
+            assert_eq!(username, &None);
+            assert_eq!(password, &None);
         }
         _ => panic!("expected socks5 outbound"),
     }
 }
 
 #[test]
-fn parses_mieru_outbound_with_username_defaulting_later() {
+fn parses_mieru_username_defaults_from_password() {
     let config = RuntimeConfig::parse(
         r#"{
+            "inbounds": [
+                {
+                    "tag": "mieru-in",
+                    "listen": { "address": "127.0.0.1", "port": 2998 },
+                    "protocol": {
+                        "type": "mieru",
+                        "users": [
+                            { "password": "inbound-secret" }
+                        ]
+                    }
+                }
+            ],
             "outbounds": [
                 {
                     "tag": "mieru-node",
@@ -1050,10 +1289,20 @@ fn parses_mieru_outbound_with_username_defaulting_later() {
         OutboundProtocolConfig::Mieru {
             username, password, ..
         } => {
-            assert_eq!(username, &None);
+            assert_eq!(
+                username.as_deref(),
+                Some("318149df-2bab-4a35-9de1-870f3e410598")
+            );
             assert_eq!(password, "318149df-2bab-4a35-9de1-870f3e410598");
         }
         _ => panic!("expected mieru outbound"),
+    }
+    match &config.inbounds[0].protocol {
+        InboundProtocolConfig::Mieru { users } => {
+            assert_eq!(users[0].username, "inbound-secret");
+            assert_eq!(users[0].password, "inbound-secret");
+        }
+        _ => panic!("expected mieru inbound"),
     }
 }
 

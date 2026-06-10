@@ -1,30 +1,65 @@
 # VMess
 
-> 参照 Xray-core | Crate: `vmess`
+VMess is the V2Ray/Xray-family proxy protocol implementation used by Zero.
+This crate owns VMess protocol behavior: AEAD request/response headers, body
+framing, TCP stream state, UDP packet framing, and Mux.Cool frame encoding.
 
-VMess 是 V2Ray/Xray 项目的原始代理协议，使用 UUID + 时间戳进行身份验证，内置加密传输。
+## Current State
 
-## 协议来源
-
-| 项目 | 来源 |
+| Capability | State |
 |------|------|
-| 参照实现 | [Xray-core](https://github.com/XTLS/Xray-core) |
-| 协议形态 | VMess AEAD |
-| 本实现 | `vmess` crate（stub，功能正在开发中） |
+| TCP handshake | experimental |
+| TCP body stream | experimental |
+| TCP inbound | experimental |
+| TCP outbound | experimental |
+| UDP-over-stream | experimental |
+| Mux.Cool TCP sub-connection | experimental |
+| Mux.Cool UDP sub-connection | experimental |
+| Body AEAD authenticated length | implemented |
+| Body AEAD chunk masking (SHAKE128) | implemented |
+| Body AEAD global padding | implemented |
+| Body AEAD periodic rekey (2^14 chunks) | implemented |
+| `cipher: auto` | normalized to the current AEAD baseline |
+| `cipher: none` | implemented; Xray TCP interoperability is covered |
+| `cipher: zero` | implemented for Zero-to-Zero paths; not claimed as mainstream external compatibility |
 
-## 功能对齐状态
+Supported explicit cipher names:
 
-| 特性 | 状态 |
-|------|------|
-| 协议帧: AEAD 头部加密 | ⚠️ stub |
-| TCP 入站 | ❌ |
-| TCP 出站 | ❌ |
-| UDP | ❌ |
-| MUX | ❌ |
-| AEAD 密码 | ❌ |
+- `aes-128-gcm`
+- `chacha20-poly1305`
+- `none`
+- `zero`
 
-> VMess 当前为预留目录。项目优先完成 VLESS / Shadowsocks / Hysteria2 / Trojan 协议支持。
+`auto` is accepted as a config/import alias and maps to the current AEAD
+baseline.
 
-## 参考
+## Boundary
 
-- [Xray-core VMess AEAD](https://xtls.github.io/en/config/outbounds/vmess.html)
+Protocol handshake, key derivation, response validation, body chunk
+encryption/decryption, VMess UDP packet encoding, and MUX frame encoding stay in
+this crate. The proxy runtime owns transport connection setup, routing,
+session lifecycle, stats, events, and wrapping authenticated streams in
+`VmessAeadStream` or `VmessMuxStream`.
+
+In-tree validation covers bidirectional body relay for explicit ciphers,
+shutdown termination chunks, UDP packet framing, raw TLS, WSS, gRPC, TCP MUX,
+UDP-over-stream, MUX UDP, and same-protocol VMess UDP relay-chain paths.
+
+External interoperability currently covers Xray TCP and UDP in both directions,
+Xray WS/gRPC TCP in both directions, Zero outbound to sing-box inbound TCP/UDP,
+and Mihomo outbound to Zero inbound TCP/UDP. `cipher: zero` remains a
+Zero-to-Zero capability, not a mainstream external compatibility claim.
+
+## File Layout
+
+```text
+src/lib.rs       - crate root and re-exports
+src/crypto.rs    - key derivation, AEAD header seal/open, body AEAD state (BodyAead), rekey, padding, chunk masking
+src/inbound.rs   - inbound accept with single-user and multi-user auth, response header
+src/outbound.rs  - outbound TCP session establishment, request encoding
+src/stream.rs    - VmessAeadStream (AsyncRead + AsyncWrite) for bidirectional body relay
+src/shared.rs    - cipher enum, address helpers, constants, read_exact
+src/metadata.rs  - protocol capability descriptor
+src/mux.rs       - Mux.Cool frame encode/decode, VmessMuxStream
+src/udp.rs       - UDP packet encode/decode, UDP-over-stream session establishment
+```

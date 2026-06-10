@@ -336,12 +336,14 @@ impl Proxy {
         port: u16,
         id: &str,
         cipher: &str,
+        mux_concurrency: Option<u32>,
+        mux_idle_timeout_secs: Option<u64>,
         tls: Option<&zero_config::ClientTlsConfig>,
         ws: Option<&zero_config::WebSocketConfig>,
         grpc: Option<&zero_config::GrpcConfig>,
     ) -> Result<TcpRelayStream, EngineError> {
         use vmess::{parse_uuid, VmessCipher, VmessOutbound};
-        use zero_traits::TcpTunnelProtocol;
+        use zero_traits::TcpSessionProtocol;
 
         let uuid = parse_uuid(id).map_err(|e| {
             EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
@@ -352,6 +354,25 @@ impl Proxy {
                 format!("vmess unknown cipher: {cipher}"),
             ))
         })?;
+
+        if let Some(max_concurrency) = mux_concurrency {
+            return self
+                .vmess_mux_pool
+                .open_stream(
+                    self,
+                    session,
+                    server.to_owned(),
+                    port,
+                    uuid,
+                    cipher.to_owned(),
+                    tls,
+                    ws,
+                    grpc,
+                    max_concurrency,
+                )
+                .await;
+        }
+        let _ = mux_idle_timeout_secs;
 
         let socket = self
             .protocols
@@ -405,16 +426,16 @@ impl Proxy {
             _ => {
                 return Err(EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    "vmess: ws, grpc, and tls are mutually exclusive for transport",
+                    "vmess: ws and grpc are mutually exclusive",
                 )))
             }
         };
 
         let mut sock = crate::transport::MeteredStream::new(stream);
-        <VmessOutbound as TcpTunnelProtocol<vmess::VmessTcpTunnelTarget>>::establish_tcp_tunnel(
+        let vmess_session = <VmessOutbound as TcpSessionProtocol<vmess::VmessTcpSessionTarget>>::establish_tcp_session(
             &VmessOutbound,
             &mut sock,
-            &vmess::VmessTcpTunnelTarget {
+            &vmess::VmessTcpSessionTarget {
                 session,
                 uuid: &uuid,
                 cipher: vmess_cipher,
@@ -422,7 +443,10 @@ impl Proxy {
         )
         .await?;
         self.record_session_outbound_traffic(session.id, sock.drain_traffic());
-        Ok(sock.into_inner())
+        Ok(TcpRelayStream::new(vmess::VmessAeadStream::outbound(
+            sock.into_inner(),
+            vmess_session,
+        )?))
     }
 
     #[cfg(not(feature = "vmess"))]
@@ -433,6 +457,8 @@ impl Proxy {
         _port: u16,
         _id: &str,
         _cipher: &str,
+        _mux_concurrency: Option<u32>,
+        _mux_idle_timeout_secs: Option<u64>,
         _tls: Option<&zero_config::ClientTlsConfig>,
         _ws: Option<&zero_config::WebSocketConfig>,
         _grpc: Option<&zero_config::GrpcConfig>,

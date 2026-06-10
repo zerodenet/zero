@@ -70,3 +70,6 @@ mod relays_udp_through_urltest_group_with_nested_group_member;
 #[cfg(all(feature = "socks5", feature = "vless"))]
 #[path = "socks5_udp/relays_udp_through_vless_outbound.rs"]
 mod relays_udp_through_vless_outbound;
+#[cfg(all(feature = "socks5", feature = "vmess"))]
+#[path = "socks5_udp/relays_udp_through_vmess_to_vmess_relay_chain.rs"]
+mod relays_udp_through_vmess_to_vmess_relay_chain;

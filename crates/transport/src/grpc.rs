@@ -1,9 +1,9 @@
-// gRPC transport — grpc.rs
+﻿// gRPC transport.
 //
 // Bidirectional streaming over HTTP/2 with gRPC wire format.
-// Data framing: [1 byte: compressed_flag(0)] [4 bytes: length BE] [payload]
+// Data framing: [compressed flag][length][protobuf hunk].
 //
-// Max frame payload: 16384 bytes (within single TLS record boundary).
+// Max frame payload: 16384 bytes before protobuf wrapping.
 
 use std::io;
 use std::net::SocketAddr;
@@ -59,7 +59,7 @@ impl GrpcStream {
     }
 }
 
-// ── client (outbound) connect ──
+// 鈹€鈹€ client (outbound) connect 鈹€鈹€
 
 pub async fn connect_grpc<S>(stream: S, service_names: &[String]) -> Result<GrpcStream, EngineError>
 where
@@ -94,24 +94,10 @@ where
         .send_request(request, false)
         .map_err(|e| EngineError::Io(io::Error::other(format!("grpc send request: {e}"))))?;
 
-    let resp = resp_future
-        .await
-        .map_err(|e| EngineError::Io(io::Error::other(format!("grpc response: {e}"))))?;
-
-    let status = resp.status();
-    if !status.is_success() {
-        return Err(EngineError::Io(io::Error::new(
-            io::ErrorKind::ConnectionRefused,
-            format!("grpc server returned {status}"),
-        )));
-    }
-
-    let recv_stream = resp.into_body();
-
-    build_grpc_stream(send_stream, recv_stream)
+    Ok(build_grpc_client_stream(send_stream, resp_future))
 }
 
-// ── server (inbound) accept ──
+// 鈹€鈹€ server (inbound) accept 鈹€鈹€
 
 /// Accept gRPC streams on this h2 connection, calling `handler` for each.
 ///
@@ -252,100 +238,234 @@ where
     build_grpc_stream(send_stream, recv_stream)
 }
 
-// ── common gRPC stream builder ──
+// 鈹€鈹€ common gRPC stream builder 鈹€鈹€
 
 fn build_grpc_stream(
-    mut send_stream: h2::SendStream<Bytes>,
-    mut recv_stream: h2::RecvStream,
+    send_stream: h2::SendStream<Bytes>,
+    recv_stream: h2::RecvStream,
 ) -> Result<GrpcStream, EngineError> {
-    let (write_tx, mut write_rx) = mpsc::channel::<Vec<u8>>(64);
+    let (write_tx, write_rx) = mpsc::channel::<Vec<u8>>(64);
     let (read_tx, read_rx) = mpsc::channel::<Vec<u8>>(64);
 
-    // Write relay: mpsc → gRPC frames → h2 send_stream
+    spawn_grpc_write_relay(send_stream, write_rx);
+    spawn_grpc_read_relay(recv_stream, read_tx);
+
+    Ok(GrpcStream::new(read_rx, write_tx))
+}
+
+fn build_grpc_client_stream(
+    send_stream: h2::SendStream<Bytes>,
+    resp_future: h2::client::ResponseFuture,
+) -> GrpcStream {
+    let (write_tx, write_rx) = mpsc::channel::<Vec<u8>>(64);
+    let (read_tx, read_rx) = mpsc::channel::<Vec<u8>>(64);
+
+    spawn_grpc_write_relay(send_stream, write_rx);
+    tokio::spawn(async move {
+        let resp = match resp_future.await {
+            Ok(resp) => resp,
+            Err(error) => {
+                tracing::debug!(%error, "grpc response failed");
+                return;
+            }
+        };
+        let status = resp.status();
+        if !status.is_success() {
+            tracing::debug!(%status, "grpc server returned non-success status");
+            return;
+        }
+        read_grpc_hunks(resp.into_body(), read_tx).await;
+    });
+
+    GrpcStream::new(read_rx, write_tx)
+}
+
+fn spawn_grpc_write_relay(
+    mut send_stream: h2::SendStream<Bytes>,
+    mut write_rx: mpsc::Receiver<Vec<u8>>,
+) {
     tokio::spawn(async move {
         while let Some(data) = write_rx.recv().await {
             if data.is_empty() {
-                // Sentinel from shutdown — send END_STREAM
                 let _ = send_stream.send_data(Bytes::new(), true);
                 return;
             }
             for chunk in data.chunks(GRPC_MAX_PAYLOAD) {
-                let header = grpc_frame_header(chunk.len());
-                let mut frame = Vec::with_capacity(GRPC_HEADER_LEN + chunk.len());
+                let hunk = encode_grpc_hunk(chunk);
+                let header = grpc_frame_header(hunk.len());
+                let mut frame = Vec::with_capacity(GRPC_HEADER_LEN + hunk.len());
                 frame.extend_from_slice(&header);
-                frame.extend_from_slice(chunk);
+                frame.extend_from_slice(&hunk);
                 if send_stream.send_data(Bytes::from(frame), false).is_err() {
                     return;
                 }
             }
         }
-        // Channel closed — close write side with END_STREAM
         let _ = send_stream.send_data(Bytes::new(), true);
     });
+}
 
-    // Read relay: h2 recv_stream → gRPC frame parse → mpsc
-    tokio::spawn(async move {
-        let mut frame_buf = Vec::new();
-        let mut header_buf = [0u8; GRPC_HEADER_LEN];
-        let mut header_pos = 0;
-        let mut expecting_payload: Option<usize> = None;
+fn spawn_grpc_read_relay(recv_stream: h2::RecvStream, read_tx: mpsc::Sender<Vec<u8>>) {
+    tokio::spawn(read_grpc_hunks(recv_stream, read_tx));
+}
 
-        loop {
-            match recv_stream.data().await {
-                Some(Ok(data)) => {
-                    frame_buf.extend_from_slice(&data);
-                    let _ = recv_stream.flow_control().release_capacity(data.len()).ok();
+async fn read_grpc_hunks(mut recv_stream: h2::RecvStream, read_tx: mpsc::Sender<Vec<u8>>) {
+    let mut frame_buf = Vec::new();
+    let mut header_buf = [0u8; GRPC_HEADER_LEN];
+    let mut header_pos = 0;
+    let mut expecting_payload: Option<usize> = None;
 
-                    loop {
-                        if let Some(payload_len) = expecting_payload {
-                            if frame_buf.len() >= payload_len {
-                                let payload = frame_buf[..payload_len].to_vec();
-                                frame_buf.drain(..payload_len);
-                                expecting_payload = None;
-                                header_pos = 0;
-                                if read_tx.send(payload).await.is_err() {
+    loop {
+        match recv_stream.data().await {
+            Some(Ok(data)) => {
+                frame_buf.extend_from_slice(&data);
+                let _ = recv_stream.flow_control().release_capacity(data.len()).ok();
+
+                loop {
+                    if let Some(payload_len) = expecting_payload {
+                        if frame_buf.len() >= payload_len {
+                            let payload = match decode_grpc_hunk(&frame_buf[..payload_len]) {
+                                Ok(payload) => payload,
+                                Err(error) => {
+                                    tracing::debug!(%error, "grpc protobuf hunk decode failed");
                                     return;
                                 }
-                            } else {
-                                break;
+                            };
+                            frame_buf.drain(..payload_len);
+                            expecting_payload = None;
+                            header_pos = 0;
+                            if read_tx.send(payload).await.is_err() {
+                                return;
                             }
                         } else {
-                            let needed = GRPC_HEADER_LEN - header_pos;
-                            let available = frame_buf.len().min(needed);
-                            if available > 0 {
-                                header_buf[header_pos..header_pos + available]
-                                    .copy_from_slice(&frame_buf[..available]);
-                                header_pos += available;
-                                frame_buf.drain(..available);
+                            break;
+                        }
+                    } else {
+                        let needed = GRPC_HEADER_LEN - header_pos;
+                        let available = frame_buf.len().min(needed);
+                        if available > 0 {
+                            header_buf[header_pos..header_pos + available]
+                                .copy_from_slice(&frame_buf[..available]);
+                            header_pos += available;
+                            frame_buf.drain(..available);
+                        }
+                        if header_pos == GRPC_HEADER_LEN {
+                            let (compressed, len) = parse_grpc_frame_header(&header_buf);
+                            if compressed || len == 0 || len > 1024 * 1024 {
+                                return;
                             }
-                            if header_pos == GRPC_HEADER_LEN {
-                                let (compressed, len) = parse_grpc_frame_header(&header_buf);
-                                if compressed {
-                                    return;
-                                }
-                                if len == 0 {
-                                    return;
-                                }
-                                if len > 1024 * 1024 {
-                                    return;
-                                }
-                                expecting_payload = Some(len);
-                            } else {
-                                break;
-                            }
+                            expecting_payload = Some(len);
+                        } else {
+                            break;
                         }
                     }
                 }
-                Some(Err(_)) => return,
-                None => return,
             }
+            Some(Err(_)) => return,
+            None => return,
         }
-    });
-
-    Ok(GrpcStream::new(read_rx, write_tx))
+    }
 }
 
-// ── AsyncRead / AsyncWrite / AsyncSocket / ClientStream impls ──
+fn encode_grpc_hunk(payload: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(1 + varint_len(payload.len() as u64) + payload.len());
+    out.push(0x0a);
+    write_varint(payload.len() as u64, &mut out);
+    out.extend_from_slice(payload);
+    out
+}
+
+fn decode_grpc_hunk(mut input: &[u8]) -> io::Result<Vec<u8>> {
+    let mut out = Vec::new();
+    while !input.is_empty() {
+        let key = read_varint(&mut input)?;
+        let field = key >> 3;
+        let wire_type = key & 0x07;
+        match wire_type {
+            0 => {
+                let _ = read_varint(&mut input)?;
+            }
+            1 => {
+                if input.len() < 8 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "grpc protobuf fixed64 truncated",
+                    ));
+                }
+                input = &input[8..];
+            }
+            2 => {
+                let len = read_varint(&mut input)? as usize;
+                if input.len() < len {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "grpc protobuf bytes truncated",
+                    ));
+                }
+                if field == 1 {
+                    out.extend_from_slice(&input[..len]);
+                }
+                input = &input[len..];
+            }
+            5 => {
+                if input.len() < 4 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "grpc protobuf fixed32 truncated",
+                    ));
+                }
+                input = &input[4..];
+            }
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "grpc protobuf unsupported wire type",
+                ));
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn write_varint(mut value: u64, out: &mut Vec<u8>) {
+    while value >= 0x80 {
+        out.push((value as u8) | 0x80);
+        value >>= 7;
+    }
+    out.push(value as u8);
+}
+
+fn read_varint(input: &mut &[u8]) -> io::Result<u64> {
+    let mut value = 0_u64;
+    for shift in (0..64).step_by(7) {
+        let Some((&byte, rest)) = input.split_first() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "grpc protobuf varint truncated",
+            ));
+        };
+        *input = rest;
+        value |= u64::from(byte & 0x7f) << shift;
+        if byte & 0x80 == 0 {
+            return Ok(value);
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        "grpc protobuf varint too long",
+    ))
+}
+
+fn varint_len(mut value: u64) -> usize {
+    let mut len = 1;
+    while value >= 0x80 {
+        value >>= 7;
+        len += 1;
+    }
+    len
+}
+
+// 鈹€鈹€ AsyncRead / AsyncWrite / AsyncSocket / ClientStream impls 鈹€鈹€
 
 impl AsyncRead for GrpcStream {
     fn poll_read(

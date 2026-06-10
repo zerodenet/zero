@@ -71,6 +71,8 @@ use crate::runtime::udp_associate::sessions::{
     CompletedUdpFlow, UdpFlowOutbound, UdpFlowSnapshot, UdpSessionFlows,
 };
 use crate::runtime::vless_udp::VlessUdpOutboundManager;
+#[cfg(feature = "vmess")]
+use crate::runtime::vmess_udp::VmessUdpOutboundManager;
 use crate::runtime::Proxy;
 
 // Sub-module declarations.
@@ -115,6 +117,9 @@ enum FlowStartResult {
     },
     /// A VLESS chain flow was established (tracked by the manager, not `UdpSessionFlows`).
     VlessFlow { session_id: u64, tag: String },
+    /// A VMess UDP flow was established (tracked by the manager, not `UdpSessionFlows`).
+    #[cfg(feature = "vmess")]
+    VmessFlow { session_id: u64, tag: String },
     /// The target was blocked.
     Blocked { tag: String },
 }
@@ -148,11 +153,17 @@ pub(crate) struct UdpDispatch {
     socks5_idle_deadline: Option<TokioInstant>,
     /// VLESS upstream manager (per-target connections).
     vless_manager: VlessUdpOutboundManager,
+    /// VMess upstream manager (per-target connections).
+    #[cfg(feature = "vmess")]
+    vmess_manager: VmessUdpOutboundManager,
     /// Session handles for VLESS chain flows. These are not tracked by
     /// [`UdpSessionFlows`] because the VLESS manager owns the per-target
     /// upstream connections. We store handles here so `finish_all()` can
     /// properly complete them.
     vless_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
+    /// Session handles for VMess UDP flows owned by the VMess manager.
+    #[cfg(feature = "vmess")]
+    vmess_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
     /// Unified JoinSet for chain-outbound (SS/H2/Trojan/Mieru/VLESS)
     /// response bridge tasks. Polled by [`poll_chain_response`].
     chain_tasks: JoinSet<ChainTask>,
@@ -182,7 +193,11 @@ impl UdpDispatch {
             socks5_upstream: None,
             socks5_idle_deadline: None,
             vless_manager: VlessUdpOutboundManager::new(),
+            #[cfg(feature = "vmess")]
+            vmess_manager: VmessUdpOutboundManager::new(),
             vless_handles: HashMap::new(),
+            #[cfg(feature = "vmess")]
+            vmess_handles: HashMap::new(),
             chain_tasks: JoinSet::new(),
             #[cfg(feature = "shadowsocks")]
             ss_manager: SsChainManager::new(),
@@ -204,7 +219,11 @@ impl UdpDispatch {
             socks5_upstream: None,
             socks5_idle_deadline: None,
             vless_manager: VlessUdpOutboundManager::new(),
+            #[cfg(feature = "vmess")]
+            vmess_manager: VmessUdpOutboundManager::new(),
             vless_handles: HashMap::new(),
+            #[cfg(feature = "vmess")]
+            vmess_handles: HashMap::new(),
             chain_tasks: JoinSet::new(),
             #[cfg(feature = "shadowsocks")]
             ss_manager: SsChainManager::new(),
@@ -346,6 +365,14 @@ impl UdpDispatch {
             }
         }
 
+        #[cfg(feature = "vmess")]
+        for (_key, (session, mut handle)) in self.vmess_handles.drain() {
+            if let Some(record) = handle.finish(SessionOutcome::ChainedRelayed) {
+                log_session_finished(&record, None);
+                let _ = session;
+            }
+        }
+
         self.flows.finish_all()
     }
 
@@ -388,6 +415,27 @@ impl UdpDispatch {
             proxy.record_session_outbound_tx(handle.session_id, packet_len);
             // Spawn bridge task for the expected response.
             self.vless_manager
+                .spawn_bridge(&mut self.chain_tasks, target, port, handle.session_id);
+            return Ok(handle.session_id);
+        }
+
+        #[cfg(feature = "vmess")]
+        if let Some(handle) = self.vmess_manager.get(&target, port) {
+            proxy.record_session_inbound_rx(handle.session_id, payload.len() as u64);
+            let packet = <vmess::VmessOutbound as UdpPacketFraming<
+                vmess::VmessUdpPacketTarget,
+            >>::encode_udp_packet(
+                &proxy.protocols.vmess_outbound,
+                &vmess::VmessUdpPacketTarget {
+                    address: &target,
+                    port,
+                    payload,
+                },
+            )?;
+            let packet_len = packet.len() as u64;
+            let _ = handle.send_tx.send(packet).await;
+            proxy.record_session_outbound_tx(handle.session_id, packet_len);
+            self.vmess_manager
                 .spawn_bridge(&mut self.chain_tasks, target, port, handle.session_id);
             return Ok(handle.session_id);
         }
@@ -451,6 +499,17 @@ impl UdpDispatch {
                     session.outbound_tag = Some(tag);
                     proxy.set_session_outbound(&session);
                     self.vless_handles.insert(
+                        (session.target.clone(), session.port),
+                        (session, session_handle),
+                    );
+                    proxy.record_session_outbound_tx(session_id, payload.len() as u64);
+                    return Ok(session_id);
+                }
+                #[cfg(feature = "vmess")]
+                Ok(FlowStartResult::VmessFlow { session_id, tag }) => {
+                    session.outbound_tag = Some(tag);
+                    proxy.set_session_outbound(&session);
+                    self.vmess_handles.insert(
                         (session.target.clone(), session.port),
                         (session, session_handle),
                     );
