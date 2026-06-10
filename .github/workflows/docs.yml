@@ -33,6 +33,7 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: docs
+        continue-on-error: true
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

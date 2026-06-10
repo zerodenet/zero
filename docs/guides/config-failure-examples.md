@@ -631,10 +631,10 @@ Error: invalid dns config: `dns.fake_ip.cidr` is not a valid CIDR: not-a-cidr
 2. **基于能力的协议列表**：启动时查询 `{"capabilities":{}}`。仅展示 `capabilities.protocols[]` 中的协议。`protocol` 和 `feature` 字段告诉你协议名称及其 cargo feature 门控。
 
 3. **结构化错误消息解析**：当 `config.validate` 返回错误时，CLI 输出格式遵循以下模式：
-   - `invalid inbound: inbounds[<index>] `<tag>`: <detail>`
-   - `invalid outbound: outbounds[<index>] `<tag>`: <detail>`
-   - `invalid outbound group: outbound_groups[<index>]: <detail>`
-   - `invalid rule condition: <detail>`
+   - `invalid inbound: inbounds[&lt;index&gt;] &lt;tag&gt;: &lt;detail&gt;`
+   - `invalid outbound: outbounds[&lt;index&gt;] &lt;tag&gt;: &lt;detail&gt;`
+   - `invalid outbound group: outbound_groups[&lt;index&gt;]: &lt;detail&gt;`
+   - `invalid rule condition: &lt;detail&gt;`
    如果你通过 shell 调用 `zero validate`（或解析内核端的 `cause` 字符串），可以提取索引和 tag 来高亮出问题的条目。
 
 ### 预验证检查清单
