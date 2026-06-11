@@ -579,8 +579,6 @@ impl Proxy {
             &mieru::MieruProtocol,
                 &mut stream,
                 &mieru::MieruTcpTarget {
-                    target: &session.target,
-                    port: session.port,
                     username: peer.username,
                     password: peer.password,
                 },
@@ -588,9 +586,12 @@ impl Proxy {
         .await
         .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru handshake: {e}"))))?;
 
-        Ok(TcpRelayStream::new(
-            crate::outbound::mieru::MieruTcpStream::new(stream, outbound),
-        ))
+        let mut mieru_stream = crate::outbound::mieru::MieruTcpStream::new(stream, outbound);
+        // mieru conveys the proxy target via socks5 inside the encrypted tunnel.
+        crate::outbound::mieru::socks5_connect(&mut mieru_stream, &session.target, session.port)
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru socks5: {e}"))))?;
+        Ok(TcpRelayStream::new(mieru_stream))
     }
 }
 

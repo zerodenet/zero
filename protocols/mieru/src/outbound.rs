@@ -2,7 +2,7 @@
 
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error};
+use zero_core::Error;
 use zero_traits::AsyncSocket;
 
 use crate::crypto::{derive_key, MieruCipher, NonceConfig};
@@ -24,12 +24,16 @@ pub struct MieruOutbound {
 
 impl MieruOutbound {
     /// Perform the mieru outbound handshake.
+    ///
+    /// Establishes the encrypted mieru session only. The session is a raw
+    /// encrypted tunnel and does NOT carry a target — upstream mieru conveys
+    /// the proxy target via socks5 running inside the tunnel (mita runs a
+    /// socks5 server on the decrypted session). Callers must perform that
+    /// socks5 handshake over the resulting stream to bind a target.
     pub async fn connect<S: AsyncSocket>(
         stream: &mut S,
         username: &str,
         password: &str,
-        target: &Address,
-        port: u16,
     ) -> Result<Self, Error> {
         let unix_now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -45,46 +49,40 @@ impl MieruOutbound {
         let mut server_cipher = MieruCipher::with_config(&key, &nc);
         let session = MieruSession::new();
 
-        // Encode target + send openSessionRequest
-        let target_payload = encode_target(target, port);
+        // openSessionRequest carries only the session ID — no target payload.
         let open_meta = SessionMetadata {
             protocol_type: OPEN_SESSION_REQUEST,
             timestamp: MieruSession::timestamp_minutes(),
             session_id: session.session_id,
             sequence_number: 0,
             status_code: 0,
-            payload_length: target_payload.len() as u16,
+            payload_length: 0,
             suffix_length: 0,
         };
-        let open_seg =
-            build_session_segment(&open_meta, &target_payload, &mut client_cipher, true)?;
+        let open_seg = build_session_segment(&open_meta, &[], &mut client_cipher, true)?;
         stream
             .write_all(&open_seg)
             .await
             .map_err(|_| Error::Io("mieru: send open"))?;
 
-        // Read openSessionResponse: padding0(0-64) + nonce(24) + meta(32) + tag(16) + optional payload
-        // Read enough to cover max padding + core segment
-        const MAX_PADDING: usize = 64;
+        // Read openSessionResponse. Upstream emits no leading padding0, so the
+        // nonce + encrypted metadata is exactly CORE_LEN bytes at offset 0.
         const CORE_LEN: usize = 24 + METADATA_LEN + 16; // nonce + meta + tag
-        let mut resp = vec![0u8; MAX_PADDING + CORE_LEN + 1024]; // 1024 = max payload
-        let mut total = 0usize;
-        while total < MAX_PADDING + CORE_LEN {
-            let n = stream
-                .read(&mut resp[total..])
-                .await
-                .map_err(|_| Error::Io("mieru out: conn closed"))?;
-            if n == 0 {
-                return Err(Error::Protocol("mieru out: conn closed"));
-            }
-            total += n;
-        }
-        let (seg, _) = parse_segment(&resp[..total], &mut server_cipher, true, true)?;
+        let mut resp = vec![0u8; CORE_LEN];
+        read_exact(stream, &mut resp, CORE_LEN).await?;
+        let (seg, _) = parse_segment(&resp, &mut server_cipher, true, true)?;
         let sm = seg
             .session_meta
             .ok_or(Error::Protocol("mieru: expected session meta"))?;
         if sm.protocol_type != OPEN_SESSION_RESPONSE {
             return Err(Error::Protocol("mieru: unexpected response"));
+        }
+
+        // Consume any suffix padding declared by the response so the stream is
+        // cleanly positioned for the data (socks5) phase.
+        if sm.suffix_length > 0 {
+            let mut suffix = vec![0u8; sm.suffix_length as usize];
+            read_exact(stream, &mut suffix, sm.suffix_length as usize).await?;
         }
 
         Ok(Self {
@@ -172,30 +170,6 @@ fn segment_wire_len(segment: &Segment, has_nonce: bool) -> usize {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-fn encode_target(addr: &Address, port: u16) -> Vec<u8> {
-    let mut buf = Vec::new();
-    match addr {
-        Address::Ipv4(ip) => {
-            buf.push(0x01);
-            buf.extend_from_slice(ip);
-            buf.extend_from_slice(&port.to_be_bytes());
-        }
-        Address::Ipv6(ip) => {
-            buf.push(0x04);
-            buf.extend_from_slice(ip);
-            buf.extend_from_slice(&port.to_be_bytes());
-        }
-        Address::Domain(domain) => {
-            buf.push(0x03);
-            let b = domain.as_bytes();
-            buf.push(b.len() as u8);
-            buf.extend_from_slice(b);
-            buf.extend_from_slice(&port.to_be_bytes());
-        }
-    }
-    buf
-}
-
 async fn read_exact<S: AsyncSocket>(
     stream: &mut S,
     buf: &mut [u8],
@@ -215,11 +189,13 @@ async fn read_exact<S: AsyncSocket>(
     Ok(())
 }
 
-/// Target parameters for Mieru TCP session.
+/// Credential parameters for a Mieru outbound session.
+///
+/// The mieru session is target-agnostic (it is an encrypted tunnel); the
+/// proxy target is conveyed by a socks5 handshake the caller runs over the
+/// established session, matching upstream mieru.
 #[derive(Debug, Clone, Copy)]
 pub struct MieruTcpTarget<'a> {
-    pub target: &'a Address,
-    pub port: u16,
     pub username: &'a str,
     pub password: &'a str,
 }

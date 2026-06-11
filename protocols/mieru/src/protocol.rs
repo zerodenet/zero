@@ -71,13 +71,6 @@ impl<'a> TcpSessionProtocol<MieruTcpTarget<'a>> for MieruProtocol {
     where
         S: AsyncSocket,
     {
-        MieruOutbound::connect(
-            stream,
-            target.username,
-            target.password,
-            target.target,
-            target.port,
-        )
-        .await
+        MieruOutbound::connect(stream, target.username, target.password).await
     }
 }

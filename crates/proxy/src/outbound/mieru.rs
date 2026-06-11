@@ -8,9 +8,91 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use mieru::MieruOutbound;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use zero_core::Address;
 
 use crate::transport::TcpRelayStream;
+
+/// Run a socks5 client handshake (no-auth + CONNECT) over an established mieru
+/// session stream to bind `target`. After this returns, the stream is a raw
+/// bidirectional pipe to the target.
+///
+/// mieru conveys the proxy target via socks5 inside the encrypted tunnel:
+/// mita runs a socks5 server on the decrypted session, so the client must
+/// negotiate the target with a CONNECT after the mieru handshake.
+pub(crate) async fn socks5_connect<S>(
+    stream: &mut S,
+    target: &Address,
+    port: u16,
+) -> io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    // Greeting: SOCKS5, 1 offered method, no-auth.
+    stream.write_all(&[0x05, 0x01, 0x00]).await?;
+    stream.flush().await?;
+
+    let mut method = [0u8; 2];
+    stream.read_exact(&mut method).await?;
+    if method[0] != 0x05 || method[1] != 0x00 {
+        return Err(io::Error::other(
+            "mieru socks5: server did not select no-auth",
+        ));
+    }
+
+    // CONNECT request.
+    let mut req = vec![0x05, 0x01, 0x00];
+    match target {
+        Address::Ipv4(ip) => {
+            req.push(0x01);
+            req.extend_from_slice(ip);
+        }
+        Address::Ipv6(ip) => {
+            req.push(0x04);
+            req.extend_from_slice(ip);
+        }
+        Address::Domain(domain) => {
+            let b = domain.as_bytes();
+            if b.len() > 255 {
+                return Err(io::Error::other("mieru socks5: domain too long"));
+            }
+            req.push(0x03);
+            req.push(b.len() as u8);
+            req.extend_from_slice(b);
+        }
+    }
+    req.extend_from_slice(&port.to_be_bytes());
+    stream.write_all(&req).await?;
+    stream.flush().await?;
+
+    // Reply: VER, REP, RSV, ATYP, BND.ADDR, BND.PORT.
+    let mut head = [0u8; 4];
+    stream.read_exact(&mut head).await?;
+    if head[0] != 0x05 {
+        return Err(io::Error::other("mieru socks5: bad reply version"));
+    }
+    if head[1] != 0x00 {
+        return Err(io::Error::other(format!(
+            "mieru socks5: connect rejected (rep=0x{:02x})",
+            head[1]
+        )));
+    }
+    let bnd_len = match head[3] {
+        0x01 => 4,
+        0x04 => 16,
+        0x03 => {
+            let mut len = [0u8; 1];
+            stream.read_exact(&mut len).await?;
+            len[0] as usize
+        }
+        _ => return Err(io::Error::other("mieru socks5: bad BND address type")),
+    };
+    let mut bnd_addr = vec![0u8; bnd_len];
+    stream.read_exact(&mut bnd_addr).await?;
+    let mut bnd_port = [0u8; 2];
+    stream.read_exact(&mut bnd_port).await?;
+    Ok(())
+}
 
 /// A Mieru-encrypted TCP stream that transparently encrypts/decrypts
 /// Mieru protocol segments during relay.

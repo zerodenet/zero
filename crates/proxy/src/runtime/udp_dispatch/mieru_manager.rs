@@ -172,13 +172,15 @@ impl MieruChainManager {
         username: &str,
         password: &str,
     ) -> Result<MieruEntry, EngineError> {
-        let udp_associate_target = Address::Ipv4([0, 0, 0, 0]);
-        let outbound =
-            MieruOutbound::connect(&mut stream, username, password, &udp_associate_target, 0)
-                .await
-                .map_err(|e| {
-                    EngineError::Io(std::io::Error::other(format!("mieru udp handshake: {e}")))
-                })?;
+        // The mieru session is target-agnostic; UDP-over-mieru conveys the
+        // target via socks5 UDP ASSOCIATE over the encrypted tunnel. The full
+        // socks5 UDP ASSOCIATE handshake is a follow-up — for now this
+        // establishes the encrypted session only.
+        let outbound = MieruOutbound::connect(&mut stream, username, password)
+            .await
+            .map_err(|e| {
+                EngineError::Io(std::io::Error::other(format!("mieru udp handshake: {e}")))
+            })?;
 
         let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
         let (recv_tx, _) = broadcast::channel::<RecvItem>(32);

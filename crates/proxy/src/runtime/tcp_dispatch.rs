@@ -651,18 +651,16 @@ async fn apply_hop_protocol(
                 <mieru::MieruProtocol as TcpSessionProtocol<mieru::MieruTcpTarget>>::establish_tcp_session(
                     &mieru::MieruProtocol,
                     &mut stream,
-                    &mieru::MieruTcpTarget {
-                        target: &session.target,
-                        port: session.port,
-                        username,
-                        password,
-                    },
+                    &mieru::MieruTcpTarget { username, password },
                 )
                 .await
                 .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
-            Ok(TcpRelayStream::new(
-                crate::outbound::mieru::MieruTcpStream::new(stream, outbound),
-            ))
+            let mut mieru_stream =
+                crate::outbound::mieru::MieruTcpStream::new(stream, outbound);
+            crate::outbound::mieru::socks5_connect(&mut mieru_stream, &session.target, session.port)
+                .await
+                .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
+            Ok(TcpRelayStream::new(mieru_stream))
         }
         _ => Err(EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
