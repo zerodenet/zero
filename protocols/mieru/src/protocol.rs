@@ -23,8 +23,6 @@ pub struct MieruProtocol;
 impl ProtocolMetadata for MieruProtocol {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
         let unsupported = ProtocolCapabilityState::unsupported(&[]);
-        let experimental =
-            ProtocolCapabilityState::experimental(&["external_interop_coverage_is_incomplete"]);
         let partial =
             ProtocolCapabilityState::partial(&["external_interop_coverage_is_incomplete"]);
 
@@ -33,7 +31,7 @@ impl ProtocolMetadata for MieruProtocol {
             feature: "mieru",
             status: ProtocolCapabilityLevel::Partial,
             compatibility_baseline: "mieru",
-            inbound: ProtocolNetworkCapability::new(experimental, partial),
+            inbound: ProtocolNetworkCapability::new(partial, partial),
             outbound: ProtocolNetworkCapability::new(partial, partial),
             transports: &["tcp", "udp"],
             mux: unsupported,
