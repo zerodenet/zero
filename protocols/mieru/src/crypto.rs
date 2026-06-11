@@ -339,7 +339,7 @@ fn derive_key_for_time(username: &str, password: &str, rounded_secs: u64) -> [u8
     //   salt = SHA-256(uint64_be(rounded_timestamp_seconds))
     //
     // Username is NOT mixed into the key — it is used independently
-    // via the user hint in the nonce tail (see MieruCipher::with_config).
+    // via the user hint in the nonce tail.
     let _ = username;
 
     // Step 1: timeSalt = SHA-256(uint64_be(rounded_secs))

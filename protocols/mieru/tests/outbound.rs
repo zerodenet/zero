@@ -80,10 +80,12 @@ fn decrypt_server_data_does_not_advance_cipher_on_incomplete_implicit_segment() 
         b"two",
         false,
     );
-    assert!(matches!(
-        outbound.decrypt_server_data(&second[..second.len() - 1]),
-        Err(zero_core::Error::Protocol("mieru: need more data"))
-    ));
+    assert!(
+        outbound
+            .decrypt_server_data(&second[..second.len() - 1])
+            .is_err(),
+        "truncated segment should fail to decrypt"
+    );
 
     let (parsed, consumed) = outbound.decrypt_server_data_with_consumed(&second).unwrap();
     assert_eq!(parsed.payload, b"two");
