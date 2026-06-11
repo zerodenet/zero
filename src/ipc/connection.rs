@@ -101,77 +101,76 @@ where
             }
         };
 
-        let req_id = request.id();
-
         match request {
-            IpcRequest::Ping { .. } => {
-                let resp = ipc_ok(req_id, "pong");
+            IpcRequest::Ping { id } => {
+                let resp = ipc_ok(id, "pong");
                 write_ipc_response(&mut *writer.lock().await, &resp).await?;
             }
-            IpcRequest::Query { request, .. } => match handle.query(request) {
+            IpcRequest::Query { id, request } => match handle.query(request) {
                 Ok(query_resp) => {
                     let value = serde_json::to_value(query_resp).map_err(io::Error::other)?;
-                    let resp = ipc_ok(req_id, value);
+                    let resp = ipc_ok(id, value);
                     write_ipc_response(&mut *writer.lock().await, &resp).await?;
                 }
                 Err(error) => {
-                    let resp = ipc_api_error(req_id, &error);
+                    let resp = ipc_api_error(id, &error);
                     write_ipc_response(&mut *writer.lock().await, &resp).await?;
                 }
             },
-            IpcRequest::Command { method, params, .. } => {
+            IpcRequest::Command { id, method, params } => {
                 let command = parse_command(&method, &params);
                 match command {
                     Ok(ref cmd) if !auth_ctx.allows(cmd.required_permission()) => {
                         let error =
                             zero_api::ApiError::permission_denied(cmd.required_permission());
-                        let resp = ipc_api_error(req_id, &error);
+                        let resp = ipc_api_error(id, &error);
                         write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     }
                     Ok(cmd) => match handle.execute(cmd) {
                         Ok(cmd_resp) => {
                             let value = serde_json::to_value(cmd_resp).map_err(io::Error::other)?;
-                            let resp = ipc_ok(req_id, value);
+                            let resp = ipc_ok(id, value);
                             write_ipc_response(&mut *writer.lock().await, &resp).await?;
                         }
                         Err(error) => {
-                            let resp = ipc_api_error(req_id, &error);
+                            let resp = ipc_api_error(id, &error);
                             write_ipc_response(&mut *writer.lock().await, &resp).await?;
                         }
                     },
                     Err(error) => {
-                        let resp = error.with_id(req_id);
+                        let resp = error.with_id(id);
                         write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     }
                 }
             }
-            IpcRequest::Subscribe { events, .. } => {
+            IpcRequest::Subscribe { id, events } => {
                 if subscribed {
                     let resp = ipc_error(
-                        req_id,
+                        id,
                         "already_subscribed",
                         "this connection is already subscribed to events",
                     );
                     write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     continue;
                 }
-                subscribed = true;
-
-                let resp = ipc_ok(req_id, "subscribed");
-                write_ipc_response(&mut *writer.lock().await, &resp).await?;
 
                 let mut filter = EventFilter::default();
                 if let Some(types) = events {
                     filter.event_types = types;
                 }
 
+                // Ack only after the subscription actually succeeds, so the
+                // request `id` is moved exactly once (no clone) and
+                // "subscribed" truthfully reflects engine state.
                 match handle.subscribe(filter) {
                     Ok(subscriber) => {
+                        subscribed = true;
+                        let resp = ipc_ok(id, "subscribed");
+                        write_ipc_response(&mut *writer.lock().await, &resp).await?;
                         // Tokio (async) channel so the writer task can
                         // `recv().await` without blocking a worker thread, and so
                         // aborting it cancels at the await point immediately.
-                        let (event_tx, mut event_rx) =
-                            tokio::sync::mpsc::unbounded_channel();
+                        let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
 
                         // Cooperative cancel flag. `abort()` does not interrupt a
                         // `spawn_blocking` task mid-sleep, and `try_recv()` returning
@@ -213,11 +212,8 @@ where
                         let event_writer = writer.clone();
                         bg_events = Some(tokio::spawn(async move {
                             loop {
-                                match tokio::time::timeout(
-                                    Duration::from_secs(30),
-                                    event_rx.recv(),
-                                )
-                                .await
+                                match tokio::time::timeout(Duration::from_secs(30), event_rx.recv())
+                                    .await
                                 {
                                     Ok(Some(value)) => {
                                         let frame =
@@ -239,9 +235,8 @@ where
                         }));
                     }
                     Err(error) => {
-                        let resp = ipc_api_error(req_id, &error);
+                        let resp = ipc_api_error(id, &error);
                         write_ipc_response(&mut *writer.lock().await, &resp).await?;
-                        subscribed = false;
                     }
                 }
             }

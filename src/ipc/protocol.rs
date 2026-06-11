@@ -9,39 +9,27 @@ pub enum IpcRequest {
     /// Execute a query.
     Query {
         #[serde(default)]
-        id: Option<u64>,
+        id: Option<serde_json::Value>,
         request: zero_api::QueryRequest,
     },
     /// Execute a command.
     Command {
         #[serde(default)]
-        id: Option<u64>,
+        id: Option<serde_json::Value>,
         method: String,
         params: serde_json::Value,
     },
     /// Subscribe to events (keeps the connection open).
     Subscribe {
         #[serde(default)]
-        id: Option<u64>,
+        id: Option<serde_json::Value>,
         events: Option<Vec<String>>,
     },
     /// Ping to verify the connection is alive.
     Ping {
         #[serde(default)]
-        id: Option<u64>,
+        id: Option<serde_json::Value>,
     },
-}
-
-impl IpcRequest {
-    /// Extract the optional request id for response echo.
-    pub fn id(&self) -> Option<u64> {
-        match self {
-            IpcRequest::Query { id, .. }
-            | IpcRequest::Command { id, .. }
-            | IpcRequest::Subscribe { id, .. }
-            | IpcRequest::Ping { id } => *id,
-        }
-    }
 }
 
 /// An event frame pushed by the server to subscribed clients.
@@ -58,14 +46,17 @@ pub enum IpcEvent {
 // ── IPC server response helpers ─────────────────────────────────────
 
 /// Construct a success response with a raw JSON value and optional request id.
-pub fn ipc_ok(id: Option<u64>, result: impl Serialize) -> ApiResponse<serde_json::Value> {
+pub fn ipc_ok(
+    id: Option<serde_json::Value>,
+    result: impl Serialize,
+) -> ApiResponse<serde_json::Value> {
     let value = serde_json::to_value(result).unwrap_or(serde_json::Value::Null);
     ApiResponse::ok_with_id(id, value)
 }
 
 /// Construct an error response with a code, message, and optional request id.
 pub fn ipc_error(
-    id: Option<u64>,
+    id: Option<serde_json::Value>,
     code: impl Into<String>,
     message: impl Into<String>,
 ) -> ApiResponse<()> {
@@ -73,7 +64,7 @@ pub fn ipc_error(
 }
 
 /// Construct an error response from an `ApiError`, with optional request id.
-pub fn ipc_api_error(id: Option<u64>, error: &zero_api::ApiError) -> ApiResponse<()> {
+pub fn ipc_api_error(id: Option<serde_json::Value>, error: &zero_api::ApiError) -> ApiResponse<()> {
     ApiResponse::<()>::from_api_error(error).with_id(id)
 }
 

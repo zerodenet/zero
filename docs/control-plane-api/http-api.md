@@ -36,7 +36,7 @@ HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiRespons
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `api_id` | string | 协议标识，始终为 `"zero.api.v1"` |
-| `id` | u64? | 请求关联 ID（IPC 多路复用时使用，HTTP 通常为 null） |
+| `id` | string \| number \| null | 请求关联 ID，不透明原样回显（客户端可用任意标量作配对令牌：数字、字符串如 UUID/标签）；IPC 多路复用时使用，HTTP 通常为 null |
 | `ok` | bool | 成功标志 |
 | `result` | object? | 成功时的响应数据 |
 | `error.code` | string | 机器可读错误码（snake_case） |
