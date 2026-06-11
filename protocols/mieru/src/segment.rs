@@ -58,10 +58,14 @@ pub fn build_session_segment(
         Vec::new()
     };
 
+    // Session segment wire format matches upstream mieru (underlay_stream.go):
+    //   [nonce(24) + encryptedMeta(48)] + [encryptedPayload] + [suffixPadding]
+    // There is NO leading padding0 — the server's readOneSegment() reads the
+    // first 72 bytes directly as nonce + encrypted metadata. Any prefix bytes
+    // would be misread as the nonce and break AEAD decryption.
+    // Suffix padding (declared in metadata.suffix_length) is appended after the
+    // payload; with suffix_length = 0 (the default), none is added.
     let mut buf = Vec::new();
-    // padding0: random non-encrypted prefix for entropy adjustment
-    buf.extend_from_slice(&generate_padding0());
-
     buf.extend_from_slice(&encrypted_meta);
 
     if !encrypted_payload.is_empty() {
@@ -262,15 +266,7 @@ fn random_bytes(len: usize) -> Vec<u8> {
     buf
 }
 
-/// Generate padding0: random non-encrypted bytes before the segment.
-/// Set to 64 to match upstream mieru's default padding range.
+/// Maximum leading padding0 offset scanned by `parse_segment` on the first
+/// (nonce-carrying) segment. Upstream mieru does not emit a leading padding0,
+/// so the nonce is normally at offset 0; the scan is a permissive fallback.
 const PADDING0_MAX: usize = 64;
-
-fn generate_padding0() -> Vec<u8> {
-    if PADDING0_MAX == 0 {
-        return Vec::new();
-    }
-    use rand::Rng;
-    let len = rand::thread_rng().gen_range(0..=PADDING0_MAX);
-    random_bytes(len)
-}

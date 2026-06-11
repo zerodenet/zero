@@ -37,7 +37,7 @@ impl MieruOutbound {
             .as_secs();
 
         let key = derive_key(username, password, unix_now);
-        let nc = crate::crypto::NonceConfig {
+        let nc = NonceConfig {
             username: Some(username.to_owned()),
             ..Default::default()
         };
