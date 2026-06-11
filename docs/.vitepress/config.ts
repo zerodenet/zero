@@ -2,88 +2,94 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Zero',
-  description: 'Zero - A modular network proxy kernel written in Rust',
+  description: 'Zero - 模块化网络代理内核（Rust）',
   lang: 'zh-CN',
   lastUpdated: true,
 
   themeConfig: {
     nav: [
-      { text: 'Guides', link: '/guides/quickstart' },
-      { text: 'Config', link: '/project/config' },
-      { text: 'Protocols', link: '/protocols/' },
-      { text: 'Control Plane', link: '/control-plane-api/' },
-      { text: 'Project', link: '/project/architecture' },
+      { text: '指南', link: '/guides/quickstart' },
+      { text: '配置', link: '/project/config' },
+      { text: '协议', link: '/protocols/' },
+      { text: '控制面', link: '/control-plane-api/' },
+      { text: '项目', link: '/project/architecture' },
     ],
 
     sidebar: {
       '/guides/': [
         {
-          text: 'Guides',
+          text: '指南',
           items: [
-            { text: 'Quickstart', link: '/guides/quickstart' },
-            { text: 'GUI Integration', link: '/guides/gui-integration' },
+            { text: '快速上手', link: '/guides/quickstart' },
+            { text: 'GUI 对接', link: '/guides/gui-integration' },
+            { text: '配置失败示例', link: '/guides/config-failure-examples' },
           ],
         },
       ],
 
       '/protocols/': [
         {
-          text: 'Protocol Tracking',
+          text: '协议追踪',
           items: [
-            { text: 'Overview', link: '/protocols/' },
-            { text: 'Configuration', link: '/protocols/configuration' },
-            { text: 'SOCKS5', link: '/protocols/socks5' },
-            { text: 'HTTP CONNECT', link: '/protocols/http-connect' },
-            { text: 'Mixed', link: '/protocols/mixed' },
-            { text: 'VLESS', link: '/protocols/vless' },
-            { text: 'Shadowsocks', link: '/protocols/shadowsocks' },
-            { text: 'Trojan', link: '/protocols/trojan' },
-            { text: 'Hysteria2', link: '/protocols/hysteria2' },
-            { text: 'Mieru', link: '/protocols/mieru' },
-            { text: 'VMess', link: '/protocols/vmess' },
-            { text: 'Incomplete', link: '/protocols/incomplete' },
+            { text: '概览', link: '/protocols/' },
+            { text: '配置速查', link: '/protocols/configuration' },
+            { text: '未完成项', link: '/protocols/incomplete' },
+          ],
+        },
+        {
+          text: '协议详情',
+          items: [
+            { text: 'SOCKS5', link: '/protocols/socks5/' },
+            { text: 'HTTP CONNECT', link: '/protocols/http-connect/' },
+            { text: 'Mixed', link: '/protocols/mixed/' },
+            { text: 'VLESS', link: '/protocols/vless/' },
+            { text: 'Shadowsocks', link: '/protocols/shadowsocks/' },
+            { text: 'Trojan', link: '/protocols/trojan/' },
+            { text: 'Hysteria2', link: '/protocols/hysteria2/' },
+            { text: 'Mieru', link: '/protocols/mieru/' },
+            { text: 'VMess', link: '/protocols/vmess/' },
           ],
         },
       ],
 
       '/project/': [
         {
-          text: 'Config',
+          text: '配置与运行时',
           items: [
-            { text: 'Config Spec', link: '/project/config' },
-            { text: 'Modes And Groups', link: '/project/modes-and-groups' },
-            { text: 'Engine Plan', link: '/project/engine-plan' },
-            { text: 'API Types', link: '/project/api' },
+            { text: '配置规范', link: '/project/config' },
+            { text: '模式与分组', link: '/project/modes-and-groups' },
+            { text: '引擎计划', link: '/project/engine-plan' },
+            { text: 'API 类型', link: '/project/api' },
           ],
         },
         {
-          text: 'Design',
+          text: '架构设计',
           items: [
-            { text: 'Architecture', link: '/project/architecture' },
-            { text: 'Features', link: '/project/features' },
-            { text: 'Logging', link: '/project/logging' },
-            { text: 'Lifecycle', link: '/project/lifecycle' },
-            { text: 'Control Plane', link: '/project/control-plane' },
-            { text: 'Positioning', link: '/project/positioning' },
-            { text: 'Goals', link: '/project/goals' },
-            { text: 'Tooling', link: '/project/tooling' },
-            { text: 'Panel Connector', link: '/project/panel-node-connector' },
-            { text: 'Protocol Capabilities', link: '/project/protocol-capabilities' },
+            { text: '架构', link: '/project/architecture' },
+            { text: '构建特性', link: '/project/features' },
+            { text: '日志', link: '/project/logging' },
+            { text: '生命周期', link: '/project/lifecycle' },
+            { text: '控制面', link: '/project/control-plane' },
+            { text: '项目定位', link: '/project/positioning' },
+            { text: '项目目标', link: '/project/goals' },
+            { text: '工程规则', link: '/project/tooling' },
+            { text: '面板连接器', link: '/project/panel-node-connector' },
+            { text: '协议能力', link: '/project/protocol-capabilities' },
           ],
         },
       ],
 
       '/control-plane-api/': [
         {
-          text: 'Control Plane API',
+          text: '控制面 API',
           items: [
-            { text: 'Overview', link: '/control-plane-api/' },
-            { text: 'Configuration Model', link: '/control-plane-api/configuration' },
+            { text: '概览', link: '/control-plane-api/' },
+            { text: '配置模型', link: '/control-plane-api/configuration' },
             { text: 'HTTP API', link: '/control-plane-api/http-api' },
-            { text: 'IPC Protocol', link: '/control-plane-api/ipc-protocol' },
-            { text: 'Events', link: '/control-plane-api/events' },
-            { text: 'Flow Hooks', link: '/control-plane-api/hooks' },
-            { text: 'Push Connector', link: '/control-plane-api/push-connector' },
+            { text: 'IPC 协议', link: '/control-plane-api/ipc-protocol' },
+            { text: '事件', link: '/control-plane-api/events' },
+            { text: '流钩子', link: '/control-plane-api/hooks' },
+            { text: '推送连接器', link: '/control-plane-api/push-connector' },
             { text: 'CLI', link: '/control-plane-api/cli' },
           ],
         },
@@ -100,16 +106,16 @@ export default defineConfig({
 
     outline: {
       level: [2, 3],
-      label: 'On This Page',
+      label: '本页目录',
     },
 
     docFooter: {
-      prev: 'Previous',
-      next: 'Next',
+      prev: '上一篇',
+      next: '下一篇',
     },
 
     lastUpdated: {
-      text: 'Last Updated',
+      text: '最后更新',
     },
   },
 })
