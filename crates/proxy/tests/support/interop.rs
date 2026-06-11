@@ -12,6 +12,19 @@ use tokio::time::{sleep, Duration};
 #[cfg(feature = "socks5")]
 use zero_core::Address;
 
+/// Look up an environment variable.  Returns `None` when the variable is
+/// unset and prints a skip message.  Callers should `return;` early to
+/// gracefully skip the test.
+pub fn require_env(var: &str) -> Option<String> {
+    match std::env::var(var) {
+        Ok(v) => Some(v),
+        Err(_) => {
+            eprintln!("SKIP: env var {var} is not set");
+            None
+        }
+    }
+}
+
 static NEXT_TEMP_DIR: AtomicU64 = AtomicU64::new(0);
 static LOG_INIT: Once = Once::new();
 
@@ -124,8 +137,7 @@ pub struct XrayProcess {
 }
 
 impl XrayProcess {
-    pub fn start(config: &Path, material: &TempMaterial) -> Self {
-        let xray_bin = std::env::var("XRAY_BIN").expect("XRAY_BIN must point to xray executable");
+    pub fn start(xray_bin: String, config: &Path, material: &TempMaterial) -> Self {
         Self {
             inner: ExternalProcess::start(
                 xray_bin,

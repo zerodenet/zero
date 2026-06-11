@@ -44,7 +44,10 @@ async fn zero_ss_outbound_interops_with_xray_ss_inbound_tcp_aes_128_gcm() {
         xray_ss_inbound_config(xray_port, "aes-128-gcm", PASSWORD),
     )
     .expect("write xray config");
-    let mut xray = XrayProcess::start(&xray_config, &material);
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
     wait_for_listener(xray_port).await;
 
     let zero_config = RuntimeConfig::parse(&format!(
@@ -115,7 +118,10 @@ async fn zero_ss_outbound_interops_with_xray_ss_inbound_udp_aes_128_gcm() {
         xray_ss_inbound_config(xray_port, "aes-128-gcm", PASSWORD),
     )
     .expect("write xray config");
-    let mut xray = XrayProcess::start(&xray_config, &material);
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
     wait_for_listener(xray_port).await;
 
     let zero_config = RuntimeConfig::parse(&format!(
@@ -184,7 +190,10 @@ async fn zero_ss_outbound_interops_with_xray_ss_inbound_tcp_2022_blake3_aes_128_
         xray_ss_inbound_config(xray_port, cipher, password),
     )
     .expect("write xray config");
-    let mut xray = XrayProcess::start(&xray_config, &material);
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
     wait_for_listener(xray_port).await;
 
     let zero_config = RuntimeConfig::parse(&format!(
@@ -257,7 +266,10 @@ async fn zero_ss_outbound_interops_with_xray_ss_inbound_udp_2022_blake3_aes_128_
         xray_ss_inbound_config(xray_port, cipher, password),
     )
     .expect("write xray config");
-    let mut xray = XrayProcess::start(&xray_config, &material);
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
     wait_for_listener(xray_port).await;
 
     let zero_config = RuntimeConfig::parse(&format!(
@@ -347,7 +359,10 @@ async fn xray_ss_outbound_interops_with_zero_ss_inbound_tcp_aes_128_gcm() {
         xray_ss_outbound_config(xray_socks_port, zero_port, "aes-128-gcm", PASSWORD, false),
     )
     .expect("write xray config");
-    let mut xray = XrayProcess::start(&xray_config, &material);
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
     wait_for_listener(xray_socks_port).await;
 
     let echo = spawn_tcp_echo(echo_port, payload.len()).await;
@@ -411,7 +426,10 @@ async fn xray_ss_outbound_interops_with_zero_ss_inbound_udp_aes_128_gcm() {
         xray_ss_outbound_config(xray_socks_port, zero_port, "aes-128-gcm", PASSWORD, true),
     )
     .expect("write xray config");
-    let mut xray = XrayProcess::start(&xray_config, &material);
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
     wait_for_listener(xray_socks_port).await;
 
     let echo = spawn_udp_echo(echo_port, payload.len()).await;

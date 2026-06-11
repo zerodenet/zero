@@ -27,7 +27,10 @@ async fn zero_trojan_outbound_interops_with_xray_trojan_inbound_tcp() {
     let xray_config = material.path("xray-server.json");
     std::fs::write(&xray_config, xray_trojan_inbound_config(xray_port, &tls))
         .expect("write xray config");
-    let mut xray = XrayProcess::start(&xray_config, &material);
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
     wait_for_listener(xray_port).await;
 
     let zero_config = RuntimeConfig::parse(&format!(
@@ -97,7 +100,10 @@ async fn zero_trojan_outbound_interops_with_xray_trojan_inbound_udp() {
     let xray_config = material.path("xray-server.json");
     std::fs::write(&xray_config, xray_trojan_inbound_config(xray_port, &tls))
         .expect("write xray config");
-    let mut xray = XrayProcess::start(&xray_config, &material);
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
     wait_for_listener(xray_port).await;
 
     let zero_config = RuntimeConfig::parse(&format!(
@@ -194,7 +200,10 @@ async fn xray_trojan_outbound_interops_with_zero_trojan_inbound_tcp() {
         xray_trojan_outbound_config(xray_socks_port, zero_port, &tls),
     )
     .expect("write xray config");
-    let mut xray = XrayProcess::start(&xray_config, &material);
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
     wait_for_listener(xray_socks_port).await;
 
     let echo = spawn_tcp_echo(echo_port, payload.len()).await;
@@ -264,7 +273,10 @@ async fn xray_trojan_outbound_interops_with_zero_trojan_inbound_udp() {
         xray_trojan_outbound_config(xray_socks_port, zero_port, &tls),
     )
     .expect("write xray config");
-    let mut xray = XrayProcess::start(&xray_config, &material);
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
     wait_for_listener(xray_socks_port).await;
 
     let echo = spawn_udp_echo(echo_port, payload.len()).await;
