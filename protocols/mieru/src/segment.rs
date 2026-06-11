@@ -90,8 +90,8 @@ pub fn build_data_segment(
     };
 
     let mut buf = Vec::new();
-    // padding0: random non-encrypted prefix for entropy adjustment
-    buf.extend_from_slice(&generate_padding0());
+    // No padding0 for data/ACK segments — only session segments
+    // (open/close) carry padding0 per upstream mieru protocol.
 
     buf.extend_from_slice(&encrypted_meta);
 
