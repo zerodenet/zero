@@ -249,6 +249,11 @@ pub fn parse_segment(
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+#[cfg(not(feature = "crypto"))]
+fn random_bytes(_len: usize) -> Vec<u8> {
+    Vec::new()
+}
+
 #[cfg(feature = "crypto")]
 fn random_bytes(len: usize) -> Vec<u8> {
     use rand::RngCore;
@@ -258,8 +263,8 @@ fn random_bytes(len: usize) -> Vec<u8> {
 }
 
 /// Generate padding0: random non-encrypted bytes before the segment.
-/// Default length: 0 (disabled). Configurable for anti-detection.
-const PADDING0_MAX: usize = 0; // Set >0 to enable random prefix padding
+/// Set to 64 to match upstream mieru's default padding range.
+const PADDING0_MAX: usize = 64;
 
 fn generate_padding0() -> Vec<u8> {
     if PADDING0_MAX == 0 {

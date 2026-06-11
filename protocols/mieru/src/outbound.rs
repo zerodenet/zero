@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use zero_core::{Address, Error};
 use zero_traits::AsyncSocket;
 
-use crate::crypto::{derive_key, MieruCipher};
+use crate::crypto::{derive_key, MieruCipher, NonceConfig};
 use crate::metadata::{
     DataMetadata, SessionMetadata, CLOSE_SESSION_REQUEST, DATA_CLIENT_TO_SERVER, METADATA_LEN,
     OPEN_SESSION_REQUEST, OPEN_SESSION_RESPONSE,
@@ -37,8 +37,15 @@ impl MieruOutbound {
             .as_secs();
 
         let key = derive_key(username, password, unix_now);
-        let mut client_cipher = MieruCipher::new(&key);
-        let mut server_cipher = MieruCipher::new(&key);
+
+        // Apply user hint to the nonce so the server can quickly identify
+        // which user's key to try (matching upstream mieru behavior).
+        let nonce_config = crate::crypto::NonceConfig {
+            username: Some(username.to_owned()),
+            ..Default::default()
+        };
+        let mut client_cipher = MieruCipher::with_config(&key, &nonce_config);
+        let mut server_cipher = MieruCipher::with_config(&key, &nonce_config);
         let session = MieruSession::new();
 
         // Encode target + send openSessionRequest
@@ -59,10 +66,23 @@ impl MieruOutbound {
             .await
             .map_err(|_| Error::Io("mieru: send open"))?;
 
-        // Read openSessionResponse: nonce(24) + meta(32) + tag(16) = 72
-        let mut resp = vec![0u8; 72];
-        read_exact(stream, &mut resp, 72).await?;
-        let (seg, _) = parse_segment(&resp, &mut server_cipher, true, true)?;
+        // Read openSessionResponse: padding0(0-64) + nonce(24) + meta(32) + tag(16) + optional payload
+        // Read enough to cover max padding + core segment
+        const MAX_PADDING: usize = 64;
+        const CORE_LEN: usize = 24 + METADATA_LEN + 16; // nonce + meta + tag
+        let mut resp = vec![0u8; MAX_PADDING + CORE_LEN + 1024]; // 1024 = max payload
+        let mut total = 0usize;
+        while total < MAX_PADDING + CORE_LEN {
+            let n = stream
+                .read(&mut resp[total..])
+                .await
+                .map_err(|_| Error::Io("mieru out: conn closed"))?;
+            if n == 0 {
+                return Err(Error::Protocol("mieru out: conn closed"));
+            }
+            total += n;
+        }
+        let (seg, _) = parse_segment(&resp[..total], &mut server_cipher, true, true)?;
         let sm = seg
             .session_meta
             .ok_or(Error::Protocol("mieru: expected session meta"))?;

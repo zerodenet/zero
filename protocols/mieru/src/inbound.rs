@@ -35,9 +35,11 @@ impl MieruInbound {
         stream: &mut S,
         users: &[(String, String)],
     ) -> Result<MieruAccept, Error> {
-        // Read first segment: nonce(24) + encrypted_meta(32) + tag(16) = 72 bytes
-        let mut first = vec![0u8; 72];
-        read_exact(stream, &mut first, 72).await?;
+        // Read first segment: padding0(0-64) + nonce(24) + encrypted_meta(32) + tag(16)
+        const MAX_PADDING: usize = 64;
+        const SEGMENT_CORE: usize = 24 + 32 + 16;
+        let mut first = vec![0u8; MAX_PADDING + SEGMENT_CORE];
+        read_exact(stream, &mut first, MAX_PADDING + SEGMENT_CORE).await?;
 
         let unix_now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

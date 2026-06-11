@@ -334,25 +334,26 @@ pub fn try_derive_keys(username: &str, password: &str, unix_time_secs: u64) -> [
 }
 
 fn derive_key_for_time(username: &str, password: &str, rounded_secs: u64) -> [u8; 32] {
-    // Step 1: hashedPassword = SHA-256(password || 0x00 || username)
-    let mut hasher = sha2::Sha256::new();
-    hasher.update(password.as_bytes());
-    hasher.update(&[0x00]);
-    hasher.update(username.as_bytes());
-    let hashed_password = hasher.finalize();
+    // Key derivation matching upstream mieru v3.x:
+    //   key = PBKDF2-HMAC-SHA256(password, salt, 64 iter, 32 bytes)
+    //   salt = SHA-256(uint64_be(rounded_timestamp_seconds))
+    //
+    // Username is NOT mixed into the key — it is used independently
+    // via the user hint in the nonce tail (see MieruCipher::with_config).
+    let _ = username;
 
-    // Step 2: timeSalt = SHA-256(uint64_be(rounded_secs))
+    // Step 1: timeSalt = SHA-256(uint64_be(rounded_secs))
     let mut ts_hasher = sha2::Sha256::new();
     ts_hasher.update(&rounded_secs.to_be_bytes());
     let time_salt = ts_hasher.finalize();
 
-    // Step 3: PBKDF2(HMAC-SHA256, 64 iter, 32 bytes)
+    // Step 2: PBKDF2(HMAC-SHA256, 64 iter, 32 bytes)
     let mut key = [0u8; 32];
     ring::pbkdf2::derive(
         ring::pbkdf2::PBKDF2_HMAC_SHA256,
         std::num::NonZeroU32::new(64).unwrap(),
         &time_salt,
-        &hashed_password,
+        password.as_bytes(),
         &mut key,
     );
 
