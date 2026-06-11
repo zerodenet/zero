@@ -10,7 +10,7 @@ Mieru 是 `partial` 协议能力。基线 TCP stream 和 UDP associate 路径存
 | TCP 出站 | `partial` | 加密流上游 |
 | UDP 入站 | `partial` | UDP associate 路径 |
 | UDP 出站 | `partial` | 单跳及 TCP relay-prefix final-hop 路径 |
-| MUX | `not_applicable` | 无独立 MUX 配置 |
+| MUX | `unsupported` | Mieru MUX 未实现 |
 
 ## 剩余缺口
 

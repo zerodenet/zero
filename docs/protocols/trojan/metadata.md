@@ -22,7 +22,7 @@ impl ProtocolMetadata for TrojanProtocol {
             },
             transports: vec!["tcp", "tls"],
             mux: ProtocolCapabilityLevel::Unsupported,
-            limitations: vec![],
+            limitations: vec!["external_interop_coverage_is_incomplete", "relay_stream_tls_client_fingerprint_is_not_supported"],
         }
     }
 }

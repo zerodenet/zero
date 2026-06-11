@@ -41,7 +41,7 @@ impl ProtocolMetadata for ShadowsocksProtocol {
 | `outbound.tcp` | `supported` | 全 cipher TCP outbound |
 | `outbound.udp` | `supported` | 全 cipher UDP outbound (已外部验证) |
 | `transports` | `["tcp", "udp"]` | Shadowsocks 不使用 transport 层抽象 |
-| `mux` | `not_applicable` | Shadowsocks 无 MUX 规范 |
+| `mux` | `unsupported` | Shadowsocks 未实现 MUX |
 
 ## Limitations
 

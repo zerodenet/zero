@@ -18,7 +18,6 @@
 | `mux_udp_is_not_implemented` | VLESS MUX 不承载 UDP sub-connection | 实现 UDP MUX sub-connection 编解码和运行时派发 |
 | `udp_relay_chain_final_transport_limited` | UDP relay-chain 不支持所有 final-hop transport | SplitHTTP、QUIC 等非当前 TCP relay stream 路径有明确实现 |
 | `non_reality_tls_fingerprint_passthrough_is_incomplete` | 非 Reality TLS fingerprint 行为不完整 | 将 fingerprint cipher suite / key exchange 偏好传入 TLS 实现 |
-| `relay_stream_tls_client_fingerprint_is_not_supported` | relay stream 上的 TLS final hop 不能完全控制 fingerprint | relay-stream TLS 握手获得等价 raw socket 控制能力，或定义明确不支持边界 |
 
 ## Trojan
 

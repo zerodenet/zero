@@ -60,11 +60,11 @@
 | `http_connect` | `supported` | `supported` | `not_applicable` | `unsupported` | `not_applicable` | `not_applicable` | `rfc_7231_connect` |
 | `mixed` | `supported` | `supported` | `supported` | `unsupported` | `unsupported` | `not_applicable` | `kernel_builtin` |
 | `vless` | `partial` | `supported` | `partial` | `supported` | `partial` | `partial` | `xray_core_vless` |
-| `hysteria2` | `partial` | `supported` | `partial` | `supported` | `partial` | `not_applicable` | `hysteria` |
-| `shadowsocks` | `partial` | `supported` | `supported` | `supported` | `supported` | `not_applicable` | `shadowsocks_rust_sip022` |
+| `hysteria2` | `partial` | `supported` | `partial` | `supported` | `partial` | `unsupported` | `hysteria` |
+| `shadowsocks` | `partial` | `supported` | `supported` | `supported` | `supported` | `unsupported` | `shadowsocks_rust_sip022` |
 | `trojan` | `partial` | `supported` | `partial` | `supported` | `partial` | `unsupported` | `trojan_go` |
 | `vmess` | `partial` | `partial` | `partial` | `partial` | `partial` | `partial` | `xray_core_vmess_aead` |
-| `mieru` | `partial` | `experimental` | `partial` | `partial` | `partial` | `not_applicable` | `mieru` |
+| `mieru` | `partial` | `partial` | `partial` | `partial` | `partial` | `unsupported` | `mieru` |
 
 ## 内核缺口
 
@@ -94,7 +94,7 @@
 | `trojan` | TCP 和 UDP-over-stream 基线路径完备 | 外部互操作性覆盖和中继流 TLS 指纹行为不完整 |
 | `shadowsocks` | 普通 AEAD TCP 和 UDP datagram 路径完备，包括 Shadowsocks UDP over SOCKS5、大 TCP 载荷分块、错误密码拒绝、数据包路径中继链以及针对 `shadowsocks-rust` 的本地外部 UDP 出站互操作性（覆盖所有支持的 cipher） | AEAD 2022 TCP 和 AEAD 2022 服务器端 UDP 外部互操作性不完整 |
 | `hysteria2` | QUIC TCP 流和 UDP datagram 基线路径完备 | 外部互操作性覆盖和 QUIC UDP 链路径不完整 |
-| `mieru` | TCP 流和 UDP associate 基线路径完备 | 外部互操作性覆盖不完整；入站 TCP 在描述符中保持 experimental |
+| `mieru` | TCP 流和 UDP associate 基线路径完备 | 外部互操作性覆盖不完整 |
 | `vmess` | 基线 TCP 握手、TCP/UDP MUX、UDP-over-stream、同协议 `vmess -> vmess` UDP 中继链和 body relay 已针对内置运行时实现；原始 TLS、WSS、gRPC、`cipher: auto` 规范化、`cipher: none` / `cipher: zero`、本地 TCP MUX、本地 MUX UDP、本地 UDP 单跳中继和本地同协议 UDP 中继链具有内置覆盖；body AEAD 支持认证长度、块掩码（SHAKE128）、全局填充和定期密钥旋转（2^14 块）；外部 TCP 和 UDP 基线互操作性已覆盖：Xray 双向、Zero 出站到 sing-box 入站、Mihomo 出站到 Zero 入站；Xray WS/gRPC TCP 传输互操作性已覆盖双向 | 外部互操作性覆盖和主流 `cipher: zero` 兼容性仍不完整 |
 
 ## 当前收口状态
