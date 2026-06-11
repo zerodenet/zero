@@ -268,12 +268,20 @@ where
 }
 
 /// Write a serialized IPC response frame to the transport.
+///
+/// The connection writer is wrapped in a `BufWriter`, so we MUST flush
+/// after each frame — otherwise responses sit in the 8 KB buffer and the
+/// client times out waiting. The only other flush site is the background
+/// event/heartbeat task, which doesn't run until a `Subscribe` succeeds
+/// and only fires every 30 s; relying on it leaves every pre-subscribe
+/// response (and ack/error frames) stuck in the buffer indefinitely.
 pub(crate) async fn write_ipc_response(
     writer: &mut (impl AsyncWriteExt + Unpin),
     response: &impl Serialize,
 ) -> io::Result<()> {
     let frame = serialize_frame(response).map_err(io::Error::other)?;
     writer.write_all(&frame).await?;
+    writer.flush().await?;
     Ok(())
 }
 
