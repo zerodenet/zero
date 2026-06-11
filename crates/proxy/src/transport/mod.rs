@@ -32,6 +32,8 @@ pub(crate) use zero_transport::tls::{build_tls_acceptor, InboundTlsStream, TlsAc
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::vless_transport::build_vless_outbound_transport_over_stream;
 #[cfg(feature = "vless")]
+pub(crate) use zero_transport::vless_transport::build_vless_split_http_over_relay;
+#[cfg(feature = "vless")]
 pub(crate) use zero_transport::vless_transport::VlessTransportConnector;
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::ws::accept_ws;

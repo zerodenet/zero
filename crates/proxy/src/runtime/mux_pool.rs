@@ -125,7 +125,7 @@ impl MuxConnectionPool {
         conn.streams.lock().unwrap().insert(sid, down_tx);
 
         // Send new-stream request to the peer
-        let req = vless::encode_new_stream(session.port, &session.target)
+        let req = vless::encode_new_stream(vless::NETWORK_TCP, session.port, &session.target)
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
         conn.write_tx
             .send(req)
@@ -139,12 +139,12 @@ impl MuxConnectionPool {
             let mut up_rx = up_rx;
             while let Some(data) = up_rx.recv().await {
                 let payload = encrypt_mux_payload(&crypto, sid, &data, true);
-                let frame = vless::encode_frame(sid, &payload);
+                let frame = vless::encode_data_frame(sid, &payload);
                 if write.send(frame).is_err() {
                     break;
                 }
             }
-            let close_frame = vless::encode_frame(sid, &[]);
+            let close_frame = vless::encode_end_frame(sid);
             let _ = write.send(close_frame);
             *conn_drop.active.lock().unwrap() -= 1;
         });

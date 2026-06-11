@@ -186,10 +186,14 @@ pub async fn build_vless_outbound_transport_over_stream(
     } = carrier;
     // Shadow to match the original &str / u16 types used throughout the function.
     let server: &str = &server;
-    if split_http_config.is_some() {
+    if let Some(cfg) = split_http_config {
+        // Single-hop SplitHTTP is handled by build_vless_outbound_transport().
+        // Relay-chain SplitHTTP goes through build_vless_split_http_over_relay()
+        // in start_relay_flow, which provides both POST and GET streams.
+        // This path only receives a single stream — emit a clear diagnostic.
         return Err(EngineError::Io(io::Error::new(
             io::ErrorKind::Unsupported,
-            "split_http final hop over relay stream is not supported",
+            "split_http requires two streams; use build_vless_split_http_over_relay for relay chains",
         )));
     }
 
@@ -255,6 +259,21 @@ pub async fn build_vless_outbound_transport_over_stream(
             "invalid vless final-hop transport combination",
         ))),
     }
+}
+
+/// Build a SplitHTTP transport over a relay chain.
+///
+/// SplitHTTP uses separate POST (write) and GET (read) TCP channels.
+/// This function receives two independent streams — each already tunneled
+/// through the same relay prefix hops — and pairs them via
+/// [`split_http::connect_split_http`].
+pub async fn build_vless_split_http_over_relay(
+    post_stream: TcpRelayStream,
+    get_stream: TcpRelayStream,
+    config: &SplitHttpConfig,
+) -> Result<TcpRelayStream, EngineError> {
+    let paired = split_http::connect_split_http(post_stream, get_stream, config).await?;
+    Ok(TcpRelayStream::new(paired))
 }
 
 /// VLESS transport connector that implements [`TransportConnector`].

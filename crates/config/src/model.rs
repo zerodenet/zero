@@ -604,6 +604,11 @@ pub struct TlsConfig {
     pub key_path: String,
     #[serde(default)]
     pub alpn: Vec<String>,
+    /// TLS server fingerprint preset: "chrome", "firefox", "safari",
+    /// "ios", "edge", "randomized", or empty/"none" for rustls defaults.
+    /// Controls cipher suite preference order in the ServerHello.
+    #[serde(default)]
+    pub server_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

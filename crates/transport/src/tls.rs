@@ -67,7 +67,34 @@ pub fn build_tls_acceptor(
 ) -> Result<TlsAcceptor, EngineError> {
     let certs = load_certs(&resolve_path(base_dir, &tls.cert_path))?;
     let key = load_private_key(&resolve_path(base_dir, &tls.key_path))?;
-    let mut config = rustls::ServerConfig::builder()
+
+    // Look up server fingerprint preset for cipher suite preference control
+    let fingerprint = tls
+        .server_fingerprint
+        .as_deref()
+        .and_then(|name| {
+            let fp = crate::fingerprint::lookup_fingerprint(name);
+            if fp.is_none() {
+                tracing::warn!(fingerprint = %name, "unknown tls server fingerprint preset, using defaults");
+            }
+            fp
+        });
+
+    let config_builder = if let Some(ref fp) = fingerprint {
+        let provider = Arc::new(crate::fingerprint::build_provider(fp));
+        tracing::debug!(
+            fingerprint = %tls.server_fingerprint.as_deref().unwrap_or(""),
+            cipher_count = fp.cipher_suites.len(),
+            "tls server fingerprint applied"
+        );
+        rustls::ServerConfig::builder_with_provider(provider)
+            .with_protocol_versions(&[&rustls::version::TLS13, &rustls::version::TLS12])
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
+    } else {
+        rustls::ServerConfig::builder()
+    };
+
+    let mut config = config_builder
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
@@ -220,16 +247,13 @@ where
         }
     }
 
-    if tls
+    // Route fingerprint TLS through the generic ztls async handshake path
+    if let Some(fp) = tls
         .client_fingerprint
         .as_deref()
         .and_then(crate::fingerprint::lookup_fingerprint)
-        .is_some()
     {
-        return Err(EngineError::Io(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "tls client fingerprint over relay stream is not supported",
-        )));
+        return connect_tls13_stream(stream, &server_name, &fp).await;
     }
 
     let mut config = if tls.insecure {
@@ -265,8 +289,51 @@ where
     Ok(TcpRelayStream::new(stream))
 }
 
+/// Connect over a generic AsyncRead+AsyncWrite stream using our custom
+/// TLS 1.3 stack with the requested fingerprint's cipher suites and
+/// ClientHello control. Suitable for relay-stream TLS (where the stream
+/// is not a concrete TcpStream).
+async fn connect_tls13_stream<S>(
+    stream: S,
+    server_name: &str,
+    fp: &crate::fingerprint::TlsFingerprint,
+) -> Result<TcpRelayStream, EngineError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    let cipher_suites: Vec<ztls::cipher::CipherSuite> = fp
+        .cipher_suites
+        .iter()
+        .filter_map(|s| rustls_to_ztls_suite(s.suite().as_str()?))
+        .collect();
+
+    let suites = if cipher_suites.is_empty() {
+        ztls::cipher::DEFAULT_CIPHER_SUITES.to_vec()
+    } else {
+        cipher_suites
+    };
+
+    let config = ztls::handshake::Tls13Config {
+        server_name: server_name.to_owned(),
+        cipher_suites: suites,
+        alpn_protocols: vec!["h2".to_owned(), "http/1.1".to_owned()],
+        handshake_timeout_ms: 15_000,
+    };
+
+    let tls_stream = ztls::stream::Tls13Stream::connect_async(stream, config)
+        .await
+        .map_err(|e| {
+            EngineError::Io(io::Error::other(format!(
+                "custom TLS handshake over relay stream: {e}"
+            )))
+        })?;
+
+    Ok(TcpRelayStream::new(tls_stream))
+}
+
 /// Connect using our custom TLS 1.3 stack with the requested
 /// fingerprint's cipher suites and ClientHello control.
+/// Fast path for fresh sockets (uses spawn_blocking + into_std).
 async fn connect_tls13_upstream(
     socket: TokioSocket,
     server_name: &str,

@@ -1,31 +1,43 @@
 //! Async wrapper around Tls13Connection for tokio integration.
 //!
-//! Bridges sync Tls13Connection I/O with tokio's async TcpStream.
+//! Provides TLS 1.3 handshake over both concrete TcpStream (fast path with
+//! spawn_blocking + into_std) and generic AsyncRead+AsyncWrite streams
+//! (async handshake loop for relay-stream TLS).
 
 use std::io::{self, Read};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::TcpStream;
 
 use super::handshake::{Tls13Config, Tls13Connection};
 
 /// An async TLS 1.3 stream using our custom ClientHello handshake.
 ///
-/// Implements `AsyncRead + AsyncWrite` as a drop-in replacement
-/// for `tokio_rustls::client::TlsStream<TcpStream>`.
-pub struct Tls13Stream {
-    inner: TcpStream,
+/// Generic over the inner stream type `S`. Implements `AsyncRead + AsyncWrite`.
+///
+/// # Construction
+///
+/// - `Tls13Stream::connect(tcp_stream, config)` — fast path for fresh sockets
+///   (uses `spawn_blocking` + `into_std()`).
+/// - `Tls13Stream::connect_async(stream, config)` — generic async handshake for
+///   any `AsyncRead + AsyncWrite + Unpin + Send + 'static` stream (relay streams,
+///   trait objects, etc.).
+pub struct Tls13Stream<S> {
+    inner: S,
     conn: Tls13Connection,
 }
 
-impl Tls13Stream {
-    /// Perform the full TLS 1.3 handshake asynchronously.
+/// Fast-path constructor: fresh TcpStream.
+impl Tls13Stream<TcpStream> {
+    /// Perform the full TLS 1.3 handshake over a concrete TcpStream.
+    ///
+    /// Uses `spawn_blocking` + `into_std()` for maximum throughput on
+    /// fresh-socket connections.
     pub async fn connect(stream: TcpStream, config: Tls13Config) -> io::Result<Self> {
         let mut conn = Tls13Connection::new(config)?;
 
-        // Run handshake synchronously on the blocking thread pool
         let mut stream_std = stream.into_std()?;
         let (conn, stream_std) = tokio::task::spawn_blocking(move || {
             loop {
@@ -75,13 +87,66 @@ impl Tls13Stream {
             conn,
         })
     }
+}
 
-    pub fn get_ref(&self) -> &TcpStream {
+/// Generic constructor for any AsyncRead + AsyncWrite stream.
+impl<S> Tls13Stream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    /// Perform the full TLS 1.3 handshake asynchronously over a generic stream.
+    ///
+    /// Uses async I/O primitives directly — no `spawn_blocking` or `into_std()`.
+    /// Suitable for relay streams, trait objects, and any `AsyncRead + AsyncWrite`
+    /// carrier that is not a concrete `TcpStream`.
+    pub async fn connect_async(mut stream: S, config: Tls13Config) -> io::Result<Self> {
+        let mut conn = Tls13Connection::new(config)?;
+
+        loop {
+            if conn.wants_write() {
+                let mut buf = Vec::new();
+                conn.write_tls(&mut buf)?;
+                if !buf.is_empty() {
+                    stream.write_all(&buf).await?;
+                }
+            }
+
+            let _ = conn.process_new_packets()?;
+
+            if conn.wants_read() {
+                let mut buf = [0u8; 8192];
+                let n = stream.read(&mut buf).await?;
+                if n == 0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "TLS handshake: connection closed",
+                    ));
+                }
+                conn.read_tls(&mut io::Cursor::new(&buf[..n]))?;
+            }
+
+            if !conn.is_handshaking() {
+                break;
+            }
+        }
+
+        Ok(Self {
+            inner: stream,
+            conn,
+        })
+    }
+}
+
+impl<S> Tls13Stream<S> {
+    pub fn get_ref(&self) -> &S {
         &self.inner
     }
 }
 
-impl AsyncRead for Tls13Stream {
+impl<S> AsyncRead for Tls13Stream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -125,7 +190,10 @@ impl AsyncRead for Tls13Stream {
     }
 }
 
-impl AsyncWrite for Tls13Stream {
+impl<S> AsyncWrite for Tls13Stream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

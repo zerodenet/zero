@@ -591,6 +591,91 @@ impl UdpDispatch {
             });
         }
 
+        // ── SplitHTTP fast path (needs two relay prefix streams) ───────
+        // SplitHTTP uses separate POST (write) and GET (read) channels.
+        // Run the relay prefix setup twice so we get two independent TCP
+        // streams through the same set of intermediate hops.
+        if matches!(
+            chain.last(),
+            Some(ResolvedLeafOutbound::Vless {
+                split_http: Some(_),
+                ..
+            })
+        ) {
+            let chain_get = chain.clone();
+            let (post_carrier, final_hop) =
+                proxy
+                    .dispatch_tcp_relay_prefix(chain)
+                    .await
+                    .map_err(|failure| FlowFailure {
+                        stage: failure.stage,
+                        error: failure.error,
+                        upstream: failure.upstream_endpoint,
+                    })?;
+            let (get_carrier, _) =
+                proxy
+                    .dispatch_tcp_relay_prefix(chain_get)
+                    .await
+                    .map_err(|failure| FlowFailure {
+                        stage: failure.stage,
+                        error: failure.error,
+                        upstream: failure.upstream_endpoint,
+                    })?;
+
+            let (tag, server, port, id, split_http_cfg) = match &final_hop {
+                ResolvedLeafOutbound::Vless {
+                    tag,
+                    server,
+                    port,
+                    id,
+                    split_http,
+                    ..
+                } => (
+                    tag,
+                    server,
+                    port,
+                    id,
+                    split_http.as_ref().expect("checked above"),
+                ),
+                _ => unreachable!(),
+            };
+
+            let stream = crate::transport::build_vless_split_http_over_relay(
+                post_carrier.stream,
+                get_carrier.stream,
+                split_http_cfg,
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_relay_final_transport",
+                error,
+                upstream: Some((server.to_string(), *port)),
+            })?;
+
+            let session_id = session.id;
+            let key = (session.target.clone(), session.port);
+            let (upstream, recv_tx) =
+                establish_vless_udp_upstream_over_stream(proxy, session, id, payload, stream)
+                    .await
+                    .map_err(|error| FlowFailure {
+                        stage: "udp_vless_relay_chain",
+                        error,
+                        upstream: None,
+                    })?;
+            self.vless_manager.insert_upstream(key, upstream, recv_tx);
+            self.vless_manager.spawn_bridge(
+                &mut self.chain_tasks,
+                session.target.clone(),
+                session.port,
+                session_id,
+            );
+
+            return Ok(FlowStartResult::VlessFlow {
+                session_id,
+                tag: tag.to_string(),
+            });
+        }
+
         let (carrier, final_hop) =
             proxy
                 .dispatch_tcp_relay_prefix(chain)
