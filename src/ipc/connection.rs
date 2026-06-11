@@ -5,6 +5,7 @@
 //! socket and Windows named pipe IPC servers.
 
 use std::io;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -72,6 +73,15 @@ where
 
     let mut subscribed = false;
     let mut line = String::new();
+    // Handles for the background tasks spawned by a `Subscribe` request.
+    // Kept here so we can abort them when the connection ends, instead of
+    // relying on a write failure up to 30s later to reap them.
+    let mut bg_blocking: Option<tokio::task::JoinHandle<()>> = None;
+    let mut bg_events: Option<tokio::task::JoinHandle<io::Result<()>>> = None;
+    // Cancel flag shared with the blocking subscriber poller; set when the
+    // connection ends so the poller exits within ~100ms instead of looping
+    // forever (which would keep the engine pushing events at a dead client).
+    let mut bg_cancel: Option<Arc<AtomicBool>> = None;
     loop {
         line.clear();
         let n = reader.read_line(&mut line).await?;
@@ -157,53 +167,76 @@ where
 
                 match handle.subscribe(filter) {
                     Ok(subscriber) => {
-                        let (event_tx, event_rx) = std::sync::mpsc::channel();
+                        // Tokio (async) channel so the writer task can
+                        // `recv().await` without blocking a worker thread, and so
+                        // aborting it cancels at the await point immediately.
+                        let (event_tx, mut event_rx) =
+                            tokio::sync::mpsc::unbounded_channel();
 
-                        let blocking = tokio::task::spawn_blocking(move || {
-                            while let Some(event) = subscriber.recv() {
-                                // Serialize the full ApiEvent envelope (same format as SSE)
-                                // so consumers use one parsing code for both channels.
-                                let value = serde_json::to_value(&event);
-                                if let Ok(value) = value {
-                                    if event_tx.send(value).is_err() {
-                                        break;
+                        // Cooperative cancel flag. `abort()` does not interrupt a
+                        // `spawn_blocking` task mid-sleep, and `try_recv()` returning
+                        // `None` cannot distinguish "empty" from "publisher gone" — so
+                        // neither alone reaps the poller. The flag is set when the
+                        // connection ends; the loop checks it each iteration and exits
+                        // within ~100ms, dropping the subscriber so the engine stops
+                        // pushing events at a dead connection.
+                        let cancel = Arc::new(AtomicBool::new(false));
+                        let cancel_for_task = cancel.clone();
+
+                        // Poll with `try_recv()` + short sleep rather than a blocking
+                        // `recv()`: the 100ms sleep is a responsive cancel checkpoint
+                        // without holding a worker thread in a blocking call.
+                        bg_blocking = Some(tokio::task::spawn_blocking(move || {
+                            loop {
+                                if cancel_for_task.load(Ordering::Relaxed) {
+                                    break;
+                                }
+                                if let Some(event) = subscriber.try_recv() {
+                                    // Serialize the full ApiEvent envelope (same format
+                                    // as SSE) so consumers use one parsing code path
+                                    // for both channels.
+                                    let value = serde_json::to_value(&event);
+                                    if let Ok(value) = value {
+                                        if event_tx.send(value).is_err() {
+                                            break;
+                                        }
                                     }
                                 }
+                                std::thread::sleep(Duration::from_millis(100));
                             }
-                        });
+                        }));
+                        bg_cancel = Some(cancel);
 
-                        // Spawn event writer task so the main loop can
-                        // continue reading query/command/ping frames.
+                        // Writer task: pushes events and 30s heartbeats to the
+                        // client. Runs concurrently with the main read loop so
+                        // query/command/ping frames keep working after subscribe.
                         let event_writer = writer.clone();
-                        let event_task = tokio::spawn(async move {
+                        bg_events = Some(tokio::spawn(async move {
                             loop {
-                                match event_rx.recv_timeout(Duration::from_secs(30)) {
-                                    Ok(value) => {
+                                match tokio::time::timeout(
+                                    Duration::from_secs(30),
+                                    event_rx.recv(),
+                                )
+                                .await
+                                {
+                                    Ok(Some(value)) => {
                                         let frame =
                                             serialize_frame(&value).map_err(io::Error::other)?;
                                         let mut w = event_writer.lock().await;
                                         w.write_all(&frame).await?;
                                         w.flush().await?;
                                     }
-                                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                                        // heartbeat
+                                    Ok(None) => break, // sender dropped
+                                    Err(_) => {
+                                        // heartbeat (SSE comment line; clients ignore)
                                         let mut w = event_writer.lock().await;
                                         w.write_all(b":\n").await?;
                                         w.flush().await?;
                                     }
-                                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                                        break;
-                                    }
                                 }
                             }
                             io::Result::Ok(())
-                        });
-
-                        // Don't break — continue the loop for subsequent requests.
-                        // The event_task runs concurrently.
-                        // When the client disconnects, read_line returns 0 → break,
-                        // event_task's write fails → task exits, blocking task aborted.
-                        let _ = (event_task, blocking);
+                        }));
                     }
                     Err(error) => {
                         let resp = ipc_api_error(req_id, &error);
@@ -213,6 +246,22 @@ where
                 }
             }
         }
+    }
+
+    // Connection ended (client EOF or shutdown). Tear down the background
+    // tasks spawned by any Subscribe request so they don't linger holding a
+    // subscriber (which would otherwise keep the engine pushing events at a
+    // dead connection). The writer task cancels at its await point; setting
+    // the cancel flag stops the blocking poller within ~100ms; abort is a
+    // belt-and-suspenders fallback.
+    if let Some(handle) = bg_events.take() {
+        handle.abort();
+    }
+    if let Some(flag) = bg_cancel.take() {
+        flag.store(true, Ordering::Relaxed);
+    }
+    if let Some(handle) = bg_blocking.take() {
+        handle.abort();
     }
 
     Ok(())
