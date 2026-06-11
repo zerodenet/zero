@@ -37,15 +37,12 @@ impl MieruOutbound {
             .as_secs();
 
         let key = derive_key(username, password, unix_now);
-
-        // Apply user hint to the nonce so the server can quickly identify
-        // which user's key to try (matching upstream mieru behavior).
-        let nonce_config = crate::crypto::NonceConfig {
+        let nc = crate::crypto::NonceConfig {
             username: Some(username.to_owned()),
             ..Default::default()
         };
-        let mut client_cipher = MieruCipher::with_config(&key, &nonce_config);
-        let mut server_cipher = MieruCipher::with_config(&key, &nonce_config);
+        let mut client_cipher = MieruCipher::with_config(&key, &nc);
+        let mut server_cipher = MieruCipher::with_config(&key, &nc);
         let session = MieruSession::new();
 
         // Encode target + send openSessionRequest
