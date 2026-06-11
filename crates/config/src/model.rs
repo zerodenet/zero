@@ -541,14 +541,28 @@ pub struct Socks5UserConfig {
 }
 
 impl InboundProtocolConfig {
+    /// Authentication contract declared by this inbound protocol.
+    pub fn auth_requirement(&self) -> crate::auth::AuthRequirement {
+        use crate::auth::AuthRequirement::*;
+        match self {
+            Self::Socks5 { .. } | Self::Mixed { .. } | Self::Mieru { .. } => UsernamePassword,
+            Self::Hysteria2 { .. } | Self::Shadowsocks { .. } | Self::Trojan { .. } => PasswordOnly,
+            Self::HttpConnect | Self::Direct { .. } => None,
+            _ => Other,
+        }
+    }
+
     fn normalize(&mut self) {
         match self {
             Self::Socks5 { users } => normalize_socks5_users(users),
             Self::Mixed { socks5_users } => normalize_socks5_users(socks5_users),
             Self::Mieru { users } => {
                 for user in users {
-                    if user.username.is_empty() {
-                        user.username = user.password.clone();
+                    if let Some(name) = crate::auth::resolve_username_password(
+                        Some(&user.username),
+                        Some(&user.password),
+                    ) {
+                        user.username = name;
                     }
                 }
             }
@@ -568,16 +582,15 @@ impl InboundProtocolConfig {
 }
 
 fn normalize_socks5_users(users: &mut Vec<Socks5UserConfig>) {
-    users.retain_mut(|user| {
-        if user.username.is_empty() && user.password.is_empty() {
-            return false;
+    users.retain_mut(|user| match crate::auth::resolve_username_password(
+        Some(&user.username),
+        Some(&user.password),
+    ) {
+        Some(name) => {
+            user.username = name;
+            true
         }
-
-        if user.username.is_empty() {
-            user.username = user.password.clone();
-        }
-
-        true
+        None => false,
     });
 }
 
@@ -903,28 +916,36 @@ pub enum OutboundProtocolConfig {
 }
 
 impl OutboundProtocolConfig {
+    /// Authentication contract declared by this outbound protocol.
+    pub fn auth_requirement(&self) -> crate::auth::AuthRequirement {
+        use crate::auth::AuthRequirement::*;
+        match self {
+            Self::Socks5 { .. } | Self::Mieru { .. } => UsernamePassword,
+            Self::Hysteria2 { .. } | Self::Shadowsocks { .. } | Self::Trojan { .. } => PasswordOnly,
+            Self::Direct | Self::Block => None,
+            _ => Other,
+        }
+    }
+
     fn normalize(&mut self) {
         match self {
             Self::Socks5 {
                 username, password, ..
             } => {
-                if username.as_deref() == Some("") {
-                    *username = None;
-                }
-                if username.is_none() {
-                    if let Some(password) =
-                        password.as_ref().filter(|password| !password.is_empty())
-                    {
-                        *username = Some(password.clone());
-                    }
-                }
+                let resolved = crate::auth::resolve_username_password(
+                    username.as_deref(),
+                    password.as_deref(),
+                );
+                *username = resolved;
             }
             Self::Mieru {
                 username, password, ..
             } => {
-                if username.as_deref().is_none_or(str::is_empty) {
-                    *username = Some(password.clone());
-                }
+                let resolved = crate::auth::resolve_username_password(
+                    username.as_deref(),
+                    Some(password.as_str()),
+                );
+                *username = resolved;
             }
             Self::Vmess { cipher, .. } => {
                 *cipher = normalize_vmess_cipher_name(cipher);

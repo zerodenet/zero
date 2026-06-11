@@ -1,10 +1,12 @@
 mod compile;
 mod error;
+pub mod auth;
 mod model;
 mod rule_sets;
 mod validate;
 
 pub use error::ConfigError;
+pub use auth::AuthRequirement;
 pub use model::{
     ApiConfig, ClientTlsConfig, ControlApiConfig, DnsCacheConfig, DnsConfig, DnsRouteConfig,
     DnsServerConfig, EventSinkConfig, FakeIpConfig, FallbackConfig, GrpcConfig, H2Config,
