@@ -246,7 +246,9 @@ while True:
         print(f"[{event['event_type']}] {event.get('payload', {}).get('flow_id', '')}")
 ```
 
-### Node.js / Electron（跨平台）
+### Node.js / Electron（短连接：单次请求）
+
+每次请求都新建并销毁连接，适合脚本或一次性查询。**GUI 不应使用这种方式** —— 请用下面的长连接复用示例。
 
 ```javascript
 const net = require('net');
@@ -304,6 +306,150 @@ async function main() {
 
 main();
 ```
+
+### Node.js / Electron（长连接复用：GUI 推荐）
+
+进程内只建一条连接，首发 `subscribe`，之后这条连接同时承载事件推送与请求-响应。响应帧按 `id` 自动配对 pending Promise，事件帧按 `event_type` 分发，`:\n` 心跳忽略。断开后自动退避重连，重连成功自动重新订阅并触发 `connected`，上层据此重新查询、重建整屏状态（事件只是增量，不能独自恢复全量）。
+
+```javascript
+const net = require('net');
+const os = require('os');
+const path = require('path');
+const { EventEmitter } = require('events');
+
+const SOCK = process.platform === 'win32'
+  ? '\\\\.\\pipe\\zero-control'
+  : path.join(os.homedir(), '.zero', 'control.sock');
+
+/**
+ * 长连接 IPC 客户端：一条连接同时承载事件订阅与请求-响应。
+ * 断开后自动退避重连；重连成功后自动重新订阅并 emit('connected')。
+ */
+class ZeroIpcClient extends EventEmitter {
+  constructor() {
+    super();
+    this.sock = null;
+    this.nextId = 1;
+    this.pending = new Map();        // id → { resolve, reject }
+    this.buf = '';                   // 半行缓冲（JSON-line）
+    this.subscribedEvents = null;    // 重连后重新订阅的事件白名单
+    this.reconnectTimer = null;
+    this.reconnectDelayMs = 1000;
+  }
+
+  /** 建立连接。传入 events 即自动订阅事件流。 */
+  start(events = null) {
+    this.subscribedEvents = events;
+    this._open();
+  }
+
+  _open() {
+    this.sock = net.createConnection(SOCK);
+    this.sock.setNoDelay(true);
+    this.sock.on('connect', () => {
+      this.reconnectDelayMs = 1000;
+      if (this.subscribedEvents !== null) {
+        // 首帧订阅；之后这条连接同时收事件、发请求
+        this._write({ type: 'subscribe', id: this._id(), events: this.subscribedEvents });
+      }
+      this.emit('connected');
+    });
+    this.sock.on('data', (chunk) => this._onData(chunk));
+    this.sock.on('error', (err) => this.emit('error', err));
+    this.sock.on('close', () => this._reconnect());
+  }
+
+  _onData(chunk) {
+    this.buf += chunk.toString('utf8');
+    let nl;
+    while ((nl = this.buf.indexOf('\n')) >= 0) {
+      const line = this.buf.slice(0, nl).trim();
+      this.buf = this.buf.slice(nl + 1);
+      if (!line || line.startsWith(':')) continue;   // 空行 / 心跳（":\n"）
+      const frame = JSON.parse(line);
+      if ('ok' in frame) {
+        // 响应帧：按 id 配对 pending 请求（subscribe 确认帧也走这里）
+        const p = frame.id != null && this.pending.get(frame.id);
+        if (p) {
+          this.pending.delete(frame.id);
+          if (frame.ok) p.resolve(frame.result);
+          else p.reject(frame.error);
+        }
+      } else {
+        // 事件帧（裸 ApiEvent，无 ok 字段）
+        this.emit('event', frame);
+      }
+    }
+  }
+
+  /** 发 query，resolve 的 result 仍含变体名 key（如 result.runtime）。 */
+  query(request, timeoutMs = 10000) {
+    return this._request({ type: 'query', request }, timeoutMs);
+  }
+
+  /** 发 command。 */
+  command(method, params, timeoutMs = 10000) {
+    return this._request({ type: 'command', method, params }, timeoutMs);
+  }
+
+  _request(frame, timeoutMs) {
+    const id = this._id();
+    frame.id = id;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this._write(frame);
+      setTimeout(() => {                       // 超时兜底，避免 pending 永久泄漏
+        if (this.pending.delete(id)) reject(new Error('ipc request timeout'));
+      }, timeoutMs);
+    });
+  }
+
+  _id() { return this.nextId++; }
+  _write(frame) { this.sock && this.sock.write(JSON.stringify(frame) + '\n'); }
+
+  _reconnect() {
+    for (const [, p] of this.pending) p.reject(new Error('connection closed'));
+    this.pending.clear();
+    this.emit('disconnected');
+    if (this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this._open();
+    }, this.reconnectDelayMs);
+    this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 5000);
+  }
+
+  stop() {
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    if (this.sock) { this.sock.destroy(); this.sock = null; }
+  }
+}
+
+// ── 用法 ──────────────────────────────────────────────
+const client = new ZeroIpcClient();
+client.start(['flow.started', 'flow.completed', 'stats.sampled', 'config.changed']);
+
+client.on('connected', async () => {
+  // 首连 / 每次重连后：用查询重建整屏状态（事件只是增量）
+  const result = await client.query({ runtime: {} });
+  console.log('活跃连接:', result.runtime.stats.active_sessions);
+});
+client.on('event', (e) => {
+  // 按 e.event_type 局部更新界面
+  console.log(`[${e.event_type}]`, e.event_id);
+});
+client.on('disconnected', () => console.warn('连接断开，自动重连中'));
+
+// 任意时刻发请求，复用同一条连接，响应按 id 自动配对
+await client.command('policies.select', { policy_tag: 'proxy', target_tag: 'direct' });
+```
+
+要点：
+
+- **只建一条连接**：`net.createConnection` 后保持不销毁，进程内复用。
+- **帧分流**：有顶层 `ok` → 响应帧（按 `id` 配对 Promise）；无 `ok` → 事件帧（按 `event_type` 分发）；行首 `:` → 心跳，忽略。
+- **`id` 必传且唯一**：多路复用靠 `id` 配对，`subscribe` 确认帧也会带同一 `id`。
+- **重连重建**：重连成功后重新 `subscribe` + 用查询重建状态，不要假设事件流能补齐断连期间的全量变化。
 
 ## HTTP 通道（备选）
 
