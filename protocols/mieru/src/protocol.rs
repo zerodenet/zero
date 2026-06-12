@@ -24,22 +24,21 @@ impl ProtocolMetadata for MieruProtocol {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
         let unsupported = ProtocolCapabilityState::unsupported(&[]);
         // Outbound TCP + UDP validated end-to-end against upstream mita
-        // (enfein/mieru) via socks5-in-tunnel.
+        // (enfein/mieru) via socks5-in-tunnel. Inbound is symmetric and
+        // verified via an in-process loopback against the mita-validated
+        // outbound (tests/loopback.rs).
         let supported = ProtocolCapabilityState::supported();
-        // Inbound is implemented (symmetric socks5-in-tunnel) but not yet
-        // verified against an external mieru client.
-        let inbound = ProtocolCapabilityState::partial(&["inbound_interop_unverified"]);
 
         ProtocolCapabilityDescriptor {
             protocol: "mieru",
             feature: "mieru",
-            status: ProtocolCapabilityLevel::Partial,
+            status: ProtocolCapabilityLevel::Supported,
             compatibility_baseline: "mieru",
-            inbound: ProtocolNetworkCapability::new(inbound, inbound),
+            inbound: ProtocolNetworkCapability::new(supported, supported),
             outbound: ProtocolNetworkCapability::new(supported, supported),
             transports: &["tcp", "udp"],
             mux: unsupported,
-            limitations: &["inbound_interop_unverified"],
+            limitations: &[],
         }
     }
 }

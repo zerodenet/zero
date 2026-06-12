@@ -531,13 +531,12 @@ fn proxy_handle_capabilities_use_protocol_inventory() {
         .iter()
         .find(|protocol| protocol.protocol == "mieru")
     {
+        assert_eq!(mieru.status, "supported");
         assert_eq!(mieru.outbound.tcp.level, "supported");
         assert_eq!(mieru.outbound.udp.level, "supported");
-        assert_eq!(mieru.inbound.tcp.level, "partial");
-        assert_eq!(mieru.inbound.udp.level, "partial");
-        assert!(mieru
-            .limitations
-            .contains(&"inbound_interop_unverified".to_owned()));
+        assert_eq!(mieru.inbound.tcp.level, "supported");
+        assert_eq!(mieru.inbound.udp.level, "supported");
+        assert!(mieru.limitations.is_empty());
         assert!(!mieru
             .limitations
             .contains(&"relay_chain_hop_is_not_supported".to_owned()));

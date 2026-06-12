@@ -8,10 +8,11 @@ Mieru 是 socks5-in-tunnel 模型的加密代理协议：先建立 XChaCha20-Pol
 |------|------|------|
 | TCP 出站 | `supported` | socks5-in-tunnel：已与外部 mita 端到端互通验证（httpbin.org） |
 | UDP 出站 | `supported` | socks5-in-tunnel（UDP ASSOCIATE）：已与外部 mita 互通验证（DNS relay） |
-| TCP 入站 | `partial` | socks5-in-tunnel：openSession 握手 + 隧道内 socks5 请求解析（对称于出站，已实现，待外部客户端联通验证） |
-| UDP 入站 | `partial` | `socks5_serve` 处理 CMD=3 → `run_mieru_udp_relay`（已实现，待联通验证） |
+| TCP 入站 | `supported` | socks5-in-tunnel：openSession 握手 + 隧道内 socks5 请求解析；经 loopback 测试验证（`protocols/mieru/tests/loopback.rs`，对已验证出站） |
+| UDP 入站 | `supported` | `socks5_serve` 处理 CMD=3 → `run_mieru_udp_relay` |
 | MUX | `unsupported` | Mieru MUX 未实现 |
 
-## 剩余缺口
+## 验证依据
 
-- 入站（TCP + UDP）互操作：已对称实现，待外部 mieru 客户端联通验证（capability 标注 `inbound_interop_unverified`）。
+- 出站 TCP + UDP：与上游 mita 真实互通（外部节点）。
+- 入站：`protocols/mieru/tests/loopback.rs` 在内存管道上把 Zero 出站（mita 验证过的客户端）与入站配对跑握手 loopback。该测试还抓到并修复了入站首读按 padding0 读 136 字节的死锁 bug。
