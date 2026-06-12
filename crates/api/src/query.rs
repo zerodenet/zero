@@ -10,7 +10,7 @@ use crate::{ApiCapabilities, Network, Permission, SinkStatus};
 /// Unknown query types from newer clients deserialize into `Unknown`
 /// instead of causing a serde error. This allows old servers to gracefully
 /// reject new query types while preserving the raw request data.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryRequest {
     Capabilities(CapabilitiesQuery),
     Health(HealthQuery),
@@ -27,6 +27,28 @@ pub enum QueryRequest {
     TunStatus(TunStatusQuery),
     /// Catch-all for unknown query types from newer clients.
     Unknown(serde_json::Value),
+}
+
+impl Serialize for QueryRequest {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let json = match self {
+            Self::Capabilities(_) => serde_json::json!({ "capabilities": {} }),
+            Self::Health(_) => serde_json::json!({ "health": {} }),
+            Self::Config(_) => serde_json::json!({ "config": {} }),
+            Self::Runtime(_) => serde_json::json!({ "runtime": {} }),
+            Self::Stats(_) => serde_json::json!({ "stats": {} }),
+            Self::ActiveFlows(v) => serde_json::json!({ "active_flows": v }),
+            Self::RecentFlows(v) => serde_json::json!({ "recent_flows": v }),
+            Self::Flow(v) => serde_json::json!({ "flow": v }),
+            Self::Policies(_) => serde_json::json!({ "policies": {} }),
+            Self::Policy(v) => serde_json::json!({ "policy": v }),
+            Self::Diagnostics(_) => serde_json::json!({ "diagnostics": {} }),
+            Self::Sinks(_) => serde_json::json!({ "sinks": {} }),
+            Self::TunStatus(_) => serde_json::json!({ "tun_status": {} }),
+            Self::Unknown(v) => v.clone(),
+        };
+        json.serialize(serializer)
+    }
 }
 
 impl QueryRequest {
@@ -46,22 +68,21 @@ impl<'de> Deserialize<'de> for QueryRequest {
                 "expected non-empty object for QueryRequest",
             ));
         };
+        // Unit-struct query types carry no parameters — the inner value is
+        // always `{}` on the wire (e.g. `{"capabilities":{}}`), which
+        // serde_json's derived Deserialize rejects for unit structs (it
+        // only accepts `null`).  Construct them directly instead of going
+        // through serde_json::from_value.
+        //
+        // Non-unit query types (active_flows, recent_flows, flow, policy)
+        // have real fields and are deserialized normally from the inner
+        // JSON value.
         match key.as_str() {
-            "capabilities" => serde_json::from_value(inner.clone())
-                .map(Self::Capabilities)
-                .map_err(D::Error::custom),
-            "health" => serde_json::from_value(inner.clone())
-                .map(Self::Health)
-                .map_err(D::Error::custom),
-            "config" => serde_json::from_value(inner.clone())
-                .map(Self::Config)
-                .map_err(D::Error::custom),
-            "runtime" => serde_json::from_value(inner.clone())
-                .map(Self::Runtime)
-                .map_err(D::Error::custom),
-            "stats" => serde_json::from_value(inner.clone())
-                .map(Self::Stats)
-                .map_err(D::Error::custom),
+            "capabilities" => Ok(Self::Capabilities(CapabilitiesQuery)),
+            "health" => Ok(Self::Health(HealthQuery)),
+            "config" => Ok(Self::Config(ConfigQuery)),
+            "runtime" => Ok(Self::Runtime(RuntimeQuery)),
+            "stats" => Ok(Self::Stats(StatsQuery)),
             "active_flows" => serde_json::from_value(inner.clone())
                 .map(Self::ActiveFlows)
                 .map_err(D::Error::custom),
@@ -71,21 +92,13 @@ impl<'de> Deserialize<'de> for QueryRequest {
             "flow" => serde_json::from_value(inner.clone())
                 .map(Self::Flow)
                 .map_err(D::Error::custom),
-            "policies" => serde_json::from_value(inner.clone())
-                .map(Self::Policies)
-                .map_err(D::Error::custom),
+            "policies" => Ok(Self::Policies(PoliciesQuery)),
             "policy" => serde_json::from_value(inner.clone())
                 .map(Self::Policy)
                 .map_err(D::Error::custom),
-            "diagnostics" => serde_json::from_value(inner.clone())
-                .map(Self::Diagnostics)
-                .map_err(D::Error::custom),
-            "sinks" => serde_json::from_value(inner.clone())
-                .map(Self::Sinks)
-                .map_err(D::Error::custom),
-            "tun_status" => serde_json::from_value(inner.clone())
-                .map(Self::TunStatus)
-                .map_err(D::Error::custom),
+            "diagnostics" => Ok(Self::Diagnostics(DiagnosticsQuery)),
+            "sinks" => Ok(Self::Sinks(SinksQuery)),
+            "tun_status" => Ok(Self::TunStatus(TunStatusQuery)),
             _ => Ok(Self::Unknown(value)),
         }
     }

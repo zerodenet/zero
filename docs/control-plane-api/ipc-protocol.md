@@ -119,16 +119,15 @@ IPC 响应使用统一信封格式（`zero_api::ApiResponse`），包含 `api_id
   "api_id": "zero.api.v1",
   "ok": true,
   "id": 1,
-  "result": { },
-  "error": null
+  "result": { }
 }
 ```
 
 - `api_id` — 协议标识，始终为 `"zero.api.v1"`
-- `id` — 回显请求的 `id` 字段，用于多路复用时配对。请求不带 `id` 时此字段为 `null`
+- `id` — 回显请求的 `id` 字段，用于多路复用时配对。请求不带 `id` 时此字段**省略**（JSON key 不存在）。请求 JSON 完全无法解析时此字段同样省略（服务端无法提取 `id`）
 - `ok` — `true` 成功 / `false` 失败
-- `result` — 成功时的响应数据
-- `error` — 失败时的错误详情
+- `result` — 成功时的响应数据（失败时省略）
+- `error` — 失败时的错误详情（成功时省略）
 
 ### Query 响应的 result 格式
 
@@ -168,13 +167,12 @@ IPC 响应使用统一信封格式（`zero_api::ApiResponse`），包含 `api_id
 
 > **注意：** 这是 IPC 通道的格式。HTTP 通道的 `result` 字段**不包含**变体名 key——直接就是内部数据。例如 HTTP `GET /api/v1/health` 返回 `result: {"engine_build_id":"build-id",...}`，而 IPC 返回 `result: {"health":{"engine_build_id":"build-id",...}}`。
 
-错误响应：
+错误响应（`result` 和 `id` 在不存在时均省略，而非 `null`）：
 ```json
 {
   "api_id": "zero.api.v1",
   "ok": false,
   "id": 1,
-  "result": null,
   "error": {
     "code": "not_found",
     "message": "flow `42` was not found",
