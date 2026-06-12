@@ -413,6 +413,50 @@ impl zero_api::CommandService for ProxyHandle {
                     "no tokio runtime available for TUN command",
                 )),
             },
+            zero_api::CommandRequest::DiagnosticsProbeOutbound(cmd) => {
+                let proxy = self.proxy.clone();
+                let target_tag = cmd.target_tag.clone();
+                let url = cmd
+                    .url
+                    .clone()
+                    .unwrap_or_else(|| crate::groups::DEFAULT_PROBE_URL.to_owned());
+                match tokio::runtime::Handle::try_current() {
+                    Ok(rt) => rt.block_on(async move {
+                        match proxy.probe_outbound_single(&target_tag, &url).await {
+                            Ok(latency_ms) => Ok(zero_api::CommandResponse {
+                                accepted: true,
+                                result: Some(serde_json::json!({
+                                    "target_tag": target_tag,
+                                    "url": url,
+                                    "via": "through_proxy",
+                                    "reachable": true,
+                                    "latency_ms": latency_ms,
+                                })),
+                            }),
+                            Err(error) => {
+                                // A failed probe (timeout, refused) is a
+                                // *result*, not a command error — the node is
+                                // simply unreachable, which the GUI renders.
+                                Ok(zero_api::CommandResponse {
+                                    accepted: true,
+                                    result: Some(serde_json::json!({
+                                        "target_tag": target_tag,
+                                        "url": url,
+                                        "via": "through_proxy",
+                                        "reachable": false,
+                                        "latency_ms": null,
+                                        "error": error.to_string(),
+                                    })),
+                                })
+                            }
+                        }
+                    }),
+                    Err(_) => Err(zero_api::ApiError::new(
+                        zero_api::ApiErrorCode::Internal,
+                        "no tokio runtime available for probe_outbound command",
+                    )),
+                }
+            }
             _ => self.inner.execute(command),
         }
     }
