@@ -37,16 +37,17 @@ async fn mieru_outbound_inbound_handshake_loopback() {
     let (client_io, server_io) = tokio::io::duplex(1 << 16);
     let mut client = DuplexSock(client_io);
     let mut server = DuplexSock(server_io);
-    let users: Vec<(String, String)> =
-        vec![("zero_test_user".to_string(), "change_this_password_2026".to_string())];
+    let users: Vec<(String, String)> = vec![(
+        "zero_test_user".to_string(),
+        "change_this_password_2026".to_string(),
+    )];
 
     let client_handle = tokio::spawn(async move {
         MieruOutbound::connect(&mut client, "zero_test_user", "change_this_password_2026").await
     });
     let inbound = MieruInbound::default();
-    let server_handle = tokio::spawn(async move {
-        inbound.accept_request(&mut server, &users).await
-    });
+    let server_handle =
+        tokio::spawn(async move { inbound.accept_request(&mut server, &users).await });
 
     let _outbound = client_handle
         .await

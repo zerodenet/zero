@@ -655,11 +655,14 @@ async fn apply_hop_protocol(
                 )
                 .await
                 .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
-            let mut mieru_stream =
-                crate::outbound::mieru::MieruTcpStream::new(stream, outbound);
-            crate::outbound::mieru::socks5_connect(&mut mieru_stream, &session.target, session.port)
-                .await
-                .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
+            let mut mieru_stream = crate::outbound::mieru::MieruTcpStream::new(stream, outbound);
+            crate::outbound::mieru::socks5_connect(
+                &mut mieru_stream,
+                &session.target,
+                session.port,
+            )
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
             Ok(TcpRelayStream::new(mieru_stream))
         }
         _ => Err(EngineError::Io(std::io::Error::new(

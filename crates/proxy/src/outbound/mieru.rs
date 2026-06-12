@@ -20,11 +20,7 @@ use crate::transport::TcpRelayStream;
 /// mieru conveys the proxy target via socks5 inside the encrypted tunnel:
 /// mita runs a socks5 server on the decrypted session, so the client must
 /// negotiate the target with a CONNECT after the mieru handshake.
-pub(crate) async fn socks5_connect<S>(
-    stream: &mut S,
-    target: &Address,
-    port: u16,
-) -> io::Result<()>
+pub(crate) async fn socks5_connect<S>(stream: &mut S, target: &Address, port: u16) -> io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {

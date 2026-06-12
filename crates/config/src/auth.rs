@@ -33,10 +33,7 @@ pub enum AuthRequirement {
 /// - If a username is present, it is kept.
 /// - Otherwise, if a password is present, it is used as the username.
 /// - If both are absent, the protocol is treated as anonymous (`None`).
-pub fn resolve_username_password(
-    username: Option<&str>,
-    password: Option<&str>,
-) -> Option<String> {
+pub fn resolve_username_password(username: Option<&str>, password: Option<&str>) -> Option<String> {
     let username = username.filter(|u| !u.is_empty());
     let password = password.filter(|p| !p.is_empty());
     match (username, password) {

@@ -184,17 +184,17 @@ impl MieruChainManager {
 
         // Send socks5 UDP ASSOCIATE request: [VER, CMD=3, RSV, ATYP=IPv4, 0.0.0.0:0].
         let assoc_req = [0x05u8, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0];
-        let assoc_seg = outbound
-            .encrypt_client_data(&assoc_req)
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru udp assoc encrypt: {e}"))))?;
-        stream
-            .write_all(&assoc_seg)
-            .await
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru udp assoc write: {e}"))))?;
-        stream
-            .flush()
-            .await
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru udp assoc flush: {e}"))))?;
+        let assoc_seg = outbound.encrypt_client_data(&assoc_req).map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!(
+                "mieru udp assoc encrypt: {e}"
+            )))
+        })?;
+        stream.write_all(&assoc_seg).await.map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!("mieru udp assoc write: {e}")))
+        })?;
+        stream.flush().await.map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!("mieru udp assoc flush: {e}")))
+        })?;
 
         // Read the UDP ASSOCIATE response (one data segment) and check REP == 0.
         let mut assoc_raw = Vec::new();
@@ -206,10 +206,9 @@ impl MieruChainManager {
                 }
                 Err(zero_core::Error::Protocol("mieru: need more data")) => {
                     let mut scratch = [0u8; 4096];
-                    let n = stream
-                        .read(&mut scratch)
-                        .await
-                        .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru udp assoc read: {e}"))))?;
+                    let n = stream.read(&mut scratch).await.map_err(|e| {
+                        EngineError::Io(std::io::Error::other(format!("mieru udp assoc read: {e}")))
+                    })?;
                     if n == 0 {
                         return Err(EngineError::Io(std::io::Error::other(
                             "mieru udp assoc: connection closed",

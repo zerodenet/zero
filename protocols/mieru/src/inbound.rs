@@ -6,9 +6,7 @@ use zero_core::{Error, ProtocolType};
 use zero_traits::AsyncSocket;
 
 use crate::crypto::{try_derive_keys, MieruCipher};
-use crate::metadata::{
-    SessionMetadata, METADATA_LEN, OPEN_SESSION_REQUEST, OPEN_SESSION_RESPONSE,
-};
+use crate::metadata::{SessionMetadata, METADATA_LEN, OPEN_SESSION_REQUEST, OPEN_SESSION_RESPONSE};
 use crate::segment::build_session_segment;
 use crate::session::MieruSession;
 

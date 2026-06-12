@@ -582,15 +582,14 @@ impl InboundProtocolConfig {
 }
 
 fn normalize_socks5_users(users: &mut Vec<Socks5UserConfig>) {
-    users.retain_mut(|user| match crate::auth::resolve_username_password(
-        Some(&user.username),
-        Some(&user.password),
-    ) {
-        Some(name) => {
-            user.username = name;
-            true
+    users.retain_mut(|user| {
+        match crate::auth::resolve_username_password(Some(&user.username), Some(&user.password)) {
+            Some(name) => {
+                user.username = name;
+                true
+            }
+            None => false,
         }
-        None => false,
     });
 }
 
