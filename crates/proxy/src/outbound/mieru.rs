@@ -28,18 +28,11 @@ pub(crate) async fn socks5_connect<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    // Greeting: SOCKS5, 1 offered method, no-auth.
-    stream.write_all(&[0x05, 0x01, 0x00]).await?;
-    stream.flush().await?;
-
-    let mut method = [0u8; 2];
-    stream.read_exact(&mut method).await?;
-    if method[0] != 0x05 || method[1] != 0x00 {
-        return Err(io::Error::other(
-            "mieru socks5: server did not select no-auth",
-        ));
-    }
-
+    // mieru conveys the proxy target via a socks5 request sent DIRECTLY inside
+    // the encrypted tunnel — NO greeting/method/auth negotiation (the mieru
+    // session itself is the authentication). This matches the upstream mieru
+    // client PostDialHandshake: write the request, read the reply, nothing more.
+    //
     // CONNECT request.
     let mut req = vec![0x05, 0x01, 0x00];
     match target {
