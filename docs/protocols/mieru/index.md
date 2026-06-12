@@ -1,17 +1,18 @@
 # Mieru
 
-Mieru 是 `partial` 协议能力。基线 TCP stream 和 UDP associate 路径存在。模块结构与 `protocols/mieru/src/` 对应。
+Mieru 是 socks5-in-tunnel 模型的加密代理协议：先建立 XChaCha20-Poly1305 加密隧道，再在隧道内用 socks5 协商目标（openSession 不携带目标；隧道内 socks5 不做 greeting/auth，因为 mieru 会话即认证）。模块结构与 `protocols/mieru/src/` 对应；socks5 编排在 `crates/proxy/src/outbound/mieru.rs`（出站 `socks5_connect`）与 `crates/proxy/src/inbound/mieru.rs`（入站 `socks5_serve`）。
 
 ## 当前能力
 
 | 能力 | 状态 | 说明 |
 |------|------|------|
-| TCP 入站 | `partial` | 完整握手：多用户密钥尝试、openSessionRequest/Response、UDP 会话检测 |
-| TCP 出站 | `partial` | 加密流上游 |
-| UDP 入站 | `partial` | UDP associate 路径 |
-| UDP 出站 | `partial` | 单跳及 TCP relay-prefix final-hop 路径 |
+| TCP 出站 | `supported` | socks5-in-tunnel：已与外部 mita 端到端互通验证（httpbin.org） |
+| TCP 入站 | `partial` | socks5-in-tunnel：openSession 握手 + 隧道内 socks5 请求解析（对称于出站，已实现，待外部客户端联通验证） |
+| UDP 入站 | `partial` | UDP associate 路径（socks5 UDP ASSOCIATE 待接） |
+| UDP 出站 | `partial` | `mieru_manager` 待加 socks5 UDP ASSOCIATE 握手 + 数据包成帧 |
 | MUX | `unsupported` | Mieru MUX 未实现 |
 
 ## 剩余缺口
 
-- 外部互操作覆盖不足
+- UDP over mieru：socks5 UDP ASSOCIATE 握手 + 数据包成帧（出站 + 入站），需迭代互操作验证。
+- 入站 TCP 互操作：已对称实现，待外部 mieru 客户端联通验证。
