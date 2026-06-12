@@ -187,6 +187,59 @@ impl AsyncWrite for MieruClientStream {
     }
 }
 
+/// Run the in-tunnel socks5 server side: read the client's socks5 request
+/// directly (no greeting/auth — the mieru session is the auth), respond, and
+/// return the requested target plus whether it is a UDP ASSOCIATE.
+async fn socks5_serve<S>(stream: &mut S) -> io::Result<(zero_core::Address, u16, bool)>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    // Request: VER, CMD, RSV, ATYP, DST.ADDR, DST.PORT.
+    let mut head = [0u8; 4];
+    stream.read_exact(&mut head).await?;
+    if head[0] != 0x05 {
+        return Err(io::Error::other("mieru socks5: bad request version"));
+    }
+    let cmd = head[1];
+    let target = match head[3] {
+        0x01 => {
+            let mut ip = [0u8; 4];
+            stream.read_exact(&mut ip).await?;
+            zero_core::Address::Ipv4(ip)
+        }
+        0x04 => {
+            let mut ip = [0u8; 16];
+            stream.read_exact(&mut ip).await?;
+            zero_core::Address::Ipv6(ip)
+        }
+        0x03 => {
+            let mut len = [0u8; 1];
+            stream.read_exact(&mut len).await?;
+            let mut d = vec![0u8; len[0] as usize];
+            stream.read_exact(&mut d).await?;
+            zero_core::Address::Domain(String::from_utf8_lossy(&d).into_owned())
+        }
+        _ => return Err(io::Error::other("mieru socks5: bad address type")),
+    };
+    let mut port_bytes = [0u8; 2];
+    stream.read_exact(&mut port_bytes).await?;
+    let port = u16::from_be_bytes(port_bytes);
+
+    if cmd != 0x01 && cmd != 0x03 {
+        return Err(io::Error::other(format!(
+            "mieru socks5: unsupported command 0x{cmd:02x}"
+        )));
+    }
+
+    // Reply: success, BND.ADDR = 0.0.0.0:0.
+    stream
+        .write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+        .await?;
+    stream.flush().await?;
+
+    Ok((target, port, cmd == 0x03))
+}
+
 // Handler.
 
 #[derive(Clone)]
@@ -209,28 +262,36 @@ impl InboundProtocol for MieruInboundHandler {
             .accept_request(&mut metered, &self.users)
             .await?;
 
-        let mut session = accept.session;
+        let mut client = MieruClientStream {
+            inner: metered.into_inner(),
+            server_cipher: accept.server_cipher,
+            client_cipher: accept.client_cipher,
+            mieru_session: accept.mieru_session,
+            s2c_nonce_sent: true, // Response nonce already sent in accept
+            c2s_nonce_recv: true,
+            read_buf: accept.remaining_payload,
+            read_pos: 0,
+            raw_read_buf: Vec::new(),
+            write_buf: Vec::new(),
+            write_pos: 0,
+            write_plain_len: 0,
+        };
+
+        // mieru conveys the proxy target via a socks5 request inside the tunnel.
+        let (target, port, is_udp) = socks5_serve(&mut client)
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru socks5: {e}"))))?;
+        let network = if is_udp {
+            zero_core::Network::Udp
+        } else {
+            zero_core::Network::Tcp
+        };
+        let mut session = Session::new(0, target, port, network, zero_core::ProtocolType::Mieru);
         let mut sa = zero_core::SessionAuth::new("mieru");
         sa.principal_key = Some("mieru".to_owned());
         session.apply_auth(sa);
 
-        Ok((
-            session,
-            MieruClientStream {
-                inner: metered.into_inner(),
-                server_cipher: accept.server_cipher,
-                client_cipher: accept.client_cipher,
-                mieru_session: accept.mieru_session,
-                s2c_nonce_sent: true, // Response nonce already sent in accept
-                c2s_nonce_recv: true,
-                read_buf: accept.remaining_payload,
-                read_pos: 0,
-                raw_read_buf: Vec::new(),
-                write_buf: Vec::new(),
-                write_pos: 0,
-                write_plain_len: 0,
-            },
-        ))
+        Ok((session, client))
     }
 
     async fn send_ok(&self, _client: &mut Self::ClientStream) -> Result<(), EngineError> {
