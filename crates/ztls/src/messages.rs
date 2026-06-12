@@ -276,13 +276,17 @@ pub fn construct_client_hello(
         }
     }
 
-    // compress_certificate (27)
+    // compress_certificate (27) — RFC 8879
+    //
+    // extension_data = CertificateCompressionAlgorithms, which is a
+    // vector `<2..2^8-2>`: a 1-byte **byte-length** prefix (not a count)
+    // followed by the 2-byte algorithm ids.
     {
         extensions.extend_from_slice(&[0x00, 0x1b]);
-        extensions.extend_from_slice(&[0x00, 0x04]); // Extension length: 4
-        extensions.push(0x02); // Algorithms length: 1 byte (TLS vector <2..2^8-2>)
-        extensions.extend_from_slice(&[0x00, 0x02]); // brotli (1)
-        extensions.extend_from_slice(&[0x00, 0x03]); // zstd (2)
+        extensions.extend_from_slice(&[0x00, 0x05]); // 1 (prefix) + 2 algos * 2 bytes
+        extensions.push(0x04); // byte-length of the algorithm list: 2 * 2
+        extensions.extend_from_slice(&[0x00, 0x02]); // brotli
+        extensions.extend_from_slice(&[0x00, 0x03]); // zstd
     }
 
     // encrypt_then_mac (22)

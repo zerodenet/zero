@@ -22,7 +22,7 @@ impl ProtocolMetadata for TrojanProtocol {
             },
             transports: vec!["tcp", "tls"],
             mux: ProtocolCapabilityLevel::Unsupported,
-            limitations: vec!["external_interop_coverage_is_incomplete", "relay_stream_tls_client_fingerprint_is_not_supported"],
+            limitations: vec!["external_interop_coverage_is_incomplete"],
         }
     }
 }
@@ -43,9 +43,10 @@ impl ProtocolMetadata for TrojanProtocol {
 ## 剩余缺口
 
 - `external_interop_coverage_is_incomplete`
-- `relay_stream_tls_client_fingerprint_is_not_supported`
 - `mux_udp_is_not_implemented` (Trojan 无 MUX)
 
 ## 外部互操作
 
-互操作测试文件：`crates/proxy/tests/trojan_xray_interop.rs`（8 个测试，Xray/sing-box/Mihomo 三大族，本地手动执行，`#[ignore]`）。
+互操作测试文件：`crates/proxy/tests/trojan_xray_interop.rs`（Xray/sing-box/Mihomo 三大族，本地手动执行，`#[ignore]`）。
+
+TLS 客户端指纹（`client_fingerprint`，chrome/firefox/safari/ios/edge/randomized）在 TCP 出站、UDP fresh-socket、以及 **relay-stream**（UDP relay-chain 末跳）三条路径上均已支持，回归测试见 `socks5_udp/relays_udp_through_socks5_to_trojan_relay_chain_with_tls_fingerprint.rs`（CI 自跑）。

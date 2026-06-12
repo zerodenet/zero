@@ -273,6 +273,24 @@ impl Tls13Connection {
         Some(data)
     }
 
+    /// Copy decrypted application data into `dst`, consuming only what was
+    /// copied. Returns the number of bytes copied (0 when nothing is
+    /// buffered). Unlike [`take_plaintext`](Self::take_plaintext), this never
+    /// discards data that does not fit, so it is safe to use with small
+    /// caller-provided read buffers.
+    pub fn read_plaintext(&mut self, dst: &mut [u8]) -> usize {
+        let src = self.plaintext_read_buf.as_slice();
+        let n = src.len().min(dst.len());
+        dst[..n].copy_from_slice(&src[..n]);
+        self.plaintext_read_buf.consume(n);
+        n
+    }
+
+    /// Number of decrypted application-data bytes available to read.
+    pub fn plaintext_len(&self) -> usize {
+        self.plaintext_read_buf.len()
+    }
+
     /// Queue plaintext for encryption and sending.
     pub fn write_plaintext(&mut self, data: &[u8]) {
         self.plaintext_write_buf.extend_from_slice(data);
@@ -319,14 +337,20 @@ impl Tls13Connection {
             io::Error::other(format!("unsupported cipher suite 0x{cipher_suite_id:04x}"))
         })?;
 
-        // Compute transcript hash: ClientHello + ServerHello
+        // Compute the cumulative transcript hash Hash(ClientHello || ServerHello).
+        //
+        // Per RFC 8446 §7.1, the handshake traffic secrets are bound to
+        // Transcript-Hash(ClientHello..ServerHello) — the *running* hash over
+        // both messages — not Hash(ServerHello) alone. Using the latter
+        // produces keys that no standard TLS 1.3 server (rustls, etc.) will
+        // accept, so the AEAD open fails with an auth-tag mismatch. The
+        // REALITY client (reality_client_connection.rs) already does this
+        // correctly; this path must match.
         let server_hello = &record[TLS_RECORD_HEADER_SIZE..];
-        let mut ctx = digest::Context::new(cipher_suite.digest_algorithm());
-        ctx.update(&client_hello_bytes);
-        ctx.update(server_hello);
-
-        let ch_hash = digest::digest(cipher_suite.digest_algorithm(), &client_hello_bytes);
-        let sh_hash = digest::digest(cipher_suite.digest_algorithm(), server_hello);
+        let mut transcript = digest::Context::new(cipher_suite.digest_algorithm());
+        transcript.update(&client_hello_bytes);
+        transcript.update(server_hello);
+        let transcript_hash = transcript.finish();
 
         // ECDH
         let peer_public_key = PublicKey::from(
@@ -339,8 +363,8 @@ impl Tls13Connection {
         let hs_keys = derive_handshake_keys(
             cipher_suite,
             shared_secret.as_bytes(),
-            ch_hash.as_ref(),
-            sh_hash.as_ref(),
+            &[],
+            transcript_hash.as_ref(),
         )?;
 
         // Build transcript (raw bytes, not hashes)

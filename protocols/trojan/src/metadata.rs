@@ -10,10 +10,8 @@ impl ProtocolMetadata for TrojanProtocol {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
         let unsupported = ProtocolCapabilityState::unsupported(&[]);
         let supported = ProtocolCapabilityState::supported();
-        let partial = ProtocolCapabilityState::partial(&[
-            "external_interop_coverage_is_incomplete",
-            "relay_stream_tls_client_fingerprint_is_not_supported",
-        ]);
+        let partial =
+            ProtocolCapabilityState::partial(&["external_interop_coverage_is_incomplete"]);
 
         ProtocolCapabilityDescriptor {
             protocol: "trojan",
@@ -24,10 +22,7 @@ impl ProtocolMetadata for TrojanProtocol {
             outbound: ProtocolNetworkCapability::new(supported, partial),
             transports: &["tcp", "tls"],
             mux: unsupported,
-            limitations: &[
-                "external_interop_coverage_is_incomplete",
-                "relay_stream_tls_client_fingerprint_is_not_supported",
-            ],
+            limitations: &["external_interop_coverage_is_incomplete"],
         }
     }
 }
