@@ -127,28 +127,41 @@ jobs:
 
       - name: Generate changelog
         shell: bash
+        env:
+          CURRENT_TAG: ${{ github.ref_name }}
         run: |
-          # Sort by semantic version, pick previous tag
-          PREV_TAG=$(git tag --sort=-version:refname | sed -n 2p)
+          # Find the previous *stable* tag: drop prereleases (any tag with a
+          # hyphen, e.g. v0.0.12-beta) and the tag currently being released,
+          # then take the next-newest. Using the tag name (not bare HEAD)
+          # keeps the range correct even when prerelease tags sort above the
+          # release tag under `version:refname`.
+          PREV_TAG=$(git tag --sort=-version:refname \
+            | grep -v -- '-' \
+            | grep -vFx "$CURRENT_TAG" \
+            | head -n 1 || true)
           if [ -z "$PREV_TAG" ]; then
-            RANGE="HEAD"
+            RANGE="$CURRENT_TAG"
           else
-            RANGE="${PREV_TAG}..HEAD"
+            RANGE="${PREV_TAG}..${CURRENT_TAG}"
           fi
+          echo "Changelog range: $RANGE"
 
           # Extract commit log once; exclude merge commits and release commits
-          COMMITS=$(git log "$RANGE" --no-merges --format="%s" 2>/dev/null | grep -ivE '^release:' || true)
+          # (both "release:" and "release vX.Y.Z" forms).
+          COMMITS=$(git log "$RANGE" --no-merges --format="%s" 2>/dev/null | grep -ivE '^release([: ]|$)' || true)
 
           # ── Helpers ────────────────────────────────────────────────
 
           # Extract and format commits matching a prefix regex.
           # $1 = pipe-separated prefixes (e.g. "improve|refactor|perf")
+          # Patterns accept an optional conventional-commit scope, e.g.
+          # "fix(ipc):" / "docs(vless):", not just "fix:".
           extract() {
             local result
-            result=$(echo "$COMMITS" | grep -iE "^(${1}):" 2>/dev/null || true)
+            result=$(echo "$COMMITS" | grep -iE "^(${1})(\([^)]*\))?:" 2>/dev/null || true)
             if [ -n "$result" ]; then
               echo "$result" | while IFS= read -r raw; do
-                # Strip the prefix label (e.g. "feat: ") for display
+                # Strip the prefix label (e.g. "feat: " / "fix(ipc): ")
                 local body="${raw#*: }"
                 echo "- ${body}"
               done
@@ -158,8 +171,8 @@ jobs:
           # Count commits matching a prefix regex
           count() {
             local n
-            n=$(echo "$COMMITS" | grep -ciE "^(${1}):" 2>/dev/null || echo 0)
-            echo "$n"
+            n=$(echo "$COMMITS" | grep -ciE "^(${1})(\([^)]*\))?:" 2>/dev/null || true)
+            echo "${n:-0}"
           }
 
           # Emit a section if there are commits in the category.
