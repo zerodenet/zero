@@ -2,11 +2,11 @@
 
 VLESS 是 `partial` 协议能力。基线 TCP 和 UDP-over-stream 路径存在，UDP MUX、部分 final-hop 传输和互操作覆盖仍有缺口。模块结构与 `protocols/vless/src/` 对应：
 
-| 文档 | 对应源码 | 内容 |
-|------|---------|------|
-| [inbound.md](inbound.md) | `inbound.rs` | VLESS TCP/UDP 入站、Reality/Vision flow |
-| [outbound.md](outbound.md) | `outbound.rs` | VLESS TCP/UDP 出站 |
-| [shared.md](shared.md) | `shared.rs` | UUID、flow、命令常量 |
+| 对应源码 | 内容 |
+|---------|------|
+| `inbound.rs` | VLESS TCP/UDP 入站、Reality/Vision flow |
+| `outbound.rs` | VLESS TCP/UDP 出站 |
+| `shared.rs` | UUID、flow、命令常量 |
 
 ## 当前能力
 
