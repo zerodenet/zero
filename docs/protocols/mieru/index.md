@@ -10,7 +10,7 @@ Mieru 是 socks5-in-tunnel 模型的加密代理协议：先建立 XChaCha20-Pol
 | UDP 出站 | `supported` | socks5-in-tunnel（UDP ASSOCIATE）：已与外部 mita 互通验证（DNS relay） |
 | TCP 入站 | `supported` | socks5-in-tunnel：openSession 握手 + 隧道内 socks5 请求解析；经 loopback 测试验证（`protocols/mieru/tests/loopback.rs`，对已验证出站） |
 | UDP 入站 | `supported` | `socks5_serve` 处理 CMD=3 → `run_mieru_udp_relay` |
-| MUX | `unsupported` | Mieru MUX 未实现 |
+| MUX | `unsupported` | 多会话复用单条 underlay，性能优化项；暂不实现（单会话模式 TCP/UDP 双向已验证可用） |
 
 ## 验证依据
 

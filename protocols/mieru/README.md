@@ -37,9 +37,11 @@ Mieru 是一种加密代理协议。它先与对端建立一条 XChaCha20-Poly13
 |------|------|
 | TCP 加密隧道（openSession 握手） | ✅ 已与 mita 互通验证 |
 | TCP 出站：socks5-in-tunnel 目标协商 + relay | ✅ 已与 mita 端到端互通验证（httpbin.org） |
-| TCP 入站：socks5-in-tunnel（对称于出站） | ✅ 已实现（对称设计） |
+| TCP 入站：socks5-in-tunnel（对称于出站） | ✅ loopback 验证（对已验证出站） |
+| UDP 出站：socks5 UDP ASSOCIATE | ✅ 已与 mita 互通验证（DNS relay） |
+| UDP 入站：socks5 UDP ASSOCIATE | ✅ 已实现（对称设计） |
 | 密钥派生（HashPassword）+ nonce user hint | ✅ 已与 mita 字节级对齐 |
-| UDP over mieru（socks5 UDP ASSOCIATE） | ⏳ 待实现 |
+| MUX（多会话复用单条 underlay） | ➖ 暂不实现（性能优化项；单会话模式 TCP/UDP 双向已可用） |
 
 ## 架构
 
