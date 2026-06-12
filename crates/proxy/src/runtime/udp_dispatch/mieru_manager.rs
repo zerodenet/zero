@@ -172,15 +172,64 @@ impl MieruChainManager {
         username: &str,
         password: &str,
     ) -> Result<MieruEntry, EngineError> {
-        // The mieru session is target-agnostic; UDP-over-mieru conveys the
-        // target via socks5 UDP ASSOCIATE over the encrypted tunnel. The full
-        // socks5 UDP ASSOCIATE handshake is a follow-up — for now this
-        // establishes the encrypted session only.
-        let outbound = MieruOutbound::connect(&mut stream, username, password)
+        // Establish the encrypted mieru session, then negotiate socks5 UDP
+        // ASSOCIATE inside the tunnel (CMD=3). mieru conveys the UDP target via
+        // socks5, and the session must complete the UDP ASSOCIATE handshake
+        // before UDP packets can flow.
+        let mut outbound = MieruOutbound::connect(&mut stream, username, password)
             .await
             .map_err(|e| {
                 EngineError::Io(std::io::Error::other(format!("mieru udp handshake: {e}")))
             })?;
+
+        // Send socks5 UDP ASSOCIATE request: [VER, CMD=3, RSV, ATYP=IPv4, 0.0.0.0:0].
+        let assoc_req = [0x05u8, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0];
+        let assoc_seg = outbound
+            .encrypt_client_data(&assoc_req)
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru udp assoc encrypt: {e}"))))?;
+        stream
+            .write_all(&assoc_seg)
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru udp assoc write: {e}"))))?;
+        stream
+            .flush()
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru udp assoc flush: {e}"))))?;
+
+        // Read the UDP ASSOCIATE response (one data segment) and check REP == 0.
+        let mut assoc_raw = Vec::new();
+        let assoc_resp = loop {
+            match outbound.decrypt_server_data_with_consumed(&assoc_raw) {
+                Ok((segment, consumed)) => {
+                    assoc_raw.drain(..consumed);
+                    break segment.payload;
+                }
+                Err(zero_core::Error::Protocol("mieru: need more data")) => {
+                    let mut scratch = [0u8; 4096];
+                    let n = stream
+                        .read(&mut scratch)
+                        .await
+                        .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru udp assoc read: {e}"))))?;
+                    if n == 0 {
+                        return Err(EngineError::Io(std::io::Error::other(
+                            "mieru udp assoc: connection closed",
+                        )));
+                    }
+                    assoc_raw.extend_from_slice(&scratch[..n]);
+                }
+                Err(e) => {
+                    return Err(EngineError::Io(std::io::Error::other(format!(
+                        "mieru udp assoc decrypt: {e}"
+                    ))))
+                }
+            }
+        };
+        if assoc_resp.len() < 4 || assoc_resp[0] != 0x05 || assoc_resp[1] != 0x00 {
+            return Err(EngineError::Io(std::io::Error::other(format!(
+                "mieru udp assoc rejected: {:?}",
+                &assoc_resp[..assoc_resp.len().min(4)]
+            ))));
+        }
 
         let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
         let (recv_tx, _) = broadcast::channel::<RecvItem>(32);
