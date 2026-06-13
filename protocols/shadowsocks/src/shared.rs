@@ -239,59 +239,60 @@ pub fn encode_udp_datagram_2022(
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, Error> {
-    let master_key = {
-        #[cfg(feature = "blake3")]
-        {
-            decode_blake3_master_key(cipher, password)?
-        }
-        #[cfg(not(feature = "blake3"))]
-        {
-            let _ = (cipher, password);
-            return Err(Error::Protocol(
-                "ss: blake3 key derivation requires `blake3` feature",
-            ));
-        }
-    };
+    #[cfg(feature = "blake3")]
+    {
+        let master_key = decode_blake3_master_key(cipher, password)?;
 
-    let target_data = build_target_data(target, port, payload)?;
-    let mut packet = Vec::with_capacity(64 + target_data.len() + cipher.tag_len());
-    let session_id = random_u64()?;
-    let packet_id = random_u64()?;
+        let target_data = build_target_data(target, port, payload)?;
+        let mut packet = Vec::with_capacity(64 + target_data.len() + cipher.tag_len());
+        let session_id = random_u64()?;
+        let packet_id = random_u64()?;
 
-    if cipher == CipherKind::Blake3Chacha20Poly1305 {
-        let mut nonce = [0u8; 24];
-        fill_random(&mut nonce)?;
-        packet.extend_from_slice(&nonce);
+        if cipher == CipherKind::Blake3Chacha20Poly1305 {
+            let mut nonce = [0u8; 24];
+            fill_random(&mut nonce)?;
+            packet.extend_from_slice(&nonce);
+        }
+
+        packet.extend_from_slice(&session_id.to_be_bytes());
+        packet.extend_from_slice(&packet_id.to_be_bytes());
+        packet.push(0);
+        packet.extend_from_slice(&now_unix_seconds().to_be_bytes());
+        packet.extend_from_slice(&0u16.to_be_bytes());
+        packet.extend_from_slice(&target_data);
+
+        return match cipher {
+            CipherKind::Blake3Aes128Gcm | CipherKind::Blake3Aes256Gcm => {
+                let mut header = [0u8; 16];
+                header.copy_from_slice(&packet[..16]);
+                let session_key = derive_key_blake3(&master_key, &header[..8], cipher.key_len())?;
+                let encrypted =
+                    aead_encrypt_udp(cipher, &session_key, &header[4..16], &packet[16..])?;
+                encrypt_aes_2022_header(cipher, &master_key, &mut header)?;
+
+                let mut out = Vec::with_capacity(header.len() + encrypted.len());
+                out.extend_from_slice(&header);
+                out.extend_from_slice(&encrypted);
+                Ok(out)
+            }
+            CipherKind::Blake3Chacha20Poly1305 => {
+                let encrypted =
+                    aead_encrypt_udp(cipher, &master_key, &packet[..24], &packet[24..])?;
+                let mut out = Vec::with_capacity(24 + encrypted.len());
+                out.extend_from_slice(&packet[..24]);
+                out.extend_from_slice(&encrypted);
+                Ok(out)
+            }
+            _ => Err(Error::Protocol("ss: cipher is not a 2022 method")),
+        };
     }
 
-    packet.extend_from_slice(&session_id.to_be_bytes());
-    packet.extend_from_slice(&packet_id.to_be_bytes());
-    packet.push(0);
-    packet.extend_from_slice(&now_unix_seconds().to_be_bytes());
-    packet.extend_from_slice(&0u16.to_be_bytes());
-    packet.extend_from_slice(&target_data);
-
-    match cipher {
-        CipherKind::Blake3Aes128Gcm | CipherKind::Blake3Aes256Gcm => {
-            let mut header = [0u8; 16];
-            header.copy_from_slice(&packet[..16]);
-            let session_key = derive_key_blake3(&master_key, &header[..8], cipher.key_len())?;
-            let encrypted = aead_encrypt_udp(cipher, &session_key, &header[4..16], &packet[16..])?;
-            encrypt_aes_2022_header(cipher, &master_key, &mut header)?;
-
-            let mut out = Vec::with_capacity(header.len() + encrypted.len());
-            out.extend_from_slice(&header);
-            out.extend_from_slice(&encrypted);
-            Ok(out)
-        }
-        CipherKind::Blake3Chacha20Poly1305 => {
-            let encrypted = aead_encrypt_udp(cipher, &master_key, &packet[..24], &packet[24..])?;
-            let mut out = Vec::with_capacity(24 + encrypted.len());
-            out.extend_from_slice(&packet[..24]);
-            out.extend_from_slice(&encrypted);
-            Ok(out)
-        }
-        _ => Err(Error::Protocol("ss: cipher is not a 2022 method")),
+    #[cfg(not(feature = "blake3"))]
+    {
+        let _ = (cipher, password, target, port, payload);
+        Err(Error::Protocol(
+            "ss: 2022 udp datagram requires `blake3` feature",
+        ))
     }
 }
 
@@ -301,48 +302,48 @@ pub fn decode_udp_datagram_2022(
     password: &[u8],
     datagram: &[u8],
 ) -> Result<(Address, u16, Vec<u8>), Error> {
-    let master_key = {
-        #[cfg(feature = "blake3")]
-        {
-            decode_blake3_master_key(cipher, password)?
-        }
-        #[cfg(not(feature = "blake3"))]
-        {
-            let _ = (cipher, password, datagram);
-            return Err(Error::Protocol(
-                "ss: blake3 key derivation requires `blake3` feature",
-            ));
-        }
-    };
+    #[cfg(feature = "blake3")]
+    {
+        let master_key = decode_blake3_master_key(cipher, password)?;
 
-    let plain = match cipher {
-        CipherKind::Blake3Aes128Gcm | CipherKind::Blake3Aes256Gcm => {
-            if datagram.len() < 16 + cipher.tag_len() {
-                return Err(Error::Protocol("ss: udp datagram too short"));
+        let plain = match cipher {
+            CipherKind::Blake3Aes128Gcm | CipherKind::Blake3Aes256Gcm => {
+                if datagram.len() < 16 + cipher.tag_len() {
+                    return Err(Error::Protocol("ss: udp datagram too short"));
+                }
+                let mut header = [0u8; 16];
+                header.copy_from_slice(&datagram[..16]);
+                decrypt_aes_2022_header(cipher, &master_key, &mut header)?;
+                let session_key = derive_key_blake3(&master_key, &header[..8], cipher.key_len())?;
+                let message =
+                    aead_decrypt_udp(cipher, &session_key, &header[4..16], &datagram[16..])?;
+                let mut plain = Vec::with_capacity(header.len() + message.len());
+                plain.extend_from_slice(&header);
+                plain.extend_from_slice(&message);
+                plain
             }
-            let mut header = [0u8; 16];
-            header.copy_from_slice(&datagram[..16]);
-            decrypt_aes_2022_header(cipher, &master_key, &mut header)?;
-            let session_key = derive_key_blake3(&master_key, &header[..8], cipher.key_len())?;
-            let message = aead_decrypt_udp(cipher, &session_key, &header[4..16], &datagram[16..])?;
-            let mut plain = Vec::with_capacity(header.len() + message.len());
-            plain.extend_from_slice(&header);
-            plain.extend_from_slice(&message);
-            plain
-        }
-        CipherKind::Blake3Chacha20Poly1305 => {
-            if datagram.len() < 24 + cipher.tag_len() {
-                return Err(Error::Protocol("ss: udp datagram too short"));
+            CipherKind::Blake3Chacha20Poly1305 => {
+                if datagram.len() < 24 + cipher.tag_len() {
+                    return Err(Error::Protocol("ss: udp datagram too short"));
+                }
+                aead_decrypt_udp(cipher, &master_key, &datagram[..24], &datagram[24..])?
             }
-            aead_decrypt_udp(cipher, &master_key, &datagram[..24], &datagram[24..])?
-        }
-        _ => return Err(Error::Protocol("ss: cipher is not a 2022 method")),
-    };
+            _ => return Err(Error::Protocol("ss: cipher is not a 2022 method")),
+        };
 
-    parse_udp_2022_plain(&plain)
+        return parse_udp_2022_plain(&plain);
+    }
+
+    #[cfg(not(feature = "blake3"))]
+    {
+        let _ = (cipher, password, datagram);
+        Err(Error::Protocol(
+            "ss: 2022 udp datagram requires `blake3` feature",
+        ))
+    }
 }
 
-#[cfg(feature = "crypto")]
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 fn parse_udp_2022_plain(plain: &[u8]) -> Result<(Address, u16, Vec<u8>), Error> {
     if plain.len() < 8 + 8 + 1 + 8 + 2 {
         return Err(Error::Protocol("ss: udp 2022 packet too short"));
@@ -369,7 +370,7 @@ fn parse_udp_2022_plain(plain: &[u8]) -> Result<(Address, u16, Vec<u8>), Error> 
     Ok((target, port, plain[cursor + payload_offset..].to_vec()))
 }
 
-#[cfg(feature = "crypto")]
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 fn encrypt_aes_2022_header(
     cipher: CipherKind,
     master_key: &[u8],
@@ -397,7 +398,7 @@ fn encrypt_aes_2022_header(
     }
 }
 
-#[cfg(feature = "crypto")]
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 fn decrypt_aes_2022_header(
     cipher: CipherKind,
     master_key: &[u8],
@@ -425,14 +426,14 @@ fn decrypt_aes_2022_header(
     }
 }
 
-#[cfg(feature = "crypto")]
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 fn random_u64() -> Result<u64, Error> {
     let mut bytes = [0u8; 8];
     fill_random(&mut bytes)?;
     Ok(u64::from_be_bytes(bytes))
 }
 
-#[cfg(feature = "crypto")]
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 fn fill_random(bytes: &mut [u8]) -> Result<(), Error> {
     use ring::rand::SecureRandom;
     ring::rand::SystemRandom::new()
@@ -440,7 +441,7 @@ fn fill_random(bytes: &mut [u8]) -> Result<(), Error> {
         .map_err(|_| Error::Protocol("ss: random failed"))
 }
 
-#[cfg(feature = "crypto")]
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 fn now_unix_seconds() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
