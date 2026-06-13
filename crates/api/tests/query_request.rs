@@ -5,9 +5,8 @@
 //! the implementation.
 
 use zero_api::{
-    CapabilitiesQuery, ConfigQuery, DiagnosticsQuery, FlowFilter, FlowListQuery,
-    HealthQuery, PoliciesQuery, QueryRequest, RuntimeQuery, SinksQuery, StatsQuery,
-    TunStatusQuery,
+    CapabilitiesQuery, ConfigQuery, DiagnosticsQuery, FlowFilter, FlowListQuery, HealthQuery,
+    PoliciesQuery, QueryRequest, RuntimeQuery, SinksQuery, StatsQuery, TunStatusQuery,
 };
 
 // ── Unit-struct query types: deserialize from {"key":{}} ──────────
@@ -89,8 +88,7 @@ fn deser_active_flows_with_limit() {
 #[test]
 fn deser_active_flows_default_filter() {
     // FlowFilter has all Option fields — `"filter":{}` should deserialize
-    let qr: QueryRequest =
-        serde_json::from_str(r#"{"active_flows":{"filter":{}}}"#).unwrap();
+    let qr: QueryRequest = serde_json::from_str(r#"{"active_flows":{"filter":{}}}"#).unwrap();
     assert!(matches!(qr, QueryRequest::ActiveFlows(_)));
 }
 
@@ -103,8 +101,7 @@ fn deser_recent_flows() {
 
 #[test]
 fn deser_flow_by_id() {
-    let qr: QueryRequest =
-        serde_json::from_str(r#"{"flow":{"flow_id":"abc-123"}}"#).unwrap();
+    let qr: QueryRequest = serde_json::from_str(r#"{"flow":{"flow_id":"abc-123"}}"#).unwrap();
     match qr {
         QueryRequest::Flow(f) => assert_eq!(f.flow_id, "abc-123"),
         _ => panic!("expected Flow, got {:?}", qr),
@@ -113,8 +110,7 @@ fn deser_flow_by_id() {
 
 #[test]
 fn deser_policy() {
-    let qr: QueryRequest =
-        serde_json::from_str(r#"{"policy":{"policy_tag":"proxy"}}"#).unwrap();
+    let qr: QueryRequest = serde_json::from_str(r#"{"policy":{"policy_tag":"proxy"}}"#).unwrap();
     match qr {
         QueryRequest::Policy(p) => assert_eq!(p.policy_tag, "proxy"),
         _ => panic!("expected Policy, got {:?}", qr),
@@ -125,8 +121,7 @@ fn deser_policy() {
 
 #[test]
 fn deser_unknown_query_type() {
-    let qr: QueryRequest =
-        serde_json::from_str(r#"{"future_query":{"some":"data"}}"#).unwrap();
+    let qr: QueryRequest = serde_json::from_str(r#"{"future_query":{"some":"data"}}"#).unwrap();
     assert!(matches!(qr, QueryRequest::Unknown(_)));
 }
 
