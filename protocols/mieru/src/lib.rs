@@ -11,7 +11,9 @@ extern crate alloc;
 
 pub mod metadata;
 pub mod protocol;
+#[cfg(feature = "crypto")]
 pub mod segment;
+#[cfg(feature = "crypto")]
 pub mod session;
 pub mod udp;
 
@@ -38,9 +40,11 @@ pub use metadata::{
 #[cfg(feature = "crypto")]
 pub use outbound::{MieruOutbound, MieruTcpTarget};
 pub use protocol::MieruProtocol;
+#[cfg(feature = "crypto")]
 pub use segment::{
     build_data_segment, build_session_segment, parse_segment, Segment, MAX_FRAGMENT,
 };
+#[cfg(feature = "crypto")]
 pub use session::MieruSession;
 pub use udp::{
     unwrap_udp_associate, wrap_udp_associate, MieruUdpAssociatePacket, MieruUdpAssociatePayload,
