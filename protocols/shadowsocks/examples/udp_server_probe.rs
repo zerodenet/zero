@@ -1,0 +1,47 @@
+//! Manual interop probe: send a SIP022 2022 UDP client packet (Zero-encoded,
+//! reference-compatible) to a running Zero SS 2022 server and verify it
+//! returns a valid type-1 server response carrying a DNS answer.
+//!
+//! Run with Zero listening on 127.0.0.1:18388 (2022-blake3-aes-256-gcm):
+//!   cargo run --example udp_server_probe --features crypto,blake3
+
+use std::net::UdpSocket;
+use std::time::Duration;
+
+use shadowsocks::{decode_udp_datagram_2022_session, encode_udp_datagram_2022, CipherKind};
+use zero_core::Address;
+
+fn main() {
+    let cipher = CipherKind::Blake3Aes256Gcm;
+    let password = b"MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
+    let zero_addr = "127.0.0.1:18388";
+    let dns_server = Address::Ipv4([8, 8, 8, 8]);
+
+    // Minimal DNS query: id=0x1234, RD, QD=1, "example.com" A IN.
+    let mut query = Vec::new();
+    query.extend_from_slice(&[0x12, 0x34, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0]);
+    query.extend_from_slice(b"\x07example\x03com\x00");
+    query.extend_from_slice(&[0x00, 0x01, 0x00, 0x01]);
+
+    let packet =
+        encode_udp_datagram_2022(cipher, password, &dns_server, 53, &query).expect("encode");
+
+    let sock = UdpSocket::bind("127.0.0.1:0").expect("bind");
+    sock.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    sock.send_to(&packet, zero_addr).expect("send to zero");
+
+    let mut buf = [0u8; 2048];
+    let (n, _from) = sock.recv_from(&mut buf).expect("recv response from zero");
+    let resp = &buf[..n];
+
+    let (target, port, payload, server_ssid) =
+        decode_udp_datagram_2022_session(cipher, password, resp).expect("decode response");
+    eprintln!("response target={target:?} port={port} server_ssid={server_ssid:#x}");
+    eprintln!("payload {} bytes", payload.len());
+
+    // A DNS response echoes the query id (0x1234) and has QR=1.
+    assert!(payload.len() >= 12, "response too short for DNS");
+    assert_eq!(&payload[0..2], &[0x12, 0x34], "DNS id mismatch");
+    assert_eq!(payload[2] & 0x80, 0x80, "DNS response QR bit not set");
+    println!("UDP-2022-SERVER-OK");
+}

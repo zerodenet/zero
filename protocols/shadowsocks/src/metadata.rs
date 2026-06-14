@@ -20,7 +20,7 @@ impl ProtocolMetadata for ShadowsocksProtocol {
             outbound: ProtocolNetworkCapability::new(supported, supported),
             transports: &["tcp", "udp"],
             mux: unsupported,
-            limitations: &["shadowsocks_2022_external_interop_coverage_incomplete"],
+            limitations: &["shadowsocks_2022_tcp_outbound_not_externally_validated"],
         }
     }
 }
