@@ -14,6 +14,19 @@ enum ReadState {
         buf: Vec<u8>,
         pos: usize,
     },
+    /// 2022 outbound: read the response fixed-length header chunk after the
+    /// salt (it carries the request salt and the first payload length).
+    ResponseHeader2022 {
+        buf: Vec<u8>,
+        pos: usize,
+    },
+    /// 2022 outbound: read the first payload chunk whose length came from the
+    /// response header. Subsequent chunks use the normal Length/Payload loop.
+    FirstPayload2022 {
+        expected_len: usize,
+        buf: Vec<u8>,
+        pos: usize,
+    },
     Length {
         buf: Vec<u8>,
         pos: usize,
@@ -39,9 +52,19 @@ pub struct ShadowsocksAeadStream<S> {
     write_nonce: u64,
     write_buf: Vec<u8>,
     write_pos: usize,
+    /// True for 2022 edition streams.
+    is_2022: bool,
+    /// Inbound: the request salt echoed in the response fixed header.
+    /// Outbound: the request salt we sent, verified against the response header.
+    request_salt: Vec<u8>,
+    /// Inbound 2022: the response salt, emitted with the first response header chunk.
+    response_salt: Vec<u8>,
+    /// Inbound 2022: true until the first write emits the response header chunk.
+    write_response_header_pending: bool,
 }
 
 impl<S> ShadowsocksAeadStream<S> {
+    #[allow(clippy::too_many_arguments)]
     pub fn inbound(
         inner: S,
         cipher: CipherKind,
@@ -50,7 +73,19 @@ impl<S> ShadowsocksAeadStream<S> {
         download_key: Vec<u8>,
         response_salt: Vec<u8>,
         remaining_payload: Vec<u8>,
+        is_2022: bool,
+        request_salt: Vec<u8>,
     ) -> Self {
+        let is_2022_enabled = is_2022 && cipher.is_blake3();
+        // For 2022 the response salt is emitted together with the first
+        // response header chunk, so write_buf starts empty and the first
+        // write builds salt+header+payload. For legacy, write the salt up
+        // front exactly as before.
+        let write_buf = if is_2022_enabled {
+            Vec::new()
+        } else {
+            response_salt.clone()
+        };
         Self {
             inner,
             cipher,
@@ -65,13 +100,18 @@ impl<S> ShadowsocksAeadStream<S> {
             read_plain_pos: 0,
             write_key: download_key,
             write_nonce: 0,
-            write_buf: response_salt,
+            write_buf,
             write_pos: 0,
+            is_2022: is_2022_enabled,
+            request_salt,
+            response_salt,
+            write_response_header_pending: is_2022_enabled,
         }
     }
 
     pub fn outbound(inner: S, session: ShadowsocksOutboundSession, password: Vec<u8>) -> Self {
         let cipher = session.cipher;
+        let is_2022 = cipher.is_blake3();
         Self {
             inner,
             cipher,
@@ -88,6 +128,10 @@ impl<S> ShadowsocksAeadStream<S> {
             write_nonce: session.next_upload_nonce,
             write_buf: Vec::new(),
             write_pos: 0,
+            is_2022,
+            request_salt: session.request_salt,
+            response_salt: Vec::new(),
+            write_response_header_pending: false,
         }
     }
 
@@ -124,6 +168,7 @@ impl ShadowsocksAccept {
         response_salt: Vec<u8>,
     ) -> Result<ShadowsocksAeadStream<S>, zero_core::Error> {
         let download_key = derive_download_key(self.cipher, password, &response_salt)?;
+        let is_2022 = self.cipher.is_blake3();
         Ok(ShadowsocksAeadStream::inbound(
             inner,
             self.cipher,
@@ -132,6 +177,8 @@ impl ShadowsocksAccept {
             download_key,
             response_salt,
             self.remaining_payload,
+            is_2022,
+            self.request_salt,
         ))
     }
 }
@@ -179,13 +226,115 @@ where
                                 Some(derive_download_key(self.cipher, &password, salt).map_err(
                                     |error| io::Error::new(io::ErrorKind::InvalidData, error),
                                 )?);
-                            self.read_state = ReadState::Length {
-                                buf: vec![0_u8; TCP_CHUNK_SIZE_LEN + self.cipher.tag_len()],
+                            if self.is_2022 {
+                                // 2022 response: read the fixed-length header
+                                // chunk next (carries request salt + first
+                                // payload length).
+                                let header_len =
+                                    crate::shared::ss_2022_response_header_plain_len(salt.len())
+                                        + self.cipher.tag_len();
+                                self.read_state = ReadState::ResponseHeader2022 {
+                                    buf: vec![0_u8; header_len],
+                                    pos: 0,
+                                };
+                            } else {
+                                self.read_state = ReadState::Length {
+                                    buf: vec![0_u8; TCP_CHUNK_SIZE_LEN + self.cipher.tag_len()],
+                                    pos: 0,
+                                };
+                            }
+                        }
+                    }
+                }
+                ReadState::ResponseHeader2022 { buf, pos } => {
+                    match poll_fill(&mut self.inner, cx, buf, pos, false)? {
+                        Poll::Pending => return Poll::Pending,
+                        Poll::Ready(()) => {
+                            let key = self.read_key.as_ref().ok_or_else(|| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    "shadowsocks read key missing",
+                                )
+                            })?;
+                            let header_plain = crate::shared::decrypt_tcp_2022_single_chunk(
+                                self.cipher,
+                                key,
+                                &mut self.read_nonce,
+                                buf,
+                            )
+                            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+                            let salt_len = self.cipher.salt_len();
+                            let (header_type, timestamp, resp_request_salt, length) =
+                                crate::shared::parse_2022_response_fixed_header(
+                                    &header_plain,
+                                    salt_len,
+                                )
+                                .map_err(|error| {
+                                    io::Error::new(io::ErrorKind::InvalidData, error)
+                                })?;
+                            if header_type != crate::shared::SS_2022_HEADER_TYPE_SERVER_STREAM {
+                                return Poll::Ready(Err(io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    "ss: 2022 response header bad type",
+                                )));
+                            }
+                            #[cfg(feature = "blake3")]
+                            {
+                                crate::shared::validate_2022_timestamp(timestamp).map_err(
+                                    |error| io::Error::new(io::ErrorKind::InvalidData, error),
+                                )?;
+                            }
+                            // SIP022 3.1.3: the client MUST verify the echoed request salt.
+                            if resp_request_salt != self.request_salt {
+                                return Poll::Ready(Err(io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    "ss: 2022 response request salt mismatch",
+                                )));
+                            }
+                            self.read_state = ReadState::FirstPayload2022 {
+                                expected_len: length as usize,
+                                buf: vec![0_u8; length as usize + self.cipher.tag_len()],
                                 pos: 0,
                             };
                         }
                     }
                 }
+                ReadState::FirstPayload2022 {
+                    expected_len,
+                    buf: encrypted,
+                    pos,
+                } => match poll_fill(&mut self.inner, cx, encrypted, pos, false)? {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(()) => {
+                        let key = self.read_key.as_ref().ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "shadowsocks read key missing",
+                            )
+                        })?;
+                        self.read_plain = crate::shared::decrypt_tcp_2022_single_chunk(
+                            self.cipher,
+                            key,
+                            &mut self.read_nonce,
+                            encrypted,
+                        )
+                        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+                        if self.read_plain.len() != *expected_len {
+                            return Poll::Ready(Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "ss: 2022 first payload length mismatch",
+                            )));
+                        }
+                        self.read_plain_pos = 0;
+                        self.read_state = ReadState::Length {
+                            buf: vec![0_u8; TCP_CHUNK_SIZE_LEN + self.cipher.tag_len()],
+                            pos: 0,
+                        };
+                        if self.serve_read_plain(buf) {
+                            return Poll::Ready(Ok(()));
+                        }
+                    }
+                },
                 ReadState::Length {
                     buf: encrypted_len,
                     pos,
@@ -287,6 +436,42 @@ where
         }
 
         let n = buf.len().min(crate::shared::MAX_TCP_PAYLOAD_SIZE);
+
+        // 2022 inbound: the first write emits the response salt + the
+        // fixed-length response header chunk (nonce 0, which doubles as the
+        // first length chunk) + the first payload chunk (nonce 1). Body
+        // length+payload pairs continue from nonce 2 via encrypt_tcp_chunk.
+        if self.is_2022 && self.write_response_header_pending {
+            let header_plain = crate::shared::build_2022_response_fixed_header(
+                crate::shared::now_unix_seconds(),
+                &self.request_salt,
+                n as u16,
+            )
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+            let enc_header = crate::shared::encrypt_tcp_2022_single_chunk(
+                self.cipher,
+                &self.write_key,
+                &mut self.write_nonce,
+                &header_plain,
+            )
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+            let enc_payload = crate::shared::encrypt_tcp_2022_single_chunk(
+                self.cipher,
+                &self.write_key,
+                &mut self.write_nonce,
+                &buf[..n],
+            )
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+
+            self.write_buf.clear();
+            self.write_buf.extend_from_slice(&self.response_salt);
+            self.write_buf.extend_from_slice(&enc_header);
+            self.write_buf.extend_from_slice(&enc_payload);
+            self.write_pos = 0;
+            self.write_response_header_pending = false;
+            return Poll::Ready(Ok(n));
+        }
+
         self.write_buf = encrypt_tcp_chunk(
             self.cipher,
             &self.write_key,

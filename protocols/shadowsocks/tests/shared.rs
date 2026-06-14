@@ -7,7 +7,12 @@
 //! cipher/address/target tests run unconditionally.
 
 use shadowsocks::{
-    build_target_data, decode_address, encode_address, parse_target_data, CipherKind,
+    build_2022_request_fixed_header, build_2022_request_var_header,
+    build_2022_response_fixed_header, build_target_data, decode_address, encode_address,
+    parse_2022_request_fixed_header, parse_2022_request_var_header,
+    parse_2022_response_fixed_header, parse_target_data, ss_2022_response_header_plain_len,
+    CipherKind, SS_2022_HEADER_TYPE_CLIENT_STREAM, SS_2022_HEADER_TYPE_SERVER_STREAM,
+    SS_2022_MAX_PADDING_LENGTH, SS_2022_REQUEST_FIXED_HEADER_LEN,
 };
 use zero_core::Address;
 
@@ -122,4 +127,114 @@ fn test_tcp_chunk_roundtrip() {
     .unwrap();
     assert_eq!(decrypt_nonce, 2);
     assert_eq!(pt, plaintext);
+}
+
+// ---- SIP022 2022 edition TCP header byte layout ----
+
+#[test]
+fn ss_2022_request_fixed_header_byte_layout() {
+    // type(1) + timestamp(8 BE) + length(2 BE) = 11 bytes.
+    let header = build_2022_request_fixed_header(0x1122_3344_5566_7788, 0x1234);
+    assert_eq!(header.len(), SS_2022_REQUEST_FIXED_HEADER_LEN);
+    assert_eq!(header[0], SS_2022_HEADER_TYPE_CLIENT_STREAM);
+    // Big-endian timestamp.
+    assert_eq!(
+        &header[1..9],
+        &[0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]
+    );
+    // Big-endian length.
+    assert_eq!(&header[9..11], &[0x12, 0x34]);
+
+    let (ty, ts, len) = parse_2022_request_fixed_header(&header).unwrap();
+    assert_eq!(ty, SS_2022_HEADER_TYPE_CLIENT_STREAM);
+    assert_eq!(ts, 0x1122_3344_5566_7788);
+    assert_eq!(len, 0x1234);
+}
+
+#[test]
+fn ss_2022_request_fixed_header_rejects_bad_length() {
+    // 10 bytes instead of 11.
+    assert!(parse_2022_request_fixed_header(&[0u8; 10]).is_err());
+    // 12 bytes instead of 11.
+    assert!(parse_2022_request_fixed_header(&[0u8; 12]).is_err());
+}
+
+#[test]
+fn ss_2022_request_var_header_roundtrip_with_padding() {
+    let padding = vec![0xaau8; 8];
+    let var = build_2022_request_var_header(
+        &Address::Domain("example.com".to_owned()),
+        443,
+        &padding,
+        &[],
+    )
+    .unwrap();
+    // ATYP(1) + len(1) + "example.com"(11) + port(2) + padding_len(2) + padding(8)
+    assert_eq!(var.len(), 1 + 1 + 11 + 2 + 2 + 8);
+    let (addr, port, payload) = parse_2022_request_var_header(&var).unwrap();
+    assert_eq!(addr, Address::Domain("example.com".to_owned()));
+    assert_eq!(port, 443);
+    assert!(payload.is_empty(), "no initial payload carried");
+}
+
+#[test]
+fn ss_2022_request_var_header_roundtrip_with_initial_payload() {
+    let initial = b"GET / HTTP/1.1";
+    let var = build_2022_request_var_header(&Address::Ipv4([93, 184, 216, 34]), 80, &[], initial)
+        .unwrap();
+    let (addr, port, payload) = parse_2022_request_var_header(&var).unwrap();
+    assert_eq!(addr, Address::Ipv4([93, 184, 216, 34]));
+    assert_eq!(port, 80);
+    assert_eq!(payload, initial);
+}
+
+#[test]
+fn ss_2022_request_var_header_rejects_no_payload_no_padding() {
+    // Per SIP022 3.1.3: variable header with neither payload nor padding is
+    // invalid. build_2022_request_var_header allows it (the caller controls
+    // policy), but parse MUST reject it.
+    let var = build_2022_request_var_header(&Address::Ipv4([1, 1, 1, 1]), 53, &[], &[]).unwrap();
+    assert!(parse_2022_request_var_header(&var).is_err());
+}
+
+#[test]
+fn ss_2022_request_var_header_rejects_oversized_padding() {
+    let padding = vec![0u8; SS_2022_MAX_PADDING_LENGTH + 1];
+    assert!(
+        build_2022_request_var_header(&Address::Ipv4([1, 1, 1, 1]), 53, &padding, &[],).is_err()
+    );
+}
+
+#[test]
+fn ss_2022_response_header_byte_layout() {
+    let request_salt = vec![0x55u8; 16];
+    // type(1) + timestamp(8) + request_salt(16) + length(2) = 27 bytes plain.
+    assert_eq!(ss_2022_response_header_plain_len(16), 27);
+    assert_eq!(ss_2022_response_header_plain_len(32), 43);
+
+    let header =
+        build_2022_response_fixed_header(0x0011_2233_4455_6677, &request_salt, 0x7fff).unwrap();
+    assert_eq!(header.len(), 27);
+    assert_eq!(header[0], SS_2022_HEADER_TYPE_SERVER_STREAM);
+    assert_eq!(
+        &header[1..9],
+        &[0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]
+    );
+    assert_eq!(&header[9..25], &request_salt[..]);
+    assert_eq!(&header[25..27], &[0x7f, 0xff]);
+
+    let (ty, ts, salt, len) = parse_2022_response_fixed_header(&header, 16).unwrap();
+    assert_eq!(ty, SS_2022_HEADER_TYPE_SERVER_STREAM);
+    assert_eq!(ts, 0x0011_2233_4455_6677);
+    assert_eq!(salt, request_salt);
+    assert_eq!(len, 0x7fff);
+}
+
+#[test]
+fn ss_2022_response_header_rejects_wrong_type() {
+    let salt = vec![0u8; 16];
+    // Forge a response header with type 0 (client stream) instead of 1.
+    let mut header = build_2022_response_fixed_header(1, &salt, 4).unwrap();
+    header[0] = SS_2022_HEADER_TYPE_CLIENT_STREAM;
+    assert!(parse_2022_response_fixed_header(&header, 16).is_err());
 }

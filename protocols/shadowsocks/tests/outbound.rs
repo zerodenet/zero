@@ -1,14 +1,16 @@
 #![cfg(feature = "crypto")]
 
 use std::io;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use shadowsocks::{
     decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, derive_download_key, derive_key,
     derive_session_key, encrypt_tcp_chunk, parse_target_data, CipherKind, ShadowsocksAccept,
-    ShadowsocksAeadStream, ShadowsocksOutbound, ShadowsocksOutboundSession,
+    ShadowsocksAeadStream, ShadowsocksInbound, ShadowsocksOutbound, ShadowsocksOutboundSession,
     ShadowsocksUdpDecodeContext, ShadowsocksUdpPacketTarget, TCP_CHUNK_SIZE_LEN,
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream, ReadBuf};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, UdpDatagramFraming};
 
@@ -25,6 +27,27 @@ fn supported_ciphers() -> Vec<CipherKind> {
         CipherKind::Blake3Chacha20Poly1305,
     ]);
     ciphers
+}
+
+/// Legacy (SIP004) AEAD ciphers only. Used by stream-framing tests that drive
+/// the legacy salt + length/payload-chunk response model; 2022 ciphers use a
+/// different response header and are covered by dedicated 2022 tests.
+fn legacy_ciphers() -> Vec<CipherKind> {
+    vec![
+        CipherKind::Aes128Gcm,
+        CipherKind::Aes256Gcm,
+        CipherKind::Chacha20Poly1305,
+    ]
+}
+
+/// 2022 edition (SIP022) ciphers.
+#[cfg(feature = "blake3")]
+fn blake3_ciphers() -> Vec<CipherKind> {
+    vec![
+        CipherKind::Blake3Aes128Gcm,
+        CipherKind::Blake3Aes256Gcm,
+        CipherKind::Blake3Chacha20Poly1305,
+    ]
 }
 
 fn derive_test_key(cipher: CipherKind, password: &[u8], salt: &[u8]) -> Vec<u8> {
@@ -147,7 +170,7 @@ async fn outbound_writes_salt_and_first_chunk_in_one_write() {
 
 #[tokio::test]
 async fn aead_stream_roundtrips_all_supported_ciphers() {
-    for cipher in supported_ciphers() {
+    for cipher in legacy_ciphers() {
         let password = password_for_cipher(cipher).to_vec();
         let upload_salt = vec![0x11_u8; cipher.salt_len()];
         let upload_key = derive_test_key(cipher, &password, &upload_salt);
@@ -157,6 +180,7 @@ async fn aead_stream_roundtrips_all_supported_ciphers() {
             session_key: upload_key.clone(),
             next_upload_nonce: 0,
             cipher,
+            request_salt: Vec::new(),
         };
         let mut stream =
             ShadowsocksAeadStream::outbound(client_io, outbound_session, password.clone());
@@ -208,6 +232,7 @@ async fn aead_stream_outbound_encrypts_upload_and_decrypts_download() {
         session_key: upload_key.clone(),
         next_upload_nonce: 0,
         cipher,
+        request_salt: Vec::new(),
     };
     let mut stream = ShadowsocksAeadStream::outbound(client_io, outbound_session, password.clone());
 
@@ -261,6 +286,8 @@ async fn aead_stream_inbound_serves_remaining_payload_and_encrypts_download() {
         download_key.clone(),
         response_salt.clone(),
         b"first".to_vec(),
+        false,
+        Vec::new(),
     );
 
     let mut first = [0_u8; 5];
@@ -313,6 +340,7 @@ async fn accepted_inbound_stream_constructor_owns_response_key_derivation() {
         session_key: upload_key,
         cipher,
         next_upload_nonce: 2,
+        request_salt: Vec::new(),
     };
     let (server_io, mut client_io) = tokio::io::duplex(4096);
 
@@ -457,4 +485,218 @@ fn udp_datagram_framing_roundtrips_2022_blake3_packet() {
     assert_eq!(decoded.target, Address::Domain("dns.google".to_owned()));
     assert_eq!(decoded.port, 53);
     assert_eq!(decoded.payload, b"query");
+}
+
+// ---- 2022 edition (SIP022) TCP ----
+//
+// The request stream is salt + fixed-header chunk (nonce 0) + variable-header
+// chunk (nonce 1) + body length/payload pairs; the response stream is salt +
+// fixed-header chunk (nonce 0, doubling as first length chunk) + payload chunk
+// (nonce 1) + body length/payload pairs. These tests drive the full
+// send_request / accept_request / into_aead_stream pipeline for all three
+// 2022 ciphers.
+
+/// Wraps a tokio `DuplexStream` so it satisfies both `AsyncSocket` (needed by
+/// `send_request` / `accept_request`) and `AsyncRead` + `AsyncWrite` (needed by
+/// `ShadowsocksAeadStream`).
+struct TestSocket(DuplexStream);
+
+impl AsyncSocket for TestSocket {
+    type Error = io::Error;
+
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        AsyncReadExt::read(&mut self.0, buf).await
+    }
+
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        AsyncWriteExt::write_all(&mut self.0, buf).await?;
+        AsyncWriteExt::flush(&mut self.0).await
+    }
+
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        AsyncWriteExt::shutdown(&mut self.0).await
+    }
+}
+
+impl AsyncRead for TestSocket {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for TestSocket {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_shutdown(cx)
+    }
+}
+
+// ---- 2022 edition (SIP022) TCP ----
+//
+// The request stream is salt + fixed-header chunk (nonce 0) + variable-header
+// chunk (nonce 1) + body length/payload pairs; the response stream is salt +
+// fixed-header chunk (nonce 0, doubling as first length chunk) + payload chunk
+// (nonce 1) + body length/payload pairs. These tests drive the full
+// send_request / accept_request / into_aead_stream pipeline for all three
+// 2022 ciphers.
+
+#[cfg(feature = "blake3")]
+#[tokio::test]
+async fn ss_2022_tcp_request_and_accept_roundtrip_all_blake3_ciphers() {
+    for cipher in blake3_ciphers() {
+        let password = password_for_cipher(cipher).to_vec();
+        let (client_io, server_io) = tokio::io::duplex(8192);
+        let (mut client_io, mut server_io) = (TestSocket(client_io), TestSocket(server_io));
+
+        let session = Session::new(
+            0,
+            Address::Domain("example.com".to_owned()),
+            443,
+            Network::Tcp,
+            ProtocolType::Shadowsocks,
+        );
+
+        // Client writes: salt + fixed header (nonce 0) + var header (nonce 1).
+        let outbound_session = ShadowsocksOutbound
+            .send_request(&mut client_io, &session, cipher, &password)
+            .await
+            .expect("send 2022 request");
+        assert_eq!(outbound_session.next_upload_nonce, 2, "cipher: {cipher:?}");
+        assert_eq!(
+            outbound_session.request_salt.len(),
+            cipher.salt_len(),
+            "cipher: {cipher:?}"
+        );
+
+        // Server reads the same bytes back and parses the target.
+        let accept = ShadowsocksInbound
+            .accept_request(&mut server_io, cipher, &password)
+            .await
+            .expect("accept 2022 request");
+        assert_eq!(
+            accept.session.target,
+            Address::Domain("example.com".to_owned())
+        );
+        assert_eq!(accept.session.port, 443);
+        assert_eq!(accept.next_upload_nonce, 2, "cipher: {cipher:?}");
+        assert_eq!(accept.request_salt, outbound_session.request_salt);
+        // No initial payload was carried, so nothing is buffered.
+        assert!(accept.remaining_payload.is_empty());
+    }
+}
+
+#[cfg(feature = "blake3")]
+#[tokio::test]
+async fn ss_2022_tcp_full_relay_roundtrips_all_blake3_ciphers() {
+    for cipher in blake3_ciphers() {
+        let password = password_for_cipher(cipher).to_vec();
+        let (client_io, server_io) = tokio::io::duplex(8192);
+        let (mut client_io, mut server_io) = (TestSocket(client_io), TestSocket(server_io));
+
+        let session = Session::new(
+            0,
+            Address::Domain("example.com".to_owned()),
+            443,
+            Network::Tcp,
+            ProtocolType::Shadowsocks,
+        );
+
+        // send_request / accept_request borrow the transports; afterwards we
+        // move them into the AEAD stream wrappers for the relay.
+        let outbound_session = ShadowsocksOutbound
+            .send_request(&mut client_io, &session, cipher, &password)
+            .await
+            .expect("send 2022 request");
+        let accept = ShadowsocksInbound
+            .accept_request(&mut server_io, cipher, &password)
+            .await
+            .expect("accept 2022 request");
+
+        let mut server_stream = accept
+            .into_aead_stream(server_io, &password)
+            .expect("wrap server stream");
+        let mut client_stream =
+            ShadowsocksAeadStream::outbound(client_io, outbound_session, password.clone());
+
+        // Upload: client -> server (body length/payload pairs from nonce 2).
+        client_stream.write_all(b"ping").await.unwrap();
+        client_stream.flush().await.unwrap();
+        let mut up = [0u8; 4];
+        server_stream.read_exact(&mut up).await.unwrap();
+        assert_eq!(&up, b"ping", "upload cipher: {cipher:?}");
+
+        // Download: server -> client. The first write emits the response salt
+        // + fixed header (nonce 0) + first payload chunk (nonce 1); the client
+        // verifies the echoed request salt and timestamp.
+        server_stream.write_all(b"pong").await.unwrap();
+        server_stream.flush().await.unwrap();
+        let mut down = [0u8; 4];
+        client_stream.read_exact(&mut down).await.unwrap();
+        assert_eq!(&down, b"pong", "download cipher: {cipher:?}");
+    }
+}
+
+#[cfg(feature = "blake3")]
+#[tokio::test]
+async fn ss_2022_tcp_relay_large_payload_spans_multiple_chunks() {
+    // A payload larger than one chunk (0x3FFF) exercises multi-chunk body
+    // framing in both directions, including the 2022 response header acting as
+    // the first length chunk followed by further length/payload pairs.
+    let cipher = CipherKind::Blake3Aes256Gcm;
+    let password = password_for_cipher(cipher).to_vec();
+    let (client_io, server_io) = tokio::io::duplex(1 << 16);
+    let (mut client_io, mut server_io) = (TestSocket(client_io), TestSocket(server_io));
+
+    let session = Session::new(
+        0,
+        Address::Ipv4([93, 184, 216, 34]),
+        80,
+        Network::Tcp,
+        ProtocolType::Shadowsocks,
+    );
+
+    let outbound_session = ShadowsocksOutbound
+        .send_request(&mut client_io, &session, cipher, &password)
+        .await
+        .unwrap();
+    let accept = ShadowsocksInbound
+        .accept_request(&mut server_io, cipher, &password)
+        .await
+        .unwrap();
+    assert_eq!(accept.session.target, Address::Ipv4([93, 184, 216, 34]));
+
+    let mut server_stream = accept
+        .into_aead_stream(server_io, &password)
+        .expect("wrap server stream");
+    let mut client_stream =
+        ShadowsocksAeadStream::outbound(client_io, outbound_session, password.clone());
+
+    let payload: Vec<u8> = (0..40_000u32).map(|i| (i & 0xff) as u8).collect();
+
+    client_stream.write_all(&payload).await.unwrap();
+    client_stream.flush().await.unwrap();
+    let mut received = vec![0u8; payload.len()];
+    server_stream.read_exact(&mut received).await.unwrap();
+    assert_eq!(received, payload, "upload multi-chunk");
+
+    server_stream.write_all(&payload).await.unwrap();
+    server_stream.flush().await.unwrap();
+    let mut echoed = vec![0u8; payload.len()];
+    client_stream.read_exact(&mut echoed).await.unwrap();
+    assert_eq!(echoed, payload, "download multi-chunk");
 }
