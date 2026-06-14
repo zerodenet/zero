@@ -277,6 +277,10 @@ fn execute_engine_command(
             ApiErrorCode::Internal,
             "TUN commands are handled by the proxy runtime, not the engine",
         )),
+        CommandRequest::DiagnosticsProbeOutbound(_) => Err(ApiError::new(
+            ApiErrorCode::Internal,
+            "probe_outbound is handled by the proxy runtime, not the engine",
+        )),
     }
 }
 

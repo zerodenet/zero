@@ -51,6 +51,20 @@ impl Tls13Stream<TcpStream> {
 
                 let _ = conn.process_new_packets()?;
 
+                // The handshake only completes once our Finished flight has
+                // actually been written; `is_handshaking()` flips to false
+                // while the Finished is still queued, so also require no
+                // pending output before breaking.
+                if !conn.is_handshaking() && !conn.wants_write() {
+                    break;
+                }
+
+                // If processing just queued output (our Finished), flush it
+                // before trying to read — the peer may be waiting for it.
+                if conn.wants_write() {
+                    continue;
+                }
+
                 if conn.wants_read() {
                     let mut buf = [0u8; 8192];
                     match stream_std.read(&mut buf) {
@@ -69,10 +83,6 @@ impl Tls13Stream<TcpStream> {
                         }
                         Err(e) => return Err(e),
                     }
-                }
-
-                if !conn.is_handshaking() {
-                    break;
                 }
             }
             Ok::<_, io::Error>((conn, stream_std))
@@ -113,6 +123,21 @@ where
 
             let _ = conn.process_new_packets()?;
 
+            // The handshake only completes once our Finished flight has
+            // actually been written; `is_handshaking()` flips to false while
+            // the Finished is still queued, so also require no pending output
+            // before breaking.
+            if !conn.is_handshaking() && !conn.wants_write() {
+                break;
+            }
+
+            // If processing just queued output (our Finished), flush it before
+            // trying to read — the peer may be blocked waiting for it, so a
+            // read here would deadlock.
+            if conn.wants_write() {
+                continue;
+            }
+
             if conn.wants_read() {
                 let mut buf = [0u8; 8192];
                 let n = stream.read(&mut buf).await?;
@@ -123,10 +148,6 @@ where
                     ));
                 }
                 conn.read_tls(&mut io::Cursor::new(&buf[..n]))?;
-            }
-
-            if !conn.is_handshaking() {
-                break;
             }
         }
 
@@ -152,41 +173,48 @@ where
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        // Return buffered plaintext first
-        if let Some(plaintext) = self.conn.take_plaintext() {
-            let n = plaintext.len().min(buf.remaining());
-            buf.put_slice(&plaintext[..n]);
+        // Serve already-decrypted plaintext first.
+        let n = self.conn.read_plaintext(buf.initialize_unfilled());
+        if n > 0 {
+            buf.advance(n);
             return Poll::Ready(Ok(()));
         }
 
-        // Read raw TLS data from underlying stream
-        let mut raw = [0u8; 8192];
-        let mut raw_buf = ReadBuf::new(&mut raw);
-        match Pin::new(&mut self.inner).poll_read(cx, &mut raw_buf) {
-            Poll::Ready(Ok(())) => {
-                let filled = raw_buf.filled();
-                if filled.is_empty() {
-                    return Poll::Ready(Ok(()));
+        // Loop until we either produce plaintext, hit a genuine EOF, or the
+        // underlying stream has no more data right now. Returning Ok with zero
+        // bytes filled would be interpreted by tokio as EOF, so a read that
+        // brings in a partial (or non-application) record must keep reading.
+        loop {
+            let mut raw = [0u8; 8192];
+            let mut raw_buf = ReadBuf::new(&mut raw);
+            match Pin::new(&mut self.inner).poll_read(cx, &mut raw_buf) {
+                Poll::Ready(Ok(())) => {
+                    let filled = raw_buf.filled();
+                    if filled.is_empty() {
+                        // Underlying stream closed. Surface any final plaintext
+                        // already buffered above; otherwise this is a clean EOF.
+                        return Poll::Ready(Ok(()));
+                    }
+                    if let Err(e) = self.conn.read_tls(&mut io::Cursor::new(filled)) {
+                        return Poll::Ready(Err(e));
+                    }
                 }
-                if let Err(e) = self.conn.read_tls(&mut io::Cursor::new(filled)) {
-                    return Poll::Ready(Err(e));
-                }
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Pending => return Poll::Pending,
             }
-            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-            Poll::Pending => return Poll::Pending,
-        }
 
-        // Process new packets
-        if let Err(e) = self.conn.process_new_packets() {
-            return Poll::Ready(Err(e));
-        }
+            if let Err(e) = self.conn.process_new_packets() {
+                return Poll::Ready(Err(e));
+            }
 
-        // Return plaintext
-        if let Some(plaintext) = self.conn.take_plaintext() {
-            let n = plaintext.len().min(buf.remaining());
-            buf.put_slice(&plaintext[..n]);
+            let n = self.conn.read_plaintext(buf.initialize_unfilled());
+            if n > 0 {
+                buf.advance(n);
+                return Poll::Ready(Ok(()));
+            }
+            // Partial record or a non-application record (e.g. an alert) was
+            // consumed; loop to read more.
         }
-        Poll::Ready(Ok(()))
     }
 }
 

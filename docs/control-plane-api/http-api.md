@@ -287,14 +287,21 @@ Response：
 
 #### policies.probe
 
-触发 `url_test` 立即执行一轮探测。
+触发 `url_test` 立即执行一轮探测（**异步**：命令仅触发，不等探测完成）。
 
 Params：`policy_tag` (string)
 
-Response：
+Response（同步返回的只是"已触发"，**不含延迟**）：
 ```json
 { "policy_tag": "auto", "probe_triggered": true }
 ```
+
+延迟结果通过两种途径获取（GUI 二选一）：
+
+1. **事件推送**（推荐）—— 探测完成后发射 `policy.probe.completed` 事件，payload 含每个成员的 `latency_ms`（见 [events.md](events.md#policyprobecompleted)）。
+2. **查询拉取** —— `GET /api/v1/policies/{policy_tag}` 返回 `PolicySnapshot`，其中 `latency_ms`（整组，= 选中节点延迟）与 `url_test_members[].latency_ms`（每成员）、`last_checked_unix_ms`、`last_error`。
+
+> 单成员探测 5s 超时、N 个成员并发/串行跑完可能十几秒，故采用"触发 + 异步取结果"模式，不阻塞命令响应。
 
 错误：`not_found` — policy 不存在或不是 `url_test` 类型
 
@@ -384,7 +391,11 @@ Response：
 
 #### diagnostics.probe_target
 
-对指定出站做一次 TCP 可达性探测。
+对指定出站的 `server:port` 做一次 **直连 TCP 可达性探测**（**同步**返回）。
+
+> ⚠️ 这是诊断用途：从内核所在主机**直接** `TcpStream::connect_timeout` 到出站配置里的 server:port，**不经过代理协议、不做 TLS 握手、不发协议请求**。`latency_ms` 仅反映"本机 → 服务器 TCP 端口"的 RTT，不等于经代理的端到端延迟。2 秒超时。
+>
+> 真正的"经代理测单节点延迟"目前由 `url_test` 组承载（把该节点放进一个 `url_test` 组再 `policies.probe`，结果经 `policy.probe.completed` / `policies` 查询拿）。
 
 Params：`target_tag` (string)
 
@@ -399,7 +410,52 @@ Response：
 }
 ```
 
+无固定 server 的出站（relay 链、无 server 的 direct）返回 `reachable: false` 且 `error: "outbound has no probeable fixed server"`。
+
 错误：`not_found` — target 不存在
+
+权限：`admin`
+
+#### diagnostics.probe_outbound
+
+对指定出站做一次 **经代理的同步单节点延迟探测**（`url_test` 探测的单节点、同步版本）。
+
+与另两种探测的区别：
+
+| 命令 | 同步 | 走代理 | 测的是 |
+|---|---|---|---|
+| `policies.probe` | ❌ 异步（多成员） | ✅ | 组内每成员经代理首字节延迟 |
+| `diagnostics.probe_target` | ✅ | ❌ 直连 TCP | 本机→server:port TCP RTT |
+| **`diagnostics.probe_outbound`** | **✅** | **✅** | **单节点经代理首字节延迟** |
+
+实现复用 `url_test` 的探测逻辑：经出站建立连接（含 TLS + 协议握手）→ 发 `HEAD {url}` → 读首字节，返回 `elapsed` 毫秒。单成员 ≤5s 超时，故可同步阻塞返回，适合 GUI"点一个节点测速"。仅支持 `http://` URL（明文，延迟不含 TLS 握手，与 `url_test` 一致）。
+
+Params：`target_tag` (string)、`url` (string, 可选，默认 `http://www.gstatic.com/generate_204`)
+
+Response（成功）：
+```json
+{
+  "target_tag": "node-a",
+  "url": "http://www.gstatic.com/generate_204",
+  "via": "through_proxy",
+  "reachable": true,
+  "latency_ms": 128
+}
+```
+
+Response（探测失败——超时/拒绝，属于**结果**而非命令错误，GUI 据此显示节点不可达）：
+```json
+{
+  "target_tag": "node-a",
+  "url": "http://www.gstatic.com/generate_204",
+  "via": "through_proxy",
+  "reachable": false,
+  "latency_ms": null,
+  "error": "probe target closed connection without response"
+}
+```
+
+错误：`not_found` — target 不存在；`invalid_argument` — URL 非法（非 `http://` 等）
 
 权限：`admin`
 

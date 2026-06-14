@@ -86,6 +86,84 @@ async fn zero_trojan_outbound_interops_with_xray_trojan_inbound_tcp() {
     echo.await.expect("echo task");
 }
 
+/// Same as the TCP interop above, but sets `client_fingerprint: "chrome"` on
+/// Zero's trojan outbound. This exercises the custom uTLS-style ClientHello
+/// (cipher suites / key share ordering) against a stock Xray TLS 1.3 server,
+/// guarding the relay-stream fingerprint path that previously deadlocked.
+#[tokio::test]
+#[ignore = "requires XRAY_BIN pointing to an Xray executable"]
+async fn zero_trojan_outbound_with_fingerprint_interops_with_xray_trojan_inbound_tcp() {
+    init_logs("trojan=debug");
+    let material = TempMaterial::new("zero-xray-trojan-tcp-out-fp");
+    let tls = material.tls();
+    let xray_port = free_port();
+    let zero_socks_port = free_port();
+    let echo_port = free_port();
+    let payload = b"xray-trojan-tcp-fp";
+
+    let xray_config = material.path("xray-server.json");
+    std::fs::write(&xray_config, xray_trojan_inbound_config(xray_port, &tls))
+        .expect("write xray config");
+    let Some(xray_bin) = require_env("XRAY_BIN") else {
+        return;
+    };
+    let mut xray = XrayProcess::start(xray_bin, &xray_config, &material);
+    wait_for_listener(xray_port).await;
+
+    let zero_config = RuntimeConfig::parse(&format!(
+        r#"{{
+            "inbounds": [
+                {{
+                    "tag": "socks-in",
+                    "listen": {{ "address": "127.0.0.1", "port": {zero_socks_port} }},
+                    "protocol": {{ "type": "socks5" }}
+                }}
+            ],
+            "outbounds": [
+                {{
+                    "tag": "trojan-out",
+                    "protocol": {{
+                        "type": "trojan",
+                        "server": "127.0.0.1",
+                        "port": {xray_port},
+                        "password": "{PASSWORD}",
+                        "sni": "localhost",
+                        "insecure": true,
+                        "client_fingerprint": "chrome"
+                    }}
+                }}
+            ],
+            "route": {{ "rules": [], "final": {{ "type": "route", "outbound": "trojan-out" }} }}
+        }}"#
+    ))
+    .expect("parse zero config");
+    let zero = spawn_engine(Engine::new(zero_config).expect("build zero engine"));
+    wait_for_listener(zero_socks_port).await;
+
+    let echo = spawn_tcp_echo(echo_port, payload.len()).await;
+    let echoed = match timeout(
+        Duration::from_secs(10),
+        socks5_tcp_echo_once(zero_socks_port, echo_port, payload),
+    )
+    .await
+    {
+        Ok(Ok(echoed)) => echoed,
+        Ok(Err(error)) => panic!(
+            "zero -> xray trojan fingerprint interop failed: {error:?}; xray={}",
+            xray.logs()
+        ),
+        Err(error) => panic!(
+            "zero -> xray trojan fingerprint interop timed out: {error}; xray={}",
+            xray.logs()
+        ),
+    };
+    assert_eq!(echoed, payload, "xray={}", xray.logs());
+
+    zero.shutdown().await.expect("shutdown zero");
+    xray.kill();
+    echo.await.expect("echo task");
+}
+
 #[tokio::test]
 #[ignore = "requires XRAY_BIN pointing to an Xray executable"]
 async fn zero_trojan_outbound_interops_with_xray_trojan_inbound_udp() {

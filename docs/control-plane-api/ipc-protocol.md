@@ -77,14 +77,15 @@
 | method | params | 说明 |
 |--------|--------|------|
 | `policies.select` | `policy_tag`, `target_tag` | 切换 selector 出站 |
-| `policies.probe` | `policy_tag` | 探测 url_test 组延迟 |
+| `policies.probe` | `policy_tag` | 探测 url_test 组延迟（异步，结果经事件/查询取） |
 | `flows.close` | `flow_id` | 关闭指定流 |
 | `config.validate` | `config` (完整 JSON) | 验证配置 |
 | `config.apply` | `config` (完整 JSON) | 热加载配置 |
 | `mode.set` | `mode`, `outbound?` | 设置全局模式 |
 | `tun.start` | `name?`, `addr`, `mask?`, `mtu?`, `tag` | 启动 TUN |
 | `tun.stop` | — | 停止 TUN |
-| `diagnostics.probe_target` | `target_tag` | 探测出站连通性 |
+| `diagnostics.probe_target` | `target_tag` | 直连 TCP 可达性（不走代理，仅本机→server:port RTT） |
+| `diagnostics.probe_outbound` | `target_tag`, `url?` | 同步经代理单节点延迟（默认 url = `http://www.gstatic.com/generate_204`） |
 | `diagnostics.dns_lookup` | `hostname` | DNS 查询 |
 | `diagnostics.trace_route` | `target`, `port`, `protocol?` | 路由追踪 |
 

@@ -167,15 +167,13 @@ mod tests {
 
     #[test]
     fn ping_type_first() {
-        let req: IpcRequest =
-            serde_json::from_str(r#"{"type":"ping","id":1}"#).unwrap();
+        let req: IpcRequest = serde_json::from_str(r#"{"type":"ping","id":1}"#).unwrap();
         assert!(matches!(req, IpcRequest::Ping { id } if id == Some(serde_json::json!(1))));
     }
 
     #[test]
     fn ping_type_last() {
-        let req: IpcRequest =
-            serde_json::from_str(r#"{"id":1,"type":"ping"}"#).unwrap();
+        let req: IpcRequest = serde_json::from_str(r#"{"id":1,"type":"ping"}"#).unwrap();
         assert!(matches!(req, IpcRequest::Ping { id } if id == Some(serde_json::json!(1))));
     }
 
@@ -188,9 +186,10 @@ mod tests {
 
     #[test]
     fn ping_string_id_echo() {
-        let req: IpcRequest =
-            serde_json::from_str(r#"{"type":"ping","id":"my-ping-1"}"#).unwrap();
-        assert!(matches!(req, IpcRequest::Ping { id } if id == Some(serde_json::json!("my-ping-1"))));
+        let req: IpcRequest = serde_json::from_str(r#"{"type":"ping","id":"my-ping-1"}"#).unwrap();
+        assert!(
+            matches!(req, IpcRequest::Ping { id } if id == Some(serde_json::json!("my-ping-1")))
+        );
     }
 
     // ── IpcRequest deser: Command ──────────────────────────────────────
@@ -203,7 +202,10 @@ mod tests {
             IpcRequest::Command { id, method, params } => {
                 assert_eq!(id, Some(serde_json::json!("c1")));
                 assert_eq!(method, "policies.select");
-                assert_eq!(params, serde_json::json!({"policy_tag":"p","target_tag":"d"}));
+                assert_eq!(
+                    params,
+                    serde_json::json!({"policy_tag":"p","target_tag":"d"})
+                );
             }
             _ => panic!("expected Command"),
         }
@@ -218,9 +220,8 @@ mod tests {
 
     #[test]
     fn command_no_id() {
-        let req: IpcRequest = serde_json::from_str(
-            r#"{"type":"command","method":"probe","params":{}}"#,
-        ).unwrap();
+        let req: IpcRequest =
+            serde_json::from_str(r#"{"type":"command","method":"probe","params":{}}"#).unwrap();
         match req {
             IpcRequest::Command { id, method, .. } => {
                 assert!(id.is_none());
@@ -254,8 +255,7 @@ mod tests {
 
     #[test]
     fn subscribe_no_events() {
-        let req: IpcRequest =
-            serde_json::from_str(r#"{"type":"subscribe","id":"s"}"#).unwrap();
+        let req: IpcRequest = serde_json::from_str(r#"{"type":"subscribe","id":"s"}"#).unwrap();
         match req {
             IpcRequest::Subscribe { events, .. } => assert!(events.is_none()),
             _ => panic!("expected Subscribe"),
@@ -292,8 +292,15 @@ mod tests {
     fn query_all_unit_struct_types_type_last() {
         // Every unit-struct query type works with type at the end.
         let unit_types = [
-            "capabilities", "health", "config", "runtime", "stats",
-            "policies", "diagnostics", "sinks", "tun_status",
+            "capabilities",
+            "health",
+            "config",
+            "runtime",
+            "stats",
+            "policies",
+            "diagnostics",
+            "sinks",
+            "tun_status",
         ];
         for key in unit_types {
             let json = format!(r#"{{"id":1,"request":{{"{}":{{}}}},"type":"query"}}"#, key);
@@ -301,7 +308,9 @@ mod tests {
                 .unwrap_or_else(|e| panic!("failed for '{}': {}", key, e));
             assert!(
                 matches!(&req, IpcRequest::Query { .. }),
-                "expected Query for key '{}', got {:?}", key, req
+                "expected Query for key '{}', got {:?}",
+                key,
+                req
             );
         }
     }
@@ -457,7 +466,10 @@ mod tests {
             IpcRequest::Command { id, method, params } => {
                 assert_eq!(id, Some(serde_json::json!(1)));
                 assert_eq!(method, "policies.select");
-                assert_eq!(params, serde_json::json!({"policy_tag": "p", "target_tag": "d"}));
+                assert_eq!(
+                    params,
+                    serde_json::json!({"policy_tag": "p", "target_tag": "d"})
+                );
             }
             _ => panic!("round-trip type mismatch"),
         }
@@ -480,8 +492,7 @@ mod tests {
     fn request_id_echoed_in_success_response() {
         // Simulate the server-side: parse request, construct response with
         // the same id.
-        let req: IpcRequest =
-            serde_json::from_str(r#"{"type":"ping","id":"client-1"}"#).unwrap();
+        let req: IpcRequest = serde_json::from_str(r#"{"type":"ping","id":"client-1"}"#).unwrap();
         let id = match &req {
             IpcRequest::Ping { id } => id.clone(),
             _ => None,

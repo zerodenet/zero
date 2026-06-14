@@ -87,6 +87,7 @@ trojan = { path = "../../protocols/trojan", optional = true, default-features = 
 vmess = { path = "../../protocols/vmess", optional = true }
 mieru = { path = "../../protocols/mieru", optional = true, default-features = false }
 zero-api = { path = "../api" }
+serde_json.workspace = true
 zero-traits = { path = "../traits" }
 zero-tun = { path = "../tun" }
 zero-stack = { path = "../stack" }

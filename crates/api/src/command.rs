@@ -17,6 +17,8 @@ pub enum CommandRequest {
     PolicyProbe(PolicyProbeCommand),
     #[serde(rename = "diagnostics.probe_target")]
     DiagnosticsProbeTarget(DiagnosticsProbeTargetCommand),
+    #[serde(rename = "diagnostics.probe_outbound")]
+    DiagnosticsProbeOutbound(DiagnosticsProbeOutboundCommand),
     #[serde(rename = "diagnostics.dns_lookup")]
     DiagnosticsDnsLookup(DiagnosticsDnsLookupCommand),
     #[serde(rename = "diagnostics.trace_route")]
@@ -37,6 +39,7 @@ impl CommandRequest {
                 Permission::Control
             }
             Self::DiagnosticsProbeTarget(_)
+            | Self::DiagnosticsProbeOutbound(_)
             | Self::DiagnosticsDnsLookup(_)
             | Self::DiagnosticsTraceRoute(_)
             | Self::ModeSet(_)
@@ -106,6 +109,24 @@ impl Default for ConfigApplyCommand {
 pub struct DiagnosticsProbeTargetCommand {
     #[serde(default)]
     pub target_tag: String,
+}
+
+/// Probe a single outbound **through the proxy** (full TLS + protocol
+/// handshake, then an HTTP HEAD to `url`, measuring time to first byte).
+///
+/// Unlike [`DiagnosticsProbeTargetCommand`] (direct TCP reachability) and
+/// `policies.probe` (async, group-level), this is **synchronous** and
+/// measures a single node's end-to-end proxy latency — what a GUI needs for
+/// "tap one node to test it".
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosticsProbeOutboundCommand {
+    /// Tag of the outbound (leaf or fallback group) to probe.
+    #[serde(default)]
+    pub target_tag: String,
+    /// `http://` URL to fetch through the outbound. Defaults to
+    /// `http://www.gstatic.com/generate_204` when omitted.
+    #[serde(default)]
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

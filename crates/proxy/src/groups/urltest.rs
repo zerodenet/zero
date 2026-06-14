@@ -14,6 +14,12 @@ use zero_engine::{
     ResolvedLeafOutbound, ResolvedOutbound, TargetId, UrlTestMemberState,
 };
 
+/// Default probe URL for single-outbound diagnostics (`diagnostics.probe_outbound`).
+/// Plain HTTP so the measured latency excludes a TLS handshake, and a 204
+/// response so there is no body to download — the de-facto standard also used
+/// by Clash/sing-box.
+pub const DEFAULT_PROBE_URL: &str = "http://www.gstatic.com/generate_204";
+
 impl Proxy {
     pub(crate) async fn run_urltest_group(
         &self,
@@ -231,6 +237,38 @@ impl Proxy {
                     .expect("validated fallback groups always have at least one candidate"))
             }
         }
+    }
+
+    /// Probe a single outbound **through the proxy stack** (full TLS + protocol
+    /// handshake, then an HTTP HEAD to `url`, time to first byte) and return
+    /// the latency in milliseconds.
+    ///
+    /// This is the synchronous, single-node counterpart to the async group
+    /// probe (`policies.probe`), and unlike the engine's direct-TCP
+    /// `probe_target` it measures the real end-to-end proxy path. Used by the
+    /// `diagnostics.probe_outbound` command for GUI "tap one node to test".
+    pub async fn probe_outbound_single(
+        &self,
+        target_tag: &str,
+        url: &str,
+    ) -> Result<u64, EngineError> {
+        let probe =
+            UrlTestProbe::parse(url).map_err(|message| EngineError::InvalidUrlTestGroup {
+                tag: target_tag.to_owned(),
+                message,
+            })?;
+        let plan = self.engine().plan();
+        let Some(target_id) = plan.target_id(target_tag) else {
+            return Err(EngineError::SelectorGroupNotFound {
+                tag: target_tag.to_owned(),
+            });
+        };
+        let Some((candidate, _plan)) = self.resolve_target_id(target_id) else {
+            return Err(EngineError::SelectorGroupNotFound {
+                tag: target_tag.to_owned(),
+            });
+        };
+        self.probe_outbound(candidate, &probe).await
     }
 
     async fn probe_leaf_outbound(
