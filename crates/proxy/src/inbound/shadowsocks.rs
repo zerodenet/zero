@@ -32,7 +32,6 @@ pub(crate) struct ShadowsocksInboundHandler {
     password: Vec<u8>,
     /// SIP022 3.1.5 replay protection, shared across this listener's
     /// connections. Only exercised for 2022 (blake3) ciphers.
-    #[cfg(feature = "blake3")]
     replay_pool: Arc<shadowsocks::ReplaySaltPool>,
 }
 
@@ -53,7 +52,6 @@ impl InboundProtocol for ShadowsocksInboundHandler {
         // SIP022 3.1.5: reject a request salt reused within the 60 s window.
         // The timestamp check (inside accept_request) is the primary replay
         // filter; this catches replays inside the 30 s window.
-        #[cfg(feature = "blake3")]
         if self.cipher.is_blake3() && !accept.request_salt.is_empty() {
             self.replay_pool.check_and_insert(&accept.request_salt)?;
         }
@@ -133,7 +131,6 @@ impl Proxy {
             ss_inbound: ShadowsocksInbound,
             cipher,
             password: password.clone().into_bytes(),
-            #[cfg(feature = "blake3")]
             replay_pool: Arc::new(shadowsocks::ReplaySaltPool::new()),
         };
 
@@ -237,6 +234,10 @@ impl Proxy {
         // Map session_id -> client_addr for response delivery.
         let mut client_sessions: std::collections::HashMap<u64, SocketAddr> =
             std::collections::HashMap::new();
+        // For 2022 (blake3): map internal dispatch session_id -> the client's
+        // SIP022 session id, so server-to-client responses can echo it.
+        let mut client_ss_session_ids: std::collections::HashMap<u64, u64> =
+            std::collections::HashMap::new();
 
         let mut buf = [0u8; 65536];
         let mut direct_buf = [0u8; 65536];
@@ -252,16 +253,28 @@ impl Proxy {
                     };
                     let packet = &buf[..n];
 
-                    let codec = ShadowsocksDatagramCodec {
-                        cipher,
-                        password: password.as_bytes().to_vec(),
-                    };
-                    let Some((target, port, payload)) =
-                        <ShadowsocksDatagramCodec as DatagramCodec<Address>>::decode(
+                    // Decode the client datagram. For 2022 (blake3) also recover
+                    // the client SIP022 session id so responses can echo it.
+                    let (target, port, payload, client_ss_sid) = if cipher.is_blake3() {
+                        match shadowsocks::decode_udp_datagram_2022_session(
+                            cipher,
+                            password.as_bytes(),
+                            packet,
+                        ) {
+                            Ok((t, p, pl, sid)) => (t, p, pl, sid),
+                            Err(_) => continue,
+                        }
+                    } else {
+                        let codec = ShadowsocksDatagramCodec {
+                            cipher,
+                            password: password.as_bytes().to_vec(),
+                        };
+                        match <ShadowsocksDatagramCodec as DatagramCodec<Address>>::decode(
                             &codec, packet,
-                        )
-                    else {
-                        continue;
+                        ) {
+                            Some((t, p, pl)) => (t, p, pl, 0u64),
+                            None => continue,
+                        }
                     };
 
                     let mut sa = zero_core::SessionAuth::new("shadowsocks");
@@ -278,6 +291,9 @@ impl Proxy {
                     {
                         Ok(session_id) => {
                             client_sessions.insert(session_id, client_addr);
+                            if cipher.is_blake3() {
+                                client_ss_session_ids.insert(session_id, client_ss_sid);
+                            }
                         }
                         Err(error) => {
                             warn!(error = %error, "ss udp dispatch failed");
@@ -291,6 +307,7 @@ impl Proxy {
                         if let Some(&client) = client_sessions.get(&sid) {
                             ss_send_encrypted(
                                 udp_socket.as_ref(), cipher, password,
+                                client_ss_session_ids.get(&sid).copied(),
                                 &address_from_socket_addr(sender),
                                 sender.port(),
                                 &direct_buf[..n],
@@ -307,6 +324,7 @@ impl Proxy {
                                 if let Some(&client) = client_sessions.get(&sid) {
                                     ss_send_encrypted(
                                         udp_socket.as_ref(), cipher, password,
+                                        client_ss_session_ids.get(&sid).copied(),
                                         &target, port, &payload, client,
                                     ).await;
                                 }
@@ -326,25 +344,51 @@ impl Proxy {
 }
 
 /// Encode and send one Shadowsocks UDP response datagram.
+///
+/// For 2022 (blake3) ciphers this produces a server-to-client response that
+/// echoes `client_session_id` (SIP022 3.2.3); for legacy AEAD it produces the
+/// stateless datagram via the shared codec.
 async fn ss_send_encrypted(
     socket: &UdpSocket,
     cipher: CipherKind,
     password: &str,
+    client_session_id: Option<u64>,
     target: &Address,
     port: u16,
     payload: &[u8],
     client: SocketAddr,
 ) {
+    let resp = if cipher.is_blake3() {
+        shadowsocks::encode_udp_response_2022(
+            cipher,
+            password.as_bytes(),
+            client_session_id.unwrap_or(0),
+            target,
+            port,
+            payload,
+        )
+    } else {
+        legacy_ss_udp_encode(cipher, password, target, port, payload)
+    };
+    let Ok(resp) = resp else {
+        return;
+    };
+    let _ = socket.send_to(&resp, client).await;
+}
+
+/// Encode a legacy (non-2022) Shadowsocks UDP datagram.
+fn legacy_ss_udp_encode(
+    cipher: CipherKind,
+    password: &str,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, zero_core::Error> {
     let codec = ShadowsocksDatagramCodec {
         cipher,
         password: password.as_bytes().to_vec(),
     };
-    let Ok(resp) =
-        <ShadowsocksDatagramCodec as DatagramCodec<Address>>::encode(&codec, target, port, payload)
-    else {
-        return;
-    };
-    let _ = socket.send_to(&resp, client).await;
+    <ShadowsocksDatagramCodec as DatagramCodec<Address>>::encode(&codec, target, port, payload)
 }
 fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<SocketAddr> {
     addr.map(|ip| match ip {

@@ -487,6 +487,63 @@ fn udp_datagram_framing_roundtrips_2022_blake3_packet() {
     assert_eq!(decoded.payload, b"query");
 }
 
+/// SIP022 3.2.3 server-to-client UDP response: a server recovers the client
+/// session id from an incoming request and echoes it in the response body so
+/// the client can map the response. Exercises the full server flow for all
+/// three 2022 ciphers (AES separate-header + ChaCha20 nonce variants).
+#[cfg(feature = "blake3")]
+#[test]
+fn udp_2022_server_response_flow_all_blake3_ciphers() {
+    use shadowsocks::{
+        decode_udp_datagram_2022_session, encode_udp_datagram_2022, encode_udp_response_2022,
+    };
+    for cipher in blake3_ciphers() {
+        let password = password_for_cipher(cipher);
+        let target = Address::Domain("dns.google".to_owned());
+
+        // Client -> server request.
+        let request = encode_udp_datagram_2022(cipher, password, &target, 53, b"query")
+            .expect("encode client request");
+        // Server decodes and recovers the client session id.
+        let (req_target, req_port, req_payload, client_session_id) =
+            decode_udp_datagram_2022_session(cipher, password, &request)
+                .expect("decode client request");
+        assert_eq!(req_target, target);
+        assert_eq!(req_port, 53);
+        assert_eq!(req_payload, b"query");
+        assert_ne!(client_session_id, 0, "client session id must be non-zero");
+
+        // Server -> client response echoing the client session id.
+        let response =
+            encode_udp_response_2022(cipher, password, client_session_id, &target, 53, b"answer")
+                .expect("encode server response");
+        // Client decodes the response.
+        let (resp_target, resp_port, resp_payload, server_session_id) =
+            decode_udp_datagram_2022_session(cipher, password, &response)
+                .expect("decode server response");
+        assert_eq!(resp_target, target, "response target cipher: {cipher:?}");
+        assert_eq!(resp_port, 53);
+        assert_eq!(
+            resp_payload, b"answer",
+            "response payload cipher: {cipher:?}"
+        );
+        // The response carries a fresh server session id in its separate header,
+        // distinct from the client session id it echoes in the body.
+        assert_ne!(
+            server_session_id, client_session_id,
+            "server session id must differ cipher: {cipher:?}"
+        );
+        // A response datagram (type 1) is 8 bytes larger than the equivalent
+        // client datagram (type 0) because of the echoed client session id.
+        let baseline = encode_udp_datagram_2022(cipher, password, &target, 53, b"answer").unwrap();
+        assert_eq!(
+            response.len(),
+            baseline.len() + 8,
+            "server response must carry the echoed client session id cipher: {cipher:?}"
+        );
+    }
+}
+
 // ---- 2022 edition (SIP022) TCP ----
 //
 // The request stream is salt + fixed-header chunk (nonce 0) + variable-header

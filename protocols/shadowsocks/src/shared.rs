@@ -296,12 +296,138 @@ pub fn encode_udp_datagram_2022(
     }
 }
 
+/// Encode a Shadowsocks 2022 UDP **server-to-client** response datagram
+/// (SIP022 3.2.3, socket type 1). The server generates a fresh server session
+/// id / packet id for the separate header (or merged into the body for the
+/// ChaCha20 variant) and echoes `client_session_id` in the body so the client
+/// can map the response to its session.
+#[cfg(feature = "crypto")]
+pub fn encode_udp_response_2022(
+    cipher: CipherKind,
+    password: &[u8],
+    client_session_id: u64,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    #[cfg(feature = "blake3")]
+    {
+        let master_key = decode_blake3_master_key(cipher, password)?;
+
+        let target_data = build_target_data(target, port, payload)?;
+        let mut packet = Vec::with_capacity(64 + target_data.len() + cipher.tag_len());
+        let server_session_id = random_u64()?;
+        let server_packet_id = random_u64()?;
+
+        if cipher == CipherKind::Blake3Chacha20Poly1305 {
+            let mut nonce = [0u8; 24];
+            fill_random(&mut nonce)?;
+            packet.extend_from_slice(&nonce);
+        }
+
+        packet.extend_from_slice(&server_session_id.to_be_bytes());
+        packet.extend_from_slice(&server_packet_id.to_be_bytes());
+        packet.push(SS_2022_HEADER_TYPE_SERVER_PACKET);
+        packet.extend_from_slice(&now_unix_seconds().to_be_bytes());
+        packet.extend_from_slice(&client_session_id.to_be_bytes());
+        packet.extend_from_slice(&0u16.to_be_bytes());
+        packet.extend_from_slice(&target_data);
+
+        return match cipher {
+            CipherKind::Blake3Aes128Gcm | CipherKind::Blake3Aes256Gcm => {
+                let mut header = [0u8; 16];
+                header.copy_from_slice(&packet[..16]);
+                let session_key = derive_key_blake3(&master_key, &header[..8], cipher.key_len())?;
+                let encrypted =
+                    aead_encrypt_udp(cipher, &session_key, &header[4..16], &packet[16..])?;
+                encrypt_aes_2022_header(cipher, &master_key, &mut header)?;
+
+                let mut out = Vec::with_capacity(header.len() + encrypted.len());
+                out.extend_from_slice(&header);
+                out.extend_from_slice(&encrypted);
+                Ok(out)
+            }
+            CipherKind::Blake3Chacha20Poly1305 => {
+                let encrypted =
+                    aead_encrypt_udp(cipher, &master_key, &packet[..24], &packet[24..])?;
+                let mut out = Vec::with_capacity(24 + encrypted.len());
+                out.extend_from_slice(&packet[..24]);
+                out.extend_from_slice(&encrypted);
+                Ok(out)
+            }
+            _ => Err(Error::Protocol("ss: cipher is not a 2022 method")),
+        };
+    }
+
+    #[cfg(not(feature = "blake3"))]
+    {
+        let _ = (cipher, password, client_session_id, target, port, payload);
+        Err(Error::Protocol(
+            "ss: 2022 udp response requires `blake3` feature",
+        ))
+    }
+}
+
 #[cfg(feature = "crypto")]
 pub fn decode_udp_datagram_2022(
     cipher: CipherKind,
     password: &[u8],
     datagram: &[u8],
 ) -> Result<(Address, u16, Vec<u8>), Error> {
+    #[cfg(feature = "blake3")]
+    {
+        let master_key = decode_blake3_master_key(cipher, password)?;
+
+        let plain = match cipher {
+            CipherKind::Blake3Aes128Gcm | CipherKind::Blake3Aes256Gcm => {
+                if datagram.len() < 16 + cipher.tag_len() {
+                    return Err(Error::Protocol("ss: udp datagram too short"));
+                }
+                let mut header = [0u8; 16];
+                header.copy_from_slice(&datagram[..16]);
+                decrypt_aes_2022_header(cipher, &master_key, &mut header)?;
+                let session_key = derive_key_blake3(&master_key, &header[..8], cipher.key_len())?;
+                let message =
+                    aead_decrypt_udp(cipher, &session_key, &header[4..16], &datagram[16..])?;
+                let mut plain = Vec::with_capacity(header.len() + message.len());
+                plain.extend_from_slice(&header);
+                plain.extend_from_slice(&message);
+                plain
+            }
+            CipherKind::Blake3Chacha20Poly1305 => {
+                if datagram.len() < 24 + cipher.tag_len() {
+                    return Err(Error::Protocol("ss: udp datagram too short"));
+                }
+                aead_decrypt_udp(cipher, &master_key, &datagram[..24], &datagram[24..])?
+            }
+            _ => return Err(Error::Protocol("ss: cipher is not a 2022 method")),
+        };
+
+        return match parse_udp_2022_plain(&plain) {
+            Ok((target, port, payload, _session_id)) => Ok((target, port, payload)),
+            Err(e) => Err(e),
+        };
+    }
+
+    #[cfg(not(feature = "blake3"))]
+    {
+        let _ = (cipher, password, datagram);
+        Err(Error::Protocol(
+            "ss: 2022 udp datagram requires `blake3` feature",
+        ))
+    }
+}
+
+/// Decode a 2022 UDP datagram, also returning the separate-header session id.
+///
+/// A server uses this to recover the client session id from an incoming
+/// client packet (type 0) so it can echo it in server-to-client responses.
+#[cfg(feature = "crypto")]
+pub fn decode_udp_datagram_2022_session(
+    cipher: CipherKind,
+    password: &[u8],
+    datagram: &[u8],
+) -> Result<(Address, u16, Vec<u8>, u64), Error> {
     #[cfg(feature = "blake3")]
     {
         let master_key = decode_blake3_master_key(cipher, password)?;
@@ -344,10 +470,16 @@ pub fn decode_udp_datagram_2022(
 }
 
 #[cfg(all(feature = "crypto", feature = "blake3"))]
-fn parse_udp_2022_plain(plain: &[u8]) -> Result<(Address, u16, Vec<u8>), Error> {
+fn parse_udp_2022_plain(plain: &[u8]) -> Result<(Address, u16, Vec<u8>, u64), Error> {
     if plain.len() < 8 + 8 + 1 + 8 + 2 {
         return Err(Error::Protocol("ss: udp 2022 packet too short"));
     }
+
+    // The separate-header session id occupies the first 8 bytes (for AES it is
+    // the separate-header session id; for ChaCha20 it is the body session id).
+    let session_id = u64::from_be_bytes([
+        plain[0], plain[1], plain[2], plain[3], plain[4], plain[5], plain[6], plain[7],
+    ]);
 
     let socket_type = plain[16];
     let mut cursor = match socket_type {
@@ -367,7 +499,12 @@ fn parse_udp_2022_plain(plain: &[u8]) -> Result<(Address, u16, Vec<u8>), Error> 
     cursor += padding_len;
 
     let (target, port, payload_offset) = parse_target_data(&plain[cursor..])?;
-    Ok((target, port, plain[cursor + payload_offset..].to_vec()))
+    Ok((
+        target,
+        port,
+        plain[cursor + payload_offset..].to_vec(),
+        session_id,
+    ))
 }
 
 // 2022 edition TCP header (SIP022 section 3.1.3).
@@ -383,6 +520,9 @@ fn parse_udp_2022_plain(plain: &[u8]) -> Result<(Address, u16, Vec<u8>), Error> 
 
 pub const SS_2022_HEADER_TYPE_CLIENT_STREAM: u8 = 0;
 pub const SS_2022_HEADER_TYPE_SERVER_STREAM: u8 = 1;
+/// SIP022 3.2.3 UDP main-header socket types (same numeric values as streams).
+pub const SS_2022_HEADER_TYPE_CLIENT_PACKET: u8 = 0;
+pub const SS_2022_HEADER_TYPE_SERVER_PACKET: u8 = 1;
 pub const SS_2022_MAX_PADDING_LENGTH: usize = 900;
 /// Messages with over this many seconds of time skew are treated as replay.
 pub const SS_2022_TIMESTAMP_WINDOW_SECS: u64 = 30;

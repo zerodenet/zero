@@ -42,7 +42,8 @@ pub use shared::{
 pub use shared::{decode_blake3_master_key, derive_key_blake3};
 #[cfg(feature = "crypto")]
 pub use shared::{
-    decrypt_tcp_2022_single_chunk, encrypt_tcp_2022_single_chunk, max_tcp_payload_len,
+    decode_udp_datagram_2022_session, decrypt_tcp_2022_single_chunk, encode_udp_datagram_2022,
+    encode_udp_response_2022, encrypt_tcp_2022_single_chunk, max_tcp_payload_len,
 };
 #[cfg(all(feature = "crypto", feature = "blake3"))]
 pub use shared::{now_unix_seconds, random_2022_padding, validate_2022_timestamp, ReplaySaltPool};
