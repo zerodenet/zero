@@ -582,6 +582,65 @@ pub fn validate_2022_timestamp(timestamp: u64) -> Result<(), Error> {
     Ok(())
 }
 
+/// Server-side replay protection for Shadowsocks 2022 (SIP022 3.1.5).
+///
+/// Stores every accepted request salt for a rolling window and rejects a
+/// salt that has been seen within the window. The timestamp check (30 s) is
+/// the primary replay filter; this pool defends against replays inside that
+/// window. Bloom filters and other false-positive structures are forbidden by
+/// the spec, so an exact `HashMap` with per-entry timestamps is used.
+///
+/// One pool should be shared across all connections of a single SS listener so
+/// a replayed salt is caught regardless of which connection it arrives on.
+#[cfg(all(feature = "crypto", feature = "blake3"))]
+pub struct ReplaySaltPool {
+    inner: std::sync::Mutex<std::collections::HashMap<Vec<u8>, std::time::Instant>>,
+    ttl: std::time::Duration,
+}
+
+#[cfg(all(feature = "crypto", feature = "blake3"))]
+impl ReplaySaltPool {
+    /// Default window per SIP022 3.1.5 ("at least 60 seconds").
+    pub const DEFAULT_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+    pub fn new() -> Self {
+        Self::new_with_ttl(Self::DEFAULT_TTL)
+    }
+
+    /// Construct with an explicit TTL (primarily for tests).
+    pub fn new_with_ttl(ttl: std::time::Duration) -> Self {
+        Self {
+            inner: std::sync::Mutex::new(std::collections::HashMap::new()),
+            ttl,
+        }
+    }
+
+    /// Validate that `salt` is fresh, then record it.
+    ///
+    /// Evicts expired entries first, then returns an error if the salt is
+    /// already present (replay). Otherwise inserts it.
+    pub fn check_and_insert(&self, salt: &[u8]) -> Result<(), Error> {
+        let now = std::time::Instant::now();
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| Error::Protocol("ss: 2022 salt pool poisoned"))?;
+        inner.retain(|_, observed| now.duration_since(*observed) < self.ttl);
+        if inner.contains_key(salt) {
+            return Err(Error::Protocol("ss: 2022 replay salt rejected"));
+        }
+        inner.insert(salt.to_vec(), now);
+        Ok(())
+    }
+}
+
+#[cfg(all(feature = "crypto", feature = "blake3"))]
+impl Default for ReplaySaltPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(all(feature = "crypto", feature = "blake3"))]
 fn encrypt_aes_2022_header(
     cipher: CipherKind,

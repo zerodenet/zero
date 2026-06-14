@@ -30,6 +30,10 @@ pub(crate) struct ShadowsocksInboundHandler {
     ss_inbound: ShadowsocksInbound,
     cipher: CipherKind,
     password: Vec<u8>,
+    /// SIP022 3.1.5 replay protection, shared across this listener's
+    /// connections. Only exercised for 2022 (blake3) ciphers.
+    #[cfg(feature = "blake3")]
+    replay_pool: Arc<shadowsocks::ReplaySaltPool>,
 }
 
 #[async_trait]
@@ -45,6 +49,14 @@ impl InboundProtocol for ShadowsocksInboundHandler {
             .ss_inbound
             .accept_request(&mut metered, self.cipher, &self.password)
             .await?;
+
+        // SIP022 3.1.5: reject a request salt reused within the 60 s window.
+        // The timestamp check (inside accept_request) is the primary replay
+        // filter; this catches replays inside the 30 s window.
+        #[cfg(feature = "blake3")]
+        if self.cipher.is_blake3() && !accept.request_salt.is_empty() {
+            self.replay_pool.check_and_insert(&accept.request_salt)?;
+        }
 
         let mut session = accept.session.clone();
         let mut sa = zero_core::SessionAuth::new("shadowsocks");
@@ -121,6 +133,8 @@ impl Proxy {
             ss_inbound: ShadowsocksInbound,
             cipher,
             password: password.clone().into_bytes(),
+            #[cfg(feature = "blake3")]
+            replay_pool: Arc::new(shadowsocks::ReplaySaltPool::new()),
         };
 
         let mut connections: JoinSet<Result<(), EngineError>> = JoinSet::new();

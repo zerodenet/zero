@@ -238,3 +238,42 @@ fn ss_2022_response_header_rejects_wrong_type() {
     header[0] = SS_2022_HEADER_TYPE_CLIENT_STREAM;
     assert!(parse_2022_response_fixed_header(&header, 16).is_err());
 }
+
+// ---- SIP022 3.1.5 server-side replay salt pool ----
+
+#[cfg(feature = "blake3")]
+#[test]
+fn replay_salt_pool_accepts_distinct_salts() {
+    use shadowsocks::ReplaySaltPool;
+    let pool = ReplaySaltPool::new();
+    assert!(pool.check_and_insert(&[0x01; 32]).is_ok());
+    assert!(pool.check_and_insert(&[0x02; 32]).is_ok());
+    assert!(pool.check_and_insert(&[0x03; 32]).is_ok());
+}
+
+#[cfg(feature = "blake3")]
+#[test]
+fn replay_salt_pool_rejects_replayed_salt() {
+    use shadowsocks::ReplaySaltPool;
+    let pool = ReplaySaltPool::new();
+    let salt = vec![0xaau8; 32];
+    assert!(pool.check_and_insert(&salt).is_ok());
+    // Same salt within the window is a replay.
+    assert!(pool.check_and_insert(&salt).is_err());
+}
+
+#[cfg(feature = "blake3")]
+#[test]
+fn replay_salt_pool_evicts_expired_entries() {
+    use shadowsocks::ReplaySaltPool;
+    use std::time::Duration;
+    // A zero TTL evicts every entry on the next call, so a "replay" is never
+    // observed — verifying the retention/eviction path is exercised.
+    let pool = ReplaySaltPool::new_with_ttl(Duration::ZERO);
+    let salt = vec![0xbbu8; 32];
+    assert!(pool.check_and_insert(&salt).is_ok());
+    assert!(
+        pool.check_and_insert(&salt).is_ok(),
+        "zero-TTL pool must evict the prior entry before the replay check"
+    );
+}

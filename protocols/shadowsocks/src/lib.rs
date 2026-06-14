@@ -45,6 +45,6 @@ pub use shared::{
     decrypt_tcp_2022_single_chunk, encrypt_tcp_2022_single_chunk, max_tcp_payload_len,
 };
 #[cfg(all(feature = "crypto", feature = "blake3"))]
-pub use shared::{now_unix_seconds, random_2022_padding, validate_2022_timestamp};
+pub use shared::{now_unix_seconds, random_2022_padding, validate_2022_timestamp, ReplaySaltPool};
 #[cfg(feature = "crypto")]
 pub use stream::ShadowsocksAeadStream;
