@@ -76,7 +76,7 @@
 - `shadowsocks_2022_hardening_not_externally_validated`: Shadowsocks AEAD 2022 (SIP022) **全部 spec 章节已实现并通过内置测试**（3.1.1 加密/nonce、3.1.2 格式、3.1.3 头部+检测防御、3.1.5 重放保护、3.2 UDP 含 3.2.4 滑动窗口）。SIP022 3.2.4 的按客户端 session id 隔离 UDP 中继流已实现：`UdpFlowKey` 增加了可选 `client_session_id` 维度，SS 2022 inbound 将客户端 SIP022 session id 传入 UDP 调度层，不同客户端 session id 到同一 `(target, port)` 会建立独立的出站流。具体：TCP 请求/响应头部、固定+变量头、30 秒时间戳窗口、请求 salt 回填校验、padding、SIP022 3.1.5 的 60 秒服务端重放 salt 池、SIP022 3.1.3 的单次读取+失败时 drain 检测防御、SIP022 3.2.4 的每会话 UDP 滑动窗口重放过滤、AEAD 2022 UDP 服务端响应（回填客户端 session id）。验证覆盖：TCP 入站方向已通过 `shadowsocks-rust` 参考客户端 (`sslocal`) 端到端互操作性、TCP 出站管线已通过 Zero→Zero、AEAD 2022 UDP 服务端响应已通过手动探针（DNS 往返）。尚未完成外部验证的部分：新的检测防御/drain 与滑动窗口对抗真实主动探测/重放攻击的行为，以及与未损坏的外部 `ssserver` 的直接互操作（此环境下的 `ssserver` 单次读取存在 Windows 环境缺陷，已通过参考对对照测试排除 Zero 自身缺陷）。
 - `relay_stream_tls_client_fingerprint_is_not_supported`: 中继链最终跳 TLS 可以在已建立的 TCP 流上运行，但需要原始 socket 控制的自定义 TLS 指纹握手不支持该路径。此限制未在协议 crate 的 `limitations` 中暴露（仅能在 relay chain 场景下触发），不影响单跳 TLS 指纹。
 - `mux_udp_outbound_not_wired`: VLESS MUX 处理 TCP 子连接和 UDP 子连接入站。UDP MUX outbound API（`MuxConnectionPool::open_udp_stream`）已在 `start_flow()` 中接入 Vision flow 路径，首包即用 MUX UDP 子流替代独立 VLESS 连接。
-- `non_reality_tls_fingerprint_passthrough_is_incomplete`: 非 Reality VLESS TLS 路径中 fingerprint 通过 `ClientTlsConfig.client_fingerprint` 隐式传递到 `connect_tls_upstream()`，依赖 `build_vless_outbound_transport()` 原样透传 tls 配置（SplitHTTP、gRPC、H2、WS + TLS 路径均已覆盖）。并非功能缺失，而是缺乏独立显式参数。
+- `non_reality_tls_fingerprint_passthrough_is_incomplete`: 非 Reality VLESS TLS 路径中 fingerprint 通过 `ClientTlsConfig.client_fingerprint` 隐式传递。已审计确认所有 TLS 路径均已覆盖（SplitHTTP、gRPC、H2、WS + TLS）。已从 metadata.rs 移除。此项仅为文档记录，非活跃缺陷。
 
 ## 基线完备
 
