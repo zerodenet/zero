@@ -222,6 +222,7 @@ impl Proxy {
                                     payload: &packet.payload,
                                     protocol: zero_core::ProtocolType::Trojan,
                                     auth: auth.as_ref(),
+                                    client_session_id: None,
                                 })
                                 .await
                             {
@@ -268,7 +269,7 @@ impl Proxy {
                             self.record_udp_upstream_packet_received();
                             dispatch.touch_socks5_idle(self.udp_upstream_idle_timeout());
                             if let Ok(pkt) = socks5::parse_udp_packet(&upstream_buf[..read]) {
-                                if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port) {
+                                if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                     self.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                 }
                                 let packet = TrojanUdpPacket {
@@ -282,7 +283,7 @@ impl Proxy {
                                     &packet,
                                 )
                                 .await?;
-                                if let Some(sid) = dispatch.session_id_by_target(&packet.target, packet.port) {
+                                if let Some(sid) = dispatch.session_id_by_target(&packet.target, packet.port, None) {
                                     self.record_session_inbound_tx(sid, packet.payload.len() as u64);
                                 }
                             }

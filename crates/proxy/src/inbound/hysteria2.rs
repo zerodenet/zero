@@ -391,6 +391,7 @@ impl Proxy {
                                         payload: &pkt.payload,
                                         protocol: ProtocolType::Hysteria2,
                                         auth: None,
+                                        client_session_id: None,
                                     })
                                     .await.inspect(|sid| {
                                     h2_flows.insert(*sid, pkt.session_id);

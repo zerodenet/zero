@@ -816,6 +816,7 @@ impl Proxy {
                             payload: &packet.payload,
                             protocol: zero_core::ProtocolType::Vless,
                             auth,
+                            client_session_id: None,
                         })
                         .await
                     {
@@ -868,7 +869,7 @@ impl Proxy {
                             self.record_udp_upstream_packet_received();
                             dispatch.touch_socks5_idle(timeout);
                             if let Ok(pkt) = socks5::parse_udp_packet(&upstream_buf[..read]) {
-                                if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port) {
+                                if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                     self.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                 }
                                 match encode_vless_mux_udp_response(
@@ -882,7 +883,7 @@ impl Proxy {
                                         if down_tx.send((mux_session_id, frame)).is_err() {
                                             break;
                                         }
-                                        if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port) {
+                                        if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                             self.record_session_inbound_tx(sid, frame_len);
                                         }
                                     }
@@ -1138,6 +1139,7 @@ impl Proxy {
                 payload: &udp_packet.payload,
                 protocol: zero_core::ProtocolType::Vless,
                 auth: auth.as_ref(),
+                client_session_id: None,
             })
             .await
             .map(|_| ())

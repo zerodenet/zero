@@ -296,6 +296,11 @@ impl Proxy {
 
                     let mut sa = zero_core::SessionAuth::new("shadowsocks");
                     sa.principal_key = Some(password.to_owned());
+                    let flow_isolation_key = if cipher.is_blake3() {
+                        Some(client_ss_sid)
+                    } else {
+                        None
+                    };
                     match UdpPipe::new(self, &mut dispatch)
                         .dispatch(UdpPipeInput {
                             target,
@@ -303,6 +308,7 @@ impl Proxy {
                             payload: &payload,
                             protocol: ProtocolType::Shadowsocks,
                             auth: Some(&sa),
+                            client_session_id: flow_isolation_key,
                         })
                         .await
                     {

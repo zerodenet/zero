@@ -320,6 +320,7 @@ impl Proxy {
                 payload: &udp_packet.payload,
                 protocol: ProtocolType::Socks5,
                 auth: None,
+                client_session_id: None,
             })
             .await?;
 

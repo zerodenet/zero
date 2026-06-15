@@ -618,6 +618,7 @@ impl Proxy {
                                 payload: &input.2,
                                 protocol: ProtocolType::Vmess,
                                 auth: None,
+                                client_session_id: None,
                             })
                             .await
                         {
@@ -671,7 +672,7 @@ impl Proxy {
                                 proxy.record_udp_upstream_packet_received();
                                 dispatch.touch_socks5_idle(proxy.udp_upstream_idle_timeout());
                                 if let Ok(pkt) = socks5::parse_udp_packet(&upstream_buf[..read]) {
-                                    if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port) {
+                                    if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                         proxy.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                     }
                                     match encode_vmess_mux_udp_response(
@@ -686,7 +687,7 @@ impl Proxy {
                                             if write_tx.send(frame).is_err() {
                                                 break;
                                             }
-                                            if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port) {
+                                            if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                                 proxy.record_session_inbound_tx(sid, frame_len);
                                             }
                                         }
@@ -814,6 +815,7 @@ impl Proxy {
                                     payload: &input.2,
                                     protocol: ProtocolType::Vmess,
                                     auth: auth.as_ref(),
+                                    client_session_id: None,
                                 })
                                 .await
                             {
@@ -855,7 +857,7 @@ impl Proxy {
                             self.record_udp_upstream_packet_received();
                             dispatch.touch_socks5_idle(self.udp_upstream_idle_timeout());
                             if let Ok(pkt) = socks5::parse_udp_packet(&upstream_buf[..read]) {
-                                if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port) {
+                                if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                     self.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                 }
                                 let packet = encode_vmess_udp_response(
@@ -865,7 +867,7 @@ impl Proxy {
                                     &pkt.payload,
                                 )?;
                                 client.write_all(&packet).await?;
-                                if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port) {
+                                if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                     self.record_session_inbound_tx(sid, packet.len() as u64);
                                 }
                             }
