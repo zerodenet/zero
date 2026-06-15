@@ -10,7 +10,7 @@ Zero is a network proxy kernel written in Rust.
 - `SOCKS5` (no-auth, CONNECT + UDP ASSOCIATE)
 - `HTTP CONNECT`
 - `mixed` (same port auto-detects SOCKS5 / HTTP CONNECT)
-- `VLESS` (TCP, TLS, Reality, WebSocket, gRPC, H2, HTTPUpgrade, QUIC, SplitHTTP; MUX + Vision flow + UDP over TCP)
+- `VLESS` (TCP, TLS, Reality, WebSocket, gRPC, H2, HTTPUpgrade, XHTTP (formerly SplitHTTP); MUX + Vision flow + UDP over TCP. QUIC transport deprecated by XTLS — replaced by XHTTP `stream-one`)
 - `Hysteria2` (QUIC, password auth, TCP + UDP)
 - `Shadowsocks` (AEAD: aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305; 2022-blake3; TCP + UDP)
 - `Trojan` (TCP)
@@ -20,7 +20,7 @@ Zero is a network proxy kernel written in Rust.
 **Outbound protocols:**
 - `direct` / `block`
 - `SOCKS5` (TCP CONNECT + UDP relay)
-- `VLESS` (all 9 transports, MUX, Vision, UDP over TCP)
+- `VLESS` (all XHTTP transports, MUX, Vision, UDP over TCP)
 - `Hysteria2` (QUIC, TCP + UDP)
 - `Shadowsocks` (TCP + UDP)
 - `Trojan` (TCP)
@@ -114,7 +114,7 @@ make fmt / check / test / clippy / build / release / run / run-status / status /
    - `protocols/*` — protocol implementations:
      - `protocols/socks5` — SOCKS5 (inbound + outbound + UDP)
      - `protocols/http-connect` — HTTP CONNECT
-     - `protocols/vless` — VLESS (Reality TLS 1.3, Vision flow, MUX, 9 transports)
+     - `protocols/vless` — VLESS (Reality TLS 1.3, Vision flow, MUX, XHTTP + 7 other transports)
      - `protocols/hysteria2` — Hysteria2 (QUIC, password auth)
      - `protocols/shadowsocks` — Shadowsocks (AEAD, 2022-blake3)
      - `protocols/trojan` — Trojan (TCP)

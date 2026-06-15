@@ -62,7 +62,7 @@
 }
 ```
 
-`tls`、`reality`、`ws`、`grpc`、`h2`、`http_upgrade` 和 `quic` 是可选传输配置。`reality` 不能和这些非 raw TCP 传输组合。
+`tls`、`reality`、`ws`、`grpc`、`h2`、`http_upgrade` 和 `split_http`（XHTTP，配置字段名沿用 `split_http`，支持 `mode`：`auto`/`stream-one` 单连接、`packet-up`/`stream-up` 双连接）是可选传输配置。`reality` 不能和这些非 raw TCP 传输组合。`quic` 字段保留以向后兼容，但 XTLS 已弃用 VLESS 独立 QUIC 传输（继任者为 XHTTP `stream-one` H3）。
 
 ### Shadowsocks
 

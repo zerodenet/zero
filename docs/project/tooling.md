@@ -67,8 +67,11 @@ and control-plane features to internal crates.
 | `grpc_api` | gRPC control-plane adapter |
 
 `zero-proxy` also has internal transport-oriented feature wiring. For example,
-VLESS enables TLS, WebSocket, gRPC, H2, HTTPUpgrade, SplitHTTP, and QUIC related
-transport capabilities. External build users should prefer root features rather
+VLESS enables TLS, WebSocket, gRPC, H2, HTTPUpgrade, and XHTTP (formerly
+SplitHTTP, config field `split_http`) related transport capabilities. The
+standalone VLESS QUIC transport is deprecated by XTLS (replaced by XHTTP
+`stream-one` over H3); the `quic` config field is retained for backward
+compatibility. External build users should prefer root features rather
 than depending on internal crate feature shapes.
 
 If a config references an uncompiled protocol, the kernel fails early with a

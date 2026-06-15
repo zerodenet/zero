@@ -17,7 +17,7 @@ AEAD 2022 验证覆盖：TCP 入站已通过 `shadowsocks-rust` 参考客户端 
 | 缺口 | 影响 | 完成标准 |
 |------|------|----------|
 | `mux_udp_outbound_not_wired` | VLESS MUX UDP outbound API（`MuxConnectionPool::open_udp_stream`）已在 `start_flow()` 中接入；Vision flow 启用时优先复用 MUX 池而非拨号独立 VLESS 连接 | ✅ 完成 |
-| `udp_relay_chain_final_transport_limited` | SplitHTTP 最终跳已通过 `start_relay_flow()` fast path 实现；QUIC 因需要非 TCP 载体仍不支持作为链最终跳 | QUIC 路径明确实现方案或记录为架构限制 |
+| `udp_relay_final_hop_not_externally_validated` | XHTTP `stream-one` 单连接模式已实现，使 SplitHTTP/XHTTP 可作为 relay-chain 最终跳（解决原「不可最终跳」约束）；QUIC 因 XTLS 已弃用独立传输且需非 TCP 载体，不再作为最终跳 | stream-one 最终跳路径与上游 Xray 服务器完成 TCP/UDP 端到端互通验证 |
 | `non_reality_tls_fingerprint_passthrough_is_incomplete` | 已审计确认 fingerprint 通过 `ClientTlsConfig.client_fingerprint` 隐式传递到 `connect_tls_upstream()`，所有 TLS 路径均已覆盖；limitation 已从 metadata.rs 移除 | ✅ 完成 |
 
 ## Trojan

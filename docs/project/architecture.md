@@ -192,7 +192,7 @@ UDP datagram 由内核 UDP 分发路径处理。分发层拥有路由决策、fa
 
 - `zero-transport`
 
-统一传输抽象：TLS、WebSocket、gRPC、H2、HTTPUpgrade、QUIC、SplitHTTP、Hysteria2 QUIC、VLESS 传输。还包含内核中继路径使用的共享 `RateLimiter`（GCRA）。
+统一传输抽象：TLS、WebSocket、gRPC、H2、HTTPUpgrade、XHTTP（原 SplitHTTP，配置字段 `split_http`，含 `mode`）、QUIC（共享 H3 基座；VLESS 独立 QUIC 传输已被 XTLS 弃用）、Hysteria2 QUIC、VLESS 传输。还包含内核中继路径使用的共享 `RateLimiter`（GCRA）。
 
 ## 支撑 Crates
 

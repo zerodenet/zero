@@ -71,7 +71,7 @@
 
 - 每个协议特定的 UDP 链传输路径；
 - Hysteria2 UDP 通过 QUIC 链式连接；
-- VLESS UDP over SplitHTTP 或 QUIC 中继链最终跳；
+- VLESS UDP over XHTTP `stream-one` 中继链最终跳（已实现，尚未与上游 Xray 完成外部互通验证）；QUIC 中继链最终跳不支持（XTLS 已弃用独立 VLESS QUIC 传输）；
 - 非 VMess UDP MUX 缺口；
 - 当前已实现路径之外的完整 TLS 指纹透传；
 - VMess `cipher: zero` 主流外部兼容性。
