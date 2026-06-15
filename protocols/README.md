@@ -6,10 +6,10 @@
 
 | Crate | 协议 | 参照 | TCP | UDP | MUX | 传输 |
 |-------|------|------|-----|-----|-----|------|
-| `vless` | VLESS | Xray-core | ✅ | ✅ | ✅ | TLS / Reality / WS / gRPC / H2 / QUIC |
+| `vless` | VLESS | Xray-core | ✅ | ⚠️ | ⚠️ | TLS / Reality / WS / gRPC / H2 / QUIC |
 | `shadowsocks` | Shadowsocks | shadowsocks-rust | ✅ | ✅ | — | TCP |
-| `trojan` | Trojan | trojan-go | ✅ | ✅ | ❌ | TLS |
-| `hysteria2` | Hysteria2 | hysteria | ✅ | ✅ | — | QUIC |
+| `trojan` | Trojan | trojan-go | ✅ | ⚠️ | ❌ | TLS |
+| `hysteria2` | Hysteria2 | hysteria | ✅ | ⚠️ | — | QUIC |
 | `mieru` | Mieru | mieru | ✅ | ✅ | — | TCP |
 | `socks5` | SOCKS5 | RFC 1928 | ✅ | ✅ | — | TCP |
 | `http_connect` | HTTP CONNECT | RFC 7231 | ✅ | — | — | TCP |
