@@ -96,13 +96,19 @@ protocols/vless/src/
 ├── outbound.rs       # VlessOutbound: connect, send request, relay
 ├── flow.rs           # Vision flow (AES-128-GCM encrypt/decrypt)
 ├── mux.rs            # MUX frame, client, server
-├── protocol.rs       # common: frame parsing, address, UUID
-├── udp.rs            # UDP packet v1/v2
+├── shared.rs         # common: frame parsing, address, UUID, UDP packet v1/v2
+├── mux_crypto.rs     # MUX per-stream AES-128-GCM crypto
+├── mux_pool.rs       # MUX connection pool
+├── metadata.rs       # protocol capability descriptor
+├── deferred_response.rs  # DeferredVlessResponseStream (Reality flow)
 └── reality/          # Reality TLS 1.3
     ├── mod.rs
+    ├── reality_auth.rs
+    ├── reality_client_connection.rs
+    ├── reality_client_verify.rs
     ├── reality_server_connection.rs
-    ├── stream.rs
-    └── util.rs
+    ├── reality_util.rs
+    └── stream.rs
 ```
 
 ## 参考

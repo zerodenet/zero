@@ -64,7 +64,7 @@
 | `shadowsocks` | `partial` | `supported` | `supported` | `supported` | `supported` | `unsupported` | `shadowsocks_rust_sip022` |
 | `trojan` | `partial` | `supported` | `partial` | `supported` | `partial` | `unsupported` | `trojan_go` |
 | `vmess` | `partial` | `partial` | `partial` | `partial` | `partial` | `partial` | `xray_core_vmess_aead` |
-| `mieru` | `partial` | `partial` | `partial` | `partial` | `partial` | `unsupported` | `mieru` |
+| `mieru` | `supported` | `supported` | `supported` | `supported` | `supported` | `unsupported` | `mieru` |
 
 ## 内核缺口
 
