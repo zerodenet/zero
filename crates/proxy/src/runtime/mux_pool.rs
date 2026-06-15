@@ -49,6 +49,63 @@ impl MuxConnectionPool {
         guard.clear();
     }
 
+    /// Look up or create a MUX connection to the given upstream.
+    async fn get_or_create_conn(
+        &self,
+        proxy: &Proxy,
+        server: &str,
+        port: u16,
+        id: &[u8; 16],
+        tls: Option<&ClientTlsConfig>,
+        reality: Option<&RealityConfig>,
+        max_concurrency: u32,
+    ) -> Result<Arc<MuxPoolConn>, EngineError> {
+        let transport = match (tls, reality) {
+            (Some(t), None) => TransportKey::Tls {
+                server_name: t.server_name.clone(),
+            },
+            (None, Some(r)) => TransportKey::Reality {
+                public_key: r.public_key.clone(),
+                server_name: r.server_name.clone().unwrap_or(server.to_owned()),
+            },
+            _ => TransportKey::Raw,
+        };
+
+        let key = PoolKey {
+            server: server.to_owned(),
+            port,
+            uuid: *id,
+            transport,
+        };
+
+        let conn = {
+            let pool = self.pool.lock().unwrap();
+            pool.get(&key).cloned()
+        };
+
+        match conn {
+            Some(c) => {
+                if *c.active.lock().unwrap() >= c.max_concurrency as usize {
+                    let conn =
+                        Self::create_mux_connection(proxy, &key, tls, reality, max_concurrency)
+                            .await?;
+                    let conn = Arc::new(conn);
+                    self.pool.lock().unwrap().insert(key, conn.clone());
+                    Ok(conn)
+                } else {
+                    Ok(c)
+                }
+            }
+            None => {
+                let conn =
+                    Self::create_mux_connection(proxy, &key, tls, reality, max_concurrency).await?;
+                let conn = Arc::new(conn);
+                self.pool.lock().unwrap().insert(key, conn.clone());
+                Ok(conn)
+            }
+        }
+    }
+
     pub async fn open_stream(
         &self,
         proxy: &Proxy,
@@ -61,50 +118,104 @@ impl MuxConnectionPool {
         max_concurrency: u32,
         _idle_timeout_secs: u64,
     ) -> Result<TcpRelayStream, EngineError> {
-        let transport = match (tls, reality) {
-            (Some(t), None) => TransportKey::Tls {
-                server_name: t.server_name.clone(),
-            },
-            (None, Some(r)) => TransportKey::Reality {
-                public_key: r.public_key.clone(),
-                server_name: r.server_name.clone().unwrap_or(server.clone()),
-            },
-            _ => TransportKey::Raw,
+        self.open_stream_inner(proxy, session, &server, port, id, tls, reality, max_concurrency, _idle_timeout_secs, vless::NETWORK_TCP).await
+    }
+
+    /// Open a UDP MUX sub-stream (SIP022 Mux.Cool NETWORK_UDP).
+    ///
+    /// Per Xray-core Mux.Cool semantics: UDP MUX sub-streams are
+    /// connectionless — each STATUS_KEEP frame carries its own
+    /// `[network:1][port:2][atyp:1][address…]` prefix, so one UDP
+    /// sub-stream can serve all targets through this MUX connection.
+    ///
+    /// Returns `(session_id, write_tx, down_rx)` — a tuple of:
+    ///   - `session_id` — MUX session id for response dispatch
+    ///   - `write_tx` — unbounded sender, submit raw VLESS UDP packets
+    ///   - `down_rx` — unbounded receiver for responses
+    pub async fn open_udp_stream(
+        &self,
+        proxy: &Proxy,
+        server: &str,
+        port: u16,
+        id: &[u8; 16],
+        tls: Option<&ClientTlsConfig>,
+        reality: Option<&RealityConfig>,
+        max_concurrency: u32,
+        _idle_timeout_secs: u64,
+    ) -> Result<(u16, mpsc::UnboundedSender<Vec<u8>>, mpsc::UnboundedReceiver<Vec<u8>>), EngineError>
+    {
+        let conn = self
+            .get_or_create_conn(proxy, server, port, id, tls, reality, max_concurrency)
+            .await?;
+
+        // Allocate stream ID
+        let sid = {
+            let mut next = conn.next_id.lock().unwrap();
+            let s = *next;
+            *next = next.wrapping_add(1);
+            if *next == 0 {
+                *next = 1;
+            }
+            s
         };
 
-        let key = PoolKey {
-            server,
-            port,
-            uuid: *id,
-            transport,
-        };
+        *conn.active.lock().unwrap() += 1;
 
-        let conn = {
-            let pool = self.pool.lock().unwrap();
-            pool.get(&key).cloned()
-        };
+        let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (down_tx, down_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
-        let conn = match conn {
-            Some(c) => {
-                if *c.active.lock().unwrap() >= c.max_concurrency as usize {
-                    let conn =
-                        Self::create_mux_connection(proxy, &key, tls, reality, max_concurrency)
-                            .await?;
-                    let conn = Arc::new(conn);
-                    self.pool.lock().unwrap().insert(key, conn.clone());
-                    conn
-                } else {
-                    c
+        conn.streams.lock().unwrap().insert(sid, down_tx);
+
+        // Send new-stream request with NETWORK_UDP
+        let req = vless::encode_new_stream(
+            vless::NETWORK_UDP,
+            0, /* port unused for UDP MUX sub-stream */
+            &zero_core::Address::Ipv4([0, 0, 0, 0]), /* address unused */
+        )
+        .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
+        conn.write_tx
+            .send(req)
+            .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
+
+        // Upload relay: raw VLESS UDP packets → encrypt → MUX frame → write_tx
+        let write = conn.write_tx.clone();
+        let conn_drop = conn.clone();
+        let crypto = conn.crypto.clone();
+        tokio::spawn(async move {
+            let mut up_rx = up_rx;
+            while let Some(vless_udp_packet) = up_rx.recv().await {
+                let payload = encrypt_mux_payload(&crypto, sid, &vless_udp_packet, true);
+                // UDP MUX data frames: the VLESS UDP packet is the full payload
+                let frame = vless::encode_data_frame(sid, &payload);
+                if write.send(frame).is_err() {
+                    break;
                 }
             }
-            None => {
-                let conn =
-                    Self::create_mux_connection(proxy, &key, tls, reality, max_concurrency).await?;
-                let conn = Arc::new(conn);
-                self.pool.lock().unwrap().insert(key, conn.clone());
-                conn
-            }
-        };
+            let close_frame = vless::encode_end_frame(sid);
+            let _ = write.send(close_frame);
+            *conn_drop.active.lock().unwrap() -= 1;
+        });
+
+        Ok((sid, up_tx, down_rx))
+    }
+
+    async fn open_stream_inner(
+        &self,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        id: &[u8; 16],
+        tls: Option<&ClientTlsConfig>,
+        reality: Option<&RealityConfig>,
+        max_concurrency: u32,
+        _idle_timeout_secs: u64,
+        network: u8,
+    ) -> Result<TcpRelayStream, EngineError> {
+        let _ = network; // network is used by future callers (e.g. open_udp_stream), TcpStream path hardcodes NETWORK_TCP
+        let conn = self
+            .get_or_create_conn(proxy, server, port, id, tls, reality, max_concurrency)
+            .await?;
 
         // Allocate stream ID
         let sid = {

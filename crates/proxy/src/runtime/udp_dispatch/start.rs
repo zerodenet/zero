@@ -223,6 +223,8 @@ impl UdpDispatch {
                 quic,
                 ..
             } => {
+                let session_id = session.id;
+                let tag_owned = tag.to_owned();
                 let transport = VlessUdpTransport {
                     tls,
                     reality,
@@ -233,8 +235,6 @@ impl UdpDispatch {
                     split_http,
                     quic,
                 };
-                let session_id = session.id;
-                let tag_owned = tag.to_owned();
                 self.vless_manager
                     .get_or_create_upstream(
                         &mut self.chain_tasks,
