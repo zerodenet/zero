@@ -46,6 +46,8 @@ pub use shared::{
     encode_udp_response_2022, encrypt_tcp_2022_single_chunk, max_tcp_payload_len,
 };
 #[cfg(all(feature = "crypto", feature = "blake3"))]
-pub use shared::{now_unix_seconds, random_2022_padding, validate_2022_timestamp, ReplaySaltPool};
+pub use shared::{
+    now_unix_seconds, random_2022_padding, validate_2022_timestamp, ReplaySaltPool, ReplayWindow,
+};
 #[cfg(feature = "crypto")]
 pub use stream::ShadowsocksAeadStream;

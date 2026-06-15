@@ -404,7 +404,7 @@ pub fn decode_udp_datagram_2022(
         };
 
         return match parse_udp_2022_plain(&plain) {
-            Ok((target, port, payload, _session_id)) => Ok((target, port, payload)),
+            Ok((target, port, payload, _session_id, _packet_id)) => Ok((target, port, payload)),
             Err(e) => Err(e),
         };
     }
@@ -427,7 +427,7 @@ pub fn decode_udp_datagram_2022_session(
     cipher: CipherKind,
     password: &[u8],
     datagram: &[u8],
-) -> Result<(Address, u16, Vec<u8>, u64), Error> {
+) -> Result<(Address, u16, Vec<u8>, u64, u64), Error> {
     #[cfg(feature = "blake3")]
     {
         let master_key = decode_blake3_master_key(cipher, password)?;
@@ -470,15 +470,18 @@ pub fn decode_udp_datagram_2022_session(
 }
 
 #[cfg(all(feature = "crypto", feature = "blake3"))]
-fn parse_udp_2022_plain(plain: &[u8]) -> Result<(Address, u16, Vec<u8>, u64), Error> {
+fn parse_udp_2022_plain(plain: &[u8]) -> Result<(Address, u16, Vec<u8>, u64, u64), Error> {
     if plain.len() < 8 + 8 + 1 + 8 + 2 {
         return Err(Error::Protocol("ss: udp 2022 packet too short"));
     }
 
-    // The separate-header session id occupies the first 8 bytes (for AES it is
-    // the separate-header session id; for ChaCha20 it is the body session id).
+    // The separate-header session id / packet id occupy the first 16 bytes (for
+    // AES they are the separate-header fields; for ChaCha20 they are in body).
     let session_id = u64::from_be_bytes([
         plain[0], plain[1], plain[2], plain[3], plain[4], plain[5], plain[6], plain[7],
+    ]);
+    let packet_id = u64::from_be_bytes([
+        plain[8], plain[9], plain[10], plain[11], plain[12], plain[13], plain[14], plain[15],
     ]);
 
     let socket_type = plain[16];
@@ -504,6 +507,7 @@ fn parse_udp_2022_plain(plain: &[u8]) -> Result<(Address, u16, Vec<u8>, u64), Er
         port,
         plain[cursor + payload_offset..].to_vec(),
         session_id,
+        packet_id,
     ))
 }
 
@@ -776,6 +780,70 @@ impl ReplaySaltPool {
 
 #[cfg(all(feature = "crypto", feature = "blake3"))]
 impl Default for ReplaySaltPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Per-session UDP replay protection for Shadowsocks 2022 (SIP022 3.2.4).
+///
+/// Each UDP relay session keeps a sliding-window filter over client packet
+/// ids and rejects duplicates or packets that fall behind the window. The
+/// spec allows reusing WireGuard-style implementations; this is an exact
+/// sliding window (a `BTreeSet` of recent ids, evicted past the window) rather
+/// than a probabilistic structure, since the spec forbids false positives.
+#[cfg(all(feature = "crypto", feature = "blake3"))]
+pub struct ReplayWindow {
+    seen: std::collections::BTreeSet<u64>,
+    window: u64,
+}
+
+#[cfg(all(feature = "crypto", feature = "blake3"))]
+impl ReplayWindow {
+    /// Default window width (SIP022 references WireGuard, which uses 2048).
+    pub const DEFAULT_WINDOW: u64 = 2048;
+
+    pub fn new() -> Self {
+        Self::new_with_window(Self::DEFAULT_WINDOW)
+    }
+
+    /// Construct with an explicit window width (primarily for tests).
+    pub fn new_with_window(window: u64) -> Self {
+        Self {
+            seen: std::collections::BTreeSet::new(),
+            window,
+        }
+    }
+
+    /// Validate that `packet_id` is fresh, then record it.
+    ///
+    /// Returns `true` if accepted (new and within the window), `false` if it is
+    /// a duplicate or falls behind the window (replay / out-of-order too old).
+    pub fn check_and_update(&mut self, packet_id: u64) -> bool {
+        if self.seen.contains(&packet_id) {
+            return false;
+        }
+        // The window ceiling tracks the highest seen id so far (or this one if
+        // it jumps ahead). Packets more than `window` behind the ceiling are
+        // rejected as stale; accepted ids evict everything outside the window.
+        let ceiling = self
+            .seen
+            .last()
+            .copied()
+            .unwrap_or(packet_id)
+            .max(packet_id);
+        if ceiling > packet_id && ceiling - packet_id > self.window {
+            return false;
+        }
+        self.seen.insert(packet_id);
+        let cutoff = ceiling.saturating_sub(self.window);
+        self.seen.retain(|&s| s > cutoff);
+        true
+    }
+}
+
+#[cfg(all(feature = "crypto", feature = "blake3"))]
+impl Default for ReplayWindow {
     fn default() -> Self {
         Self::new()
     }

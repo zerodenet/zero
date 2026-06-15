@@ -505,7 +505,7 @@ fn udp_2022_server_response_flow_all_blake3_ciphers() {
         let request = encode_udp_datagram_2022(cipher, password, &target, 53, b"query")
             .expect("encode client request");
         // Server decodes and recovers the client session id.
-        let (req_target, req_port, req_payload, client_session_id) =
+        let (req_target, req_port, req_payload, client_session_id, _req_packet_id) =
             decode_udp_datagram_2022_session(cipher, password, &request)
                 .expect("decode client request");
         assert_eq!(req_target, target);
@@ -518,7 +518,7 @@ fn udp_2022_server_response_flow_all_blake3_ciphers() {
             encode_udp_response_2022(cipher, password, client_session_id, &target, 53, b"answer")
                 .expect("encode server response");
         // Client decodes the response.
-        let (resp_target, resp_port, resp_payload, server_session_id) =
+        let (resp_target, resp_port, resp_payload, server_session_id, _resp_packet_id) =
             decode_udp_datagram_2022_session(cipher, password, &response)
                 .expect("decode server response");
         assert_eq!(resp_target, target, "response target cipher: {cipher:?}");

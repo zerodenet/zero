@@ -277,3 +277,50 @@ fn replay_salt_pool_evicts_expired_entries() {
         "zero-TTL pool must evict the prior entry before the replay check"
     );
 }
+
+// ---- SIP022 3.2.4 UDP sliding-window replay filter ----
+
+#[cfg(feature = "blake3")]
+#[test]
+fn replay_window_accepts_fresh_increasing_ids() {
+    use shadowsocks::ReplayWindow;
+    let mut w = ReplayWindow::new();
+    assert!(w.check_and_update(1));
+    assert!(w.check_and_update(2));
+    assert!(w.check_and_update(1000));
+}
+
+#[cfg(feature = "blake3")]
+#[test]
+fn replay_window_rejects_duplicate_packet_id() {
+    use shadowsocks::ReplayWindow;
+    let mut w = ReplayWindow::new();
+    assert!(w.check_and_update(5));
+    assert!(
+        !w.check_and_update(5),
+        "duplicate packet id must be rejected"
+    );
+}
+
+#[cfg(feature = "blake3")]
+#[test]
+fn replay_window_rejects_stale_out_of_window() {
+    use shadowsocks::ReplayWindow;
+    let mut w = ReplayWindow::new_with_window(8);
+    assert!(w.check_and_update(100));
+    // 100 - 8 == 92 is the cutoff; 91 is behind the window.
+    assert!(!w.check_and_update(91), "packet behind the window is stale");
+    // 93 is still within the window.
+    assert!(w.check_and_update(93));
+}
+
+#[cfg(feature = "blake3")]
+#[test]
+fn replay_window_accepts_in_order_out_of_order_within_window() {
+    use shadowsocks::ReplayWindow;
+    let mut w = ReplayWindow::new_with_window(64);
+    assert!(w.check_and_update(10));
+    assert!(w.check_and_update(50)); // jump ahead
+    assert!(w.check_and_update(20)); // older but within window
+    assert!(!w.check_and_update(20)); // now a duplicate
+}

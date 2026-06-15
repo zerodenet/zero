@@ -238,6 +238,10 @@ impl Proxy {
         // SIP022 session id, so server-to-client responses can echo it.
         let mut client_ss_session_ids: std::collections::HashMap<u64, u64> =
             std::collections::HashMap::new();
+        // SIP022 3.2.4: per-client-session sliding-window replay filter over
+        // packet ids, keyed by the client SIP022 session id.
+        let mut udp_replay_windows: std::collections::HashMap<u64, shadowsocks::ReplayWindow> =
+            std::collections::HashMap::new();
 
         let mut buf = [0u8; 65536];
         let mut direct_buf = [0u8; 65536];
@@ -254,14 +258,16 @@ impl Proxy {
                     let packet = &buf[..n];
 
                     // Decode the client datagram. For 2022 (blake3) also recover
-                    // the client SIP022 session id so responses can echo it.
-                    let (target, port, payload, client_ss_sid) = if cipher.is_blake3() {
+                    // the client SIP022 session id + packet id.
+                    let (target, port, payload, client_ss_sid, client_ss_pid) = if cipher
+                        .is_blake3()
+                    {
                         match shadowsocks::decode_udp_datagram_2022_session(
                             cipher,
                             password.as_bytes(),
                             packet,
                         ) {
-                            Ok((t, p, pl, sid)) => (t, p, pl, sid),
+                            Ok((t, p, pl, sid, pid)) => (t, p, pl, sid, pid),
                             Err(_) => continue,
                         }
                     } else {
@@ -272,10 +278,21 @@ impl Proxy {
                         match <ShadowsocksDatagramCodec as DatagramCodec<Address>>::decode(
                             &codec, packet,
                         ) {
-                            Some((t, p, pl)) => (t, p, pl, 0u64),
+                            Some((t, p, pl)) => (t, p, pl, 0u64, 0u64),
                             None => continue,
                         }
                     };
+
+                    // SIP022 3.2.4: reject duplicate or out-of-window packet
+                    // ids per client session (sliding-window replay filter).
+                    if cipher.is_blake3()
+                        && !udp_replay_windows
+                            .entry(client_ss_sid)
+                            .or_insert_with(shadowsocks::ReplayWindow::new)
+                            .check_and_update(client_ss_pid)
+                    {
+                        continue;
+                    }
 
                     let mut sa = zero_core::SessionAuth::new("shadowsocks");
                     sa.principal_key = Some(password.to_owned());

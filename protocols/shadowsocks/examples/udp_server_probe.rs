@@ -34,7 +34,7 @@ fn main() {
     let (n, _from) = sock.recv_from(&mut buf).expect("recv response from zero");
     let resp = &buf[..n];
 
-    let (target, port, payload, server_ssid) =
+    let (target, port, payload, server_ssid, _packet_id) =
         decode_udp_datagram_2022_session(cipher, password, resp).expect("decode response");
     eprintln!("response target={target:?} port={port} server_ssid={server_ssid:#x}");
     eprintln!("payload {} bytes", payload.len());
