@@ -94,7 +94,7 @@
 | `trojan` | TCP 和 UDP-over-stream 基线路径完备 | 外部互操作性覆盖不完整（中继流 TLS 指纹已支持，见 `relay_stream_tls_client_fingerprint_is_not_supported`） |
 | `shadowsocks` | 普通 AEAD TCP 和 UDP datagram 路径完备，包括 Shadowsocks UDP over SOCKS5、大 TCP 载荷分块、错误密码拒绝、数据包路径中继链以及针对 `shadowsocks-rust` 的本地外部 UDP 出站互操作性（覆盖所有支持的 cipher）；AEAD 2022 (SIP022) **spec 全部章节已实现**——TCP 请求/响应头部协议（固定+变量头、30 秒时间戳窗口、请求 salt 回填校验、padding）、SIP022 3.1.3 检测防御（salt+固定头单次读取 + 失败时 drain）、SIP022 3.1.5 服务端重放 salt 池（60 秒）、SIP022 3.2.4 每会话 UDP 滑动窗口重放过滤 + 按客户端 session id 隔离 UDP 中继流（`client_session_id` 传入 UDP 调度层，不同客户端到同一 target 不复用出站流）、AEAD 2022 UDP 服务端响应（回填客户端 session id），覆盖三个 blake3 cipher 双向基线路径；TCP 入站方向已通过 `shadowsocks-rust` 参考客户端 (`sslocal`) 端到端互操作性验证，AEAD 2022 UDP 服务端响应已通过手动探针（DNS 往返）验证，TCP 出站管线已通过 Zero→Zero 端到端验证 | 新增的检测防御/drain 与滑动窗口尚未对抗真实主动探测/重放攻击完成外部验证；TCP 出站方向尚未在未损坏的外部 `ssserver` 上完成端到端验证（此环境下的 `ssserver` 单次读取有 Windows 环境缺陷，已通过参考对对照测试排除 Zero 自身缺陷） |
 | `hysteria2` | QUIC TCP 流和 UDP datagram 基线路径完备 | 外部互操作性覆盖不完整（QUIC UDP 链载体已实现，见 `udp_relay_chain_quic_path_not_supported`） |
-| `mieru` | TCP 流和 UDP associate 基线路径完备 | 外部互操作性覆盖不完整 |
+| `mieru` | TCP 流和 UDP associate 基线路径完备；出站 TCP/UDP 已与外部 mita 互通验证，入站经 `protocols/mieru/tests/loopback.rs` 对已验证出站配对验证 | 无剩余协议缺口 |
 | `vmess` | 基线 TCP 握手、TCP/UDP MUX、UDP-over-stream、同协议 `vmess -> vmess` UDP 中继链和 body relay 已针对内置运行时实现；原始 TLS、WSS、gRPC、`cipher: auto` 规范化、`cipher: none` / `cipher: zero`、本地 TCP MUX、本地 MUX UDP、本地 UDP 单跳中继和本地同协议 UDP 中继链具有内置覆盖；body AEAD 支持认证长度、块掩码（SHAKE128）、全局填充和定期密钥旋转（2^14 块）；外部 TCP 和 UDP 基线互操作性已覆盖：Xray 双向、Zero 出站到 sing-box 入站、Mihomo 出站到 Zero 入站；Xray WS/gRPC TCP 传输互操作性已覆盖双向 | 外部互操作性覆盖和主流 `cipher: zero` 兼容性仍不完整 |
 
 ## 当前收口状态

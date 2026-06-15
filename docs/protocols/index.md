@@ -23,7 +23,7 @@ This section tracks the protocol implementation surface in the current codebase.
 | Hysteria2 | `hysteria2` | `partial` | `supported` | `supported` | `partial` | `partial` | [Hysteria2](./hysteria2/index.md) |
 | Shadowsocks | `shadowsocks` | `partial` | `supported` | `supported` | `supported` | `supported` | [Shadowsocks](./shadowsocks/index.md) |
 | Trojan | `trojan` | `partial` | `supported` | `supported` | `partial` | `partial` | [Trojan](./trojan/index.md) |
-| Mieru | `mieru` | `partial` | `partial` | `partial` | `partial` | `partial` | [Mieru](./mieru/index.md) |
+| Mieru | `mieru` | `supported` | `supported` | `supported` | `supported` | `supported` | [Mieru](./mieru/index.md) |
 | VMess | `vmess` | `partial` | `partial` | `partial` | `partial` | `partial` | [VMess](./vmess/index.md) |
 
 ## 内核动作

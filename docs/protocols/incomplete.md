@@ -35,12 +35,6 @@ AEAD 2022 验证覆盖：TCP 入站已通过 `shadowsocks-rust` 参考客户端 
 | 外部互通覆盖不足 | 不能声明生产级完整兼容 | 使用基线 Hysteria2 实现进行 TCP stream 和 UDP datagram 互通 |
 | `udp_relay_chain_quic_path_not_supported` | 已实现：Hysteria2 QUIC 数据包路径载体 `Hysteria2PacketPath`（实现 `UdpPacketPath`），经 `Hysteria2Connector::connect_raw()` 建立 QUIC 连接，承载内部 datagram；`resolve_udp_packet_path_chain` 识别 `[Hysteria2, Shadowsocks]` 链 | ✅ 完成（e2e 测试 `relays_udp_through_hysteria2_to_shadowsocks_packet_path_chain` 通过） |
 
-## Mieru
-
-| 缺口 | 影响 | 完成标准 |
-|------|------|----------|
-| 外部互通覆盖不足 | 不能声明生产级完整兼容 | 使用基线 Mieru 客户端、服务端互通测试 |
-
 ## VMess
 
 | 缺口 | 影响 | 完成标准 |
