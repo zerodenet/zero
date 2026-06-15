@@ -307,7 +307,8 @@ impl UdpDispatch {
         port: u16,
         client_session_id: Option<u64>,
     ) -> Option<u64> {
-        self.flows.session_id_by_target(target, port, client_session_id)
+        self.flows
+            .session_id_by_target(target, port, client_session_id)
     }
 
     /// Look up the session ID for an upstream response (requires outbound tag).

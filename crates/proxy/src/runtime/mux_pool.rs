@@ -118,7 +118,19 @@ impl MuxConnectionPool {
         max_concurrency: u32,
         _idle_timeout_secs: u64,
     ) -> Result<TcpRelayStream, EngineError> {
-        self.open_stream_inner(proxy, session, &server, port, id, tls, reality, max_concurrency, _idle_timeout_secs, vless::NETWORK_TCP).await
+        self.open_stream_inner(
+            proxy,
+            session,
+            &server,
+            port,
+            id,
+            tls,
+            reality,
+            max_concurrency,
+            _idle_timeout_secs,
+            vless::NETWORK_TCP,
+        )
+        .await
     }
 
     /// Open a UDP MUX sub-stream (SIP022 Mux.Cool NETWORK_UDP).
@@ -142,8 +154,14 @@ impl MuxConnectionPool {
         reality: Option<&RealityConfig>,
         max_concurrency: u32,
         _idle_timeout_secs: u64,
-    ) -> Result<(u16, mpsc::UnboundedSender<Vec<u8>>, mpsc::UnboundedReceiver<Vec<u8>>), EngineError>
-    {
+    ) -> Result<
+        (
+            u16,
+            mpsc::UnboundedSender<Vec<u8>>,
+            mpsc::UnboundedReceiver<Vec<u8>>,
+        ),
+        EngineError,
+    > {
         let conn = self
             .get_or_create_conn(proxy, server, port, id, tls, reality, max_concurrency)
             .await?;
@@ -169,7 +187,7 @@ impl MuxConnectionPool {
         // Send new-stream request with NETWORK_UDP
         let req = vless::encode_new_stream(
             vless::NETWORK_UDP,
-            0, /* port unused for UDP MUX sub-stream */
+            0,                                       /* port unused for UDP MUX sub-stream */
             &zero_core::Address::Ipv4([0, 0, 0, 0]), /* address unused */
         )
         .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;

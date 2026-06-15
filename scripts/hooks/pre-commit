@@ -1,0 +1,52 @@
+#!/bin/sh
+# Pre-commit hook — mirrors the CI static job (.github/workflows/ci.yml).
+# Runs `cargo fmt --all --check` and `cargo clippy --workspace --all-targets --features full`
+# before every commit so formatting / clippy failures never reach CI.
+#
+# Install (one-time, per clone):
+#   git config core.hooksPath scripts/hooks
+#   # or: make hooks
+#
+# Bypass:
+#   git commit --no-verify            # this commit only
+#   ZERO_SKIP_HOOK=1 git commit ...   # skip everything
+#   ZERO_SKIP_CLIPPY=1 git commit ... # skip clippy only (fmt still enforced)
+
+set -u
+
+if [ -n "${ZERO_SKIP_HOOK:-}" ]; then
+  echo "[pre-commit] ZERO_SKIP_HOOK set, skipping all checks."
+  exit 0
+fi
+
+# ── cargo fmt (fast, always enforced) ────────────────────────────
+echo "[pre-commit] cargo fmt --all --check"
+if ! cargo fmt --all --check; then
+  cat >&2 <<'EOF'
+
+[pre-commit] ✗ formatting check failed.
+  Fix with:  cargo fmt --all
+  Then:      git add -u && git commit ...
+  Bypass:    git commit --no-verify
+EOF
+  exit 1
+fi
+
+# ── cargo clippy (slower; mirrors CI exactly, no -D warnings) ────
+if [ -n "${ZERO_SKIP_CLIPPY:-}" ]; then
+  echo "[pre-commit] ZERO_SKIP_CLIPPY set, skipping clippy."
+else
+  echo "[pre-commit] cargo clippy --workspace --all-targets --features full"
+  if ! cargo clippy --workspace --all-targets --features full; then
+    cat >&2 <<'EOF'
+
+[pre-commit] ✗ clippy failed.
+  Fix the issues above, then re-commit.
+  Bypass:    ZERO_SKIP_CLIPPY=1 git commit ...
+             git commit --no-verify
+EOF
+    exit 1
+  fi
+fi
+
+echo "[pre-commit] ✓ static checks passed."

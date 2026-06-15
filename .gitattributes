@@ -1,0 +1,3 @@
+# Git hooks must keep LF line endings — CRLF breaks the `#!/bin/sh`
+# shebang on Unix and under Git Bash on Windows.
+scripts/hooks/* text eol=lf

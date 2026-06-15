@@ -241,25 +241,27 @@ impl UdpDispatch {
                     // manager path which dials a fresh connection.
                     let max_concurrency = 8u32; // config may override later
                     let idle_timeout = 300u64;
-                    match proxy.mux_pool.open_udp_stream(
-                        proxy,
-                        server,
-                        port,
-                        &vless::parse_uuid(id).map_err(|e| FlowFailure {
-                            stage: "udp_vless_mux_parse_uuid",
-                            error: zero_core::Error::Protocol(
-                                &*Box::leak(
+                    match proxy
+                        .mux_pool
+                        .open_udp_stream(
+                            proxy,
+                            server,
+                            port,
+                            &vless::parse_uuid(id).map_err(|e| FlowFailure {
+                                stage: "udp_vless_mux_parse_uuid",
+                                error: zero_core::Error::Protocol(&*Box::leak(
                                     format!("invalid VLESS UUID: {e}").into_boxed_str(),
-                                ),
-                            )
-                            .into(),
-                            upstream: Some((server.to_owned(), port)),
-                        })?,
-                        tls,
-                        reality,
-                        max_concurrency,
-                        idle_timeout,
-                    ).await {
+                                ))
+                                .into(),
+                                upstream: Some((server.to_owned(), port)),
+                            })?,
+                            tls,
+                            reality,
+                            max_concurrency,
+                            idle_timeout,
+                        )
+                        .await
+                    {
                         Ok((_mux_sid, up_tx, _down_rx)) => {
                             // Encode the first VLESS UDP packet and send it
                             // through the MUX UDP sub-stream.
@@ -272,7 +274,8 @@ impl UdpDispatch {
                                     port: session.port,
                                     payload,
                                 },
-                            ).map_err(|error| FlowFailure {
+                            )
+                            .map_err(|error| FlowFailure {
                                 stage: "udp_vless_mux_encode",
                                 error: error.into(),
                                 upstream: Some((server.to_owned(), port)),
@@ -281,10 +284,7 @@ impl UdpDispatch {
                             // MUX UDP responses are dispatched back through
                             // the MUX read loop → chain_tasks; the session
                             // handle is tracked in vless_handles.
-                            proxy.record_session_outbound_tx(
-                                session_id,
-                                payload.len() as u64,
-                            );
+                            proxy.record_session_outbound_tx(session_id, payload.len() as u64);
 
                             // Track this session in vless_handles so finish_all()
                             // properly completes it. The MUX read loop dispatches
