@@ -18,7 +18,7 @@ AEAD 2022 验证覆盖：TCP 入站已通过 `shadowsocks-rust` 参考客户端 
 |------|------|----------|
 | `mux_udp_is_not_implemented` | VLESS MUX UDP outbound API（`MuxConnectionPool::open_udp_stream`）已实现但尚未接入 `VlessUdpOutboundManager`；inbound MUX UDP 已完备 | 将 MUX UDP outbound API 接入 UDP 调度路径 |
 | `udp_relay_chain_final_transport_limited` | SplitHTTP 最终跳已通过 `start_relay_flow()` fast path 实现；QUIC 因需要非 TCP 载体仍不支持作为链最终跳 | QUIC 路径明确实现方案或记录为架构限制 |
-| `non_reality_tls_fingerprint_passthrough_is_incomplete` | 已审计确认 fingerprint 通过 `ClientTlsConfig.client_fingerprint` 隐式传递到 `connect_tls_upstream()`，SplitHTTP/gRPC/H2/WS + TLS 路径均已覆盖。非功能缺失 | 从 limitation 列表移除（已在 metadata.rs 中移除） |
+| `non_reality_tls_fingerprint_passthrough_is_incomplete` | 已审计确认 fingerprint 通过 `ClientTlsConfig.client_fingerprint` 隐式传递到 `connect_tls_upstream()`，SplitHTTP/gRPC/H2/WS + TLS 路径均已覆盖。运行时仍报告此 limitation 以提示调用方未使用显式参数传递 | 待后续清理：在调用链增加显式 `client_fingerprint` 参数后移除 |
 
 ## Trojan
 

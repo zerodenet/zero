@@ -198,6 +198,7 @@ UDP datagram 由内核 UDP 分发路径处理。分发层拥有路由决策、fa
 
 - `zero-api` -- 管控面 API 类型
 - `zero-connector` -- 事件分发 connector（JSONL sink、webhook、push）
+- `zero-crypto` -- 加密基础设施（Reality TLS 1.3、密钥交换、证书操作）
 - `zero-logging` -- 结构化日志
 - `zero-ffi` -- C 兼容嵌入式接口
 - `zero-grpc` -- gRPC 管控面适配器（`grpc_api` feature）
@@ -251,7 +252,7 @@ UDP datagram 由内核 UDP 分发路径处理。分发层拥有路由决策、fa
 - `engine` -> `config`, `router`, `core`, `api`
 - `stack` -> `traits`
 - `tun` -> `traits`
-- `protocols/*` -> `core`
+- `protocols/*` -> `core`, `traits`
 - `core` -> `traits`
 
 无反向依赖。
