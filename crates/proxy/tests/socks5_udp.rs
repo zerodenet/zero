@@ -56,9 +56,12 @@ mod relays_udp_through_socks5_to_trojan_relay_chain_with_tls_fingerprint;
 #[cfg(all(feature = "socks5", feature = "vless"))]
 #[path = "socks5_udp/relays_udp_through_socks5_to_vless_relay_chain.rs"]
 mod relays_udp_through_socks5_to_vless_relay_chain;
+
 #[cfg(all(feature = "socks5", feature = "vless"))]
 #[path = "socks5_udp/relays_udp_through_socks5_to_vless_ws_relay_chain.rs"]
 mod relays_udp_through_socks5_to_vless_ws_relay_chain;
+#[path = "socks5_udp/relays_udp_through_socks5_to_vless_xhttp_stream_one_relay_chain.rs"]
+mod relays_udp_through_socks5_to_vless_xhttp_stream_one_relay_chain;
 #[path = "socks5_udp/relays_udp_through_socks5_udp_associate_direct_outbound.rs"]
 mod relays_udp_through_socks5_udp_associate_direct_outbound;
 #[cfg(all(feature = "socks5", feature = "trojan"))]
