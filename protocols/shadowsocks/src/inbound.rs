@@ -234,19 +234,30 @@ impl ShadowsocksInbound {
 /// malicious peer cannot hold the connection open indefinitely; typical active
 /// probes send far fewer bytes than this.
 const SS_2022_DRAIN_CAP: usize = 1 << 20; // 1 MiB
+/// Hard wall on how long a failed-handshake drain may block. A peer that sends
+/// a short probe and then holds the connection open would otherwise pin a task
+/// until the byte cap is reached; this keeps the anti-probe drain bounded.
+const SS_2022_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
-/// Drain up to `cap` bytes from `stream`, discarding them. Used after a failed
-/// 2022 handshake so closing the connection sends FIN (empty receive buffer)
-/// instead of RST, hiding how many bytes the server consumed.
+/// Drain up to `cap` bytes (or `timeout`, or EOF) from `stream`, discarding
+/// them. Used after a failed 2022 handshake so closing the connection sends FIN
+/// (empty receive buffer) instead of RST, hiding how many bytes the server
+/// consumed. Bounded by both a byte cap and a wall-clock timeout so a peer
+/// cannot pin the task by keeping the connection open after a short probe.
 #[cfg(all(feature = "crypto", feature = "blake3"))]
 async fn drain_stream<S: zero_traits::AsyncSocket>(stream: &mut S, cap: usize) {
     let mut buf = [0u8; 4096];
     let mut total = 0usize;
-    while total < cap {
-        match stream.read(&mut buf).await {
-            Ok(0) => break,
-            Ok(n) => total += n,
-            Err(_) => break,
+    let mut deadline_reached = false;
+    while total < cap && !deadline_reached {
+        // Bound each read so a silent peer cannot block forever.
+        match tokio::time::timeout(SS_2022_DRAIN_TIMEOUT, stream.read(&mut buf)).await {
+            Ok(Ok(0)) => break,
+            Ok(Ok(n)) => total += n,
+            Ok(Err(_)) => break,
+            Err(_) => {
+                deadline_reached = true;
+            }
         }
     }
 }
