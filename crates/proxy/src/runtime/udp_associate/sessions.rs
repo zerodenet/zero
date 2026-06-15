@@ -148,6 +148,14 @@ pub(crate) enum UdpPacketPathCarrier {
         password: String,
         cipher: String,
     },
+    #[cfg(feature = "hysteria2")]
+    Hysteria2 {
+        tag: String,
+        server: String,
+        port: u16,
+        password: String,
+        client_fingerprint: Option<String>,
+    },
 }
 
 impl UdpFlowOutbound {

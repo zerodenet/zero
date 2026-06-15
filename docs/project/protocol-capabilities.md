@@ -71,7 +71,7 @@
 主要协议缺口：
 
 - `udp_relay_final_hop_not_externally_validated`: VLESS UDP 中继链支持 TCP 中继前缀，最终跳可包装已建立的 TCP 中继流：原始 TCP、TLS、Reality、WebSocket、gRPC、H2、HTTP Upgrade 和 XHTTP。XHTTP `stream-one`（默认 `auto`）单连接模式使 SplitHTTP/XHTTP 可作为 relay-chain 最终跳——此前 SplitHTTP 需双连接（POST+GET）而 relay 前缀仅提供单流，故无法作为最终跳；现经 `stream-one` 在单流上承载上行分块（POST body）与下行分块（response body）即解决。QUIC 因 XTLS 已弃用独立 VLESS QUIC 传输且需非 TCP 载体，不支持作为 UDP 中继链最终跳。该 stream-one 路径尚未与上游 Xray 服务器完成外部互通验证。
-- `udp_relay_chain_quic_path_not_supported`: Hysteria2 UDP 使用 QUIC datagram。通过 QUIC 数据包路径的 UDP 链式连接未实现。
+- `udp_relay_chain_quic_path_not_supported`: **已解决**。Hysteria2 QUIC 数据包路径载体已实现：`Hysteria2PacketPath` 实现 `UdpPacketPath`，经 `Hysteria2Connector::connect_raw()` 建立 QUIC 连接，用 Hysteria2 datagram 帧封装承载内部 datagram（如 Shadowsocks）。`resolve_udp_packet_path_chain` 识别 `[Hysteria2, Shadowsocks]` 链；e2e 测试 `relays_udp_through_hysteria2_to_shadowsocks_packet_path_chain` 通过。
 - `external_interop_coverage_is_incomplete`: 内置数据包处理存在，但针对基线上游实现的端到端测试不足以将每个高级路径称为生产级兼容。对于 VMess，TCP 和 UDP 基线互操作性已覆盖：Xray 双向（原始 TLS `aes-128-gcm`/`none`、WS+TLS、gRPC+TLS）、Zero 出站到 sing-box 入站（TCP+UDP）、Mihomo 出站到 Zero 入站（TCP `auto`+UDP `CMD_UDP` 原始 datagram）。这些路径的证据不得推广到未测试的传输组合（如 H2、HTTPUpgrade、XHTTP `stream-one`）。
 - `shadowsocks_2022_hardening_not_externally_validated`: Shadowsocks AEAD 2022 (SIP022) **全部 spec 章节已实现并通过内置测试**（3.1.1 加密/nonce、3.1.2 格式、3.1.3 头部+检测防御、3.1.5 重放保护、3.2 UDP 含 3.2.4 滑动窗口）。SIP022 3.2.4 的按客户端 session id 隔离 UDP 中继流已实现：`UdpFlowKey` 增加了可选 `client_session_id` 维度，SS 2022 inbound 将客户端 SIP022 session id 传入 UDP 调度层，不同客户端 session id 到同一 `(target, port)` 会建立独立的出站流。具体：TCP 请求/响应头部、固定+变量头、30 秒时间戳窗口、请求 salt 回填校验、padding、SIP022 3.1.5 的 60 秒服务端重放 salt 池、SIP022 3.1.3 的单次读取+失败时 drain 检测防御、SIP022 3.2.4 的每会话 UDP 滑动窗口重放过滤、AEAD 2022 UDP 服务端响应（回填客户端 session id）。验证覆盖：TCP 入站方向已通过 `shadowsocks-rust` 参考客户端 (`sslocal`) 端到端互操作性、TCP 出站管线已通过 Zero→Zero、AEAD 2022 UDP 服务端响应已通过手动探针（DNS 往返）。尚未完成外部验证的部分：新的检测防御/drain 与滑动窗口对抗真实主动探测/重放攻击的行为，以及与未损坏的外部 `ssserver` 的直接互操作（此环境下的 `ssserver` 单次读取存在 Windows 环境缺陷，已通过参考对对照测试排除 Zero 自身缺陷）。
 - `relay_stream_tls_client_fingerprint_is_not_supported`: **已解决**。中继链最终跳的 TLS 指纹经 `connect_tls_stream` → `connect_tls13_stream`（基于 ztls 的自定义 TLS 1.3 ClientHello）在已建立的 TCP 中继流上运行，复用与单跳相同的 `ClientTlsConfig.client_fingerprint`。VLESS（`build_vless_outbound_transport_over_stream`）和 Trojan（`establish_over_relay_stream`）两条 relay-stream 最终跳路径均已覆盖；端到端测试 `relays_udp_through_socks5_to_trojan_relay_chain_with_tls_fingerprint` 验证 SOCKS5→Trojan relay 链 UDP 经 chrome 指纹握手通过。
@@ -93,7 +93,7 @@
 | `vless` | TCP 和 UDP-over-stream 基线路径完备 | UDP MUX outbound 尚未接入 VlessUdpOutboundManager；XHTTP `stream-one` 最终跳路径尚未与上游 Xray 完成外部互通验证；QUIC 传输已被 XTLS 弃用 |
 | `trojan` | TCP 和 UDP-over-stream 基线路径完备 | 外部互操作性覆盖不完整（中继流 TLS 指纹已支持，见 `relay_stream_tls_client_fingerprint_is_not_supported`） |
 | `shadowsocks` | 普通 AEAD TCP 和 UDP datagram 路径完备，包括 Shadowsocks UDP over SOCKS5、大 TCP 载荷分块、错误密码拒绝、数据包路径中继链以及针对 `shadowsocks-rust` 的本地外部 UDP 出站互操作性（覆盖所有支持的 cipher）；AEAD 2022 (SIP022) **spec 全部章节已实现**——TCP 请求/响应头部协议（固定+变量头、30 秒时间戳窗口、请求 salt 回填校验、padding）、SIP022 3.1.3 检测防御（salt+固定头单次读取 + 失败时 drain）、SIP022 3.1.5 服务端重放 salt 池（60 秒）、SIP022 3.2.4 每会话 UDP 滑动窗口重放过滤 + 按客户端 session id 隔离 UDP 中继流（`client_session_id` 传入 UDP 调度层，不同客户端到同一 target 不复用出站流）、AEAD 2022 UDP 服务端响应（回填客户端 session id），覆盖三个 blake3 cipher 双向基线路径；TCP 入站方向已通过 `shadowsocks-rust` 参考客户端 (`sslocal`) 端到端互操作性验证，AEAD 2022 UDP 服务端响应已通过手动探针（DNS 往返）验证，TCP 出站管线已通过 Zero→Zero 端到端验证 | 新增的检测防御/drain 与滑动窗口尚未对抗真实主动探测/重放攻击完成外部验证；TCP 出站方向尚未在未损坏的外部 `ssserver` 上完成端到端验证（此环境下的 `ssserver` 单次读取有 Windows 环境缺陷，已通过参考对对照测试排除 Zero 自身缺陷） |
-| `hysteria2` | QUIC TCP 流和 UDP datagram 基线路径完备 | 外部互操作性覆盖和 QUIC UDP 链路径不完整 |
+| `hysteria2` | QUIC TCP 流和 UDP datagram 基线路径完备 | 外部互操作性覆盖不完整（QUIC UDP 链载体已实现，见 `udp_relay_chain_quic_path_not_supported`） |
 | `mieru` | TCP 流和 UDP associate 基线路径完备 | 外部互操作性覆盖不完整 |
 | `vmess` | 基线 TCP 握手、TCP/UDP MUX、UDP-over-stream、同协议 `vmess -> vmess` UDP 中继链和 body relay 已针对内置运行时实现；原始 TLS、WSS、gRPC、`cipher: auto` 规范化、`cipher: none` / `cipher: zero`、本地 TCP MUX、本地 MUX UDP、本地 UDP 单跳中继和本地同协议 UDP 中继链具有内置覆盖；body AEAD 支持认证长度、块掩码（SHAKE128）、全局填充和定期密钥旋转（2^14 块）；外部 TCP 和 UDP 基线互操作性已覆盖：Xray 双向、Zero 出站到 sing-box 入站、Mihomo 出站到 Zero 入站；Xray WS/gRPC TCP 传输互操作性已覆盖双向 | 外部互操作性覆盖和主流 `cipher: zero` 兼容性仍不完整 |
 
@@ -137,6 +137,6 @@
 ## 剩余工作
 
 1. 保持运行时分发聚焦于路由、生命周期、统计、事件导出、fallback、健康检查和背压。
-2. 通过为新载体实现 `UdpPacketPath` 和为新的内部协议实现 `DatagramCodec` 来扩展 UDP 链数据包路径支持。定义 Hysteria2 所需的 QUIC UDP 路径。
+2. 通过为新载体实现 `UdpPacketPath` 和为新的内部协议实现 `DatagramCodec` 来扩展 UDP 链数据包路径支持。Hysteria2 QUIC UDP 路径载体已实现（`Hysteria2PacketPath`）。
 3. 在将任何 `partial` 协议提升到 `supported` 之前，添加兼容性基线的上游互操作性测试。
 4. VMess 现在为 `partial`：基线 TCP/UDP/MUX 路径已实现，在主流传输组合（原始 TLS、WS+TLS、gRPC+TLS）上具有生产级能力。`cipher: zero` 仍为已记录的限制，除非有基线实现接受它，否则应保持在主流 GUI 默认值之外。兼容性声明不得扩展到实际测试的外部路径之外。

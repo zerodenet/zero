@@ -124,10 +124,112 @@ impl UdpPacketPath<Address> for ShadowsocksPacketPath {
     }
 }
 
+/// QUIC-backed packet path carrier for Hysteria2.
+///
+/// Carries inner-datagram traffic (e.g. Shadowsocks) over a Hysteria2 QUIC
+/// connection: `send_to` encodes `(target, port, payload)` with the Hysteria2
+/// datagram framing and sends it as a QUIC datagram; `recv_from` reads the
+/// next QUIC datagram and returns the decoded payload. Mirrors
+/// [`ShadowsocksPacketPath`] but over `quinn::Connection` instead of a raw
+/// `UdpSocket`. The underlying QUIC connection is established via
+/// [`Hysteria2Connector`](crate::transport::Hysteria2Connector), reusing the
+/// same auth + optional TLS fingerprint path as the single-hop outbound.
+#[cfg(feature = "hysteria2")]
+pub(super) struct Hysteria2PacketPath {
+    conn: std::sync::Arc<quinn::Connection>,
+}
+
+#[cfg(feature = "hysteria2")]
+impl Hysteria2PacketPath {
+    async fn establish(
+        server: &str,
+        port: u16,
+        password: &str,
+        client_fingerprint: Option<&str>,
+    ) -> Result<Self, EngineError> {
+        let connector = crate::transport::Hysteria2Connector::new(server, port, password)
+            .with_fingerprint(client_fingerprint);
+        let conn = std::sync::Arc::new(connector.connect_raw().await?);
+        Ok(Self { conn })
+    }
+
+    fn encode(target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, EngineError> {
+        use hysteria2::{Hysteria2Outbound, Hysteria2UdpPacketTarget};
+        use zero_traits::UdpDatagramFraming;
+        <Hysteria2Outbound as UdpDatagramFraming<Hysteria2UdpPacketTarget<'_>, ()>>::encode_udp_datagram(
+            &Hysteria2Outbound,
+            &Hysteria2UdpPacketTarget {
+                session_id: 0,
+                packet_id: 0,
+                target,
+                port,
+                payload,
+            },
+        )
+        .map_err(EngineError::from)
+    }
+
+    fn decode(data: &[u8]) -> Result<Vec<u8>, EngineError> {
+        use hysteria2::{Hysteria2Outbound, Hysteria2UdpPacketTarget};
+        use zero_traits::UdpDatagramFraming;
+        let pkt =
+            <Hysteria2Outbound as UdpDatagramFraming<Hysteria2UdpPacketTarget<'_>, ()>>::decode_udp_datagram(
+                &Hysteria2Outbound,
+                &(),
+                data,
+            )
+            .map_err(EngineError::from)?;
+        Ok(pkt.payload)
+    }
+}
+
+#[cfg(feature = "hysteria2")]
+impl UdpPacketPath<Address> for Hysteria2PacketPath {
+    type Error = EngineError;
+
+    async fn send_to(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        let datagram = Self::encode(target, port, payload)?;
+        self.conn.send_datagram(datagram.into()).map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!(
+                "hysteria2 carrier send: {e}"
+            )))
+        })?;
+        Ok(())
+    }
+
+    async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        let data = self.conn.read_datagram().await.map_err(|e| {
+            EngineError::Io(std::io::Error::other(format!(
+                "hysteria2 carrier recv: {e}"
+            )))
+        })?;
+        let payload = Self::decode(&data)?;
+        let len = payload.len();
+        if len > buf.len() {
+            return Err(EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "hysteria2 carrier datagram ({len}B) exceeds recv buffer ({}B)",
+                    buf.len()
+                ),
+            )));
+        }
+        buf[..len].copy_from_slice(&payload);
+        Ok(len)
+    }
+}
+
 enum PacketPath {
     #[cfg(feature = "socks5")]
     Socks5(Socks5PacketPath),
     Shadowsocks(ShadowsocksPacketPath),
+    #[cfg(feature = "hysteria2")]
+    Hysteria2(Hysteria2PacketPath),
 }
 
 impl UdpPacketPath<Address> for PacketPath {
@@ -143,6 +245,8 @@ impl UdpPacketPath<Address> for PacketPath {
             #[cfg(feature = "socks5")]
             Self::Socks5(path) => path.send_to(target, port, payload).await,
             Self::Shadowsocks(path) => path.send_to(target, port, payload).await,
+            #[cfg(feature = "hysteria2")]
+            Self::Hysteria2(path) => path.send_to(target, port, payload).await,
         }
     }
 
@@ -151,6 +255,8 @@ impl UdpPacketPath<Address> for PacketPath {
             #[cfg(feature = "socks5")]
             Self::Socks5(path) => path.recv_from(buf).await,
             Self::Shadowsocks(path) => path.recv_from(buf).await,
+            #[cfg(feature = "hysteria2")]
+            Self::Hysteria2(path) => path.recv_from(buf).await,
         }
     }
 }
@@ -183,6 +289,14 @@ enum CarrierKey {
         password: String,
         cipher: String,
     },
+    #[cfg(feature = "hysteria2")]
+    Hysteria2 {
+        tag: String,
+        server: String,
+        port: u16,
+        password: String,
+        client_fingerprint: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -213,6 +327,14 @@ pub(super) enum PacketPathCarrierParams<'a> {
         port: u16,
         password: &'a str,
         cipher: &'a str,
+    },
+    #[cfg(feature = "hysteria2")]
+    Hysteria2 {
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        password: &'a str,
+        client_fingerprint: Option<&'a str>,
     },
 }
 
@@ -391,6 +513,18 @@ async fn build_packet_path(
                     .await?;
             Ok(PacketPath::Shadowsocks(path))
         }
+        #[cfg(feature = "hysteria2")]
+        PacketPathCarrierParams::Hysteria2 {
+            server,
+            port,
+            password,
+            client_fingerprint,
+            ..
+        } => {
+            let path = Hysteria2PacketPath::establish(server, *port, password, *client_fingerprint)
+                .await?;
+            Ok(PacketPath::Hysteria2(path))
+        }
     }
 }
 
@@ -423,6 +557,20 @@ fn carrier_key(carrier: &PacketPathCarrierParams<'_>) -> CarrierKey {
             password: (*password).to_owned(),
             cipher: (*cipher).to_owned(),
         },
+        #[cfg(feature = "hysteria2")]
+        PacketPathCarrierParams::Hysteria2 {
+            tag,
+            server,
+            port,
+            password,
+            client_fingerprint,
+        } => CarrierKey::Hysteria2 {
+            tag: (*tag).to_owned(),
+            server: (*server).to_owned(),
+            port: *port,
+            password: (*password).to_owned(),
+            client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
+        },
     }
 }
 
@@ -431,6 +579,8 @@ fn carrier_upstream(carrier: &PacketPathCarrierParams<'_>) -> (String, u16) {
         #[cfg(feature = "socks5")]
         PacketPathCarrierParams::Socks5 { server, port, .. } => ((*server).to_owned(), *port),
         PacketPathCarrierParams::Shadowsocks { server, port, .. } => ((*server).to_owned(), *port),
+        #[cfg(feature = "hysteria2")]
+        PacketPathCarrierParams::Hysteria2 { server, port, .. } => ((*server).to_owned(), *port),
     }
 }
 

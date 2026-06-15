@@ -58,6 +58,20 @@ fn carrier_params(carrier: &UdpPacketPathCarrier) -> PacketPathCarrierParams<'_>
             password: password.as_str(),
             cipher: cipher.as_str(),
         },
+        #[cfg(feature = "hysteria2")]
+        UdpPacketPathCarrier::Hysteria2 {
+            tag,
+            server,
+            port,
+            password,
+            client_fingerprint,
+        } => PacketPathCarrierParams::Hysteria2 {
+            tag: tag.as_str(),
+            server: server.as_str(),
+            port: *port,
+            password: password.as_str(),
+            client_fingerprint: client_fingerprint.as_deref(),
+        },
     }
 }
 

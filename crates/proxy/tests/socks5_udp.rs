@@ -20,6 +20,9 @@ mod relays_udp_through_fallback_group_when_primary_unreachable;
 #[cfg(all(feature = "socks5", feature = "hysteria2"))]
 #[path = "socks5_udp/relays_udp_through_hysteria2_outbound.rs"]
 mod relays_udp_through_hysteria2_outbound;
+
+#[path = "socks5_udp/relays_udp_through_hysteria2_to_shadowsocks_packet_path_chain.rs"]
+mod relays_udp_through_hysteria2_to_shadowsocks_packet_path_chain;
 #[cfg(all(feature = "socks5", feature = "mieru"))]
 #[path = "socks5_udp/relays_udp_through_mieru_outbound.rs"]
 mod relays_udp_through_mieru_outbound;

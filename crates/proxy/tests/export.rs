@@ -524,7 +524,7 @@ fn proxy_handle_capabilities_use_protocol_inventory() {
         .outbound
         .udp
         .notes
-        .contains(&"udp_relay_chain_final_transport_limited".to_owned()));
+        .contains(&"udp_relay_final_hop_not_externally_validated".to_owned()));
 
     if let Some(mieru) = capabilities
         .protocols
@@ -567,8 +567,11 @@ fn proxy_handle_capabilities_use_protocol_inventory() {
         assert_eq!(shadowsocks.mux.level, "unsupported");
         assert!(shadowsocks
             .limitations
+            .contains(&"shadowsocks_2022_hardening_not_externally_validated".to_owned()));
+        assert!(!shadowsocks
+            .limitations
             .contains(&"shadowsocks_2022_tcp_header_is_not_implemented".to_owned()));
-        assert!(shadowsocks.limitations.contains(
+        assert!(!shadowsocks.limitations.contains(
             &"shadowsocks_2022_udp_server_response_context_is_not_implemented".to_owned()
         ));
         assert!(!shadowsocks
@@ -612,7 +615,7 @@ fn proxy_handle_capabilities_use_protocol_inventory() {
         .iter()
         .find(|protocol| protocol.protocol == "hysteria2")
     {
-        assert!(hysteria2
+        assert!(!hysteria2
             .limitations
             .contains(&"udp_relay_chain_quic_path_not_supported".to_owned()));
         assert!(!hysteria2

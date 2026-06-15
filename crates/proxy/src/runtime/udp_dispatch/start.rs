@@ -91,6 +91,34 @@ fn resolve_udp_packet_path_chain<'a>(
             datagram_password,
             datagram_cipher,
         }),
+        #[cfg(feature = "hysteria2")]
+        [ResolvedLeafOutbound::Hysteria2 {
+            tag: carrier_tag,
+            server: carrier_server,
+            port: carrier_port,
+            password: carrier_password,
+            client_fingerprint: carrier_client_fingerprint,
+            ..
+        }, ResolvedLeafOutbound::Shadowsocks {
+            tag: datagram_tag,
+            server: datagram_server,
+            port: datagram_port,
+            password: datagram_password,
+            cipher: datagram_cipher,
+        }] => Some(PacketPathChainParams {
+            datagram_tag,
+            carrier: PacketPathCarrierParams::Hysteria2 {
+                tag: carrier_tag,
+                server: carrier_server,
+                port: *carrier_port,
+                password: carrier_password,
+                client_fingerprint: *carrier_client_fingerprint,
+            },
+            datagram_server,
+            datagram_port: *datagram_port,
+            datagram_password,
+            datagram_cipher,
+        }),
         _ => None,
     }
 }
@@ -124,6 +152,20 @@ fn owned_packet_path_carrier(carrier: &PacketPathCarrierParams<'_>) -> UdpPacket
             port: *port,
             password: (*password).to_owned(),
             cipher: (*cipher).to_owned(),
+        },
+        #[cfg(feature = "hysteria2")]
+        PacketPathCarrierParams::Hysteria2 {
+            tag,
+            server,
+            port,
+            password,
+            client_fingerprint,
+        } => UdpPacketPathCarrier::Hysteria2 {
+            tag: (*tag).to_owned(),
+            server: (*server).to_owned(),
+            port: *port,
+            password: (*password).to_owned(),
+            client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
         },
     }
 }
