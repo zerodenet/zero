@@ -70,13 +70,13 @@
 
 主要协议缺口：
 
-- `udp_relay_chain_final_transport_limited`: VLESS UDP 中继链支持 TCP 中继前缀和可以包装已建立 TCP 中继流的 VLESS 最终跳传输：原始 TCP、TLS、Reality、WebSocket、gRPC、H2 和 HTTP Upgrade。SplitHTTP 需要额外的 TCP 连接，QUIC 需要非 TCP 载体，因此它们不支持作为 UDP 中继链最终跳传输。TLS `client_fingerprint` 不支持通过中继流，因为该路径依赖原始 socket 握手控制。
+- `udp_relay_chain_final_transport_limited`: VLESS UDP 中继链支持 TCP 中继前缀和可以包装已建立 TCP 中继流的 VLESS 最终跳传输：原始 TCP、TLS、Reality、WebSocket、gRPC、H2、HTTP Upgrade 和 SplitHTTP（已通过 SplitHTTP fast path 实现）。QUIC 需要非 TCP 载体，因此不支持作为 UDP 中继链最终跳传输。TLS `client_fingerprint` 不支持通过中继流，因为该路径依赖原始 socket 握手控制。
 - `udp_relay_chain_quic_path_not_supported`: Hysteria2 UDP 使用 QUIC datagram。通过 QUIC 数据包路径的 UDP 链式连接未实现。
 - `external_interop_coverage_is_incomplete`: 内置数据包处理存在，但针对基线上游实现的端到端测试不足以将每个高级路径称为生产级兼容。对于 VMess，TCP 和 UDP 基线互操作性已覆盖：Xray 双向（原始 TLS `aes-128-gcm`/`none`、WS+TLS、gRPC+TLS）、Zero 出站到 sing-box 入站（TCP+UDP）、Mihomo 出站到 Zero 入站（TCP `auto`+UDP `CMD_UDP` 原始 datagram）。这些路径的证据不得推广到未测试的传输组合（如 H2、HTTPUpgrade、QUIC、SplitHTTP）。
 - `shadowsocks_2022_hardening_not_externally_validated`: Shadowsocks AEAD 2022 (SIP022) **全部 spec 章节已实现并通过内置测试**（3.1.1 加密/nonce、3.1.2 格式、3.1.3 头部+检测防御、3.1.5 重放保护、3.2 UDP 含 3.2.4 滑动窗口）。SIP022 3.2.4 的按客户端 session id 隔离 UDP 中继流已实现：`UdpFlowKey` 增加了可选 `client_session_id` 维度，SS 2022 inbound 将客户端 SIP022 session id 传入 UDP 调度层，不同客户端 session id 到同一 `(target, port)` 会建立独立的出站流。具体：TCP 请求/响应头部、固定+变量头、30 秒时间戳窗口、请求 salt 回填校验、padding、SIP022 3.1.5 的 60 秒服务端重放 salt 池、SIP022 3.1.3 的单次读取+失败时 drain 检测防御、SIP022 3.2.4 的每会话 UDP 滑动窗口重放过滤、AEAD 2022 UDP 服务端响应（回填客户端 session id）。验证覆盖：TCP 入站方向已通过 `shadowsocks-rust` 参考客户端 (`sslocal`) 端到端互操作性、TCP 出站管线已通过 Zero→Zero、AEAD 2022 UDP 服务端响应已通过手动探针（DNS 往返）。尚未完成外部验证的部分：新的检测防御/drain 与滑动窗口对抗真实主动探测/重放攻击的行为，以及与未损坏的外部 `ssserver` 的直接互操作（此环境下的 `ssserver` 单次读取存在 Windows 环境缺陷，已通过参考对对照测试排除 Zero 自身缺陷）。
 - `relay_stream_tls_client_fingerprint_is_not_supported`: 中继链最终跳 TLS 可以在已建立的 TCP 流上运行，但需要原始 socket 控制的自定义 TLS 指纹握手不支持该路径。
-- `mux_udp_is_not_implemented`: VLESS MUX 处理 TCP 子连接；UDP MUX 子连接未实现。
-- `non_reality_tls_fingerprint_passthrough_is_incomplete`: 非 Reality VLESS TLS 路径未完全将指纹 cipher suite 和密钥交换偏好传递到 TLS 实现中。
+- `mux_udp_is_not_implemented`: VLESS MUX 处理 TCP 子连接和 UDP 子连接入站。UDP MUX outbound API（`MuxConnectionPool::open_udp_stream`）已实现，但尚未接入 `VlessUdpOutboundManager`。
+- `non_reality_tls_fingerprint_passthrough_is_incomplete`: 非 Reality VLESS TLS 路径中 fingerprint 通过 `ClientTlsConfig.client_fingerprint` 隐式传递到 `connect_tls_upstream()`，依赖 `build_vless_outbound_transport()` 原样透传 tls 配置（SplitHTTP、gRPC、H2、WS + TLS 路径均已覆盖）。并非功能缺失，而是缺乏独立显式参数。
 
 ## 基线完备
 
@@ -89,7 +89,7 @@
 | `socks5` | 完备 | 无剩余协议缺口 |
 | `http_connect` | 完备 | UDP 不适用 |
 | `mixed` | 完备 | Mixed 是内核入站多路复用器：SOCKS5 TCP CONNECT 和 UDP ASSOCIATE 使用 SOCKS5 运行时路径；HTTP CONNECT 使用 HTTP TCP 运行时路径 |
-| `vless` | TCP 和 UDP-over-stream 基线路径完备 | UDP MUX、部分 UDP 中继链最终传输和非 Reality TLS 指纹透传不完整 |
+| `vless` | TCP 和 UDP-over-stream 基线路径完备 | UDP MUX outbound 尚未接入 VlessUdpOutboundManager；QUIC final hop 在 UDP 中继链中不支持 |
 | `trojan` | TCP 和 UDP-over-stream 基线路径完备 | 外部互操作性覆盖和中继流 TLS 指纹行为不完整 |
 | `shadowsocks` | 普通 AEAD TCP 和 UDP datagram 路径完备，包括 Shadowsocks UDP over SOCKS5、大 TCP 载荷分块、错误密码拒绝、数据包路径中继链以及针对 `shadowsocks-rust` 的本地外部 UDP 出站互操作性（覆盖所有支持的 cipher）；AEAD 2022 (SIP022) **spec 全部章节已实现**——TCP 请求/响应头部协议（固定+变量头、30 秒时间戳窗口、请求 salt 回填校验、padding）、SIP022 3.1.3 检测防御（salt+固定头单次读取 + 失败时 drain）、SIP022 3.1.5 服务端重放 salt 池（60 秒）、SIP022 3.2.4 每会话 UDP 滑动窗口重放过滤 + 按客户端 session id 隔离 UDP 中继流（`client_session_id` 传入 UDP 调度层，不同客户端到同一 target 不复用出站流）、AEAD 2022 UDP 服务端响应（回填客户端 session id），覆盖三个 blake3 cipher 双向基线路径；TCP 入站方向已通过 `shadowsocks-rust` 参考客户端 (`sslocal`) 端到端互操作性验证，AEAD 2022 UDP 服务端响应已通过手动探针（DNS 往返）验证，TCP 出站管线已通过 Zero→Zero 端到端验证 | 新增的检测防御/drain 与滑动窗口尚未对抗真实主动探测/重放攻击完成外部验证；TCP 出站方向尚未在未损坏的外部 `ssserver` 上完成端到端验证（此环境下的 `ssserver` 单次读取有 Windows 环境缺陷，已通过参考对对照测试排除 Zero 自身缺陷） |
 | `hysteria2` | QUIC TCP 流和 UDP datagram 基线路径完备 | 外部互操作性覆盖和 QUIC UDP 链路径不完整 |
