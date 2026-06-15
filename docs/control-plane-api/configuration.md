@@ -1,6 +1,6 @@
 # 配置模型参考
 
-所有控制面配置位于 `api` 键下。本文档记录当前 API 配置字段。
+大部分控制面配置位于 `api` 键下；节点主动上报的 `push` 配置位于顶层 `push` 键（不在 `api` 下）。本文档记录当前 API 配置字段。
 
 完整的配置模型（inbounds、outbounds、route、runtime）请参阅 [config.md](../project/config.md)。
 
@@ -17,14 +17,6 @@
     "hooks": [
       { "type": "ipc", "socket": "/run/billing/hook.sock", "timeout_ms": 100 }
     ],
-  "push": {
-    "url": "https://receiver.example.com",
-    "node_id": "node-001",
-    "api_key": "sk-xxx",
-    "heartbeat_interval_seconds": 30,
-    "pull_commands": true,
-    "command_poll_interval_seconds": 10
-  },
     "event_sinks": [
       {
         "type": "jsonl",
@@ -39,6 +31,14 @@
         "events": ["flow.completed"]
       }
     ]
+  },
+  "push": {
+    "url": "https://receiver.example.com",
+    "node_id": "node-001",
+    "api_key": "sk-xxx",
+    "heartbeat_interval_seconds": 30,
+    "pull_commands": true,
+    "command_poll_interval_seconds": 10
   }
 }
 ```

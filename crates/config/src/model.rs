@@ -22,7 +22,7 @@ pub struct RuntimeConfig {
     pub route: RouteConfig,
     #[serde(default)]
     pub api: ApiConfig,
-    /// Node push connector ->?actively reports to an external management
+    /// Node push connector — actively reports to an external management
     /// endpoint.  Generic: the receiver can be a panel, monitoring system,
     /// or any HTTP service.
     #[serde(default)]
@@ -160,9 +160,6 @@ pub struct ApiConfig {
     /// Flow hooks executed in registration order.
     #[serde(default)]
     pub hooks: Vec<HookConfig>,
-    /// Node push for heartbeat and command polling.
-    #[serde(default)]
-    pub push: PushConfig,
     /// Path to dead-letter queue file for failed event deliveries.
     /// When set, events that exhaust retry attempts are persisted here
     /// as JSON lines instead of being silently dropped.
@@ -1246,8 +1243,8 @@ pub enum RouteActionConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DnsConfig {
-    /// Ordered DNS servers. Resolution tries each in order until success.
-    /// Empty or omitted defaults to the system resolver.
+    /// Ordered DNS servers. Resolution races all servers concurrently and
+    /// returns the first success. Empty or omitted defaults to the system resolver.
     #[serde(default)]
     pub servers: Vec<DnsServerConfig>,
 
