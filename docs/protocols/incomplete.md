@@ -25,7 +25,7 @@ AEAD 2022 验证覆盖：TCP 入站已通过 `shadowsocks-rust` 参考客户端 
 | 缺口 | 影响 | 完成标准 |
 |------|------|----------|
 | 外部互通覆盖不足 | 当前不能声明生产级完整兼容 | 使用基线实现进行 TCP 和 UDP 外部互通测试 |
-| `relay_stream_tls_client_fingerprint_is_not_supported` | relay-chain final hop 的 TLS fingerprint 能力不完整 | 与 VLESS 同类 TLS relay-stream 边界一起解决 |
+| `relay_stream_tls_client_fingerprint_is_not_supported` | 已实现：relay-chain final hop 的 TLS 指纹经 `connect_tls_stream` → ztls `connect_tls13_stream` 在已建立 TCP 流上运行，复用与单跳相同的 `ClientTlsConfig.client_fingerprint`；VLESS（`build_vless_outbound_transport_over_stream`）与 Trojan（`establish_over_relay_stream`）两条路径均覆盖 | ✅ 完成（e2e 测试 `relays_udp_through_socks5_to_trojan_relay_chain_with_tls_fingerprint` 通过） |
 | MUX 不支持 | 不提供 Trojan MUX 能力 | 明确实现 MUX 或保持 `unsupported` |
 
 ## Hysteria2
