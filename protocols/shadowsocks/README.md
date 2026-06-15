@@ -8,8 +8,8 @@ response bridging.
 
 | Area | Current fact |
 |------|--------------|
-| TCP inbound | Accepts AEAD stream requests and returns `ShadowsocksAccept` |
-| TCP outbound | Writes the initial target request and returns `ShadowsocksOutboundSession` |
+| TCP inbound | Accepts AEAD stream requests (legacy + 2022 SIP022) and returns `ShadowsocksAccept` |
+| TCP outbound | Writes the initial target request (legacy + 2022 SIP022) and returns `ShadowsocksOutboundSession` |
 | TCP stream | `ShadowsocksAeadStream` owns chunk encryption, decryption, response salt, and download key derivation |
 | UDP datagram | `UdpDatagramFraming` encodes and decodes Shadowsocks UDP packets; AEAD 2022 outbound client packets use the SIP022 UDP header format |
 | UDP composition | `ShadowsocksDatagramCodec` is used by generic packet-path orchestration; Shadowsocks final-hop UDP chains support SOCKS5 and Shadowsocks packet-path carriers |
@@ -61,9 +61,12 @@ src/metadata.rs  - protocol capability descriptor
 
 ## Known Limits
 
-- AEAD 2022 TCP does not implement the SIP022 TCP request/response header
-  protocol, so external TCP interoperability for 2022 cipher names is
-  incomplete.
-- AEAD 2022 UDP outbound client packets interoperate with `shadowsocks-rust`.
-  Server-side AEAD 2022 UDP responses need a stateful response context before
-  Zero can act as a fully compatible external AEAD 2022 UDP server.
+- AEAD 2022 UDP **server-side responses** are implemented and validated (SIP022
+  3.2.3 echo of client session id, DNS round-trip probe).
+- **SIP022 3.2.4** per-session sliding-window replay filtering and per-client
+  session-id flow isolation are implemented and tested.
+- The remaining limitation is `shadowsocks_2022_hardening_not_externally_validated`:
+  the detection-prevention drain and sliding-window replay filter have not been
+  validated against real active probes/replay attacks, and direct interop with
+  an external `ssserver` is pending (blocked by a Windows-env single-read bug in
+  the available `ssserver` build, exonerated by a reference-pair control test).
