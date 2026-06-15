@@ -22,7 +22,6 @@ impl ProtocolMetadata for ShadowsocksProtocol {
             mux: unsupported,
             limitations: &[
                 "shadowsocks_2022_hardening_not_externally_validated",
-                "shadowsocks_2022_udp_relays_target_keyed_not_session_id",
             ],
         }
     }
