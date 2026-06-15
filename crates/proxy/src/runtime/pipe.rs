@@ -58,6 +58,13 @@ pub(crate) struct UdpPipeInput<'a> {
     pub(crate) payload: &'a [u8],
     pub(crate) protocol: ProtocolType,
     pub(crate) auth: Option<&'a SessionAuth>,
+    /// Per-client-session isolation key (SIP022 3.2.4).
+    ///
+    /// When `Some`, flows that would collide on `(target, port)` alone are
+    /// treated as independent relay sessions.  The Shadowsocks 2022 inbound
+    /// passes the client's SIP022 session id here; all other protocols pass
+    /// `None`.
+    pub(crate) client_session_id: Option<u64>,
 }
 
 /// UDP datagram pipe.
@@ -88,6 +95,7 @@ impl KernelPipe for UdpPipe<'_> {
             input.payload,
             input.protocol,
             input.auth,
+            input.client_session_id,
         )
         .await
     }

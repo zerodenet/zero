@@ -13,13 +13,21 @@ pub(crate) use crate::runtime::orchestration::UdpPathCategory;
 struct UdpFlowKey {
     target: Address,
     port: u16,
+    /// Per-client-session isolation key.
+    ///
+    /// When `Some`, flows with the same `(target, port)` but different
+    /// `client_session_id` are treated as independent relay sessions (SIP022
+    /// 3.2.4). When `None` (legacy AEAD, non-SS protocols), the existing
+    /// `(target, port)` keying is preserved.
+    client_session_id: Option<u64>,
 }
 
 impl UdpFlowKey {
-    fn new(target: &Address, port: u16) -> Self {
+    fn new(target: &Address, port: u16, client_session_id: Option<u64>) -> Self {
         Self {
             target: target.clone(),
             port,
+            client_session_id,
         }
     }
 }
@@ -191,6 +199,8 @@ impl UdpFlowOutbound {
 pub(crate) struct UdpFlowSnapshot {
     pub(crate) session: Session,
     pub(crate) outbound: UdpFlowOutbound,
+    /// Client session isolation key (SIP022 3.2.4).
+    pub(crate) client_session_id: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -207,9 +217,14 @@ pub(crate) struct UdpSessionFlows {
 }
 
 impl UdpSessionFlows {
-    pub(crate) fn snapshot(&self, target: &Address, port: u16) -> Option<UdpFlowSnapshot> {
+    pub(crate) fn snapshot(
+        &self,
+        target: &Address,
+        port: u16,
+        client_session_id: Option<u64>,
+    ) -> Option<UdpFlowSnapshot> {
         self.flows
-            .get(&UdpFlowKey::new(target, port))
+            .get(&UdpFlowKey::new(target, port, client_session_id))
             .map(UdpFlow::snapshot)
     }
 
@@ -217,9 +232,14 @@ impl UdpSessionFlows {
     ///
     /// Used for chain-outbound response metering where the outbound tag
     /// may not be known at the call site.
-    pub(crate) fn session_id_by_target(&self, target: &Address, port: u16) -> Option<u64> {
+    pub(crate) fn session_id_by_target(
+        &self,
+        target: &Address,
+        port: u16,
+        client_session_id: Option<u64>,
+    ) -> Option<u64> {
         self.flows
-            .get(&UdpFlowKey::new(target, port))
+            .get(&UdpFlowKey::new(target, port, client_session_id))
             .map(|flow| flow.session.id)
     }
 
@@ -228,8 +248,9 @@ impl UdpSessionFlows {
         session: Session,
         handle: SessionHandle,
         outbound: UdpFlowOutbound,
+        client_session_id: Option<u64>,
     ) {
-        let key = UdpFlowKey::new(&session.target, session.port);
+        let key = UdpFlowKey::new(&session.target, session.port, client_session_id);
         self.index_flow(&key, &outbound);
         self.flows.insert(
             key,
@@ -237,6 +258,7 @@ impl UdpSessionFlows {
                 session,
                 handle,
                 outbound,
+                client_session_id,
             },
         );
     }
@@ -245,9 +267,10 @@ impl UdpSessionFlows {
         &mut self,
         target: &Address,
         port: u16,
+        client_session_id: Option<u64>,
         outcome: SessionOutcome,
     ) -> Option<CompletedUdpFlow> {
-        let key = UdpFlowKey::new(target, port);
+        let key = UdpFlowKey::new(target, port, client_session_id);
         let flow = self.flows.remove(&key)?;
         self.unindex_flow(&key, &flow.outbound);
         Some(flow.finish(outcome))
@@ -350,6 +373,7 @@ struct UdpFlow {
     session: Session,
     handle: SessionHandle,
     outbound: UdpFlowOutbound,
+    client_session_id: Option<u64>,
 }
 
 impl UdpFlow {
@@ -357,6 +381,7 @@ impl UdpFlow {
         UdpFlowSnapshot {
             session: self.session.clone(),
             outbound: self.outbound.clone(),
+            client_session_id: self.client_session_id,
         }
     }
 

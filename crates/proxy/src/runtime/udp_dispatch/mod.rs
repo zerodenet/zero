@@ -301,8 +301,13 @@ impl UdpDispatch {
     ///
     /// Used for chain-outbound response metering where the outbound tag
     /// may not be known at the call site.
-    pub(crate) fn session_id_by_target(&self, target: &Address, port: u16) -> Option<u64> {
-        self.flows.session_id_by_target(target, port)
+    pub(crate) fn session_id_by_target(
+        &self,
+        target: &Address,
+        port: u16,
+        client_session_id: Option<u64>,
+    ) -> Option<u64> {
+        self.flows.session_id_by_target(target, port, client_session_id)
     }
 
     /// Look up the session ID for an upstream response (requires outbound tag).
@@ -380,10 +385,14 @@ impl UdpDispatch {
 
     /// Dispatch a UDP packet: route, select outbound, send.
     ///
-    /// If a flow already exists for `(target, port)` (including VLESS chain
-    /// connections cached in the manager), forwards the payload.  Otherwise
-    /// creates a new session, routes through the engine, and dispatches to
-    /// the resolved outbound.
+    /// If a flow already exists for `(target, port, client_session_id)`
+    /// (including VLESS chain connections cached in the manager), forwards the
+    /// payload.  Otherwise creates a new session, routes through the engine,
+    /// and dispatches to the resolved outbound.
+    ///
+    /// `client_session_id`: when `Some`, isolates flows that would otherwise
+    /// collide on `(target, port)` alone (SIP022 3.2.4 per-client-session
+    /// routing).  All non-SS inbound callers pass `None`.
     ///
     /// Supports all outbound types: direct, block, socks5, vless,
     /// shadowsocks, hysteria2, trojan, mieru.
@@ -396,6 +405,7 @@ impl UdpDispatch {
         payload: &[u8],
         protocol: ProtocolType,
         auth: Option<&SessionAuth>,
+        client_session_id: Option<u64>,
     ) -> Result<u64, EngineError> {
         // VLESS manager shortcut (cached upstream).
         if let Some(handle) = self.vless_manager.get(&target, port) {
@@ -441,7 +451,7 @@ impl UdpDispatch {
         }
 
         // Existing flow (direct / socks5 / ss / h2 / trojan / mieru).
-        if let Some(flow) = self.flows.snapshot(&target, port) {
+        if let Some(flow) = self.flows.snapshot(&target, port, client_session_id) {
             self.forward_existing(proxy, &flow, payload).await?;
             return Ok(flow.session.id);
         }
@@ -491,7 +501,8 @@ impl UdpDispatch {
                     let session_id = session.id;
                     session.outbound_tag = Some(outbound.tag().to_owned());
                     proxy.set_session_outbound(&session);
-                    self.flows.insert(session, session_handle, outbound);
+                    self.flows
+                        .insert(session, session_handle, outbound, client_session_id);
                     proxy.record_session_outbound_tx(session_id, tx_bytes);
                     return Ok(session_id);
                 }
@@ -639,6 +650,7 @@ impl UdpDispatch {
         if let Some(completed) = self.flows.finish(
             &flow.session.target,
             flow.session.port,
+            flow.client_session_id,
             SessionOutcome::Failed,
         ) {
             log_session_failed(
