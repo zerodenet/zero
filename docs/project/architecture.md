@@ -192,13 +192,14 @@ UDP datagram 由内核 UDP 分发路径处理。分发层拥有路由决策、fa
 
 - `zero-transport`
 
-统一传输抽象：TLS、WebSocket、gRPC、H2、HTTPUpgrade、XHTTP（原 SplitHTTP，配置字段 `split_http`，含 `mode`）、QUIC（共享 H3 基座；VLESS 独立 QUIC 传输已被 XTLS 弃用）、Hysteria2 QUIC、VLESS 传输。还包含内核中继路径使用的共享 `RateLimiter`（GCRA）。
+统一传输抽象：TLS、WebSocket、gRPC、H2、HTTPUpgrade、XHTTP（原 SplitHTTP，配置字段 `split_http`，含 `mode`）、QUIC（共享 H3 基座；VLESS 独立 QUIC 传输已被 XTLS 弃用）、Hysteria2 QUIC、VLESS 传输。还包含内核中继路径使用的共享 `RateLimiter`（GCRA）。TLS 客户端指纹（自定义 ClientHello，用于单跳和 relay-stream 最终跳）经 `zero-ztls` 自定义 TLS 1.3 客户端栈实现（从 REALITY 抽取，uTLS 级浏览器指纹匹配）。
 
 ## 支撑 Crates
 
 - `zero-api` -- 管控面 API 类型
 - `zero-connector` -- 事件分发 connector（JSONL sink、webhook、push）
 - `zero-crypto` -- 加密基础设施（Reality TLS 1.3、密钥交换、证书操作）
+- `zero-ztls` -- 通用 TLS 1.3 客户端实现，支持自定义 ClientHello（从 REALITY TLS 1.3 栈抽取），供 `zero-transport` 在单跳与 relay-stream 最终跳路径上做 TLS 客户端指纹匹配（uTLS 级浏览器指纹）
 - `zero-logging` -- 结构化日志
 - `zero-ffi` -- C 兼容嵌入式接口
 - `zero-grpc` -- gRPC 管控面适配器（`grpc_api` feature）
@@ -249,6 +250,7 @@ UDP datagram 由内核 UDP 分发路径处理。分发层拥有路由决策、fa
 
 - `zero` -> `config`, `engine`, `proxy`, `api`, `connector`（可选）, `grpc`（可选）
 - `proxy` -> `engine`, `config`, `protocols/*`, `transport`, `stack`, `tun`, `dns`
+- `transport` -> `config`, `core`, `engine`, `ztls`
 - `engine` -> `config`, `router`, `core`, `api`
 - `stack` -> `traits`
 - `tun` -> `traits`

@@ -139,7 +139,7 @@ make fmt / check / test / clippy / build / release / run / run-status / status /
    - `crates/connector` (`zero-connector`) — event dispatcher connectors (jsonl sink, webhook, push)
    - `crates/crypto` (`zero-crypto`) — crypto utilities (Reality, TLS)
    - `crates/logging` (`zero-logging`) — structured logging
-   - `crates/web` (`zero-web`) — web utilities (WebSocket)
+   - `crates/ztls` (`ztls`) — custom TLS 1.3 client with ClientHello control (uTLS-level fingerprinting); used by `zero-transport`
    - `crates/ffi` (`zero-ffi`) — C-compatible embedded interface
 
 6. **Abstraction Layer**
