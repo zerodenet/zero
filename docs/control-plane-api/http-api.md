@@ -180,6 +180,9 @@ API 能力列表。
   "udp_upstream_idle_timeout_seconds": 300,
   "log_level": "info",
   "log_files": ["logs/zero.log"],
+  "pid": 12345,
+  "config_path": "examples/v0.0.1/basic.json",
+  "started_at_unix_ms": 1713500000000,
   "active_sessions": [],
   "recent_completed_sessions": []
 }
@@ -191,6 +194,9 @@ API 能力列表。
 | `udp_upstream_idle_timeout_seconds` | UDP upstream 空闲超时 |
 | `log_level` | 当前日志级别（`trace`/`debug`/`info`/`warn`/`error`） |
 | `log_files` | 配置的日志文件路径列表，无文件输出时为空数组 |
+| `pid` | 守护进程 OS 进程 ID |
+| `config_path` | 运行中的配置文件路径（未指定时省略） |
+| `started_at_unix_ms` | 进程启动时间（UNIX 毫秒） |
 | `active_sessions` | 活动流详情列表 |
 | `recent_completed_sessions` | 最近完成的流详情列表 |
 
@@ -285,6 +291,8 @@ Response：
 - `not_found` — policy 不存在
 - `invalid_argument` — target 不在 members 中
 
+权限：`control`
+
 #### policies.probe
 
 触发 `url_test` 立即执行一轮探测（**异步**：命令仅触发，不等探测完成）。
@@ -305,6 +313,8 @@ Response（同步返回的只是"已触发"，**不含延迟**）：
 
 错误：`not_found` — policy 不存在或不是 `url_test` 类型
 
+权限：`control`
+
 #### flows.close
 
 主动关闭活动 flow。
@@ -318,6 +328,8 @@ Response：
 
 错误：`not_found` — flow 不存在或已结束
 
+权限：`control`
+
 #### config.validate
 
 校验配置有效性，不改变运行时状态。
@@ -330,6 +342,8 @@ Response：
 ```
 
 错误：`invalid_argument` — 配置无效（cause 字段包含详情）
+
+权限：`config`
 
 #### config.apply
 
