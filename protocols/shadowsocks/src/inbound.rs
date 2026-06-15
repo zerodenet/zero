@@ -93,6 +93,11 @@ impl ShadowsocksInbound {
 
     /// 2022 edition (SIP022) accept: read salt + fixed-header chunk (nonce 0)
     /// + variable-header chunk (nonce 1). Body chunks follow from nonce 2.
+    ///
+    /// Implements SIP022 3.1.3 detection prevention: the salt + fixed-length
+    /// header are read in a single `read()` call, and on any handshake failure
+    /// the stream is drained before returning so the subsequent close sends FIN
+    /// rather than RST (hiding how many bytes the server consumed).
     #[cfg(all(feature = "crypto", feature = "blake3"))]
     async fn accept_request_2022<S: zero_traits::AsyncSocket>(
         &self,
@@ -100,37 +105,75 @@ impl ShadowsocksInbound {
         cipher: super::shared::CipherKind,
         password: &[u8],
     ) -> Result<ShadowsocksAccept, Error> {
+        match self
+            .accept_request_2022_probe(stream, cipher, password)
+            .await
+        {
+            Ok(accept) => Ok(accept),
+            Err(error) => {
+                // Drain to hide byte consumption from active probers.
+                drain_stream(stream, SS_2022_DRAIN_CAP).await;
+                Err(error)
+            }
+        }
+    }
+
+    /// Single-read + validate the 2022 request, without drain-on-error. The
+    /// caller ([`accept_request_2022`]) drains on failure.
+    #[cfg(all(feature = "crypto", feature = "blake3"))]
+    async fn accept_request_2022_probe<S: zero_traits::AsyncSocket>(
+        &self,
+        stream: &mut S,
+        cipher: super::shared::CipherKind,
+        password: &[u8],
+    ) -> Result<ShadowsocksAccept, Error> {
         use super::shared::{
             decrypt_tcp_2022_single_chunk, derive_session_key, parse_2022_request_fixed_header,
-            parse_2022_request_var_header, read_exact, validate_2022_timestamp,
+            parse_2022_request_var_header, validate_2022_timestamp,
             SS_2022_HEADER_TYPE_CLIENT_STREAM, SS_2022_REQUEST_FIXED_HEADER_LEN,
         };
 
         let salt_len = cipher.salt_len();
+        let fixed_size = SS_2022_REQUEST_FIXED_HEADER_LEN + cipher.tag_len();
 
-        // Read salt.
-        let mut salt = vec![0u8; salt_len];
-        read_exact(stream, &mut salt).await?;
+        // SIP022 3.1.3: exactly ONE read for salt + fixed-length header. A
+        // short read means a probe (or a fragmenting path); reject it.
+        let mut head = vec![0u8; salt_len + fixed_size];
+        let n = stream
+            .read(&mut head)
+            .await
+            .map_err(|_| Error::Io("ss: 2022 request read failed"))?;
+        if n < salt_len + fixed_size {
+            return Err(Error::Protocol("ss: 2022 request header too short"));
+        }
 
-        let key = derive_session_key(cipher, password, &salt)?;
-
+        let key = derive_session_key(cipher, password, &head[..salt_len])?;
         let mut nonce = 0u64;
-
-        // Read the fixed-length header chunk: 11B plaintext + 16B tag.
-        let mut enc_fixed = vec![0u8; SS_2022_REQUEST_FIXED_HEADER_LEN + cipher.tag_len()];
-        read_exact(stream, &mut enc_fixed).await?;
-        let fixed_plain = decrypt_tcp_2022_single_chunk(cipher, &key, &mut nonce, &enc_fixed)?;
+        let fixed_plain = decrypt_tcp_2022_single_chunk(
+            cipher,
+            &key,
+            &mut nonce,
+            &head[salt_len..salt_len + fixed_size],
+        )?;
         let (header_type, timestamp, var_len) = parse_2022_request_fixed_header(&fixed_plain)?;
         if header_type != SS_2022_HEADER_TYPE_CLIENT_STREAM {
             return Err(Error::Protocol("ss: 2022 request header bad type"));
         }
         validate_2022_timestamp(timestamp)?;
 
-        // Read the variable-length header chunk: var_len bytes plaintext + tag.
+        // Variable-length header: one read of its AEAD chunk.
         let var_len = var_len as usize;
-        let mut enc_var = vec![0u8; var_len + cipher.tag_len()];
-        read_exact(stream, &mut enc_var).await?;
-        let var_plain = decrypt_tcp_2022_single_chunk(cipher, &key, &mut nonce, &enc_var)?;
+        let var_size = var_len + cipher.tag_len();
+        let mut enc_var = vec![0u8; var_size];
+        let vn = stream
+            .read(&mut enc_var)
+            .await
+            .map_err(|_| Error::Io("ss: 2022 variable header read failed"))?;
+        if vn < var_size {
+            return Err(Error::Protocol("ss: 2022 variable header too short"));
+        }
+        let var_plain =
+            decrypt_tcp_2022_single_chunk(cipher, &key, &mut nonce, &enc_var[..var_size])?;
         if var_plain.len() != var_len {
             return Err(Error::Protocol("ss: 2022 variable header length mismatch"));
         }
@@ -143,9 +186,8 @@ impl ShadowsocksInbound {
             remaining_payload: initial_payload,
             session_key: key,
             cipher,
-            // Body length+payload chunks start at nonce 2.
             next_upload_nonce: nonce,
-            request_salt: salt,
+            request_salt: head[..salt_len].to_vec(),
         })
     }
 
@@ -185,5 +227,26 @@ impl ShadowsocksInbound {
             payload_len,
             &data[length_size..],
         )
+    }
+}
+
+/// SIP022 3.1.3 detection-prevention drain cap (bytes). Bounds the drain so a
+/// malicious peer cannot hold the connection open indefinitely; typical active
+/// probes send far fewer bytes than this.
+const SS_2022_DRAIN_CAP: usize = 1 << 20; // 1 MiB
+
+/// Drain up to `cap` bytes from `stream`, discarding them. Used after a failed
+/// 2022 handshake so closing the connection sends FIN (empty receive buffer)
+/// instead of RST, hiding how many bytes the server consumed.
+#[cfg(all(feature = "crypto", feature = "blake3"))]
+async fn drain_stream<S: zero_traits::AsyncSocket>(stream: &mut S, cap: usize) {
+    let mut buf = [0u8; 4096];
+    let mut total = 0usize;
+    while total < cap {
+        match stream.read(&mut buf).await {
+            Ok(0) => break,
+            Ok(n) => total += n,
+            Err(_) => break,
+        }
     }
 }

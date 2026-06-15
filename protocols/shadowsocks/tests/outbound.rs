@@ -544,6 +544,32 @@ fn udp_2022_server_response_flow_all_blake3_ciphers() {
     }
 }
 
+/// SIP022 3.1.3 detection prevention: a probe that sends fewer bytes than the
+/// salt + fixed-length header is rejected, and the drain does not hang when
+/// the peer then closes the connection.
+#[cfg(feature = "blake3")]
+#[tokio::test]
+async fn ss_2022_rejects_short_header_probe() {
+    let cipher = CipherKind::Blake3Aes256Gcm;
+    let password = password_for_cipher(cipher).to_vec();
+    let (client_io, server_io) = tokio::io::duplex(8192);
+    let (mut client_io, mut server_io) = (TestSocket(client_io), TestSocket(server_io));
+
+    // Send far fewer bytes than salt(32) + fixed-header(27), then close.
+    AsyncWriteExt::write_all(&mut client_io, &[0u8; 5])
+        .await
+        .unwrap();
+    AsyncWriteExt::shutdown(&mut client_io).await.unwrap();
+
+    let accept = ShadowsocksInbound
+        .accept_request(&mut server_io, cipher, &password)
+        .await;
+    assert!(
+        accept.is_err(),
+        "a probe with too few bytes must be rejected"
+    );
+}
+
 // ---- 2022 edition (SIP022) TCP ----
 //
 // The request stream is salt + fixed-header chunk (nonce 0) + variable-header
