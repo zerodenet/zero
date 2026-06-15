@@ -43,5 +43,15 @@ fn main() {
     assert!(payload.len() >= 12, "response too short for DNS");
     assert_eq!(&payload[0..2], &[0x12, 0x34], "DNS id mismatch");
     assert_eq!(payload[2] & 0x80, 0x80, "DNS response QR bit not set");
+
+    // SIP022 3.2.4: resending the exact same packet (same session id + packet
+    // id) must be dropped by the per-session sliding window — no response.
+    sock.set_read_timeout(Some(Duration::from_millis(800)))
+        .unwrap();
+    sock.send_to(&packet, zero_addr).expect("resend replay");
+    match sock.recv_from(&mut buf) {
+        Ok((n, _)) => panic!("replayed packet must be dropped, got {n} bytes"),
+        Err(e) => eprintln!("replay correctly rejected (recv timed out: {e})"),
+    }
     println!("UDP-2022-SERVER-OK");
 }
