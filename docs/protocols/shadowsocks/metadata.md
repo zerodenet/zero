@@ -23,8 +23,8 @@ impl ProtocolMetadata for ShadowsocksProtocol {
             transports: vec!["tcp", "udp"],
             mux: ProtocolCapabilityLevel::NotApplicable,
             limitations: vec![
-                "shadowsocks_2022_tcp_header_is_not_implemented",
-                "shadowsocks_2022_udp_server_response_context_is_not_implemented",
+                "shadowsocks_2022_hardening_not_externally_validated",
+                "shadowsocks_2022_udp_relays_target_keyed_not_session_id",
             ],
         }
     }
@@ -35,9 +35,9 @@ impl ProtocolMetadata for ShadowsocksProtocol {
 
 | 字段 | 值 | 理由 |
 |------|-----|------|
-| `status` | `partial` | TCP/UDP 基线完成，但 AEAD 2022 TCP 和 server-side UDP response 仍有缺口 |
-| `inbound.tcp` | `supported` | 常规 AEAD + AEAD 2022 TCP inbound accept |
-| `inbound.udp` | `supported` | UDP datagram framing for inbound |
+| `status` | `partial` | SIP022 全部章节已实现；剩余为安全加固外部验证与 UDP 按 session id 路由 |
+| `inbound.tcp` | `supported` | 常规 AEAD + AEAD 2022 TCP inbound accept（SIP022 头部+检测防御+重放） |
+| `inbound.udp` | `supported` | UDP datagram framing for inbound（含 2022 UDP server response + 滑动窗口） |
 | `outbound.tcp` | `supported` | 全 cipher TCP outbound |
 | `outbound.udp` | `supported` | 全 cipher UDP outbound (已外部验证) |
 | `transports` | `["tcp", "udp"]` | Shadowsocks 不使用 transport 层抽象 |
@@ -47,11 +47,13 @@ impl ProtocolMetadata for ShadowsocksProtocol {
 
 | Limitation 码 | 含义 |
 |---------------|------|
-| `shadowsocks_2022_tcp_header_is_not_implemented` | AEAD 2022 TCP 仍使用 AEAD stream wrapper，未实现 SIP022 TCP header |
-| `shadowsocks_2022_udp_server_response_context_is_not_implemented` | AEAD 2022 UDP server response 需要 session control state |
+| `shadowsocks_2022_hardening_not_externally_validated` | SIP022 全部 spec 章节已实现并通过内置测试；但新的检测防御/drain 与滑动窗口尚未对抗真实主动探测/重放攻击完成外部验证 |
+| `shadowsocks_2022_udp_relays_target_keyed_not_session_id` | SIP022 3.2.4 要求按客户端 session id 路由；Zero 的 UDP 调度按 `(target, port)` 复用流，并发同目标客户端可能交叉路由 |
 
 ## 外部互操作状态
 
 - UDP outbound 已完成与 `shadowsocks-rust ssserver -U` 的所有 6 个 cipher 外部互通
-- Xray/sing-box/shadowsocks-rust 外部互操作测试文件：`crates/proxy/tests/shadowsocks_xray_interop.rs`（10 个测试，本地手动执行）
-- AEAD 2022 TCP 外部互通和 AEAD 2022 UDP server 互通尚未完成
+- AEAD 2022 TCP **入站**已通过 `shadowsocks-rust` 参考客户端 `sslocal` 端到端互操作验证（HTTP 200）
+- AEAD 2022 TCP **出站**管线已通过 Zero→Zero 端到端验证（外部 `ssserver` 在此环境有 Windows 单次读取缺陷，已通过参考对对照测试排除 Zero 自身缺陷）
+- AEAD 2022 **UDP server response** 已通过手动探针验证（DNS 往返 + 滑动窗口重放拒绝）：`protocols/shadowsocks/examples/udp_server_probe.rs`
+- 新增的检测防御/drain 与滑动窗口对抗真实主动探测/重放攻击的外部验证尚未完成

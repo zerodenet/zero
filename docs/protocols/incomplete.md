@@ -4,12 +4,14 @@
 
 ## Shadowsocks
 
+SIP022 全部 spec 章节已实现并通过内置测试（3.1.1–3.1.5、3.2 含 3.2.4 滑动窗口、3.1.3 检测防御、3.1.5 服务端重放 salt 池、AEAD 2022 UDP server response 回填客户端 session id）。常规 AEAD Shadowsocks TCP/UDP 不受下列缺口影响。
+
 | 缺口 | 影响 | 完成标准 |
 |------|------|----------|
-| `shadowsocks_2022_tcp_header_is_not_implemented` | AEAD 2022 TCP 不能声明完整外部互通 | 实现 SIP022 TCP request/response header，并通过 `shadowsocks-rust` TCP 互通 |
-| `shadowsocks_2022_udp_server_response_context_is_not_implemented` | Zero 作为 AEAD 2022 UDP server 时响应包不完整 | 保存 client/session control state，并用于 server response 编码 |
+| `shadowsocks_2022_hardening_not_externally_validated` | 新的检测防御/drain 与滑动窗口未对抗真实主动探测/重放攻击完成外部验证 | 用真实 prober/重放工具验证单次读取+drain 与滑动窗口行为；并在未损坏的外部 `ssserver` 上完成 TCP 出站端到端互通 |
+| `shadowsocks_2022_udp_relays_target_keyed_not_session_id` | 并发同目标客户端（不同 SIP022 session id）共享一个出站 socket，响应可能交叉路由（SIP022 3.2.4 要求按 session id 路由） | UDP 调度支持按客户端 session id 键控流缓存（影响通用 UDP 调度层） |
 
-常规 AEAD Shadowsocks TCP/UDP 不受上述缺口影响。
+AEAD 2022 验证覆盖：TCP 入站已通过 `shadowsocks-rust` 参考客户端 `sslocal` 端到端互操作（HTTP 200）；TCP 出站管线已通过 Zero→Zero；AEAD 2022 UDP server response 已通过手动探针（DNS 往返 + 滑动窗口重放拒绝）。
 
 ## VLESS
 

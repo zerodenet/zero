@@ -57,12 +57,9 @@ ShadowsocksAeadStream::new(
 
 Outbound 通过 `ShadowsocksOutboundSession` 返回 session key 材料。Proxy runtime 在 `apply_hop_protocol()` 中构造 `ShadowsocksAeadStream` 包裹已连接的 TCP stream。
 
-## 未完成：AEAD 2022 TCP
+## AEAD 2022 TCP（SIP022）
 
-当前 TCP 2022 仍使用现有 AEAD stream wrapper，没有实现 SIP022 的 TCP request/response header protocol。
+`CipherKind::is_blake3()` 派发到 SIP022 路径：`send_request_2022` 写入 `salt + fixed-header chunk (nonce 0) + variable-header chunk (nonce 1)`，body length/payload 对从 nonce 2 继续；inbound `accept_request_2022` 以**单次读取**接收 salt + fixed-header（SIP022 3.1.3 检测防御），失败时 drain 后再关闭。响应流的 fixed-header chunk（nonce 0，含 request-salt 回填）兼作首个 length chunk，首个 payload chunk 在 nonce 1。三个 blake3 cipher 均覆盖。
 
-完成标准：
-- 实现 AEAD 2022 TCP request header
-- 实现 AEAD 2022 TCP response header
-- 区分常规 AEAD TCP chunking 与 AEAD 2022 TCP header/chunking
-- 与 `shadowsocks-rust` 做本地 TCP 外部互通测试
+验证：TCP 入站已通过 `shadowsocks-rust` 参考客户端 `sslocal` 端到端互操作（HTTP 200）；TCP 出站管线已通过 Zero→Zero 验证；常规 AEAD 与 2022 路径由 `is_blake3()` 在 `send_request` / `accept_request` / `ShadowsocksAeadStream` 中区分。
+
