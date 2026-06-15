@@ -24,7 +24,7 @@ pub(super) fn validate_inbound_protocol(
             http_upgrade,
             fallback: _,
             quic,
-            split_http: _,
+            split_http,
         } => {
             validate_vless_users(users)?;
             if let Some(tls) = tls {
@@ -87,6 +87,9 @@ pub(super) fn validate_inbound_protocol(
                 if let Some(key_path) = &quic.key_path {
                     validate_inbound_optional_non_empty("vless quic.key_path", key_path)?;
                 }
+            }
+            if let Some(split_http) = split_http {
+                validate_xhttp_mode("inbound", &split_http.mode)?;
             }
             Ok(())
         }
@@ -181,7 +184,7 @@ pub(super) fn validate_outbound_protocol(
             h2,
             http_upgrade,
             quic,
-            split_http: _,
+            split_http,
         } => {
             validate_outbound_endpoint("vless", server, *port)?;
             validate_uuid_literal(id).map_err(|message| {
@@ -251,6 +254,9 @@ pub(super) fn validate_outbound_protocol(
                 if let Some(server_name) = &quic.server_name {
                     validate_outbound_optional_non_empty("vless quic.server_name", server_name)?;
                 }
+            }
+            if let Some(split_http) = split_http {
+                validate_xhttp_mode("outbound", &split_http.mode)?;
             }
             Ok(())
         }
@@ -512,6 +518,25 @@ fn base64url_decoded_len(value: &str) -> Option<usize> {
     }
 
     Some(bits / 8)
+}
+
+/// Validate the XHTTP `mode` field on a `vless` `split_http` transport config.
+///
+/// `auto` / `stream-one` resolve to the single-connection path; `packet-up` /
+/// `stream-up` select the legacy two-connection model. Any other value is
+/// rejected. An empty string is treated as the default `auto`.
+fn validate_xhttp_mode(kind: &str, mode: &str) -> Result<(), ConfigError> {
+    let ctor = if kind == "inbound" {
+        ConfigError::InvalidInbound
+    } else {
+        ConfigError::InvalidOutbound
+    };
+    match mode {
+        "" | "auto" | "packet-up" | "stream-up" | "stream-one" => Ok(()),
+        other => Err(ctor(format!(
+            "`vless` {kind} split_http.mode `{other}` is not one of: auto, packet-up, stream-up, stream-one"
+        ))),
+    }
 }
 
 fn validate_outbound_endpoint(

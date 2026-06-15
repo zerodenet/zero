@@ -665,17 +665,21 @@ impl UdpDispatch {
             });
         }
 
-        // ── SplitHTTP fast path (needs two relay prefix streams) ───────
-        // SplitHTTP uses separate POST (write) and GET (read) channels.
-        // Run the relay prefix setup twice so we get two independent TCP
-        // streams through the same set of intermediate hops.
-        if matches!(
+        // ── XHTTP two-stream fast path (packet-up / stream-up only) ─────
+        // The legacy two-connection XHTTP model uses separate POST (write) and
+        // GET (read) channels. Run the relay prefix setup twice so we get two
+        // independent TCP streams through the same set of intermediate hops.
+        //
+        // `stream-one` / `auto` use a single bidirectional connection and fall
+        // through to the generic single-stream final-hop path below.
+        let needs_two_streams = matches!(
             chain.last(),
             Some(ResolvedLeafOutbound::Vless {
-                split_http: Some(_),
+                split_http: Some(cfg),
                 ..
-            })
-        ) {
+            }) if !zero_transport::split_http::XhttpMode::parse(&cfg.mode).is_single_connection()
+        );
+        if needs_two_streams {
             let chain_get = chain.clone();
             let (post_carrier, final_hop) =
                 proxy

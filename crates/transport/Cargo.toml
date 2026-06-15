@@ -44,3 +44,6 @@ zero-platform-tokio = { path = "../platform/tokio" }
 hysteria2 = { path = "../../protocols/hysteria2", features = ["crypto"] }
 vless = { path = "../../protocols/vless", default-features = false, features = ["reality"] }
 zero-traits = { path = "../traits" }
+
+[dev-dependencies]
+tokio = { workspace = true }

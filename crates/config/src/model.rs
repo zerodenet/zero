@@ -767,10 +767,27 @@ pub struct SplitHttpConfig {
     pub host: Option<String>,
     #[serde(default = "default_split_http_path")]
     pub path: String,
+    /// XHTTP framing mode.
+    ///
+    /// - `auto` (default) → `stream-one`: single bidirectional connection,
+    ///   usable as a relay-chain final hop.
+    /// - `stream-one` → explicit single connection.
+    /// - `packet-up` / `stream-up` → legacy two-connection model (POST upload
+    ///   + GET download), single-hop direct only — cannot be a relay final hop.
+    ///
+    /// XTLS removed the standalone `quic` transport; XHTTP `stream-one` over
+    /// H3 is its successor. This project implements the client (outbound)
+    /// side; `auto` and `stream-one` resolve to the single-connection path.
+    #[serde(default = "default_xhttp_mode")]
+    pub mode: String,
 }
 
 fn default_split_http_path() -> String {
     "/".to_string()
+}
+
+fn default_xhttp_mode() -> String {
+    "auto".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,18 +1,25 @@
-//! SplitHTTP (XHTTP) transport — split_http.rs
+//! XHTTP transport (formerly SplitHTTP) — `split_http.rs`
 //!
-//! Splits a bidirectional stream across HTTP POST (upload) + GET (download)
-//! paired by an X-Session-Id header.
+//! Splits a bidirectional stream across HTTP request(s) paired by an
+//! `X-Session-Id` header. XTLS renamed SplitHTTP → XHTTP; the standalone
+//! `quic` transport was removed in favour of XHTTP `stream-one` over H3.
 //!
-//! ## Modes
-//! - **stream-one** (v1): single TCP connection, HTTP pipelining (client)
-//! - **multi-connection** (v2): POST+GET on separate connections, server-side
-//!   `SplitHttpRegistry` pairs them by session ID
+//! ## Modes (`SplitHttpConfig.mode`)
+//! - **stream-one** (default, also selected by `auto`): a single
+//!   bidirectional connection — a chunked POST body carries upload and a
+//!   chunked response body carries download, both over the same TCP/TLS
+//!   socket. This is the only mode that works as a **relay-chain final hop**,
+//!   where the relay prefix provides a single stream. `XhttpStreamOne`
+//!   implements it.
+//! - **packet-up** / **stream-up**: the legacy two-connection model — a POST
+//!   connection uploads, a separate GET connection downloads, paired by the
+//!   server-side `SplitHttpRegistry`. Single-hop direct only; cannot be a
+//!   relay final hop.
 //!
 //! ## Architecture
-//! - Client: stream-one (POST+GET pipelined on one TCP socket)
-//! - Server: `accept_split_http` uses a registry to pair separate POST/GET
-//!   connections. The SECOND connection to arrive creates and returns the
-//!   paired stream; the FIRST returns `None` (consumed by partner).
+//! - Client `stream-one`: `connect_xhttp_stream_one` — one connection.
+//! - Client two-connection: `connect_split_http` — POST + GET on two sockets.
+//! - Server two-connection: `accept_split_http` pairs POST/GET by session ID.
 
 use std::any::Any;
 use std::collections::HashMap;
@@ -78,7 +85,176 @@ impl Default for SplitHttpRegistry {
     }
 }
 
-// ── SplitHttpPairedStream ──
+// ── chunked transfer-encoding decoder (shared) ──
+
+/// HTTP chunked-transfer-encoding decoder state machine.
+///
+/// Pure state over an internal byte buffer — it performs no I/O. The owner
+/// feeds raw bytes via [`ChunkedDecoder::feed`] and drains decoded body bytes
+/// via [`ChunkedDecoder::try_decode`]. This correctly handles arbitrary TCP
+/// segmentation and consumes the trailing `\r\n` after each chunk's data
+/// (the bug the original two-connection decoder had: it parsed the `\r\n`
+/// terminator as a size line and broke on multi-chunk responses).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ChunkState {
+    /// Reading the `<hex>[;ext]\r\n` chunk-size line.
+    Size,
+    /// Reading `chunk_remaining` bytes of chunk data.
+    Data,
+    /// Consuming the trailing `\r\n` after chunk data.
+    Trailer,
+}
+
+/// Outcome of a single [`ChunkedDecoder::try_decode`] pass.
+enum DecodeStep {
+    /// Body bytes were produced, the stream hit EOF, or the output buffer is
+    /// full — the caller returns `Poll::Ready(Ok(()))`.
+    Done,
+    /// More raw bytes are required — the caller feeds its source, then retries.
+    NeedsMore,
+}
+
+struct ChunkedDecoder {
+    /// Buffered raw bytes not yet consumed by the decoder.
+    raw: Vec<u8>,
+    /// Consumed offset within `raw`.
+    raw_pos: usize,
+    state: ChunkState,
+    /// Bytes remaining in the current data chunk.
+    chunk_remaining: usize,
+    /// Set once the terminating `0` chunk has been seen.
+    eof: bool,
+}
+
+impl ChunkedDecoder {
+    fn new() -> Self {
+        Self {
+            raw: Vec::new(),
+            raw_pos: 0,
+            state: ChunkState::Size,
+            chunk_remaining: 0,
+            eof: false,
+        }
+    }
+
+    /// Build a decoder pre-seeded with bytes already read past a header
+    /// boundary (e.g. response body bytes captured during the handshake).
+    fn with_prefetched(prefetched: Vec<u8>) -> Self {
+        Self {
+            raw: prefetched,
+            raw_pos: 0,
+            state: ChunkState::Size,
+            chunk_remaining: 0,
+            eof: false,
+        }
+    }
+
+    fn feed(&mut self, bytes: &[u8]) {
+        self.raw.extend_from_slice(bytes);
+    }
+
+    /// Drop consumed bytes from `raw` once fully drained.
+    fn compact(&mut self) {
+        if self.raw_pos >= self.raw.len() {
+            self.raw.clear();
+            self.raw_pos = 0;
+        }
+    }
+
+    /// Try to decode body bytes into `buf`.
+    ///
+    /// Returns `Done` when output was produced, the stream hit EOF, or the
+    /// output buffer is full; returns `NeedsMore` only when **nothing** was
+    /// produced this pass and more raw bytes are required. This respects the
+    /// `AsyncRead` contract — a caller must never return `Pending` while it
+    /// has already filled the caller's buffer, otherwise the peer waits
+    /// forever for an ack that never comes (a real deadlock the greedy
+    /// version caused in the stream-one round-trip).
+    fn try_decode(&mut self, buf: &mut ReadBuf<'_>) -> io::Result<DecodeStep> {
+        if self.eof {
+            return Ok(DecodeStep::Done);
+        }
+        let mut produced = false;
+        loop {
+            self.compact();
+            match self.state {
+                ChunkState::Size => {
+                    let window = &self.raw[self.raw_pos..];
+                    if let Some(rel) = window.windows(2).position(|w| w == b"\r\n") {
+                        let line = &self.raw[self.raw_pos..self.raw_pos + rel];
+                        self.raw_pos += rel + 2;
+                        let hex_str = std::str::from_utf8(line).map_err(|_| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "split-http: non-UTF-8 chunk size",
+                            )
+                        })?;
+                        // RFC 7230 chunk-size is hex digits, optionally followed
+                        // by `;chunk-ext` — ignore any extension before parsing.
+                        let hex_part = hex_str.split(';').next().unwrap_or("").trim();
+                        let size = usize::from_str_radix(hex_part, 16).map_err(|_| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                format!("split-http: bad chunk-size: {hex_str}"),
+                            )
+                        })?;
+                        if size == 0 {
+                            self.eof = true;
+                            return Ok(DecodeStep::Done);
+                        }
+                        self.chunk_remaining = size;
+                        self.state = ChunkState::Data;
+                        continue;
+                    }
+                    return Ok(if produced {
+                        DecodeStep::Done
+                    } else {
+                        DecodeStep::NeedsMore
+                    });
+                }
+                ChunkState::Data => {
+                    let avail = self.raw.len() - self.raw_pos;
+                    if avail == 0 {
+                        return Ok(if produced {
+                            DecodeStep::Done
+                        } else {
+                            DecodeStep::NeedsMore
+                        });
+                    }
+                    if buf.remaining() == 0 {
+                        return Ok(DecodeStep::Done);
+                    }
+                    let n = avail.min(self.chunk_remaining).min(buf.remaining());
+                    buf.put_slice(&self.raw[self.raw_pos..self.raw_pos + n]);
+                    self.raw_pos += n;
+                    self.chunk_remaining -= n;
+                    produced = true;
+                    if self.chunk_remaining == 0 {
+                        self.state = ChunkState::Trailer;
+                    }
+                    if buf.remaining() == 0 {
+                        return Ok(DecodeStep::Done);
+                    }
+                    continue;
+                }
+                ChunkState::Trailer => {
+                    let avail = self.raw.len() - self.raw_pos;
+                    if avail < 2 {
+                        return Ok(if produced {
+                            DecodeStep::Done
+                        } else {
+                            DecodeStep::NeedsMore
+                        });
+                    }
+                    // Consume the trailing `\r\n` after chunk data.
+                    self.raw_pos += 2;
+                    self.state = ChunkState::Size;
+                    continue;
+                }
+            }
+        }
+    }
+}
 
 /// Bidirectional stream combining POST body (read) and GET response (write).
 ///
@@ -90,11 +266,8 @@ impl Default for SplitHttpRegistry {
 pub struct SplitHttpPairedStream<R, W> {
     reader: R,
     writer: W,
-    /// Remaining bytes in the current data chunk (0 = need new chunk-size).
-    chunk_remaining: usize,
-    /// Line buffer for chunk-size parsing.
-    line_buf: Vec<u8>,
-    line_pos: usize,
+    /// Chunked-download decoder (shared with `XhttpStreamOne`).
+    decoder: ChunkedDecoder,
     /// True after terminating 0-chunk sent.
     write_finished: bool,
 }
@@ -107,9 +280,18 @@ impl<R, W> SplitHttpPairedStream<R, W> {
         Self {
             reader,
             writer,
-            chunk_remaining: 0,
-            line_buf: Vec::new(),
-            line_pos: 0,
+            decoder: ChunkedDecoder::new(),
+            write_finished: false,
+        }
+    }
+
+    /// Construct with response-body bytes already read past the header
+    /// boundary during the connect handshake.
+    fn new_with_prefetched(reader: R, writer: W, prefetched: Vec<u8>) -> Self {
+        Self {
+            reader,
+            writer,
+            decoder: ChunkedDecoder::with_prefetched(prefetched),
             write_finished: false,
         }
     }
@@ -199,8 +381,18 @@ where
         )));
     }
 
+    // Preserve any response-body bytes read past the header boundary — they
+    // are the start of the chunked download stream.
+    let prefetched: Vec<u8> = if head_end < total {
+        buf[head_end..total].to_vec()
+    } else {
+        Vec::new()
+    };
+
     // reader = GET (download from server), writer = POST (upload to server)
-    Ok(SplitHttpPairedStream::new(get, post))
+    Ok(SplitHttpPairedStream::new_with_prefetched(
+        get, post, prefetched,
+    ))
 }
 
 // ── server (inbound) accept ──
@@ -346,86 +538,24 @@ where
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
         let this = self.get_mut();
-
-        // Ensure line buffer has capacity
-        if this.line_buf.capacity() < 1024 {
-            this.line_buf.resize(1024, 0);
-        }
-
         loop {
-            // Serve current chunk data: read directly into the user's buffer,
-            // bounded by remaining chunk size.
-            if this.chunk_remaining > 0 {
-                let limit = this.chunk_remaining.min(buf.remaining());
-                let mut restricted = buf.take(limit);
-                let inner = unsafe { Pin::new_unchecked(&mut this.reader) };
-                match inner.poll_read(cx, &mut restricted) {
-                    Poll::Pending => return Poll::Pending,
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                    Poll::Ready(Ok(())) => {
-                        let added = restricted.filled().len();
-                        if added == 0 {
-                            this.chunk_remaining = 0;
-                        } else {
-                            this.chunk_remaining -= added;
+            match this.decoder.try_decode(buf)? {
+                DecodeStep::Done => return Poll::Ready(Ok(())),
+                DecodeStep::NeedsMore => {
+                    let mut tmp = [0u8; 8192];
+                    let mut rb = ReadBuf::new(&mut tmp);
+                    match Pin::new(&mut this.reader).poll_read(cx, &mut rb) {
+                        Poll::Pending => return Poll::Pending,
+                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                        Poll::Ready(Ok(())) => {
+                            let filled = rb.filled();
+                            if filled.is_empty() {
+                                // Source EOF — treat as stream EOF.
+                                return Poll::Ready(Ok(()));
+                            }
+                            this.decoder.feed(filled);
                         }
-                        // restricted dropped → original buf auto-updated
-                        return Poll::Ready(Ok(()));
                     }
-                }
-            }
-
-            // Parse next chunk-size line from reader
-            let inner = unsafe { Pin::new_unchecked(&mut this.reader) };
-            let fill_start = this.line_pos;
-            if fill_start >= this.line_buf.len() {
-                this.line_buf.resize(this.line_buf.len() + 256, 0);
-            }
-            let mut read_buf = ReadBuf::new(&mut this.line_buf[fill_start..]);
-            match inner.poll_read(cx, &mut read_buf) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                Poll::Ready(Ok(())) => {
-                    let filled = read_buf.filled().len();
-                    if filled == 0 {
-                        return Poll::Ready(Ok(())); // EOF
-                    }
-                    this.line_pos += filled;
-
-                    // Scan for \r\n
-                    if let Some(line_end) = this.line_buf[..this.line_pos]
-                        .windows(2)
-                        .position(|w| w == b"\r\n")
-                    {
-                        let hex_str =
-                            std::str::from_utf8(&this.line_buf[..line_end]).map_err(|_| {
-                                io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    "split-http: invalid chunk-size hex",
-                                )
-                            })?;
-                        let hex_str = hex_str.trim();
-                        let size = usize::from_str_radix(hex_str, 16).map_err(|_| {
-                            io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                format!("split-http: bad chunk-size: {hex_str}"),
-                            )
-                        })?;
-
-                        // Reset line buffer
-                        this.line_pos = 0;
-
-                        if size == 0 {
-                            // Terminating chunk
-                            return Poll::Ready(Ok(())); // EOF: 0 bytes filled
-                        }
-
-                        this.chunk_remaining = size;
-                        continue;
-                    }
-
-                    // Line continues — need more data
-                    continue;
                 }
             }
         }
@@ -532,6 +662,347 @@ where
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "SplitHttp stream does not expose local_addr",
+        ))
+    }
+}
+
+// ── XHTTP mode ──
+
+/// Parsed XHTTP framing mode.
+///
+/// `Auto` and `StreamOne` both resolve to the single-connection path; the
+/// difference is purely documentary. `PacketUp` / `StreamUp` select the
+/// legacy two-connection model and are rejected on a single-stream relay
+/// final hop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XhttpMode {
+    Auto,
+    PacketUp,
+    StreamUp,
+    StreamOne,
+}
+
+impl XhttpMode {
+    /// Parse a mode string, treating the empty string as the default `auto`.
+    /// Returns `None` for unknown values (validation rejects them earlier;
+    /// this is a defensive fallback).
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "" | "auto" => XhttpMode::Auto,
+            "packet-up" => XhttpMode::PacketUp,
+            "stream-up" => XhttpMode::StreamUp,
+            "stream-one" => XhttpMode::StreamOne,
+            _ => XhttpMode::Auto,
+        }
+    }
+
+    /// Whether the mode runs over a single bidirectional connection.
+    ///
+    /// `auto` resolves to `stream-one` on the client side: it is the only
+    /// mode usable as a relay-chain final hop and the most compatible choice
+    /// for asymmetric server deployments.
+    pub fn is_single_connection(self) -> bool {
+        matches!(self, XhttpMode::Auto | XhttpMode::StreamOne)
+    }
+}
+
+// ── XhttpStreamOne (stream-one: single bidirectional connection) ──
+
+/// Single-connection bidirectional XHTTP stream (`stream-one` mode).
+///
+/// Both upload and download flow over the same underlying connection:
+/// - **upload** (`AsyncWrite`): HTTP/1.1 chunked-encoded POST body.
+/// - **download** (`AsyncRead`): chunked-encoded response body.
+///
+/// This is the only XHTTP mode usable as a relay-chain final hop, where the
+/// relay prefix delivers a single stream. The chunked download decoder is the
+/// shared [`ChunkedDecoder`], which handles arbitrary TCP segmentation
+/// (including the trailing `\r\n` after each chunk's data).
+pub struct XhttpStreamOne<S> {
+    inner: S,
+    /// Chunked-download decoder (shared with `SplitHttpPairedStream`).
+    decoder: ChunkedDecoder,
+    // ── upload (chunked request encoder) ──
+    /// True after the terminating `0\r\n\r\n` has been sent.
+    write_finished: bool,
+}
+
+/// Connect via XHTTP `stream-one` over a single bidirectional connection.
+///
+/// Sends a chunked POST request (upload) and reads the `200` chunked response
+/// (download) on the **same** connection. The returned stream reads the
+/// chunked response body and writes the chunked request body concurrently —
+/// safe because the underlying connection is full-duplex.
+///
+/// Pass either a raw TCP socket or an already-wrapped TLS stream. For a
+/// relay-chain final hop, pass the relay carrier stream directly.
+pub async fn connect_xhttp_stream_one<S>(
+    stream: S,
+    config: &SplitHttpConfig,
+) -> Result<XhttpStreamOne<S>, EngineError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let host = config.host.as_deref().unwrap_or("localhost");
+    let path = config.path.as_str();
+    let session_id = gen_session_id();
+
+    let mut s = stream;
+    // Upload is a chunked POST body; download arrives as the chunked response
+    // body on the same connection (stream-one).
+    let req = format!(
+        "POST {path} HTTP/1.1\r\n\
+         Host: {host}\r\n\
+         X-Session-Id: {session_id}\r\n\
+         Transfer-Encoding: chunked\r\n\
+         Content-Type: application/octet-stream\r\n\
+         \r\n"
+    );
+    s.write_all(req.as_bytes()).await.map_err(EngineError::Io)?;
+    s.flush().await.map_err(EngineError::Io)?;
+
+    // Read response status line + headers. The server emits these immediately
+    // in stream-one; the body streams afterwards on the same connection.
+    let mut buf = vec![0u8; 8192];
+    let mut total = 0;
+    let head_end = loop {
+        let n = s.read(&mut buf[total..]).await.map_err(EngineError::Io)?;
+        if n == 0 {
+            return Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "xhttp stream-one: unexpected EOF reading response",
+            )));
+        }
+        total += n;
+        if let Some(end) = find_header_end(&buf[..total]) {
+            break end;
+        }
+        if total >= buf.len() {
+            return Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "xhttp stream-one: response headers too large",
+            )));
+        }
+    };
+
+    let status = parse_status(&buf[..head_end]);
+    if status != Some(200) {
+        return Err(EngineError::Io(io::Error::new(
+            io::ErrorKind::ConnectionRefused,
+            format!("xhttp stream-one: expected 200, got {status:?}"),
+        )));
+    }
+
+    // Preserve any response-body bytes read past the header boundary — they
+    // are the start of the chunked download stream.
+    let prefetched: Vec<u8> = if head_end < total {
+        buf[head_end..total].to_vec()
+    } else {
+        Vec::new()
+    };
+
+    Ok(XhttpStreamOne {
+        inner: s,
+        decoder: ChunkedDecoder::with_prefetched(prefetched),
+        write_finished: false,
+    })
+}
+
+/// Accept an XHTTP `stream-one` connection on the server (inbound) side.
+///
+/// The mirror of [`connect_xhttp_stream_one`]: reads the client's chunked POST
+/// request headers, immediately writes back a `200` chunked response on the
+/// **same** connection, then returns a bidirectional stream. The returned
+/// stream's `AsyncRead` decodes the client's upload (POST body) and its
+/// `AsyncWrite` encodes the download (response body) — full-duplex over the
+/// single connection.
+///
+/// The server emits the response headers before reading any upload body, so
+/// there is no request/response deadlock when the client waits for the
+/// response before uploading.
+pub async fn accept_xhttp_stream_one<S>(
+    stream: S,
+    config: &SplitHttpConfig,
+) -> Result<XhttpStreamOne<S>, EngineError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let mut s = stream;
+
+    // Read the client's POST request line + headers.
+    let mut buf = vec![0u8; 8192];
+    let mut total = 0;
+    let head_end = loop {
+        let n = s.read(&mut buf[total..]).await.map_err(EngineError::Io)?;
+        if n == 0 {
+            return Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "xhttp stream-one accept: unexpected EOF before request headers",
+            )));
+        }
+        total += n;
+        if let Some(end) = find_header_end(&buf[..total]) {
+            break end;
+        }
+        if total >= buf.len() {
+            return Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "xhttp stream-one accept: request headers too large",
+            )));
+        }
+    };
+
+    // Validate the request targets the configured path.
+    validate_path(&buf[..head_end], config.path.as_str())?;
+
+    // Respond 200 with a chunked body on the same connection. Sent before any
+    // upload is consumed, so the client's connect handshake unblocks.
+    s.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+        .await
+        .map_err(EngineError::Io)?;
+    s.flush().await.map_err(EngineError::Io)?;
+
+    // Any request-body bytes already read past the header boundary are the
+    // start of the client's upload — preserve them for the decoder.
+    let prefetched: Vec<u8> = if head_end < total {
+        buf[head_end..total].to_vec()
+    } else {
+        Vec::new()
+    };
+
+    Ok(XhttpStreamOne {
+        inner: s,
+        decoder: ChunkedDecoder::with_prefetched(prefetched),
+        write_finished: false,
+    })
+}
+
+// ── AsyncRead (chunked download decoder) ──
+
+impl<S> AsyncRead for XhttpStreamOne<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+{
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        loop {
+            match this.decoder.try_decode(buf)? {
+                DecodeStep::Done => return Poll::Ready(Ok(())),
+                DecodeStep::NeedsMore => {
+                    let mut tmp = [0u8; 8192];
+                    let mut rb = ReadBuf::new(&mut tmp);
+                    match Pin::new(&mut this.inner).poll_read(cx, &mut rb) {
+                        Poll::Pending => return Poll::Pending,
+                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                        Poll::Ready(Ok(())) => {
+                            let filled = rb.filled();
+                            if filled.is_empty() {
+                                // Source EOF — treat as stream EOF.
+                                return Poll::Ready(Ok(()));
+                            }
+                            this.decoder.feed(filled);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── AsyncWrite (chunked upload encoder) ──
+
+impl<S> AsyncWrite for XhttpStreamOne<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+{
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        if buf.is_empty() || self.write_finished {
+            return Poll::Ready(Ok(0));
+        }
+        let this = self.get_mut();
+
+        let header = format!("{:x}\r\n", buf.len());
+        let frame: Vec<u8> = header
+            .as_bytes()
+            .iter()
+            .chain(buf.iter())
+            .chain(b"\r\n".iter())
+            .copied()
+            .collect();
+
+        match Pin::new(&mut this.inner).poll_write(cx, &frame) {
+            Poll::Ready(Ok(written)) => {
+                let data_written = if written >= header.len() + 2 {
+                    buf.len().min(written - header.len() - 2)
+                } else {
+                    0
+                };
+                Poll::Ready(Ok(data_written))
+            }
+            other => other,
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.get_mut().inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        let this = self.get_mut();
+        if this.write_finished {
+            return Poll::Ready(Ok(()));
+        }
+        this.write_finished = true;
+        let write_res = Pin::new(&mut this.inner).poll_write(cx, b"0\r\n\r\n");
+        match write_res {
+            Poll::Ready(Ok(_)) => {
+                let _ = Pin::new(&mut this.inner).poll_flush(cx);
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+// ── AsyncSocket ──
+
+impl<S> AsyncSocket for XhttpStreamOne<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+{
+    type Error = io::Error;
+
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        AsyncReadExt::read(self, buf).await
+    }
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        AsyncWriteExt::write_all(self, buf).await?;
+        AsyncWriteExt::flush(self).await
+    }
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        AsyncWriteExt::shutdown(self).await
+    }
+}
+
+// ── ClientStream ──
+
+impl<S> ClientStream for XhttpStreamOne<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+{
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "XHTTP stream-one stream does not expose local_addr",
         ))
     }
 }

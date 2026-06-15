@@ -10,7 +10,7 @@ impl ProtocolMetadata for VlessProtocol {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
         let supported = ProtocolCapabilityState::supported();
         let partial_udp =
-            ProtocolCapabilityState::partial(&["udp_relay_chain_final_transport_limited"]);
+            ProtocolCapabilityState::partial(&["udp_relay_final_hop_not_externally_validated"]);
 
         ProtocolCapabilityDescriptor {
             protocol: "vless",
@@ -27,13 +27,13 @@ impl ProtocolMetadata for VlessProtocol {
                 "grpc",
                 "h2",
                 "http_upgrade",
-                "split_http",
-                "quic",
+                "xhttp",
             ],
             mux: ProtocolCapabilityState::partial(&["mux_udp_outbound_not_wired"]),
             limitations: &[
-                "udp_relay_chain_final_transport_limited",
                 "mux_udp_outbound_not_wired",
+                "vless_quic_transport_deprecated_by_xtls",
+                "udp_relay_final_hop_not_externally_validated",
             ],
         }
     }

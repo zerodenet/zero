@@ -37,8 +37,22 @@ pub async fn build_vless_outbound_transport(
     server: &str,
     port: u16,
 ) -> Result<TcpRelayStream, EngineError> {
-    // SplitHTTP is handled first because it is mutually exclusive with other transports.
+    // XHTTP is handled first because it is mutually exclusive with other transports.
     if let Some(cfg) = split_http_config {
+        let mode = split_http::XhttpMode::parse(&cfg.mode);
+        // stream-one (and `auto`): a single bidirectional connection — one TCP/TLS
+        // socket carries both the chunked upload and the chunked download.
+        if mode.is_single_connection() {
+            let carrier: TcpRelayStream = match tls_config {
+                Some(tls) => tls::connect_tls_upstream(socket, tls, source_dir, server).await?,
+                None => TcpRelayStream::new(socket),
+            };
+            return Ok(TcpRelayStream::new(
+                split_http::connect_xhttp_stream_one(carrier, cfg).await?,
+            ));
+        }
+
+        // packet-up / stream-up: legacy two-connection model (POST + GET).
         let peer = socket.peer_addr().map_err(EngineError::Io)?;
         let stream: TcpRelayStream = match tls_config {
             Some(tls) => {
@@ -187,13 +201,27 @@ pub async fn build_vless_outbound_transport_over_stream(
     // Shadow to match the original &str / u16 types used throughout the function.
     let server: &str = &server;
     if let Some(cfg) = split_http_config {
-        // Single-hop SplitHTTP is handled by build_vless_outbound_transport().
-        // Relay-chain SplitHTTP goes through build_vless_split_http_over_relay()
-        // in start_relay_flow, which provides both POST and GET streams.
-        // This path only receives a single stream — emit a clear diagnostic.
+        let mode = split_http::XhttpMode::parse(&cfg.mode);
+        // stream-one (and `auto`): a single bidirectional connection. This is
+        // the path that makes XHTTP usable as a relay-chain final hop — the
+        // relay prefix delivers exactly one stream, which stream-one uses for
+        // both the chunked upload and the chunked download.
+        if mode.is_single_connection() {
+            let carrier: TcpRelayStream = match tls_config {
+                Some(tls) => tls::connect_tls_stream(stream, tls, source_dir, server).await?,
+                None => stream,
+            };
+            return Ok(TcpRelayStream::new(
+                split_http::connect_xhttp_stream_one(carrier, cfg).await?,
+            ));
+        }
+        // packet-up / stream-up require two independent connections (POST + GET);
+        // a relay chain provides only one stream per hop, so they cannot serve
+        // as a final hop here. The two-stream path lives in
+        // `build_vless_split_http_over_relay` (used by the UDP relay fast path).
         return Err(EngineError::Io(io::Error::new(
             io::ErrorKind::Unsupported,
-            "split_http requires two streams; use build_vless_split_http_over_relay for relay chains",
+            "xhttp packet-up/stream-up require two streams; use mode stream-one (or auto) for relay final-hop",
         )));
     }
 

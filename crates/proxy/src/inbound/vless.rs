@@ -424,6 +424,17 @@ impl Proxy {
     where
         S: ClientStream + 'static,
     {
+        if let Some(cfg) = split_http_config {
+            // stream-one / auto: a single bidirectional connection. The server
+            // reads the client's POST, responds on the same socket, and the
+            // same stream carries upload + download. No registry needed.
+            if zero_transport::split_http::XhttpMode::parse(&cfg.mode).is_single_connection() {
+                let stream_one = crate::transport::accept_xhttp_stream_one(stream, cfg).await?;
+                return self
+                    .handle_vless_client(stream_one, inbound_tag, users, fallback, sni)
+                    .await;
+            }
+        }
         if let (Some(cfg), Some(reg)) = (split_http_config, split_http_registry) {
             match crate::transport::accept_split_http(stream, cfg, reg).await? {
                 Some(split_stream) => {
