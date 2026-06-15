@@ -4,22 +4,21 @@
 
 ## Shadowsocks
 
-SIP022 全部 spec 章节已实现并通过内置测试（3.1.1–3.1.5、3.2 含 3.2.4 滑动窗口、3.1.3 检测防御、3.1.5 服务端重放 salt 池、AEAD 2022 UDP server response 回填客户端 session id）。常规 AEAD Shadowsocks TCP/UDP 不受下列缺口影响。
+SIP022 全部 spec 章节已实现并通过内置测试（3.1.1–3.1.5、3.2 含 3.2.4 滑动窗口 + 按客户端 session id 隔离 UDP 中继流、3.1.3 检测防御、3.1.5 服务端重放 salt 池、AEAD 2022 UDP server response 回填客户端 session id）。常规 AEAD Shadowsocks TCP/UDP 不受下列缺口影响。
 
 | 缺口 | 影响 | 完成标准 |
 |------|------|----------|
 | `shadowsocks_2022_hardening_not_externally_validated` | 新的检测防御/drain 与滑动窗口未对抗真实主动探测/重放攻击完成外部验证 | 用真实 prober/重放工具验证单次读取+drain 与滑动窗口行为；并在未损坏的外部 `ssserver` 上完成 TCP 出站端到端互通 |
-| `shadowsocks_2022_udp_relays_target_keyed_not_session_id` | 并发同目标客户端（不同 SIP022 session id）共享一个出站 socket，响应可能交叉路由（SIP022 3.2.4 要求按 session id 路由） | UDP 调度支持按客户端 session id 键控流缓存（影响通用 UDP 调度层） |
 
-AEAD 2022 验证覆盖：TCP 入站已通过 `shadowsocks-rust` 参考客户端 `sslocal` 端到端互操作（HTTP 200）；TCP 出站管线已通过 Zero→Zero；AEAD 2022 UDP server response 已通过手动探针（DNS 往返 + 滑动窗口重放拒绝）。
+AEAD 2022 验证覆盖：TCP 入站已通过 `shadowsocks-rust` 参考客户端 `sslocal` 端到端互操作（HTTP 200）；TCP 出站管线已通过 Zero→Zero；AEAD 2022 UDP server response 已通过手动探针（DNS 往返 + 滑动窗口重放拒绝）；SIP022 3.2.4 按 session id 隔离 UDP 中继流已实现（`UdpFlowKey` 增加 `client_session_id` 维度）。
 
 ## VLESS
 
 | 缺口 | 影响 | 完成标准 |
 |------|------|----------|
-| `mux_udp_is_not_implemented` | VLESS MUX 不承载 UDP sub-connection | 实现 UDP MUX sub-connection 编解码和运行时派发 |
-| `udp_relay_chain_final_transport_limited` | UDP relay-chain 不支持所有 final-hop transport | SplitHTTP、QUIC 等非当前 TCP relay stream 路径有明确实现 |
-| `non_reality_tls_fingerprint_passthrough_is_incomplete` | 非 Reality TLS fingerprint 行为不完整 | 将 fingerprint cipher suite / key exchange 偏好传入 TLS 实现 |
+| `mux_udp_is_not_implemented` | VLESS MUX UDP outbound API（`MuxConnectionPool::open_udp_stream`）已实现但尚未接入 `VlessUdpOutboundManager`；inbound MUX UDP 已完备 | 将 MUX UDP outbound API 接入 UDP 调度路径 |
+| `udp_relay_chain_final_transport_limited` | SplitHTTP 最终跳已通过 `start_relay_flow()` fast path 实现；QUIC 因需要非 TCP 载体仍不支持作为链最终跳 | QUIC 路径明确实现方案或记录为架构限制 |
+| `non_reality_tls_fingerprint_passthrough_is_incomplete` | 已审计确认 fingerprint 通过 `ClientTlsConfig.client_fingerprint` 隐式传递到 `connect_tls_upstream()`，SplitHTTP/gRPC/H2/WS + TLS 路径均已覆盖。非功能缺失 | 从 limitation 列表移除（已在 metadata.rs 中移除） |
 
 ## Trojan
 
