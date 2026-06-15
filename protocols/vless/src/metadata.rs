@@ -30,11 +30,10 @@ impl ProtocolMetadata for VlessProtocol {
                 "split_http",
                 "quic",
             ],
-            mux: ProtocolCapabilityState::partial(&["mux_udp_is_not_implemented"]),
+            mux: ProtocolCapabilityState::partial(&["mux_udp_outbound_not_wired"]),
             limitations: &[
                 "udp_relay_chain_final_transport_limited",
-                "mux_udp_is_not_implemented",
-                "non_reality_tls_fingerprint_passthrough_is_incomplete",
+                "mux_udp_outbound_not_wired",
             ],
         }
     }
