@@ -3,6 +3,33 @@ use thiserror::Error;
 
 use crate::Permission;
 
+/// A single structured diagnostic attached to an [`ApiError`].
+///
+/// Carries a machine-usable `field_path` (e.g. `"inbounds[0].protocol"`,
+/// `"route.rules[2]"`) plus a human-readable `message`, so GUIs can render
+/// validation errors next to the offending form field instead of showing
+/// one opaque message. An error may carry multiple details (e.g. when a
+/// config validation collects several field errors); single-error cases
+/// carry one entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ErrorDetail {
+    /// Dotted/indices field path the diagnostic applies to. Omitted when
+    /// the error is not field-specific.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_path: Option<String>,
+    /// Human-readable explanation of this specific diagnostic.
+    pub message: String,
+}
+
+impl ErrorDetail {
+    pub fn new(field_path: Option<impl Into<String>>, message: impl Into<String>) -> Self {
+        Self {
+            field_path: field_path.map(Into::into),
+            message: message.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
 #[error("{code}: {message}")]
 pub struct ApiError {
@@ -10,6 +37,10 @@ pub struct ApiError {
     pub message: String,
     pub field_path: Option<String>,
     pub cause: Option<String>,
+    /// Structured, field-level diagnostics. Empty for non-validation
+    /// errors. On the wire only when non-empty (`skip_serializing_if`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub details: Vec<ErrorDetail>,
 }
 
 impl ApiError {
@@ -19,6 +50,7 @@ impl ApiError {
             message: message.into(),
             field_path: None,
             cause: None,
+            details: Vec::new(),
         }
     }
 
@@ -27,6 +59,12 @@ impl ApiError {
             ApiErrorCode::PermissionDenied,
             format!("permission `{required:?}` is required"),
         )
+    }
+
+    /// Attach a single structured diagnostic (consuming and returning self).
+    pub fn with_detail(mut self, detail: ErrorDetail) -> Self {
+        self.details.push(detail);
+        self
     }
 }
 

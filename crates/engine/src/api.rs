@@ -433,15 +433,92 @@ fn to_internal_error(error: serde_json::Error) -> ApiError {
         message: "failed to serialize engine query snapshot".to_owned(),
         field_path: None,
         cause: Some(error.to_string()),
+        details: Vec::new(),
     }
 }
 
 fn config_error_to_api(error: zero_config::ConfigError) -> ApiError {
-    ApiError {
+    use zero_config::ConfigError;
+    // Map each ConfigError variant to a structured, field-level diagnostic
+    // so GUIs can highlight the offending config field. The variant's
+    // scope/path/tag data provides the `field_path`; the message is the
+    // human-readable explanation.
+    let detail = |field_path: Option<&str>, message: String| {
+        Some(zero_api::ErrorDetail::new(field_path, message))
+    };
+    let field_detail = match &error {
+        ConfigError::EmptyTag { scope } => detail(Some(scope), format!("`{scope}` tag must not be empty")),
+        ConfigError::DuplicateTag { scope, tag } => detail(Some(scope), format!("duplicate `{scope}` tag `{tag}`")),
+        ConfigError::DuplicateInboundListen { address, port } => detail(Some("inbounds"), format!("duplicate listen endpoint `{address}:{port}`; use `mixed` for multi-protocol same-port listening")),
+        ConfigError::UndefinedRouteTargetTag { tag } => detail(Some("route"), format!("route or mode references undefined target tag `{tag}`")),
+        ConfigError::UndefinedRuleSetTag { tag } => detail(Some("route.rules"), format!("route references undefined rule set tag `{tag}`")),
+        ConfigError::DuplicateRouteTargetTag { tag } => detail(Some("route"), format!("duplicate route target tag `{tag}` across outbounds and outbound groups")),
+        ConfigError::ParseConfig(serde_err) => {
+            let line = serde_err.line();
+            let col = serde_err.column();
+            let loc = if line > 0 || col > 0 {
+                format!(" (line {line}, column {col})")
+            } else {
+                String::new()
+            };
+            detail(Some("config"), format!("failed to parse config{loc}: {serde_err}"))
+        }
+        ConfigError::ReadConfig { path, .. } => detail(Some("config"), format!("failed to read config `{path}`")),
+        ConfigError::ReadRuleSet { path, .. } => detail(Some("rule_sets"), format!("failed to read rule set `{path}`")),
+        // The `Invalid*` string variants already embed a scope prefix like
+        // `inbounds[0] \`tag\`: ...`; use the prefix (up to the first space
+        // or backtick) as the field-path hint.
+        ConfigError::InvalidRuleCondition(msg)
+        | ConfigError::InvalidInbound(msg)
+        | ConfigError::InvalidOutbound(msg)
+        | ConfigError::InvalidRuleSet(msg)
+        | ConfigError::InvalidRouteAction(msg)
+        | ConfigError::InvalidOutboundGroup(msg)
+        | ConfigError::InvalidRuntime(msg)
+        | ConfigError::InvalidApi(msg)
+        | ConfigError::InvalidMode(msg)
+        | ConfigError::InvalidDns(msg) => {
+            let field = invalid_config_field_path(msg);
+            detail(field.as_deref(), msg.clone())
+        }
+    };
+    let mut api = ApiError {
         code: ApiErrorCode::InvalidArgument,
         message: "config validation failed".to_owned(),
         field_path: None,
         cause: Some(error.to_string()),
+        details: Vec::new(),
+    };
+    if let Some(d) = field_detail {
+        api.details.push(d);
+    }
+    api
+}
+
+/// Extract a top-level field-path hint from an `Invalid*` config message.
+///
+/// Two recognized formats:
+/// 1. `"<path-prefix>: <detail>"` (e.g. `inbounds[0] \`tag\`: ...`) → leading
+///    token of the prefix.
+/// 2. A backtick-wrapped field name anywhere in the message (e.g.
+///    `` `runtime.udp_upstream_idle_timeout_seconds` must be ... ``) → the
+///    wrapped name.
+///
+/// `None` when neither yields a usable token.
+fn invalid_config_field_path(message: &str) -> Option<String> {
+    if let Some((prefix, _)) = message.split_once(':') {
+        let token = prefix.trim().split_whitespace().next()?.trim_matches('`');
+        if !token.is_empty() {
+            return Some(token.to_owned());
+        }
+    }
+    let mut parts = message.split('`');
+    parts.next()?; // text before the first backtick
+    let inner = parts.next()?.trim();
+    if inner.is_empty() || inner.contains(' ') {
+        None
+    } else {
+        Some(inner.to_owned())
     }
 }
 
@@ -452,6 +529,7 @@ fn engine_error_to_api(error: EngineError) -> ApiError {
             message: "requested feature is not enabled in this build".to_owned(),
             field_path: None,
             cause: Some(error.to_string()),
+            details: Vec::new(),
         },
         EngineError::Config(error) => config_error_to_api(error),
         EngineError::SelectorGroupNotFound { .. } => ApiError {
@@ -459,12 +537,14 @@ fn engine_error_to_api(error: EngineError) -> ApiError {
             message: "policy was not found".to_owned(),
             field_path: Some("policy_tag".to_owned()),
             cause: Some(error.to_string()),
+            details: Vec::new(),
         },
         EngineError::SelectorGroupTypeMismatch { .. } => ApiError {
             code: ApiErrorCode::InvalidArgument,
             message: "target policy is not selectable".to_owned(),
             field_path: Some("policy_tag".to_owned()),
             cause: Some(error.to_string()),
+            details: Vec::new(),
         },
         EngineError::SelectorTargetNotFound { .. } | EngineError::MissingRouteTarget { .. } => {
             ApiError {
@@ -472,6 +552,7 @@ fn engine_error_to_api(error: EngineError) -> ApiError {
                 message: "policy target is invalid".to_owned(),
                 field_path: Some("target_tag".to_owned()),
                 cause: Some(error.to_string()),
+                details: Vec::new(),
             }
         }
         EngineError::Io(ref io_err) if io_err.kind() == std::io::ErrorKind::NotFound => ApiError {
@@ -479,18 +560,100 @@ fn engine_error_to_api(error: EngineError) -> ApiError {
             message: io_err.to_string(),
             field_path: Some("flow_id".to_owned()),
             cause: Some(error.to_string()),
+            details: Vec::new(),
         },
         EngineError::Io(_) => ApiError {
             code: ApiErrorCode::InvalidArgument,
             message: error.to_string(),
             field_path: None,
             cause: None,
+            details: Vec::new(),
         },
         error => ApiError {
             code: ApiErrorCode::Internal,
             message: "command execution failed".to_owned(),
             field_path: None,
             cause: Some(error.to_string()),
+            details: Vec::new(),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zero_config::ConfigError;
+
+    #[test]
+    fn config_error_details_carry_field_path() {
+        // Structured variant: EmptyTag → field_path = scope.
+        let api = config_error_to_api(ConfigError::EmptyTag { scope: "inbound" });
+        assert_eq!(api.code, ApiErrorCode::InvalidArgument);
+        assert_eq!(api.details.len(), 1);
+        assert_eq!(api.details[0].field_path.as_deref(), Some("inbound"));
+        assert!(api.details[0].message.contains("tag must not be empty"));
+
+        // DuplicateInboundListen → field_path = "inbounds".
+        let api = config_error_to_api(ConfigError::DuplicateInboundListen {
+            address: "0.0.0.0".to_owned(),
+            port: 1080,
+        });
+        assert_eq!(api.details[0].field_path.as_deref(), Some("inbounds"));
+
+        // DuplicateTag carries scope + tag.
+        let api = config_error_to_api(ConfigError::DuplicateTag {
+            scope: "outbound",
+            tag: "dup".to_owned(),
+        });
+        assert_eq!(api.details[0].field_path.as_deref(), Some("outbound"));
+        assert!(api.details[0].message.contains("`dup`"));
+    }
+
+    #[test]
+    fn config_error_invalid_variant_extracts_field_token() {
+        // Invalid* messages embed a path prefix like `inbounds[0] \`tag\`: ...`.
+        let api = config_error_to_api(ConfigError::InvalidInbound(
+            "inbounds[0] `socks-in`: password must not be empty".to_owned(),
+        ));
+        assert_eq!(api.details[0].field_path.as_deref(), Some("inbounds[0]"));
+        assert!(api.details[0]
+            .message
+            .contains("password must not be empty"));
+
+        // Runtime field reference (backtick-wrapped name, no colon prefix).
+        let api = config_error_to_api(ConfigError::InvalidRuntime(
+            "`runtime.udp_upstream_idle_timeout_seconds` must be greater than 0".to_owned(),
+        ));
+        assert_eq!(
+            api.details[0].field_path.as_deref(),
+            Some("runtime.udp_upstream_idle_timeout_seconds")
+        );
+    }
+
+    #[test]
+    fn invalid_config_field_path_extracts_leading_token() {
+        assert_eq!(
+            invalid_config_field_path("inbounds[0] `tag`: bad"),
+            Some("inbounds[0]".to_owned())
+        );
+        assert_eq!(
+            invalid_config_field_path("dns route 1: domain must not be empty"),
+            Some("dns".to_owned())
+        );
+        // No colon separator → no path hint.
+        assert_eq!(invalid_config_field_path("no separator here"), None);
+    }
+
+    #[test]
+    fn details_serialize_when_present() {
+        let api = config_error_to_api(ConfigError::EmptyTag { scope: "inbound" });
+        let json = serde_json::to_value(&api).expect("serialize");
+        assert!(json.get("details").is_some());
+        assert_eq!(json["details"][0]["field_path"], "inbound");
+
+        // Non-validation errors omit details on the wire (skip_serializing_if).
+        let plain = ApiError::new(ApiErrorCode::Internal, "boom");
+        let json = serde_json::to_value(&plain).expect("serialize");
+        assert!(json.get("details").is_none());
     }
 }

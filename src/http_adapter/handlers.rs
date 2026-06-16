@@ -102,6 +102,7 @@ pub fn commands(
             message: "invalid command request".to_owned(),
             field_path: None,
             cause: Some(error.to_string()),
+            details: Vec::new(),
         };
         let status = api_error_status(&api_error);
         let body = serde_json::to_vec_pretty(&ApiResponse::<()>::from_api_error(&api_error))

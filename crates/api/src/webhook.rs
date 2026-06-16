@@ -111,6 +111,7 @@ fn parse_webhook_url(raw_url: &str) -> ApiResult<Url> {
         message: "webhook url is invalid".to_owned(),
         field_path: Some("url".to_owned()),
         cause: Some(error.to_string()),
+        details: Vec::new(),
     })?;
 
     match url.scheme() {
@@ -120,6 +121,7 @@ fn parse_webhook_url(raw_url: &str) -> ApiResult<Url> {
             message: "webhook url scheme must be http or https".to_owned(),
             field_path: Some("url".to_owned()),
             cause: Some(format!("unsupported scheme `{scheme}`")),
+            details: Vec::new(),
         }),
     }
 }
@@ -132,12 +134,14 @@ fn parse_headers(headers: &BTreeMap<String, String>) -> ApiResult<HeaderMap> {
             message: "webhook header name is invalid".to_owned(),
             field_path: Some(format!("headers.{name}")),
             cause: Some(error.to_string()),
+            details: Vec::new(),
         })?;
         let value = HeaderValue::from_str(value).map_err(|error| ApiError {
             code: ApiErrorCode::InvalidArgument,
             message: "webhook header value is invalid".to_owned(),
             field_path: Some(format!("headers.{name}")),
             cause: Some(error.to_string()),
+            details: Vec::new(),
         })?;
         parsed.insert(name, value);
     }
@@ -154,5 +158,6 @@ fn client_error(error: reqwest::Error) -> ApiError {
         message: "failed to build webhook event sink client".to_owned(),
         field_path: None,
         cause: Some(error.to_string()),
+        details: Vec::new(),
     }
 }

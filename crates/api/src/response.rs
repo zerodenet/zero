@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ApiError, API_ID};
+use crate::{ApiError, ErrorDetail, API_ID};
 
 // ── Error body ──────────────────────────────────────────────────────
 
@@ -20,6 +20,10 @@ pub struct EnvelopeError {
     /// Parameter field path for validation errors.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field_path: Option<String>,
+    /// Structured, field-level diagnostics (e.g. config validation errors).
+    /// On the wire only when non-empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub details: Vec<ErrorDetail>,
 }
 
 impl EnvelopeError {
@@ -28,6 +32,7 @@ impl EnvelopeError {
             code: code.into(),
             message: message.into(),
             field_path: None,
+            details: Vec::new(),
         }
     }
 }
@@ -96,6 +101,7 @@ impl<T: Serialize> ApiResponse<T> {
                 code: error.code.as_code_str().to_owned(),
                 message: error.message.clone(),
                 field_path: error.field_path.clone(),
+                details: error.details.clone(),
             }),
         }
     }

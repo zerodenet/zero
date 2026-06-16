@@ -97,6 +97,7 @@ fn serialization_error(error: serde_json::Error) -> ApiError {
         message: "failed to serialize event as json line".to_owned(),
         field_path: None,
         cause: Some(error.to_string()),
+        details: Vec::new(),
     }
 }
 
@@ -106,6 +107,7 @@ fn io_error(error: std::io::Error) -> ApiError {
         message: "failed to write event sink output".to_owned(),
         field_path: None,
         cause: Some(error.to_string()),
+        details: Vec::new(),
     }
 }
 

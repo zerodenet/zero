@@ -33,6 +33,22 @@ HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiRespons
 }
 ```
 
+配置校验失败时附带字段级诊断：
+```json
+{
+  "api_id": "zero.api.v1",
+  "ok": false,
+  "error": {
+    "code": "invalid_argument",
+    "message": "config validation failed",
+    "cause": "`inbounds[0] `socks-in`: password must not be empty",
+    "details": [
+      { "field_path": "inbounds[0]", "message": "`inbounds[0] `socks-in`: password must not be empty" }
+    ]
+  }
+}
+```
+
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `api_id` | string | 协议标识，始终为 `"zero.api.v1"` |
@@ -42,6 +58,7 @@ HTTP 和 IPC 共享相同的响应信封格式（定义在 `zero_api::ApiRespons
 | `error.code` | string | 机器可读错误码（snake_case） |
 | `error.message` | string | 人类可读错误信息 |
 | `error.field_path` | string? | 参数校验错误时的字段路径 |
+| `error.details` | array? | 结构化、字段级诊断；每项 `{field_path?, message}`。配置校验错误时填充，含如 `inbounds[0]`、`runtime.udp_upstream_idle_timeout_seconds` 等字段路径。非校验错误省略此字段 |
 
 > **HTTP 和 IPC 的 `result` 格式不同**：HTTP 的 `result` 直接包含端点数据（如 `{engine_build_id:"build-id",...}`）。IPC 的 `result` 包含一个变体名 key 包裹（如 `{"health":{engine_build_id:"build-id",...}}`）。详见 [ipc-protocol.md](./ipc-protocol.md)。
 
