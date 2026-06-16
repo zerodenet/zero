@@ -29,9 +29,8 @@ impl ProtocolMetadata for VlessProtocol {
                 "http_upgrade",
                 "xhttp",
             ],
-            mux: ProtocolCapabilityState::partial(&["mux_udp_outbound_not_wired"]),
+            mux: supported,
             limitations: &[
-                "mux_udp_outbound_not_wired",
                 "vless_quic_transport_deprecated_by_xtls",
                 "udp_relay_final_hop_not_externally_validated",
             ],
