@@ -34,6 +34,11 @@ impl CompiledRegex {
             pattern,
         })
     }
+
+    /// The original pattern string this regex was compiled from.
+    pub fn pattern(&self) -> &str {
+        &self.pattern
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,6 +115,72 @@ impl RuleSet {
     pub fn decide(&self, address: &Address, sni: Option<&str>) -> RouteAction {
         self.decide_ref(address, sni).clone()
     }
+
+    /// Like [`decide`](Self::decide) but also returns which rule matched
+    /// (index + condition summary), for `diagnostics.trace_route`.
+    /// `matched_rule` is `None` when the decision came from `final_action`.
+    pub fn decide_trace(&self, address: &Address, sni: Option<&str>) -> RouteDecision {
+        if let Some((index, rule)) = self.rules.iter().enumerate().find(|(_, rule)| {
+            condition_matches(&rule.condition, address, sni, self.geoip_db.as_deref())
+        }) {
+            RouteDecision {
+                action: rule.action.clone(),
+                matched_rule: Some(MatchedRule {
+                    index,
+                    condition: condition_describe(&rule.condition),
+                }),
+            }
+        } else {
+            RouteDecision {
+                action: self.final_action.clone(),
+                matched_rule: None,
+            }
+        }
+    }
+}
+
+/// Human-readable summary of a [`RuleCondition`], for diagnostics/trace.
+pub fn condition_describe(condition: &RuleCondition) -> String {
+    let join = |vals: &[String]| vals.join(", ");
+    match condition {
+        RuleCondition::Domain(v) => format!("domain: {}", join(v)),
+        RuleCondition::DomainKeyword(v) => format!("domain_keyword: {}", join(v)),
+        RuleCondition::DomainRegex(v) => {
+            let pats: Vec<&str> = v.iter().map(CompiledRegex::pattern).collect();
+            format!("domain_regex: {}", pats.join(", "))
+        }
+        RuleCondition::Ip(v) => {
+            let nets: Vec<String> = v.iter().map(|n| n.to_string()).collect();
+            format!("ip: {}", nets.join(", "))
+        }
+        RuleCondition::GeoIp(v) => format!("geoip: {}", join(v)),
+        RuleCondition::Sni(v) => format!("sni: {}", join(v)),
+        RuleCondition::And(items) => {
+            let inner: Vec<String> = items.iter().map(condition_describe).collect();
+            format!("and({})", inner.join(", "))
+        }
+        RuleCondition::Or(items) => {
+            let inner: Vec<String> = items.iter().map(condition_describe).collect();
+            format!("or({})", inner.join(", "))
+        }
+    }
+}
+
+/// The rule that produced a routing decision (for `diagnostics.trace_route`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchedRule {
+    /// 0-based index into `RuleSet::rules`.
+    pub index: usize,
+    /// Human-readable condition summary (see [`condition_describe`]).
+    pub condition: String,
+}
+
+/// A routing decision plus the rule that produced it (if any).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteDecision {
+    pub action: RouteAction,
+    /// `None` when the decision came from `final_action` (no rule matched).
+    pub matched_rule: Option<MatchedRule>,
 }
 
 fn condition_matches(
@@ -180,5 +251,75 @@ fn address_to_ip(address: &Address) -> Option<IpAddr> {
         Address::Domain(_) => None,
         Address::Ipv4(bytes) => Some(IpAddr::V4(Ipv4Addr::from(*bytes))),
         Address::Ipv6(bytes) => Some(IpAddr::V6(Ipv6Addr::from(*bytes))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rs(rules: Vec<Rule>, final_action: RouteAction) -> RuleSet {
+        RuleSet::new(rules, final_action)
+    }
+
+    #[test]
+    fn decide_trace_reports_matched_rule_index_and_condition() {
+        let rules = vec![
+            Rule {
+                condition: RuleCondition::Domain(vec!["example.com".to_owned()]),
+                action: RouteAction::Reject,
+            },
+            Rule {
+                condition: RuleCondition::Ip(vec!["10.0.0.0/8".parse().unwrap()]),
+                action: RouteAction::Route("proxy".to_owned()),
+            },
+        ];
+        let router = rs(rules, RouteAction::Direct);
+
+        // First rule matches.
+        let d = router.decide_trace(&Address::Domain("example.com".to_owned()), None);
+        assert_eq!(d.action, RouteAction::Reject);
+        let matched = d.matched_rule.expect("rule matched");
+        assert_eq!(matched.index, 0);
+        assert!(matched.condition.contains("domain: example.com"));
+
+        // Second rule matches.
+        let d = router.decide_trace(&Address::Ipv4([10, 1, 2, 3]), None);
+        assert_eq!(d.action, RouteAction::Route("proxy".to_owned()));
+        assert_eq!(d.matched_rule.as_ref().unwrap().index, 1);
+        assert!(d
+            .matched_rule
+            .as_ref()
+            .unwrap()
+            .condition
+            .contains("ip: 10.0.0.0/8"));
+    }
+
+    #[test]
+    fn decide_trace_final_action_has_no_matched_rule() {
+        let router = rs(vec![], RouteAction::Direct);
+        let d = router.decide_trace(&Address::Domain("unmatched.example".to_owned()), None);
+        assert_eq!(d.action, RouteAction::Direct);
+        assert!(d.matched_rule.is_none());
+    }
+
+    #[test]
+    fn condition_describe_covers_variants() {
+        assert_eq!(
+            condition_describe(&RuleCondition::Domain(vec!["a.com".into(), "b.com".into()])),
+            "domain: a.com, b.com"
+        );
+        let ip: IpNet = "192.168.0.0/16".parse().unwrap();
+        assert_eq!(
+            condition_describe(&RuleCondition::Ip(vec![ip])),
+            "ip: 192.168.0.0/16"
+        );
+        assert_eq!(
+            condition_describe(&RuleCondition::And(vec![
+                RuleCondition::DomainKeyword(vec!["login".into()]),
+                RuleCondition::GeoIp(vec!["CN".into()]),
+            ])),
+            "and(domain_keyword: login, geoip: CN)"
+        );
     }
 }

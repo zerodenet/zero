@@ -520,9 +520,12 @@ Response：
   "port": 443,
   "protocol": "tcp",
   "effective_mode": "rule",
-  "route_action": { "route": "proxy" }
+  "route_action": { "route": "proxy" },
+  "matched_rule": { "index": 2, "condition": "ip: 1.0.0.0/8" }
 }
 ```
+
+`matched_rule` 为命中的规则（0 基 `index` + 人类可读 `condition` 摘要，如 `domain: example.com`、`ip: 10.0.0.0/8`、`and(domain_keyword: login, geoip: CN)`）。命中 `final` 动作（无规则匹配）时为 `null`。
 
 权限：`admin`
 

@@ -731,20 +731,28 @@ impl Engine {
         };
 
         let router = self.router.lock().unwrap_or_else(|e| e.into_inner());
-        let action = router.decide(&address, None);
+        let decision = router.decide_trace(&address, None);
 
         let mode = self.mode_kind();
+
+        let matched_rule = decision.matched_rule.map(|m| {
+            serde_json::json!({
+                "index": m.index,
+                "condition": m.condition,
+            })
+        });
 
         Ok(serde_json::json!({
             "target": target,
             "port": port,
             "protocol": protocol,
             "effective_mode": mode,
-            "route_action": match action {
+            "route_action": match &decision.action {
                 zero_router::RouteAction::Route(tag) => serde_json::json!({"route": tag}),
                 zero_router::RouteAction::Direct => serde_json::json!("direct"),
                 zero_router::RouteAction::Reject => serde_json::json!("reject"),
             },
+            "matched_rule": matched_rule,
         }))
     }
 
