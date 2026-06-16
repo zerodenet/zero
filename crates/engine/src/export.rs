@@ -132,6 +132,7 @@ pub(crate) fn completed_to_flow(session: &CompletedSessionRecord) -> CompletedFl
         process_id: session.process_id,
         process_name: session.process_name.clone(),
         outcome: outcome_name(session.outcome).to_owned(),
+        close_reason: session.close_reason.clone(),
     }
 }
 

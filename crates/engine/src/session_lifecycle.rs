@@ -19,11 +19,22 @@ impl SessionHandle {
     }
 
     pub fn finish(&mut self, outcome: SessionOutcome) -> Option<CompletedSessionRecord> {
+        self.finish_with_reason(outcome, None)
+    }
+
+    /// Finish the session with an explicit close reason.
+    pub fn finish_with_reason(
+        &mut self,
+        outcome: SessionOutcome,
+        close_reason: Option<String>,
+    ) -> Option<CompletedSessionRecord> {
         if self.finished {
             return None;
         }
 
-        let record = self.engine.finish_session(self.session_id, outcome);
+        let record = self
+            .engine
+            .finish_session_with_reason(self.session_id, outcome, close_reason);
         self.finished = true;
         record
     }
@@ -32,9 +43,11 @@ impl SessionHandle {
 impl Drop for SessionHandle {
     fn drop(&mut self) {
         if !self.finished {
-            let _ = self
-                .engine
-                .finish_session(self.session_id, SessionOutcome::Failed);
+            let _ = self.engine.finish_session_with_reason(
+                self.session_id,
+                SessionOutcome::Failed,
+                None,
+            );
         }
     }
 }

@@ -254,6 +254,7 @@ impl EngineEventLog {
                 duration_ms: None,
             },
             outcome: FlowOutcome::DirectRelayed, // placeholder; overwritten at completion
+            close_reason: None,
         };
 
         let payload = serde_json::to_value(payload)
@@ -391,6 +392,7 @@ fn flow_completed_event(
             duration_ms: Some(record.duration_ms),
         },
         outcome: api_outcome(record.outcome),
+        close_reason: record.close_reason.clone(),
     };
 
     let payload =

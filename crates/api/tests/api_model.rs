@@ -100,6 +100,7 @@ fn flow_completed_event_serializes_as_normalized_envelope() {
             duration_ms: Some(5120),
         },
         outcome: FlowOutcome::ChainedRelayed,
+        close_reason: None,
     };
 
     let mut event = ApiEvent::new(

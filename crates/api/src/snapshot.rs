@@ -227,6 +227,9 @@ pub struct CompletedFlowSnapshot {
     pub process_name: Option<String>,
     #[serde(default)]
     pub outcome: String,
+    /// Why the flow ended (standard close reason). Omitted when `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

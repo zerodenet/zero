@@ -71,4 +71,8 @@ pub struct CompletedSessionRecord {
     pub process_id: Option<u32>,
     pub process_name: Option<String>,
     pub outcome: SessionOutcome,
+    /// Why the session ended. `None` = normal peer close / unspecified.
+    /// Recognised values: `"manual"` (flows.close), `"idle_timeout"`,
+    /// `"upstream_error"`.
+    pub close_reason: Option<String>,
 }

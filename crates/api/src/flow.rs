@@ -15,6 +15,9 @@ pub struct FlowEventPayload {
     pub traffic: TrafficStats,
     pub timing: FlowTiming,
     pub outcome: FlowOutcome,
+    /// Why the flow ended (standard close reason). `None` = normal / unspecified.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

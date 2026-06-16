@@ -73,12 +73,13 @@ impl SessionRegistry {
         &self,
         session_id: u64,
         outcome: SessionOutcome,
+        close_reason: Option<String>,
     ) -> Option<CompletedSessionRecord> {
         self.inner
             .lock()
             .expect("session registry lock poisoned")
             .remove(&session_id)
-            .map(|session| session.finish(outcome))
+            .map(|session| session.finish(outcome, close_reason))
     }
 
     pub fn snapshot(&self) -> Vec<ActiveSession> {
@@ -250,7 +251,11 @@ impl ActiveSessionEntry {
         }
     }
 
-    fn finish(&self, outcome: SessionOutcome) -> CompletedSessionRecord {
+    fn finish(
+        &self,
+        outcome: SessionOutcome,
+        close_reason: Option<String>,
+    ) -> CompletedSessionRecord {
         let finished_at_unix_ms = unix_timestamp_ms();
         let duration_ms = self.started_at.elapsed().as_millis() as u64;
         let bytes_up = self.bytes_up.load(Ordering::Relaxed);
@@ -283,6 +288,7 @@ impl ActiveSessionEntry {
             process_id: self.process_id,
             process_name: self.process_name.clone(),
             outcome,
+            close_reason,
         }
     }
 

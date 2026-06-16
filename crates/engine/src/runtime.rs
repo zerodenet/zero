@@ -658,7 +658,18 @@ impl Engine {
         session_id: u64,
         outcome: SessionOutcome,
     ) -> Option<CompletedSessionRecord> {
-        let record = self.session_registry.finish(session_id, outcome)?;
+        self.finish_session_with_reason(session_id, outcome, None)
+    }
+
+    pub fn finish_session_with_reason(
+        &self,
+        session_id: u64,
+        outcome: SessionOutcome,
+        close_reason: Option<String>,
+    ) -> Option<CompletedSessionRecord> {
+        let record = self
+            .session_registry
+            .finish(session_id, outcome, close_reason)?;
         self.stats.record_finish(outcome);
         self.stats.record_traffic(
             record.outbound_tag.as_deref(),
@@ -841,14 +852,18 @@ impl Engine {
                 "invalid flow id",
             ))
         })?;
-        self.finish_session(session_id, SessionOutcome::Cancelled)
-            .map(|_| ())
-            .ok_or_else(|| {
-                EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("flow `{flow_id}` not found or already completed"),
-                ))
-            })
+        self.finish_session_with_reason(
+            session_id,
+            SessionOutcome::Cancelled,
+            Some("manual".to_owned()),
+        )
+        .map(|_| ())
+        .ok_or_else(|| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("flow `{flow_id}` not found or already completed"),
+            ))
+        })
     }
 
     fn outbound_protocol_for_tag(&self, tag: &str) -> Option<&'static str> {

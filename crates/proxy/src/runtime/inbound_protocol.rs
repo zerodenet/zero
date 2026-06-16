@@ -170,7 +170,10 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
                     Ok(())
                 }
                 Ok(Err(error)) => {
-                    let record = handle.finish(SessionOutcome::Failed);
+                    let record = handle.finish_with_reason(
+                        SessionOutcome::Failed,
+                        Some("upstream_error".to_owned()),
+                    );
                     log_session_failed(
                         &session,
                         record.as_ref(),
@@ -183,7 +186,9 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
                 }
                 Err(_elapsed) => {
                     // Idle timeout — clean finish, not an error.
-                    if let Some(record) = handle.finish(outcome) {
+                    if let Some(record) =
+                        handle.finish_with_reason(outcome, Some("idle_timeout".to_owned()))
+                    {
                         log_session_finished(
                             &record,
                             upstream_endpoint.as_ref().map(|(s, p)| (s.as_str(), *p)),
@@ -203,7 +208,8 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
         }
         Err(error) => {
             let _ = protocol.send_upstream_failure(&mut client).await;
-            let record = handle.finish(SessionOutcome::Failed);
+            let record = handle
+                .finish_with_reason(SessionOutcome::Failed, Some("upstream_error".to_owned()));
             log_session_failed(
                 &session,
                 record.as_ref(),

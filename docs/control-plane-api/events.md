@@ -190,13 +190,17 @@ flow 终结事件，是流量统计和计费的核心数据来源。
 
 outcome 值：
 
-| 值 | 说明 |
-|-----|------|
-| `direct_relayed` | 直连成功 |
-| `chained_relayed` | 链式转发成功 |
-| `blocked` | 被路由规则拒绝 |
-| `failed` | 连接失败 |
-| `cancelled` | 被 `flows.close` 关闭 |
+| 值 | close_reason | 说明 |
+|-----|-------------|------|
+| `direct_relayed` | 通常无 | 直连成功 |
+| `chained_relayed` | 通常无 | 链式转发成功 |
+| `blocked` | — | 被路由规则拒绝 |
+| `failed` | `upstream_error` | 上游/传输错误 |
+| `cancelled` | `manual` | 被 `flows.close` 关闭 |
+| (any) | `idle_timeout` | 空闲超时内核原语 |
+| (any) | null (省略) | 正常结束 / 未指定 |
+
+`close_reason` 为 `flow.completed` 负载上的可选字符串字段，用于区分终止原因（标准原因为 `"manual"`、`"idle_timeout"`、`"upstream_error"`）。对于常规对端关闭或 session 生命周期中手动处理之外的其他 finish 路径，会省略该字段。
 
 ### policy.selected
 
