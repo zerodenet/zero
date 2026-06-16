@@ -138,6 +138,72 @@ impl DnsSystem {
         }
     }
 
+    /// Whether a DNS cache is configured.
+    pub fn cache_enabled(&self) -> bool {
+        let guard = self.inner.read().expect("dns system lock poisoned");
+        matches!(&*guard, DnsSystemInner::Configured { cache: Some(_), .. })
+    }
+
+    /// Whether fake-IP allocation is configured.
+    pub fn fake_ip_enabled(&self) -> bool {
+        let guard = self.inner.read().expect("dns system lock poisoned");
+        matches!(
+            &*guard,
+            DnsSystemInner::Configured {
+                fake_ip: Some(_),
+                ..
+            }
+        )
+    }
+
+    /// Inspect a cached domain (diagnostic). Returns (addresses, seconds to
+    /// expiry). `None` if cache disabled, miss, or expired.
+    pub async fn inspect_cache(&self, domain: &str) -> Option<(Vec<String>, u64)> {
+        let cache = self.snapshot_cache()?;
+        let (ips, ttl) = cache.inspect(domain).await?;
+        Some((ips.iter().map(format_ip_address).collect(), ttl))
+    }
+
+    /// Snapshot live cache entries (diagnostic), capped to `limit`.
+    pub async fn list_cache(&self, limit: usize) -> Vec<(String, Vec<String>, u64)> {
+        let Some(cache) = self.snapshot_cache() else {
+            return Vec::new();
+        };
+        cache
+            .entries(limit)
+            .await
+            .into_iter()
+            .map(|(domain, ips, ttl)| (domain, ips.iter().map(format_ip_address).collect(), ttl))
+            .collect()
+    }
+
+    /// Forward fake-IP lookup (diagnostic): domain → assigned fake IP, without
+    /// allocating. Returns the formatted IP, or `None` if fake IP is disabled
+    /// or the domain has no mapping.
+    pub async fn lookup_fake_ip_domain(&self, domain: &str) -> Option<String> {
+        let alloc = self.snapshot_fake_ip()?;
+        let ip = alloc.lookup_domain(domain).await?;
+        Some(format_ip_address(&ip))
+    }
+
+    fn snapshot_cache(&self) -> Option<DnsCache> {
+        let guard = self.inner.read().expect("dns system lock poisoned");
+        match &*guard {
+            DnsSystemInner::Configured { cache: Some(c), .. } => Some(c.clone()),
+            _ => None,
+        }
+    }
+
+    fn snapshot_fake_ip(&self) -> Option<Arc<FakeIpAllocator>> {
+        let guard = self.inner.read().expect("dns system lock poisoned");
+        match &*guard {
+            DnsSystemInner::Configured {
+                fake_ip: Some(a), ..
+            } => Some(Arc::clone(a)),
+            _ => None,
+        }
+    }
+
     /// Take a snapshot of the current inner state for an async resolve.
     fn snapshot(&self) -> Option<ResolveSnapshot> {
         let guard = self.inner.read().expect("dns system lock poisoned");
@@ -251,4 +317,12 @@ async fn race_resolve(
     }
 
     Err(last_err)
+}
+
+/// Format a `zero_traits::IpAddress` as a string (diagnostic display).
+fn format_ip_address(ip: &IpAddress) -> String {
+    match ip {
+        IpAddress::V4(octets) => std::net::Ipv4Addr::from(*octets).to_string(),
+        IpAddress::V6(octets) => std::net::Ipv6Addr::from(*octets).to_string(),
+    }
 }

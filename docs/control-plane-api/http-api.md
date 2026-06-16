@@ -507,6 +507,67 @@ Response：
 
 权限：`admin`
 
+#### diagnostics.dns_cache
+
+查询内核 DNS 解析器缓存（来自 `runtime.dns` 配置，非 OS 解析）。
+
+Params：`domain` (string, 可选)，`limit` (number, 可选，默认 256，仅列表模式生效)
+
+- 传 `domain`：返回该域名的缓存命中状态、地址与剩余 TTL。
+- 不传 `domain`：列出当前所有有效缓存条目（按 `limit` 截断）。
+
+Response（指定域名，命中）：
+```json
+{
+  "enabled": true,
+  "domain": "example.com",
+  "hit": true,
+  "addresses": ["93.184.216.34"],
+  "ttl_seconds": 280
+}
+```
+
+Response（未命中或缓存未启用）：
+```json
+{ "enabled": true, "domain": "missing.example", "hit": false, "addresses": [], "ttl_seconds": null }
+```
+
+Response（列表模式）：
+```json
+{
+  "enabled": true,
+  "entries": [
+    { "domain": "example.com", "addresses": ["93.184.216.34"], "ttl_seconds": 280 }
+  ],
+  "count": 1
+}
+```
+
+`enabled: false` 表示未配置 `runtime.dns.cache`。
+
+权限：`admin`
+
+#### diagnostics.fakeip_lookup
+
+查询 Fake IP 映射（`runtime.dns.fake_ip`）。`domain` 与 `ip` 二选一：
+
+- `domain`：前向查询（域名 → 已分配的 Fake IP，**不分配**新 IP）。
+- `ip`：反向查询（Fake IP → 真实域名）。
+
+Response（前向）：
+```json
+{ "enabled": true, "domain": "google.com", "fake_ip": "198.18.0.5" }
+```
+
+Response（反向）：
+```json
+{ "enabled": true, "ip": "198.18.0.5", "domain": "google.com" }
+```
+
+`fake_ip` / `domain` 为 `null` 表示无映射；`enabled: false` 表示未配置 Fake IP。两者都省略返回 `invalid_argument`。
+
+权限：`admin`
+
 #### diagnostics.trace_route
 
 查看路由规则对指定目标的匹配结果。

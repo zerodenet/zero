@@ -281,6 +281,14 @@ fn execute_engine_command(
             ApiErrorCode::Internal,
             "probe_outbound is handled by the proxy runtime, not the engine",
         )),
+        CommandRequest::DiagnosticsDnsCache(_) => Err(ApiError::new(
+            ApiErrorCode::Internal,
+            "dns_cache is handled by the proxy runtime, not the engine",
+        )),
+        CommandRequest::DiagnosticsFakeipLookup(_) => Err(ApiError::new(
+            ApiErrorCode::Internal,
+            "fakeip_lookup is handled by the proxy runtime, not the engine",
+        )),
     }
 }
 

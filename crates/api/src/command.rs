@@ -21,6 +21,10 @@ pub enum CommandRequest {
     DiagnosticsProbeOutbound(DiagnosticsProbeOutboundCommand),
     #[serde(rename = "diagnostics.dns_lookup")]
     DiagnosticsDnsLookup(DiagnosticsDnsLookupCommand),
+    #[serde(rename = "diagnostics.dns_cache")]
+    DiagnosticsDnsCache(DiagnosticsDnsCacheCommand),
+    #[serde(rename = "diagnostics.fakeip_lookup")]
+    DiagnosticsFakeipLookup(DiagnosticsFakeipLookupCommand),
     #[serde(rename = "diagnostics.trace_route")]
     DiagnosticsTraceRoute(DiagnosticsTraceRouteCommand),
     #[serde(rename = "mode.set")]
@@ -41,6 +45,8 @@ impl CommandRequest {
             Self::DiagnosticsProbeTarget(_)
             | Self::DiagnosticsProbeOutbound(_)
             | Self::DiagnosticsDnsLookup(_)
+            | Self::DiagnosticsDnsCache(_)
+            | Self::DiagnosticsFakeipLookup(_)
             | Self::DiagnosticsTraceRoute(_)
             | Self::ModeSet(_)
             | Self::TunStart(_)
@@ -143,6 +149,30 @@ pub struct ModeSetCommand {
 pub struct DiagnosticsDnsLookupCommand {
     #[serde(default)]
     pub hostname: String,
+}
+
+/// Inspect the DNS resolver cache (`diagnostics.dns_cache`).
+///
+/// With `domain`, reports whether that domain is cached plus its addresses
+/// and remaining TTL. Without `domain`, lists live cache entries (capped).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosticsDnsCacheCommand {
+    #[serde(default)]
+    pub domain: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+/// Query the fake-IP mapping (`diagnostics.fakeip_lookup`).
+///
+/// Exactly one of `domain` (forward: domain → fake IP, no allocation) or
+/// `ip` (reverse: fake IP → domain) should be set.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosticsFakeipLookupCommand {
+    #[serde(default)]
+    pub domain: Option<String>,
+    #[serde(default)]
+    pub ip: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -457,6 +457,109 @@ impl zero_api::CommandService for ProxyHandle {
                     )),
                 }
             }
+            zero_api::CommandRequest::DiagnosticsDnsCache(cmd) => {
+                let proxy = self.proxy.clone();
+                let domain = cmd.domain.clone();
+                let limit = cmd.limit.unwrap_or(256);
+                match tokio::runtime::Handle::try_current() {
+                    Ok(rt) => rt.block_on(async move {
+                        let resolver = &proxy.resolver;
+                        let enabled = resolver.cache_enabled();
+                        let result = if let Some(domain) = domain {
+                            match resolver.inspect_cache(&domain).await {
+                                Some((addresses, ttl_seconds)) => serde_json::json!({
+                                    "enabled": enabled,
+                                    "domain": domain,
+                                    "hit": true,
+                                    "addresses": addresses,
+                                    "ttl_seconds": ttl_seconds,
+                                }),
+                                None => serde_json::json!({
+                                    "enabled": enabled,
+                                    "domain": domain,
+                                    "hit": false,
+                                    "addresses": [],
+                                    "ttl_seconds": null,
+                                }),
+                            }
+                        } else {
+                            let entries: Vec<_> = resolver
+                                .list_cache(limit)
+                                .await
+                                .into_iter()
+                                .map(|(domain, addresses, ttl_seconds)| {
+                                    serde_json::json!({
+                                        "domain": domain,
+                                        "addresses": addresses,
+                                        "ttl_seconds": ttl_seconds,
+                                    })
+                                })
+                                .collect();
+                            let count = entries.len();
+                            serde_json::json!({
+                                "enabled": enabled,
+                                "entries": entries,
+                                "count": count,
+                            })
+                        };
+                        Ok(zero_api::CommandResponse {
+                            accepted: true,
+                            result: Some(result),
+                        })
+                    }),
+                    Err(_) => Err(zero_api::ApiError::new(
+                        zero_api::ApiErrorCode::Internal,
+                        "no tokio runtime available for dns_cache command",
+                    )),
+                }
+            }
+            zero_api::CommandRequest::DiagnosticsFakeipLookup(cmd) => {
+                let proxy = self.proxy.clone();
+                let domain = cmd.domain.clone();
+                let ip = cmd.ip.clone();
+                match tokio::runtime::Handle::try_current() {
+                    Ok(rt) => rt.block_on(async move {
+                        let resolver = &proxy.resolver;
+                        let enabled = resolver.fake_ip_enabled();
+                        let result = if let Some(domain) = domain {
+                            let fake_ip = resolver.lookup_fake_ip_domain(&domain).await;
+                            serde_json::json!({
+                                "enabled": enabled,
+                                "domain": domain,
+                                "fake_ip": fake_ip,
+                            })
+                        } else if let Some(ip) = ip {
+                            let domain = match parse_ip_address(&ip) {
+                                Some(addr) => resolver.lookup_fake_ip(&addr).await,
+                                None => {
+                                    return Err(zero_api::ApiError::new(
+                                        zero_api::ApiErrorCode::InvalidArgument,
+                                        format!("invalid ip `{ip}`"),
+                                    ))
+                                }
+                            };
+                            serde_json::json!({
+                                "enabled": enabled,
+                                "ip": ip,
+                                "domain": domain,
+                            })
+                        } else {
+                            return Err(zero_api::ApiError::new(
+                                zero_api::ApiErrorCode::InvalidArgument,
+                                "fakeip_lookup requires `domain` or `ip`",
+                            ));
+                        };
+                        Ok(zero_api::CommandResponse {
+                            accepted: true,
+                            result: Some(result),
+                        })
+                    }),
+                    Err(_) => Err(zero_api::ApiError::new(
+                        zero_api::ApiErrorCode::Internal,
+                        "no tokio runtime available for fakeip_lookup command",
+                    )),
+                }
+            }
             _ => self.inner.execute(command),
         }
     }
@@ -597,5 +700,15 @@ fn reconcile_urltests(
         let p = proxy.clone();
         let s = shutdown_rx.clone();
         urltests.spawn(async move { p.run_urltest_group(group_id, s).await });
+    }
+}
+
+/// Parse a dotted/colon IP string into a `zero_traits::IpAddress` for the
+/// fake-IP reverse diagnostic lookup.
+fn parse_ip_address(s: &str) -> Option<zero_traits::IpAddress> {
+    match s.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(v4)) => Some(zero_traits::IpAddress::V4(v4.octets())),
+        Ok(std::net::IpAddr::V6(v6)) => Some(zero_traits::IpAddress::V6(v6.octets())),
+        Err(_) => None,
     }
 }

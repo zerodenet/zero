@@ -154,6 +154,13 @@ impl FakeIpAllocator {
         inner.reverse.get(&octets).map(|(d, _)| d.clone())
     }
 
+    /// Forward lookup (diagnostic): domain → assigned fake IP, WITHOUT
+    /// allocating a new one. Returns `None` if the domain has no mapping.
+    pub async fn lookup_domain(&self, domain: &str) -> Option<IpAddress> {
+        let inner = self.inner.lock().await;
+        inner.forward.get(domain).copied()
+    }
+
     /// Evict expired entries. Call periodically or on allocation.
     #[allow(dead_code)]
     pub async fn evict_expired(&self) {
@@ -216,5 +223,15 @@ mod tests {
         assert!(alloc.is_excluded("app.local"));
         assert!(alloc.is_excluded("example.com"));
         assert!(!alloc.is_excluded("google.com"));
+    }
+
+    #[tokio::test]
+    async fn lookup_domain_returns_existing_without_allocating() {
+        let alloc = FakeIpAllocator::new(&test_config()).unwrap();
+        let allocated = alloc.alloc("google.com").await.unwrap();
+        // Forward lookup of an allocated domain returns the same IP.
+        assert_eq!(alloc.lookup_domain("google.com").await, Some(allocated));
+        // Unknown domain yields None and must not allocate.
+        assert_eq!(alloc.lookup_domain("never-seen.example").await, None);
     }
 }

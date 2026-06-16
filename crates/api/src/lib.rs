@@ -19,9 +19,9 @@ pub use capabilities::{
 };
 pub use command::{
     CommandRequest, CommandResponse, ConfigApplyCommand, ConfigValidateCommand,
-    DiagnosticsDnsLookupCommand, DiagnosticsProbeTargetCommand, DiagnosticsTraceRouteCommand,
-    FlowCloseCommand, ModeSetCommand, PolicyProbeCommand, PolicySelectCommand, TunStartCommand,
-    TunStopCommand,
+    DiagnosticsDnsCacheCommand, DiagnosticsDnsLookupCommand, DiagnosticsFakeipLookupCommand,
+    DiagnosticsProbeTargetCommand, DiagnosticsTraceRouteCommand, FlowCloseCommand, ModeSetCommand,
+    PolicyProbeCommand, PolicySelectCommand, TunStartCommand, TunStopCommand,
 };
 pub use error::{ApiError, ApiErrorCode, ErrorDetail};
 pub use event::{event_type, ApiEvent, EventFilter, PublishResult};
