@@ -125,31 +125,8 @@ impl Proxy {
                 username,
                 password,
             } => {
-                match self
-                    .connect_via_socks5_upstream(
-                        session,
-                        Socks5Upstream {
-                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
-                                server,
-                                port,
-                            },
-                            auth: username.zip(password),
-                        },
-                    )
+                self.establish_socks5_outbound(session, tag, server, port, username, password)
                     .await
-                {
-                    Ok(upstream) => Ok(EstablishedTcpOutbound::Socks5 {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        upstream,
-                    }),
-                    Err(error) => Err(TcpOutboundFailure {
-                        stage: "connect_upstream_socks5",
-                        error,
-                        upstream_endpoint: Some((server.to_owned(), port)),
-                    }),
-                }
             }
             ResolvedLeafOutbound::Vless {
                 tag,
@@ -165,80 +142,47 @@ impl Proxy {
                 grpc,
                 h2,
                 http_upgrade,
-                split_http,
                 quic,
+                split_http,
             } => {
-                match self
-                    .connect_via_vless_upstream(
-                        session,
-                        VlessUpstream {
-                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
-                                server,
-                                port,
-                            },
-                            id,
-                            flow,
-                            mux_concurrency,
-                            mux_idle_timeout_secs,
-                            tls,
-                            reality,
-                            ws,
-                            grpc,
-                            h2,
-                            http_upgrade,
-                            split_http,
-                            quic,
-                        },
-                    )
-                    .await
-                {
-                    Ok(upstream) => Ok(EstablishedTcpOutbound::Vless {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        upstream,
-                    }),
-                    Err(error) => Err(TcpOutboundFailure {
-                        stage: "connect_upstream_vless",
-                        error,
-                        upstream_endpoint: Some((server.to_owned(), port)),
-                    }),
-                }
+                self.establish_vless_outbound(
+                    session,
+                    tag,
+                    server,
+                    port,
+                    id,
+                    flow,
+                    mux_concurrency,
+                    mux_idle_timeout_secs,
+                    tls,
+                    reality,
+                    ws,
+                    grpc,
+                    h2,
+                    http_upgrade,
+                    quic,
+                    split_http,
+                )
+                .await
             }
             ResolvedLeafOutbound::Hysteria2 {
                 tag,
                 server,
                 port,
                 password,
+                insecure,
                 client_fingerprint,
-                ..
             } => {
-                match self
-                    .connect_via_hysteria2_upstream(
-                        session,
-                        Hysteria2Upstream {
-                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
-                                server,
-                                port,
-                            },
-                            password,
-                            client_fingerprint,
-                        },
-                    )
-                    .await
-                {
-                    Ok(upstream) => Ok(EstablishedTcpOutbound::Hysteria2 {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        upstream,
-                    }),
-                    Err(error) => Err(TcpOutboundFailure {
-                        stage: "connect_upstream_hysteria2",
-                        error,
-                        upstream_endpoint: Some((server.to_owned(), port)),
-                    }),
-                }
+                self.establish_hysteria2_outbound(
+                    session,
+                    tag,
+                    server,
+                    port,
+                    password,
+                    insecure,
+                    client_fingerprint,
+                )
+                .await
             }
             ResolvedLeafOutbound::Shadowsocks {
                 tag,
@@ -247,32 +191,8 @@ impl Proxy {
                 password,
                 cipher,
             } => {
-                match self
-                    .connect_via_shadowsocks_upstream(
-                        session,
-                        ShadowsocksUpstream {
-                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
-                                server,
-                                port,
-                            },
-                            password,
-                            cipher,
-                        },
-                    )
+                self.establish_shadowsocks_outbound(session, tag, server, port, password, cipher)
                     .await
-                {
-                    Ok(upstream) => Ok(EstablishedTcpOutbound::Shadowsocks {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        upstream,
-                    }),
-                    Err(error) => Err(TcpOutboundFailure {
-                        stage: "connect_upstream_shadowsocks",
-                        error,
-                        upstream_endpoint: Some((server.to_owned(), port)),
-                    }),
-                }
             }
             ResolvedLeafOutbound::Trojan {
                 tag,
@@ -283,34 +203,17 @@ impl Proxy {
                 insecure,
                 client_fingerprint,
             } => {
-                match self
-                    .connect_via_trojan_upstream(
-                        session,
-                        TrojanUpstream {
-                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
-                                server,
-                                port,
-                            },
-                            password,
-                            sni,
-                            insecure,
-                            client_fingerprint,
-                        },
-                    )
-                    .await
-                {
-                    Ok(upstream) => Ok(EstablishedTcpOutbound::Trojan {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        upstream,
-                    }),
-                    Err(error) => Err(TcpOutboundFailure {
-                        stage: "connect_upstream_trojan",
-                        error,
-                        upstream_endpoint: Some((server.to_owned(), port)),
-                    }),
-                }
+                self.establish_trojan_outbound(
+                    session,
+                    tag,
+                    server,
+                    port,
+                    password,
+                    sni,
+                    insecure,
+                    client_fingerprint,
+                )
+                .await
             }
             ResolvedLeafOutbound::Vmess {
                 tag,
@@ -324,33 +227,20 @@ impl Proxy {
                 ws,
                 grpc,
             } => {
-                match self
-                    .connect_via_vmess_upstream(
-                        session,
-                        server,
-                        port,
-                        id,
-                        cipher,
-                        mux_concurrency,
-                        mux_idle_timeout_secs,
-                        tls,
-                        ws,
-                        grpc,
-                    )
-                    .await
-                {
-                    Ok(upstream) => Ok(EstablishedTcpOutbound::Vmess {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        upstream,
-                    }),
-                    Err(error) => Err(TcpOutboundFailure {
-                        stage: "connect_upstream_vmess",
-                        error,
-                        upstream_endpoint: Some((server.to_owned(), port)),
-                    }),
-                }
+                self.establish_vmess_outbound(
+                    session,
+                    tag,
+                    server,
+                    port,
+                    id,
+                    cipher,
+                    mux_concurrency,
+                    mux_idle_timeout_secs,
+                    tls,
+                    ws,
+                    grpc,
+                )
+                .await
             }
             ResolvedLeafOutbound::Mieru {
                 tag,
@@ -359,32 +249,8 @@ impl Proxy {
                 username,
                 password,
             } => {
-                match self
-                    .connect_via_mieru_upstream(
-                        session,
-                        MieruUpstream {
-                            endpoint: crate::runtime::orchestration::OutboundEndpoint {
-                                server,
-                                port,
-                            },
-                            username,
-                            password,
-                        },
-                    )
+                self.establish_mieru_outbound(session, tag, server, port, username, password)
                     .await
-                {
-                    Ok(upstream) => Ok(EstablishedTcpOutbound::Mieru {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        upstream,
-                    }),
-                    Err(error) => Err(TcpOutboundFailure {
-                        stage: "connect_upstream_mieru",
-                        error,
-                        upstream_endpoint: Some((server.to_owned(), port)),
-                    }),
-                }
             }
         };
 
@@ -400,6 +266,283 @@ impl Proxy {
     }
 
     /// Dispatch through a relay chain sequentially.
+    async fn establish_socks5_outbound(
+        &self,
+        session: &Session,
+        tag: &str,
+        server: &str,
+        port: u16,
+        username: Option<&str>,
+        password: Option<&str>,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        match self
+            .connect_via_socks5_upstream(
+                session,
+                Socks5Upstream {
+                    endpoint: crate::runtime::orchestration::OutboundEndpoint { server, port },
+                    auth: username.zip(password),
+                },
+            )
+            .await
+        {
+            Ok(upstream) => Ok(EstablishedTcpOutbound::Socks5 {
+                tag: tag.to_owned(),
+                server: server.to_owned(),
+                port,
+                upstream,
+            }),
+            Err(error) => Err(TcpOutboundFailure {
+                stage: "connect_upstream_socks5",
+                error,
+                upstream_endpoint: Some((server.to_owned(), port)),
+            }),
+        }
+    }
+
+    #[cfg(feature = "vless")]
+    async fn establish_vless_outbound(
+        &self,
+        session: &Session,
+        tag: &str,
+        server: &str,
+        port: u16,
+        id: &str,
+        flow: Option<&str>,
+        mux_concurrency: Option<u32>,
+        mux_idle_timeout_secs: Option<u64>,
+        tls: Option<&zero_config::ClientTlsConfig>,
+        reality: Option<&zero_config::RealityConfig>,
+        ws: Option<&zero_config::WebSocketConfig>,
+        grpc: Option<&zero_config::GrpcConfig>,
+        h2: Option<&zero_config::H2Config>,
+        http_upgrade: Option<&zero_config::HttpUpgradeConfig>,
+        quic: Option<&zero_config::QuicConfig>,
+        split_http: Option<&zero_config::SplitHttpConfig>,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        match self
+            .connect_via_vless_upstream(
+                session,
+                VlessUpstream {
+                    endpoint: crate::runtime::orchestration::OutboundEndpoint { server, port },
+                    id,
+                    flow,
+                    mux_concurrency,
+                    mux_idle_timeout_secs,
+                    tls,
+                    reality,
+                    ws,
+                    grpc,
+                    h2,
+                    http_upgrade,
+                    split_http,
+                    quic,
+                },
+            )
+            .await
+        {
+            Ok(upstream) => Ok(EstablishedTcpOutbound::Vless {
+                tag: tag.to_owned(),
+                server: server.to_owned(),
+                port,
+                upstream,
+            }),
+            Err(error) => Err(TcpOutboundFailure {
+                stage: "connect_upstream_vless",
+                error,
+                upstream_endpoint: Some((server.to_owned(), port)),
+            }),
+        }
+    }
+
+    #[cfg(feature = "hysteria2")]
+    async fn establish_hysteria2_outbound(
+        &self,
+        session: &Session,
+        tag: &str,
+        server: &str,
+        port: u16,
+        password: &str,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        match self
+            .connect_via_hysteria2_upstream(
+                session,
+                crate::runtime::upstream::Hysteria2Upstream {
+                    endpoint: crate::runtime::orchestration::OutboundEndpoint { server, port },
+                    password,
+                    client_fingerprint,
+                },
+            )
+            .await
+        {
+            Ok(upstream) => Ok(EstablishedTcpOutbound::Hysteria2 {
+                tag: tag.to_owned(),
+                server: server.to_owned(),
+                port,
+                upstream,
+            }),
+            Err(error) => Err(TcpOutboundFailure {
+                stage: "connect_upstream_hysteria2",
+                error,
+                upstream_endpoint: Some((server.to_owned(), port)),
+            }),
+        }
+    }
+
+    #[cfg(feature = "shadowsocks")]
+    async fn establish_shadowsocks_outbound(
+        &self,
+        session: &Session,
+        tag: &str,
+        server: &str,
+        port: u16,
+        password: &str,
+        cipher: &str,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        match self
+            .connect_via_shadowsocks_upstream(
+                session,
+                crate::runtime::upstream::ShadowsocksUpstream {
+                    endpoint: crate::runtime::orchestration::OutboundEndpoint { server, port },
+                    password,
+                    cipher,
+                },
+            )
+            .await
+        {
+            Ok(upstream) => Ok(EstablishedTcpOutbound::Shadowsocks {
+                tag: tag.to_owned(),
+                server: server.to_owned(),
+                port,
+                upstream,
+            }),
+            Err(error) => Err(TcpOutboundFailure {
+                stage: "connect_upstream_shadowsocks",
+                error,
+                upstream_endpoint: Some((server.to_owned(), port)),
+            }),
+        }
+    }
+
+    #[cfg(feature = "trojan")]
+    async fn establish_trojan_outbound(
+        &self,
+        session: &Session,
+        tag: &str,
+        server: &str,
+        port: u16,
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        match self
+            .connect_via_trojan_upstream(
+                session,
+                crate::runtime::upstream::TrojanUpstream {
+                    endpoint: crate::runtime::orchestration::OutboundEndpoint { server, port },
+                    password,
+                    sni,
+                    insecure,
+                    client_fingerprint,
+                },
+            )
+            .await
+        {
+            Ok(upstream) => Ok(EstablishedTcpOutbound::Trojan {
+                tag: tag.to_owned(),
+                server: server.to_owned(),
+                port,
+                upstream,
+            }),
+            Err(error) => Err(TcpOutboundFailure {
+                stage: "connect_upstream_trojan",
+                error,
+                upstream_endpoint: Some((server.to_owned(), port)),
+            }),
+        }
+    }
+
+    #[cfg(feature = "vmess")]
+    async fn establish_vmess_outbound(
+        &self,
+        session: &Session,
+        tag: &str,
+        server: &str,
+        port: u16,
+        id: &str,
+        cipher: &str,
+        mux_concurrency: Option<u32>,
+        mux_idle_timeout_secs: Option<u64>,
+        tls: Option<&zero_config::ClientTlsConfig>,
+        ws: Option<&zero_config::WebSocketConfig>,
+        grpc: Option<&zero_config::GrpcConfig>,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        match self
+            .connect_via_vmess_upstream(
+                session,
+                server,
+                port,
+                id,
+                cipher,
+                mux_concurrency,
+                mux_idle_timeout_secs,
+                tls,
+                ws,
+                grpc,
+            )
+            .await
+        {
+            Ok(upstream) => Ok(EstablishedTcpOutbound::Vmess {
+                tag: tag.to_owned(),
+                server: server.to_owned(),
+                port,
+                upstream,
+            }),
+            Err(error) => Err(TcpOutboundFailure {
+                stage: "connect_upstream_vmess",
+                error,
+                upstream_endpoint: Some((server.to_owned(), port)),
+            }),
+        }
+    }
+
+    #[cfg(feature = "mieru")]
+    async fn establish_mieru_outbound(
+        &self,
+        session: &Session,
+        tag: &str,
+        server: &str,
+        port: u16,
+        username: &str,
+        password: &str,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        match self
+            .connect_via_mieru_upstream(
+                session,
+                crate::runtime::upstream::MieruUpstream {
+                    endpoint: crate::runtime::orchestration::OutboundEndpoint { server, port },
+                    username,
+                    password,
+                },
+            )
+            .await
+        {
+            Ok(upstream) => Ok(EstablishedTcpOutbound::Mieru {
+                tag: tag.to_owned(),
+                server: server.to_owned(),
+                port,
+                upstream,
+            }),
+            Err(error) => Err(TcpOutboundFailure {
+                stage: "connect_upstream_mieru",
+                error,
+                upstream_endpoint: Some((server.to_owned(), port)),
+            }),
+        }
+    }
+
     async fn dispatch_tcp_relay_chain<'a>(
         &self,
         session: &Session,
