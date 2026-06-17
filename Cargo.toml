@@ -87,6 +87,9 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 
+[build-dependencies]
+time = { version = "0.3", features = ["formatting", "macros"] }
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
