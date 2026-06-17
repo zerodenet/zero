@@ -75,6 +75,8 @@ use crate::runtime::vless_udp::VlessUdpOutboundManager;
 use crate::runtime::vmess_udp::VmessUdpOutboundManager;
 use crate::runtime::Proxy;
 
+use crate::runtime::inbound_protocol::apply_kernel_rate_limits;
+
 // Sub-module declarations.
 
 mod forward;
@@ -463,6 +465,7 @@ impl UdpDispatch {
             session.auth = Some(a.clone());
         }
         proxy.prepare_session(&mut session, &self.inbound_tag, None);
+        apply_kernel_rate_limits(proxy, &mut session, &self.inbound_tag);
         let mut session_handle = proxy.track_session(session.id);
         let started_at = Instant::now();
         proxy.record_session_inbound_rx(session.id, payload.len() as u64);
