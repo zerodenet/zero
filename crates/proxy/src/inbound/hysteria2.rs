@@ -115,9 +115,10 @@ impl InboundProtocol for Hysteria2StreamHandler {
 // ── Listener (QUIC connection lifecycle) ───────────────────────────────
 
 impl Proxy {
-    pub(crate) async fn run_hysteria2_listener(
+    pub(crate) async fn run_hysteria2_listener_with_bound(
         &self,
         inbound: InboundConfig,
+        bound: crate::protocol_adapter::BoundInbound,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
         let (password, _up_bps, _down_bps) = match &inbound.protocol {
@@ -135,27 +136,16 @@ impl Proxy {
             }
         };
 
-        let cert_path = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Hysteria2 { cert_path, .. } => cert_path
-                .clone()
-                .unwrap_or_else(|| "certs/fullchain.pem".to_string()),
-            _ => "certs/fullchain.pem".to_string(),
-        };
-        let key_path = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Hysteria2 { key_path, .. } => key_path
-                .clone()
-                .unwrap_or_else(|| "certs/privkey.pem".to_string()),
-            _ => "certs/privkey.pem".to_string(),
-        };
-
         let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
-        let quic_inbound = crate::transport::QuicInbound::bind(
-            &listen_addr,
-            &cert_path,
-            &key_path,
-            self.config.source_dir(),
-        )
-        .await?;
+        let quic_inbound = match bound {
+            crate::protocol_adapter::BoundInbound::Quic(e) => e,
+            _ => {
+                return Err(EngineError::Io(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "hysteria2 listener requires QUIC transport",
+                )))
+            }
+        };
 
         let stream_handler = Hysteria2StreamHandler;
 

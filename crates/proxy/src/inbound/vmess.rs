@@ -125,9 +125,10 @@ impl InboundProtocol for VmessTransportHandler {
 // Listener.
 
 impl Proxy {
-    pub(crate) async fn run_vmess_listener(
+    pub(crate) async fn run_vmess_listener_with_bound(
         &self,
         inbound: InboundConfig,
+        listener: zero_platform_tokio::TokioListener,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
         let (users, tls_cfg, ws_config, grpc_config) = match &inbound.protocol {
@@ -180,7 +181,6 @@ impl Proxy {
             ))
         })?;
         let acceptor = crate::transport::build_tls_acceptor(&tls_cfg, self.config.source_dir())?;
-        let listener = bind_listener(&inbound).await?;
         let tag = inbound.tag.clone();
 
         let handler = VmessInboundHandler {

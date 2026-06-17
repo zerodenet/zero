@@ -166,7 +166,8 @@ impl Proxy {
         for inbound in &self.config.inbounds {
             let (tx, rx) = watch::channel(false);
             listener_stops.insert(inbound.tag.clone(), tx);
-            spawn_inbound_listener(self, inbound, rx, &mut listeners)?;
+            let bound = bind_inbound_listener(self, inbound).await?;
+            spawn_inbound_listener(self, inbound, bound, rx, &mut listeners);
         }
         for &group_id in self.engine.plan().urltest_groups() {
             let proxy = self.clone();
@@ -235,7 +236,7 @@ impl Proxy {
                         &new_config,
                         &mut listener_stops,
                         &mut listeners,
-                    );
+                    ).await;
                     // Remove old urltest groups --they detect config
                     // changes via the plan swap and exit cleanly next cycle.
                     // Spawn new ones.
@@ -588,16 +589,35 @@ pub(crate) async fn bind_listener(inbound: &InboundConfig) -> io::Result<TokioLi
 
 // ── listener lifecycle helpers ───────────────────────────────────────
 
+/// Eagerly bind a listener socket via the protocol's registered adapter.
+///
+/// Port conflicts surface here (before spawn) via `?`, not deferred until
+/// `JoinSet::join_next()`. The adapter reads its own protocol config fields
+/// (cert/key for QUIC) — the runtime never touches those.
+async fn bind_inbound_listener(
+    proxy: &Proxy,
+    inbound: &InboundConfig,
+) -> Result<crate::protocol_adapter::BoundInbound, EngineError> {
+    proxy
+        .protocols
+        .bind_inbound(inbound, proxy.config.source_dir())
+        .await
+}
+
 fn spawn_inbound_listener(
     proxy: &Proxy,
     inbound: &InboundConfig,
+    bound: crate::protocol_adapter::BoundInbound,
     shutdown_rx: watch::Receiver<bool>,
     listeners: &mut JoinSet<Result<(), EngineError>>,
-) -> Result<(), EngineError> {
-    // Validate via registry --single source of truth for feature gates.
-    proxy
+) {
+    if let Err(e) = proxy
         .protocols
-        .check_inbound_enabled(&inbound.protocol, &inbound.tag)?;
+        .check_inbound_enabled(&inbound.protocol, &inbound.tag)
+    {
+        warn!(tag = %inbound.tag, error = %e, "skipping inbound listener: feature check failed");
+        return;
+    }
 
     let p = proxy.clone();
     let b = inbound.clone();
@@ -605,52 +625,79 @@ fn spawn_inbound_listener(
     match &b.protocol {
         #[cfg(feature = "socks5")]
         InboundProtocolConfig::Socks5 { .. } => {
-            listeners.spawn(async move { p.run_socks5_listener(b, shutdown_rx).await });
+            listeners.spawn(async move {
+                p.run_socks5_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
+                    .await
+            });
         }
         #[cfg(feature = "http_connect")]
         InboundProtocolConfig::HttpConnect => {
-            listeners.spawn(async move { p.run_http_connect_listener(b, shutdown_rx).await });
+            listeners.spawn(async move {
+                p.run_http_connect_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
+                    .await
+            });
         }
         #[cfg(feature = "mixed")]
         InboundProtocolConfig::Mixed { .. } => {
-            listeners.spawn(async move { p.run_mixed_listener(b, shutdown_rx).await });
+            listeners.spawn(async move {
+                p.run_mixed_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
+                    .await
+            });
         }
         #[cfg(feature = "vless")]
         InboundProtocolConfig::Vless { .. } => {
-            listeners.spawn(async move { p.run_vless_listener(b, shutdown_rx).await });
+            listeners
+                .spawn(async move { p.run_vless_listener_with_bound(b, bound, shutdown_rx).await });
         }
         #[cfg(feature = "hysteria2")]
         InboundProtocolConfig::Hysteria2 { .. } => {
-            listeners.spawn(async move { p.run_hysteria2_listener(b, shutdown_rx).await });
+            listeners.spawn(async move {
+                p.run_hysteria2_listener_with_bound(b, bound, shutdown_rx)
+                    .await
+            });
         }
         #[cfg(feature = "shadowsocks")]
         InboundProtocolConfig::Shadowsocks { .. } => {
-            listeners.spawn(async move { p.run_shadowsocks_listener(b, shutdown_rx).await });
+            listeners.spawn(async move {
+                p.run_shadowsocks_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
+                    .await
+            });
         }
         #[cfg(feature = "trojan")]
         InboundProtocolConfig::Trojan { .. } => {
-            listeners.spawn(async move { p.run_trojan_listener(b, shutdown_rx).await });
+            listeners.spawn(async move {
+                p.run_trojan_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
+                    .await
+            });
         }
         #[cfg(feature = "vmess")]
         InboundProtocolConfig::Vmess { .. } => {
-            listeners.spawn(async move { p.run_vmess_listener(b, shutdown_rx).await });
+            listeners.spawn(async move {
+                p.run_vmess_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
+                    .await
+            });
         }
         #[cfg(feature = "mieru")]
         InboundProtocolConfig::Mieru { .. } => {
-            listeners.spawn(async move { p.run_mieru_listener(b, shutdown_rx).await });
+            listeners.spawn(async move {
+                p.run_mieru_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
+                    .await
+            });
         }
         InboundProtocolConfig::Direct { .. } => {
-            listeners.spawn(async move { p.run_direct_listener(b, shutdown_rx).await });
+            listeners.spawn(async move {
+                p.run_direct_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
+                    .await
+            });
         }
         #[allow(unreachable_patterns)]
         _ => unreachable!("registry check above already validated protocol is compiled"),
     }
-    Ok(())
 }
 
 /// Stop removed listeners (via their per-listener shutdown channel),
 /// start new ones.
-fn reconcile_inbounds(
+async fn reconcile_inbounds(
     proxy: &Proxy,
     new_config: &RuntimeConfig,
     listener_stops: &mut HashMap<String, watch::Sender<bool>>,
@@ -674,9 +721,15 @@ fn reconcile_inbounds(
         if !listener_stops.contains_key(&inbound.tag) {
             let (tx, rx) = watch::channel(false);
             listener_stops.insert(inbound.tag.clone(), tx);
-            match spawn_inbound_listener(proxy, inbound, rx, listeners) {
-                Ok(()) => info!(tag = %inbound.tag, "started new inbound listener"),
-                Err(e) => warn!(tag = %inbound.tag, error = %e, "failed to start inbound listener"),
+            match bind_inbound_listener(proxy, inbound).await {
+                Ok(bound) => {
+                    spawn_inbound_listener(proxy, inbound, bound, rx, listeners);
+                    info!(tag = %inbound.tag, "started new inbound listener");
+                }
+                Err(e) => {
+                    listener_stops.remove(&inbound.tag);
+                    warn!(tag = %inbound.tag, error = %e, "failed to bind inbound listener");
+                }
             }
         }
     }

@@ -84,9 +84,10 @@ impl InboundProtocol for ShadowsocksInboundHandler {
 
 impl Proxy {
     #[allow(clippy::too_many_lines)]
-    pub(crate) async fn run_shadowsocks_listener(
+    pub(crate) async fn run_shadowsocks_listener_with_bound(
         &self,
         inbound: InboundConfig,
+        listener: zero_platform_tokio::TokioListener,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
         let (password, cipher_str, _up_bps, _down_bps) = match &inbound.protocol {
@@ -111,7 +112,6 @@ impl Proxy {
             ))
         })?;
 
-        let listener = bind_listener(&inbound).await?;
         let local_addr = listener.local_addr()?;
 
         let udp_socket = match UdpSocket::bind(&format!(

@@ -8,17 +8,70 @@
 use std::fmt;
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
+use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolMetadata, TransportKind};
 
 use crate::protocol_capability::{protocol_capability, protocol_descriptor};
 
+/// A pre-bound inbound listener — TCP or QUIC.
+///
+/// Produced by [`ProtocolAdapter::bind_inbound`] **before** the accept loop
+/// spawns, so port conflicts surface immediately via `?` rather than surfacing
+/// later through `JoinSet::join_next()`. The bind logic stays owned by the
+/// adapter (which reads its own protocol config) instead of leaking protocol
+/// private fields into the runtime dispatch.
+pub(crate) enum BoundInbound {
+    Tcp(zero_platform_tokio::TokioListener),
+    #[cfg(any(feature = "vless", feature = "hysteria2"))]
+    Quic(crate::transport::QuicInbound),
+}
+
+impl BoundInbound {
+    /// Unwrap into a TCP listener. Panics if the variant is QUIC —
+    /// indicates a dispatch mismatch (bind vs spawn disagree), which
+    /// should never happen since both go through the same adapter.
+    pub(crate) fn into_tcp(self) -> zero_platform_tokio::TokioListener {
+        match self {
+            Self::Tcp(l) => l,
+            #[cfg(any(feature = "vless", feature = "hysteria2"))]
+            Self::Quic(_) => {
+                panic!("into_tcp: got QUIC listener, expected TCP (dispatch mismatch)")
+            }
+            #[cfg(not(any(feature = "vless", feature = "hysteria2")))]
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// A protocol adapter registered in the proxy.
 ///
 /// Implementations are behind `#[cfg(feature = "...")]` gates so only
 /// compiled-in protocols appear in the registry.
+#[async_trait]
 pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
+    /// Bind the listener socket for `config` eagerly so port-in-use
+    /// errors surface before the proxy announces "started".
+    ///
+    /// Defaults to a plain TCP bind on the listen address. QUIC-based
+    /// protocols (VLESS/QUIC, Hysteria2) override to create a QUIC endpoint,
+    /// reading their own cert/key config — the runtime never touches those
+    /// fields.
+    async fn bind_inbound(
+        &self,
+        inbound: &InboundConfig,
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<BoundInbound, EngineError> {
+        let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
+        let tcp = zero_platform_tokio::TokioListener::bind(&listen)
+            .await
+            .map_err(EngineError::Io)?;
+        Ok(BoundInbound::Tcp(tcp))
+    }
+
     /// Transport kind the inbound listener uses for `config`.
     ///
     /// Defaults to [`TransportKind::Tcp`]; QUIC-based protocols (VLESS/QUIC,
@@ -246,6 +299,37 @@ impl ProtocolRegistry {
             tag: String::new(),
             protocol: name,
             feature: self.inbound_protocol_feature_name(config),
+        })
+    }
+
+    /// Bind an inbound listener via its registered adapter.
+    ///
+    /// Single dispatch point: the runtime resolves an inbound config to its
+    /// adapter and binds the socket here, instead of matching on the protocol
+    /// enum. Port conflicts surface before the accept loop spawns.
+    pub async fn bind_inbound(
+        &self,
+        inbound: &zero_config::InboundConfig,
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<BoundInbound, EngineError> {
+        for adapter in &self.adapters {
+            if adapter.supports_inbound(&inbound.protocol) {
+                return adapter.bind_inbound(inbound, source_dir).await;
+            }
+        }
+        if matches!(inbound.protocol, InboundProtocolConfig::Mixed { .. }) {
+            let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
+            let tcp = zero_platform_tokio::TokioListener::bind(&listen)
+                .await
+                .map_err(EngineError::Io)?;
+            return Ok(BoundInbound::Tcp(tcp));
+        }
+        let name = self.inbound_protocol_label(&inbound.protocol);
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "inbound",
+            tag: inbound.tag.clone(),
+            protocol: name,
+            feature: self.inbound_protocol_feature_name(&inbound.protocol),
         })
     }
 

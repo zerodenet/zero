@@ -16,12 +16,12 @@ use super::http_connect::HttpConnectInboundHandler;
 use super::socks5::{ConfiguredSocks5PasswordAuth, Socks5InboundHandler};
 
 impl Proxy {
-    pub(crate) async fn run_mixed_listener(
+    pub(crate) async fn run_mixed_listener_with_bound(
         &self,
         inbound: zero_config::InboundConfig,
+        listener: zero_platform_tokio::TokioListener,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
-        let listener = bind_listener(&inbound).await?;
         let local_addr = listener.local_addr()?;
         let mut connections = JoinSet::new();
 

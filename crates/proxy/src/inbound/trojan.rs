@@ -95,9 +95,10 @@ impl InboundProtocol for TrojanInboundHandler {
 // Listener.
 
 impl Proxy {
-    pub(crate) async fn run_trojan_listener(
+    pub(crate) async fn run_trojan_listener_with_bound(
         &self,
         inbound: InboundConfig,
+        listener: zero_platform_tokio::TokioListener,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
         let (password, tls_cfg, _up_bps, _down_bps) = match &inbound.protocol {
@@ -122,7 +123,6 @@ impl Proxy {
             ))
         })?;
         let acceptor = crate::transport::build_tls_acceptor(&tls_cfg, self.config.source_dir())?;
-        let listener = bind_listener(&inbound).await?;
         let tag = inbound.tag.clone();
 
         let handler = TrojanInboundHandler {

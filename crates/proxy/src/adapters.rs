@@ -2,12 +2,16 @@
 
 use std::sync::Arc;
 
-use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
+use async_trait::async_trait;
+
+use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
+use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata, TransportKind};
 
 use crate::protocol_capability::protocol_descriptor;
+use crate::transport::QuicInbound;
 
-use super::protocol_adapter::ProtocolAdapter;
+use super::protocol_adapter::{BoundInbound, ProtocolAdapter};
 
 #[cfg(feature = "socks5")]
 #[derive(Debug)]
@@ -90,6 +94,7 @@ impl ProtocolMetadata for HttpConnectAdapter {
 pub(crate) struct VlessAdapter;
 
 #[cfg(feature = "vless")]
+#[async_trait]
 impl ProtocolAdapter for VlessAdapter {
     fn name(&self) -> &'static str {
         "vless"
@@ -115,6 +120,27 @@ impl ProtocolAdapter for VlessAdapter {
             _ => TransportKind::Tcp,
         }
     }
+    async fn bind_inbound(
+        &self,
+        inbound: &InboundConfig,
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<BoundInbound, EngineError> {
+        let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
+        if let InboundProtocolConfig::Vless {
+            quic: Some(ref quic),
+            ..
+        } = inbound.protocol
+        {
+            if let (Some(cert), Some(key)) = (&quic.cert_path, &quic.key_path) {
+                let endpoint = QuicInbound::bind(&listen, cert, key, source_dir).await?;
+                return Ok(BoundInbound::Quic(endpoint));
+            }
+        }
+        let tcp = zero_platform_tokio::TokioListener::bind(&listen)
+            .await
+            .map_err(EngineError::Io)?;
+        Ok(BoundInbound::Tcp(tcp))
+    }
 }
 
 #[cfg(feature = "vless")]
@@ -129,6 +155,7 @@ impl ProtocolMetadata for VlessAdapter {
 pub(crate) struct Hysteria2Adapter;
 
 #[cfg(feature = "hysteria2")]
+#[async_trait]
 impl ProtocolAdapter for Hysteria2Adapter {
     fn name(&self) -> &'static str {
         "hysteria2"
@@ -150,6 +177,30 @@ impl ProtocolAdapter for Hysteria2Adapter {
     }
     fn inbound_transport_kind(&self, _c: &InboundProtocolConfig) -> TransportKind {
         TransportKind::Quic
+    }
+    async fn bind_inbound(
+        &self,
+        inbound: &InboundConfig,
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<BoundInbound, EngineError> {
+        let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
+        if let InboundProtocolConfig::Hysteria2 {
+            cert_path,
+            key_path,
+            ..
+        } = &inbound.protocol
+        {
+            let cert = cert_path
+                .clone()
+                .unwrap_or_else(|| "certs/fullchain.pem".to_string());
+            let key = key_path
+                .clone()
+                .unwrap_or_else(|| "certs/privkey.pem".to_string());
+            let endpoint = QuicInbound::bind(&listen, &cert, &key, source_dir).await?;
+            Ok(BoundInbound::Quic(endpoint))
+        } else {
+            unreachable!("hysteria2 adapter only handles Hysteria2 config")
+        }
     }
 }
 

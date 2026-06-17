@@ -315,9 +315,10 @@ impl InboundProtocol for MieruInboundHandler {
 // Listener.
 
 impl Proxy {
-    pub(crate) async fn run_mieru_listener(
+    pub(crate) async fn run_mieru_listener_with_bound(
         &self,
         inbound: InboundConfig,
+        listener: zero_platform_tokio::TokioListener,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
         let users = match &inbound.protocol {
@@ -333,7 +334,6 @@ impl Proxy {
             }
         };
 
-        let listener = bind_listener(&inbound).await?;
         let local_addr = listener.local_addr()?;
 
         let handler = MieruInboundHandler {

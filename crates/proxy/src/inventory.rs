@@ -4,7 +4,7 @@ use zero_api::ProtocolCapability;
 use zero_engine::EngineError;
 
 use crate::adapters::build_registry;
-use crate::protocol_adapter::ProtocolRegistry;
+use crate::protocol_adapter::{BoundInbound, ProtocolRegistry};
 use crate::transport::DirectConnector;
 
 #[cfg(feature = "http_connect")]
@@ -144,5 +144,12 @@ impl ProtocolInventory {
             protocol: label,
             feature,
         })
+    }
+    pub(crate) async fn bind_inbound(
+        &self,
+        inbound: &zero_config::InboundConfig,
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<BoundInbound, EngineError> {
+        self.registry.bind_inbound(inbound, source_dir).await
     }
 }

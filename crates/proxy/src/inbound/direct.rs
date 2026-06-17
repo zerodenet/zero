@@ -55,9 +55,10 @@ impl InboundProtocol for DirectInboundHandler {
 // ── Listener ────────────────────────────────────────────────────────────
 
 impl Proxy {
-    pub(crate) async fn run_direct_listener(
+    pub(crate) async fn run_direct_listener_with_bound(
         &self,
         inbound: zero_config::InboundConfig,
+        listener: zero_platform_tokio::TokioListener,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
         let (target, port) = match &inbound.protocol {
@@ -70,7 +71,6 @@ impl Proxy {
             }
         };
 
-        let listener = bind_listener(&inbound).await?;
         let local_addr = listener.local_addr()?;
         let mut connections = JoinSet::new();
         let handler = DirectInboundHandler;
