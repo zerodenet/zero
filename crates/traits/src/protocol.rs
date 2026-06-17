@@ -2,6 +2,34 @@ use alloc::vec::Vec;
 
 use crate::AsyncSocket;
 
+// ── Inbound transport classification ─────────────────────────────────
+
+/// The transport a protocol's inbound listener binds.
+///
+/// Declared by each protocol adapter so the proxy runtime can dispatch
+/// bind/spawn decisions without re-reading the protocol's private config
+/// fields. This is the single source of truth for "does this listener
+/// open a TCP socket or a QUIC endpoint".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransportKind {
+    /// Raw or TLS-over-TCP listener.
+    Tcp,
+    /// QUIC (UDP) listener (e.g. VLESS/QUIC, Hysteria2).
+    Quic,
+}
+
+/// A protocol adapter that declares the transport of its inbound listener.
+///
+/// Adapters implement this so the runtime can classify a listener for
+/// bind/spawn dispatch, idle-timeout policy, and capability reporting
+/// without matching on the concrete protocol config enum.
+pub trait InboundTransport {
+    /// The transport kind this adapter's inbound listener uses.
+    fn inbound_transport_kind(&self) -> TransportKind;
+}
+
+// ── Protocol capability descriptors ──────────────────────────────────
+
 /// Support level for a protocol capability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolCapabilityLevel {

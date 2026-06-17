@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
-use zero_traits::ProtocolMetadata;
+use zero_traits::{ProtocolMetadata, TransportKind};
 
 use crate::protocol_capability::{protocol_capability, protocol_descriptor};
 
@@ -19,6 +19,15 @@ use crate::protocol_capability::{protocol_capability, protocol_descriptor};
 /// Implementations are behind `#[cfg(feature = "...")]` gates so only
 /// compiled-in protocols appear in the registry.
 pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
+    /// Transport kind the inbound listener uses for `config`.
+    ///
+    /// Defaults to [`TransportKind::Tcp`]; QUIC-based protocols (VLESS/QUIC,
+    /// Hysteria2) override. This lets the runtime dispatch bind/spawn
+    /// decisions without re-reading the protocol's private config fields.
+    fn inbound_transport_kind(&self, _config: &InboundProtocolConfig) -> TransportKind {
+        TransportKind::Tcp
+    }
+
     /// Protocol name used in config `"type"` field and exported status.
     fn name(&self) -> &'static str;
 
@@ -216,5 +225,36 @@ impl ProtocolRegistry {
             OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => "core",
             _ => "protocol_not_compiled",
         }
+    }
+
+    /// Find the adapter that handles this inbound config, if any.
+    ///
+    /// Single dispatch point: the runtime resolves an inbound config to its
+    /// adapter here instead of matching on the protocol enum.
+    pub fn find_inbound(
+        &self,
+        config: &InboundProtocolConfig,
+    ) -> Result<Arc<dyn ProtocolAdapter>, EngineError> {
+        for adapter in &self.adapters {
+            if adapter.supports_inbound(config) {
+                return Ok(adapter.clone());
+            }
+        }
+        let name = self.inbound_protocol_label(config);
+        Err(EngineError::CompiledFeatureDisabled {
+            kind: "inbound",
+            tag: String::new(),
+            protocol: name,
+            feature: self.inbound_protocol_feature_name(config),
+        })
+    }
+
+    /// Transport kind for an inbound config via its registered adapter.
+    pub fn inbound_transport_kind(&self, config: &InboundProtocolConfig) -> TransportKind {
+        self.adapters
+            .iter()
+            .find(|a| a.supports_inbound(config))
+            .map(|a| a.inbound_transport_kind(config))
+            .unwrap_or(TransportKind::Tcp)
     }
 }

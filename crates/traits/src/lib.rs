@@ -12,6 +12,7 @@ pub use protocol::{
     TcpSessionProtocol, TcpTunnelProtocol, UdpDatagramFraming, UdpPacketFraming, UdpPacketPath,
     UdpPacketStreamFraming, UdpPacketTunnelProtocol, UdpRelayProtocol,
 };
+pub use protocol::{InboundTransport, TransportKind};
 
 // Address types
 

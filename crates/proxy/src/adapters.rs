@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
-use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata, TransportKind};
 
 use crate::protocol_capability::protocol_descriptor;
 
@@ -109,6 +109,12 @@ impl ProtocolAdapter for VlessAdapter {
     fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
         matches!(c, OutboundProtocolConfig::Vless { .. })
     }
+    fn inbound_transport_kind(&self, c: &InboundProtocolConfig) -> TransportKind {
+        match c {
+            InboundProtocolConfig::Vless { quic: Some(_), .. } => TransportKind::Quic,
+            _ => TransportKind::Tcp,
+        }
+    }
 }
 
 #[cfg(feature = "vless")]
@@ -141,6 +147,9 @@ impl ProtocolAdapter for Hysteria2Adapter {
     }
     fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
         matches!(c, OutboundProtocolConfig::Hysteria2 { .. })
+    }
+    fn inbound_transport_kind(&self, _c: &InboundProtocolConfig) -> TransportKind {
+        TransportKind::Quic
     }
 }
 
