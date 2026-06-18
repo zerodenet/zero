@@ -7,22 +7,30 @@
 
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
-use zero_traits::UdpPacketFraming;
 
 #[cfg(feature = "shadowsocks")]
 use super::packet_path_chain::{PacketPathCarrierParams, PacketPathChainParams};
-use super::{
-    FlowFailure, FlowStartResult, H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpCandidate,
-    UdpDispatch, UdpFlowContext, UdpPacketRef, UdpPeerEndpoint,
+use super::{FlowFailure, FlowStartResult, UdpCandidate, UdpDispatch};
+#[cfg(feature = "shadowsocks")]
+use crate::runtime::udp_associate::sessions::UdpPacketPathCarrier;
+#[cfg(feature = "vless")]
+use crate::runtime::vless_udp::establish_vless_udp_upstream_over_stream;
+use crate::runtime::Proxy;
+
+// Re-exports consumed by `relay` submodule via `use super::*`.
+#[allow(unused_imports)]
+pub(super) use crate::runtime::udp_associate::sessions::UdpFlowOutbound;
+#[allow(unused_imports)]
+pub(super) use crate::runtime::udp_dispatch::{
+    H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpFlowContext, UdpPacketRef,
+    UdpPeerEndpoint,
 };
-use crate::runtime::udp_associate::sessions::{UdpFlowOutbound, UdpPacketPathCarrier};
-use crate::runtime::vless_udp::{establish_vless_udp_upstream_over_stream, VlessUdpTransport};
 #[cfg(feature = "vmess")]
-use crate::runtime::vmess_udp::{
+#[allow(unused_imports)]
+pub(super) use crate::runtime::vmess_udp::{
     build_vmess_udp_transport_over_stream, establish_vmess_udp_upstream_over_stream,
     VmessUdpTransport,
 };
-use crate::runtime::Proxy;
 
 // Chain resolution.
 
@@ -188,482 +196,32 @@ impl UdpDispatch {
             }
         };
 
-        match candidate {
-            ResolvedLeafOutbound::Direct { tag } => {
-                let target_addr = proxy
-                    .protocols
-                    .direct_outbound
-                    .resolve_target_addr(session, proxy.resolver.as_ref())
-                    .await
-                    .map_err(|error| FlowFailure {
-                        stage: "resolve_udp_target",
-                        error: error.into(),
-                        upstream: None,
-                    })?;
-
-                let sent = self
-                    .direct_socket
-                    .send_to_addr(payload, target_addr)
-                    .await
-                    .map_err(|error| FlowFailure {
-                        stage: "udp_direct_send",
-                        error: error.into(),
-                        upstream: None,
-                    })?;
-
-                Ok(FlowStartResult::Flow {
-                    outbound: UdpFlowOutbound::Direct {
-                        tag: tag.unwrap_or("direct").to_owned(),
-                        target_addr,
-                    },
-                    tx_bytes: sent as u64,
-                })
-            }
-            ResolvedLeafOutbound::Block { tag } => Ok(FlowStartResult::Blocked {
-                tag: tag.unwrap_or("block").to_owned(),
-            }),
-            ResolvedLeafOutbound::Socks5 {
-                tag,
-                server,
-                port,
-                username,
-                password,
-            } => {
-                let sent = self
-                    .send_socks5(
-                        proxy, tag, server, port, username, password, session, payload,
-                    )
-                    .await
-                    .map_err(|error| FlowFailure {
-                        stage: "udp_upstream_send",
-                        error,
-                        upstream: Some((server.to_owned(), port)),
-                    })?;
-
-                Ok(FlowStartResult::Flow {
-                    outbound: UdpFlowOutbound::Socks5 {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        username: username.map(ToOwned::to_owned),
-                        password: password.map(ToOwned::to_owned),
-                    },
-                    tx_bytes: sent as u64,
-                })
-            }
-            ResolvedLeafOutbound::Vless {
-                tag,
-                server,
-                port,
-                id,
-                flow,
-                tls,
-                reality,
-                ws,
-                grpc,
-                h2,
-                http_upgrade,
-                split_http,
-                quic,
-                ..
-            } => {
-                let session_id = session.id;
-                let tag_owned = tag.to_owned();
-
-                // MUX UDP fast path: when Vision flow is active and a MUX
-                // pool connection already exists, open a UDP sub-stream
-                // through the shared MUX connection instead of dialing a
-                // fresh VLESS upstream.
-                let mux_flow_enabled =
-                    flow == Some("xtls-rprx-vision") || flow == Some("xtls-rprx-vision-udp443");
-                if mux_flow_enabled {
-                    // Try to open a MUX UDP sub-stream from the pool.
-                    // If the pool has no connection to this upstream yet
-                    // (first packet), fall through to the normal VLESS
-                    // manager path which dials a fresh connection.
-                    let max_concurrency = 8u32; // config may override later
-                    let idle_timeout = 300u64;
-                    match proxy
-                        .mux_pool
-                        .open_udp_stream(
-                            proxy,
-                            server,
-                            port,
-                            &vless::parse_uuid(id).map_err(|e| FlowFailure {
-                                stage: "udp_vless_mux_parse_uuid",
-                                error: zero_core::Error::Protocol(&*Box::leak(
-                                    format!("invalid VLESS UUID: {e}").into_boxed_str(),
-                                ))
-                                .into(),
-                                upstream: Some((server.to_owned(), port)),
-                            })?,
-                            tls,
-                            reality,
-                            max_concurrency,
-                            idle_timeout,
-                        )
-                        .await
-                    {
-                        Ok((_mux_sid, up_tx, _down_rx)) => {
-                            // Encode the first VLESS UDP packet and send it
-                            // through the MUX UDP sub-stream.
-                            let packet = <vless::VlessOutbound as UdpPacketFraming<
-                                vless::VlessUdpPacketTarget,
-                            >>::encode_udp_packet(
-                                &proxy.protocols.vless_outbound,
-                                &vless::VlessUdpPacketTarget {
-                                    address: &session.target,
-                                    port: session.port,
-                                    payload,
-                                },
-                            )
-                            .map_err(|error| FlowFailure {
-                                stage: "udp_vless_mux_encode",
-                                error: error.into(),
-                                upstream: Some((server.to_owned(), port)),
-                            })?;
-                            let _ = up_tx.send(packet);
-                            // MUX UDP responses are dispatched back through
-                            // the MUX read loop → chain_tasks; the session
-                            // handle is tracked in vless_handles.
-                            proxy.record_session_outbound_tx(session_id, payload.len() as u64);
-
-                            // Track this session in vless_handles so finish_all()
-                            // properly completes it. The MUX read loop dispatches
-                            // responses back through chain_tasks.
-                            return Ok(FlowStartResult::VlessFlow {
-                                session_id,
-                                tag: tag_owned,
-                            });
-                        }
-                        // MUX pool has no connection yet, fall through.
-                        Err(_) => {}
-                    }
-                }
-
-                let transport = VlessUdpTransport {
-                    tls,
-                    reality,
-                    ws,
-                    grpc,
-                    h2,
-                    http_upgrade,
-                    split_http,
-                    quic,
-                };
-                self.vless_manager
-                    .get_or_create_upstream(
-                        &mut self.chain_tasks,
-                        proxy,
-                        session,
-                        session.target.clone(),
-                        session.port,
-                        server.to_owned(),
-                        port,
-                        id.to_owned(),
-                        payload.to_vec(),
-                        Some(&transport),
-                    )
-                    .await
-                    .map_err(|error| FlowFailure {
-                        stage: "udp_vless_upstream",
-                        error,
-                        upstream: Some((server.to_owned(), port)),
-                    })?;
-
-                Ok(FlowStartResult::VlessFlow {
-                    session_id,
-                    tag: tag_owned,
-                })
-            }
-            #[cfg(feature = "hysteria2")]
-            ResolvedLeafOutbound::Hysteria2 {
-                tag,
-                server,
-                port,
-                password,
-                client_fingerprint,
-                ..
-            } => {
-                let sent = self
-                    .h2_manager
-                    .send(
-                        UdpFlowContext {
-                            chain_tasks: &mut self.chain_tasks,
-                            session_id: session.id,
-                        },
-                        H2UdpPeer {
-                            endpoint: UdpPeerEndpoint { server, port },
-                            password,
-                            client_fingerprint,
-                        },
-                        UdpPacketRef {
-                            target: &session.target,
-                            port: session.port,
-                            payload,
-                        },
-                    )
-                    .await
-                    .map_err(|f: FlowFailure| FlowFailure {
-                        stage: f.stage,
-                        error: f.error,
-                        upstream: f.upstream,
-                    })?;
-
-                Ok(FlowStartResult::Flow {
-                    outbound: UdpFlowOutbound::Hysteria2 {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        password: password.to_owned(),
-                        client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
-                    },
-                    tx_bytes: sent as u64,
-                })
-            }
-            #[cfg(not(feature = "hysteria2"))]
-            ResolvedLeafOutbound::Hysteria2 { .. } => Err(FlowFailure {
-                stage: "udp_hysteria2_outbound",
-                error: zero_core::Error::Unsupported(
-                    "Hysteria2 UDP outbound requires Cargo feature `hysteria2`",
-                )
-                .into(),
-                upstream: None,
-            }),
-            #[allow(unused_variables)]
-            ResolvedLeafOutbound::Shadowsocks {
-                tag,
-                server,
-                port,
-                password,
-                cipher,
-                ..
-            } => {
-                #[cfg(feature = "shadowsocks")]
-                {
-                    let sent = self
-                        .ss_manager
-                        .send(
-                            UdpFlowContext {
-                                chain_tasks: &mut self.chain_tasks,
-                                session_id: session.id,
-                            },
-                            proxy,
-                            SsUdpPeer {
-                                endpoint: UdpPeerEndpoint { server, port },
-                                password,
-                                cipher,
-                            },
-                            UdpPacketRef {
-                                target: &session.target,
-                                port: session.port,
-                                payload,
-                            },
-                        )
-                        .await
-                        .map_err(|f: FlowFailure| FlowFailure {
-                            stage: f.stage,
-                            error: f.error,
-                            upstream: f.upstream,
-                        })?;
-
-                    Ok(FlowStartResult::Flow {
-                        outbound: UdpFlowOutbound::Shadowsocks {
-                            tag: tag.to_owned(),
-                            server: server.to_owned(),
-                            port,
-                            password: password.to_owned(),
-                            cipher: cipher.to_owned(),
-                            packet_path_carrier: None,
-                        },
-                        tx_bytes: sent as u64,
-                    })
-                }
-                #[cfg(not(feature = "shadowsocks"))]
-                {
-                    Err(FlowFailure {
-                        stage: "udp_shadowsocks_outbound",
-                        error: zero_core::Error::Unsupported(
-                            "Shadowsocks UDP outbound requires Cargo feature `shadowsocks`",
-                        )
-                        .into(),
-                        upstream: None,
-                    })
-                }
-            }
-            #[cfg(feature = "trojan")]
-            ResolvedLeafOutbound::Trojan {
-                tag,
-                server,
-                port,
-                password,
-                sni,
-                insecure,
-                client_fingerprint,
-            } => {
-                let sent = self
-                    .trojan_manager
-                    .send(
-                        UdpFlowContext {
-                            chain_tasks: &mut self.chain_tasks,
-                            session_id: session.id,
-                        },
-                        proxy,
-                        session,
-                        TrojanUdpPeer {
-                            endpoint: UdpPeerEndpoint { server, port },
-                            password,
-                            sni,
-                            insecure,
-                            client_fingerprint,
-                            relay_chain: false,
-                        },
-                        UdpPacketRef {
-                            target: &session.target,
-                            port: session.port,
-                            payload,
-                        },
-                    )
-                    .await
-                    .map_err(|f: FlowFailure| FlowFailure {
-                        stage: f.stage,
-                        error: f.error,
-                        upstream: f.upstream,
-                    })?;
-
-                Ok(FlowStartResult::Flow {
-                    outbound: UdpFlowOutbound::Trojan {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        password: password.to_owned(),
-                        sni: sni.map(|s| s.to_owned()),
-                        insecure,
-                        client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
-                        relay_chain: false,
-                    },
-                    tx_bytes: sent as u64,
-                })
-            }
-            #[cfg(not(feature = "trojan"))]
-            ResolvedLeafOutbound::Trojan { .. } => Err(FlowFailure {
-                stage: "udp_trojan_outbound",
-                error: zero_core::Error::Unsupported(
-                    "Trojan UDP outbound requires Cargo feature `trojan`",
-                )
-                .into(),
-                upstream: None,
-            }),
-            #[cfg(feature = "mieru")]
-            ResolvedLeafOutbound::Mieru {
-                tag,
-                server,
-                port,
-                username,
-                password,
-            } => {
-                let sent = self
-                    .mieru_manager
-                    .send(
-                        UdpFlowContext {
-                            chain_tasks: &mut self.chain_tasks,
-                            session_id: session.id,
-                        },
-                        proxy,
-                        session,
-                        MieruUdpPeer {
-                            endpoint: UdpPeerEndpoint { server, port },
-                            username,
-                            password,
-                            relay_chain: false,
-                        },
-                        UdpPacketRef {
-                            target: &session.target,
-                            port: session.port,
-                            payload,
-                        },
-                    )
-                    .await
-                    .map_err(|f: FlowFailure| FlowFailure {
-                        stage: f.stage,
-                        error: f.error,
-                        upstream: f.upstream,
-                    })?;
-
-                Ok(FlowStartResult::Flow {
-                    outbound: UdpFlowOutbound::Mieru {
-                        tag: tag.to_owned(),
-                        server: server.to_owned(),
-                        port,
-                        username: username.to_owned(),
-                        password: password.to_owned(),
-                        relay_chain: false,
-                    },
-                    tx_bytes: sent as u64,
-                })
-            }
-            #[cfg(not(feature = "mieru"))]
-            ResolvedLeafOutbound::Mieru { .. } => Err(FlowFailure {
-                stage: "udp_mieru_outbound",
-                error: zero_core::Error::Unsupported(
-                    "Mieru UDP outbound requires Cargo feature `mieru`",
-                )
-                .into(),
-                upstream: None,
-            }),
-            #[cfg(feature = "vmess")]
-            ResolvedLeafOutbound::Vmess {
-                tag,
-                server,
-                port,
-                id,
-                cipher,
-                mux_concurrency,
-                mux_idle_timeout_secs: _,
-                tls,
-                ws,
-                grpc,
-            } => {
-                let transport = VmessUdpTransport { tls, ws, grpc };
-                let session_id = session.id;
-                let tag_owned = tag.to_owned();
-                self.vmess_manager
-                    .get_or_create_upstream(
-                        &mut self.chain_tasks,
-                        proxy,
-                        session,
-                        session.target.clone(),
-                        session.port,
-                        server.to_owned(),
-                        port,
-                        id.to_owned(),
-                        cipher.to_owned(),
-                        payload.to_vec(),
-                        Some(&transport),
-                        mux_concurrency,
-                    )
-                    .await
-                    .map_err(|error| FlowFailure {
-                        stage: "udp_vmess_upstream",
-                        error,
-                        upstream: Some((server.to_owned(), port)),
-                    })?;
-
-                Ok(FlowStartResult::VmessFlow {
-                    session_id,
-                    tag: tag_owned,
-                })
-            }
-            #[cfg(not(feature = "vmess"))]
-            ResolvedLeafOutbound::Vmess { .. } => Err(FlowFailure {
-                stage: "udp_vmess_outbound",
-                error: zero_core::Error::Unsupported(
-                    "VMess UDP outbound requires Cargo feature `vmess`",
-                )
-                .into(),
-                upstream: None,
-            }),
+        // Block is kernel-level (no adapter owns it): reject immediately.
+        // Direct and every proxy protocol go through the adapter registry —
+        // adding a protocol = register an adapter, zero changes here.
+        if matches!(
+            crate::runtime::orchestration::tcp_path_category(&candidate),
+            crate::runtime::orchestration::TcpPathCategory::Block
+        ) {
+            return Ok(FlowStartResult::Blocked {
+                tag: crate::runtime::orchestration::kernel_leaf_tag(&candidate)
+                    .unwrap_or("block")
+                    .to_string(),
+            });
         }
+
+        // Single dispatch: resolve the leaf to its adapter and start the flow.
+        let adapter = proxy
+            .protocols
+            .find_outbound_leaf(&candidate)
+            .map_err(|error| FlowFailure {
+                stage: "find_outbound_leaf",
+                error,
+                upstream: None,
+            })?;
+        adapter
+            .start_udp_flow(self, proxy, session, &candidate, payload)
+            .await
     }
 }
 
