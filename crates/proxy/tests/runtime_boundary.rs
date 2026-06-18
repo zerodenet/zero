@@ -43,7 +43,7 @@ fn relative(path: &Path) -> String {
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     for source in [
         "src/runtime/udp_associate.rs",
-        "src/inbound/vless.rs",
+        "src/inbound/vless/udp_session.rs",
         "src/inbound/trojan.rs",
         "src/inbound/shadowsocks.rs",
         "src/inbound/hysteria2.rs",
@@ -83,7 +83,7 @@ fn ordinary_tcp_inbounds_use_tcp_pipe_for_route_execution() {
         "serve_inbound should route ordinary TCP sessions through TcpPipe"
     );
 
-    let vless = read("src/inbound/vless.rs");
+    let vless = read("src/inbound/vless/mux.rs");
     assert!(
         vless.contains("TcpPipe::new") && vless.contains("TcpPipeInput"),
         "VLESS MUX sub-streams should route through TcpPipe"
