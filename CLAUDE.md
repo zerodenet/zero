@@ -167,15 +167,17 @@ core → traits
 inbound/          # Protocol handler structs implementing InboundProtocol trait
                   #   socks5, vless, http_connect, mixed, hysteria2, shadowsocks, trojan, direct, tun, system
                   #   Each provides handshake (accept), client responses (send_ok/send_blocked/send_upstream_failure), and relay
-outbound/         # Outbound implementations: direct, socks5, vless, hysteria2, shadowsocks, trojan
+outbound/         # Per-protocol outbound connect logic: direct, socks5, vless, hysteria2, shadowsocks, trojan, vmess, mieru
+                  #   Each owns connect_tcp() + apply_tcp_hop() (dial/handshake I/O); the adapter in adapters.rs dispatches via claims_outbound_leaf
 runtime/          # Protocol-agnostic runtime
                   #   inbound_protocol.rs — InboundProtocol trait + serve_inbound() unified pipeline entry point
-                  #   tcp_outbound.rs — route_and_establish_tcp, establish_tcp_outbound (with circuit breaker)
+                  #   tcp_dispatch.rs — dispatch_tcp / dispatch_tcp_candidate / dispatch_tcp_relay_chain
+                  #     (dispatches via ProtocolRegistry::find_outbound_leaf().connect_tcp() — no match on ResolvedLeafOutbound)
                   #   udp_dispatch/ — UDP dispatch module: mod.rs (struct, dispatch orchestration),
                   #     forward.rs (forward_existing by UdpPathCategory), start.rs (start_flow, start_relay_flow),
                   #     ss_manager, h2_manager, trojan_manager, mieru_manager, packet_path_chain
                   #   udp_helpers.rs / vless_udp.rs — shared UDP types moved from outbound/
-                  #   engine_facade.rs, udp_associate.rs / udp_associate/, mux_pool.rs, upstream.rs
+                  #   engine_facade.rs, udp_associate.rs / udp_associate/, mux_pool.rs
 transport/        # Low-level I/O
                   #   tcp_relay.rs — RateLimiter (GCRA), RateLimitedWriter, relay_bidirectional_metered_throttled, copy_one_way
                   #   tcp_outbound.rs — data types only: TcpRouteResult, EstablishedTcpOutbound, extract_tcp_stream
