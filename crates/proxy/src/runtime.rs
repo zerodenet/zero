@@ -618,79 +618,28 @@ fn spawn_inbound_listener(
         return;
     }
 
-    let p = proxy.clone();
-    let b = inbound.clone();
+    // `mixed` is an inbound multiplexor (auto-detects SOCKS5 / HTTP CONNECT),
+    // not a registered adapter — handle it directly.
+    #[cfg(feature = "mixed")]
+    if matches!(inbound.protocol, InboundProtocolConfig::Mixed { .. }) {
+        let p = proxy.clone();
+        let b = inbound.clone();
+        listeners.spawn(async move {
+            p.run_mixed_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
+                .await
+        });
+        return;
+    }
 
-    match &b.protocol {
-        #[cfg(feature = "socks5")]
-        InboundProtocolConfig::Socks5 { .. } => {
-            listeners.spawn(async move {
-                p.run_socks5_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
-                    .await
-            });
+    // Single dispatch: resolve the inbound config to its adapter and spawn.
+    // Adding a protocol = register an adapter; this function never matches on
+    // the protocol enum.
+    match proxy.protocols.find_inbound(&inbound.protocol) {
+        Ok(adapter) => adapter.spawn_inbound(proxy, inbound.clone(), bound, shutdown_rx, listeners),
+        Err(_) => {
+            // The feature check above already validated compilation; reaching
+            // here means an unregistered config (e.g. mixed without feature).
         }
-        #[cfg(feature = "http_connect")]
-        InboundProtocolConfig::HttpConnect => {
-            listeners.spawn(async move {
-                p.run_http_connect_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
-                    .await
-            });
-        }
-        #[cfg(feature = "mixed")]
-        InboundProtocolConfig::Mixed { .. } => {
-            listeners.spawn(async move {
-                p.run_mixed_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
-                    .await
-            });
-        }
-        #[cfg(feature = "vless")]
-        InboundProtocolConfig::Vless { .. } => {
-            listeners
-                .spawn(async move { p.run_vless_listener_with_bound(b, bound, shutdown_rx).await });
-        }
-        #[cfg(feature = "hysteria2")]
-        InboundProtocolConfig::Hysteria2 { .. } => {
-            listeners.spawn(async move {
-                p.run_hysteria2_listener_with_bound(b, bound, shutdown_rx)
-                    .await
-            });
-        }
-        #[cfg(feature = "shadowsocks")]
-        InboundProtocolConfig::Shadowsocks { .. } => {
-            listeners.spawn(async move {
-                p.run_shadowsocks_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
-                    .await
-            });
-        }
-        #[cfg(feature = "trojan")]
-        InboundProtocolConfig::Trojan { .. } => {
-            listeners.spawn(async move {
-                p.run_trojan_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
-                    .await
-            });
-        }
-        #[cfg(feature = "vmess")]
-        InboundProtocolConfig::Vmess { .. } => {
-            listeners.spawn(async move {
-                p.run_vmess_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
-                    .await
-            });
-        }
-        #[cfg(feature = "mieru")]
-        InboundProtocolConfig::Mieru { .. } => {
-            listeners.spawn(async move {
-                p.run_mieru_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
-                    .await
-            });
-        }
-        InboundProtocolConfig::Direct { .. } => {
-            listeners.spawn(async move {
-                p.run_direct_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
-                    .await
-            });
-        }
-        #[allow(unreachable_patterns)]
-        _ => unreachable!("registry check above already validated protocol is compiled"),
     }
 }
 
