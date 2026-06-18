@@ -97,10 +97,10 @@ If you change protocol behavior, config parsing, routing, or runtime wiring, run
 - `ProtocolAdapter::bind_inbound` owns the bind logic (TCP or QUIC) and reads its own protocol config. The runtime never touches protocol-private fields.
 - `ProtocolAdapter::spawn_inbound` owns the accept-loop spawn (clones the proxy, extracts the listener, spawns `run_<protocol>_listener_with_bound`). The runtime dispatches via `ProtocolRegistry::find_inbound` instead of a `match InboundProtocolConfig`. (`mixed` stays a special case — it's an auto-detect multiplexor, not a registered adapter.)
 - `ProtocolAdapter::connect_tcp` owns the outbound TCP connect (dial + handshake) and `apply_relay_hop` owns the relay-chain handshake over an existing stream. The runtime dispatches via `ProtocolRegistry::find_outbound_leaf` instead of a `match ResolvedLeafOutbound`.
-- `ProtocolAdapter::start_udp_flow` owns the UDP outbound flow establishment. The adapter drives its per-protocol manager (a field on `UdpDispatch`) to send the datagram; the runtime dispatches via `find_outbound_leaf` instead of a `match ResolvedLeafOutbound`.
+- `ProtocolAdapter::start_udp_flow` owns the single-hop UDP outbound flow establishment. The adapter drives its per-protocol manager (a field on `UdpDispatch`) to send the datagram; the runtime dispatches via `find_outbound_leaf` instead of a `match ResolvedLeafOutbound`. The same trait-dispatch pattern covers the UDP relay final hop (`start_udp_relay_final_hop`) and the VLESS two-stream XHTTP path (`udp_relay_needs_two_streams` + `start_udp_relay_two_stream`); `start_relay_flow` resolves the final hop's adapter and delegates — no per-protocol match.
 - Port conflicts surface eagerly (before accept loop spawn) via `bind_inbound_listener`.
 - Per-protocol TCP connect logic lives in `crates/proxy/src/outbound/<protocol>.rs` (`connect_tcp` + `apply_tcp_hop`); the adapter in `adapters.rs` extracts the leaf variant and delegates.
-- UDP relay-chain helpers (`resolve_udp_packet_path_chain`, `start_relay_flow`) in `udp_dispatch/start/` still match on `ResolvedLeafOutbound` for the datagram-over-packet-path combinations — these are datagram composition, not per-protocol dispatch.
+- UDP relay-chain datagram-over-packet-path helpers (`resolve_udp_packet_path_chain`, `owned_packet_path_carrier`) in `udp_dispatch/start/` still match on `ResolvedLeafOutbound` — these model carrier+datagram protocol *pairs* (SS→SS, SOCKS5→SS, H2→SS), not per-protocol dispatch.
 
 ## Docs
 

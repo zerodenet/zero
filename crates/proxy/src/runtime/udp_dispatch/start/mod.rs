@@ -13,24 +13,13 @@ use super::packet_path_chain::{PacketPathCarrierParams, PacketPathChainParams};
 use super::{FlowFailure, FlowStartResult, UdpCandidate, UdpDispatch};
 #[cfg(feature = "shadowsocks")]
 use crate::runtime::udp_associate::sessions::UdpPacketPathCarrier;
-#[cfg(feature = "vless")]
-use crate::runtime::vless_udp::establish_vless_udp_upstream_over_stream;
 use crate::runtime::Proxy;
 
 // Re-exports consumed by `relay` submodule via `use super::*`.
 #[allow(unused_imports)]
 pub(super) use crate::runtime::udp_associate::sessions::UdpFlowOutbound;
 #[allow(unused_imports)]
-pub(super) use crate::runtime::udp_dispatch::{
-    H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpFlowContext, UdpPacketRef,
-    UdpPeerEndpoint,
-};
-#[cfg(feature = "vmess")]
-#[allow(unused_imports)]
-pub(super) use crate::runtime::vmess_udp::{
-    build_vmess_udp_transport_over_stream, establish_vmess_udp_upstream_over_stream,
-    VmessUdpTransport,
-};
+pub(super) use crate::runtime::udp_dispatch::{UdpFlowContext, UdpPacketRef};
 
 // Chain resolution.
 

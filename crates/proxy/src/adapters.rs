@@ -485,6 +485,179 @@ impl ProtocolAdapter for VlessAdapter {
                 .await
         });
     }
+    fn udp_relay_needs_two_streams(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
+        matches!(
+            leaf,
+            ResolvedLeafOutbound::Vless {
+                split_http: Some(cfg),
+                ..
+            } if !zero_transport::split_http::XhttpMode::parse(&cfg.mode).is_single_connection()
+        )
+    }
+    async fn start_udp_relay_two_stream(
+        &self,
+        dispatch: &mut UdpDispatch,
+        proxy: &Proxy,
+        session: &Session,
+        chain: Vec<ResolvedLeafOutbound<'_>>,
+        payload: &[u8],
+    ) -> Result<FlowStartResult, FlowFailure> {
+        use crate::runtime::vless_udp::establish_vless_udp_upstream_over_stream;
+
+        let chain_get = chain.clone();
+        let (post_carrier, final_hop) =
+            proxy
+                .dispatch_tcp_relay_prefix(chain)
+                .await
+                .map_err(|f| FlowFailure {
+                    stage: f.stage,
+                    error: f.error,
+                    upstream: f.upstream_endpoint,
+                })?;
+        let (get_carrier, _) = proxy
+            .dispatch_tcp_relay_prefix(chain_get)
+            .await
+            .map_err(|f| FlowFailure {
+                stage: f.stage,
+                error: f.error,
+                upstream: f.upstream_endpoint,
+            })?;
+
+        let ResolvedLeafOutbound::Vless {
+            tag,
+            server,
+            port,
+            id,
+            split_http,
+            ..
+        } = &final_hop
+        else {
+            return Err(unreachable_udp_leaf(self.name(), &final_hop));
+        };
+        let split_http_cfg = split_http
+            .as_ref()
+            .expect("udp_relay_needs_two_streams checked split_http is Some");
+
+        let stream = crate::transport::build_vless_split_http_over_relay(
+            post_carrier.stream,
+            get_carrier.stream,
+            split_http_cfg,
+        )
+        .await
+        .map_err(|error| FlowFailure {
+            stage: "udp_relay_final_transport",
+            error,
+            upstream: Some(((*server).to_string(), *port)),
+        })?;
+
+        let session_id = session.id;
+        let key = (session.target.clone(), session.port);
+        let (upstream, recv_tx) =
+            establish_vless_udp_upstream_over_stream(proxy, session, id, payload, stream)
+                .await
+                .map_err(|error| FlowFailure {
+                    stage: "udp_vless_relay_chain",
+                    error,
+                    upstream: None,
+                })?;
+        dispatch
+            .vless_manager
+            .insert_upstream(key, upstream, recv_tx);
+        dispatch.vless_manager.spawn_bridge(
+            &mut dispatch.chain_tasks,
+            session.target.clone(),
+            session.port,
+            session_id,
+        );
+
+        Ok(FlowStartResult::VlessFlow {
+            session_id,
+            tag: (*tag).to_string(),
+        })
+    }
+    async fn start_udp_relay_final_hop(
+        &self,
+        dispatch: &mut UdpDispatch,
+        proxy: &Proxy,
+        session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        leaf: &ResolvedLeafOutbound<'_>,
+        payload: &[u8],
+    ) -> Result<FlowStartResult, FlowFailure> {
+        use crate::runtime::vless_udp::establish_vless_udp_upstream_over_stream;
+
+        let ResolvedLeafOutbound::Vless {
+            tag,
+            server,
+            port,
+            id,
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            quic,
+            ..
+        } = leaf
+        else {
+            return Err(unreachable_udp_leaf(self.name(), leaf));
+        };
+        if quic.is_some() {
+            return Err(FlowFailure {
+                stage: "udp_relay_final_transport",
+                error: zero_core::Error::Unsupported(
+                    "VLESS QUIC final hop over TCP relay chain is not supported",
+                )
+                .into(),
+                upstream: None,
+            });
+        }
+
+        let session_id = session.id;
+        let tag_owned = (*tag).to_string();
+        let key = (session.target.clone(), session.port);
+        let stream = crate::transport::build_vless_outbound_transport_over_stream(
+            carrier,
+            *tls,
+            *reality,
+            *ws,
+            *grpc,
+            *h2,
+            *http_upgrade,
+            *split_http,
+            proxy.config.source_dir(),
+        )
+        .await
+        .map_err(|error| FlowFailure {
+            stage: "udp_relay_final_transport",
+            error,
+            upstream: Some(((*server).to_string(), *port)),
+        })?;
+        let (upstream, recv_tx) =
+            establish_vless_udp_upstream_over_stream(proxy, session, id, payload, stream)
+                .await
+                .map_err(|error| FlowFailure {
+                    stage: "udp_vless_relay_chain",
+                    error,
+                    upstream: None,
+                })?;
+        dispatch
+            .vless_manager
+            .insert_upstream(key, upstream, recv_tx);
+        dispatch.vless_manager.spawn_bridge(
+            &mut dispatch.chain_tasks,
+            session.target.clone(),
+            session.port,
+            session_id,
+        );
+
+        Ok(FlowStartResult::VlessFlow {
+            session_id,
+            tag: tag_owned,
+        })
+    }
 }
 
 #[cfg(feature = "vless")]
@@ -997,6 +1170,72 @@ impl ProtocolAdapter for TrojanAdapter {
                 .await
         });
     }
+    async fn start_udp_relay_final_hop(
+        &self,
+        dispatch: &mut UdpDispatch,
+        proxy: &Proxy,
+        session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        leaf: &ResolvedLeafOutbound<'_>,
+        payload: &[u8],
+    ) -> Result<FlowStartResult, FlowFailure> {
+        let ResolvedLeafOutbound::Trojan {
+            tag,
+            server,
+            port,
+            password,
+            sni,
+            insecure,
+            client_fingerprint,
+        } = leaf
+        else {
+            return Err(unreachable_udp_leaf(self.name(), leaf));
+        };
+        use crate::runtime::orchestration::OutboundEndpoint;
+        use crate::runtime::udp_dispatch::{TrojanUdpPeer, UdpFlowContext, UdpPacketRef};
+        let sent = dispatch
+            .trojan_manager
+            .send_relay(
+                UdpFlowContext {
+                    chain_tasks: &mut dispatch.chain_tasks,
+                    session_id: session.id,
+                },
+                carrier.stream,
+                None,
+                proxy,
+                session,
+                TrojanUdpPeer {
+                    endpoint: OutboundEndpoint {
+                        server,
+                        port: *port,
+                    },
+                    password,
+                    sni: *sni,
+                    insecure: *insecure,
+                    client_fingerprint: *client_fingerprint,
+                    relay_chain: true,
+                },
+                UdpPacketRef {
+                    target: &session.target,
+                    port: session.port,
+                    payload,
+                },
+            )
+            .await?;
+        Ok(FlowStartResult::Flow {
+            outbound: UdpFlowOutbound::Trojan {
+                tag: (*tag).to_string(),
+                server: (*server).to_string(),
+                port: *port,
+                password: (*password).to_string(),
+                sni: (*sni).map(|s| s.to_string()),
+                insecure: *insecure,
+                client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
+                relay_chain: true,
+            },
+            tx_bytes: sent as u64,
+        })
+    }
 }
 
 #[cfg(feature = "trojan")]
@@ -1169,6 +1408,78 @@ impl ProtocolAdapter for VmessAdapter {
                 .await
         });
     }
+    async fn start_udp_relay_final_hop(
+        &self,
+        dispatch: &mut UdpDispatch,
+        proxy: &Proxy,
+        session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        leaf: &ResolvedLeafOutbound<'_>,
+        payload: &[u8],
+    ) -> Result<FlowStartResult, FlowFailure> {
+        use crate::runtime::vmess_udp::{
+            build_vmess_udp_transport_over_stream, establish_vmess_udp_upstream_over_stream,
+            VmessUdpTransport,
+        };
+
+        let ResolvedLeafOutbound::Vmess {
+            tag,
+            server,
+            port,
+            id,
+            cipher,
+            tls,
+            ws,
+            grpc,
+            ..
+        } = leaf
+        else {
+            return Err(unreachable_udp_leaf(self.name(), leaf));
+        };
+        let session_id = session.id;
+        let tag_owned = (*tag).to_string();
+        let key = (session.target.clone(), session.port);
+        let transport = VmessUdpTransport {
+            tls: *tls,
+            ws: *ws,
+            grpc: *grpc,
+        };
+        let stream = build_vmess_udp_transport_over_stream(
+            carrier.stream,
+            Some(&transport),
+            proxy.config.source_dir(),
+            server,
+            *port,
+        )
+        .await
+        .map_err(|error| FlowFailure {
+            stage: "udp_vmess_relay_final_transport",
+            error,
+            upstream: Some(((*server).to_string(), *port)),
+        })?;
+        let (upstream, recv_tx) =
+            establish_vmess_udp_upstream_over_stream(proxy, session, id, cipher, payload, stream)
+                .await
+                .map_err(|error| FlowFailure {
+                    stage: "udp_vmess_relay_chain",
+                    error,
+                    upstream: None,
+                })?;
+        dispatch
+            .vmess_manager
+            .insert_upstream(key, upstream, recv_tx);
+        dispatch.vmess_manager.spawn_bridge(
+            &mut dispatch.chain_tasks,
+            session.target.clone(),
+            session.port,
+            session_id,
+        );
+
+        Ok(FlowStartResult::VmessFlow {
+            session_id,
+            tag: tag_owned,
+        })
+    }
 }
 
 #[cfg(feature = "vmess")]
@@ -1328,6 +1639,63 @@ impl ProtocolAdapter for MieruAdapter {
             p.run_mieru_listener_with_bound(inbound, bound.into_tcp(), shutdown_rx)
                 .await
         });
+    }
+    async fn start_udp_relay_final_hop(
+        &self,
+        dispatch: &mut UdpDispatch,
+        _proxy: &Proxy,
+        session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        leaf: &ResolvedLeafOutbound<'_>,
+        payload: &[u8],
+    ) -> Result<FlowStartResult, FlowFailure> {
+        let ResolvedLeafOutbound::Mieru {
+            tag,
+            server,
+            port,
+            username,
+            password,
+        } = leaf
+        else {
+            return Err(unreachable_udp_leaf(self.name(), leaf));
+        };
+        use crate::runtime::orchestration::OutboundEndpoint;
+        use crate::runtime::udp_dispatch::{MieruUdpPeer, UdpFlowContext, UdpPacketRef};
+        let sent = dispatch
+            .mieru_manager
+            .send_relay(
+                UdpFlowContext {
+                    chain_tasks: &mut dispatch.chain_tasks,
+                    session_id: session.id,
+                },
+                carrier.stream,
+                MieruUdpPeer {
+                    endpoint: OutboundEndpoint {
+                        server,
+                        port: *port,
+                    },
+                    username,
+                    password,
+                    relay_chain: true,
+                },
+                UdpPacketRef {
+                    target: &session.target,
+                    port: session.port,
+                    payload,
+                },
+            )
+            .await?;
+        Ok(FlowStartResult::Flow {
+            outbound: UdpFlowOutbound::Mieru {
+                tag: (*tag).to_string(),
+                server: (*server).to_string(),
+                port: *port,
+                username: (*username).to_string(),
+                password: (*password).to_string(),
+                relay_chain: true,
+            },
+            tx_bytes: sent as u64,
+        })
     }
 }
 

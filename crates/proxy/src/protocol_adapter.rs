@@ -205,6 +205,71 @@ pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
         _listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
     }
+
+    /// Whether the UDP relay chain final hop needs the two-stream XHTTP path.
+    ///
+    /// Only the VLESS adapter overrides this (returns `true` for legacy
+    /// split_http packet-up / stream-up modes). The runtime checks this
+    /// *before* running the relay prefix so it can dial two carrier streams.
+    fn udp_relay_needs_two_streams(&self, _leaf: &ResolvedLeafOutbound<'_>) -> bool {
+        false
+    }
+
+    /// Drive the two-stream XHTTP UDP relay path (VLESS legacy split_http).
+    ///
+    /// The adapter owns the full path: it runs the relay prefix twice (POST +
+    /// GET carrier), builds the split-HTTP pair, and establishes the VLESS UDP
+    /// upstream. Only the VLESS adapter overrides this.
+    async fn start_udp_relay_two_stream(
+        &self,
+        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
+        _proxy: &Proxy,
+        _session: &Session,
+        _chain: Vec<ResolvedLeafOutbound<'_>>,
+        _payload: &[u8],
+    ) -> Result<
+        crate::runtime::udp_dispatch::FlowStartResult,
+        crate::runtime::udp_dispatch::FlowFailure,
+    > {
+        Err(crate::runtime::udp_dispatch::FlowFailure {
+            stage: "no_two_stream_relay",
+            error: EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "this adapter does not support two-stream UDP relay",
+            )),
+            upstream: None,
+        })
+    }
+
+    /// Establish the UDP final hop over a carrier stream from the relay prefix.
+    ///
+    /// The adapter receives the carrier produced by `dispatch_tcp_relay_prefix`
+    /// and runs its protocol's UDP-over-relay logic (build transport over the
+    /// stream, or pass the stream to its chain manager). The runtime dispatches
+    /// via [`ProtocolRegistry::find_outbound_leaf`] instead of matching on the
+    /// protocol enum. Defaults to "not supported".
+    async fn start_udp_relay_final_hop(
+        &self,
+        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
+        _proxy: &Proxy,
+        _session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        _leaf: &ResolvedLeafOutbound<'_>,
+        _payload: &[u8],
+    ) -> Result<
+        crate::runtime::udp_dispatch::FlowStartResult,
+        crate::runtime::udp_dispatch::FlowFailure,
+    > {
+        let _ = carrier;
+        Err(crate::runtime::udp_dispatch::FlowFailure {
+            stage: "no_udp_relay_final_hop",
+            error: EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "this adapter does not support UDP relay final hop",
+            )),
+            upstream: None,
+        })
+    }
 }
 
 /// Registry of all compiled-in protocol adapters.
