@@ -165,6 +165,7 @@ impl Proxy {
                 )
                 .await
             }
+            #[cfg(feature = "hysteria2")]
             ResolvedLeafOutbound::Hysteria2 {
                 tag,
                 server,
@@ -184,6 +185,7 @@ impl Proxy {
                 )
                 .await
             }
+            #[cfg(feature = "shadowsocks")]
             ResolvedLeafOutbound::Shadowsocks {
                 tag,
                 server,
@@ -194,6 +196,7 @@ impl Proxy {
                 self.establish_shadowsocks_outbound(session, tag, server, port, password, cipher)
                     .await
             }
+            #[cfg(feature = "trojan")]
             ResolvedLeafOutbound::Trojan {
                 tag,
                 server,
@@ -215,6 +218,7 @@ impl Proxy {
                 )
                 .await
             }
+            #[cfg(feature = "vmess")]
             ResolvedLeafOutbound::Vmess {
                 tag,
                 server,
@@ -242,6 +246,7 @@ impl Proxy {
                 )
                 .await
             }
+            #[cfg(feature = "mieru")]
             ResolvedLeafOutbound::Mieru {
                 tag,
                 server,
@@ -252,6 +257,15 @@ impl Proxy {
                 self.establish_mieru_outbound(session, tag, server, port, username, password)
                     .await
             }
+            #[allow(unreachable_patterns)]
+            _ => Err(TcpOutboundFailure {
+                stage: "protocol_not_compiled",
+                error: EngineError::Io(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "protocol not compiled in this build",
+                )),
+                upstream_endpoint: None,
+            }),
         };
 
         // Record health after connection attempt.
