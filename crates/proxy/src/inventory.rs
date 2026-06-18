@@ -152,4 +152,26 @@ impl ProtocolInventory {
     ) -> Result<BoundInbound, EngineError> {
         self.registry.bind_inbound(inbound, source_dir).await
     }
+
+    /// Resolve a [`ResolvedLeafOutbound`] to its registered outbound adapter.
+    ///
+    /// Single dispatch point for TCP/UDP outbound establishment — the runtime
+    /// calls this instead of matching on the protocol enum.
+    pub(crate) fn find_outbound_leaf(
+        &self,
+        leaf: &zero_engine::ResolvedLeafOutbound<'_>,
+    ) -> Result<std::sync::Arc<dyn crate::protocol_adapter::ProtocolAdapter>, EngineError> {
+        self.registry.find_outbound_leaf(leaf)
+    }
+
+    /// Resolve an [`InboundProtocolConfig`] to its registered inbound adapter.
+    ///
+    /// Single dispatch point for inbound spawn — the runtime calls this
+    /// instead of matching on the protocol enum.
+    pub(crate) fn find_inbound(
+        &self,
+        config: &InboundProtocolConfig,
+    ) -> Result<std::sync::Arc<dyn crate::protocol_adapter::ProtocolAdapter>, EngineError> {
+        self.registry.find_inbound(config)
+    }
 }

@@ -78,6 +78,18 @@ pub(crate) fn endpoint<'a>(candidate: &ResolvedLeafOutbound<'a>) -> Option<Outbo
     }
 }
 
+/// Return the optional config tag for kernel-level (Direct / Block) outbounds.
+///
+/// Unlike [`health_tag`] (which returns `None` for these), this exposes the
+/// tag so the TCP dispatcher can label the `Block` result without matching on
+/// the protocol enum. Proxy-protocol tags come from [`health_tag`].
+pub(crate) fn kernel_leaf_tag<'a>(leaf: &ResolvedLeafOutbound<'a>) -> Option<&'a str> {
+    match leaf {
+        ResolvedLeafOutbound::Direct { tag } | ResolvedLeafOutbound::Block { tag } => *tag,
+        _ => None,
+    }
+}
+
 /// Return the TCP orchestration category for one resolved outbound.
 pub(crate) fn tcp_path_category(candidate: &ResolvedLeafOutbound<'_>) -> TcpPathCategory {
     match candidate {

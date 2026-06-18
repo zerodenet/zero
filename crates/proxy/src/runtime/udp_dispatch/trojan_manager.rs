@@ -19,7 +19,7 @@ use super::{FlowFailure, TrojanUdpPeer, UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 
 #[cfg(feature = "trojan")]
-pub(super) struct TrojanChainManager {
+pub(crate) struct TrojanChainManager {
     upstreams: HashMap<TrojanKey, TrojanEntry>,
 }
 
@@ -50,7 +50,7 @@ impl TrojanChainManager {
         }
     }
 
-    pub(super) async fn send(
+    pub(crate) async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
@@ -118,7 +118,7 @@ impl TrojanChainManager {
         Ok(sent)
     }
 
-    pub(super) async fn send_relay(
+    pub(crate) async fn send_relay(
         &mut self,
         ctx: UdpFlowContext<'_>,
         stream: TcpRelayStream,
@@ -382,7 +382,7 @@ impl AsyncSocket for WriteOnlySocket {
 }
 
 #[cfg(not(feature = "trojan"))]
-pub(super) struct TrojanChainManager;
+pub(crate) struct TrojanChainManager;
 
 #[cfg(not(feature = "trojan"))]
 impl TrojanChainManager {
@@ -390,7 +390,7 @@ impl TrojanChainManager {
         Self
     }
     #[allow(unused_variables)]
-    pub(super) async fn send(
+    pub(crate) async fn send(
         &mut self,
         _ctx: UdpFlowContext<'_>,
         _proxy: &Proxy,

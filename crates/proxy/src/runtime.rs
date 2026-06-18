@@ -27,7 +27,6 @@ mod tcp_dispatch;
 pub(crate) mod udp_associate;
 pub(crate) mod udp_dispatch;
 pub(crate) mod udp_helpers;
-pub(crate) mod upstream;
 pub(crate) mod vless_udp;
 #[cfg(feature = "vmess")]
 pub(crate) mod vmess_mux_pool;

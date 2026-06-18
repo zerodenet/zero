@@ -2,6 +2,7 @@
 //!
 //! Wraps a raw TCP stream with Mieru protocol encryption/decryption,
 //! providing an `AsyncRead + AsyncWrite` interface for the proxy relay.
+//! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`.
 
 use std::io;
 use std::pin::Pin;
@@ -9,8 +10,11 @@ use std::task::{Context, Poll};
 
 use mieru::MieruOutbound;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use zero_core::Address;
+use zero_core::{Address, Session};
+use zero_engine::EngineError;
+use zero_traits::TcpSessionProtocol;
 
+use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 /// Run a socks5 client handshake (no-auth + CONNECT) over an established mieru
@@ -227,4 +231,69 @@ impl AsyncWrite for MieruTcpStream {
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.inner).poll_shutdown(cx)
     }
+}
+
+// ── TCP outbound connect ──────────────────────────────────────────────
+
+/// Establish a Mieru TCP upstream: dial the server, run the Mieru session
+/// handshake, then run a SOCKS5 CONNECT inside the encrypted tunnel to bind
+/// the proxy target.
+///
+/// Moved from `runtime/upstream.rs`. The runtime dispatches via the adapter
+/// trait instead of a per-protocol `connect_via_*` method.
+pub(crate) async fn connect_tcp(
+    proxy: &Proxy,
+    session: &Session,
+    server: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+) -> Result<TcpRelayStream, EngineError> {
+    let socket = proxy
+        .protocols
+        .direct_outbound
+        .connect_host(server, port, proxy.resolver.as_ref())
+        .await?;
+
+    // Wrap in TcpRelayStream for AsyncSocket compatibility.
+    let mut stream = TcpRelayStream::new(socket);
+
+    let outbound =
+        <mieru::MieruProtocol as TcpSessionProtocol<mieru::MieruTcpTarget>>::establish_tcp_session(
+            &mieru::MieruProtocol,
+            &mut stream,
+            &mieru::MieruTcpTarget { username, password },
+        )
+        .await
+        .map_err(|e| EngineError::Io(io::Error::other(format!("mieru handshake: {e}"))))?;
+
+    let mut mieru_stream = MieruTcpStream::new(stream, outbound);
+    // Mieru conveys the proxy target via socks5 inside the encrypted tunnel.
+    socks5_connect(&mut mieru_stream, &session.target, session.port)
+        .await
+        .map_err(|e| EngineError::Io(io::Error::other(format!("mieru socks5: {e}"))))?;
+    Ok(TcpRelayStream::new(mieru_stream))
+}
+
+/// Apply a Mieru session handshake over an existing stream (relay hop).
+/// Unlike [`connect_tcp`] this does not dial.
+pub(crate) async fn apply_tcp_hop(
+    mut stream: TcpRelayStream,
+    session: &Session,
+    username: &str,
+    password: &str,
+) -> Result<TcpRelayStream, EngineError> {
+    let outbound =
+        <mieru::MieruProtocol as TcpSessionProtocol<mieru::MieruTcpTarget>>::establish_tcp_session(
+            &mieru::MieruProtocol,
+            &mut stream,
+            &mieru::MieruTcpTarget { username, password },
+        )
+        .await
+        .map_err(|e| EngineError::Io(io::Error::other(format!("mieru handshake: {e}"))))?;
+    let mut mieru_stream = MieruTcpStream::new(stream, outbound);
+    socks5_connect(&mut mieru_stream, &session.target, session.port)
+        .await
+        .map_err(|e| EngineError::Io(io::Error::other(format!("mieru socks5: {e}"))))?;
+    Ok(TcpRelayStream::new(mieru_stream))
 }

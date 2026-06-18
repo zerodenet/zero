@@ -12,10 +12,13 @@ use async_trait::async_trait;
 
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
-use zero_engine::EngineError;
+use zero_core::Session;
+use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolMetadata, TransportKind};
 
 use crate::protocol_capability::{protocol_capability, protocol_descriptor};
+use crate::runtime::Proxy;
+use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
 /// A pre-bound inbound listener — TCP or QUIC.
 ///
@@ -98,6 +101,110 @@ pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
 
     /// Whether this adapter provides an outbound connector.
     fn has_outbound(&self) -> bool;
+
+    /// Whether this adapter owns the given resolved outbound leaf.
+    ///
+    /// Single dispatch probe: the runtime calls this to find the adapter that
+    /// handles a [`ResolvedLeafOutbound`] instead of matching on the protocol
+    /// enum. Each adapter claims exactly its own variant, e.g. the SOCKS5
+    /// adapter returns `true` only for `ResolvedLeafOutbound::Socks5 { .. }`.
+    fn claims_outbound_leaf(&self, _leaf: &ResolvedLeafOutbound<'_>) -> bool {
+        false
+    }
+
+    /// Establish a TCP outbound connection for the resolved leaf.
+    ///
+    /// The adapter extracts its own variant from `leaf`, reads its own
+    /// protocol-private fields (password/cipher/uuid — the runtime never
+    /// touches those), performs the transport + protocol handshake, and
+    /// returns the established outbound. Defaults to "not supported" so
+    /// inbound-only adapters (e.g. HTTP CONNECT) need not override.
+    ///
+    /// This is the outbound mirror of [`crate::runtime::inbound_protocol::InboundProtocol`]:
+    /// the runtime dispatches via [`ProtocolRegistry::find_outbound_leaf`]
+    /// instead of matching on `ResolvedLeafOutbound`.
+    async fn connect_tcp(
+        &self,
+        _proxy: &Proxy,
+        _session: &Session,
+        _leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        Err(TcpOutboundFailure {
+            stage: "no_tcp_outbound",
+            error: EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "this adapter does not provide a TCP outbound",
+            )),
+            upstream_endpoint: None,
+        })
+    }
+
+    /// Apply this protocol's handshake to an existing stream (relay chain hop).
+    ///
+    /// For relay chains, the first hop uses [`Self::connect_tcp`] (dial +
+    /// handshake); subsequent hops receive an already-connected stream from
+    /// the previous hop and only run their protocol handshake over it.
+    /// Adapters that cannot serve as a relay hop leave the default
+    /// ("not supported") impl.
+    async fn apply_relay_hop(
+        &self,
+        _proxy: &Proxy,
+        stream: TcpRelayStream,
+        _session: &Session,
+        _leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<TcpRelayStream, EngineError> {
+        let _ = stream;
+        Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "this adapter does not support relay hop",
+        )))
+    }
+
+    /// Start a UDP outbound flow for the resolved leaf.
+    ///
+    /// The adapter extracts its own variant from `leaf` and drives its
+    /// per-protocol UDP manager on `dispatch` (each protocol owns a manager
+    /// field on [`crate::runtime::udp_dispatch::UdpDispatch`]). The runtime
+    /// dispatches via [`ProtocolRegistry::find_outbound_leaf`] instead of
+    /// matching on the protocol enum. Defaults to "not supported".
+    async fn start_udp_flow(
+        &self,
+        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
+        _proxy: &Proxy,
+        _session: &Session,
+        _leaf: &ResolvedLeafOutbound<'_>,
+        _payload: &[u8],
+    ) -> Result<
+        crate::runtime::udp_dispatch::FlowStartResult,
+        crate::runtime::udp_dispatch::FlowFailure,
+    > {
+        Err(crate::runtime::udp_dispatch::FlowFailure {
+            stage: "no_udp_outbound",
+            error: EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "this adapter does not provide a UDP outbound",
+            )),
+            upstream: None,
+        })
+    }
+
+    /// Spawn the inbound accept loop for `inbound` into `listeners`.
+    ///
+    /// The adapter owns the full inbound lifecycle from bind to run: it clones
+    /// the proxy, extracts the listener from `bound` (calling `into_tcp()` for
+    /// TCP-only protocols, keeping QUIC for VLESS/Hysteria2), and spawns its
+    /// `run_<protocol>_listener_with_bound` task. The runtime dispatches via
+    /// [`ProtocolRegistry::find_inbound`] instead of matching on the protocol
+    /// enum. Default is a no-op (inbound-only adapters override).
+    fn spawn_inbound(
+        &self,
+        _proxy: &Proxy,
+        _inbound: InboundConfig,
+        _bound: BoundInbound,
+        _shutdown_rx: tokio::sync::watch::Receiver<bool>,
+        _listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
+    ) {
+    }
 }
 
 /// Registry of all compiled-in protocol adapters.
@@ -300,6 +407,27 @@ impl ProtocolRegistry {
             protocol: name,
             feature: self.inbound_protocol_feature_name(config),
         })
+    }
+
+    /// Find the adapter that owns this resolved outbound leaf, if any.
+    ///
+    /// Single dispatch point: the TCP/UDP runtime resolves a
+    /// [`ResolvedLeafOutbound`] to its adapter here instead of matching on
+    /// the protocol enum. Each adapter claims exactly its own variant via
+    /// [`ProtocolAdapter::claims_outbound_leaf`].
+    pub fn find_outbound_leaf(
+        &self,
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<Arc<dyn ProtocolAdapter>, EngineError> {
+        for adapter in &self.adapters {
+            if adapter.claims_outbound_leaf(leaf) {
+                return Ok(adapter.clone());
+            }
+        }
+        Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "no compiled adapter handles this outbound leaf",
+        )))
     }
 
     /// Bind an inbound listener via its registered adapter.

@@ -100,7 +100,7 @@ use mieru_manager::MieruChainManager;
 use packet_path_chain::PacketPathManager;
 pub(crate) use packet_path_traits::ChainTask;
 pub(super) use packet_path_traits::{DatagramCodec, UdpPacketPath};
-use packet_path_traits::{
+pub(crate) use packet_path_traits::{
     H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpFlowContext, UdpPacketRef,
     UdpPeerEndpoint,
 };
@@ -111,7 +111,7 @@ use trojan_manager::TrojanChainManager;
 // Types.
 
 /// Result of starting a new UDP flow.
-enum FlowStartResult {
+pub(crate) enum FlowStartResult {
     /// A new flow was established and tracked in `UdpSessionFlows`.
     Flow {
         outbound: UdpFlowOutbound,
@@ -126,16 +126,16 @@ enum FlowStartResult {
     Blocked { tag: String },
 }
 
+/// Failure details for a flow start attempt.
+pub(crate) struct FlowFailure {
+    pub(crate) stage: &'static str,
+    pub(crate) error: EngineError,
+    pub(crate) upstream: Option<(String, u16)>,
+}
+
 enum UdpCandidate<'a> {
     Leaf(ResolvedLeafOutbound<'a>),
     Relay(Vec<ResolvedLeafOutbound<'a>>),
-}
-
-/// Failure details for a flow start attempt.
-struct FlowFailure {
-    stage: &'static str,
-    error: EngineError,
-    upstream: Option<(String, u16)>,
 }
 
 // UdpDispatch.
@@ -146,42 +146,42 @@ struct FlowFailure {
 /// VLESS manager) and session flow tracking.  Created per inbound UDP
 /// session/association.
 pub(crate) struct UdpDispatch {
-    inbound_tag: String,
-    flows: UdpSessionFlows,
+    pub(crate) inbound_tag: String,
+    pub(crate) flows: UdpSessionFlows,
     /// Ephemeral UDP socket for direct outbound (sends to target, receives responses).
-    direct_socket: TokioDatagramSocket,
+    pub(crate) direct_socket: TokioDatagramSocket,
     /// SOCKS5 upstream association (shared across all flows in this session).
-    socks5_upstream: Option<crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation>,
-    socks5_idle_deadline: Option<TokioInstant>,
+    pub(crate) socks5_upstream: Option<crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation>,
+    pub(crate) socks5_idle_deadline: Option<TokioInstant>,
     /// VLESS upstream manager (per-target connections).
-    vless_manager: VlessUdpOutboundManager,
+    pub(crate) vless_manager: VlessUdpOutboundManager,
     /// VMess upstream manager (per-target connections).
     #[cfg(feature = "vmess")]
-    vmess_manager: VmessUdpOutboundManager,
+    pub(crate) vmess_manager: VmessUdpOutboundManager,
     /// Session handles for VLESS chain flows. These are not tracked by
     /// [`UdpSessionFlows`] because the VLESS manager owns the per-target
     /// upstream connections. We store handles here so `finish_all()` can
     /// properly complete them.
-    vless_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
+    pub(crate) vless_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
     /// Session handles for VMess UDP flows owned by the VMess manager.
     #[cfg(feature = "vmess")]
-    vmess_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
+    pub(crate) vmess_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
     /// Unified JoinSet for chain-outbound (SS/H2/Trojan/Mieru/VLESS)
     /// response bridge tasks. Polled by [`poll_chain_response`].
-    chain_tasks: JoinSet<ChainTask>,
+    pub(crate) chain_tasks: JoinSet<ChainTask>,
     /// Per-dispatcher SS chain manager. Caches upstream sockets.
     #[cfg(feature = "shadowsocks")]
-    ss_manager: SsChainManager,
+    pub(crate) ss_manager: SsChainManager,
     /// Per-dispatcher datagram-over-packet-path manager for UDP relay chains.
     /// Caches packet path carrier connections.
     #[cfg(feature = "shadowsocks")]
-    packet_path_manager: PacketPathManager,
+    pub(crate) packet_path_manager: PacketPathManager,
     /// Per-dispatcher Trojan chain manager. Caches TLS upstream streams.
-    trojan_manager: TrojanChainManager,
+    pub(crate) trojan_manager: TrojanChainManager,
     /// Per-dispatcher Mieru chain manager. Caches encrypted upstream streams.
-    mieru_manager: MieruChainManager,
+    pub(crate) mieru_manager: MieruChainManager,
     /// Per-dispatcher H2 chain manager. Caches QUIC upstream connections.
-    h2_manager: H2ChainManager,
+    pub(crate) h2_manager: H2ChainManager,
 }
 
 impl UdpDispatch {
@@ -581,7 +581,7 @@ impl UdpDispatch {
     // SOCKS5 helper.
 
     /// Send via SOCKS5 upstream association, establishing one if needed.
-    async fn send_socks5(
+    pub(crate) async fn send_socks5(
         &mut self,
         proxy: &Proxy,
         tag: &str,

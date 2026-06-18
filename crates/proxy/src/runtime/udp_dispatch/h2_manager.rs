@@ -18,7 +18,7 @@ use super::{ChainTask, FlowFailure, H2UdpPeer, UdpFlowContext, UdpPacketRef};
 type RecvItem = (Address, u16, Vec<u8>);
 
 #[cfg(feature = "hysteria2")]
-pub(super) struct H2ChainManager {
+pub(crate) struct H2ChainManager {
     upstreams: HashMap<(String, u16, String), H2Entry>,
 }
 
@@ -35,7 +35,7 @@ impl H2ChainManager {
         }
     }
 
-    pub(super) async fn send(
+    pub(crate) async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         peer: H2UdpPeer<'_>,
@@ -169,7 +169,7 @@ impl H2ChainManager {
 }
 
 #[cfg(not(feature = "hysteria2"))]
-pub(super) struct H2ChainManager;
+pub(crate) struct H2ChainManager;
 
 #[cfg(not(feature = "hysteria2"))]
 impl H2ChainManager {
@@ -177,7 +177,7 @@ impl H2ChainManager {
         Self
     }
     #[allow(unused_variables)]
-    pub(super) async fn send(
+    pub(crate) async fn send(
         &mut self,
         _ctx: UdpFlowContext<'_>,
         _peer: H2UdpPeer<'_>,

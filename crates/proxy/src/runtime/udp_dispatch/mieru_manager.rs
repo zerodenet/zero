@@ -20,7 +20,7 @@ use crate::runtime::Proxy;
 type RecvItem = (Address, u16, Vec<u8>);
 
 #[cfg(feature = "mieru")]
-pub(super) struct MieruChainManager {
+pub(crate) struct MieruChainManager {
     upstreams: HashMap<MieruKey, MieruEntry>,
 }
 
@@ -52,7 +52,7 @@ impl MieruChainManager {
         }
     }
 
-    pub(super) async fn send(
+    pub(crate) async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
@@ -118,7 +118,7 @@ impl MieruChainManager {
         Ok(sent)
     }
 
-    pub(super) async fn send_relay(
+    pub(crate) async fn send_relay(
         &mut self,
         ctx: UdpFlowContext<'_>,
         stream: TcpRelayStream,
@@ -341,7 +341,7 @@ impl MieruChainManager {
 }
 
 #[cfg(not(feature = "mieru"))]
-pub(super) struct MieruChainManager;
+pub(crate) struct MieruChainManager;
 
 #[cfg(not(feature = "mieru"))]
 impl MieruChainManager {
@@ -349,7 +349,7 @@ impl MieruChainManager {
         Self
     }
     #[allow(unused_variables)]
-    pub(super) async fn send(
+    pub(crate) async fn send(
         &mut self,
         _ctx: UdpFlowContext<'_>,
         _proxy: &Proxy,
@@ -368,7 +368,7 @@ impl MieruChainManager {
     }
 
     #[allow(unused_variables)]
-    pub(super) async fn send_relay(
+    pub(crate) async fn send_relay(
         &mut self,
         _ctx: UdpFlowContext<'_>,
         _stream: crate::transport::TcpRelayStream,

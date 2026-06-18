@@ -1,5 +1,14 @@
 pub mod direct;
+#[cfg(feature = "hysteria2")]
+pub mod hysteria2;
 #[cfg(feature = "mieru")]
 pub mod mieru;
+#[cfg(feature = "shadowsocks")]
+pub mod shadowsocks;
 pub mod socks5;
+#[cfg(feature = "trojan")]
+pub mod trojan;
+#[cfg(feature = "vless")]
 pub mod vless;
+#[cfg(feature = "vmess")]
+pub mod vmess;

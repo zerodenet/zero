@@ -23,7 +23,7 @@ struct SsUpstream {
     waiters: Mutex<VecDeque<SsResponseWaiter>>,
 }
 
-pub(super) struct SsChainManager {
+pub(crate) struct SsChainManager {
     upstreams: HashMap<(String, u16, String, String), Arc<SsUpstream>>,
 }
 
@@ -34,7 +34,7 @@ impl SsChainManager {
         }
     }
 
-    pub(super) async fn send(
+    pub(crate) async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
