@@ -1,5 +1,6 @@
-use super::*;
-use serde::{Deserialize, Serialize};
+﻿use serde::{Deserialize, Serialize};
+
+use super::inbound::ListenConfig;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
