@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::{Network, Session};
@@ -246,7 +246,7 @@ impl VmessMuxConnectionPool {
 
         tokio::spawn(async move {
             loop {
-                let frame = match read_mux_frame_from_tokio(&mut reader).await {
+                let frame = match vmess::read_mux_frame_from_tokio(&mut reader).await {
                     Ok(frame) => frame,
                     Err(_) => break,
                 };
@@ -323,37 +323,6 @@ async fn connect_vmess_transport(
             "vmess: ws and grpc are mutually exclusive",
         ))),
     }
-}
-
-async fn read_mux_frame_from_tokio<R>(reader: &mut R) -> Result<vmess::MuxFrame, EngineError>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
-    let mut len_buf = [0_u8; 2];
-    reader.read_exact(&mut len_buf).await?;
-    let meta_len = u16::from_be_bytes(len_buf) as usize;
-    if meta_len > vmess::MUX_MAX_META_LEN {
-        return Err(EngineError::Core(zero_core::Error::Protocol(
-            "vmess mux metadata too large",
-        )));
-    }
-    let mut meta = vec![0_u8; meta_len];
-    reader.read_exact(&mut meta).await?;
-    let mut frame = vmess::decode_mux_metadata(&meta)?;
-    if frame.option & vmess::MUX_OPTION_DATA != 0 {
-        reader.read_exact(&mut len_buf).await?;
-        let data_len = u16::from_be_bytes(len_buf) as usize;
-        if data_len > vmess::MUX_MAX_DATA_LEN {
-            return Err(EngineError::Core(zero_core::Error::Protocol(
-                "vmess mux data too large",
-            )));
-        }
-        frame.payload.resize(data_len, 0);
-        if data_len > 0 {
-            reader.read_exact(&mut frame.payload).await?;
-        }
-    }
-    Ok(frame)
 }
 
 fn transport_key(

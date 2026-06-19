@@ -19,7 +19,6 @@ use zero_engine::EngineError;
 use zero_traits::DatagramCodec;
 
 use crate::logging::log_listener_connection_error;
-use crate::runtime::bind_listener;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::Proxy;

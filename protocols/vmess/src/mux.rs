@@ -116,6 +116,44 @@ pub async fn read_frame<S: AsyncSocket>(stream: &mut S) -> Result<MuxFrame, Erro
     Ok(frame)
 }
 
+pub async fn read_frame_from_tokio<R>(reader: &mut R) -> Result<MuxFrame, Error>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    let mut len_buf = [0u8; 2];
+    tokio::io::AsyncReadExt::read_exact(reader, &mut len_buf)
+        .await
+        .map_err(|_| Error::Io("vmess: failed to read from socket"))?;
+    let meta_len = u16::from_be_bytes(len_buf) as usize;
+    if meta_len > MUX_MAX_META_LEN {
+        return Err(Error::Protocol("vmess mux metadata too large"));
+    }
+
+    let mut meta = vec![0_u8; meta_len];
+    tokio::io::AsyncReadExt::read_exact(reader, &mut meta)
+        .await
+        .map_err(|_| Error::Io("vmess: failed to read from socket"))?;
+    let mut frame = decode_metadata(&meta)?;
+
+    if frame.option & MUX_OPTION_DATA != 0 {
+        tokio::io::AsyncReadExt::read_exact(reader, &mut len_buf)
+            .await
+            .map_err(|_| Error::Io("vmess: failed to read from socket"))?;
+        let data_len = u16::from_be_bytes(len_buf) as usize;
+        if data_len > MUX_MAX_DATA_LEN {
+            return Err(Error::Protocol("vmess mux data too large"));
+        }
+        frame.payload.resize(data_len, 0);
+        if data_len > 0 {
+            tokio::io::AsyncReadExt::read_exact(reader, &mut frame.payload)
+                .await
+                .map_err(|_| Error::Io("vmess: failed to read from socket"))?;
+        }
+    }
+
+    Ok(frame)
+}
+
 pub fn decode_metadata(meta: &[u8]) -> Result<MuxFrame, Error> {
     if meta.len() < 4 {
         return Err(Error::Protocol("vmess mux metadata too short"));

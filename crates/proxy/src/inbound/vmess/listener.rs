@@ -1,32 +1,13 @@
-//! VMess inbound: TLS accept, transport dispatch (WS/gRPC), protocol auth, route, TCP relay.
-
-use std::io;
-
-use async_trait::async_trait;
 use tokio::select;
-use tokio::sync::mpsc;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
-use tokio::time::Instant as TokioInstant;
 use tracing::{error, info, warn};
-use vmess::{VmessAccept, VmessAeadStream, VmessCipher, VmessInbound, VmessUser};
-use zero_config::{GrpcConfig, InboundConfig, WebSocketConfig};
-use zero_core::{Address, Network, ProtocolType, Session};
+use vmess::{VmessCipher, VmessInbound, VmessUser};
+use zero_config::InboundConfig;
 use zero_engine::EngineError;
-use zero_traits::AsyncSocket;
 
-use crate::runtime::bind_listener;
-use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
-use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
-use crate::runtime::udp_associate::helpers::{
-    log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
-};
-use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::Proxy;
-use crate::transport::TcpRelayStream;
-
-/// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
 use super::*;
+use crate::runtime::Proxy;
 
 impl Proxy {
     pub(crate) async fn run_vmess_listener_with_bound(

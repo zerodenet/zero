@@ -14,7 +14,7 @@ use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_traits::{ProtocolMetadata, TransportKind};
+use zero_traits::ProtocolMetadata;
 
 use crate::protocol_capability::{protocol_capability, protocol_descriptor};
 use crate::runtime::Proxy;
@@ -37,15 +37,20 @@ impl BoundInbound {
     /// Unwrap into a TCP listener. Panics if the variant is QUIC —
     /// indicates a dispatch mismatch (bind vs spawn disagree), which
     /// should never happen since both go through the same adapter.
+    #[cfg(any(feature = "vless", feature = "hysteria2"))]
     pub(crate) fn into_tcp(self) -> zero_platform_tokio::TokioListener {
         match self {
             Self::Tcp(l) => l,
-            #[cfg(any(feature = "vless", feature = "hysteria2"))]
             Self::Quic(_) => {
                 panic!("into_tcp: got QUIC listener, expected TCP (dispatch mismatch)")
             }
-            #[cfg(not(any(feature = "vless", feature = "hysteria2")))]
-            _ => unreachable!(),
+        }
+    }
+
+    #[cfg(not(any(feature = "vless", feature = "hysteria2")))]
+    pub(crate) fn into_tcp(self) -> zero_platform_tokio::TokioListener {
+        match self {
+            Self::Tcp(l) => l,
         }
     }
 }
@@ -66,22 +71,13 @@ pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     async fn bind_inbound(
         &self,
         inbound: &InboundConfig,
-        source_dir: Option<&std::path::Path>,
+        _source_dir: Option<&std::path::Path>,
     ) -> Result<BoundInbound, EngineError> {
         let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
         let tcp = zero_platform_tokio::TokioListener::bind(&listen)
             .await
             .map_err(EngineError::Io)?;
         Ok(BoundInbound::Tcp(tcp))
-    }
-
-    /// Transport kind the inbound listener uses for `config`.
-    ///
-    /// Defaults to [`TransportKind::Tcp`]; QUIC-based protocols (VLESS/QUIC,
-    /// Hysteria2) override. This lets the runtime dispatch bind/spawn
-    /// decisions without re-reading the protocol's private config fields.
-    fn inbound_transport_kind(&self, _config: &InboundProtocolConfig) -> TransportKind {
-        TransportKind::Tcp
     }
 
     /// Protocol name used in config `"type"` field and exported status.
@@ -269,6 +265,53 @@ pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
             )),
             upstream: None,
         })
+    }
+
+    /// If this leaf can serve as a UDP packet-path carrier (relay-chain first
+    /// hop that provides a raw send/recv channel), return its identity
+    /// descriptor (cache key + endpoint). Cheap; used for cache lookup before
+    /// [`Self::build_udp_packet_path`] dials.
+    fn udp_packet_path_carrier_descriptor(
+        &self,
+        _leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<crate::runtime::udp_dispatch::PacketPathCarrierDescriptor> {
+        None
+    }
+
+    /// Owned snapshot of the carrier for flow status/result reporting.
+    ///
+    /// Only carrier-capable adapters override this. The runtime uses it when a
+    /// relay chain caches a packet-path carrier and needs to keep a stable
+    /// owned representation in `UdpFlowOutbound`.
+    fn udp_packet_path_carrier_snapshot(
+        &self,
+        _leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<crate::runtime::udp_associate::sessions::UdpPacketPathCarrier> {
+        None
+    }
+
+    /// Build the concrete packet-path carrier for this leaf (dial + establish).
+    /// Only called on a cache miss. Defaults to "not supported".
+    async fn build_udp_packet_path(
+        &self,
+        _proxy: &Proxy,
+        _leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<std::sync::Arc<dyn crate::runtime::udp_dispatch::PacketPathCarrier>, EngineError>
+    {
+        Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "this adapter does not provide a UDP packet-path carrier",
+        )))
+    }
+
+    /// If this leaf can be a UDP packet-path datagram source (relay-chain final
+    /// hop that encodes its datagram through a carrier), return its params.
+    /// `None` for protocols that cannot serve this role.
+    fn udp_datagram_source<'a>(
+        &self,
+        _leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<crate::runtime::udp_dispatch::UdpDatagramSource<'a>> {
+        None
     }
 }
 
@@ -524,14 +567,5 @@ impl ProtocolRegistry {
             protocol: name,
             feature: self.inbound_protocol_feature_name(&inbound.protocol),
         })
-    }
-
-    /// Transport kind for an inbound config via its registered adapter.
-    pub fn inbound_transport_kind(&self, config: &InboundProtocolConfig) -> TransportKind {
-        self.adapters
-            .iter()
-            .find(|a| a.supports_inbound(config))
-            .map(|a| a.inbound_transport_kind(config))
-            .unwrap_or(TransportKind::Tcp)
     }
 }

@@ -127,7 +127,7 @@
     Shadowsocks TCP 入站 accept 返回 `ShadowsocksAccept`，协议 crate 拥有 AEAD 流封装器、服务器到客户端响应盐生成、下载密钥派生、块加密和块解密。代理拥有监听器生命周期、认证归因、TCP 管道入口、路由、计量、会话生命周期、统计和事件。
     内置验证覆盖所有支持的 Shadowsocks TCP cipher、大 TCP 载荷分块、错误密码 TCP 拒绝、SOCKS5-to-Shadowsocks UDP 中继、所有支持的 Shadowsocks UDP cipher 和基于已实现数据包路径载体的 Shadowsocks UDP 中继链。本地外部验证覆盖 SOCKS5 UDP ASSOCIATE 通过 Shadowsocks 出站到 `shadowsocks-rust ssserver -U`，覆盖所有支持的 cipher，包括 AEAD 2022 AES-GCM 和 AEAD 2022 XChaCha20Poly1305 UDP 数据包格式。
     AEAD 2022 TCP 仍缺少 SIP022 TCP 请求/响应头部协议。AEAD 2022 UDP 服务器端响应仍需要状态化响应上下文，Zero 才能作为完全兼容的外部 AEAD 2022 UDP 服务器运行。
-14. `UdpDatagramFraming` 针对 Hysteria2 UDP datagram 载荷实现。Hysteria2 crate 拥有 UDP datagram 目标编码/解码；代理拥有 QUIC 连接设置、认证、UDP datagram 发送/接收、路由、fallback、会话生命周期、统计、事件和响应桥接。Hysteria2 使用代理运行时中的传输特定 connector，因为 QUIC 连接设置与协议协商集成，不分解为流级握手。
+14. `UdpDatagramFraming` 针对 Hysteria2 UDP datagram 载荷实现。Hysteria2 crate 拥有 UDP datagram 目标编码/解码；代理拥有 QUIC 连接设置、认证、UDP datagram 发送/接收、路由、fallback、会话生命周期、统计、事件和响应桥接。Hysteria2 还提供 `UdpPacketPath` 载体，用于 packet-path relay chain；当前落点是 `[Hysteria2, Shadowsocks]`。Hysteria2 使用代理运行时中的传输特定 connector，因为 QUIC 连接设置与协议协商集成，不分解为流级握手。
 15. Mieru TCP 使用 `TcpSessionProtocol` 进行加密流会话设置。在 TCP 中继链中，Mieru 可以作为中间跳，因为代理运行 Mieru 会话握手并在应用下一跳之前用 `MieruTcpStream` 包装中继流。`UdpPacketFraming` 针对 Mieru UDP associate 封装实现。Mieru UDP 通过加密 Mieru 流集成在代理 UDP 分发路径中；协议 crate 拥有 Mieru 段加密/解密状态和 UDP associate 帧封装，而代理拥有路由、中继前缀设置、上游缓存、任务调度、统计、事件和响应桥接。UDP 中继链针对 TCP 中继前缀和 Mieru 作为最终跳实现。
 
 ## 剩余工作

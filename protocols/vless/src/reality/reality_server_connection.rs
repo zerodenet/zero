@@ -61,7 +61,6 @@ enum HandshakeState {
         client_handshake_traffic_secret: Vec<u8>,
         master_secret: Vec<u8>,
         cipher_suite: CipherSuite,
-        handshake_transcript_bytes: Vec<u8>,
         handshake_seq: u64,
         server_finished_hash: Vec<u8>,
     },
@@ -360,7 +359,6 @@ impl RealityServerConnection {
             client_handshake_traffic_secret: hs_keys.client_handshake_traffic_secret,
             master_secret: hs_keys.master_secret,
             cipher_suite,
-            handshake_transcript_bytes: transcript,
             handshake_seq: 0,
             server_finished_hash,
         };
@@ -373,7 +371,6 @@ impl RealityServerConnection {
             client_handshake_traffic_secret,
             master_secret,
             cipher_suite,
-            handshake_transcript_bytes: _,
             handshake_seq,
             server_finished_hash,
         } = &self.handshake_state

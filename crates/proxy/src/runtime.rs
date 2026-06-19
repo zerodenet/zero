@@ -11,7 +11,6 @@ use tracing::{info, warn};
 use zero_config::{InboundConfig, InboundProtocolConfig, RuntimeConfig};
 use zero_dns::DnsSystem;
 use zero_engine::{Engine, EngineError};
-use zero_platform_tokio::TokioListener;
 
 use crate::inventory::ProtocolInventory;
 use crate::runtime::mux_pool::MuxConnectionPool;
@@ -579,11 +578,6 @@ impl zero_api::EventSource for ProxyHandle {
     ) -> zero_api::ApiResult<Vec<zero_api::RawApiEvent>> {
         self.inner.latest(limit, filter)
     }
-}
-
-pub(crate) async fn bind_listener(inbound: &InboundConfig) -> io::Result<TokioListener> {
-    let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
-    TokioListener::bind(&listen).await
 }
 
 // ── listener lifecycle helpers ───────────────────────────────────────

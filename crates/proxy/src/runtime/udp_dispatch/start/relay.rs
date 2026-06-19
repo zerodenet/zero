@@ -8,38 +8,59 @@ impl UdpDispatch {
         session: &Session,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        // Datagram-over-packet-path: previous hop provides a packet path,
-        // next hop encodes its datagram through it.
+        // Datagram-over-packet-path: carrier provides a raw send/recv channel,
+        // datagram encodes through it. Resolve both positions via the adapter
+        // registry — no match on the protocol enum.
         #[cfg(feature = "shadowsocks")]
-        if let Some(params) = resolve_udp_packet_path_chain(&chain) {
-            let sent = self
-                .packet_path_manager
-                .send(
-                    UdpFlowContext {
-                        chain_tasks: &mut self.chain_tasks,
-                        session_id: session.id,
-                    },
-                    proxy,
-                    &params,
-                    UdpPacketRef {
-                        target: &session.target,
-                        port: session.port,
-                        payload,
-                    },
-                )
-                .await?;
+        if chain.len() == 2 {
+            let carrier_leaf = &chain[0];
+            let datagram_leaf = &chain[1];
+            if let (Some(carrier_adapter), Some(datagram_adapter)) = (
+                proxy.protocols.find_outbound_leaf(carrier_leaf).ok(),
+                proxy.protocols.find_outbound_leaf(datagram_leaf).ok(),
+            ) {
+                if carrier_adapter
+                    .udp_packet_path_carrier_descriptor(carrier_leaf)
+                    .is_some()
+                    && datagram_adapter
+                        .udp_datagram_source(datagram_leaf)
+                        .is_some()
+                {
+                    let sent = self
+                        .packet_path_manager
+                        .send(
+                            UdpFlowContext {
+                                chain_tasks: &mut self.chain_tasks,
+                                session_id: session.id,
+                            },
+                            proxy,
+                            carrier_leaf,
+                            datagram_leaf,
+                            UdpPacketRef {
+                                target: &session.target,
+                                port: session.port,
+                                payload,
+                            },
+                        )
+                        .await?;
 
-            return Ok(FlowStartResult::Flow {
-                outbound: UdpFlowOutbound::Shadowsocks {
-                    tag: params.datagram_tag.to_owned(),
-                    server: params.datagram_server.to_owned(),
-                    port: params.datagram_port,
-                    password: params.datagram_password.to_owned(),
-                    cipher: params.datagram_cipher.to_owned(),
-                    packet_path_carrier: Some(owned_packet_path_carrier(&params.carrier)),
-                },
-                tx_bytes: sent as u64,
-            });
+                    let datagram = datagram_adapter
+                        .udp_datagram_source(datagram_leaf)
+                        .expect("checked above");
+                    return Ok(FlowStartResult::Flow {
+                        outbound: UdpFlowOutbound::Shadowsocks {
+                            tag: datagram.tag.to_owned(),
+                            server: datagram.server.to_owned(),
+                            port: datagram.port,
+                            password: datagram.password.to_owned(),
+                            cipher: datagram.cipher.to_owned(),
+                            packet_path_carrier: carrier_adapter
+                                .udp_packet_path_carrier_snapshot(carrier_leaf),
+                        },
+                        tx_bytes: sent as u64,
+                    });
+                }
+            }
         }
 
         // Single dispatch: resolve the final hop's adapter. Adding a protocol

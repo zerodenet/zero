@@ -15,7 +15,7 @@ use crate::transport::TcpRelayStream;
 /// Moved from `runtime/upstream.rs`. The runtime dispatches via the adapter
 /// trait instead of a per-protocol `connect_via_*` method.
 pub(crate) async fn connect_tcp(
-    proxy: &Proxy,
+    _proxy: &Proxy,
     session: &Session,
     server: &str,
     port: u16,

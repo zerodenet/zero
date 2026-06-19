@@ -5,7 +5,7 @@
 //! concrete protocols plug into those pipes through protocol traits and
 //! dispatch categories.
 
-use zero_core::{Address, Network, ProtocolType, Session, SessionAuth};
+use zero_core::{Address, ProtocolType, Session, SessionAuth};
 use zero_engine::EngineError;
 
 use crate::runtime::udp_dispatch::UdpDispatch;
@@ -14,8 +14,6 @@ use crate::transport::TcpRouteResult;
 
 /// Common runtime pipe boundary for kernel orchestration.
 pub(crate) trait KernelPipe {
-    const NETWORK: Network;
-
     type Input<'a>;
     type Output;
     type Error;
@@ -40,8 +38,6 @@ pub(crate) struct TcpPipeInput<'a> {
 }
 
 impl KernelPipe for TcpPipe<'_> {
-    const NETWORK: Network = Network::Tcp;
-
     type Input<'a> = TcpPipeInput<'a>;
     type Output = TcpRouteResult;
     type Error = EngineError;
@@ -80,8 +76,6 @@ impl<'a> UdpPipe<'a> {
 }
 
 impl KernelPipe for UdpPipe<'_> {
-    const NETWORK: Network = Network::Udp;
-
     type Input<'a> = UdpPipeInput<'a>;
     type Output = u64;
     type Error = EngineError;

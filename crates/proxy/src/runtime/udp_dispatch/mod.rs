@@ -96,13 +96,22 @@ mod trojan_manager;
 
 use h2_manager::H2ChainManager;
 use mieru_manager::MieruChainManager;
+#[cfg(all(feature = "shadowsocks", feature = "hysteria2"))]
+pub(crate) use packet_path_chain::build_hysteria2_packet_path;
+#[cfg(feature = "shadowsocks")]
+pub(crate) use packet_path_chain::build_shadowsocks_packet_path;
+#[cfg(all(feature = "shadowsocks", feature = "socks5"))]
+pub(crate) use packet_path_chain::build_socks5_packet_path;
 #[cfg(feature = "shadowsocks")]
 use packet_path_chain::PacketPathManager;
 pub(crate) use packet_path_traits::ChainTask;
-pub(super) use packet_path_traits::{DatagramCodec, UdpPacketPath};
+pub(super) use packet_path_traits::DatagramCodec;
 pub(crate) use packet_path_traits::{
     H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpFlowContext, UdpPacketRef,
     UdpPeerEndpoint,
+};
+pub(crate) use packet_path_traits::{
+    PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
 };
 #[cfg(feature = "shadowsocks")]
 use ss_manager::SsChainManager;

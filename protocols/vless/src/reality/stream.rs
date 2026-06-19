@@ -272,13 +272,6 @@ enum RealitySession {
 }
 
 impl RealitySession {
-    fn is_handshaking(&self) -> bool {
-        match self {
-            Self::Client(session) => session.is_handshaking(),
-            Self::Server(session) => session.is_handshaking(),
-        }
-    }
-
     fn wants_read(&self) -> bool {
         match self {
             Self::Client(session) => session.wants_read(),

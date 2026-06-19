@@ -725,7 +725,11 @@ fn xray_trojan_inbound_config(port: u16, tls: &TestTlsMaterial) -> String {
     )
 }
 
-fn xray_trojan_outbound_config(socks_port: u16, trojan_port: u16, tls: &TestTlsMaterial) -> String {
+fn xray_trojan_outbound_config(
+    socks_port: u16,
+    trojan_port: u16,
+    _tls: &TestTlsMaterial,
+) -> String {
     format!(
         r#"{{
             "log": {{ "loglevel": "debug" }},
@@ -796,7 +800,7 @@ fn sing_box_trojan_inbound_config(port: u16, tls: &TestTlsMaterial) -> String {
 fn mihomo_trojan_outbound_config(
     mixed_port: u16,
     trojan_port: u16,
-    tls: &TestTlsMaterial,
+    _tls: &TestTlsMaterial,
 ) -> String {
     format!(
         r#"mixed-port: {mixed_port}

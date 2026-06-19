@@ -16,64 +16,13 @@ use std::time::Instant;
 
 use zero_engine::EngineError;
 
-#[cfg(feature = "shadowsocks")]
-use super::packet_path_chain::{PacketPathCarrierParams, PacketPathChainParams};
 use super::{
     H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpDispatch, UdpFlowContext, UdpPacketRef,
     UdpPeerEndpoint,
 };
-use crate::runtime::udp_associate::sessions::{
-    UdpFlowOutbound, UdpFlowSnapshot, UdpPacketPathCarrier, UdpPathCategory,
-};
+use crate::runtime::udp_associate::sessions::{UdpFlowOutbound, UdpFlowSnapshot, UdpPathCategory};
 use crate::runtime::udp_helpers::send_direct_udp_packet;
 use crate::runtime::Proxy;
-
-#[cfg(feature = "shadowsocks")]
-fn carrier_params(carrier: &UdpPacketPathCarrier) -> PacketPathCarrierParams<'_> {
-    match carrier {
-        #[cfg(feature = "socks5")]
-        UdpPacketPathCarrier::Socks5 {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } => PacketPathCarrierParams::Socks5 {
-            tag: tag.as_str(),
-            server: server.as_str(),
-            port: *port,
-            username: username.as_deref(),
-            password: password.as_deref(),
-        },
-        UdpPacketPathCarrier::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-        } => PacketPathCarrierParams::Shadowsocks {
-            tag: tag.as_str(),
-            server: server.as_str(),
-            port: *port,
-            password: password.as_str(),
-            cipher: cipher.as_str(),
-        },
-        #[cfg(feature = "hysteria2")]
-        UdpPacketPathCarrier::Hysteria2 {
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-        } => PacketPathCarrierParams::Hysteria2 {
-            tag: tag.as_str(),
-            server: server.as_str(),
-            port: *port,
-            password: password.as_str(),
-            client_fingerprint: client_fingerprint.as_deref(),
-        },
-    }
-}
 
 impl UdpDispatch {
     /// Forward a packet to an existing flow.
@@ -157,20 +106,17 @@ impl UdpDispatch {
                     #[cfg(feature = "shadowsocks")]
                     let result = if let Some(carrier) = packet_path_carrier {
                         self.packet_path_manager
-                            .send(
+                            .send_with_snapshot(
                                 UdpFlowContext {
                                     chain_tasks: &mut self.chain_tasks,
                                     session_id: flow.session.id,
                                 },
-                                proxy,
-                                &PacketPathChainParams {
-                                    datagram_tag: "",
-                                    carrier: carrier_params(carrier),
-                                    datagram_server: server.as_str(),
-                                    datagram_port: *port,
-                                    datagram_password: password.as_str(),
-                                    datagram_cipher: cipher.as_str(),
-                                },
+                                carrier,
+                                "",
+                                server.as_str(),
+                                *port,
+                                password.as_str(),
+                                cipher.as_str(),
                                 UdpPacketRef {
                                     target: &flow.session.target,
                                     port: flow.session.port,

@@ -8,7 +8,6 @@ use zero_core::{Error as CoreError, Session};
 use zero_engine::EngineError;
 
 use crate::logging::log_listener_connection_error;
-use crate::runtime::bind_listener;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};

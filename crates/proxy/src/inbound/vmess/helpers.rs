@@ -1,31 +1,8 @@
-//! VMess inbound: TLS accept, transport dispatch (WS/gRPC), protocol auth, route, TCP relay.
-
-use std::io;
-
-use async_trait::async_trait;
-use tokio::select;
-use tokio::sync::mpsc;
-use tokio::sync::watch;
-use tokio::task::JoinSet;
-use tokio::time::Instant as TokioInstant;
-use tracing::{error, info, warn};
-use vmess::{VmessAccept, VmessAeadStream, VmessCipher, VmessInbound, VmessUser};
-use zero_config::{GrpcConfig, InboundConfig, WebSocketConfig};
-use zero_core::{Address, Network, ProtocolType, Session};
+use vmess::{VmessAccept, VmessAeadStream};
+use zero_core::Address;
 use zero_engine::EngineError;
-use zero_traits::AsyncSocket;
 
-use crate::runtime::bind_listener;
-use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
-use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
-use crate::runtime::udp_associate::helpers::{
-    log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
-};
-use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
-
-/// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
 
 #[derive(Clone, Copy)]
 pub(crate) enum VmessUdpPayloadMode {
@@ -71,39 +48,6 @@ pub(crate) fn wrap_vmess_client(
     Ok(TcpRelayStream::new(VmessAeadStream::inbound(
         stream, accepted,
     )?))
-}
-
-pub(crate) async fn read_vmess_mux_frame_from_tokio<R>(
-    reader: &mut R,
-) -> Result<vmess::MuxFrame, EngineError>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
-    let mut len_buf = [0_u8; 2];
-    tokio::io::AsyncReadExt::read_exact(reader, &mut len_buf).await?;
-    let meta_len = u16::from_be_bytes(len_buf) as usize;
-    if meta_len > vmess::MUX_MAX_META_LEN {
-        return Err(EngineError::Core(zero_core::Error::Protocol(
-            "vmess mux metadata too large",
-        )));
-    }
-    let mut meta = vec![0_u8; meta_len];
-    tokio::io::AsyncReadExt::read_exact(reader, &mut meta).await?;
-    let mut frame = vmess::decode_mux_metadata(&meta)?;
-    if frame.option & vmess::MUX_OPTION_DATA != 0 {
-        tokio::io::AsyncReadExt::read_exact(reader, &mut len_buf).await?;
-        let data_len = u16::from_be_bytes(len_buf) as usize;
-        if data_len > vmess::MUX_MAX_DATA_LEN {
-            return Err(EngineError::Core(zero_core::Error::Protocol(
-                "vmess mux data too large",
-            )));
-        }
-        frame.payload.resize(data_len, 0);
-        if data_len > 0 {
-            tokio::io::AsyncReadExt::read_exact(reader, &mut frame.payload).await?;
-        }
-    }
-    Ok(frame)
 }
 
 pub(crate) fn remote_addr_to_socket(

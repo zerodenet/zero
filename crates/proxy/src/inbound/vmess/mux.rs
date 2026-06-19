@@ -1,22 +1,13 @@
 //! VMess inbound: TLS accept, transport dispatch (WS/gRPC), protocol auth, route, TCP relay.
 
-use std::io;
-
-use async_trait::async_trait;
 use tokio::select;
 use tokio::sync::mpsc;
-use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
-use tracing::{error, info, warn};
-use vmess::{VmessAccept, VmessAeadStream, VmessCipher, VmessInbound, VmessUser};
-use zero_config::{GrpcConfig, InboundConfig, WebSocketConfig};
+use tracing::{info, warn};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
-use zero_traits::AsyncSocket;
 
-use crate::runtime::bind_listener;
-use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_associate::helpers::{
     log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
@@ -63,7 +54,7 @@ impl Proxy {
 
         loop {
             select! {
-                frame = read_vmess_mux_frame_from_tokio(&mut reader) => {
+                frame = vmess::read_mux_frame_from_tokio(&mut reader) => {
                     let frame = match frame {
                         Ok(frame) => frame,
                         Err(error) => {

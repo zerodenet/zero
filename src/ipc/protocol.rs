@@ -36,6 +36,7 @@ pub enum IpcRequest {
 ///
 /// Regular events are sent as `zero_api::ApiEvent<serde_json::Value>` JSON
 /// directly (the same format as SSE).  The `Goodbye` frame is IPC-specific.
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum IpcEvent {

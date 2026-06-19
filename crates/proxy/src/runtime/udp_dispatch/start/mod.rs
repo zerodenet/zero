@@ -1,18 +1,16 @@
 //! UDP flow start: new outbound establishment.
 //!
 //! Contains [`UdpDispatch::start_flow`] (single-hop) and
-//! [`UdpDispatch::start_relay_flow`] (multi-hop chain) for establishing new
-//! UDP outbound connections, plus the chain resolution function
-//! [`resolve_udp_packet_path_chain`].
+//! [`UdpDispatch::start_relay_flow`] (multi-hop chain). Packet-path carrier
+//! and datagram roles are resolved via the adapter registry
+//! ([`ProtocolAdapter::udp_packet_path_carrier_descriptor`] /
+//! [`ProtocolAdapter::udp_datagram_source`]); there is no per-protocol match
+//! here.
 
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
-#[cfg(feature = "shadowsocks")]
-use super::packet_path_chain::{PacketPathCarrierParams, PacketPathChainParams};
 use super::{FlowFailure, FlowStartResult, UdpCandidate, UdpDispatch};
-#[cfg(feature = "shadowsocks")]
-use crate::runtime::udp_associate::sessions::UdpPacketPathCarrier;
 use crate::runtime::Proxy;
 
 // Re-exports consumed by `relay` submodule via `use super::*`.
@@ -20,154 +18,6 @@ use crate::runtime::Proxy;
 pub(super) use crate::runtime::udp_associate::sessions::UdpFlowOutbound;
 #[allow(unused_imports)]
 pub(super) use crate::runtime::udp_dispatch::{UdpFlowContext, UdpPacketRef};
-
-// Chain resolution.
-
-/// Resolve a relay chain into packet-path + datagram parameters.
-///
-/// Returns `Some` when the chain matches the "packet path carrier -> datagram
-/// protocol" pattern. Currently recognises `[Shadowsocks, Shadowsocks]` and,
-/// when the `socks5` feature is enabled, `[SOCKS5, Shadowsocks]`. Adding
-/// new combinations only requires extending this function and implementing
-/// [`UdpPacketPath`] + [`DatagramCodec`]: no new protocol-pair modules.
-#[cfg(feature = "shadowsocks")]
-fn resolve_udp_packet_path_chain<'a>(
-    chain: &[ResolvedLeafOutbound<'a>],
-) -> Option<PacketPathChainParams<'a>> {
-    match chain {
-        #[cfg(feature = "socks5")]
-        [ResolvedLeafOutbound::Socks5 {
-            tag: carrier_tag,
-            server: carrier_server,
-            port: carrier_port,
-            username: carrier_username,
-            password: carrier_password,
-        }, ResolvedLeafOutbound::Shadowsocks {
-            tag: datagram_tag,
-            server: datagram_server,
-            port: datagram_port,
-            password: datagram_password,
-            cipher: datagram_cipher,
-        }] => Some(PacketPathChainParams {
-            datagram_tag,
-            carrier: PacketPathCarrierParams::Socks5 {
-                tag: carrier_tag,
-                server: carrier_server,
-                port: *carrier_port,
-                username: *carrier_username,
-                password: *carrier_password,
-            },
-            datagram_server,
-            datagram_port: *datagram_port,
-            datagram_password,
-            datagram_cipher,
-        }),
-        [ResolvedLeafOutbound::Shadowsocks {
-            tag: carrier_tag,
-            server: carrier_server,
-            port: carrier_port,
-            password: carrier_password,
-            cipher: carrier_cipher,
-        }, ResolvedLeafOutbound::Shadowsocks {
-            tag: datagram_tag,
-            server: datagram_server,
-            port: datagram_port,
-            password: datagram_password,
-            cipher: datagram_cipher,
-        }] => Some(PacketPathChainParams {
-            datagram_tag,
-            carrier: PacketPathCarrierParams::Shadowsocks {
-                tag: carrier_tag,
-                server: carrier_server,
-                port: *carrier_port,
-                password: carrier_password,
-                cipher: carrier_cipher,
-            },
-            datagram_server,
-            datagram_port: *datagram_port,
-            datagram_password,
-            datagram_cipher,
-        }),
-        #[cfg(feature = "hysteria2")]
-        [ResolvedLeafOutbound::Hysteria2 {
-            tag: carrier_tag,
-            server: carrier_server,
-            port: carrier_port,
-            password: carrier_password,
-            client_fingerprint: carrier_client_fingerprint,
-            ..
-        }, ResolvedLeafOutbound::Shadowsocks {
-            tag: datagram_tag,
-            server: datagram_server,
-            port: datagram_port,
-            password: datagram_password,
-            cipher: datagram_cipher,
-        }] => Some(PacketPathChainParams {
-            datagram_tag,
-            carrier: PacketPathCarrierParams::Hysteria2 {
-                tag: carrier_tag,
-                server: carrier_server,
-                port: *carrier_port,
-                password: carrier_password,
-                client_fingerprint: *carrier_client_fingerprint,
-            },
-            datagram_server,
-            datagram_port: *datagram_port,
-            datagram_password,
-            datagram_cipher,
-        }),
-        _ => None,
-    }
-}
-
-#[cfg(feature = "shadowsocks")]
-fn owned_packet_path_carrier(carrier: &PacketPathCarrierParams<'_>) -> UdpPacketPathCarrier {
-    match carrier {
-        #[cfg(feature = "socks5")]
-        PacketPathCarrierParams::Socks5 {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } => UdpPacketPathCarrier::Socks5 {
-            tag: (*tag).to_owned(),
-            server: (*server).to_owned(),
-            port: *port,
-            username: username.map(ToOwned::to_owned),
-            password: password.map(ToOwned::to_owned),
-        },
-        PacketPathCarrierParams::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-        } => UdpPacketPathCarrier::Shadowsocks {
-            tag: (*tag).to_owned(),
-            server: (*server).to_owned(),
-            port: *port,
-            password: (*password).to_owned(),
-            cipher: (*cipher).to_owned(),
-        },
-        #[cfg(feature = "hysteria2")]
-        PacketPathCarrierParams::Hysteria2 {
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-        } => UdpPacketPathCarrier::Hysteria2 {
-            tag: (*tag).to_owned(),
-            server: (*server).to_owned(),
-            port: *port,
-            password: (*password).to_owned(),
-            client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
-        },
-    }
-}
-
-// impl UdpDispatch.
 
 impl UdpDispatch {
     /// Start a new UDP flow by dispatching to the resolved outbound.

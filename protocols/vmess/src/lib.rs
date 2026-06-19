@@ -13,9 +13,10 @@ pub use mux::{
     decode_metadata as decode_mux_metadata, encode_end_stream as encode_mux_end_stream,
     encode_frame as encode_mux_frame, encode_keep_stream as encode_mux_keep_stream,
     encode_open_stream as encode_mux_open_stream, is_mux_cool_session, mux_cool_session,
-    read_frame as read_mux_frame, MuxFrame, VmessMuxStream, MUX_MAX_DATA_LEN, MUX_MAX_META_LEN,
-    MUX_NETWORK_TCP, MUX_NETWORK_UDP, MUX_OPTION_DATA, MUX_OPTION_ERROR, MUX_STATUS_END,
-    MUX_STATUS_KEEP, MUX_STATUS_KEEP_ALIVE, MUX_STATUS_NEW,
+    read_frame as read_mux_frame, read_frame_from_tokio as read_mux_frame_from_tokio, MuxFrame,
+    VmessMuxStream, MUX_MAX_DATA_LEN, MUX_MAX_META_LEN, MUX_NETWORK_TCP, MUX_NETWORK_UDP,
+    MUX_OPTION_DATA, MUX_OPTION_ERROR, MUX_STATUS_END, MUX_STATUS_KEEP, MUX_STATUS_KEEP_ALIVE,
+    MUX_STATUS_NEW,
 };
 pub use outbound::{VmessOutbound, VmessOutboundSession, VmessTcpSessionTarget};
 pub use shared::{

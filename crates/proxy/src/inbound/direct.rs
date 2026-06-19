@@ -14,7 +14,6 @@ use tracing::{error, info};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
 
-use crate::runtime::bind_listener;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;

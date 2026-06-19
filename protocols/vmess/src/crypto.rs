@@ -3,7 +3,6 @@ use std::sync::Mutex;
 
 use ring::aead::{Aad, BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey};
 use ring::hkdf::{KeyType, Salt, HKDF_SHA256};
-use ring::hmac;
 use sha3::{
     digest::{ExtendableOutput, Update, XofReader},
     Shake128,
@@ -36,19 +35,6 @@ impl KeyType for HkdfLen {
     fn len(&self) -> usize {
         self.0
     }
-}
-
-/// Derive the per-user command key from a VMess UUID.
-pub(crate) fn derive_cmd_key(uuid: &[u8; 16], key_len: usize) -> Vec<u8> {
-    let salt = Salt::new(HKDF_SHA256, b"VMess AEAD KDF");
-    let prk = salt.extract(uuid);
-    let info: [&[u8]; 1] = [b""];
-    let okm = prk
-        .expand(&info, HkdfLen(key_len))
-        .expect("hkdf expand cmd_key");
-    let mut key = vec![0u8; key_len];
-    okm.fill(&mut key).expect("hkdf fill cmd_key");
-    key
 }
 
 pub(crate) fn derive_xray_cmd_key(uuid: &[u8; 16]) -> [u8; 16] {
@@ -131,65 +117,6 @@ pub(crate) fn seal_xray_aead_header(
     out.extend_from_slice(&nonce);
     out.extend_from_slice(&encrypted_payload);
     Ok(out)
-}
-
-pub(crate) fn open_xray_aead_header(
-    cmd_key: &[u8; 16],
-    auth_id: &[u8; 16],
-    len_and_nonce_and_payload: &[u8],
-) -> Result<Vec<u8>, Error> {
-    if len_and_nonce_and_payload.len() < 18 + 8 + GCM_TAG_LEN {
-        return Err(Error::Protocol("vmess xray aead header too short"));
-    }
-    let encrypted_len = &len_and_nonce_and_payload[..18];
-    let nonce = &len_and_nonce_and_payload[18..26];
-
-    let len_key = xray_kdf16(
-        cmd_key,
-        &[
-            HEADER_LENGTH_AEAD_KEY,
-            bytes_to_path(auth_id),
-            bytes_to_path(nonce),
-        ],
-    );
-    let len_nonce = xray_kdf(
-        cmd_key,
-        &[
-            HEADER_LENGTH_AEAD_IV,
-            bytes_to_path(auth_id),
-            bytes_to_path(nonce),
-        ],
-    );
-    let len_plain = aes_128_gcm_open(&len_key, &len_nonce[..NONCE_LEN], encrypted_len, auth_id)?;
-    let payload_len = u16::from_be_bytes([len_plain[0], len_plain[1]]) as usize;
-    let payload_start = 26;
-    let payload_end = payload_start + payload_len + GCM_TAG_LEN;
-    if len_and_nonce_and_payload.len() < payload_end {
-        return Err(Error::Protocol("vmess xray aead header payload truncated"));
-    }
-
-    let payload_key = xray_kdf16(
-        cmd_key,
-        &[
-            HEADER_PAYLOAD_AEAD_KEY,
-            bytes_to_path(auth_id),
-            bytes_to_path(nonce),
-        ],
-    );
-    let payload_nonce = xray_kdf(
-        cmd_key,
-        &[
-            HEADER_PAYLOAD_AEAD_IV,
-            bytes_to_path(auth_id),
-            bytes_to_path(nonce),
-        ],
-    );
-    aes_128_gcm_open(
-        &payload_key,
-        &payload_nonce[..NONCE_LEN],
-        &len_and_nonce_and_payload[payload_start..payload_end],
-        auth_id,
-    )
 }
 
 pub(crate) fn open_xray_aead_header_length(
@@ -276,39 +203,6 @@ pub(crate) fn seal_xray_response_header(
     Ok(out)
 }
 
-pub(crate) fn open_xray_response_header(
-    response_key: &[u8],
-    response_nonce: &[u8],
-    packet: &[u8],
-) -> Result<Vec<u8>, Error> {
-    if packet.len() < 18 + GCM_TAG_LEN {
-        return Err(Error::Protocol("vmess response header too short"));
-    }
-
-    let len_key = xray_kdf16(response_key, &[RESPONSE_HEADER_LENGTH_AEAD_KEY]);
-    let len_nonce = xray_kdf(response_nonce, &[RESPONSE_HEADER_LENGTH_AEAD_IV]);
-    let len_plain = aes_128_gcm_open(&len_key, &len_nonce[..NONCE_LEN], &packet[..18], &[])?;
-    if len_plain.len() != 2 {
-        return Err(Error::Protocol("vmess response header len invalid"));
-    }
-
-    let payload_len = u16::from_be_bytes([len_plain[0], len_plain[1]]) as usize;
-    let payload_start = 18;
-    let payload_end = payload_start + payload_len + GCM_TAG_LEN;
-    if packet.len() < payload_end {
-        return Err(Error::Protocol("vmess response header truncated"));
-    }
-
-    let payload_key = xray_kdf16(response_key, &[RESPONSE_HEADER_PAYLOAD_AEAD_KEY]);
-    let payload_nonce = xray_kdf(response_nonce, &[RESPONSE_HEADER_PAYLOAD_AEAD_IV]);
-    aes_128_gcm_open(
-        &payload_key,
-        &payload_nonce[..NONCE_LEN],
-        &packet[payload_start..payload_end],
-        &[],
-    )
-}
-
 pub(crate) fn open_xray_response_header_length(
     response_key: &[u8],
     response_nonce: &[u8],
@@ -342,80 +236,6 @@ pub(crate) fn vmess_aead_kdf16(key: &[u8], label: &[u8]) -> [u8; 16] {
     xray_kdf16(key, &[label])
 }
 
-/// Compute the 16-byte auth ID = HMAC-SHA256(cmd_key, timestamp)[:16].
-pub(crate) fn compute_auth_id(cmd_key: &[u8], timestamp: u64) -> [u8; 16] {
-    let key = hmac::Key::new(hmac::HMAC_SHA256, cmd_key);
-    let tag = hmac::sign(&key, &timestamp.to_be_bytes());
-    let mut result = [0u8; 16];
-    result.copy_from_slice(&tag.as_ref()[..16]);
-    result
-}
-
-/// Derive body key and nonce from the command key and auth ID.
-pub(crate) fn derive_body_key_nonce(
-    cmd_key: &[u8],
-    auth_id: &[u8; 16],
-    key_len: usize,
-) -> (Vec<u8>, Vec<u8>) {
-    let body_key = hkdf_expand(cmd_key, b"VMess Body Key", auth_id, key_len);
-    let body_nonce = hkdf_expand(cmd_key, b"VMess Body Nonce", auth_id, NONCE_LEN);
-    (body_key, body_nonce)
-}
-
-/// Derive response key and nonce from the body key and auth ID.
-pub(crate) fn derive_response_key_nonce(
-    body_key: &[u8],
-    auth_id: &[u8; 16],
-    key_len: usize,
-) -> (Vec<u8>, Vec<u8>) {
-    let resp_key = hkdf_expand(body_key, b"VMess Resp Key", auth_id, key_len);
-    let resp_nonce = hkdf_expand(body_key, b"VMess Resp Nonce", auth_id, NONCE_LEN);
-    (resp_key, resp_nonce)
-}
-
-pub(crate) fn aead_encrypt(
-    key: &[u8],
-    nonce_bytes: &[u8],
-    plaintext: &[u8],
-    cipher: VmessCipher,
-) -> Result<Vec<u8>, Error> {
-    let unbound = UnboundKey::new(cipher.aead_algorithm(), key)
-        .map_err(|_| Error::Protocol("vmess invalid aead key"))?;
-    let nonce = Nonce::assume_unique_for_key(
-        nonce_bytes[..NONCE_LEN]
-            .try_into()
-            .map_err(|_| Error::Protocol("vmess invalid nonce length"))?,
-    );
-    let mut sealing_key = SealingKey::new(unbound, CountingNonce::new(nonce));
-    let mut buf = plaintext.to_vec();
-    buf.reserve(GCM_TAG_LEN);
-    sealing_key
-        .seal_in_place_append_tag(Aad::empty(), &mut buf)
-        .map_err(|_| Error::Protocol("vmess aead encryption failed"))?;
-    Ok(buf)
-}
-
-pub(crate) fn aead_decrypt(
-    key: &[u8],
-    nonce_bytes: &[u8],
-    ciphertext: &[u8],
-    cipher: VmessCipher,
-) -> Result<Vec<u8>, Error> {
-    let unbound = UnboundKey::new(cipher.aead_algorithm(), key)
-        .map_err(|_| Error::Protocol("vmess invalid aead key"))?;
-    let nonce = Nonce::assume_unique_for_key(
-        nonce_bytes[..NONCE_LEN]
-            .try_into()
-            .map_err(|_| Error::Protocol("vmess invalid nonce length"))?,
-    );
-    let mut opening_key = OpeningKey::new(unbound, CountingNonce::new(nonce));
-    let mut in_out = ciphertext.to_vec();
-    let plaintext = opening_key
-        .open_in_place(Aad::empty(), &mut in_out)
-        .map_err(|_| Error::Protocol("vmess aead decryption failed"))?;
-    Ok(plaintext.to_vec())
-}
-
 /// VMess body chunk reader/writer state.
 ///
 /// The command and response headers consume nonce 0. Body frames start from
@@ -435,26 +255,6 @@ pub(crate) struct BodyAead {
 }
 
 impl BodyAead {
-    pub fn new(
-        key: Vec<u8>,
-        nonce_prefix: Vec<u8>,
-        cipher: VmessCipher,
-        authenticated_length: bool,
-        chunk_masking: bool,
-        global_padding: bool,
-    ) -> Result<Self, Error> {
-        Self::new_with_length_source(
-            key,
-            nonce_prefix.clone(),
-            nonce_prefix.clone(),
-            nonce_prefix,
-            cipher,
-            authenticated_length,
-            chunk_masking,
-            global_padding,
-        )
-    }
-
     pub fn new_with_length_source(
         key: Vec<u8>,
         nonce_prefix: Vec<u8>,
@@ -773,24 +573,6 @@ fn aead_decrypt_with_nonce(
         .open_in_place(Aad::empty(), &mut in_out)
         .map_err(|_| Error::Protocol("vmess body aead decryption failed"))?;
     Ok(plaintext.to_vec())
-}
-
-pub(crate) struct CountingNonce {
-    nonce: [u8; NONCE_LEN],
-}
-
-impl CountingNonce {
-    pub fn new(initial: Nonce) -> Self {
-        let mut nonce = [0u8; NONCE_LEN];
-        nonce.copy_from_slice(initial.as_ref());
-        Self { nonce }
-    }
-}
-
-impl NonceSequence for CountingNonce {
-    fn advance(&mut self) -> Result<Nonce, ring::error::Unspecified> {
-        Ok(Nonce::assume_unique_for_key(self.nonce))
-    }
 }
 
 struct SingleNonce([u8; NONCE_LEN]);
