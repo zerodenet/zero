@@ -103,33 +103,18 @@ impl ProtocolAdapter for TrojanAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        use crate::runtime::orchestration::OutboundEndpoint;
-        use crate::runtime::udp_dispatch::{TrojanUdpPeer, UdpFlowContext, UdpPacketRef};
         let sent = dispatch
-            .trojan_manager
-            .send(
-                UdpFlowContext {
-                    chain_tasks: &mut dispatch.chain_tasks,
-                    session_id: session.id,
-                },
+            .start_trojan_udp_flow(
                 proxy,
                 session,
-                TrojanUdpPeer {
-                    endpoint: OutboundEndpoint {
-                        server,
-                        port: *port,
-                    },
-                    password,
-                    sni: *sni,
-                    insecure: *insecure,
-                    client_fingerprint: *client_fingerprint,
-                    relay_chain: false,
-                },
-                UdpPacketRef {
-                    target: &session.target,
-                    port: session.port,
-                    payload,
-                },
+                server,
+                *port,
+                password,
+                *sni,
+                *insecure,
+                *client_fingerprint,
+                false,
+                payload,
             )
             .await
             .map_err(|f: FlowFailure| FlowFailure {
@@ -186,35 +171,18 @@ impl ProtocolAdapter for TrojanAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        use crate::runtime::orchestration::OutboundEndpoint;
-        use crate::runtime::udp_dispatch::{TrojanUdpPeer, UdpFlowContext, UdpPacketRef};
         let sent = dispatch
-            .trojan_manager
-            .send_relay(
-                UdpFlowContext {
-                    chain_tasks: &mut dispatch.chain_tasks,
-                    session_id: session.id,
-                },
-                carrier.stream,
-                None,
+            .start_trojan_udp_relay_flow(
                 proxy,
                 session,
-                TrojanUdpPeer {
-                    endpoint: OutboundEndpoint {
-                        server,
-                        port: *port,
-                    },
-                    password,
-                    sni: *sni,
-                    insecure: *insecure,
-                    client_fingerprint: *client_fingerprint,
-                    relay_chain: true,
-                },
-                UdpPacketRef {
-                    target: &session.target,
-                    port: session.port,
-                    payload,
-                },
+                carrier,
+                server,
+                *port,
+                password,
+                *sni,
+                *insecure,
+                *client_fingerprint,
+                payload,
             )
             .await?;
         Ok(FlowStartResult::Flow {

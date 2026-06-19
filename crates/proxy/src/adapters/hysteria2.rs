@@ -192,28 +192,14 @@ impl ProtocolAdapter for Hysteria2Adapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        use crate::runtime::orchestration::OutboundEndpoint;
-        use crate::runtime::udp_dispatch::{H2UdpPeer, UdpFlowContext, UdpPacketRef};
         let sent = dispatch
-            .h2_manager
-            .send(
-                UdpFlowContext {
-                    chain_tasks: &mut dispatch.chain_tasks,
-                    session_id: session.id,
-                },
-                H2UdpPeer {
-                    endpoint: OutboundEndpoint {
-                        server,
-                        port: *port,
-                    },
-                    password,
-                    client_fingerprint: *client_fingerprint,
-                },
-                UdpPacketRef {
-                    target: &session.target,
-                    port: session.port,
-                    payload,
-                },
+            .start_hysteria2_udp_flow(
+                session,
+                server,
+                *port,
+                password,
+                *client_fingerprint,
+                payload,
             )
             .await
             .map_err(|f: FlowFailure| FlowFailure {

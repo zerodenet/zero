@@ -26,7 +26,7 @@ impl Proxy {
         S: ClientStream,
     {
         self.protocols
-            .vless_inbound
+            .vless_inbound_protocol()
             .send_response(&mut client)
             .await?;
         self.record_session_inbound_traffic(session.id, client.drain_traffic());

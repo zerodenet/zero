@@ -7,7 +7,8 @@ use tracing::{debug, warn};
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use super::{FlowFailure, SsUdpPeer, UdpFlowContext, UdpPacketRef};
+use super::packet_path_traits::{SsUdpPeer, UdpFlowContext, UdpPacketRef, UdpPeerEndpoint};
+use super::FlowFailure;
 use crate::runtime::Proxy;
 
 type SsRecvItem = (Address, u16, Vec<u8>);
@@ -34,7 +35,7 @@ impl SsChainManager {
         }
     }
 
-    pub(crate) async fn send(
+    async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
@@ -58,7 +59,7 @@ impl SsChainManager {
 
         let target_addr = proxy
             .protocols
-            .direct_outbound
+            .direct_connector()
             .resolve_address(
                 &peer.endpoint.address(),
                 peer.endpoint.port,
@@ -129,6 +130,39 @@ impl SsChainManager {
         });
 
         Ok(packet_ref.payload.len())
+    }
+
+    pub(crate) async fn send_existing(
+        &mut self,
+        chain_tasks: &mut tokio::task::JoinSet<super::ChainTask>,
+        session_id: u64,
+        proxy: &Proxy,
+        server: &str,
+        port: u16,
+        password: &str,
+        cipher: &str,
+        target: &Address,
+        target_port: u16,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.send(
+            UdpFlowContext {
+                chain_tasks,
+                session_id,
+            },
+            proxy,
+            SsUdpPeer {
+                endpoint: UdpPeerEndpoint { server, port },
+                password,
+                cipher,
+            },
+            UdpPacketRef {
+                target,
+                port: target_port,
+                payload,
+            },
+        )
+        .await
     }
 
     fn ensure_entry(

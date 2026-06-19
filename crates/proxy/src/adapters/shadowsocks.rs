@@ -188,30 +188,8 @@ impl ProtocolAdapter for ShadowsocksAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        use crate::runtime::orchestration::OutboundEndpoint;
-        use crate::runtime::udp_dispatch::{SsUdpPeer, UdpFlowContext, UdpPacketRef};
         let sent = dispatch
-            .ss_manager
-            .send(
-                UdpFlowContext {
-                    chain_tasks: &mut dispatch.chain_tasks,
-                    session_id: session.id,
-                },
-                proxy,
-                SsUdpPeer {
-                    endpoint: OutboundEndpoint {
-                        server,
-                        port: *port,
-                    },
-                    password,
-                    cipher,
-                },
-                UdpPacketRef {
-                    target: &session.target,
-                    port: session.port,
-                    payload,
-                },
-            )
+            .start_shadowsocks_udp_flow(proxy, session, server, *port, password, cipher, payload)
             .await
             .map_err(|f: FlowFailure| FlowFailure {
                 stage: f.stage,

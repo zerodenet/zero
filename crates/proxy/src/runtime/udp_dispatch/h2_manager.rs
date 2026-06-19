@@ -1,5 +1,12 @@
+use tokio::task::JoinSet;
+use zero_core::Address;
+use zero_engine::EngineError;
+
+use super::{ChainTask, FlowFailure};
+
 #[cfg(feature = "hysteria2")]
 use {
+    super::packet_path_traits::{H2UdpPeer, UdpFlowContext, UdpPacketRef, UdpPeerEndpoint},
     crate::transport::Hysteria2Connector,
     hysteria2::{Hysteria2Outbound, Hysteria2UdpPacket, Hysteria2UdpPacketTarget},
     std::collections::HashMap,
@@ -7,12 +14,6 @@ use {
     tokio::sync::broadcast,
     zero_traits::UdpDatagramFraming,
 };
-
-use tokio::task::JoinSet;
-use zero_core::Address;
-use zero_engine::EngineError;
-
-use super::{ChainTask, FlowFailure, H2UdpPeer, UdpFlowContext, UdpPacketRef};
 
 #[cfg(feature = "hysteria2")]
 type RecvItem = (Address, u16, Vec<u8>);
@@ -35,7 +36,7 @@ impl H2ChainManager {
         }
     }
 
-    pub(crate) async fn send(
+    async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         peer: H2UdpPeer<'_>,
@@ -78,6 +79,37 @@ impl H2ChainManager {
         );
 
         Ok(sent)
+    }
+
+    pub(crate) async fn send_existing(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        session_id: u64,
+        server: &str,
+        port: u16,
+        password: &str,
+        client_fingerprint: Option<&str>,
+        target: &Address,
+        target_port: u16,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.send(
+            UdpFlowContext {
+                chain_tasks,
+                session_id,
+            },
+            H2UdpPeer {
+                endpoint: UdpPeerEndpoint { server, port },
+                password,
+                client_fingerprint,
+            },
+            UdpPacketRef {
+                target,
+                port: target_port,
+                payload,
+            },
+        )
+        .await
     }
 
     async fn establish(
@@ -176,12 +208,19 @@ impl H2ChainManager {
     pub(super) fn new() -> Self {
         Self
     }
+
     #[allow(unused_variables)]
-    pub(crate) async fn send(
+    pub(crate) async fn send_existing(
         &mut self,
-        _ctx: UdpFlowContext<'_>,
-        _peer: H2UdpPeer<'_>,
-        _packet_ref: UdpPacketRef<'_>,
+        _chain_tasks: &mut JoinSet<ChainTask>,
+        _session_id: u64,
+        _server: &str,
+        _port: u16,
+        _password: &str,
+        _client_fingerprint: Option<&str>,
+        _target: &Address,
+        _target_port: u16,
+        _payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         Err(FlowFailure {
             stage: "h2_feature",

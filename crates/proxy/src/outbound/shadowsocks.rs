@@ -27,7 +27,7 @@ pub(crate) async fn connect_tcp(
 ) -> Result<TcpRelayStream, EngineError> {
     let upstream = proxy
         .protocols
-        .direct_outbound
+        .direct_connector()
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
     let mut metered = MeteredStream::new(upstream);
@@ -41,7 +41,7 @@ pub(crate) async fn connect_tcp(
     let ss_session = <shadowsocks::ShadowsocksOutbound as TcpSessionProtocol<
         shadowsocks::ShadowsocksTcpTarget,
     >>::establish_tcp_session(
-        &proxy.protocols.shadowsocks_outbound,
+        &proxy.protocols.shadowsocks_outbound_protocol(),
         &mut metered,
         &shadowsocks::ShadowsocksTcpTarget {
             session,

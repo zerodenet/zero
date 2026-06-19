@@ -93,31 +93,9 @@ impl ProtocolAdapter for MieruAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        use crate::runtime::orchestration::OutboundEndpoint;
-        use crate::runtime::udp_dispatch::{MieruUdpPeer, UdpFlowContext, UdpPacketRef};
         let sent = dispatch
-            .mieru_manager
-            .send(
-                UdpFlowContext {
-                    chain_tasks: &mut dispatch.chain_tasks,
-                    session_id: session.id,
-                },
-                proxy,
-                session,
-                MieruUdpPeer {
-                    endpoint: OutboundEndpoint {
-                        server,
-                        port: *port,
-                    },
-                    username,
-                    password,
-                    relay_chain: false,
-                },
-                UdpPacketRef {
-                    target: &session.target,
-                    port: session.port,
-                    payload,
-                },
+            .start_mieru_udp_flow(
+                proxy, session, server, *port, username, password, false, payload,
             )
             .await
             .map_err(|f: FlowFailure| FlowFailure {
@@ -170,30 +148,9 @@ impl ProtocolAdapter for MieruAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        use crate::runtime::orchestration::OutboundEndpoint;
-        use crate::runtime::udp_dispatch::{MieruUdpPeer, UdpFlowContext, UdpPacketRef};
         let sent = dispatch
-            .mieru_manager
-            .send_relay(
-                UdpFlowContext {
-                    chain_tasks: &mut dispatch.chain_tasks,
-                    session_id: session.id,
-                },
-                carrier.stream,
-                MieruUdpPeer {
-                    endpoint: OutboundEndpoint {
-                        server,
-                        port: *port,
-                    },
-                    username,
-                    password,
-                    relay_chain: true,
-                },
-                UdpPacketRef {
-                    target: &session.target,
-                    port: session.port,
-                    payload,
-                },
+            .start_mieru_udp_relay_flow(
+                session, carrier, server, *port, username, password, payload,
             )
             .await?;
         Ok(FlowStartResult::Flow {

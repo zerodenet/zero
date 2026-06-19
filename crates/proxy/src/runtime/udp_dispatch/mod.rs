@@ -61,11 +61,6 @@ use std::time::Instant;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 
-use zero_core::{Address, Network, ProtocolType, Session, SessionAuth};
-use zero_engine::{EngineError, ResolvedLeafOutbound, SessionHandle, SessionOutcome};
-use zero_platform_tokio::TokioDatagramSocket;
-use zero_traits::UdpPacketFraming;
-
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
 use crate::runtime::udp_associate::sessions::{
     CompletedUdpFlow, UdpFlowOutbound, UdpFlowSnapshot, UdpSessionFlows,
@@ -74,6 +69,9 @@ use crate::runtime::vless_udp::VlessUdpOutboundManager;
 #[cfg(feature = "vmess")]
 use crate::runtime::vmess_udp::VmessUdpOutboundManager;
 use crate::runtime::Proxy;
+use zero_core::{Address, Network, ProtocolType, Session, SessionAuth};
+use zero_engine::{EngineError, ResolvedLeafOutbound, SessionHandle, SessionOutcome};
+use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::runtime::inbound_protocol::apply_kernel_rate_limits;
 
@@ -94,22 +92,17 @@ mod trojan_manager;
 
 // Re-exports.
 
+#[cfg(all(feature = "shadowsocks", feature = "socks5"))]
+pub(crate) use crate::runtime::socks5_udp::build_socks5_packet_path;
 use h2_manager::H2ChainManager;
 use mieru_manager::MieruChainManager;
 #[cfg(all(feature = "shadowsocks", feature = "hysteria2"))]
 pub(crate) use packet_path_chain::build_hysteria2_packet_path;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_chain::build_shadowsocks_packet_path;
-#[cfg(all(feature = "shadowsocks", feature = "socks5"))]
-pub(crate) use packet_path_chain::build_socks5_packet_path;
 #[cfg(feature = "shadowsocks")]
 use packet_path_chain::PacketPathManager;
 pub(crate) use packet_path_traits::ChainTask;
-pub(super) use packet_path_traits::DatagramCodec;
-pub(crate) use packet_path_traits::{
-    H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpFlowContext, UdpPacketRef,
-    UdpPeerEndpoint,
-};
 pub(crate) use packet_path_traits::{
     PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
 };
@@ -160,37 +153,38 @@ pub(crate) struct UdpDispatch {
     /// Ephemeral UDP socket for direct outbound (sends to target, receives responses).
     pub(crate) direct_socket: TokioDatagramSocket,
     /// SOCKS5 upstream association (shared across all flows in this session).
-    pub(crate) socks5_upstream: Option<crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation>,
+    pub(crate) socks5_upstream:
+        Option<crate::runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>,
     pub(crate) socks5_idle_deadline: Option<TokioInstant>,
     /// VLESS upstream manager (per-target connections).
-    pub(crate) vless_manager: VlessUdpOutboundManager,
+    vless_manager: VlessUdpOutboundManager,
     /// VMess upstream manager (per-target connections).
     #[cfg(feature = "vmess")]
-    pub(crate) vmess_manager: VmessUdpOutboundManager,
+    vmess_manager: VmessUdpOutboundManager,
     /// Session handles for VLESS chain flows. These are not tracked by
     /// [`UdpSessionFlows`] because the VLESS manager owns the per-target
     /// upstream connections. We store handles here so `finish_all()` can
     /// properly complete them.
-    pub(crate) vless_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
+    vless_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
     /// Session handles for VMess UDP flows owned by the VMess manager.
     #[cfg(feature = "vmess")]
-    pub(crate) vmess_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
+    vmess_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
     /// Unified JoinSet for chain-outbound (SS/H2/Trojan/Mieru/VLESS)
     /// response bridge tasks. Polled by [`poll_chain_response`].
     pub(crate) chain_tasks: JoinSet<ChainTask>,
     /// Per-dispatcher SS chain manager. Caches upstream sockets.
     #[cfg(feature = "shadowsocks")]
-    pub(crate) ss_manager: SsChainManager,
+    ss_manager: SsChainManager,
     /// Per-dispatcher datagram-over-packet-path manager for UDP relay chains.
     /// Caches packet path carrier connections.
     #[cfg(feature = "shadowsocks")]
-    pub(crate) packet_path_manager: PacketPathManager,
+    packet_path_manager: PacketPathManager,
     /// Per-dispatcher Trojan chain manager. Caches TLS upstream streams.
-    pub(crate) trojan_manager: TrojanChainManager,
+    trojan_manager: TrojanChainManager,
     /// Per-dispatcher Mieru chain manager. Caches encrypted upstream streams.
-    pub(crate) mieru_manager: MieruChainManager,
+    mieru_manager: MieruChainManager,
     /// Per-dispatcher H2 chain manager. Caches QUIC upstream connections.
-    pub(crate) h2_manager: H2ChainManager,
+    h2_manager: H2ChainManager,
 }
 
 impl UdpDispatch {
@@ -271,7 +265,7 @@ impl UdpDispatch {
         &mut self,
     ) -> (
         &TokioDatagramSocket,
-        Option<&crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation>,
+        Option<&crate::runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>,
         Option<TokioInstant>,
         &mut JoinSet<ChainTask>,
     ) {
@@ -287,7 +281,7 @@ impl UdpDispatch {
     #[allow(dead_code)]
     pub(crate) fn socks5_upstream(
         &self,
-    ) -> Option<&crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation> {
+    ) -> Option<&crate::runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation> {
         self.socks5_upstream.as_ref()
     }
 
@@ -337,7 +331,7 @@ impl UdpDispatch {
     #[allow(dead_code)]
     pub(crate) fn take_socks5_upstream(
         &mut self,
-    ) -> Option<crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation> {
+    ) -> Option<crate::runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation> {
         self.socks5_idle_deadline = None;
         self.socks5_upstream.take()
     }
@@ -346,7 +340,7 @@ impl UdpDispatch {
     #[allow(dead_code)]
     pub(crate) fn close_socks5_idle(&mut self) {
         use crate::logging::log_udp_upstream_association_idle_timeout;
-        use crate::outbound::socks5::UpstreamAssociationCloseReason;
+        use crate::runtime::socks5_udp::UpstreamAssociationCloseReason;
 
         if let Some(assoc) = self.socks5_upstream.take() {
             let outbound_tag = assoc.outbound_tag().to_owned();
@@ -370,7 +364,7 @@ impl UdpDispatch {
     /// session handles, and drains all regular flows from `UdpSessionFlows`.
     pub(crate) fn finish_all(mut self) -> Vec<CompletedUdpFlow> {
         if let Some(assoc) = self.socks5_upstream {
-            use crate::outbound::socks5::UpstreamAssociationCloseReason;
+            use crate::runtime::socks5_udp::UpstreamAssociationCloseReason;
             assoc.close(UpstreamAssociationCloseReason::Closed);
         }
 
@@ -420,46 +414,21 @@ impl UdpDispatch {
         client_session_id: Option<u64>,
     ) -> Result<u64, EngineError> {
         // VLESS manager shortcut (cached upstream).
-        if let Some(handle) = self.vless_manager.get(&target, port) {
-            proxy.record_session_inbound_rx(handle.session_id, payload.len() as u64);
-            let packet = <vless::VlessOutbound as UdpPacketFraming<
-                vless::VlessUdpPacketTarget,
-            >>::encode_udp_packet(
-                &proxy.protocols.vless_outbound,
-                &vless::VlessUdpPacketTarget {
-                    address: &target,
-                    port,
-                    payload,
-                },
-            )?;
-            let packet_len = packet.len() as u64;
-            let _ = handle.send_tx.send(packet).await;
-            proxy.record_session_outbound_tx(handle.session_id, packet_len);
-            // Spawn bridge task for the expected response.
-            self.vless_manager
-                .spawn_bridge(&mut self.chain_tasks, target, port, handle.session_id);
-            return Ok(handle.session_id);
+        if let Some(session_id) = self
+            .vless_manager
+            .send_existing(&mut self.chain_tasks, proxy, &target, port, payload)
+            .await?
+        {
+            return Ok(session_id);
         }
 
         #[cfg(feature = "vmess")]
-        if let Some(handle) = self.vmess_manager.get(&target, port) {
-            proxy.record_session_inbound_rx(handle.session_id, payload.len() as u64);
-            let packet = <vmess::VmessOutbound as UdpPacketFraming<
-                vmess::VmessUdpPacketTarget,
-            >>::encode_udp_packet(
-                &proxy.protocols.vmess_outbound,
-                &vmess::VmessUdpPacketTarget {
-                    address: &target,
-                    port,
-                    payload,
-                },
-            )?;
-            let packet_len = packet.len() as u64;
-            let _ = handle.send_tx.send(packet).await;
-            proxy.record_session_outbound_tx(handle.session_id, packet_len);
-            self.vmess_manager
-                .spawn_bridge(&mut self.chain_tasks, target, port, handle.session_id);
-            return Ok(handle.session_id);
+        if let Some(session_id) = self
+            .vmess_manager
+            .send_existing(&mut self.chain_tasks, proxy, &target, port, payload)
+            .await?
+        {
+            return Ok(session_id);
         }
 
         // Existing flow (direct / socks5 / ss / h2 / trojan / mieru).
@@ -602,7 +571,7 @@ impl UdpDispatch {
         payload: &[u8],
     ) -> Result<usize, EngineError> {
         use crate::logging::log_udp_upstream_association_dropped;
-        use crate::outbound::socks5::{
+        use crate::runtime::socks5_udp::{
             send_socks5_udp_packet, Socks5UdpAssociation, UpstreamAssociationCloseReason,
         };
 
@@ -649,6 +618,388 @@ impl UdpDispatch {
                 Err(error)
             }
         }
+    }
+
+    #[cfg(feature = "shadowsocks")]
+    pub(crate) async fn start_shadowsocks_udp_flow(
+        &mut self,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        password: &str,
+        cipher: &str,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.ss_manager
+            .send_existing(
+                &mut self.chain_tasks,
+                session.id,
+                proxy,
+                server,
+                port,
+                password,
+                cipher,
+                &session.target,
+                session.port,
+                payload,
+            )
+            .await
+    }
+
+    #[cfg(feature = "hysteria2")]
+    pub(crate) async fn start_hysteria2_udp_flow(
+        &mut self,
+        session: &Session,
+        server: &str,
+        port: u16,
+        password: &str,
+        client_fingerprint: Option<&str>,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.h2_manager
+            .send_existing(
+                &mut self.chain_tasks,
+                session.id,
+                server,
+                port,
+                password,
+                client_fingerprint,
+                &session.target,
+                session.port,
+                payload,
+            )
+            .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "trojan")]
+    pub(crate) async fn start_trojan_udp_flow(
+        &mut self,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+        relay_chain: bool,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.trojan_manager
+            .send_existing(
+                &mut self.chain_tasks,
+                session.id,
+                proxy,
+                session,
+                server,
+                port,
+                password,
+                sni,
+                insecure,
+                client_fingerprint,
+                relay_chain,
+                &session.target,
+                session.port,
+                payload,
+            )
+            .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "trojan")]
+    pub(crate) async fn start_trojan_udp_relay_flow(
+        &mut self,
+        proxy: &Proxy,
+        session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        server: &str,
+        port: u16,
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.trojan_manager
+            .send_relay_existing(
+                &mut self.chain_tasks,
+                session.id,
+                carrier.stream,
+                None,
+                proxy,
+                session,
+                server,
+                port,
+                password,
+                sni,
+                insecure,
+                client_fingerprint,
+                &session.target,
+                session.port,
+                payload,
+            )
+            .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "mieru")]
+    pub(crate) async fn start_mieru_udp_flow(
+        &mut self,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        username: &str,
+        password: &str,
+        relay_chain: bool,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.mieru_manager
+            .send_existing(
+                &mut self.chain_tasks,
+                session.id,
+                proxy,
+                session,
+                server,
+                port,
+                username,
+                password,
+                relay_chain,
+                &session.target,
+                session.port,
+                payload,
+            )
+            .await
+    }
+
+    #[cfg(feature = "mieru")]
+    pub(crate) async fn start_mieru_udp_relay_flow(
+        &mut self,
+        session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        server: &str,
+        port: u16,
+        username: &str,
+        password: &str,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.mieru_manager
+            .send_relay_existing(
+                &mut self.chain_tasks,
+                session.id,
+                carrier.stream,
+                server,
+                port,
+                username,
+                password,
+                &session.target,
+                session.port,
+                payload,
+            )
+            .await
+    }
+
+    #[cfg(feature = "vless")]
+    pub(crate) async fn start_vless_udp_flow(
+        &mut self,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        id: &str,
+        flow: Option<&str>,
+        tls: Option<&zero_config::ClientTlsConfig>,
+        reality: Option<&zero_config::RealityConfig>,
+        ws: Option<&zero_config::WebSocketConfig>,
+        grpc: Option<&zero_config::GrpcConfig>,
+        h2: Option<&zero_config::H2Config>,
+        http_upgrade: Option<&zero_config::HttpUpgradeConfig>,
+        split_http: Option<&zero_config::SplitHttpConfig>,
+        quic: Option<&zero_config::QuicConfig>,
+        payload: &[u8],
+    ) -> Result<(), FlowFailure> {
+        self.vless_manager
+            .start_flow(
+                &mut self.chain_tasks,
+                proxy,
+                session,
+                server,
+                port,
+                id,
+                flow,
+                tls,
+                reality,
+                ws,
+                grpc,
+                h2,
+                http_upgrade,
+                split_http,
+                quic,
+                payload,
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_upstream",
+                error,
+                upstream: Some((server.to_string(), port)),
+            })?;
+        Ok(())
+    }
+
+    #[cfg(feature = "vless")]
+    pub(crate) async fn start_vless_udp_relay_two_stream(
+        &mut self,
+        proxy: &Proxy,
+        session: &Session,
+        post_carrier: crate::transport::RelayCarrier,
+        get_carrier: crate::transport::RelayCarrier,
+        id: &str,
+        split_http: &zero_config::SplitHttpConfig,
+        payload: &[u8],
+    ) -> Result<(), FlowFailure> {
+        self.vless_manager
+            .start_relay_two_stream(
+                &mut self.chain_tasks,
+                proxy,
+                session,
+                post_carrier,
+                get_carrier,
+                id,
+                split_http,
+                payload,
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        Ok(())
+    }
+
+    #[cfg(feature = "vless")]
+    pub(crate) async fn start_vless_udp_relay_final_hop(
+        &mut self,
+        proxy: &Proxy,
+        session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        server: &str,
+        port: u16,
+        id: &str,
+        tls: Option<&zero_config::ClientTlsConfig>,
+        reality: Option<&zero_config::RealityConfig>,
+        ws: Option<&zero_config::WebSocketConfig>,
+        grpc: Option<&zero_config::GrpcConfig>,
+        h2: Option<&zero_config::H2Config>,
+        http_upgrade: Option<&zero_config::HttpUpgradeConfig>,
+        split_http: Option<&zero_config::SplitHttpConfig>,
+        payload: &[u8],
+    ) -> Result<(), FlowFailure> {
+        self.vless_manager
+            .start_relay_final_hop(
+                &mut self.chain_tasks,
+                proxy,
+                session,
+                carrier,
+                server,
+                port,
+                id,
+                tls,
+                reality,
+                ws,
+                grpc,
+                h2,
+                http_upgrade,
+                split_http,
+                payload,
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        Ok(())
+    }
+
+    #[cfg(feature = "vmess")]
+    pub(crate) async fn start_vmess_udp_flow(
+        &mut self,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        id: &str,
+        cipher: &str,
+        mux_concurrency: Option<u32>,
+        tls: Option<&zero_config::ClientTlsConfig>,
+        ws: Option<&zero_config::WebSocketConfig>,
+        grpc: Option<&zero_config::GrpcConfig>,
+        payload: &[u8],
+    ) -> Result<(), FlowFailure> {
+        self.vmess_manager
+            .start_flow(
+                &mut self.chain_tasks,
+                proxy,
+                session,
+                server,
+                port,
+                id,
+                cipher,
+                mux_concurrency,
+                tls,
+                ws,
+                grpc,
+                payload,
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vmess_upstream",
+                error,
+                upstream: Some((server.to_string(), port)),
+            })?;
+        Ok(())
+    }
+
+    #[cfg(feature = "vmess")]
+    pub(crate) async fn start_vmess_udp_relay_flow(
+        &mut self,
+        proxy: &Proxy,
+        session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        server: &str,
+        port: u16,
+        id: &str,
+        cipher: &str,
+        tls: Option<&zero_config::ClientTlsConfig>,
+        ws: Option<&zero_config::WebSocketConfig>,
+        grpc: Option<&zero_config::GrpcConfig>,
+        payload: &[u8],
+    ) -> Result<(), FlowFailure> {
+        self.vmess_manager
+            .start_relay_flow(
+                &mut self.chain_tasks,
+                proxy,
+                session,
+                carrier,
+                server,
+                port,
+                id,
+                cipher,
+                tls,
+                ws,
+                grpc,
+                payload,
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vmess_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        Ok(())
     }
 
     // Failure helpers.

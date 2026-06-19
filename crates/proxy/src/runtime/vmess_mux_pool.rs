@@ -193,7 +193,7 @@ impl VmessMuxConnectionPool {
     ) -> Result<VmessMuxConn, EngineError> {
         let socket = proxy
             .protocols
-            .direct_outbound
+            .direct_connector()
             .connect_host(&key.server, key.port, proxy.resolver.as_ref())
             .await?;
 

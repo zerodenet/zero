@@ -23,42 +23,14 @@ use tracing::{debug, warn};
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use super::{DatagramCodec, FlowFailure, PacketPathCarrier, UdpFlowContext, UdpPacketRef};
-#[cfg(feature = "socks5")]
-use crate::outbound::socks5::ActiveUpstreamSocks5UdpAssociation;
+use super::packet_path_traits::{DatagramCodec, UdpFlowContext, UdpPacketRef};
+use super::{FlowFailure, PacketPathCarrier};
 use crate::runtime::Proxy;
 use zero_engine::ResolvedLeafOutbound;
 
 type RecvItem = (Address, u16, Vec<u8>);
 
 // ── concrete carriers ─────────────────────────────────────────────────
-
-#[cfg(feature = "socks5")]
-pub(super) struct Socks5PacketPath {
-    association: Arc<ActiveUpstreamSocks5UdpAssociation>,
-}
-
-#[cfg(feature = "socks5")]
-#[async_trait]
-impl PacketPathCarrier for Socks5PacketPath {
-    async fn send_to(
-        &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<(), EngineError> {
-        self.association.send_packet(target, port, payload).await?;
-        Ok(())
-    }
-    async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        let read = self.association.recv_packet(buf).await?;
-        let packet = socks5::parse_udp_packet(&buf[..read])
-            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
-        let len = packet.payload.len();
-        buf[..len].copy_from_slice(&packet.payload);
-        Ok(len)
-    }
-}
 
 pub(super) struct ShadowsocksPacketPath {
     socket: UdpSocket,
@@ -76,7 +48,7 @@ impl ShadowsocksPacketPath {
     ) -> Result<Self, EngineError> {
         let endpoint = proxy
             .protocols
-            .direct_outbound
+            .direct_connector()
             .resolve_address(
                 &Address::Domain(server.to_owned()),
                 port,
@@ -463,21 +435,6 @@ fn carrier_upstream(leaf: &ResolvedLeafOutbound<'_>) -> (String, u16) {
 }
 
 // ── per-carrier constructors (called by adapters) ─────────────────────
-
-/// Build a SOCKS5 packet-path carrier (UDP ASSOCIATE over the SOCKS5 upstream).
-#[cfg(feature = "socks5")]
-pub(crate) async fn build_socks5_packet_path(
-    proxy: &Proxy,
-    tag: &str,
-    server: &str,
-    port: u16,
-    auth: Option<(&str, &str)>,
-) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
-    let association = Arc::new(
-        ActiveUpstreamSocks5UdpAssociation::establish(proxy, tag, server, port, auth, 0).await?,
-    );
-    Ok(Arc::new(Socks5PacketPath { association }))
-}
 
 /// Build a Shadowsocks packet-path carrier (raw UDP socket to the SS server).
 pub(crate) async fn build_shadowsocks_packet_path(

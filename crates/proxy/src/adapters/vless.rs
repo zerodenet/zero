@@ -128,7 +128,6 @@ impl ProtocolAdapter for VlessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::runtime::vless_udp::VlessUdpTransport;
         use zero_traits::UdpPacketFraming;
 
         let ResolvedLeafOutbound::Vless {
@@ -168,10 +167,10 @@ impl ProtocolAdapter for VlessAdapter {
                     *port,
                     &::vless::parse_uuid(id).map_err(|e| FlowFailure {
                         stage: "udp_vless_mux_parse_uuid",
-                        error: zero_core::Error::Protocol(&*Box::leak(
-                            format!("invalid VLESS UUID: {e}").into_boxed_str(),
-                        ))
-                        .into(),
+                        error: EngineError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            format!("invalid VLESS UUID: {e}"),
+                        )),
                         upstream: Some(((*server).to_string(), *port)),
                     })?,
                     *tls,
@@ -185,7 +184,7 @@ impl ProtocolAdapter for VlessAdapter {
                     let packet = <::vless::VlessOutbound as UdpPacketFraming<
                         ::vless::VlessUdpPacketTarget,
                     >>::encode_udp_packet(
-                        &proxy.protocols.vless_outbound,
+                        &proxy.protocols.vless_outbound_protocol(),
                         &::vless::VlessUdpPacketTarget {
                             address: &session.target,
                             port: session.port,
@@ -208,35 +207,29 @@ impl ProtocolAdapter for VlessAdapter {
             }
         }
 
-        let transport = VlessUdpTransport {
-            tls: *tls,
-            reality: *reality,
-            ws: *ws,
-            grpc: *grpc,
-            h2: *h2,
-            http_upgrade: *http_upgrade,
-            split_http: *split_http,
-            quic: *quic,
-        };
         dispatch
-            .vless_manager
-            .get_or_create_upstream(
-                &mut dispatch.chain_tasks,
+            .start_vless_udp_flow(
                 proxy,
                 session,
-                session.target.clone(),
-                session.port,
-                (*server).to_string(),
+                server,
                 *port,
-                (*id).to_string(),
-                payload.to_vec(),
-                Some(&transport),
+                id,
+                *flow,
+                *tls,
+                *reality,
+                *ws,
+                *grpc,
+                *h2,
+                *http_upgrade,
+                *split_http,
+                *quic,
+                payload,
             )
             .await
             .map_err(|error| FlowFailure {
-                stage: "udp_vless_upstream",
-                error,
-                upstream: Some(((*server).to_string(), *port)),
+                stage: error.stage,
+                error: error.error,
+                upstream: error.upstream,
             })?;
 
         Ok(FlowStartResult::VlessFlow {
@@ -275,8 +268,6 @@ impl ProtocolAdapter for VlessAdapter {
         chain: Vec<ResolvedLeafOutbound<'_>>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::runtime::vless_udp::establish_vless_udp_upstream_over_stream;
-
         let chain_get = chain.clone();
         let (post_carrier, final_hop) =
             proxy
@@ -298,8 +289,8 @@ impl ProtocolAdapter for VlessAdapter {
 
         let ResolvedLeafOutbound::Vless {
             tag,
-            server,
-            port,
+            server: _,
+            port: _,
             id,
             split_http,
             ..
@@ -307,41 +298,21 @@ impl ProtocolAdapter for VlessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), &final_hop));
         };
+        let session_id = session.id;
         let split_http_cfg = split_http
             .as_ref()
             .expect("udp_relay_needs_two_streams checked split_http is Some");
-
-        let stream = crate::transport::build_vless_split_http_over_relay(
-            post_carrier.stream,
-            get_carrier.stream,
-            split_http_cfg,
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_relay_final_transport",
-            error,
-            upstream: Some(((*server).to_string(), *port)),
-        })?;
-
-        let session_id = session.id;
-        let key = (session.target.clone(), session.port);
-        let (upstream, recv_tx) =
-            establish_vless_udp_upstream_over_stream(proxy, session, id, payload, stream)
-                .await
-                .map_err(|error| FlowFailure {
-                    stage: "udp_vless_relay_chain",
-                    error,
-                    upstream: None,
-                })?;
         dispatch
-            .vless_manager
-            .insert_upstream(key, upstream, recv_tx);
-        dispatch.vless_manager.spawn_bridge(
-            &mut dispatch.chain_tasks,
-            session.target.clone(),
-            session.port,
-            session_id,
-        );
+            .start_vless_udp_relay_two_stream(
+                proxy,
+                session,
+                post_carrier,
+                get_carrier,
+                id,
+                split_http_cfg,
+                payload,
+            )
+            .await?;
 
         Ok(FlowStartResult::VlessFlow {
             session_id,
@@ -357,8 +328,6 @@ impl ProtocolAdapter for VlessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::runtime::vless_udp::establish_vless_udp_upstream_over_stream;
-
         let ResolvedLeafOutbound::Vless {
             tag,
             server,
@@ -377,6 +346,7 @@ impl ProtocolAdapter for VlessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
+        let session_id = session.id;
         if quic.is_some() {
             return Err(FlowFailure {
                 stage: "udp_relay_final_transport",
@@ -388,43 +358,25 @@ impl ProtocolAdapter for VlessAdapter {
             });
         }
 
-        let session_id = session.id;
         let tag_owned = (*tag).to_string();
-        let key = (session.target.clone(), session.port);
-        let stream = crate::transport::build_vless_outbound_transport_over_stream(
-            carrier,
-            *tls,
-            *reality,
-            *ws,
-            *grpc,
-            *h2,
-            *http_upgrade,
-            *split_http,
-            proxy.config.source_dir(),
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_relay_final_transport",
-            error,
-            upstream: Some(((*server).to_string(), *port)),
-        })?;
-        let (upstream, recv_tx) =
-            establish_vless_udp_upstream_over_stream(proxy, session, id, payload, stream)
-                .await
-                .map_err(|error| FlowFailure {
-                    stage: "udp_vless_relay_chain",
-                    error,
-                    upstream: None,
-                })?;
         dispatch
-            .vless_manager
-            .insert_upstream(key, upstream, recv_tx);
-        dispatch.vless_manager.spawn_bridge(
-            &mut dispatch.chain_tasks,
-            session.target.clone(),
-            session.port,
-            session_id,
-        );
+            .start_vless_udp_relay_final_hop(
+                proxy,
+                session,
+                carrier,
+                server,
+                *port,
+                id,
+                *tls,
+                *reality,
+                *ws,
+                *grpc,
+                *h2,
+                *http_upgrade,
+                *split_http,
+                payload,
+            )
+            .await?;
 
         Ok(FlowStartResult::VlessFlow {
             session_id,

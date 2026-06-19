@@ -1,5 +1,13 @@
+use tokio::task::JoinSet;
+use zero_core::{Address, Session};
+use zero_engine::EngineError;
+
+use super::{ChainTask, FlowFailure};
+use crate::runtime::Proxy;
+
 #[cfg(feature = "mieru")]
 use {
+    super::packet_path_traits::{MieruUdpPeer, UdpFlowContext, UdpPacketRef, UdpPeerEndpoint},
     crate::transport::TcpRelayStream,
     mieru::{MieruOutbound, MieruProtocol, MieruUdpAssociatePacket},
     std::collections::HashMap,
@@ -8,13 +16,6 @@ use {
     tokio::sync::{broadcast, mpsc, Mutex},
     zero_traits::UdpPacketFraming,
 };
-
-use tokio::task::JoinSet;
-use zero_core::{Address, Session};
-use zero_engine::EngineError;
-
-use super::{ChainTask, FlowFailure, MieruUdpPeer, UdpFlowContext, UdpPacketRef};
-use crate::runtime::Proxy;
 
 #[cfg(feature = "mieru")]
 type RecvItem = (Address, u16, Vec<u8>);
@@ -52,7 +53,7 @@ impl MieruChainManager {
         }
     }
 
-    pub(crate) async fn send(
+    async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
@@ -118,7 +119,45 @@ impl MieruChainManager {
         Ok(sent)
     }
 
-    pub(crate) async fn send_relay(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn send_existing(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        session_id: u64,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        username: &str,
+        password: &str,
+        relay_chain: bool,
+        target: &Address,
+        target_port: u16,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.send(
+            UdpFlowContext {
+                chain_tasks,
+                session_id,
+            },
+            proxy,
+            session,
+            MieruUdpPeer {
+                endpoint: UdpPeerEndpoint { server, port },
+                username,
+                password,
+                relay_chain,
+            },
+            UdpPacketRef {
+                target,
+                port: target_port,
+                payload,
+            },
+        )
+        .await
+    }
+
+    async fn send_relay(
         &mut self,
         ctx: UdpFlowContext<'_>,
         stream: TcpRelayStream,
@@ -149,13 +188,48 @@ impl MieruChainManager {
         Ok(packet_ref.payload.len())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn send_relay_existing(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        session_id: u64,
+        stream: TcpRelayStream,
+        server: &str,
+        port: u16,
+        username: &str,
+        password: &str,
+        target: &Address,
+        target_port: u16,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.send_relay(
+            UdpFlowContext {
+                chain_tasks,
+                session_id,
+            },
+            stream,
+            MieruUdpPeer {
+                endpoint: UdpPeerEndpoint { server, port },
+                username,
+                password,
+                relay_chain: true,
+            },
+            UdpPacketRef {
+                target,
+                port: target_port,
+                payload,
+            },
+        )
+        .await
+    }
+
     async fn establish_direct(
         proxy: &Proxy,
         peer: &MieruUdpPeer<'_>,
     ) -> Result<MieruEntry, EngineError> {
         let socket = proxy
             .protocols
-            .direct_outbound
+            .direct_connector()
             .connect_host(
                 peer.endpoint.server,
                 peer.endpoint.port,
@@ -348,14 +422,22 @@ impl MieruChainManager {
     pub(super) fn new() -> Self {
         Self
     }
-    #[allow(unused_variables)]
-    pub(crate) async fn send(
+
+    #[allow(unused_variables, clippy::too_many_arguments)]
+    pub(crate) async fn send_existing(
         &mut self,
-        _ctx: UdpFlowContext<'_>,
+        _chain_tasks: &mut JoinSet<ChainTask>,
+        _session_id: u64,
         _proxy: &Proxy,
-        _sess: &Session,
-        _peer: MieruUdpPeer<'_>,
-        _packet_ref: UdpPacketRef<'_>,
+        _session: &Session,
+        _server: &str,
+        _port: u16,
+        _username: &str,
+        _password: &str,
+        _relay_chain: bool,
+        _target: &Address,
+        _target_port: u16,
+        _payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         Err(FlowFailure {
             stage: "mieru_feature",
@@ -366,14 +448,17 @@ impl MieruChainManager {
             upstream: None,
         })
     }
-
-    #[allow(unused_variables)]
-    pub(crate) async fn send_relay(
+    #[allow(unused_variables, clippy::too_many_arguments)]
+    pub(crate) async fn send_relay_existing(
         &mut self,
-        _ctx: UdpFlowContext<'_>,
         _stream: crate::transport::TcpRelayStream,
-        _peer: MieruUdpPeer<'_>,
-        _packet_ref: UdpPacketRef<'_>,
+        _server: &str,
+        _port: u16,
+        _username: &str,
+        _password: &str,
+        _target: &Address,
+        _target_port: u16,
+        _payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         Err(FlowFailure {
             stage: "mieru_feature",

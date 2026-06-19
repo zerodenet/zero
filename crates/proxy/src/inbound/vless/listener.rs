@@ -121,7 +121,7 @@ impl Proxy {
                                                 });
 
                                             if let Some(fb) = alpn_match {
-                                                let mut upstream = engine.protocols.direct_outbound
+                                                let mut upstream = engine.protocols.direct_connector()
                                                     .connect_host(&fb.server, fb.port, &engine.resolver)
                                                     .await?;
                                                 tokio::io::AsyncWriteExt::write_all(

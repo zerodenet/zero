@@ -76,7 +76,7 @@ pub(crate) async fn connect_tcp(
 
     let socket = proxy
         .protocols
-        .direct_outbound
+        .direct_connector()
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
 
@@ -99,7 +99,7 @@ pub(crate) async fn connect_tcp(
         use zero_traits::DeferredTcpTunnelProtocol;
         proxy
             .protocols
-            .vless_outbound
+            .vless_outbound_protocol()
             .send_deferred_tcp_tunnel_request(
                 &mut metered,
                 &vless::VlessFlowTcpTunnelTarget {
@@ -117,7 +117,7 @@ pub(crate) async fn connect_tcp(
     } else {
         use zero_traits::TcpTunnelProtocol;
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessFlowTcpTunnelTarget>>::establish_tcp_tunnel(
-            &proxy.protocols.vless_outbound,
+            &proxy.protocols.vless_outbound_protocol(),
             &mut metered,
             &vless::VlessFlowTcpTunnelTarget {
                 session,
@@ -147,7 +147,7 @@ pub(crate) async fn apply_tcp_hop(
     use zero_traits::TcpTunnelProtocol;
     if flow.is_some() {
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessFlowTcpTunnelTarget>>::establish_tcp_tunnel(
-            &proxy.protocols.vless_outbound,
+            &proxy.protocols.vless_outbound_protocol(),
             &mut stream,
             &vless::VlessFlowTcpTunnelTarget {
                 session,
@@ -159,7 +159,7 @@ pub(crate) async fn apply_tcp_hop(
         .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
     } else {
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessTcpTunnelTarget>>::establish_tcp_tunnel(
-            &proxy.protocols.vless_outbound,
+            &proxy.protocols.vless_outbound_protocol(),
             &mut stream,
             &vless::VlessTcpTunnelTarget {
                 session,

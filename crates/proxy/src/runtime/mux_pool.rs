@@ -299,7 +299,7 @@ impl MuxConnectionPool {
 
         let socket = proxy
             .protocols
-            .direct_outbound
+            .direct_connector()
             .connect_host(&key.server, key.port, proxy.resolver.as_ref())
             .await?;
 
@@ -318,7 +318,7 @@ impl MuxConnectionPool {
         let mut metered = MeteredStream::new(stream);
         let _mux = proxy
             .protocols
-            .vless_outbound
+            .vless_outbound_protocol()
             .establish_mux(&mut metered, &key.uuid)
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;

@@ -41,7 +41,7 @@ impl Proxy {
     {
         let mut upstream = self
             .protocols
-            .direct_outbound
+            .direct_connector()
             .connect_host(&fallback.server, fallback.port, self.resolver.as_ref())
             .await?;
 

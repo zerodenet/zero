@@ -61,11 +61,10 @@ fn assert_src_pattern_confined(
             continue;
         }
         let allowed = allowed_exact.iter().any(|item| *item == source)
-            || allowed_prefixes.iter().any(|prefix| source.starts_with(prefix));
-        assert!(
-            allowed,
-            "{source} should not contain `{pattern}`; {reason}"
-        );
+            || allowed_prefixes
+                .iter()
+                .any(|prefix| source.starts_with(prefix));
+        assert!(allowed, "{source} should not contain `{pattern}`; {reason}");
     }
 }
 
@@ -198,6 +197,176 @@ fn protocol_crates_do_not_depend_on_proxy_runtime_layers() {
                 !content.contains(crate_name),
                 "{} should not depend on forbidden runtime crate `{crate_name}`",
                 manifest.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
+    let content = read("src/runtime/udp_dispatch/mod.rs");
+
+    for forbidden in [
+        "proxy.protocols.vless_outbound",
+        "proxy.protocols.vmess_outbound",
+        "VlessUdpPacketTarget",
+        "VmessUdpPacketTarget",
+        "VlessOutbound as UdpPacketFraming",
+        "VmessOutbound as UdpPacketFraming",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "src/runtime/udp_dispatch/mod.rs should stay protocol-neutral; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_inventory_keeps_protocol_instances_private() {
+    let content = read("src/inventory.rs");
+
+    for forbidden in [
+        "pub socks5_inbound:",
+        "pub socks5_outbound:",
+        "pub http_connect_inbound:",
+        "pub vless_inbound:",
+        "pub vless_outbound:",
+        "pub hysteria2_inbound:",
+        "pub hysteria2_outbound:",
+        "pub shadowsocks_inbound:",
+        "pub shadowsocks_outbound:",
+        "pub trojan_inbound:",
+        "pub trojan_outbound:",
+        "pub vmess_inbound:",
+        "pub vmess_outbound:",
+        "pub(crate) direct_outbound:",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "src/inventory.rs should keep protocol instances private; found `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "fn direct_connector(&self)",
+        "fn socks5_inbound_protocol(&self)",
+        "fn http_connect_inbound_protocol(&self)",
+        "fn vless_inbound_protocol(&self)",
+        "fn vless_outbound_protocol(&self)",
+        "fn shadowsocks_outbound_protocol(&self)",
+        "fn trojan_outbound_protocol(&self)",
+        "fn vmess_outbound_protocol(&self)",
+    ] {
+        assert!(
+            content.contains(required),
+            "src/inventory.rs should expose controlled protocol accessors; missing `{required}`"
+        );
+    }
+}
+
+#[test]
+fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
+    let outbound = read("src/outbound/socks5.rs");
+    let runtime = read("src/runtime/socks5_udp.rs");
+
+    for forbidden in [
+        "ActiveUpstreamSocks5UdpAssociation",
+        "Socks5UdpAssociation",
+        "UpstreamAssociationCloseReason",
+        "send_socks5_udp_packet",
+        "ensure_socks5_udp_association",
+        "Socks5UdpRelay",
+    ] {
+        assert!(
+            !outbound.contains(forbidden),
+            "src/outbound/socks5.rs should stay focused on TCP handshake; found `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "pub struct ActiveUpstreamSocks5UdpAssociation",
+        "pub struct Socks5UdpAssociation",
+        "pub enum UpstreamAssociationCloseReason",
+        "pub async fn send_socks5_udp_packet",
+    ] {
+        assert!(
+            runtime.contains(required),
+            "src/runtime/socks5_udp.rs should own SOCKS5 UDP runtime state; missing `{required}`"
+        );
+    }
+}
+
+#[test]
+fn udp_forward_stays_protocol_neutral_and_does_not_construct_peer_types() {
+    let content = read("src/runtime/udp_dispatch/forward.rs");
+
+    for forbidden in [
+        "SsUdpPeer",
+        "H2UdpPeer",
+        "TrojanUdpPeer",
+        "MieruUdpPeer",
+        "UdpPeerEndpoint",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "src/runtime/udp_dispatch/forward.rs should not construct protocol peer types; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn adapters_do_not_construct_udp_dispatch_peer_helpers() {
+    for path in rust_sources_under("src/adapters") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in [
+            "SsUdpPeer",
+            "H2UdpPeer",
+            "TrojanUdpPeer",
+            "MieruUdpPeer",
+            "UdpFlowContext",
+            "UdpPacketRef",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should not construct udp-dispatch peer helper `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
+fn packet_path_chain_does_not_own_socks5_runtime_state() {
+    let content = read("src/runtime/udp_dispatch/packet_path_chain.rs");
+
+    for forbidden in [
+        "ActiveUpstreamSocks5UdpAssociation",
+        "Socks5PacketPath",
+        "socks5::parse_udp_packet",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "src/runtime/udp_dispatch/packet_path_chain.rs should stay generic; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn adapters_do_not_reach_into_udp_dispatch_manager_fields() {
+    for path in rust_sources_under("src/adapters") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in [
+            ".ss_manager",
+            ".h2_manager",
+            ".trojan_manager",
+            ".mieru_manager",
+            ".vless_manager",
+            ".vmess_manager",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should not reach into udp-dispatch manager field `{forbidden}`"
             );
         }
     }

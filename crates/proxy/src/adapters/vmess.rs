@@ -97,8 +97,6 @@ impl ProtocolAdapter for VmessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::runtime::vmess_udp::VmessUdpTransport;
-
         let ResolvedLeafOutbound::Vmess {
             tag,
             server,
@@ -114,38 +112,25 @@ impl ProtocolAdapter for VmessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let transport = VmessUdpTransport {
-            tls: *tls,
-            ws: *ws,
-            grpc: *grpc,
-        };
-        let session_id = session.id;
         let tag_owned = (*tag).to_string();
         dispatch
-            .vmess_manager
-            .get_or_create_upstream(
-                &mut dispatch.chain_tasks,
+            .start_vmess_udp_flow(
                 proxy,
                 session,
-                session.target.clone(),
-                session.port,
-                (*server).to_string(),
+                server,
                 *port,
-                (*id).to_string(),
-                (*cipher).to_string(),
-                payload.to_vec(),
-                Some(&transport),
+                id,
+                cipher,
                 *mux_concurrency,
+                *tls,
+                *ws,
+                *grpc,
+                payload,
             )
-            .await
-            .map_err(|error| FlowFailure {
-                stage: "udp_vmess_upstream",
-                error,
-                upstream: Some(((*server).to_string(), *port)),
-            })?;
+            .await?;
 
         Ok(FlowStartResult::VmessFlow {
-            session_id,
+            session_id: session.id,
             tag: tag_owned,
         })
     }
@@ -172,11 +157,6 @@ impl ProtocolAdapter for VmessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::runtime::vmess_udp::{
-            build_vmess_udp_transport_over_stream, establish_vmess_udp_upstream_over_stream,
-            VmessUdpTransport,
-        };
-
         let ResolvedLeafOutbound::Vmess {
             tag,
             server,
@@ -191,47 +171,15 @@ impl ProtocolAdapter for VmessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let session_id = session.id;
         let tag_owned = (*tag).to_string();
-        let key = (session.target.clone(), session.port);
-        let transport = VmessUdpTransport {
-            tls: *tls,
-            ws: *ws,
-            grpc: *grpc,
-        };
-        let stream = build_vmess_udp_transport_over_stream(
-            carrier.stream,
-            Some(&transport),
-            proxy.config.source_dir(),
-            server,
-            *port,
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vmess_relay_final_transport",
-            error,
-            upstream: Some(((*server).to_string(), *port)),
-        })?;
-        let (upstream, recv_tx) =
-            establish_vmess_udp_upstream_over_stream(proxy, session, id, cipher, payload, stream)
-                .await
-                .map_err(|error| FlowFailure {
-                    stage: "udp_vmess_relay_chain",
-                    error,
-                    upstream: None,
-                })?;
         dispatch
-            .vmess_manager
-            .insert_upstream(key, upstream, recv_tx);
-        dispatch.vmess_manager.spawn_bridge(
-            &mut dispatch.chain_tasks,
-            session.target.clone(),
-            session.port,
-            session_id,
-        );
+            .start_vmess_udp_relay_flow(
+                proxy, session, carrier, server, *port, id, cipher, *tls, *ws, *grpc, payload,
+            )
+            .await?;
 
         Ok(FlowStartResult::VmessFlow {
-            session_id,
+            session_id: session.id,
             tag: tag_owned,
         })
     }

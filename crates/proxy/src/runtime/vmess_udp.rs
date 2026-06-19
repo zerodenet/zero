@@ -18,13 +18,13 @@ use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
 #[derive(Clone)]
-pub(crate) struct VmessUdpUpstream {
+pub(super) struct VmessUdpUpstream {
     pub(crate) session_id: u64,
     pub(crate) send_tx: mpsc::Sender<Vec<u8>>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct VmessUdpTransport<'a> {
+pub(super) struct VmessUdpTransport<'a> {
     pub(crate) tls: Option<&'a ClientTlsConfig>,
     pub(crate) ws: Option<&'a WebSocketConfig>,
     pub(crate) grpc: Option<&'a GrpcConfig>,
@@ -39,7 +39,7 @@ fn spawn_vmess_udp_relay(
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
     let (recv_tx, _) = broadcast::channel::<vmess::VmessUdpPacket>(32);
     let recv_tx_bg = recv_tx.clone();
-    let vmess_outbound = proxy.protocols.vmess_outbound;
+    let vmess_outbound = proxy.protocols.vmess_outbound_protocol();
 
     proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
 
@@ -93,7 +93,7 @@ fn spawn_vmess_udp_relay(
     )
 }
 
-pub(crate) async fn build_vmess_udp_transport_over_stream(
+async fn build_vmess_udp_transport_over_stream(
     stream: TcpRelayStream,
     transport: Option<&VmessUdpTransport<'_>>,
     source_dir: Option<&std::path::Path>,
@@ -157,7 +157,7 @@ pub(crate) async fn build_vmess_udp_transport_over_stream(
     }
 }
 
-pub(crate) async fn establish_vmess_udp_upstream_over_stream(
+async fn establish_vmess_udp_upstream_over_stream(
     proxy: &Proxy,
     session: &Session,
     id: &str,
@@ -174,7 +174,7 @@ pub(crate) async fn establish_vmess_udp_upstream_over_stream(
     })?;
     let initial_packet =
         <vmess::VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::encode_udp_packet(
-            &proxy.protocols.vmess_outbound,
+            &proxy.protocols.vmess_outbound_protocol(),
             &vmess::VmessUdpPacketTarget {
                 address: &session.target,
                 port: session.port,
@@ -184,7 +184,7 @@ pub(crate) async fn establish_vmess_udp_upstream_over_stream(
 
     let vmess_stream = vmess::VmessAeadStream::establish_udp_outbound(
         stream,
-        &proxy.protocols.vmess_outbound,
+        &proxy.protocols.vmess_outbound_protocol(),
         session,
         &uuid,
         vmess_cipher,
@@ -201,7 +201,7 @@ pub(crate) async fn establish_vmess_udp_upstream_over_stream(
     ))
 }
 
-pub(crate) async fn establish_vmess_udp_upstream(
+async fn establish_vmess_udp_upstream(
     proxy: &Proxy,
     session: &Session,
     server: &str,
@@ -221,7 +221,7 @@ pub(crate) async fn establish_vmess_udp_upstream(
     })?;
     let initial_packet =
         <vmess::VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::encode_udp_packet(
-            &proxy.protocols.vmess_outbound,
+            &proxy.protocols.vmess_outbound_protocol(),
             &vmess::VmessUdpPacketTarget {
                 address: &session.target,
                 port: session.port,
@@ -258,7 +258,7 @@ pub(crate) async fn establish_vmess_udp_upstream(
 
     let socket = proxy
         .protocols
-        .direct_outbound
+        .direct_connector()
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
 
@@ -339,7 +339,7 @@ pub(crate) async fn establish_vmess_udp_upstream(
 
     let vmess_stream = vmess::VmessAeadStream::establish_udp_outbound(
         stream,
-        &proxy.protocols.vmess_outbound,
+        &proxy.protocols.vmess_outbound_protocol(),
         session,
         &uuid,
         vmess_cipher,
@@ -356,25 +356,119 @@ pub(crate) async fn establish_vmess_udp_upstream(
     ))
 }
 
-pub(crate) struct VmessUdpOutboundManager {
+pub(super) struct VmessUdpOutboundManager {
     upstreams:
         HashMap<(Address, u16), (VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>)>,
 }
 
 impl VmessUdpOutboundManager {
-    pub(crate) fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             upstreams: HashMap::new(),
         }
     }
 
-    pub(crate) fn get(&self, target: &Address, port: u16) -> Option<&VmessUdpUpstream> {
-        self.upstreams
-            .get(&(target.clone(), port))
-            .map(|(upstream, _)| upstream)
+    pub(super) async fn start_flow(
+        &mut self,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        id: &str,
+        cipher: &str,
+        mux_concurrency: Option<u32>,
+        tls: Option<&ClientTlsConfig>,
+        ws: Option<&WebSocketConfig>,
+        grpc: Option<&GrpcConfig>,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        let transport = VmessUdpTransport { tls, ws, grpc };
+        self.get_or_create_upstream(
+            chain_tasks,
+            proxy,
+            session,
+            session.target.clone(),
+            session.port,
+            server.to_string(),
+            port,
+            id.to_string(),
+            cipher.to_string(),
+            payload.to_vec(),
+            Some(&transport),
+            mux_concurrency,
+        )
+        .await
     }
 
-    pub(crate) fn insert_upstream(
+    pub(super) async fn start_relay_flow(
+        &mut self,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        proxy: &Proxy,
+        session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        server: &str,
+        port: u16,
+        id: &str,
+        cipher: &str,
+        tls: Option<&ClientTlsConfig>,
+        ws: Option<&WebSocketConfig>,
+        grpc: Option<&GrpcConfig>,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        let transport = VmessUdpTransport { tls, ws, grpc };
+        let stream = build_vmess_udp_transport_over_stream(
+            carrier.stream,
+            Some(&transport),
+            proxy.config.source_dir(),
+            server,
+            port,
+        )
+        .await?;
+        let (upstream, recv_tx) =
+            establish_vmess_udp_upstream_over_stream(proxy, session, id, cipher, payload, stream)
+                .await?;
+        self.insert_upstream((session.target.clone(), session.port), upstream, recv_tx);
+        self.spawn_bridge(
+            chain_tasks,
+            session.target.clone(),
+            session.port,
+            session.id,
+        );
+        Ok(())
+    }
+
+    pub(super) async fn send_existing(
+        &self,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        proxy: &Proxy,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<u64>, EngineError> {
+        let Some((upstream, _)) = self.upstreams.get(&(target.clone(), port)) else {
+            return Ok(None);
+        };
+
+        proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
+        let packet = <vmess::VmessOutbound as UdpPacketFraming<
+            vmess::VmessUdpPacketTarget,
+        >>::encode_udp_packet(
+            &proxy.protocols.vmess_outbound_protocol(),
+            &vmess::VmessUdpPacketTarget {
+                address: target,
+                port,
+                payload,
+            },
+        )?;
+        let packet_len = packet.len() as u64;
+        let _ = upstream.send_tx.send(packet).await;
+        proxy.record_session_outbound_tx(upstream.session_id, packet_len);
+        self.spawn_bridge(chain_tasks, target.clone(), port, upstream.session_id);
+        Ok(Some(upstream.session_id))
+    }
+
+    pub(super) fn insert_upstream(
         &mut self,
         key: (Address, u16),
         upstream: VmessUdpUpstream,
@@ -383,7 +477,7 @@ impl VmessUdpOutboundManager {
         self.upstreams.insert(key, (upstream, recv_tx));
     }
 
-    pub(crate) fn spawn_bridge(
+    pub(super) fn spawn_bridge(
         &self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         target: Address,
@@ -402,7 +496,7 @@ impl VmessUdpOutboundManager {
         }
     }
 
-    pub(crate) async fn get_or_create_upstream(
+    pub(super) async fn get_or_create_upstream(
         &mut self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         proxy: &Proxy,
@@ -423,7 +517,7 @@ impl VmessUdpOutboundManager {
             let packet = <vmess::VmessOutbound as UdpPacketFraming<
                 vmess::VmessUdpPacketTarget,
             >>::encode_udp_packet(
-                &proxy.protocols.vmess_outbound,
+                &proxy.protocols.vmess_outbound_protocol(),
                 &vmess::VmessUdpPacketTarget {
                     address: &target,
                     port,

@@ -251,7 +251,7 @@ pub(crate) async fn connect_tcp(
 ) -> Result<TcpRelayStream, EngineError> {
     let socket = proxy
         .protocols
-        .direct_outbound
+        .direct_connector()
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
 

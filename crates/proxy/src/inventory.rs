@@ -9,12 +9,6 @@ use crate::transport::DirectConnector;
 
 #[cfg(feature = "http_connect")]
 use http_connect::HttpConnectInbound;
-#[cfg(feature = "hysteria2")]
-use hysteria2::Hysteria2Inbound;
-#[cfg(feature = "hysteria2")]
-use hysteria2::Hysteria2Outbound;
-#[cfg(feature = "shadowsocks")]
-use shadowsocks::ShadowsocksInbound;
 #[cfg(feature = "shadowsocks")]
 use shadowsocks::ShadowsocksOutbound;
 #[cfg(feature = "socks5")]
@@ -22,86 +16,72 @@ use socks5::Socks5Inbound;
 #[cfg(feature = "socks5")]
 use socks5::Socks5Outbound;
 #[cfg(feature = "trojan")]
-use trojan::TrojanInbound;
-#[cfg(feature = "trojan")]
 use trojan::TrojanOutbound;
 #[cfg(feature = "vless")]
 use vless::VlessInbound;
 #[cfg(feature = "vless")]
 use vless::VlessOutbound;
 #[cfg(feature = "vmess")]
-use vmess::VmessInbound;
-#[cfg(feature = "vmess")]
 use vmess::VmessOutbound;
 
 #[derive(Debug, Clone)]
 pub struct ProtocolInventory {
-    #[cfg(feature = "socks5")]
-    pub socks5_inbound: Socks5Inbound,
-    #[cfg(feature = "socks5")]
-    pub socks5_outbound: Socks5Outbound,
-    #[cfg(feature = "http_connect")]
-    pub http_connect_inbound: HttpConnectInbound,
-    #[cfg(feature = "vless")]
-    pub vless_inbound: VlessInbound,
-    #[cfg(feature = "vless")]
-    pub vless_outbound: VlessOutbound,
-    #[cfg(feature = "hysteria2")]
-    pub hysteria2_inbound: Hysteria2Inbound,
-    #[cfg(feature = "hysteria2")]
-    pub hysteria2_outbound: Hysteria2Outbound,
-    #[cfg(feature = "shadowsocks")]
-    pub shadowsocks_inbound: ShadowsocksInbound,
-    #[cfg(feature = "shadowsocks")]
-    pub shadowsocks_outbound: ShadowsocksOutbound,
-    #[cfg(feature = "trojan")]
-    pub trojan_inbound: TrojanInbound,
-    #[cfg(feature = "trojan")]
-    pub trojan_outbound: TrojanOutbound,
-    #[cfg(feature = "vmess")]
-    pub vmess_inbound: VmessInbound,
-    #[cfg(feature = "vmess")]
-    pub vmess_outbound: VmessOutbound,
-    pub(crate) direct_outbound: DirectConnector,
     registry: ProtocolRegistry,
 }
 
 impl Default for ProtocolInventory {
     fn default() -> Self {
         Self {
-            #[cfg(feature = "socks5")]
-            socks5_inbound: Socks5Inbound,
-            #[cfg(feature = "socks5")]
-            socks5_outbound: Socks5Outbound,
-            #[cfg(feature = "http_connect")]
-            http_connect_inbound: HttpConnectInbound,
-            #[cfg(feature = "vless")]
-            vless_inbound: VlessInbound,
-            #[cfg(feature = "vless")]
-            vless_outbound: VlessOutbound,
-            #[cfg(feature = "hysteria2")]
-            hysteria2_inbound: Hysteria2Inbound,
-            #[cfg(feature = "hysteria2")]
-            hysteria2_outbound: Hysteria2Outbound,
-            #[cfg(feature = "shadowsocks")]
-            shadowsocks_inbound: ShadowsocksInbound,
-            #[cfg(feature = "shadowsocks")]
-            shadowsocks_outbound: ShadowsocksOutbound,
-            #[cfg(feature = "trojan")]
-            trojan_inbound: TrojanInbound,
-            #[cfg(feature = "trojan")]
-            trojan_outbound: TrojanOutbound,
-            #[cfg(feature = "vmess")]
-            vmess_inbound: VmessInbound,
-            #[cfg(feature = "vmess")]
-            vmess_outbound: VmessOutbound,
-            direct_outbound: DirectConnector,
             registry: build_registry(),
         }
     }
 }
 
 impl ProtocolInventory {
+    pub(crate) fn direct_connector(&self) -> DirectConnector {
+        DirectConnector
+    }
+
+    #[cfg(feature = "socks5")]
+    pub(crate) fn socks5_inbound_protocol(&self) -> Socks5Inbound {
+        Socks5Inbound
+    }
+
+    #[cfg(feature = "socks5")]
+    pub(crate) fn socks5_outbound_protocol(&self) -> Socks5Outbound {
+        Socks5Outbound
+    }
+
+    #[cfg(feature = "http_connect")]
+    pub(crate) fn http_connect_inbound_protocol(&self) -> HttpConnectInbound {
+        HttpConnectInbound
+    }
+
+    #[cfg(feature = "vless")]
+    pub(crate) fn vless_inbound_protocol(&self) -> VlessInbound {
+        VlessInbound
+    }
+
+    #[cfg(feature = "vless")]
+    pub(crate) fn vless_outbound_protocol(&self) -> VlessOutbound {
+        VlessOutbound
+    }
+
+    #[cfg(feature = "shadowsocks")]
+    pub(crate) fn shadowsocks_outbound_protocol(&self) -> ShadowsocksOutbound {
+        ShadowsocksOutbound
+    }
+
+    #[cfg(feature = "trojan")]
+    pub(crate) fn trojan_outbound_protocol(&self) -> TrojanOutbound {
+        TrojanOutbound
+    }
+
+    #[cfg(feature = "vmess")]
+    pub(crate) fn vmess_outbound_protocol(&self) -> VmessOutbound {
+        VmessOutbound
+    }
+
     pub fn supported_inbounds(&self) -> Vec<&'static str> {
         self.registry.inbound_names()
     }

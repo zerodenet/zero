@@ -195,7 +195,7 @@ impl Proxy {
         let auth = ConfiguredVlessUsers { users };
         let result = self
             .protocols
-            .vless_inbound
+            .vless_inbound_protocol()
             .accept_tcp_with_auth_and_id(&mut metered, &auth)
             .await;
 
@@ -225,7 +225,7 @@ impl Proxy {
                 .await
         } else {
             let handler = VlessInboundHandler {
-                vless_inbound: self.protocols.vless_inbound,
+                vless_inbound: self.protocols.vless_inbound_protocol(),
             };
             let source_addr = client.peer_addr().ok();
             serve_inbound(

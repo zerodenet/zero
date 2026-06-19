@@ -1,6 +1,9 @@
 #[cfg(feature = "trojan")]
 use {
-    super::ChainTask,
+    super::{
+        packet_path_traits::{TrojanUdpPeer, UdpFlowContext, UdpPacketRef, UdpPeerEndpoint},
+        ChainTask,
+    },
     crate::transport::{MeteredStream, TcpRelayStream},
     std::collections::HashMap,
     std::io,
@@ -15,7 +18,7 @@ use {
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use super::{FlowFailure, TrojanUdpPeer, UdpFlowContext, UdpPacketRef};
+use super::FlowFailure;
 use crate::runtime::Proxy;
 
 #[cfg(feature = "trojan")]
@@ -50,7 +53,7 @@ impl TrojanChainManager {
         }
     }
 
-    pub(crate) async fn send(
+    async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
@@ -118,7 +121,49 @@ impl TrojanChainManager {
         Ok(sent)
     }
 
-    pub(crate) async fn send_relay(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn send_existing(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        session_id: u64,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+        relay_chain: bool,
+        target: &Address,
+        target_port: u16,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.send(
+            UdpFlowContext {
+                chain_tasks,
+                session_id,
+            },
+            proxy,
+            session,
+            TrojanUdpPeer {
+                endpoint: UdpPeerEndpoint { server, port },
+                password,
+                sni,
+                insecure,
+                client_fingerprint,
+                relay_chain,
+            },
+            UdpPacketRef {
+                target,
+                port: target_port,
+                payload,
+            },
+        )
+        .await
+    }
+
+    async fn send_relay(
         &mut self,
         ctx: UdpFlowContext<'_>,
         stream: TcpRelayStream,
@@ -160,6 +205,51 @@ impl TrojanChainManager {
         Ok(packet_ref.payload.len())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn send_relay_existing(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        session_id: u64,
+        stream: TcpRelayStream,
+        tls_server_name: Option<&str>,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+        target: &Address,
+        target_port: u16,
+        payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        self.send_relay(
+            UdpFlowContext {
+                chain_tasks,
+                session_id,
+            },
+            stream,
+            tls_server_name,
+            proxy,
+            session,
+            TrojanUdpPeer {
+                endpoint: UdpPeerEndpoint { server, port },
+                password,
+                sni,
+                insecure,
+                client_fingerprint,
+                relay_chain: true,
+            },
+            UdpPacketRef {
+                target,
+                port: target_port,
+                payload,
+            },
+        )
+        .await
+    }
+
     async fn establish_direct(
         proxy: &Proxy,
         session: &Session,
@@ -171,7 +261,7 @@ impl TrojanChainManager {
 
         let upstream = proxy
             .protocols
-            .direct_outbound
+            .direct_connector()
             .connect_host(
                 peer.endpoint.server,
                 peer.endpoint.port,
@@ -253,7 +343,7 @@ impl TrojanChainManager {
         _target: &Address,
         _target_port: u16,
     ) -> Result<TrojanEntry, EngineError> {
-        let trojan = proxy.protocols.trojan_outbound;
+        let trojan = proxy.protocols.trojan_outbound_protocol();
         let mut metered = MeteredStream::new(stream);
         <TrojanOutbound as UdpPacketTunnelProtocol<TrojanUdpPacketTunnelTarget>>::establish_udp_packet_tunnel(
             &trojan,
@@ -389,14 +479,53 @@ impl TrojanChainManager {
     pub(super) fn new() -> Self {
         Self
     }
-    #[allow(unused_variables)]
-    pub(crate) async fn send(
+
+    #[allow(unused_variables, clippy::too_many_arguments)]
+    pub(crate) async fn send_existing(
         &mut self,
-        _ctx: UdpFlowContext<'_>,
+        _chain_tasks: &mut tokio::task::JoinSet<super::ChainTask>,
+        _session_id: u64,
         _proxy: &Proxy,
-        _sess: &Session,
-        _peer: TrojanUdpPeer<'_>,
-        _packet_ref: UdpPacketRef<'_>,
+        _session: &Session,
+        _server: &str,
+        _port: u16,
+        _password: &str,
+        _sni: Option<&str>,
+        _insecure: bool,
+        _client_fingerprint: Option<&str>,
+        _relay_chain: bool,
+        _target: &zero_core::Address,
+        _target_port: u16,
+        _payload: &[u8],
+    ) -> Result<usize, FlowFailure> {
+        Err(FlowFailure {
+            stage: "trojan_feature",
+            error: EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "Trojan requires feature `trojan`",
+            )),
+            upstream: None,
+        })
+    }
+
+    #[allow(unused_variables, clippy::too_many_arguments)]
+    pub(crate) async fn send_relay_existing(
+        &mut self,
+        _chain_tasks: &mut tokio::task::JoinSet<super::ChainTask>,
+        _session_id: u64,
+        _stream: crate::transport::TcpRelayStream,
+        _tls_server_name: Option<&str>,
+        _proxy: &Proxy,
+        _session: &Session,
+        _server: &str,
+        _port: u16,
+        _password: &str,
+        _sni: Option<&str>,
+        _insecure: bool,
+        _client_fingerprint: Option<&str>,
+        _target: &zero_core::Address,
+        _target_port: u16,
+        _payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         Err(FlowFailure {
             stage: "trojan_feature",

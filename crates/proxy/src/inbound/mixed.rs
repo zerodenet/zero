@@ -25,9 +25,10 @@ impl Proxy {
         let mut connections = JoinSet::new();
 
         let socks5_users = inbound.protocol.socks5_users().to_vec();
-        let socks5_handler = Socks5InboundHandler::new(self.protocols.socks5_inbound, socks5_users);
+        let socks5_handler =
+            Socks5InboundHandler::new(self.protocols.socks5_inbound_protocol(), socks5_users);
         let http_handler = HttpConnectInboundHandler {
-            http_connect_inbound: self.protocols.http_connect_inbound,
+            http_connect_inbound: self.protocols.http_connect_inbound_protocol(),
         };
 
         info!(

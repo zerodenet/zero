@@ -16,10 +16,7 @@ use std::time::Instant;
 
 use zero_engine::EngineError;
 
-use super::{
-    H2UdpPeer, MieruUdpPeer, SsUdpPeer, TrojanUdpPeer, UdpDispatch, UdpFlowContext, UdpPacketRef,
-    UdpPeerEndpoint,
-};
+use super::UdpDispatch;
 use crate::runtime::udp_associate::sessions::{UdpFlowOutbound, UdpFlowSnapshot, UdpPathCategory};
 use crate::runtime::udp_helpers::send_direct_udp_packet;
 use crate::runtime::Proxy;
@@ -107,7 +104,7 @@ impl UdpDispatch {
                     let result = if let Some(carrier) = packet_path_carrier {
                         self.packet_path_manager
                             .send_with_snapshot(
-                                UdpFlowContext {
+                                super::packet_path_traits::UdpFlowContext {
                                     chain_tasks: &mut self.chain_tasks,
                                     session_id: flow.session.id,
                                 },
@@ -117,7 +114,7 @@ impl UdpDispatch {
                                 *port,
                                 password.as_str(),
                                 cipher.as_str(),
-                                UdpPacketRef {
+                                super::packet_path_traits::UdpPacketRef {
                                     target: &flow.session.target,
                                     port: flow.session.port,
                                     payload,
@@ -126,25 +123,17 @@ impl UdpDispatch {
                             .await
                     } else {
                         self.ss_manager
-                            .send(
-                                UdpFlowContext {
-                                    chain_tasks: &mut self.chain_tasks,
-                                    session_id: flow.session.id,
-                                },
+                            .send_existing(
+                                &mut self.chain_tasks,
+                                flow.session.id,
                                 proxy,
-                                SsUdpPeer {
-                                    endpoint: UdpPeerEndpoint {
-                                        server: server.as_str(),
-                                        port: *port,
-                                    },
-                                    password: password.as_str(),
-                                    cipher: cipher.as_str(),
-                                },
-                                UdpPacketRef {
-                                    target: &flow.session.target,
-                                    port: flow.session.port,
-                                    payload,
-                                },
+                                server.as_str(),
+                                *port,
+                                password.as_str(),
+                                cipher.as_str(),
+                                &flow.session.target,
+                                flow.session.port,
+                                payload,
                             )
                             .await
                     };
@@ -168,24 +157,16 @@ impl UdpDispatch {
                 } => {
                     let result = self
                         .h2_manager
-                        .send(
-                            UdpFlowContext {
-                                chain_tasks: &mut self.chain_tasks,
-                                session_id: flow.session.id,
-                            },
-                            H2UdpPeer {
-                                endpoint: UdpPeerEndpoint {
-                                    server: server.as_str(),
-                                    port: *port,
-                                },
-                                password: password.as_str(),
-                                client_fingerprint: client_fingerprint.as_deref(),
-                            },
-                            UdpPacketRef {
-                                target: &flow.session.target,
-                                port: flow.session.port,
-                                payload,
-                            },
+                        .send_existing(
+                            &mut self.chain_tasks,
+                            flow.session.id,
+                            server.as_str(),
+                            *port,
+                            password.as_str(),
+                            client_fingerprint.as_deref(),
+                            &flow.session.target,
+                            flow.session.port,
+                            payload,
                         )
                         .await;
                     self.record_or_fail(flow, proxy, started_at, result)?;
@@ -215,29 +196,21 @@ impl UdpDispatch {
                 } => {
                     let result = self
                         .trojan_manager
-                        .send(
-                            UdpFlowContext {
-                                chain_tasks: &mut self.chain_tasks,
-                                session_id: flow.session.id,
-                            },
+                        .send_existing(
+                            &mut self.chain_tasks,
+                            flow.session.id,
                             proxy,
                             &flow.session,
-                            TrojanUdpPeer {
-                                endpoint: UdpPeerEndpoint {
-                                    server: server.as_str(),
-                                    port: *port,
-                                },
-                                password: password.as_str(),
-                                sni: sni.as_deref(),
-                                insecure: *insecure,
-                                client_fingerprint: client_fingerprint.as_deref(),
-                                relay_chain: *relay_chain,
-                            },
-                            UdpPacketRef {
-                                target: &flow.session.target,
-                                port: flow.session.port,
-                                payload,
-                            },
+                            server.as_str(),
+                            *port,
+                            password.as_str(),
+                            sni.as_deref(),
+                            *insecure,
+                            client_fingerprint.as_deref(),
+                            *relay_chain,
+                            &flow.session.target,
+                            flow.session.port,
+                            payload,
                         )
                         .await;
                     self.record_or_fail(flow, proxy, started_at, result)?;
@@ -260,27 +233,19 @@ impl UdpDispatch {
                 } => {
                     let result = self
                         .mieru_manager
-                        .send(
-                            UdpFlowContext {
-                                chain_tasks: &mut self.chain_tasks,
-                                session_id: flow.session.id,
-                            },
+                        .send_existing(
+                            &mut self.chain_tasks,
+                            flow.session.id,
                             proxy,
                             &flow.session,
-                            MieruUdpPeer {
-                                endpoint: UdpPeerEndpoint {
-                                    server: server.as_str(),
-                                    port: *port,
-                                },
-                                username: username.as_str(),
-                                password: password.as_str(),
-                                relay_chain: *relay_chain,
-                            },
-                            UdpPacketRef {
-                                target: &flow.session.target,
-                                port: flow.session.port,
-                                payload,
-                            },
+                            server.as_str(),
+                            *port,
+                            username.as_str(),
+                            password.as_str(),
+                            *relay_chain,
+                            &flow.session.target,
+                            flow.session.port,
+                            payload,
                         )
                         .await;
                     self.record_or_fail(flow, proxy, started_at, result)?;

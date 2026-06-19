@@ -22,14 +22,14 @@ use crate::transport::{MeteredStream, TcpRelayStream};
 
 /// Handle to an established VLESS UDP upstream connection.
 #[derive(Clone)]
-pub(crate) struct VlessUdpUpstream {
+pub(super) struct VlessUdpUpstream {
     pub session_id: u64,
     pub send_tx: mpsc::Sender<Vec<u8>>,
 }
 
 /// Transport options for VLESS UDP upstream connections.
 #[derive(Clone, Copy)]
-pub(crate) struct VlessUdpTransport<'a> {
+pub(super) struct VlessUdpTransport<'a> {
     pub tls: Option<&'a ClientTlsConfig>,
     pub reality: Option<&'a RealityConfig>,
     pub ws: Option<&'a WebSocketConfig>,
@@ -51,7 +51,7 @@ fn spawn_vless_udp_relay(
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
     let (recv_tx, _) = broadcast::channel::<vless::VlessUdpPacket>(32);
     let recv_tx_bg = recv_tx.clone();
-    let vless_outbound = proxy.protocols.vless_outbound;
+    let vless_outbound = proxy.protocols.vless_outbound_protocol();
 
     proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
 
@@ -106,7 +106,7 @@ fn spawn_vless_udp_relay(
 }
 
 /// Establishes a VLESS UDP upstream over an already connected stream.
-pub(crate) async fn establish_vless_udp_upstream_over_stream(
+async fn establish_vless_udp_upstream_over_stream(
     proxy: &Proxy,
     session: &Session,
     id: &str,
@@ -116,7 +116,7 @@ pub(crate) async fn establish_vless_udp_upstream_over_stream(
     let vless_id = parse_uuid(id)?;
     let initial_packet =
         <vless::VlessOutbound as UdpPacketFraming<vless::VlessUdpPacketTarget>>::encode_udp_packet(
-            &proxy.protocols.vless_outbound,
+            &proxy.protocols.vless_outbound_protocol(),
             &vless::VlessUdpPacketTarget {
                 address: &session.target,
                 port: session.port,
@@ -127,7 +127,7 @@ pub(crate) async fn establish_vless_udp_upstream_over_stream(
     let mut metered = MeteredStream::new(stream);
 
     <vless::VlessOutbound as UdpPacketTunnelProtocol<vless::VlessUdpPacketTunnelTarget>>::establish_udp_packet_tunnel(
-        &proxy.protocols.vless_outbound,
+        &proxy.protocols.vless_outbound_protocol(),
         &mut metered,
         &vless::VlessUdpPacketTunnelTarget {
             session,
@@ -146,7 +146,7 @@ pub(crate) async fn establish_vless_udp_upstream_over_stream(
 }
 
 /// Establishes a VLESS UDP upstream connection with optional transport encryption.
-pub(crate) async fn establish_vless_udp_upstream(
+async fn establish_vless_udp_upstream(
     proxy: &Proxy,
     session: &Session,
     server: &str,
@@ -158,7 +158,7 @@ pub(crate) async fn establish_vless_udp_upstream(
     let vless_id = parse_uuid(id)?;
     let initial_packet =
         <vless::VlessOutbound as UdpPacketFraming<vless::VlessUdpPacketTarget>>::encode_udp_packet(
-            &proxy.protocols.vless_outbound,
+            &proxy.protocols.vless_outbound_protocol(),
             &vless::VlessUdpPacketTarget {
                 address: &session.target,
                 port: session.port,
@@ -177,7 +177,7 @@ pub(crate) async fn establish_vless_udp_upstream(
             <vless::VlessOutbound as UdpPacketTunnelProtocol<
                 vless::VlessUdpPacketTunnelTarget,
             >>::establish_udp_packet_tunnel(
-                &proxy.protocols.vless_outbound,
+                &proxy.protocols.vless_outbound_protocol(),
                 &mut metered,
                 &vless::VlessUdpPacketTunnelTarget {
                     session,
@@ -198,7 +198,7 @@ pub(crate) async fn establish_vless_udp_upstream(
 
     let socket = proxy
         .protocols
-        .direct_outbound
+        .direct_connector()
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
 
@@ -226,7 +226,7 @@ pub(crate) async fn establish_vless_udp_upstream(
 ///
 /// Response bridge tasks are spawned into the shared `chain_tasks` JoinSet
 /// in [`UdpDispatch`], so all chain outbound responses are polled uniformly.
-pub(crate) struct VlessUdpOutboundManager {
+pub(super) struct VlessUdpOutboundManager {
     upstreams:
         HashMap<(Address, u16), (VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>)>,
 }
@@ -238,14 +238,199 @@ impl VlessUdpOutboundManager {
         }
     }
 
-    /// Check if an upstream already exists for a target.
-    pub fn get(&self, target: &Address, port: u16) -> Option<&VlessUdpUpstream> {
-        self.upstreams
-            .get(&(target.clone(), port))
-            .map(|(upstream, _)| upstream)
+    pub(super) async fn start_flow(
+        &mut self,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        proxy: &Proxy,
+        session: &Session,
+        server: &str,
+        port: u16,
+        id: &str,
+        flow: Option<&str>,
+        tls: Option<&ClientTlsConfig>,
+        reality: Option<&RealityConfig>,
+        ws: Option<&WebSocketConfig>,
+        grpc: Option<&GrpcConfig>,
+        h2: Option<&H2Config>,
+        http_upgrade: Option<&HttpUpgradeConfig>,
+        split_http: Option<&SplitHttpConfig>,
+        quic: Option<&QuicConfig>,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        use zero_traits::UdpPacketFraming;
+
+        let mux_flow_enabled =
+            flow == Some("xtls-rprx-vision") || flow == Some("xtls-rprx-vision-udp443");
+        if mux_flow_enabled {
+            let max_concurrency = 8u32;
+            let idle_timeout = 300u64;
+            match proxy
+                .mux_pool
+                .open_udp_stream(
+                    proxy,
+                    server,
+                    port,
+                    &::vless::parse_uuid(id).map_err(|error| {
+                        EngineError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            format!("invalid VLESS UUID: {error}"),
+                        ))
+                    })?,
+                    tls,
+                    reality,
+                    max_concurrency,
+                    idle_timeout,
+                )
+                .await
+            {
+                Ok((_mux_sid, up_tx, _down_rx)) => {
+                    let packet = <::vless::VlessOutbound as UdpPacketFraming<
+                        ::vless::VlessUdpPacketTarget,
+                    >>::encode_udp_packet(
+                        &proxy.protocols.vless_outbound_protocol(),
+                        &::vless::VlessUdpPacketTarget {
+                            address: &session.target,
+                            port: session.port,
+                            payload,
+                        },
+                    )?;
+                    let _ = up_tx.send(packet);
+                    proxy.record_session_outbound_tx(session.id, payload.len() as u64);
+                    return Ok(());
+                }
+                Err(_) => {}
+            }
+        }
+
+        let transport = VlessUdpTransport {
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            quic,
+        };
+        self.get_or_create_upstream(
+            chain_tasks,
+            proxy,
+            session,
+            session.target.clone(),
+            session.port,
+            server.to_string(),
+            port,
+            id.to_string(),
+            payload.to_vec(),
+            Some(&transport),
+        )
+        .await
     }
 
-    pub(crate) fn insert_upstream(
+    pub(super) async fn start_relay_two_stream(
+        &mut self,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        proxy: &Proxy,
+        session: &Session,
+        post_carrier: crate::transport::RelayCarrier,
+        get_carrier: crate::transport::RelayCarrier,
+        id: &str,
+        split_http: &SplitHttpConfig,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        let stream = crate::transport::build_vless_split_http_over_relay(
+            post_carrier.stream,
+            get_carrier.stream,
+            split_http,
+        )
+        .await?;
+        let (upstream, recv_tx) =
+            establish_vless_udp_upstream_over_stream(proxy, session, id, payload, stream).await?;
+        self.insert_upstream((session.target.clone(), session.port), upstream, recv_tx);
+        self.spawn_bridge(
+            chain_tasks,
+            session.target.clone(),
+            session.port,
+            session.id,
+        );
+        Ok(())
+    }
+
+    pub(super) async fn start_relay_final_hop(
+        &mut self,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        proxy: &Proxy,
+        session: &Session,
+        carrier: crate::transport::RelayCarrier,
+        server: &str,
+        port: u16,
+        id: &str,
+        tls: Option<&ClientTlsConfig>,
+        reality: Option<&RealityConfig>,
+        ws: Option<&WebSocketConfig>,
+        grpc: Option<&GrpcConfig>,
+        h2: Option<&H2Config>,
+        http_upgrade: Option<&HttpUpgradeConfig>,
+        split_http: Option<&SplitHttpConfig>,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        let stream = crate::transport::build_vless_outbound_transport_over_stream(
+            carrier,
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            proxy.config.source_dir(),
+        )
+        .await?;
+        let (upstream, recv_tx) =
+            establish_vless_udp_upstream_over_stream(proxy, session, id, payload, stream).await?;
+        self.insert_upstream((session.target.clone(), session.port), upstream, recv_tx);
+        self.spawn_bridge(
+            chain_tasks,
+            session.target.clone(),
+            session.port,
+            session.id,
+        );
+        let _ = (server, port);
+        Ok(())
+    }
+
+    /// Send a packet through an existing upstream, if one is cached.
+    pub(super) async fn send_existing(
+        &self,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        proxy: &Proxy,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<u64>, EngineError> {
+        let Some((upstream, _)) = self.upstreams.get(&(target.clone(), port)) else {
+            return Ok(None);
+        };
+
+        proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
+        let packet = <vless::VlessOutbound as UdpPacketFraming<
+            vless::VlessUdpPacketTarget,
+        >>::encode_udp_packet(
+            &proxy.protocols.vless_outbound_protocol(),
+            &vless::VlessUdpPacketTarget {
+                address: target,
+                port,
+                payload,
+            },
+        )?;
+        let packet_len = packet.len() as u64;
+        let _ = upstream.send_tx.send(packet).await;
+        proxy.record_session_outbound_tx(upstream.session_id, packet_len);
+        self.spawn_bridge(chain_tasks, target.clone(), port, upstream.session_id);
+        Ok(Some(upstream.session_id))
+    }
+
+    pub(super) fn insert_upstream(
         &mut self,
         key: (Address, u16),
         upstream: VlessUdpUpstream,
@@ -255,7 +440,7 @@ impl VlessUdpOutboundManager {
     }
 
     /// Spawn a one-shot bridge task for a cached upstream.
-    pub(crate) fn spawn_bridge(
+    pub(super) fn spawn_bridge(
         &self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         target: Address,
@@ -276,7 +461,7 @@ impl VlessUdpOutboundManager {
 
     /// Get or create an upstream for a target.
     /// Spawns a bridge task into `chain_tasks` for response polling.
-    pub async fn get_or_create_upstream(
+    pub(super) async fn get_or_create_upstream(
         &mut self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         proxy: &Proxy,
@@ -296,7 +481,7 @@ impl VlessUdpOutboundManager {
             let packet = <vless::VlessOutbound as UdpPacketFraming<
                 vless::VlessUdpPacketTarget,
             >>::encode_udp_packet(
-                &proxy.protocols.vless_outbound,
+                &proxy.protocols.vless_outbound_protocol(),
                 &vless::VlessUdpPacketTarget {
                     address: &target,
                     port,

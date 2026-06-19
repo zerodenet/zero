@@ -80,7 +80,7 @@ impl Proxy {
         let mut connections = JoinSet::new();
 
         let handler = HttpConnectInboundHandler {
-            http_connect_inbound: self.protocols.http_connect_inbound,
+            http_connect_inbound: self.protocols.http_connect_inbound_protocol(),
         };
 
         info!(

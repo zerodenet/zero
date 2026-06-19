@@ -38,7 +38,7 @@ impl ProtocolAdapter for DirectAdapter {
         };
         match proxy
             .protocols
-            .direct_outbound
+            .direct_connector()
             .connect(session, proxy.resolver.as_ref())
             .await
         {
@@ -66,7 +66,7 @@ impl ProtocolAdapter for DirectAdapter {
         };
         let target_addr = proxy
             .protocols
-            .direct_outbound
+            .direct_connector()
             .resolve_target_addr(session, proxy.resolver.as_ref())
             .await
             .map_err(|error| FlowFailure {

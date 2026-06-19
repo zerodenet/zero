@@ -31,7 +31,7 @@ pub(crate) async fn connect_tcp(
 ) -> Result<TcpRelayStream, EngineError> {
     let upstream = proxy
         .protocols
-        .direct_outbound
+        .direct_connector()
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
     let tls_config = ClientTlsConfig {
@@ -52,7 +52,7 @@ pub(crate) async fn connect_tcp(
     let mut metered = MeteredStream::new(tls_stream);
     proxy
         .protocols
-        .trojan_outbound
+        .trojan_outbound_protocol()
         .establish_tcp_tunnel(
             &mut metered,
             &trojan::TrojanTcpTunnelTarget { session, password },
@@ -81,7 +81,7 @@ pub(crate) async fn apply_tcp_hop(
 ) -> Result<TcpRelayStream, EngineError> {
     proxy
         .protocols
-        .trojan_outbound
+        .trojan_outbound_protocol()
         .establish_tcp_tunnel(
             &mut stream,
             &trojan::TrojanTcpTunnelTarget { session, password },
