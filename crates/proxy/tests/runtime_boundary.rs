@@ -5,6 +5,15 @@ fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+fn repo_root() -> PathBuf {
+    manifest_dir()
+        .parent()
+        .expect("proxy crate parent")
+        .parent()
+        .expect("workspace root")
+        .to_path_buf()
+}
+
 fn read(relative: &str) -> String {
     let path = manifest_dir().join(relative);
     fs::read_to_string(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
@@ -37,6 +46,27 @@ fn relative(path: &Path) -> String {
         .expect("path under manifest dir")
         .to_string_lossy()
         .replace('\\', "/")
+}
+
+fn assert_src_pattern_confined(
+    pattern: &str,
+    allowed_exact: &[&str],
+    allowed_prefixes: &[&str],
+    reason: &str,
+) {
+    for path in rust_sources_under("src") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        if !content.contains(pattern) {
+            continue;
+        }
+        let allowed = allowed_exact.iter().any(|item| *item == source)
+            || allowed_prefixes.iter().any(|prefix| source.starts_with(prefix));
+        assert!(
+            allowed,
+            "{source} should not contain `{pattern}`; {reason}"
+        );
+    }
 }
 
 #[test]
@@ -106,5 +136,69 @@ fn tcp_outbound_resolution_helper_stays_inside_tcp_dispatch() {
             !content.contains("dispatch_tcp_outbound"),
             "{source} should not call the TCP outbound helper directly"
         );
+    }
+}
+
+#[test]
+fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypoints() {
+    assert_src_pattern_confined(
+        "InboundProtocolConfig::",
+        &[
+            "src/protocol_adapter.rs",
+            "src/runtime.rs",
+            "src/inbound/direct.rs",
+            "src/inbound/hysteria2.rs",
+            "src/inbound/mieru.rs",
+            "src/inbound/shadowsocks.rs",
+            "src/inbound/trojan.rs",
+            "src/inbound/vmess/listener.rs",
+        ],
+        &["src/adapters/"],
+        "protocol config variant matching should stay inside adapters, the mixed special-case, or protocol-owned inbound entrypoints",
+    );
+}
+
+#[test]
+fn resolved_outbound_variant_matching_is_confined_to_adapters_and_neutral_orchestration() {
+    assert_src_pattern_confined(
+        "ResolvedLeafOutbound::",
+        &[
+            "src/protocol_adapter.rs",
+            "src/runtime/orchestration.rs",
+        ],
+        &["src/adapters/"],
+        "resolved outbound variant matching should stay inside adapters or neutral runtime classification helpers",
+    );
+}
+
+#[test]
+fn protocol_crates_do_not_depend_on_proxy_runtime_layers() {
+    let protocols_root = repo_root().join("protocols");
+    let forbidden = [
+        "zero-proxy",
+        "zero-engine",
+        "zero-config",
+        "zero-dns",
+        "zero-platform-tokio",
+        "zero-transport",
+        "zero-tun",
+        "zero-stack",
+    ];
+
+    for entry in fs::read_dir(&protocols_root).expect("read protocols dir") {
+        let entry = entry.expect("protocol entry");
+        let manifest = entry.path().join("Cargo.toml");
+        if !manifest.exists() {
+            continue;
+        }
+        let content = fs::read_to_string(&manifest)
+            .unwrap_or_else(|error| panic!("read {}: {error}", manifest.display()));
+        for crate_name in forbidden {
+            assert!(
+                !content.contains(crate_name),
+                "{} should not depend on forbidden runtime crate `{crate_name}`",
+                manifest.display()
+            );
+        }
     }
 }
