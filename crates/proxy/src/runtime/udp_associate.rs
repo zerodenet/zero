@@ -19,7 +19,7 @@ use zero_engine::EngineError;
 pub(crate) mod helpers;
 pub(crate) mod sessions;
 
-use crate::outbound::socks5::UpstreamAssociationCloseReason;
+use crate::runtime::socks5_udp::UpstreamAssociationCloseReason;
 use helpers::{
     address_from_socket_addr, log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };
@@ -41,7 +41,7 @@ impl Proxy {
         let relay_bind = address_from_socket_addr(relay_addr);
 
         self.protocols
-            .socks5_inbound
+            .socks5_inbound_protocol()
             .send_response_with_bound(
                 &mut client,
                 Socks5Reply::Succeeded,

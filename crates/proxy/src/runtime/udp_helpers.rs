@@ -18,7 +18,7 @@ pub(crate) async fn resolve_udp_target(
 ) -> Result<SocketAddr, EngineError> {
     proxy
         .protocols
-        .direct_outbound
+        .direct_connector()
         .resolve_target_addr(session, proxy.resolver.as_ref())
         .await
         .map_err(Into::into)

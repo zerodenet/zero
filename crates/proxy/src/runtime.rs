@@ -22,6 +22,7 @@ pub(crate) mod inbound_protocol;
 pub(crate) mod mux_pool;
 pub(crate) mod orchestration;
 pub(crate) mod pipe;
+pub(crate) mod socks5_udp;
 mod tcp_dispatch;
 pub(crate) mod udp_associate;
 pub(crate) mod udp_dispatch;

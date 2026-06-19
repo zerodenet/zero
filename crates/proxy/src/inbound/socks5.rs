@@ -100,7 +100,7 @@ impl Proxy {
 
         let users = inbound.protocol.socks5_users().to_vec();
         let handler = Socks5InboundHandler {
-            socks5_inbound: self.protocols.socks5_inbound,
+            socks5_inbound: self.protocols.socks5_inbound_protocol(),
             users,
         };
 
