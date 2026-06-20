@@ -264,7 +264,7 @@ impl VlessUdpOutboundManager {
         if mux_flow_enabled {
             let max_concurrency = 8u32;
             let idle_timeout = 300u64;
-            match proxy
+            if let Ok((_mux_sid, up_tx, _down_rx)) = proxy
                 .mux_pool
                 .open_udp_stream(
                     proxy,
@@ -283,22 +283,19 @@ impl VlessUdpOutboundManager {
                 )
                 .await
             {
-                Ok((_mux_sid, up_tx, _down_rx)) => {
-                    let packet = <::vless::VlessOutbound as UdpPacketFraming<
-                        ::vless::VlessUdpPacketTarget,
-                    >>::encode_udp_packet(
-                        &proxy.protocols.vless_outbound_protocol(),
-                        &::vless::VlessUdpPacketTarget {
-                            address: &session.target,
-                            port: session.port,
-                            payload,
-                        },
-                    )?;
-                    let _ = up_tx.send(packet);
-                    proxy.record_session_outbound_tx(session.id, payload.len() as u64);
-                    return Ok(());
-                }
-                Err(_) => {}
+                let packet = <::vless::VlessOutbound as UdpPacketFraming<
+                    ::vless::VlessUdpPacketTarget,
+                >>::encode_udp_packet(
+                    &proxy.protocols.vless_outbound_protocol(),
+                    &::vless::VlessUdpPacketTarget {
+                        address: &session.target,
+                        port: session.port,
+                        payload,
+                    },
+                )?;
+                let _ = up_tx.send(packet);
+                proxy.record_session_outbound_tx(session.id, payload.len() as u64);
+                return Ok(());
             }
         }
 

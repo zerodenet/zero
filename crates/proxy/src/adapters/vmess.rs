@@ -114,19 +114,19 @@ impl ProtocolAdapter for VmessAdapter {
         };
         let tag_owned = (*tag).to_string();
         dispatch
-            .start_vmess_udp_flow(
+            .start_vmess_udp_flow(VmessUdpFlow {
                 proxy,
                 session,
                 server,
-                *port,
+                port: *port,
                 id,
                 cipher,
-                *mux_concurrency,
-                *tls,
-                *ws,
-                *grpc,
+                mux_concurrency: *mux_concurrency,
+                tls: *tls,
+                ws: *ws,
+                grpc: *grpc,
                 payload,
-            )
+            })
             .await?;
 
         Ok(FlowStartResult::VmessFlow {
@@ -178,9 +178,19 @@ impl ProtocolAdapter for VmessAdapter {
         };
         let tag_owned = (*tag).to_string();
         dispatch
-            .start_vmess_udp_relay_flow(
-                proxy, session, carrier, server, *port, id, cipher, *tls, *ws, *grpc, payload,
-            )
+            .start_vmess_udp_relay_flow(VmessUdpRelayFlow {
+                proxy,
+                session,
+                carrier,
+                server,
+                port: *port,
+                id,
+                cipher,
+                tls: *tls,
+                ws: *ws,
+                grpc: *grpc,
+                payload,
+            })
             .await?;
 
         Ok(FlowStartResult::VmessFlow {

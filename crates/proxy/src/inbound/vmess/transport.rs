@@ -13,8 +13,6 @@ use crate::runtime::inbound_protocol::serve_inbound;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
-/// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
-
 /// Raw TLS path: TLS accept -> VMess auth -> serve_inbound.
 pub(crate) async fn handle_vmess_raw(
     proxy: &Proxy,

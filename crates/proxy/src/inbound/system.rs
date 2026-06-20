@@ -148,7 +148,7 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let stack = SystemTcpStack::bind(listen_addr)
             .await
-            .map_err(|e| EngineError::Io(e))?;
+            .map_err(EngineError::Io)?;
 
         let actual = stack.local_addr().map_err(EngineError::Io)?;
         info!(inbound_tag = tag, listen = %actual, "system inbound ready");

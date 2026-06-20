@@ -29,15 +29,15 @@ async fn probe_outbound_single_measures_through_proxy_latency() {
             .expect("write 204");
     });
 
-    let config = RuntimeConfig::parse(&format!(
-        r#"{{
+    let config = RuntimeConfig::parse(
+        r#"{
             "inbounds": [],
             "outbounds": [
-                {{ "tag": "probe-target", "protocol": {{ "type": "direct" }} }}
+                { "tag": "probe-target", "protocol": { "type": "direct" } }
             ],
-            "route": {{ "rules": [], "final": {{ "type": "direct" }} }}
-        }}"#
-    ))
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
     .expect("parse config");
     let proxy = Proxy::new(config).expect("build proxy");
 

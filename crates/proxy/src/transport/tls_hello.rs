@@ -143,23 +143,20 @@ fn parse_extensions(ext_data: &[u8], consumed: Vec<u8>) -> ClientHelloInfo {
                     }
                 }
             }
-            0x0010 => {
-                // ALPN: [alpn_ext_len(2)][proto_list_len(2)][len(1)][proto(N)]...
-                if ext_bytes.len() >= 4 {
-                    let list_len = u16::from_be_bytes([ext_bytes[2], ext_bytes[3]]) as usize;
-                    let mut pos = 4;
-                    while pos < ext_bytes.len() && pos < 4 + list_len {
-                        let proto_len = ext_bytes[pos] as usize;
-                        pos += 1;
-                        if pos + proto_len <= ext_bytes.len() {
-                            if let Ok(proto) = std::str::from_utf8(&ext_bytes[pos..pos + proto_len])
-                            {
-                                alpn.push(proto.to_owned());
-                            }
-                            pos += proto_len;
-                        } else {
-                            break;
+            // ALPN: [alpn_ext_len(2)][proto_list_len(2)][len(1)][proto(N)]...
+            0x0010 if ext_bytes.len() >= 4 => {
+                let list_len = u16::from_be_bytes([ext_bytes[2], ext_bytes[3]]) as usize;
+                let mut pos = 4;
+                while pos < ext_bytes.len() && pos < 4 + list_len {
+                    let proto_len = ext_bytes[pos] as usize;
+                    pos += 1;
+                    if pos + proto_len <= ext_bytes.len() {
+                        if let Ok(proto) = std::str::from_utf8(&ext_bytes[pos..pos + proto_len]) {
+                            alpn.push(proto.to_owned());
                         }
+                        pos += proto_len;
+                    } else {
+                        break;
                     }
                 }
             }

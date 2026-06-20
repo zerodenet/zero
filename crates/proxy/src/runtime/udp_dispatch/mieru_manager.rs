@@ -364,7 +364,7 @@ impl MieruChainManager {
                                 }
                             }
                         }
-                        Err(e) if e == zero_core::Error::Protocol("mieru: need more data") => break,
+                        Err(zero_core::Error::Protocol("mieru: need more data")) => break,
                         Err(_) => return,
                     }
                 }

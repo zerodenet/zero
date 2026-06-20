@@ -285,7 +285,7 @@ impl Proxy {
                     if cipher.is_blake3()
                         && !udp_replay_windows
                             .entry(client_ss_sid)
-                            .or_insert_with(shadowsocks::ReplayWindow::new)
+                            .or_default()
                             .check_and_update(client_ss_pid)
                     {
                         continue;

@@ -128,10 +128,7 @@ async fn socks5_tcp_http_get(
     let mut auth = [0_u8; 2];
     stream.read_exact(&mut auth).await?;
     if auth != [0x05, 0x00] {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "SOCKS5 auth failed",
-        ));
+        return Err(std::io::Error::other("SOCKS5 auth failed"));
     }
     let host_bytes = host.as_bytes();
     let mut connect = vec![0x05, 0x01, 0x00, 0x03, host_bytes.len() as u8];
@@ -141,10 +138,10 @@ async fn socks5_tcp_http_get(
     let mut response = [0_u8; 256];
     let n = stream.read(&mut response).await?;
     if n < 10 || response[1] != 0x00 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("SOCKS5 connect failed: {:?}", &response[..n]),
-        ));
+        return Err(std::io::Error::other(format!(
+            "SOCKS5 connect failed: {:?}",
+            &response[..n]
+        )));
     }
     stream.write_all(request).await?;
     let mut buf = vec![0_u8; 4096];

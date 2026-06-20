@@ -189,7 +189,15 @@ impl ProtocolAdapter for ShadowsocksAdapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         let sent = dispatch
-            .start_shadowsocks_udp_flow(proxy, session, server, *port, password, cipher, payload)
+            .start_shadowsocks_udp_flow(ShadowsocksUdpFlow {
+                proxy,
+                session,
+                server,
+                port: *port,
+                password,
+                cipher,
+                payload,
+            })
             .await
             .map_err(|f: FlowFailure| FlowFailure {
                 stage: f.stage,

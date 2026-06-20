@@ -92,7 +92,7 @@ impl AsyncRead for MieruClientStream {
                     }
                     return Poll::Ready(Ok(()));
                 }
-                Err(error) if error == zero_core::Error::Protocol("mieru: need more data") => {}
+                Err(zero_core::Error::Protocol("mieru: need more data")) => {}
                 Err(error) => {
                     return Poll::Ready(Err(io::Error::other(format!("mieru decrypt: {error}"))));
                 }

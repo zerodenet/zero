@@ -184,7 +184,7 @@ impl MieruTcpStream {
                     }
                     return Poll::Ready(Ok(()));
                 }
-                Err(error) if error == zero_core::Error::Protocol("mieru: need more data") => {
+                Err(zero_core::Error::Protocol("mieru: need more data")) => {
                     let mut scratch = [0u8; 4096];
                     let mut read_buf = ReadBuf::new(&mut scratch);
                     match Pin::new(&mut self.inner).poll_read(cx, &mut read_buf) {

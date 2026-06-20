@@ -150,16 +150,11 @@ impl H2ChainManager {
         let conn_recv = conn.clone();
         let recv_tx2 = recv_tx.clone();
         tokio::spawn(async move {
-            loop {
-                match conn_recv.read_datagram().await {
-                    Ok(data) => {
-                        if let Ok(pkt) = Self::decode_packet(&data) {
-                            if recv_tx2.send((pkt.target, pkt.port, pkt.payload)).is_err() {
-                                break;
-                            }
-                        }
+            while let Ok(data) = conn_recv.read_datagram().await {
+                if let Ok(pkt) = Self::decode_packet(&data) {
+                    if recv_tx2.send((pkt.target, pkt.port, pkt.payload)).is_err() {
+                        break;
                     }
-                    Err(_) => break,
                 }
             }
         });

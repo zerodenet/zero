@@ -154,9 +154,15 @@ impl ProtocolAdapter for MieruAdapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         let sent = dispatch
-            .start_mieru_udp_relay_flow(
-                session, carrier, server, *port, username, password, payload,
-            )
+            .start_mieru_udp_relay_flow(MieruUdpRelayFlow {
+                session,
+                carrier,
+                server,
+                port: *port,
+                username,
+                password,
+                payload,
+            })
             .await?;
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Mieru {

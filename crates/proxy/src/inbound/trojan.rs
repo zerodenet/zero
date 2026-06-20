@@ -66,7 +66,7 @@ impl InboundProtocol for TrojanInboundHandler {
         let mut sock = TlsStream(tls);
         let accept = self
             .trojan_inbound
-            .accept(&mut sock, &[self.password.clone()])
+            .accept(&mut sock, std::slice::from_ref(&self.password))
             .await?;
         let mut session: Session = accept.session;
         let mut sa = zero_core::SessionAuth::new("trojan");

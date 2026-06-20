@@ -326,7 +326,7 @@ impl Proxy {
 
         // Record protocol-specific overhead: TCP control traffic and
         // SOCKS5 framing bytes (payload is already tracked by dispatch).
-        self.record_session_inbound_traffic(session_id, pending_control_traffic.clone());
+        self.record_session_inbound_traffic(session_id, *pending_control_traffic);
         *pending_control_traffic = StreamTraffic::default();
         let framing_bytes = packet.len() as u64 - udp_packet.payload.len() as u64;
         self.record_session_inbound_rx(session_id, framing_bytes);

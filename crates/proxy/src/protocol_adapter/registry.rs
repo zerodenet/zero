@@ -275,7 +275,10 @@ mod tests {
     }
 
     fn compiled_in_inbound_configs() -> Vec<InboundProtocolConfig> {
-        let mut configs = Vec::new();
+        let mut configs = vec![InboundProtocolConfig::Direct {
+            target: None,
+            port: None,
+        }];
 
         #[cfg(feature = "socks5")]
         configs.push(InboundProtocolConfig::Socks5 { users: Vec::new() });
@@ -327,10 +330,6 @@ mod tests {
             tls: None,
             ws: None,
             grpc: None,
-        });
-        configs.push(InboundProtocolConfig::Direct {
-            target: None,
-            port: None,
         });
         #[cfg(feature = "mieru")]
         configs.push(InboundProtocolConfig::Mieru { users: Vec::new() });

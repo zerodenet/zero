@@ -380,19 +380,15 @@ impl TrojanChainManager {
         let recv_tx2 = recv_tx.clone();
         let recv_trojan = trojan;
         tokio::spawn(async move {
-            loop {
-                match <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::read_udp_packet(
+            while let Ok(packet) =
+                <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::read_udp_packet(
                     &recv_trojan,
                     &mut recv_stream,
                 )
                 .await
-                {
-                    Ok(packet) => {
-                        if recv_tx2.send(packet).is_err() {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
+            {
+                if recv_tx2.send(packet).is_err() {
+                    break;
                 }
             }
         });

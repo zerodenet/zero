@@ -159,7 +159,7 @@ impl ProtocolAdapter for VlessAdapter {
         if mux_flow_enabled {
             let max_concurrency = 8u32;
             let idle_timeout = 300u64;
-            match proxy
+            if let Ok((_mux_sid, up_tx, _down_rx)) = proxy
                 .mux_pool
                 .open_udp_stream(
                     proxy,
@@ -180,51 +180,48 @@ impl ProtocolAdapter for VlessAdapter {
                 )
                 .await
             {
-                Ok((_mux_sid, up_tx, _down_rx)) => {
-                    let packet = <::vless::VlessOutbound as UdpPacketFraming<
-                        ::vless::VlessUdpPacketTarget,
-                    >>::encode_udp_packet(
-                        &proxy.protocols.vless_outbound_protocol(),
-                        &::vless::VlessUdpPacketTarget {
-                            address: &session.target,
-                            port: session.port,
-                            payload,
-                        },
-                    )
-                    .map_err(|error| FlowFailure {
-                        stage: "udp_vless_mux_encode",
-                        error: error.into(),
-                        upstream: Some(((*server).to_string(), *port)),
-                    })?;
-                    let _ = up_tx.send(packet);
-                    proxy.record_session_outbound_tx(session_id, payload.len() as u64);
-                    return Ok(FlowStartResult::VlessFlow {
-                        session_id,
-                        tag: tag_owned,
-                    });
-                }
-                Err(_) => {}
+                let packet = <::vless::VlessOutbound as UdpPacketFraming<
+                    ::vless::VlessUdpPacketTarget,
+                >>::encode_udp_packet(
+                    &proxy.protocols.vless_outbound_protocol(),
+                    &::vless::VlessUdpPacketTarget {
+                        address: &session.target,
+                        port: session.port,
+                        payload,
+                    },
+                )
+                .map_err(|error| FlowFailure {
+                    stage: "udp_vless_mux_encode",
+                    error: error.into(),
+                    upstream: Some(((*server).to_string(), *port)),
+                })?;
+                let _ = up_tx.send(packet);
+                proxy.record_session_outbound_tx(session_id, payload.len() as u64);
+                return Ok(FlowStartResult::VlessFlow {
+                    session_id,
+                    tag: tag_owned,
+                });
             }
         }
 
         dispatch
-            .start_vless_udp_flow(
+            .start_vless_udp_flow(VlessUdpFlow {
                 proxy,
                 session,
                 server,
-                *port,
+                port: *port,
                 id,
-                *flow,
-                *tls,
-                *reality,
-                *ws,
-                *grpc,
-                *h2,
-                *http_upgrade,
-                *split_http,
-                *quic,
+                flow: *flow,
+                tls: *tls,
+                reality: *reality,
+                ws: *ws,
+                grpc: *grpc,
+                h2: *h2,
+                http_upgrade: *http_upgrade,
+                split_http: *split_http,
+                quic: *quic,
                 payload,
-            )
+            })
             .await
             .map_err(|error| FlowFailure {
                 stage: error.stage,
@@ -302,15 +299,15 @@ impl ProtocolAdapter for VlessAdapter {
             .as_ref()
             .expect("udp_relay_needs_two_streams checked split_http is Some");
         dispatch
-            .start_vless_udp_relay_two_stream(
+            .start_vless_udp_relay_two_stream(VlessUdpRelayTwoStream {
                 proxy,
                 session,
                 post_carrier,
                 get_carrier,
                 id,
-                split_http_cfg,
+                split_http: split_http_cfg,
                 payload,
-            )
+            })
             .await?;
 
         Ok(FlowStartResult::VlessFlow {
@@ -359,22 +356,22 @@ impl ProtocolAdapter for VlessAdapter {
 
         let tag_owned = (*tag).to_string();
         dispatch
-            .start_vless_udp_relay_final_hop(
+            .start_vless_udp_relay_final_hop(VlessUdpRelayFinalHop {
                 proxy,
                 session,
                 carrier,
                 server,
-                *port,
+                port: *port,
                 id,
-                *tls,
-                *reality,
-                *ws,
-                *grpc,
-                *h2,
-                *http_upgrade,
-                *split_http,
+                tls: *tls,
+                reality: *reality,
+                ws: *ws,
+                grpc: *grpc,
+                h2: *h2,
+                http_upgrade: *http_upgrade,
+                split_http: *split_http,
                 payload,
-            )
+            })
             .await?;
 
         Ok(FlowStartResult::VlessFlow {
