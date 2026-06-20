@@ -93,7 +93,7 @@ impl UdpDispatch {
             UdpPathCategory::Datagram => match &flow.outbound {
                 #[cfg(feature = "shadowsocks")]
                 UdpFlowOutbound::Shadowsocks {
-                    tag: _,
+                    tag,
                     server,
                     port,
                     password,
@@ -109,7 +109,7 @@ impl UdpDispatch {
                                     session_id: flow.session.id,
                                 },
                                 carrier,
-                                "",
+                                tag.as_str(),
                                 server.as_str(),
                                 *port,
                                 password.as_str(),
