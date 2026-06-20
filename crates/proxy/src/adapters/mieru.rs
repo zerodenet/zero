@@ -104,14 +104,14 @@ impl ProtocolAdapter for MieruAdapter {
                 upstream: f.upstream,
             })?;
         Ok(FlowStartResult::Flow {
-            outbound: UdpFlowOutbound::Mieru {
+            outbound: Box::new(UdpFlowOutbound::Mieru {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,
                 username: (*username).to_string(),
                 password: (*password).to_string(),
                 relay_chain: false,
-            },
+            }),
             tx_bytes: sent as u64,
         })
     }
@@ -159,14 +159,14 @@ impl ProtocolAdapter for MieruAdapter {
             )
             .await?;
         Ok(FlowStartResult::Flow {
-            outbound: UdpFlowOutbound::Mieru {
+            outbound: Box::new(UdpFlowOutbound::Mieru {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,
                 username: (*username).to_string(),
                 password: (*password).to_string(),
                 relay_chain: true,
-            },
+            }),
             tx_bytes: sent as u64,
         })
     }

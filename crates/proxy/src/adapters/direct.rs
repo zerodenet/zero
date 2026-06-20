@@ -84,10 +84,10 @@ impl ProtocolAdapter for DirectAdapter {
                 upstream: None,
             })?;
         Ok(FlowStartResult::Flow {
-            outbound: UdpFlowOutbound::Direct {
+            outbound: Box::new(UdpFlowOutbound::Direct {
                 tag: (*tag).unwrap_or("direct").to_string(),
                 target_addr,
-            },
+            }),
             tx_bytes: sent as u64,
         })
     }

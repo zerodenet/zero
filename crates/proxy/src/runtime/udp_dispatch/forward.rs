@@ -140,13 +140,6 @@ impl UdpDispatch {
 
                     self.record_or_fail(flow, proxy, started_at, result)?;
                 }
-                #[cfg(not(feature = "shadowsocks"))]
-                UdpFlowOutbound::Shadowsocks { .. } => {
-                    return Err(EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Unsupported,
-                        "Shadowsocks UDP outbound requires feature `shadowsocks`",
-                    )));
-                }
                 #[cfg(feature = "hysteria2")]
                 UdpFlowOutbound::Hysteria2 {
                     tag: _,
@@ -170,13 +163,6 @@ impl UdpDispatch {
                         )
                         .await;
                     self.record_or_fail(flow, proxy, started_at, result)?;
-                }
-                #[cfg(not(feature = "hysteria2"))]
-                UdpFlowOutbound::Hysteria2 { .. } => {
-                    return Err(EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Unsupported,
-                        "Hysteria2 UDP outbound requires feature `hysteria2`",
-                    )));
                 }
                 _ => unreachable!("Datagram category maps to Shadowsocks or Hysteria2 only"),
             },
@@ -215,13 +201,6 @@ impl UdpDispatch {
                         .await;
                     self.record_or_fail(flow, proxy, started_at, result)?;
                 }
-                #[cfg(not(feature = "trojan"))]
-                UdpFlowOutbound::Trojan { .. } => {
-                    return Err(EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Unsupported,
-                        "Trojan UDP outbound requires feature `trojan`",
-                    )));
-                }
                 #[cfg(feature = "mieru")]
                 UdpFlowOutbound::Mieru {
                     tag: _,
@@ -250,17 +229,47 @@ impl UdpDispatch {
                         .await;
                     self.record_or_fail(flow, proxy, started_at, result)?;
                 }
-                #[cfg(not(feature = "mieru"))]
-                UdpFlowOutbound::Mieru { .. } => {
-                    return Err(EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Unsupported,
-                        "Mieru UDP outbound requires feature `mieru`",
-                    )));
-                }
                 _ => unreachable!("StreamPacket category maps to Trojan or Mieru only"),
             },
         }
 
         Ok(())
+    }
+
+    fn fail_flow_with_msg(
+        &mut self,
+        flow: &UdpFlowSnapshot,
+        started_at: Instant,
+        stage: &'static str,
+        msg: &str,
+    ) {
+        let error = EngineError::Io(std::io::Error::other(msg.to_string()));
+        self.fail_flow(flow, started_at, stage, &error);
+    }
+
+    /// Record outbound bytes or fail the flow, for the common
+    /// manager-based dispatch pattern in [`forward_existing()`].
+    fn record_or_fail(
+        &mut self,
+        flow: &UdpFlowSnapshot,
+        proxy: &Proxy,
+        started_at: Instant,
+        result: Result<usize, super::FlowFailure>,
+    ) -> Result<(), EngineError> {
+        match result {
+            Ok(sent) => {
+                proxy.record_session_outbound_tx(flow.session.id, sent as u64);
+                Ok(())
+            }
+            Err(failure) => {
+                self.fail_flow_with_msg(
+                    flow,
+                    started_at,
+                    failure.stage,
+                    &failure.error.to_string(),
+                );
+                Err(failure.error)
+            }
+        }
     }
 }

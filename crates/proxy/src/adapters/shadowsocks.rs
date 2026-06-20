@@ -197,14 +197,14 @@ impl ProtocolAdapter for ShadowsocksAdapter {
                 upstream: f.upstream,
             })?;
         Ok(FlowStartResult::Flow {
-            outbound: UdpFlowOutbound::Shadowsocks {
+            outbound: Box::new(UdpFlowOutbound::Shadowsocks {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,
                 password: (*password).to_string(),
                 cipher: (*cipher).to_string(),
                 packet_path_carrier: None,
-            },
+            }),
             tx_bytes: sent as u64,
         })
     }

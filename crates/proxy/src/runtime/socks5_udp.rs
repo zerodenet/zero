@@ -1,7 +1,9 @@
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "shadowsocks")]
 use std::sync::Arc;
 
+#[cfg(feature = "shadowsocks")]
 use async_trait::async_trait;
 use socks5::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
 use tokio::time::Instant as TokioInstant;
@@ -168,10 +170,12 @@ impl Drop for ActiveUpstreamSocks5UdpAssociation {
     }
 }
 
+#[cfg(feature = "shadowsocks")]
 pub(crate) struct Socks5PacketPath {
     association: Arc<ActiveUpstreamSocks5UdpAssociation>,
 }
 
+#[cfg(feature = "shadowsocks")]
 #[async_trait]
 impl crate::runtime::udp_dispatch::PacketPathCarrier for Socks5PacketPath {
     async fn send_to(
@@ -194,6 +198,7 @@ impl crate::runtime::udp_dispatch::PacketPathCarrier for Socks5PacketPath {
     }
 }
 
+#[cfg(feature = "shadowsocks")]
 pub(crate) async fn build_socks5_packet_path(
     proxy: &Proxy,
     tag: &str,

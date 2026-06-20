@@ -66,3 +66,6 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --lib --features full,status_api
+
+      - name: Architecture boundary tests
+        run: cargo test -p zero-proxy --test runtime_boundary --all-features

@@ -35,6 +35,7 @@ impl ProtocolAdapter for Socks5Adapter {
         matches!(leaf, ResolvedLeafOutbound::Socks5 { .. })
     }
 
+    #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_descriptor(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
@@ -60,6 +61,7 @@ impl ProtocolAdapter for Socks5Adapter {
         })
     }
 
+    #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_snapshot(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
@@ -199,13 +201,13 @@ impl ProtocolAdapter for Socks5Adapter {
                 upstream: Some(((*server).to_string(), *port)),
             })?;
         Ok(FlowStartResult::Flow {
-            outbound: UdpFlowOutbound::Socks5 {
+            outbound: Box::new(UdpFlowOutbound::Socks5 {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,
                 username: (*username).map(|u| u.to_string()),
                 password: (*password).map(|p| p.to_string()),
-            },
+            }),
             tx_bytes: sent as u64,
         })
     }

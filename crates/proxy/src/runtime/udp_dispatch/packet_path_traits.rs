@@ -6,15 +6,30 @@
 
 use std::vec::Vec;
 
-use async_trait::async_trait;
 use zero_core::Address;
 use zero_engine::EngineError;
 
+#[cfg(any(
+    feature = "shadowsocks",
+    feature = "hysteria2",
+    feature = "trojan",
+    feature = "mieru"
+))]
 use tokio::task::JoinSet;
 
+#[cfg(feature = "shadowsocks")]
+use async_trait::async_trait;
+
+#[cfg(any(
+    feature = "shadowsocks",
+    feature = "hysteria2",
+    feature = "trojan",
+    feature = "mieru"
+))]
 use crate::runtime::orchestration::OutboundEndpoint;
 
 /// Datagram codec for encoding/decoding inner protocol datagrams.
+#[cfg(feature = "shadowsocks")]
 pub(in crate::runtime) use zero_traits::DatagramCodec;
 
 /// Object-safe packet-path carrier.
@@ -23,6 +38,7 @@ pub(in crate::runtime) use zero_traits::DatagramCodec;
 /// `Arc<dyn PacketPathCarrier>` without a per-protocol enum. Adapters build the
 /// concrete carrier and box it; adding a carrier = implement this trait + the
 /// adapter's `build_udp_packet_path`, zero manager changes.
+#[cfg(feature = "shadowsocks")]
 #[async_trait]
 pub(crate) trait PacketPathCarrier: Send + Sync {
     /// Send `payload` to `target:port` through this carrier.
@@ -44,6 +60,7 @@ pub(crate) type ChainTask = Result<(Address, u16, Vec<u8>, Option<u64>), EngineE
 /// Produced by `ProtocolAdapter::udp_packet_path_carrier_descriptor`. The
 /// `cache_key` uniquely identifies one carrier connection so the manager can
 /// reuse it across packets; `server`/`port` are the endpoint for diagnostics.
+#[cfg(feature = "shadowsocks")]
 pub(crate) struct PacketPathCarrierDescriptor {
     pub(crate) cache_key: String,
     pub(crate) server: String,
@@ -55,6 +72,7 @@ pub(crate) struct PacketPathCarrierDescriptor {
 /// Produced by `ProtocolAdapter::udp_datagram_source`. The manager builds the
 /// inner `DatagramCodec` from `cipher` + `password`; `tag`/`server`/`port`
 /// feed the outbound result + cache key.
+#[cfg(feature = "shadowsocks")]
 pub(crate) struct UdpDatagramSource<'a> {
     pub(crate) tag: &'a str,
     pub(crate) server: &'a str,
@@ -64,21 +82,40 @@ pub(crate) struct UdpDatagramSource<'a> {
 }
 
 /// Runtime context shared by UDP outbound managers for one send operation.
+#[cfg(any(
+    feature = "shadowsocks",
+    feature = "hysteria2",
+    feature = "trojan",
+    feature = "mieru"
+))]
 pub(crate) struct UdpFlowContext<'a> {
     pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
     pub(crate) session_id: u64,
 }
 
 /// Borrowed target payload for one UDP send operation.
+#[cfg(any(
+    feature = "shadowsocks",
+    feature = "hysteria2",
+    feature = "trojan",
+    feature = "mieru"
+))]
 pub(crate) struct UdpPacketRef<'a> {
     pub(crate) target: &'a Address,
     pub(crate) port: u16,
     pub(crate) payload: &'a [u8],
 }
 
+#[cfg(any(
+    feature = "shadowsocks",
+    feature = "hysteria2",
+    feature = "trojan",
+    feature = "mieru"
+))]
 pub(crate) type UdpPeerEndpoint<'a> = OutboundEndpoint<'a>;
 
 /// Shadowsocks UDP peer parameters.
+#[cfg(feature = "shadowsocks")]
 pub(crate) struct SsUdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
     pub(crate) password: &'a str,
@@ -86,6 +123,7 @@ pub(crate) struct SsUdpPeer<'a> {
 }
 
 /// Hysteria2 UDP peer parameters.
+#[cfg(feature = "hysteria2")]
 pub(crate) struct H2UdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
     pub(crate) password: &'a str,
@@ -93,6 +131,7 @@ pub(crate) struct H2UdpPeer<'a> {
 }
 
 /// Trojan UDP peer parameters.
+#[cfg(feature = "trojan")]
 pub(crate) struct TrojanUdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
     pub(crate) password: &'a str,
@@ -103,6 +142,7 @@ pub(crate) struct TrojanUdpPeer<'a> {
 }
 
 /// Mieru UDP peer parameters.
+#[cfg(feature = "mieru")]
 pub(crate) struct MieruUdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
     pub(crate) username: &'a str,

@@ -16,6 +16,7 @@ use crate::runtime::Proxy;
 // Re-exports consumed by `relay` submodule via `use super::*`.
 #[allow(unused_imports)]
 pub(super) use crate::runtime::udp_associate::sessions::UdpFlowOutbound;
+#[cfg(feature = "shadowsocks")]
 #[allow(unused_imports)]
 pub(super) use crate::runtime::udp_dispatch::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 

@@ -123,7 +123,7 @@ impl ProtocolAdapter for TrojanAdapter {
                 upstream: f.upstream,
             })?;
         Ok(FlowStartResult::Flow {
-            outbound: UdpFlowOutbound::Trojan {
+            outbound: Box::new(UdpFlowOutbound::Trojan {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,
@@ -132,7 +132,7 @@ impl ProtocolAdapter for TrojanAdapter {
                 insecure: *insecure,
                 client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
                 relay_chain: false,
-            },
+            }),
             tx_bytes: sent as u64,
         })
     }
@@ -191,7 +191,7 @@ impl ProtocolAdapter for TrojanAdapter {
             )
             .await?;
         Ok(FlowStartResult::Flow {
-            outbound: UdpFlowOutbound::Trojan {
+            outbound: Box::new(UdpFlowOutbound::Trojan {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,
@@ -200,7 +200,7 @@ impl ProtocolAdapter for TrojanAdapter {
                 insecure: *insecure,
                 client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
                 relay_chain: true,
-            },
+            }),
             tx_bytes: sent as u64,
         })
     }

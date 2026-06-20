@@ -60,20 +60,19 @@ use std::time::Instant;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 
-use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
+use crate::logging::{log_session_failed, log_session_finished};
 use crate::runtime::udp_associate::sessions::{UdpFlowSnapshot, UdpSessionFlows};
 use crate::runtime::vless_udp::VlessUdpOutboundManager;
 #[cfg(feature = "vmess")]
 use crate::runtime::vmess_udp::VmessUdpOutboundManager;
 use crate::runtime::Proxy;
-use zero_core::{Address, Network, ProtocolType, Session, SessionAuth};
+use zero_core::{Address, Session};
 use zero_engine::{EngineError, SessionHandle, SessionOutcome};
 use zero_platform_tokio::TokioDatagramSocket;
 
-use crate::runtime::inbound_protocol::apply_kernel_rate_limits;
-
 // Sub-module declarations.
 
+mod dispatch;
 mod forward;
 mod lifecycle;
 mod socks5_flow;
@@ -82,19 +81,24 @@ mod types;
 
 mod packet_path_traits;
 
+#[cfg(feature = "hysteria2")]
 mod h2_manager;
+#[cfg(feature = "mieru")]
 mod mieru_manager;
 #[cfg(feature = "shadowsocks")]
 mod packet_path_chain;
 #[cfg(feature = "shadowsocks")]
 mod ss_manager;
+#[cfg(feature = "trojan")]
 mod trojan_manager;
 
 // Re-exports.
 
 #[cfg(all(feature = "shadowsocks", feature = "socks5"))]
 pub(crate) use crate::runtime::socks5_udp::build_socks5_packet_path;
+#[cfg(feature = "hysteria2")]
 use h2_manager::H2ChainManager;
+#[cfg(feature = "mieru")]
 use mieru_manager::MieruChainManager;
 #[cfg(all(feature = "shadowsocks", feature = "hysteria2"))]
 pub(crate) use packet_path_chain::build_hysteria2_packet_path;
@@ -103,11 +107,13 @@ pub(crate) use packet_path_chain::build_shadowsocks_packet_path;
 #[cfg(feature = "shadowsocks")]
 use packet_path_chain::PacketPathManager;
 pub(crate) use packet_path_traits::ChainTask;
+#[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_traits::{
     PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
 };
 #[cfg(feature = "shadowsocks")]
 use ss_manager::SsChainManager;
+#[cfg(feature = "trojan")]
 use trojan_manager::TrojanChainManager;
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
@@ -151,183 +157,17 @@ pub(crate) struct UdpDispatch {
     #[cfg(feature = "shadowsocks")]
     packet_path_manager: PacketPathManager,
     /// Per-dispatcher Trojan chain manager. Caches TLS upstream streams.
+    #[cfg(feature = "trojan")]
     trojan_manager: TrojanChainManager,
     /// Per-dispatcher Mieru chain manager. Caches encrypted upstream streams.
+    #[cfg(feature = "mieru")]
     mieru_manager: MieruChainManager,
     /// Per-dispatcher H2 chain manager. Caches QUIC upstream connections.
+    #[cfg(feature = "hysteria2")]
     h2_manager: H2ChainManager,
 }
 
 impl UdpDispatch {
-    // Dispatch.
-
-    /// Dispatch a UDP packet: route, select outbound, send.
-    ///
-    /// If a flow already exists for `(target, port, client_session_id)`
-    /// (including VLESS chain connections cached in the manager), forwards the
-    /// payload.  Otherwise creates a new session, routes through the engine,
-    /// and dispatches to the resolved outbound.
-    ///
-    /// `client_session_id`: when `Some`, isolates flows that would otherwise
-    /// collide on `(target, port)` alone (SIP022 3.2.4 per-client-session
-    /// routing).  All non-SS inbound callers pass `None`.
-    ///
-    /// Supports all outbound types: direct, block, socks5, vless,
-    /// shadowsocks, hysteria2, trojan, mieru.
-    /// Returns the session_id of the (new or cached) flow for metering.
-    pub(crate) async fn dispatch(
-        &mut self,
-        proxy: &Proxy,
-        target: Address,
-        port: u16,
-        payload: &[u8],
-        protocol: ProtocolType,
-        auth: Option<&SessionAuth>,
-        client_session_id: Option<u64>,
-    ) -> Result<u64, EngineError> {
-        // VLESS manager shortcut (cached upstream).
-        if let Some(session_id) = self
-            .vless_manager
-            .send_existing(&mut self.chain_tasks, proxy, &target, port, payload)
-            .await?
-        {
-            return Ok(session_id);
-        }
-
-        #[cfg(feature = "vmess")]
-        if let Some(session_id) = self
-            .vmess_manager
-            .send_existing(&mut self.chain_tasks, proxy, &target, port, payload)
-            .await?
-        {
-            return Ok(session_id);
-        }
-
-        // Existing flow (direct / socks5 / ss / h2 / trojan / mieru).
-        if let Some(flow) = self.flows.snapshot(&target, port, client_session_id) {
-            self.forward_existing(proxy, &flow, payload).await?;
-            return Ok(flow.session.id);
-        }
-
-        // New flow.
-        let mut session = Session::new(0, target, port, Network::Udp, protocol);
-        if let Some(a) = auth {
-            session.auth = Some(a.clone());
-        }
-        proxy.prepare_session(&mut session, &self.inbound_tag, None);
-        apply_kernel_rate_limits(proxy, &mut session, &self.inbound_tag);
-        let mut session_handle = proxy.track_session(session.id);
-        let started_at = Instant::now();
-        proxy.record_session_inbound_rx(session.id, payload.len() as u64);
-
-        proxy.resolve_fake_ip_target(&mut session).await;
-        let action = proxy.route_decision(&session);
-        let resolved = match proxy.resolve_outbound(&action) {
-            Ok((resolved, _plan)) => resolved,
-            Err(error) => {
-                let record = session_handle.finish(SessionOutcome::Failed);
-                log_session_failed(
-                    &session,
-                    record.as_ref(),
-                    "resolve_outbound",
-                    started_at.elapsed(),
-                    &error,
-                    None,
-                );
-                return Err(error);
-            }
-        };
-        log_session_accepted(&session, &action, proxy.config.mode.kind());
-
-        let candidates = match resolved {
-            ResolvedOutbound::Single(c) => vec![UdpCandidate::Leaf(c)],
-            ResolvedOutbound::Fallback { candidates } => {
-                candidates.into_iter().map(UdpCandidate::Leaf).collect()
-            }
-            ResolvedOutbound::Relay { chain } => vec![UdpCandidate::Relay(chain)],
-        };
-        let is_fallback = candidates.len() > 1;
-        let mut last_failure = None;
-
-        for candidate in candidates {
-            match self.start_flow(proxy, candidate, &session, payload).await {
-                Ok(FlowStartResult::Flow { outbound, tx_bytes }) => {
-                    let session_id = session.id;
-                    session.outbound_tag = Some(outbound.tag().to_owned());
-                    proxy.set_session_outbound(&session);
-                    self.flows
-                        .insert(session, session_handle, outbound, client_session_id);
-                    proxy.record_session_outbound_tx(session_id, tx_bytes);
-                    return Ok(session_id);
-                }
-                Ok(FlowStartResult::VlessFlow { session_id, tag }) => {
-                    session.outbound_tag = Some(tag);
-                    proxy.set_session_outbound(&session);
-                    self.vless_handles.insert(
-                        (session.target.clone(), session.port),
-                        (session, session_handle),
-                    );
-                    proxy.record_session_outbound_tx(session_id, payload.len() as u64);
-                    return Ok(session_id);
-                }
-                #[cfg(feature = "vmess")]
-                Ok(FlowStartResult::VmessFlow { session_id, tag }) => {
-                    session.outbound_tag = Some(tag);
-                    proxy.set_session_outbound(&session);
-                    self.vmess_handles.insert(
-                        (session.target.clone(), session.port),
-                        (session, session_handle),
-                    );
-                    proxy.record_session_outbound_tx(session_id, payload.len() as u64);
-                    return Ok(session_id);
-                }
-                Ok(FlowStartResult::Blocked { tag }) => {
-                    session.outbound_tag = Some(tag);
-                    proxy.set_session_outbound(&session);
-                    if let Some(record) = session_handle.finish(SessionOutcome::Blocked) {
-                        log_session_finished(&record, None);
-                    }
-                    return Ok(session.id);
-                }
-                Err(failure) => {
-                    last_failure = Some(failure);
-                }
-            }
-        }
-
-        let record = session_handle.finish(SessionOutcome::Failed);
-        if let Some(failure) = last_failure {
-            let stage = if is_fallback {
-                "fallback_exhausted"
-            } else {
-                failure.stage
-            };
-            log_session_failed(
-                &session,
-                record.as_ref(),
-                stage,
-                started_at.elapsed(),
-                &failure.error,
-                failure
-                    .upstream
-                    .as_ref()
-                    .map(|(server, port)| (server.as_str(), *port)),
-            );
-            return Err(failure.error);
-        }
-
-        let error = EngineError::Io(std::io::Error::other("all fallback outbounds failed"));
-        log_session_failed(
-            &session,
-            record.as_ref(),
-            "fallback_exhausted",
-            started_at.elapsed(),
-            &error,
-            None,
-        );
-        Err(error)
-    }
-
     #[cfg(feature = "shadowsocks")]
     pub(crate) async fn start_shadowsocks_udp_flow(
         &mut self,
@@ -744,43 +584,4 @@ impl UdpDispatch {
             );
         }
     }
-
-    fn fail_flow_with_msg(
-        &mut self,
-        flow: &UdpFlowSnapshot,
-        started_at: Instant,
-        stage: &'static str,
-        msg: &str,
-    ) {
-        let error = EngineError::Io(std::io::Error::other(msg.to_string()));
-        self.fail_flow(flow, started_at, stage, &error);
-    }
-
-    /// Record outbound bytes or fail the flow, for the common
-    /// manager-based dispatch pattern in [`forward_existing()`].
-    fn record_or_fail(
-        &mut self,
-        flow: &UdpFlowSnapshot,
-        proxy: &Proxy,
-        started_at: Instant,
-        result: Result<usize, FlowFailure>,
-    ) -> Result<(), EngineError> {
-        match result {
-            Ok(sent) => {
-                proxy.record_session_outbound_tx(flow.session.id, sent as u64);
-                Ok(())
-            }
-            Err(failure) => {
-                self.fail_flow_with_msg(
-                    flow,
-                    started_at,
-                    failure.stage,
-                    &failure.error.to_string(),
-                );
-                Err(failure.error)
-            }
-        }
-    }
 }
-
-use zero_engine::ResolvedOutbound;

@@ -48,7 +48,7 @@ impl UdpDispatch {
                         .udp_datagram_source(datagram_leaf)
                         .expect("checked above");
                     return Ok(FlowStartResult::Flow {
-                        outbound: UdpFlowOutbound::Shadowsocks {
+                        outbound: Box::new(UdpFlowOutbound::Shadowsocks {
                             tag: datagram.tag.to_owned(),
                             server: datagram.server.to_owned(),
                             port: datagram.port,
@@ -56,7 +56,7 @@ impl UdpDispatch {
                             cipher: datagram.cipher.to_owned(),
                             packet_path_carrier: carrier_adapter
                                 .udp_packet_path_carrier_snapshot(carrier_leaf),
-                        },
+                        }),
                         tx_bytes: sent as u64,
                     });
                 }

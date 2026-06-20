@@ -6,7 +6,7 @@ use crate::runtime::udp_associate::sessions::UdpFlowOutbound;
 pub(crate) enum FlowStartResult {
     /// A new flow was established and tracked in `UdpSessionFlows`.
     Flow {
-        outbound: UdpFlowOutbound,
+        outbound: Box<UdpFlowOutbound>,
         tx_bytes: u64,
     },
     /// A VLESS chain flow was established (tracked by the manager, not `UdpSessionFlows`).

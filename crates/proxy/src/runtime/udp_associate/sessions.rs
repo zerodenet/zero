@@ -88,7 +88,7 @@ pub(crate) enum UdpFlowOutbound {
     },
 
     // Datagram path.
-    #[allow(dead_code)]
+    #[cfg(feature = "shadowsocks")]
     Shadowsocks {
         tag: String,
         server: String,
@@ -97,6 +97,7 @@ pub(crate) enum UdpFlowOutbound {
         cipher: String,
         packet_path_carrier: Option<UdpPacketPathCarrier>,
     },
+    #[cfg(feature = "hysteria2")]
     Hysteria2 {
         tag: String,
         server: String,
@@ -106,6 +107,7 @@ pub(crate) enum UdpFlowOutbound {
     },
 
     // Stream packet path.
+    #[cfg(feature = "trojan")]
     Trojan {
         tag: String,
         server: String,
@@ -116,6 +118,7 @@ pub(crate) enum UdpFlowOutbound {
         client_fingerprint: Option<String>,
         relay_chain: bool,
     },
+    #[cfg(feature = "mieru")]
     Mieru {
         tag: String,
         server: String,
@@ -142,6 +145,7 @@ pub(crate) enum UdpPacketPathCarrier {
         username: Option<String>,
         password: Option<String>,
     },
+    #[cfg(feature = "shadowsocks")]
     Shadowsocks {
         cache_key: String,
         tag: String,
@@ -167,8 +171,8 @@ impl UdpPacketPathCarrier {
     pub(crate) fn cache_key(&self) -> &str {
         match self {
             #[cfg(feature = "socks5")]
-            Self::Socks5 { cache_key, .. } | Self::Shadowsocks { cache_key, .. } => cache_key,
-            #[cfg(not(feature = "socks5"))]
+            Self::Socks5 { cache_key, .. } => cache_key,
+            #[cfg(feature = "shadowsocks")]
             Self::Shadowsocks { cache_key, .. } => cache_key,
             #[cfg(feature = "hysteria2")]
             Self::Hysteria2 { cache_key, .. } => cache_key,
@@ -179,12 +183,15 @@ impl UdpPacketPathCarrier {
 impl UdpFlowOutbound {
     pub(crate) fn tag(&self) -> &str {
         match self {
-            Self::Direct { tag, .. }
-            | Self::Socks5 { tag, .. }
-            | Self::Shadowsocks { tag, .. }
-            | Self::Hysteria2 { tag, .. }
-            | Self::Trojan { tag, .. }
-            | Self::Mieru { tag, .. } => tag,
+            Self::Direct { tag, .. } | Self::Socks5 { tag, .. } => tag,
+            #[cfg(feature = "shadowsocks")]
+            Self::Shadowsocks { tag, .. } => tag,
+            #[cfg(feature = "hysteria2")]
+            Self::Hysteria2 { tag, .. } => tag,
+            #[cfg(feature = "trojan")]
+            Self::Trojan { tag, .. } => tag,
+            #[cfg(feature = "mieru")]
+            Self::Mieru { tag, .. } => tag,
         }
     }
 
@@ -193,30 +200,44 @@ impl UdpFlowOutbound {
         match self {
             Self::Direct { .. } => UdpPathCategory::Direct,
             Self::Socks5 { .. } => UdpPathCategory::Relay,
-            Self::Shadowsocks { .. } | Self::Hysteria2 { .. } => UdpPathCategory::Datagram,
-            Self::Trojan { .. } | Self::Mieru { .. } => UdpPathCategory::StreamPacket,
+            #[cfg(feature = "shadowsocks")]
+            Self::Shadowsocks { .. } => UdpPathCategory::Datagram,
+            #[cfg(feature = "hysteria2")]
+            Self::Hysteria2 { .. } => UdpPathCategory::Datagram,
+            #[cfg(feature = "trojan")]
+            Self::Trojan { .. } => UdpPathCategory::StreamPacket,
+            #[cfg(feature = "mieru")]
+            Self::Mieru { .. } => UdpPathCategory::StreamPacket,
         }
     }
 
     fn upstream_endpoint(&self) -> Option<(String, u16)> {
         match self {
             Self::Direct { .. } => None,
-            Self::Socks5 { server, port, .. }
-            | Self::Shadowsocks { server, port, .. }
-            | Self::Hysteria2 { server, port, .. }
-            | Self::Trojan { server, port, .. }
-            | Self::Mieru { server, port, .. } => Some((server.clone(), *port)),
+            Self::Socks5 { server, port, .. } => Some((server.clone(), *port)),
+            #[cfg(feature = "shadowsocks")]
+            Self::Shadowsocks { server, port, .. } => Some((server.clone(), *port)),
+            #[cfg(feature = "hysteria2")]
+            Self::Hysteria2 { server, port, .. } => Some((server.clone(), *port)),
+            #[cfg(feature = "trojan")]
+            Self::Trojan { server, port, .. } => Some((server.clone(), *port)),
+            #[cfg(feature = "mieru")]
+            Self::Mieru { server, port, .. } => Some((server.clone(), *port)),
         }
     }
 
     fn success_outcome(&self) -> SessionOutcome {
         match self {
             Self::Direct { .. } => SessionOutcome::DirectRelayed,
-            Self::Socks5 { .. }
-            | Self::Shadowsocks { .. }
-            | Self::Hysteria2 { .. }
-            | Self::Trojan { .. }
-            | Self::Mieru { .. } => SessionOutcome::ChainedRelayed,
+            Self::Socks5 { .. } => SessionOutcome::ChainedRelayed,
+            #[cfg(feature = "shadowsocks")]
+            Self::Shadowsocks { .. } => SessionOutcome::ChainedRelayed,
+            #[cfg(feature = "hysteria2")]
+            Self::Hysteria2 { .. } => SessionOutcome::ChainedRelayed,
+            #[cfg(feature = "trojan")]
+            Self::Trojan { .. } => SessionOutcome::ChainedRelayed,
+            #[cfg(feature = "mieru")]
+            Self::Mieru { .. } => SessionOutcome::ChainedRelayed,
         }
     }
 }
@@ -338,11 +359,35 @@ impl UdpSessionFlows {
             UdpFlowOutbound::Direct { target_addr, .. } => {
                 self.direct_by_sender.insert(*target_addr, key.clone());
             }
-            UdpFlowOutbound::Socks5 { tag, .. }
-            | UdpFlowOutbound::Shadowsocks { tag, .. }
-            | UdpFlowOutbound::Hysteria2 { tag, .. }
-            | UdpFlowOutbound::Trojan { tag, .. }
-            | UdpFlowOutbound::Mieru { tag, .. } => {
+            UdpFlowOutbound::Socks5 { tag, .. } => {
+                self.upstream_by_response.insert(
+                    UdpUpstreamResponseKey::new(tag, &key.target, key.port),
+                    key.clone(),
+                );
+            }
+            #[cfg(feature = "shadowsocks")]
+            UdpFlowOutbound::Shadowsocks { tag, .. } => {
+                self.upstream_by_response.insert(
+                    UdpUpstreamResponseKey::new(tag, &key.target, key.port),
+                    key.clone(),
+                );
+            }
+            #[cfg(feature = "hysteria2")]
+            UdpFlowOutbound::Hysteria2 { tag, .. } => {
+                self.upstream_by_response.insert(
+                    UdpUpstreamResponseKey::new(tag, &key.target, key.port),
+                    key.clone(),
+                );
+            }
+            #[cfg(feature = "trojan")]
+            UdpFlowOutbound::Trojan { tag, .. } => {
+                self.upstream_by_response.insert(
+                    UdpUpstreamResponseKey::new(tag, &key.target, key.port),
+                    key.clone(),
+                );
+            }
+            #[cfg(feature = "mieru")]
+            UdpFlowOutbound::Mieru { tag, .. } => {
                 self.upstream_by_response.insert(
                     UdpUpstreamResponseKey::new(tag, &key.target, key.port),
                     key.clone(),
@@ -358,11 +403,35 @@ impl UdpSessionFlows {
                     self.direct_by_sender.remove(target_addr);
                 }
             }
-            UdpFlowOutbound::Socks5 { tag, .. }
-            | UdpFlowOutbound::Shadowsocks { tag, .. }
-            | UdpFlowOutbound::Hysteria2 { tag, .. }
-            | UdpFlowOutbound::Trojan { tag, .. }
-            | UdpFlowOutbound::Mieru { tag, .. } => {
+            UdpFlowOutbound::Socks5 { tag, .. } => {
+                let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
+                if self.upstream_by_response.get(&response_key) == Some(key) {
+                    self.upstream_by_response.remove(&response_key);
+                }
+            }
+            #[cfg(feature = "shadowsocks")]
+            UdpFlowOutbound::Shadowsocks { tag, .. } => {
+                let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
+                if self.upstream_by_response.get(&response_key) == Some(key) {
+                    self.upstream_by_response.remove(&response_key);
+                }
+            }
+            #[cfg(feature = "hysteria2")]
+            UdpFlowOutbound::Hysteria2 { tag, .. } => {
+                let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
+                if self.upstream_by_response.get(&response_key) == Some(key) {
+                    self.upstream_by_response.remove(&response_key);
+                }
+            }
+            #[cfg(feature = "trojan")]
+            UdpFlowOutbound::Trojan { tag, .. } => {
+                let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
+                if self.upstream_by_response.get(&response_key) == Some(key) {
+                    self.upstream_by_response.remove(&response_key);
+                }
+            }
+            #[cfg(feature = "mieru")]
+            UdpFlowOutbound::Mieru { tag, .. } => {
                 let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
                 if self.upstream_by_response.get(&response_key) == Some(key) {
                     self.upstream_by_response.remove(&response_key);
@@ -382,11 +451,15 @@ impl UdpSessionFlows {
 
     fn single_socks5_flow_session_id(&self, outbound_tag: &str) -> Option<u64> {
         let mut upstream_flows = self.flows.values().filter(|flow| match &flow.outbound {
-            UdpFlowOutbound::Socks5 { tag, .. }
-            | UdpFlowOutbound::Shadowsocks { tag, .. }
-            | UdpFlowOutbound::Hysteria2 { tag, .. }
-            | UdpFlowOutbound::Trojan { tag, .. }
-            | UdpFlowOutbound::Mieru { tag, .. } => tag == outbound_tag,
+            UdpFlowOutbound::Socks5 { tag, .. } => tag == outbound_tag,
+            #[cfg(feature = "shadowsocks")]
+            UdpFlowOutbound::Shadowsocks { tag, .. } => tag == outbound_tag,
+            #[cfg(feature = "hysteria2")]
+            UdpFlowOutbound::Hysteria2 { tag, .. } => tag == outbound_tag,
+            #[cfg(feature = "trojan")]
+            UdpFlowOutbound::Trojan { tag, .. } => tag == outbound_tag,
+            #[cfg(feature = "mieru")]
+            UdpFlowOutbound::Mieru { tag, .. } => tag == outbound_tag,
             UdpFlowOutbound::Direct { .. } => false,
         });
         let flow = upstream_flows.next()?;
