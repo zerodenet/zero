@@ -1,21 +1,22 @@
 use super::*;
 
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "mixed")]
 #[derive(Debug)]
-pub(crate) struct HttpConnectAdapter;
+pub(crate) struct MixedAdapter;
 
-#[cfg(feature = "http_connect")]
-impl ProtocolAdapter for HttpConnectAdapter {
+#[cfg(feature = "mixed")]
+#[async_trait]
+impl ProtocolAdapter for MixedAdapter {
     fn name(&self) -> &'static str {
-        "http_connect"
+        "mixed"
     }
 
     fn feature_name(&self) -> &'static str {
-        "http_connect"
+        "mixed"
     }
 
     fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        matches!(c, InboundProtocolConfig::HttpConnect)
+        matches!(c, InboundProtocolConfig::Mixed { .. })
     }
 
     fn supports_outbound(&self, _: &OutboundProtocolConfig) -> bool {
@@ -40,7 +41,7 @@ impl ProtocolAdapter for HttpConnectAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            crate::inbound::run_http_connect_listener_with_bound(
+            crate::inbound::run_mixed_listener_with_bound(
                 &p,
                 inbound,
                 bound.into_tcp(),
@@ -51,9 +52,9 @@ impl ProtocolAdapter for HttpConnectAdapter {
     }
 }
 
-#[cfg(feature = "http_connect")]
-impl ProtocolMetadata for HttpConnectAdapter {
+#[cfg(feature = "mixed")]
+impl ProtocolMetadata for MixedAdapter {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-        ::http_connect::HttpConnectProtocol.descriptor()
+        protocol_descriptor("mixed", "mixed")
     }
 }

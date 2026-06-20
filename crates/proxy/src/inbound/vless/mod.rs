@@ -55,6 +55,8 @@ mod mux;
 mod session;
 mod udp_session;
 
+pub(crate) use listener::run_vless_listener_with_bound;
+
 pub(crate) use helpers::{
     encode_vless_mux_udp_response, upgrade_vless_reality_server, ConfiguredVlessUsers,
     RecordingStream,

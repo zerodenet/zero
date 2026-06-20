@@ -228,8 +228,7 @@ impl ProtocolAdapter for Hysteria2Adapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            p.run_hysteria2_listener_with_bound(inbound, bound, shutdown_rx)
-                .await
+            crate::inbound::run_hysteria2_listener_with_bound(&p, inbound, bound, shutdown_rx).await
         });
     }
 }

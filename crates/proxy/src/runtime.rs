@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::sync::{oneshot, watch};
 use tokio::task::{JoinHandle, JoinSet};
 use tracing::{info, warn};
-use zero_config::{InboundConfig, InboundProtocolConfig, RuntimeConfig};
+use zero_config::RuntimeConfig;
 use zero_dns::DnsSystem;
 use zero_engine::{Engine, EngineError};
 
@@ -19,6 +19,7 @@ use crate::runtime::vmess_mux_pool::VmessMuxConnectionPool;
 
 mod engine_facade;
 pub(crate) mod inbound_protocol;
+mod listeners;
 pub(crate) mod mux_pool;
 pub(crate) mod orchestration;
 pub(crate) mod pipe;
@@ -165,8 +166,8 @@ impl Proxy {
         for inbound in &self.config.inbounds {
             let (tx, rx) = watch::channel(false);
             listener_stops.insert(inbound.tag.clone(), tx);
-            let bound = bind_inbound_listener(self, inbound).await?;
-            spawn_inbound_listener(self, inbound, bound, rx, &mut listeners);
+            let bound = listeners::bind_inbound_listener(self, inbound).await?;
+            listeners::spawn_inbound_listener(self, inbound, bound, rx, &mut listeners);
         }
         for &group_id in self.engine.plan().urltest_groups() {
             let proxy = self.clone();
@@ -230,7 +231,7 @@ impl Proxy {
                     if let Err(e) = self.resolver.reload(new_config.runtime.dns.as_ref()) {
                         warn!(error = %e, "failed to reload dns config");
                     }
-                    reconcile_inbounds(
+                    listeners::reconcile_inbounds(
                         self,
                         &new_config,
                         &mut listener_stops,
@@ -239,7 +240,7 @@ impl Proxy {
                     // Remove old urltest groups --they detect config
                     // changes via the plan swap and exit cleanly next cycle.
                     // Spawn new ones.
-                    reconcile_urltests(self, &new_config, &shutdown_rx, &mut urltests);
+                    listeners::reconcile_urltests(self, &new_config, &shutdown_rx, &mut urltests);
                     self.mux_pool.evict_all();
                     #[cfg(feature = "vmess")]
                     self.vmess_mux_pool.evict_all();
@@ -313,7 +314,7 @@ impl Deref for RunningProxy {
     }
 }
 
-// ── ProxyHandle: IPC command interception ─────────────────────────
+// //// ProxyHandle: IPC command interception //////////////////////////////////////////////////
 
 /// Wraps [`EngineHandle`] with TUN command interception.
 ///
@@ -435,7 +436,7 @@ impl zero_api::CommandService for ProxyHandle {
                             }),
                             Err(error) => {
                                 // A failed probe (timeout, refused) is a
-                                // *result*, not a command error — the node is
+                                // *result*, not a command error -the node is
                                 // simply unreachable, which the GUI renders.
                                 Ok(zero_api::CommandResponse {
                                     accepted: true,
@@ -581,124 +582,13 @@ impl zero_api::EventSource for ProxyHandle {
     }
 }
 
-// ── listener lifecycle helpers ───────────────────────────────────────
+// //// listener lifecycle helpers //////////////////////////////////////////////////////////////////////////////
 
 /// Eagerly bind a listener socket via the protocol's registered adapter.
 ///
 /// Port conflicts surface here (before spawn) via `?`, not deferred until
 /// `JoinSet::join_next()`. The adapter reads its own protocol config fields
-/// (cert/key for QUIC) — the runtime never touches those.
-async fn bind_inbound_listener(
-    proxy: &Proxy,
-    inbound: &InboundConfig,
-) -> Result<crate::protocol_adapter::BoundInbound, EngineError> {
-    proxy
-        .protocols
-        .bind_inbound(inbound, proxy.config.source_dir())
-        .await
-}
-
-fn spawn_inbound_listener(
-    proxy: &Proxy,
-    inbound: &InboundConfig,
-    bound: crate::protocol_adapter::BoundInbound,
-    shutdown_rx: watch::Receiver<bool>,
-    listeners: &mut JoinSet<Result<(), EngineError>>,
-) {
-    if let Err(e) = proxy
-        .protocols
-        .check_inbound_enabled(&inbound.protocol, &inbound.tag)
-    {
-        warn!(tag = %inbound.tag, error = %e, "skipping inbound listener: feature check failed");
-        return;
-    }
-
-    // `mixed` is an inbound multiplexor (auto-detects SOCKS5 / HTTP CONNECT),
-    // not a registered adapter — handle it directly.
-    #[cfg(feature = "mixed")]
-    if matches!(inbound.protocol, InboundProtocolConfig::Mixed { .. }) {
-        let p = proxy.clone();
-        let b = inbound.clone();
-        listeners.spawn(async move {
-            p.run_mixed_listener_with_bound(b, bound.into_tcp(), shutdown_rx)
-                .await
-        });
-        return;
-    }
-
-    // Single dispatch: resolve the inbound config to its adapter and spawn.
-    // Adding a protocol = register an adapter; this function never matches on
-    // the protocol enum.
-    match proxy.protocols.find_inbound(&inbound.protocol) {
-        Ok(adapter) => adapter.spawn_inbound(proxy, inbound.clone(), bound, shutdown_rx, listeners),
-        Err(_) => {
-            // The feature check above already validated compilation; reaching
-            // here means an unregistered config (e.g. mixed without feature).
-        }
-    }
-}
-
-/// Stop removed listeners (via their per-listener shutdown channel),
-/// start new ones.
-async fn reconcile_inbounds(
-    proxy: &Proxy,
-    new_config: &RuntimeConfig,
-    listener_stops: &mut HashMap<String, watch::Sender<bool>>,
-    listeners: &mut JoinSet<Result<(), EngineError>>,
-) {
-    let new_tags: Vec<&str> = new_config.inbounds.iter().map(|i| i.tag.as_str()).collect();
-
-    // Stop removed listeners: send shutdown and remove from the map.
-    listener_stops.retain(|tag, tx| {
-        if new_tags.contains(&tag.as_str()) {
-            true
-        } else {
-            let _ = tx.send(true);
-            info!(%tag, "signalled shutdown for removed inbound listener");
-            false
-        }
-    });
-
-    // Start added listeners.
-    for inbound in &new_config.inbounds {
-        if !listener_stops.contains_key(&inbound.tag) {
-            let (tx, rx) = watch::channel(false);
-            listener_stops.insert(inbound.tag.clone(), tx);
-            match bind_inbound_listener(proxy, inbound).await {
-                Ok(bound) => {
-                    spawn_inbound_listener(proxy, inbound, bound, rx, listeners);
-                    info!(tag = %inbound.tag, "started new inbound listener");
-                }
-                Err(e) => {
-                    listener_stops.remove(&inbound.tag);
-                    warn!(tag = %inbound.tag, error = %e, "failed to bind inbound listener");
-                }
-            }
-        }
-    }
-}
-
-/// Stop removed urltest groups, start new ones.
-fn reconcile_urltests(
-    proxy: &Proxy,
-    _new_config: &RuntimeConfig,
-    shutdown_rx: &watch::Receiver<bool>,
-    urltests: &mut JoinSet<Result<(), EngineError>>,
-) {
-    let plan = proxy.engine.plan();
-    let new_ids: Vec<zero_engine::TargetId> = plan.urltest_groups().to_vec();
-
-    // Urltest groups detect shutdown via the watch channel; old
-    // ones that are no longer in the plan will exit on their next
-    // interval cycle (they see `shutdown_rx` changed).  Start new
-    // ones immediately.
-    for &group_id in &new_ids {
-        let p = proxy.clone();
-        let s = shutdown_rx.clone();
-        urltests.spawn(async move { p.run_urltest_group(group_id, s).await });
-    }
-}
-
+/// (cert/key for QUIC) -the runtime never touches those.
 /// Parse a dotted/colon IP string into a `zero_traits::IpAddress` for the
 /// fake-IP reverse diagnostic lookup.
 fn parse_ip_address(s: &str) -> Option<zero_traits::IpAddress> {

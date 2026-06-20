@@ -313,110 +313,108 @@ impl InboundProtocol for MieruInboundHandler {
 
 // Listener.
 
-impl Proxy {
-    pub(crate) async fn run_mieru_listener_with_bound(
-        &self,
-        inbound: InboundConfig,
-        listener: zero_platform_tokio::TokioListener,
-        mut shutdown: watch::Receiver<bool>,
-    ) -> Result<(), EngineError> {
-        let users = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Mieru { users } => users
-                .iter()
-                .map(|u| (u.username.clone(), u.password.clone()))
-                .collect::<Vec<_>>(),
-            _ => {
-                return Err(EngineError::Io(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "mieru listener requires mieru config",
-                )))
-            }
-        };
+pub(crate) async fn run_mieru_listener_with_bound(
+    proxy: &Proxy,
+    inbound: InboundConfig,
+    listener: zero_platform_tokio::TokioListener,
+    mut shutdown: watch::Receiver<bool>,
+) -> Result<(), EngineError> {
+    let users = match &inbound.protocol {
+        zero_config::InboundProtocolConfig::Mieru { users } => users
+            .iter()
+            .map(|u| (u.username.clone(), u.password.clone()))
+            .collect::<Vec<_>>(),
+        _ => {
+            return Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "mieru listener requires mieru config",
+            )))
+        }
+    };
 
-        let local_addr = listener.local_addr()?;
+    let local_addr = listener.local_addr()?;
 
-        let handler = MieruInboundHandler {
-            mieru_inbound: MieruInbound,
-            users,
-        };
+    let handler = MieruInboundHandler {
+        mieru_inbound: MieruInbound,
+        users,
+    };
 
-        let mut connections: JoinSet<Result<(), EngineError>> = JoinSet::new();
+    let mut connections: JoinSet<Result<(), EngineError>> = JoinSet::new();
 
-        info!(
-            inbound_tag = %inbound.tag,
-            protocol = "mieru",
-            listen = %local_addr,
-            "inbound listener ready"
-        );
+    info!(
+        inbound_tag = %inbound.tag,
+        protocol = "mieru",
+        listen = %local_addr,
+        "inbound listener ready"
+    );
 
-        loop {
-            select! {
-                changed = shutdown.changed() => {
-                    match changed {
-                        Ok(()) if *shutdown.borrow() => break,
-                        Ok(()) => {}
-                        Err(_) => break,
-                    }
+    loop {
+        select! {
+            changed = shutdown.changed() => {
+                match changed {
+                    Ok(()) if *shutdown.borrow() => break,
+                    Ok(()) => {}
+                    Err(_) => break,
                 }
-                accept_result = listener.accept() => {
-                    match accept_result {
-                        Ok((stream, remote_addr)) => {
-                            let engine = self.clone();
-                            let tag = inbound.tag.clone();
-                            let handler = handler.clone();
-                            let source_addr = remote_addr_to_socket(remote_addr);
-                            connections.spawn(async move {
-                                match handler.accept(stream.into()).await {
-                                    Ok((session, client)) => {
-                                        if session.network == zero_core::Network::Udp {
-                                            let _ = engine.run_mieru_udp_relay(
-                                                client, &session, &tag,
-                                            ).await;
-                                        } else {
-                                            let _ = serve_inbound(
-                                                &engine, session, client, &handler,
-                                                &tag, source_addr,
-                                            ).await;
-                                        }
-                                    }
-                                    Err(error) => {
-                                        log_listener_connection_error(
-                                            "mieru", &tag, &remote_addr, &error,
-                                        );
+            }
+            accept_result = listener.accept() => {
+                match accept_result {
+                    Ok((stream, remote_addr)) => {
+                        let engine = proxy.clone();
+                        let tag = inbound.tag.clone();
+                        let handler = handler.clone();
+                        let source_addr = remote_addr_to_socket(remote_addr);
+                        connections.spawn(async move {
+                            match handler.accept(stream.into()).await {
+                                Ok((session, client)) => {
+                                    if session.network == zero_core::Network::Udp {
+                                        let _ = engine.run_mieru_udp_relay(
+                                            client, &session, &tag,
+                                        ).await;
+                                    } else {
+                                        let _ = serve_inbound(
+                                            &engine, session, client, &handler,
+                                            &tag, source_addr,
+                                        ).await;
                                     }
                                 }
-                                Ok(())
-                            });
-                        }
-                        Err(e) => {
-                            error!(error = %e, "mieru: accept error");
-                            break;
-                        }
+                                Err(error) => {
+                                    log_listener_connection_error(
+                                        "mieru", &tag, &remote_addr, &error,
+                                    );
+                                }
+                            }
+                            Ok(())
+                        });
                     }
-                }
-                result = connections.join_next(), if !connections.is_empty() => {
-                    match result {
-                        Some(Err(error)) if !error.is_cancelled() => {
-                            error!(error = %error, "mieru connection task panicked");
-                        }
-                        _ => {}
+                    Err(e) => {
+                        error!(error = %e, "mieru: accept error");
+                        break;
                     }
                 }
             }
-        }
-
-        connections.abort_all();
-        while let Some(result) = connections.join_next().await {
-            if let Err(error) = result {
-                if !error.is_cancelled() {
-                    error!(error = %error, "mieru shutdown error");
+            result = connections.join_next(), if !connections.is_empty() => {
+                match result {
+                    Some(Err(error)) if !error.is_cancelled() => {
+                        error!(error = %error, "mieru connection task panicked");
+                    }
+                    _ => {}
                 }
             }
         }
-
-        info!(inbound_tag = %inbound.tag, protocol = "mieru", "listener stopped");
-        Ok(())
     }
+
+    connections.abort_all();
+    while let Some(result) = connections.join_next().await {
+        if let Err(error) = result {
+            if !error.is_cancelled() {
+                error!(error = %error, "mieru shutdown error");
+            }
+        }
+    }
+
+    info!(inbound_tag = %inbound.tag, protocol = "mieru", "listener stopped");
+    Ok(())
 }
 
 // UDP relay.

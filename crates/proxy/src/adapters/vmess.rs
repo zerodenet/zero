@@ -144,8 +144,13 @@ impl ProtocolAdapter for VmessAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            p.run_vmess_listener_with_bound(inbound, bound.into_tcp(), shutdown_rx)
-                .await
+            crate::inbound::run_vmess_listener_with_bound(
+                &p,
+                inbound,
+                bound.into_tcp(),
+                shutdown_rx,
+            )
+            .await
         });
     }
     async fn start_udp_relay_final_hop(

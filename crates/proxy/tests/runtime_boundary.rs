@@ -144,7 +144,7 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
         "InboundProtocolConfig::",
         &[
             "src/protocol_adapter.rs",
-            "src/runtime.rs",
+            "src/protocol_adapter/registry.rs",
             "src/inbound/direct.rs",
             "src/inbound/hysteria2.rs",
             "src/inbound/mieru.rs",
@@ -153,8 +153,42 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
             "src/inbound/vmess/listener.rs",
         ],
         &["src/adapters/"],
-        "protocol config variant matching should stay inside adapters, the mixed special-case, or protocol-owned inbound entrypoints",
+        "protocol config variant matching should stay inside adapters or protocol-owned inbound entrypoints",
     );
+}
+
+#[test]
+fn runtime_does_not_match_protocol_config_variants() {
+    for path in rust_sources_under("src/runtime") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        assert!(
+            !content.contains("InboundProtocolConfig::"),
+            "{source} should not match inbound protocol config variants"
+        );
+    }
+
+    let runtime = read("src/runtime.rs");
+    assert!(
+        !runtime.contains("InboundProtocolConfig::"),
+        "src/runtime.rs should dispatch inbound lifecycle through ProtocolAdapter"
+    );
+}
+
+#[test]
+fn proxy_does_not_own_protocol_listener_entrypoints() {
+    for path in rust_sources_under("src/inbound") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path)
+            .expect("read rust source")
+            .replace("\r\n", "\n");
+
+        assert!(
+            !content.contains("_listener_with_bound(\n")
+                || !content.contains("impl Proxy {\n    pub(crate) async fn run_"),
+            "{source} should expose run_*_listener_with_bound as module functions, not Proxy methods"
+        );
+    }
 }
 
 #[test]
@@ -163,6 +197,7 @@ fn resolved_outbound_variant_matching_is_confined_to_adapters_and_neutral_orches
         "ResolvedLeafOutbound::",
         &[
             "src/protocol_adapter.rs",
+            "src/protocol_adapter/registry.rs",
             "src/runtime/orchestration.rs",
         ],
         &["src/adapters/"],

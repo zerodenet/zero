@@ -52,6 +52,16 @@
 
 此层可以依赖 Tokio 后端、协议 crates 和 `zero-engine`。它不重新解释配置语义，也不维护独立的模式、组或路由状态集。
 
+### Adapter dispatch boundary
+
+`ProtocolAdapter` is the single runtime dispatch boundary for inbound bind/spawn and outbound TCP/UDP establishment.
+`zero-proxy` runtime orchestration does not match on `InboundProtocolConfig` or `ResolvedLeafOutbound` to select a protocol path.
+Adding a protocol means registering an adapter and adding protocol-local inbound/outbound code.
+
+Inbound listener entrypoints live as module functions under `crates/proxy/src/inbound/`.
+Adapters call `crate::inbound::run_<protocol>_listener_with_bound`; `Proxy` does not own `run_*_listener_with_bound` methods.
+`mixed` remains an inbound multiplexor rather than an external protocol, but it is registered through `MixedAdapter` so reload and spawn use the same adapter path as other inbounds.
+
 ### 内核管道和入站协议管道
 
 代理运行时围绕一个通用内核管道边界组织：

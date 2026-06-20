@@ -24,6 +24,8 @@ mod http_connect;
 mod hysteria2;
 #[cfg(feature = "mieru")]
 mod mieru;
+#[cfg(feature = "mixed")]
+mod mixed;
 #[cfg(feature = "shadowsocks")]
 mod shadowsocks;
 #[cfg(feature = "socks5")]
@@ -43,6 +45,8 @@ use http_connect::HttpConnectAdapter;
 use hysteria2::Hysteria2Adapter;
 #[cfg(feature = "mieru")]
 use mieru::MieruAdapter;
+#[cfg(feature = "mixed")]
+use mixed::MixedAdapter;
 #[cfg(feature = "shadowsocks")]
 use shadowsocks::ShadowsocksAdapter;
 #[cfg(feature = "socks5")]
@@ -73,6 +77,8 @@ pub(crate) fn build_registry() -> super::protocol_adapter::ProtocolRegistry {
     r.register(Arc::new(VmessAdapter));
     #[cfg(feature = "mieru")]
     r.register(Arc::new(MieruAdapter));
+    #[cfg(feature = "mixed")]
+    r.register(Arc::new(MixedAdapter));
     r.register(Arc::new(DirectAdapter));
 
     r

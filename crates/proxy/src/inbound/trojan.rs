@@ -93,87 +93,87 @@ impl InboundProtocol for TrojanInboundHandler {
 
 // Listener.
 
-impl Proxy {
-    pub(crate) async fn run_trojan_listener_with_bound(
-        &self,
-        inbound: InboundConfig,
-        listener: zero_platform_tokio::TokioListener,
-        mut shutdown: watch::Receiver<bool>,
-    ) -> Result<(), EngineError> {
-        let (password, tls_cfg, _up_bps, _down_bps) = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Trojan {
-                password,
-                sni: _,
-                tls,
-                up_bps,
-                down_bps,
-            } => (password.clone(), tls.clone(), *up_bps, *down_bps),
-            _ => {
-                return Err(EngineError::Io(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "trojan config",
-                )))
-            }
-        };
-        let tls_cfg = tls_cfg.ok_or_else(|| {
-            EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "trojan requires TLS",
-            ))
-        })?;
-        let acceptor = crate::transport::build_tls_acceptor(&tls_cfg, self.config.source_dir())?;
-        let tag = inbound.tag.clone();
-
-        let handler = TrojanInboundHandler {
-            trojan_inbound: TrojanInbound,
+pub(crate) async fn run_trojan_listener_with_bound(
+    proxy: &Proxy,
+    inbound: InboundConfig,
+    listener: zero_platform_tokio::TokioListener,
+    mut shutdown: watch::Receiver<bool>,
+) -> Result<(), EngineError> {
+    let (password, tls_cfg, _up_bps, _down_bps) = match &inbound.protocol {
+        zero_config::InboundProtocolConfig::Trojan {
             password,
-            tls_acceptor: acceptor,
-        };
+            sni: _,
+            tls,
+            up_bps,
+            down_bps,
+        } => (password.clone(), tls.clone(), *up_bps, *down_bps),
+        _ => {
+            return Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "trojan config",
+            )))
+        }
+    };
+    let tls_cfg = tls_cfg.ok_or_else(|| {
+        EngineError::Io(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "trojan requires TLS",
+        ))
+    })?;
+    let acceptor = crate::transport::build_tls_acceptor(&tls_cfg, proxy.config.source_dir())?;
+    let tag = inbound.tag.clone();
 
-        info!(inbound_tag = %tag, protocol = "trojan", listen = %listener.local_addr()?, "started");
+    let handler = TrojanInboundHandler {
+        trojan_inbound: TrojanInbound,
+        password,
+        tls_acceptor: acceptor,
+    };
 
-        let mut conns = JoinSet::new();
-        loop {
-            select! {
-                _ = shutdown.changed() => { if *shutdown.borrow() { break; } }
-                r = listener.accept() => {
-                    let (s, peer) = match r { Ok(v) => v, Err(e) => { error!(%e, "accept"); continue; } };
-                    let p = self.clone();
-                    let t = tag.clone();
-                    let h = handler.clone();
-                    let source_addr = remote_addr_to_socket(peer);
-                    conns.spawn(async move {
-                        match h.accept(s.into()).await {
-                            Ok((session, client)) => {
-                                let result = if session.network == zero_core::Network::Udp {
-                                    p.run_trojan_udp_relay(client, session, &t).await
-                                } else {
-                                    serve_inbound(&p, session, client, &h, &t, source_addr).await
-                                };
-                                if let Err(e) = result {
-                                    if !matches!(&e, EngineError::Io(io) if matches!(io.kind(),
-                                        io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset | io::ErrorKind::BrokenPipe))
-                                    { warn!(?source_addr, %e, "trojan failed"); }
-                                }
-                            }
-                            Err(e) => {
+    info!(inbound_tag = %tag, protocol = "trojan", listen = %listener.local_addr()?, "started");
+
+    let mut conns = JoinSet::new();
+    loop {
+        select! {
+            _ = shutdown.changed() => { if *shutdown.borrow() { break; } }
+            r = listener.accept() => {
+                let (s, peer) = match r { Ok(v) => v, Err(e) => { error!(%e, "accept"); continue; } };
+                let p = proxy.clone();
+                let t = tag.clone();
+                let h = handler.clone();
+                let source_addr = remote_addr_to_socket(peer);
+                conns.spawn(async move {
+                    match h.accept(s.into()).await {
+                        Ok((session, client)) => {
+                            let result = if session.network == zero_core::Network::Udp {
+                                p.run_trojan_udp_relay(client, session, &t).await
+                            } else {
+                                serve_inbound(&p, session, client, &h, &t, source_addr).await
+                            };
+                            if let Err(e) = result {
                                 if !matches!(&e, EngineError::Io(io) if matches!(io.kind(),
                                     io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset | io::ErrorKind::BrokenPipe))
-                                { warn!(?source_addr, %e, "trojan auth failed"); }
+                                { warn!(?source_addr, %e, "trojan failed"); }
                             }
                         }
-                    });
-                }
-                r = conns.join_next(), if !conns.is_empty() => {
-                    if let Some(Err(e)) = r { if !e.is_cancelled() { error!(%e, "task panicked"); } }
-                }
+                        Err(e) => {
+                            if !matches!(&e, EngineError::Io(io) if matches!(io.kind(),
+                                io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset | io::ErrorKind::BrokenPipe))
+                            { warn!(?source_addr, %e, "trojan auth failed"); }
+                        }
+                    }
+                });
+            }
+            r = conns.join_next(), if !conns.is_empty() => {
+                if let Some(Err(e)) = r { if !e.is_cancelled() { error!(%e, "task panicked"); } }
             }
         }
-        conns.abort_all();
-        info!(inbound_tag = %tag, "stopped");
-        Ok(())
     }
+    conns.abort_all();
+    info!(inbound_tag = %tag, "stopped");
+    Ok(())
+}
 
+impl Proxy {
     async fn run_trojan_udp_relay(
         &self,
         mut client: TcpRelayStream,

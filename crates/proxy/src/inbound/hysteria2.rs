@@ -114,106 +114,106 @@ impl InboundProtocol for Hysteria2StreamHandler {
 
 // ── Listener (QUIC connection lifecycle) ───────────────────────────────
 
-impl Proxy {
-    pub(crate) async fn run_hysteria2_listener_with_bound(
-        &self,
-        inbound: InboundConfig,
-        bound: crate::protocol_adapter::BoundInbound,
-        mut shutdown: watch::Receiver<bool>,
-    ) -> Result<(), EngineError> {
-        let (password, _up_bps, _down_bps) = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Hysteria2 {
-                password,
-                up_bps,
-                down_bps,
-                ..
-            } => (password.clone(), *up_bps, *down_bps),
-            _ => {
-                return Err(EngineError::Io(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "hysteria2 listener requires hysteria2 protocol config",
-                )))
+pub(crate) async fn run_hysteria2_listener_with_bound(
+    proxy: &Proxy,
+    inbound: InboundConfig,
+    bound: crate::protocol_adapter::BoundInbound,
+    mut shutdown: watch::Receiver<bool>,
+) -> Result<(), EngineError> {
+    let (password, _up_bps, _down_bps) = match &inbound.protocol {
+        zero_config::InboundProtocolConfig::Hysteria2 {
+            password,
+            up_bps,
+            down_bps,
+            ..
+        } => (password.clone(), *up_bps, *down_bps),
+        _ => {
+            return Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "hysteria2 listener requires hysteria2 protocol config",
+            )))
+        }
+    };
+
+    let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
+    let quic_inbound = match bound {
+        crate::protocol_adapter::BoundInbound::Quic(e) => e,
+        _ => {
+            return Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "hysteria2 listener requires QUIC transport",
+            )))
+        }
+    };
+
+    let stream_handler = Hysteria2StreamHandler;
+
+    let mut connections: JoinSet<Result<(), EngineError>> = JoinSet::new();
+
+    info!(
+        inbound_tag = %inbound.tag,
+        protocol = "hysteria2",
+        listen = %listen_addr,
+        "inbound listener ready"
+    );
+
+    loop {
+        select! {
+            changed = shutdown.changed() => {
+                match changed {
+                    Ok(()) if *shutdown.borrow() => break,
+                    Ok(()) => {}
+                    Err(_) => break,
+                }
             }
-        };
+            accept_result = quic_inbound.accept_connection() => {
+                match accept_result {
+                    Ok(conn) => {
+                        let engine = proxy.clone();
+                        let tag = inbound.tag.clone();
+                        let pw = password.clone();
+                        let resolver = Arc::clone(&proxy.resolver);
+                        let handler = stream_handler.clone();
 
-        let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
-        let quic_inbound = match bound {
-            crate::protocol_adapter::BoundInbound::Quic(e) => e,
-            _ => {
-                return Err(EngineError::Io(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "hysteria2 listener requires QUIC transport",
-                )))
-            }
-        };
-
-        let stream_handler = Hysteria2StreamHandler;
-
-        let mut connections: JoinSet<Result<(), EngineError>> = JoinSet::new();
-
-        info!(
-            inbound_tag = %inbound.tag,
-            protocol = "hysteria2",
-            listen = %listen_addr,
-            "inbound listener ready"
-        );
-
-        loop {
-            select! {
-                changed = shutdown.changed() => {
-                    match changed {
-                        Ok(()) if *shutdown.borrow() => break,
-                        Ok(()) => {}
-                        Err(_) => break,
+                        connections.spawn(async move {
+                            if let Err(error) = engine.handle_hysteria2_connection(
+                                conn, &tag, &pw, &handler, resolver,
+                            ).await {
+                                error!(error = %error, "hysteria2 connection error");
+                            }
+                            Ok(())
+                        });
+                    }
+                    Err(error) => {
+                        error!(error = %error, "hysteria2 accept error");
+                        break;
                     }
                 }
-                accept_result = quic_inbound.accept_connection() => {
-                    match accept_result {
-                        Ok(conn) => {
-                            let engine = self.clone();
-                            let tag = inbound.tag.clone();
-                            let pw = password.clone();
-                            let resolver = Arc::clone(&self.resolver);
-                            let handler = stream_handler.clone();
-
-                            connections.spawn(async move {
-                                if let Err(error) = engine.handle_hysteria2_connection(
-                                    conn, &tag, &pw, &handler, resolver,
-                                ).await {
-                                    error!(error = %error, "hysteria2 connection error");
-                                }
-                                Ok(())
-                            });
-                        }
-                        Err(error) => {
-                            error!(error = %error, "hysteria2 accept error");
-                            break;
-                        }
-                    }
-                }
-                result = connections.join_next(), if !connections.is_empty() => {
-                    if let Some(Err(error)) = result {
-                        if !error.is_cancelled() {
-                            error!(error = %error, "hysteria2 connection task panicked");
-                        }
+            }
+            result = connections.join_next(), if !connections.is_empty() => {
+                if let Some(Err(error)) = result {
+                    if !error.is_cancelled() {
+                        error!(error = %error, "hysteria2 connection task panicked");
                     }
                 }
             }
         }
-
-        connections.abort_all();
-        while let Some(result) = connections.join_next().await {
-            if let Err(error) = result {
-                if !error.is_cancelled() {
-                    error!(error = %error, "hysteria2 connection shutdown error");
-                }
-            }
-        }
-
-        info!(inbound_tag = %inbound.tag, protocol = "hysteria2", "inbound listener stopped");
-        Ok(())
     }
 
+    connections.abort_all();
+    while let Some(result) = connections.join_next().await {
+        if let Err(error) = result {
+            if !error.is_cancelled() {
+                error!(error = %error, "hysteria2 connection shutdown error");
+            }
+        }
+    }
+
+    info!(inbound_tag = %inbound.tag, protocol = "hysteria2", "inbound listener stopped");
+    Ok(())
+}
+
+impl Proxy {
     /// Handle a single Hysteria2 QUIC connection.
     async fn handle_hysteria2_connection(
         &self,

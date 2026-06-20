@@ -16,7 +16,7 @@ Root `src/main.rs` builds the `zero` binary. Reusable crates live under `crates/
 - `zero-dns` — configurable DNS resolver, caching, fake-IP, routing. Depends on `zero-config`, `zero-platform-tokio`, `zero-traits`.
 - `zero-platform-tokio` — tokio runtime implementation of the traits abstractions (`TokioSocket`, `TokioListener`, `TokioDatagramSocket`, `TcpRelayStream`, `ClientStream`, `TransportConnector`). Depends on `zero-traits`.
 - `zero-transport` — concrete transport implementations: QUIC, TLS, WebSocket, gRPC, H2, HTTP-Upgrade, split-HTTP, REALITY. Feature-gated per transport. Depends on `zero-config`, `zero-core`, `zero-engine`, `zero-platform-tokio`, `zero-traits`.
-- `zero-proxy` — the orchestration layer: `Proxy`, `ProxyHandle`, `RunningProxy`, listener lifecycle, reload/reconcile, the `ProtocolRegistry` + `ProtocolAdapter` dispatch, `serve_inbound` unified TCP pipeline, TCP/UDP dispatch, upstream connect helpers. Depends on config/core/dns/engine/platform/traits/transport/tun/stack.
+- `zero-proxy` — the orchestration layer: `Proxy`, `ProxyHandle`, `RunningProxy`, reload/reconcile, the `ProtocolRegistry` + `ProtocolAdapter` dispatch, protocol-local inbound listener entrypoints, `serve_inbound` unified TCP pipeline, TCP/UDP dispatch, upstream connect helpers. Depends on config/core/dns/engine/platform/traits/transport/tun/stack.
 - `zero-connector` — event dispatcher and panel push connector. Optional (`event_dispatcher`, `sink_jsonl`, `panel_connector` features).
 - `zero-grpc` — gRPC control plane adapter. Optional (`grpc_api` feature).
 - `zero-ffi` — C-compatible FFI bindings.
@@ -82,20 +82,20 @@ If you change protocol behavior, config parsing, routing, or runtime wiring, run
   - config ADTs and validation -> `crates/config`
   - routing -> `crates/router`
   - engine plan, session state, stats, events, groups, health -> `crates/engine`
-  - listener lifecycle, protocol dispatch (`ProtocolRegistry`/`ProtocolAdapter`), `serve_inbound` pipeline, TCP/UDP dispatch, upstream connect -> `crates/proxy`
+  - reload/reconcile, protocol dispatch (`ProtocolRegistry`/`ProtocolAdapter`), protocol-local inbound listener entrypoints, `serve_inbound` pipeline, TCP/UDP dispatch, upstream connect -> `crates/proxy`
   - platform abstraction (socket, listener, stream) -> `crates/traits` + `crates/platform/tokio`
   - transport implementations (TLS, QUIC, WS, etc.) -> `crates/transport`
   - concrete protocol implementations -> `protocols/*`
 - Protocol-private config fields (cert/key, cipher, etc.) are read by the protocol's own adapter, never by the proxy runtime directly
 - Port conflict detection is authoritative in config validation (`DuplicateInboundListen`); bind-time errors mean external port occupation only
 - `direct` and `block` target semantics stay inside `zero-engine`; socket-level direct execution stays in `zero-proxy`
-- `mixed` is an inbound multiplexor, not an external protocol
+- `mixed` is an inbound multiplexor, not an external protocol, but it is still registered through `MixedAdapter` so runtime code does not special-case it
 
 ## Control plane dispatch
 
 - `ProtocolAdapter` is the single dispatch point for **inbound bind/spawn and outbound TCP + UDP connect**. Adding a protocol = register an adapter; the runtime never matches on protocol config variants or `ResolvedLeafOutbound`.
 - `ProtocolAdapter::bind_inbound` owns the bind logic (TCP or QUIC) and reads its own protocol config. The runtime never touches protocol-private fields.
-- `ProtocolAdapter::spawn_inbound` owns the accept-loop spawn (clones the proxy, extracts the listener, spawns `run_<protocol>_listener_with_bound`). The runtime dispatches via `ProtocolRegistry::find_inbound` instead of a `match InboundProtocolConfig`. (`mixed` stays a special case — it's an auto-detect multiplexor, not a registered adapter.)
+- `ProtocolAdapter::spawn_inbound` owns the accept-loop spawn (clones the proxy, extracts the listener, calls the protocol-local `crate::inbound::run_<protocol>_listener_with_bound` module function). The runtime dispatches via `ProtocolRegistry::find_inbound` instead of a `match InboundProtocolConfig`. `mixed` is registered through `MixedAdapter`; the runtime does not special-case it.
 - `ProtocolAdapter::connect_tcp` owns the outbound TCP connect (dial + handshake) and `apply_relay_hop` owns the relay-chain handshake over an existing stream. The runtime dispatches via `ProtocolRegistry::find_outbound_leaf` instead of a `match ResolvedLeafOutbound`.
 - `ProtocolAdapter::start_udp_flow` owns the single-hop UDP outbound flow establishment. The adapter drives its per-protocol manager (a field on `UdpDispatch`) to send the datagram; the runtime dispatches via `find_outbound_leaf` instead of a `match ResolvedLeafOutbound`. The same trait-dispatch pattern covers the UDP relay final hop (`start_udp_relay_final_hop`) and the VLESS two-stream XHTTP path (`udp_relay_needs_two_streams` + `start_udp_relay_two_stream`); `start_relay_flow` resolves the final hop's adapter and delegates — no per-protocol match.
 - Port conflicts surface eagerly (before accept loop spawn) via `bind_inbound_listener`.

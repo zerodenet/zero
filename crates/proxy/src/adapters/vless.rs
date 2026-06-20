@@ -247,8 +247,7 @@ impl ProtocolAdapter for VlessAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            p.run_vless_listener_with_bound(inbound, bound, shutdown_rx)
-                .await
+            crate::inbound::run_vless_listener_with_bound(&p, inbound, bound, shutdown_rx).await
         });
     }
     fn udp_relay_needs_two_streams(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {

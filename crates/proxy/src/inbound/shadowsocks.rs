@@ -81,140 +81,138 @@ impl InboundProtocol for ShadowsocksInboundHandler {
     }
 }
 
-impl Proxy {
-    #[allow(clippy::too_many_lines)]
-    pub(crate) async fn run_shadowsocks_listener_with_bound(
-        &self,
-        inbound: InboundConfig,
-        listener: zero_platform_tokio::TokioListener,
-        mut shutdown: watch::Receiver<bool>,
-    ) -> Result<(), EngineError> {
-        let (password, cipher_str, _up_bps, _down_bps) = match &inbound.protocol {
-            zero_config::InboundProtocolConfig::Shadowsocks {
-                password,
-                cipher,
-                up_bps,
-                down_bps,
-            } => (password.clone(), cipher.clone(), *up_bps, *down_bps),
-            _ => {
-                return Err(EngineError::Io(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "shadowsocks listener requires shadowsocks config",
-                )))
-            }
-        };
-
-        let cipher = CipherKind::from_str(&cipher_str).ok_or_else(|| {
-            EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("unknown shadowsocks cipher: {cipher_str}"),
-            ))
-        })?;
-
-        let local_addr = listener.local_addr()?;
-
-        let udp_socket = match UdpSocket::bind(&format!(
-            "{}:{}",
-            inbound.listen.address, inbound.listen.port
-        ))
-        .await
-        {
-            Ok(s) => Some(Arc::new(s)),
-            Err(e) => {
-                warn!(error = %e, "shadowsocks: failed to bind UDP socket, UDP disabled");
-                None
-            }
-        };
-
-        let handler = ShadowsocksInboundHandler {
-            ss_inbound: ShadowsocksInbound,
+#[allow(clippy::too_many_lines)]
+pub(crate) async fn run_shadowsocks_listener_with_bound(
+    proxy: &Proxy,
+    inbound: InboundConfig,
+    listener: zero_platform_tokio::TokioListener,
+    mut shutdown: watch::Receiver<bool>,
+) -> Result<(), EngineError> {
+    let (password, cipher_str, _up_bps, _down_bps) = match &inbound.protocol {
+        zero_config::InboundProtocolConfig::Shadowsocks {
+            password,
             cipher,
-            password: password.clone().into_bytes(),
-            replay_pool: Arc::new(shadowsocks::ReplaySaltPool::new()),
-        };
-
-        let mut connections: JoinSet<Result<(), EngineError>> = JoinSet::new();
-
-        info!(
-            inbound_tag = %inbound.tag,
-            protocol = "shadowsocks",
-            cipher = %cipher_str,
-            listen = %local_addr,
-            udp = udp_socket.is_some(),
-            "inbound listener ready"
-        );
-
-        if let Some(udp) = udp_socket.as_ref() {
-            let engine = self.clone();
-            let tag = inbound.tag.clone();
-            let password = password.clone();
-            let udp = udp.clone();
-            connections
-                .spawn(async move { engine.ss_udp_relay_loop(udp, &tag, &password, cipher).await });
+            up_bps,
+            down_bps,
+        } => (password.clone(), cipher.clone(), *up_bps, *down_bps),
+        _ => {
+            return Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "shadowsocks listener requires shadowsocks config",
+            )))
         }
+    };
 
-        loop {
-            select! {
-                changed = shutdown.changed() => {
-                    match changed {
-                        Ok(()) if *shutdown.borrow() => break,
-                        Ok(()) => {}
-                        Err(_) => break,
-                    }
-                }
-                accept_result = listener.accept() => {
-                    match accept_result {
-                        Ok((stream, remote_addr)) => {
-                            let engine = self.clone();
-                            let tag = inbound.tag.clone();
-                            let handler = handler.clone();
-                            let source_addr = remote_addr_to_socket(remote_addr);
-                            connections.spawn(async move {
-                                match handler.accept(stream.into()).await {
-                                    Ok((session, client)) => {
-                                        let _ = serve_inbound(
-                                            &engine, session, client, &handler,
-                                            &tag, source_addr,
-                                        ).await;
-                                    }
-                                    Err(error) => {
-                                        log_listener_connection_error(
-                                            "shadowsocks", &tag, &remote_addr, &error,
-                                        );
-                                    }
-                                }
-                                Ok(())
-                            });
-                        }
-                        Err(e) => {
-                            error!(error = %e, "shadowsocks: accept error");
-                            break;
-                        }
-                    }
-                }
-                result = connections.join_next(), if !connections.is_empty() => {
-                    match result {
-                        Some(Err(error)) if !error.is_cancelled() => {
-                            error!(error = %error, "shadowsocks connection task panicked");
-                        }
-                        _ => {}
-                    }
-                }
-            }
+    let cipher = CipherKind::from_str(&cipher_str).ok_or_else(|| {
+        EngineError::Io(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown shadowsocks cipher: {cipher_str}"),
+        ))
+    })?;
+
+    let local_addr = listener.local_addr()?;
+
+    let udp_socket = match UdpSocket::bind(&format!(
+        "{}:{}",
+        inbound.listen.address, inbound.listen.port
+    ))
+    .await
+    {
+        Ok(s) => Some(Arc::new(s)),
+        Err(e) => {
+            warn!(error = %e, "shadowsocks: failed to bind UDP socket, UDP disabled");
+            None
         }
+    };
 
-        connections.abort_all();
-        while let Some(result) = connections.join_next().await {
-            if let Err(error) = result {
-                if !error.is_cancelled() {
-                    error!(error = %error, "shadowsocks shutdown error");
-                }
-            }
-        }
+    let handler = ShadowsocksInboundHandler {
+        ss_inbound: ShadowsocksInbound,
+        cipher,
+        password: password.clone().into_bytes(),
+        replay_pool: Arc::new(shadowsocks::ReplaySaltPool::new()),
+    };
 
-        info!(inbound_tag = %inbound.tag, protocol = "shadowsocks", "listener stopped");
-        Ok(())
+    let mut connections: JoinSet<Result<(), EngineError>> = JoinSet::new();
+
+    info!(
+        inbound_tag = %inbound.tag,
+        protocol = "shadowsocks",
+        cipher = %cipher_str,
+        listen = %local_addr,
+        udp = udp_socket.is_some(),
+        "inbound listener ready"
+    );
+
+    if let Some(udp) = udp_socket.as_ref() {
+        let engine = proxy.clone();
+        let tag = inbound.tag.clone();
+        let password = password.clone();
+        let udp = udp.clone();
+        connections
+            .spawn(async move { engine.ss_udp_relay_loop(udp, &tag, &password, cipher).await });
     }
+
+    loop {
+        select! {
+            changed = shutdown.changed() => {
+                match changed {
+                    Ok(()) if *shutdown.borrow() => break,
+                    Ok(()) => {}
+                    Err(_) => break,
+                }
+            }
+            accept_result = listener.accept() => {
+                match accept_result {
+                    Ok((stream, remote_addr)) => {
+                        let engine = proxy.clone();
+                        let tag = inbound.tag.clone();
+                        let handler = handler.clone();
+                        let source_addr = remote_addr_to_socket(remote_addr);
+                        connections.spawn(async move {
+                            match handler.accept(stream.into()).await {
+                                Ok((session, client)) => {
+                                    let _ = serve_inbound(
+                                        &engine, session, client, &handler,
+                                        &tag, source_addr,
+                                    ).await;
+                                }
+                                Err(error) => {
+                                    log_listener_connection_error(
+                                        "shadowsocks", &tag, &remote_addr, &error,
+                                    );
+                                }
+                            }
+                            Ok(())
+                        });
+                    }
+                    Err(e) => {
+                        error!(error = %e, "shadowsocks: accept error");
+                        break;
+                    }
+                }
+            }
+            result = connections.join_next(), if !connections.is_empty() => {
+                match result {
+                    Some(Err(error)) if !error.is_cancelled() => {
+                        error!(error = %error, "shadowsocks connection task panicked");
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    connections.abort_all();
+    while let Some(result) = connections.join_next().await {
+        if let Err(error) = result {
+            if !error.is_cancelled() {
+                error!(error = %error, "shadowsocks shutdown error");
+            }
+        }
+    }
+
+    info!(inbound_tag = %inbound.tag, protocol = "shadowsocks", "listener stopped");
+    Ok(())
 }
 
 // UDP relay: protocol framing here, routing through the UDP pipe.
