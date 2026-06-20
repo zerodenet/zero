@@ -42,6 +42,19 @@ struct VmessMuxConn {
     max_concurrency: u32,
 }
 
+pub(crate) struct VmessMuxOpenRequest<'a> {
+    pub(crate) proxy: &'a Proxy,
+    pub(crate) session: &'a Session,
+    pub(crate) server: String,
+    pub(crate) port: u16,
+    pub(crate) id: [u8; 16],
+    pub(crate) cipher: String,
+    pub(crate) tls: Option<&'a ClientTlsConfig>,
+    pub(crate) ws: Option<&'a WebSocketConfig>,
+    pub(crate) grpc: Option<&'a GrpcConfig>,
+    pub(crate) max_concurrency: u32,
+}
+
 #[derive(Clone)]
 pub(crate) struct VmessMuxConnectionPool {
     pool: Arc<Mutex<HashMap<VmessMuxPoolKey, Arc<VmessMuxConn>>>>,
@@ -68,94 +81,32 @@ impl VmessMuxConnectionPool {
 
     pub async fn open_stream(
         &self,
-        proxy: &Proxy,
-        session: &Session,
-        server: String,
-        port: u16,
-        id: [u8; 16],
-        cipher: String,
-        tls: Option<&ClientTlsConfig>,
-        ws: Option<&WebSocketConfig>,
-        grpc: Option<&GrpcConfig>,
-        max_concurrency: u32,
+        request: VmessMuxOpenRequest<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
-        let key = VmessMuxPoolKey {
-            server,
-            port,
-            id,
-            cipher,
-            transport: transport_key(tls, ws, grpc)?,
-        };
-
-        let cached = self.pool.lock().unwrap().get(&key).cloned();
-        let conn = match cached {
-            Some(conn) if *conn.active.lock().unwrap() < conn.max_concurrency as usize => conn,
-            _ => {
-                let conn = Arc::new(
-                    Self::create_connection(proxy, &key, tls, ws, grpc, max_concurrency).await?,
-                );
-                self.pool.lock().unwrap().insert(key.clone(), conn.clone());
-                conn
-            }
-        };
-
-        let session_id = {
-            let mut next = conn.next_id.lock().unwrap();
-            let id = *next;
-            *next = next.wrapping_add(1);
-            if *next == 0 {
-                *next = 1;
-            }
-            id
-        };
-
-        *conn.active.lock().unwrap() += 1;
-        let (down_tx, down_rx) = mpsc::unbounded_channel();
-        conn.streams.lock().unwrap().insert(session_id, down_tx);
-
-        Ok(TcpRelayStream::new(vmess::VmessMuxStream::new(
-            session_id,
-            session.target.clone(),
-            session.port,
-            conn.write_tx.clone(),
-            down_rx,
-            conn.active.clone(),
-        )))
+        self.open_with_network(request, Network::Tcp).await
     }
 
     pub async fn open_udp_stream(
         &self,
-        proxy: &Proxy,
-        session: &Session,
-        server: String,
-        port: u16,
-        id: [u8; 16],
-        cipher: String,
-        tls: Option<&ClientTlsConfig>,
-        ws: Option<&WebSocketConfig>,
-        grpc: Option<&GrpcConfig>,
-        max_concurrency: u32,
+        request: VmessMuxOpenRequest<'_>,
+    ) -> Result<TcpRelayStream, EngineError> {
+        self.open_with_network(request, Network::Udp).await
+    }
+
+    async fn open_with_network(
+        &self,
+        request: VmessMuxOpenRequest<'_>,
+        network: Network,
     ) -> Result<TcpRelayStream, EngineError> {
         let key = VmessMuxPoolKey {
-            server,
-            port,
-            id,
-            cipher,
-            transport: transport_key(tls, ws, grpc)?,
+            server: request.server.clone(),
+            port: request.port,
+            id: request.id,
+            cipher: request.cipher.clone(),
+            transport: transport_key(request.tls, request.ws, request.grpc)?,
         };
 
-        let cached = self.pool.lock().unwrap().get(&key).cloned();
-        let conn = match cached {
-            Some(conn) if *conn.active.lock().unwrap() < conn.max_concurrency as usize => conn,
-            _ => {
-                let conn = Arc::new(
-                    Self::create_connection(proxy, &key, tls, ws, grpc, max_concurrency).await?,
-                );
-                self.pool.lock().unwrap().insert(key.clone(), conn.clone());
-                conn
-            }
-        };
-
+        let conn = self.get_or_create_conn(&key, &request).await?;
         let session_id = {
             let mut next = conn.next_id.lock().unwrap();
             let id = *next;
@@ -173,9 +124,9 @@ impl VmessMuxConnectionPool {
         Ok(TcpRelayStream::new(
             vmess::VmessMuxStream::new_with_network(
                 session_id,
-                session.target.clone(),
-                session.port,
-                Network::Udp,
+                request.session.target.clone(),
+                request.session.port,
+                network,
                 conn.write_tx.clone(),
                 down_rx,
                 conn.active.clone(),
@@ -183,26 +134,40 @@ impl VmessMuxConnectionPool {
         ))
     }
 
-    async fn create_connection(
-        proxy: &Proxy,
+    async fn get_or_create_conn(
+        &self,
         key: &VmessMuxPoolKey,
-        tls: Option<&ClientTlsConfig>,
-        ws: Option<&WebSocketConfig>,
-        grpc: Option<&GrpcConfig>,
-        max_concurrency: u32,
+        request: &VmessMuxOpenRequest<'_>,
+    ) -> Result<Arc<VmessMuxConn>, EngineError> {
+        let cached = self.pool.lock().unwrap().get(key).cloned();
+        let conn = match cached {
+            Some(conn) if *conn.active.lock().unwrap() < conn.max_concurrency as usize => conn,
+            _ => {
+                let conn = Arc::new(Self::create_connection(key, request).await?);
+                self.pool.lock().unwrap().insert(key.clone(), conn.clone());
+                conn
+            }
+        };
+        Ok(conn)
+    }
+
+    async fn create_connection(
+        key: &VmessMuxPoolKey,
+        request: &VmessMuxOpenRequest<'_>,
     ) -> Result<VmessMuxConn, EngineError> {
-        let socket = proxy
+        let socket = request
+            .proxy
             .protocols
             .direct_connector()
-            .connect_host(&key.server, key.port, proxy.resolver.as_ref())
+            .connect_host(&key.server, key.port, request.proxy.resolver.as_ref())
             .await?;
 
         let stream = connect_vmess_transport(
             socket,
-            tls,
-            ws,
-            grpc,
-            proxy.config.source_dir(),
+            request.tls,
+            request.ws,
+            request.grpc,
+            request.proxy.config.source_dir(),
             &key.server,
             key.port,
         )
@@ -274,7 +239,7 @@ impl VmessMuxConnectionPool {
             streams,
             next_id: Mutex::new(1),
             active: Arc::new(Mutex::new(0)),
-            max_concurrency,
+            max_concurrency: request.max_concurrency,
         })
     }
 }

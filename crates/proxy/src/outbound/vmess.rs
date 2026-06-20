@@ -46,18 +46,18 @@ pub(crate) async fn connect_tcp(
     if let Some(max_concurrency) = mux_concurrency {
         return proxy
             .vmess_mux_pool
-            .open_stream(
+            .open_stream(crate::runtime::vmess_mux_pool::VmessMuxOpenRequest {
                 proxy,
                 session,
-                server.to_owned(),
+                server: server.to_owned(),
                 port,
-                uuid,
-                cipher.to_owned(),
+                id: uuid,
+                cipher: cipher.to_owned(),
                 tls,
                 ws,
                 grpc,
                 max_concurrency,
-            )
+            })
             .await;
     }
     let _ = mux_idle_timeout_secs;

@@ -53,19 +53,19 @@ pub(crate) async fn connect_tcp(
     if flow == Some("xtls-rprx-vision") {
         return proxy
             .mux_pool
-            .open_stream(
+            .open_stream(crate::runtime::mux_pool::VlessMuxOpenRequest {
                 proxy,
-                session,
-                server.to_owned(),
+                session: Some(session),
+                server,
                 port,
-                &id,
+                id: &id,
                 tls,
                 reality,
-                mux_concurrency.unwrap_or(8),
-                mux_idle_timeout_secs.unwrap_or(300),
-            )
+                max_concurrency: mux_concurrency.unwrap_or(8),
+            })
             .await;
     }
+    let _ = mux_idle_timeout_secs;
 
     // QUIC uses UDP; handle before TCP connect entirely.
     if let Some(quic) = quic {

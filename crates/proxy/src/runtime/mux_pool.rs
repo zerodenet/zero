@@ -27,6 +27,17 @@ pub(crate) struct MuxConnectionPool {
     pool: Arc<Mutex<HashMap<PoolKey, Arc<MuxPoolConn>>>>,
 }
 
+pub(crate) struct VlessMuxOpenRequest<'a> {
+    pub(crate) proxy: &'a Proxy,
+    pub(crate) session: Option<&'a Session>,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) id: &'a [u8; 16],
+    pub(crate) tls: Option<&'a ClientTlsConfig>,
+    pub(crate) reality: Option<&'a RealityConfig>,
+    pub(crate) max_concurrency: u32,
+}
+
 impl std::fmt::Debug for MuxConnectionPool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MuxConnectionPool")
@@ -52,29 +63,26 @@ impl MuxConnectionPool {
     /// Look up or create a MUX connection to the given upstream.
     async fn get_or_create_conn(
         &self,
-        proxy: &Proxy,
-        server: &str,
-        port: u16,
-        id: &[u8; 16],
-        tls: Option<&ClientTlsConfig>,
-        reality: Option<&RealityConfig>,
-        max_concurrency: u32,
+        request: &VlessMuxOpenRequest<'_>,
     ) -> Result<Arc<MuxPoolConn>, EngineError> {
-        let transport = match (tls, reality) {
+        let transport = match (request.tls, request.reality) {
             (Some(t), None) => TransportKey::Tls {
                 server_name: t.server_name.clone(),
             },
             (None, Some(r)) => TransportKey::Reality {
                 public_key: r.public_key.clone(),
-                server_name: r.server_name.clone().unwrap_or(server.to_owned()),
+                server_name: r
+                    .server_name
+                    .clone()
+                    .unwrap_or_else(|| request.server.to_owned()),
             },
             _ => TransportKey::Raw,
         };
 
         let key = PoolKey {
-            server: server.to_owned(),
-            port,
-            uuid: *id,
+            server: request.server.to_owned(),
+            port: request.port,
+            uuid: *request.id,
             transport,
         };
 
@@ -86,9 +94,7 @@ impl MuxConnectionPool {
         match conn {
             Some(c) => {
                 if *c.active.lock().unwrap() >= c.max_concurrency as usize {
-                    let conn =
-                        Self::create_mux_connection(proxy, &key, tls, reality, max_concurrency)
-                            .await?;
+                    let conn = Self::create_mux_connection(request.proxy, &key, request).await?;
                     let conn = Arc::new(conn);
                     self.pool.lock().unwrap().insert(key, conn.clone());
                     Ok(conn)
@@ -97,8 +103,7 @@ impl MuxConnectionPool {
                 }
             }
             None => {
-                let conn =
-                    Self::create_mux_connection(proxy, &key, tls, reality, max_concurrency).await?;
+                let conn = Self::create_mux_connection(request.proxy, &key, request).await?;
                 let conn = Arc::new(conn);
                 self.pool.lock().unwrap().insert(key, conn.clone());
                 Ok(conn)
@@ -108,29 +113,9 @@ impl MuxConnectionPool {
 
     pub async fn open_stream(
         &self,
-        proxy: &Proxy,
-        session: &Session,
-        server: String,
-        port: u16,
-        id: &[u8; 16],
-        tls: Option<&ClientTlsConfig>,
-        reality: Option<&RealityConfig>,
-        max_concurrency: u32,
-        _idle_timeout_secs: u64,
+        request: VlessMuxOpenRequest<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
-        self.open_stream_inner(
-            proxy,
-            session,
-            &server,
-            port,
-            id,
-            tls,
-            reality,
-            max_concurrency,
-            _idle_timeout_secs,
-            vless::NETWORK_TCP,
-        )
-        .await
+        self.open_stream_inner(request, vless::NETWORK_TCP).await
     }
 
     /// Open a UDP MUX sub-stream (SIP022 Mux.Cool NETWORK_UDP).
@@ -146,14 +131,7 @@ impl MuxConnectionPool {
     ///   - `down_rx` — unbounded receiver for responses
     pub async fn open_udp_stream(
         &self,
-        proxy: &Proxy,
-        server: &str,
-        port: u16,
-        id: &[u8; 16],
-        tls: Option<&ClientTlsConfig>,
-        reality: Option<&RealityConfig>,
-        max_concurrency: u32,
-        _idle_timeout_secs: u64,
+        request: VlessMuxOpenRequest<'_>,
     ) -> Result<
         (
             u16,
@@ -162,9 +140,7 @@ impl MuxConnectionPool {
         ),
         EngineError,
     > {
-        let conn = self
-            .get_or_create_conn(proxy, server, port, id, tls, reality, max_concurrency)
-            .await?;
+        let conn = self.get_or_create_conn(&request).await?;
 
         // Allocate stream ID
         let sid = {
@@ -219,21 +195,14 @@ impl MuxConnectionPool {
 
     async fn open_stream_inner(
         &self,
-        proxy: &Proxy,
-        session: &Session,
-        server: &str,
-        port: u16,
-        id: &[u8; 16],
-        tls: Option<&ClientTlsConfig>,
-        reality: Option<&RealityConfig>,
-        max_concurrency: u32,
-        _idle_timeout_secs: u64,
+        request: VlessMuxOpenRequest<'_>,
         network: u8,
     ) -> Result<TcpRelayStream, EngineError> {
+        let session = request
+            .session
+            .expect("VLESS TCP MUX stream requires session target");
         let _ = network; // network is used by future callers (e.g. open_udp_stream), TcpStream path hardcodes NETWORK_TCP
-        let conn = self
-            .get_or_create_conn(proxy, server, port, id, tls, reality, max_concurrency)
-            .await?;
+        let conn = self.get_or_create_conn(&request).await?;
 
         // Allocate stream ID
         let sid = {
@@ -291,9 +260,7 @@ impl MuxConnectionPool {
     async fn create_mux_connection(
         proxy: &Proxy,
         key: &PoolKey,
-        tls: Option<&ClientTlsConfig>,
-        reality: Option<&RealityConfig>,
-        max_concurrency: u32,
+        request: &VlessMuxOpenRequest<'_>,
     ) -> Result<MuxPoolConn, EngineError> {
         use crate::transport::MeteredStream;
 
@@ -304,8 +271,8 @@ impl MuxConnectionPool {
             .await?;
 
         let connector = crate::transport::VlessTransportConnector::new(
-            tls,
-            reality,
+            request.tls,
+            request.reality,
             None,
             None,
             None,
@@ -386,7 +353,7 @@ impl MuxConnectionPool {
             streams: streams_for_pool,
             next_id: Mutex::new(1),
             active: Mutex::new(0),
-            max_concurrency,
+            max_concurrency: request.max_concurrency,
             crypto,
         })
     }

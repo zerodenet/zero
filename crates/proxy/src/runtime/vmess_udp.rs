@@ -232,18 +232,18 @@ async fn establish_vmess_udp_upstream(
     if let Some(max_concurrency) = mux_concurrency {
         let mut mux_stream = proxy
             .vmess_mux_pool
-            .open_udp_stream(
+            .open_udp_stream(crate::runtime::vmess_mux_pool::VmessMuxOpenRequest {
                 proxy,
                 session,
-                server.to_owned(),
+                server: server.to_owned(),
                 port,
-                uuid,
-                cipher.to_owned(),
-                transport.and_then(|transport| transport.tls),
-                transport.and_then(|transport| transport.ws),
-                transport.and_then(|transport| transport.grpc),
+                id: uuid,
+                cipher: cipher.to_owned(),
+                tls: transport.and_then(|transport| transport.tls),
+                ws: transport.and_then(|transport| transport.ws),
+                grpc: transport.and_then(|transport| transport.grpc),
                 max_concurrency,
-            )
+            })
             .await?;
         mux_stream.write_all(&initial_packet).await?;
         tokio::io::AsyncWriteExt::flush(&mut mux_stream).await?;

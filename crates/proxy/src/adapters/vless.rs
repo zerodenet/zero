@@ -158,14 +158,14 @@ impl ProtocolAdapter for VlessAdapter {
             *flow == Some("xtls-rprx-vision") || *flow == Some("xtls-rprx-vision-udp443");
         if mux_flow_enabled {
             let max_concurrency = 8u32;
-            let idle_timeout = 300u64;
             if let Ok((_mux_sid, up_tx, _down_rx)) = proxy
                 .mux_pool
-                .open_udp_stream(
+                .open_udp_stream(crate::runtime::mux_pool::VlessMuxOpenRequest {
                     proxy,
+                    session: None,
                     server,
-                    *port,
-                    &::vless::parse_uuid(id).map_err(|e| FlowFailure {
+                    port: *port,
+                    id: &::vless::parse_uuid(id).map_err(|e| FlowFailure {
                         stage: "udp_vless_mux_parse_uuid",
                         error: EngineError::Io(std::io::Error::new(
                             std::io::ErrorKind::InvalidInput,
@@ -173,11 +173,10 @@ impl ProtocolAdapter for VlessAdapter {
                         )),
                         upstream: Some(((*server).to_string(), *port)),
                     })?,
-                    *tls,
-                    *reality,
+                    tls: *tls,
+                    reality: *reality,
                     max_concurrency,
-                    idle_timeout,
-                )
+                })
                 .await
             {
                 let packet = <::vless::VlessOutbound as UdpPacketFraming<

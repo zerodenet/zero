@@ -263,14 +263,14 @@ impl VlessUdpOutboundManager {
             flow == Some("xtls-rprx-vision") || flow == Some("xtls-rprx-vision-udp443");
         if mux_flow_enabled {
             let max_concurrency = 8u32;
-            let idle_timeout = 300u64;
             if let Ok((_mux_sid, up_tx, _down_rx)) = proxy
                 .mux_pool
-                .open_udp_stream(
+                .open_udp_stream(crate::runtime::mux_pool::VlessMuxOpenRequest {
                     proxy,
+                    session: None,
                     server,
                     port,
-                    &::vless::parse_uuid(id).map_err(|error| {
+                    id: &::vless::parse_uuid(id).map_err(|error| {
                         EngineError::Io(std::io::Error::new(
                             std::io::ErrorKind::InvalidInput,
                             format!("invalid VLESS UUID: {error}"),
@@ -279,8 +279,7 @@ impl VlessUdpOutboundManager {
                     tls,
                     reality,
                     max_concurrency,
-                    idle_timeout,
-                )
+                })
                 .await
             {
                 let packet = <::vless::VlessOutbound as UdpPacketFraming<
