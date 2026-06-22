@@ -20,13 +20,13 @@ fn test_mieru_style_key() {
     // Step 1: hashedPassword = SHA-256(password || 0x00 || username)
     let mut pw = sha2::Sha256::new();
     pw.update(password.as_bytes());
-    pw.update(&[0x00]);
+    pw.update([0x00]);
     pw.update(username.as_bytes());
     let hashed_password = pw.finalize();
 
     // Step 2: salt = SHA-256(uint64_be(timestamp))
     let mut hasher = sha2::Sha256::new();
-    hasher.update(&timestamp.to_be_bytes());
+    hasher.update(timestamp.to_be_bytes());
     let salt = hasher.finalize();
 
     eprintln!("username: {username}");

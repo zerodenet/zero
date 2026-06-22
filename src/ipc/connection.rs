@@ -20,6 +20,8 @@ use zero_proxy::ProxyHandle;
 
 use super::protocol::{ipc_api_error, ipc_error, ipc_ok, serialize_frame, IpcRequest};
 
+type CommandParseError = Box<ApiResponse<()>>;
+
 /// Parse a string method name + JSON params into a typed `CommandRequest`.
 ///
 /// Uses the same serde `#[serde(tag = "method", content = "params")]` path as
@@ -29,7 +31,7 @@ use super::protocol::{ipc_api_error, ipc_error, ipc_ok, serialize_frame, IpcRequ
 pub(crate) fn parse_command(
     method: &str,
     params: &serde_json::Value,
-) -> Result<CommandRequest, ApiResponse<()>> {
+) -> Result<CommandRequest, CommandParseError> {
     let wrapper = serde_json::json!({
         "method": method,
         "params": params,
@@ -37,9 +39,12 @@ pub(crate) fn parse_command(
     serde_json::from_value::<CommandRequest>(wrapper).map_err(|e| {
         let msg = e.to_string();
         if msg.contains("unknown_variant") {
-            ApiResponse::error_msg("unsupported", format!("unknown command method: {method}"))
+            Box::new(ApiResponse::error_msg(
+                "unsupported",
+                format!("unknown command method: {method}"),
+            ))
         } else {
-            ApiResponse::error_msg("invalid_argument", msg)
+            Box::new(ApiResponse::error_msg("invalid_argument", msg))
         }
     })
 }

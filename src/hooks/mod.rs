@@ -6,6 +6,8 @@ use std::time::Duration;
 use zero_config::{ApiConfig, HookConfig};
 use zero_engine::FlowHookChain;
 
+type WarningHandler = Arc<dyn Fn(&str, &str) + Send + Sync>;
+
 /// Build the hook chain from CLI option and config file.
 ///
 /// CLI `ipc_socket` takes precedence.  Config `api.hooks` entries are
@@ -13,7 +15,7 @@ use zero_engine::FlowHookChain;
 pub fn build_hook_chain(
     ipc_socket: Option<&str>,
     api_config: &ApiConfig,
-    on_warning: Option<Arc<dyn Fn(&str, &str) + Send + Sync>>,
+    on_warning: Option<WarningHandler>,
 ) -> FlowHookChain {
     let mut chain = FlowHookChain::empty();
 
@@ -40,7 +42,7 @@ fn push_ipc_hook(
     chain: &mut FlowHookChain,
     socket_path: &str,
     timeout_ms: u64,
-    on_warning: &Option<Arc<dyn Fn(&str, &str) + Send + Sync>>,
+    on_warning: &Option<WarningHandler>,
 ) {
     let mut hook = ipc::IpcFlowHook::new(socket_path, Duration::from_millis(timeout_ms));
     if let Some(handler) = on_warning {

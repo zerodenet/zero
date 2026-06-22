@@ -9,6 +9,7 @@ use zero_engine::{BlockReason, FlowContext, FlowHook, FlowTraffic, SessionOutcom
 type IpcStream = std::os::unix::net::UnixStream;
 #[cfg(windows)]
 type IpcStream = std::fs::File;
+type WarningHandler = Box<dyn Fn(&str, &str) + Send + Sync>;
 
 /// An `IpcFlowHook` delegates flow decisions to an external process over
 /// a local IPC channel (Unix domain socket or Windows named pipe).
@@ -32,7 +33,7 @@ pub struct IpcFlowHook {
     path: String,
     timeout: Duration,
     stream: Mutex<Option<IpcStream>>,
-    on_warning: Option<Box<dyn Fn(&str, &str) + Send + Sync>>,
+    on_warning: Option<WarningHandler>,
 }
 
 impl IpcFlowHook {

@@ -9,6 +9,9 @@ use zero_proxy::ProxyHandle;
 use super::response::api_error_status;
 use zero_api::ApiResponse;
 
+type HttpApiError = (&'static str, Vec<u8>);
+type EventStream = (zero_engine::EventSubscriber, Vec<zero_api::RawApiEvent>);
+
 /// Handle GET /api/v1/capabilities.
 pub fn capabilities(handle: &ProxyHandle) -> io::Result<Vec<u8>> {
     let resp = handle.query(QueryRequest::Capabilities(Default::default()));
@@ -143,7 +146,7 @@ pub fn events_stream(
     handle: &ProxyHandle,
     query: &str,
     headers: &[(String, String)],
-) -> Result<(zero_engine::EventSubscriber, Vec<zero_api::RawApiEvent>), (&'static str, Vec<u8>)> {
+) -> Result<EventStream, HttpApiError> {
     let mut filter = EventFilter::default();
     if let Some(types) = parse_query_param(query, "types") {
         filter.event_types = types.split(',').map(|t| t.trim().to_owned()).collect();

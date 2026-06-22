@@ -46,16 +46,12 @@ impl WindowsTun {
         let guid: u128 = 0xB6F4C8A2_1E3D_4F5A_9C2B_8D7E6A5F4C3B;
 
         let adapter = wintun::Adapter::create(&wintun, adapter_name, "ZeroTun", Some(guid))
-            .map_err(|e| {
-                io::Error::new(io::ErrorKind::Other, format!("wintun create adapter: {e}"))
-            })?;
+            .map_err(|e| io::Error::other(format!("wintun create adapter: {e}")))?;
 
         let session = Arc::new(
             adapter
                 .start_session(wintun::MAX_RING_CAPACITY)
-                .map_err(|e| {
-                    io::Error::new(io::ErrorKind::Other, format!("wintun start session: {e}"))
-                })?,
+                .map_err(|e| io::Error::other(format!("wintun start session: {e}")))?,
         );
 
         // Bridge Wintun (sync) ↔ tokio (async) via channels.
@@ -64,33 +60,27 @@ impl WindowsTun {
 
         // Reader thread.
         let reader_session = session.clone();
-        std::thread::spawn(move || loop {
-            match reader_session.receive_blocking() {
-                Ok(pkt) => {
-                    let data = pkt.bytes().to_vec();
-                    if read_tx.blocking_send(data).is_err() {
-                        break; // channel closed
-                    }
+        std::thread::spawn(move || {
+            while let Ok(pkt) = reader_session.receive_blocking() {
+                let data = pkt.bytes().to_vec();
+                if read_tx.blocking_send(data).is_err() {
+                    break; // channel closed
                 }
-                Err(_) => break,
             }
         });
 
         // Writer thread.
         let writer_session = session.clone();
-        std::thread::spawn(move || loop {
-            match write_rx.blocking_recv() {
-                Some(data) => {
-                    let len = data.len().min(u16::MAX as usize) as u16;
-                    match writer_session.allocate_send_packet(len) {
-                        Ok(mut pkt) => {
-                            pkt.bytes_mut()[..len as usize].copy_from_slice(&data[..len as usize]);
-                            writer_session.send_packet(pkt);
-                        }
-                        Err(_) => break,
+        std::thread::spawn(move || {
+            while let Some(data) = write_rx.blocking_recv() {
+                let len = data.len().min(u16::MAX as usize) as u16;
+                match writer_session.allocate_send_packet(len) {
+                    Ok(mut pkt) => {
+                        pkt.bytes_mut()[..len as usize].copy_from_slice(&data[..len as usize]);
+                        writer_session.send_packet(pkt);
                     }
+                    Err(_) => break,
                 }
-                None => break,
             }
         });
 
@@ -112,10 +102,10 @@ fn load_wintun() -> io::Result<wintun::Wintun> {
             let adjacent = dir.join("wintun.dll");
             if adjacent.exists() {
                 return unsafe { wintun::load_from_path(&adjacent) }.map_err(|e| {
-                    io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("wintun load from {} failed: {e}", adjacent.display()),
-                    )
+                    io::Error::other(format!(
+                        "wintun load from {} failed: {e}",
+                        adjacent.display()
+                    ))
                 });
             }
         }

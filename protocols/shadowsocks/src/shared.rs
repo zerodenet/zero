@@ -35,11 +35,7 @@ impl CipherKind {
     }
 
     pub fn salt_len(&self) -> usize {
-        if self.is_blake3() {
-            self.key_len()
-        } else {
-            self.key_len()
-        }
+        self.key_len()
     }
 
     pub fn udp_salt_len(&self) -> usize {
@@ -75,7 +71,7 @@ impl CipherKind {
     }
 
     #[cfg(feature = "crypto")]
-    fn to_ring_algorithm(&self) -> &'static ring::aead::Algorithm {
+    fn ring_algorithm(self) -> &'static ring::aead::Algorithm {
         use ring::aead;
         match self {
             Self::Aes128Gcm | Self::Blake3Aes128Gcm => &aead::AES_128_GCM,
@@ -261,7 +257,7 @@ pub fn encode_udp_datagram_2022(
         packet.extend_from_slice(&0u16.to_be_bytes());
         packet.extend_from_slice(&target_data);
 
-        return match cipher {
+        match cipher {
             CipherKind::Blake3Aes128Gcm | CipherKind::Blake3Aes256Gcm => {
                 let mut header = [0u8; 16];
                 header.copy_from_slice(&packet[..16]);
@@ -284,7 +280,7 @@ pub fn encode_udp_datagram_2022(
                 Ok(out)
             }
             _ => Err(Error::Protocol("ss: cipher is not a 2022 method")),
-        };
+        }
     }
 
     #[cfg(not(feature = "blake3"))]
@@ -333,7 +329,7 @@ pub fn encode_udp_response_2022(
         packet.extend_from_slice(&0u16.to_be_bytes());
         packet.extend_from_slice(&target_data);
 
-        return match cipher {
+        match cipher {
             CipherKind::Blake3Aes128Gcm | CipherKind::Blake3Aes256Gcm => {
                 let mut header = [0u8; 16];
                 header.copy_from_slice(&packet[..16]);
@@ -356,7 +352,7 @@ pub fn encode_udp_response_2022(
                 Ok(out)
             }
             _ => Err(Error::Protocol("ss: cipher is not a 2022 method")),
-        };
+        }
     }
 
     #[cfg(not(feature = "blake3"))]
@@ -403,10 +399,10 @@ pub fn decode_udp_datagram_2022(
             _ => return Err(Error::Protocol("ss: cipher is not a 2022 method")),
         };
 
-        return match parse_udp_2022_plain(&plain) {
+        match parse_udp_2022_plain(&plain) {
             Ok((target, port, payload, _session_id, _packet_id)) => Ok((target, port, payload)),
             Err(e) => Err(e),
-        };
+        }
     }
 
     #[cfg(not(feature = "blake3"))]
@@ -457,7 +453,7 @@ pub fn decode_udp_datagram_2022_session(
             _ => return Err(Error::Protocol("ss: cipher is not a 2022 method")),
         };
 
-        return parse_udp_2022_plain(&plain);
+        parse_udp_2022_plain(&plain)
     }
 
     #[cfg(not(feature = "blake3"))]
@@ -948,7 +944,7 @@ pub fn aead_encrypt(
     plaintext: &[u8],
 ) -> Result<Vec<u8>, Error> {
     use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey};
-    let unbound = UnboundKey::new(cipher.to_ring_algorithm(), key)
+    let unbound = UnboundKey::new(cipher.ring_algorithm(), key)
         .map_err(|_| Error::Protocol("ss: invalid key"))?;
     let key = LessSafeKey::new(unbound);
     let nonce = Nonce::assume_unique_for_key(*nonce);
@@ -970,7 +966,7 @@ pub fn aead_decrypt(
     if ciphertext.len() < cipher.tag_len() {
         return Err(Error::Protocol("ss: ciphertext too short"));
     }
-    let unbound = UnboundKey::new(cipher.to_ring_algorithm(), key)
+    let unbound = UnboundKey::new(cipher.ring_algorithm(), key)
         .map_err(|_| Error::Protocol("ss: invalid key"))?;
     let key = LessSafeKey::new(unbound);
     let nonce = Nonce::assume_unique_for_key(*nonce);
@@ -1122,7 +1118,7 @@ pub fn aead_encrypt_udp(
     let nonce: &[u8; 12] = nonce
         .try_into()
         .map_err(|_| Error::Protocol("ss: invalid nonce length"))?;
-    let unbound = UnboundKey::new(cipher.to_ring_algorithm(), key)
+    let unbound = UnboundKey::new(cipher.ring_algorithm(), key)
         .map_err(|_| Error::Protocol("ss: invalid key"))?;
     let key = LessSafeKey::new(unbound);
     let nonce = Nonce::assume_unique_for_key(*nonce);
@@ -1167,7 +1163,7 @@ pub fn aead_decrypt_udp(
     let nonce: &[u8; 12] = nonce
         .try_into()
         .map_err(|_| Error::Protocol("ss: invalid nonce length"))?;
-    let unbound = UnboundKey::new(cipher.to_ring_algorithm(), key)
+    let unbound = UnboundKey::new(cipher.ring_algorithm(), key)
         .map_err(|_| Error::Protocol("ss: invalid key"))?;
     let key = LessSafeKey::new(unbound);
     let nonce = Nonce::assume_unique_for_key(*nonce);

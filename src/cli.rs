@@ -6,9 +6,7 @@ use std::fmt;
 /// commands that don't need a config file.
 pub fn config_path_from_args(args: &[String]) -> Option<&str> {
     let mut iter = args.iter().skip(1);
-    let Some(first) = iter.next() else {
-        return None;
-    };
+    let first = iter.next()?;
     match first.as_str() {
         "run" | "validate" | "reload" => {
             for arg in iter {

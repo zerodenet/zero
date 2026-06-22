@@ -76,10 +76,11 @@ pub fn init_tracing(config: &LogConfig) {
 }
 
 static LOG_GUARDS: OnceLock<Vec<tracing_appender::non_blocking::WorkerGuard>> = OnceLock::new();
+type WarningSink = Box<dyn Fn(&str, &str) + Send + Sync>;
 
 /// Callback that receives every `warn` / `error` log line so it can be
 /// forwarded to the engine event log.
-static WARNING_SINK: OnceLock<Box<dyn Fn(&str, &str) + Send + Sync>> = OnceLock::new();
+static WARNING_SINK: OnceLock<WarningSink> = OnceLock::new();
 
 /// Register the engine warning callback.  Safe to call after `init_tracing`.
 pub fn set_warning_sink(f: impl Fn(&str, &str) + Send + Sync + 'static) {

@@ -45,7 +45,7 @@ async fn mieru_outbound_inbound_handshake_loopback() {
     let client_handle = tokio::spawn(async move {
         MieruOutbound::connect(&mut client, "zero_test_user", "change_this_password_2026").await
     });
-    let inbound = MieruInbound::default();
+    let inbound = MieruInbound;
     let server_handle =
         tokio::spawn(async move { inbound.accept_request(&mut server, &users).await });
 

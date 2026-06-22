@@ -9,6 +9,9 @@ use std::net::IpAddr;
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
+type TunPacketSender = tokio::sync::mpsc::Sender<Vec<u8>>;
+type TunPacketReceiver = tokio::sync::mpsc::Receiver<Vec<u8>>;
+
 // ── Address helpers ───────────────────────────────────────────────────
 
 /// Convert an IP + prefix to a netmask.
@@ -46,12 +49,7 @@ pub trait TunDevice: AsyncRead + AsyncWrite + Send + Sync + Unpin {
     /// Used when the OS owns the TUN lifecycle (iOS `NEPacketTunnelProvider`,
     /// Android `VpnService`) and the application only sees packet channels.
     /// Default implementation bridges `AsyncRead`/`AsyncWrite` via spawned tasks.
-    fn into_channels(
-        self,
-    ) -> io::Result<(
-        tokio::sync::mpsc::Sender<Vec<u8>>,
-        tokio::sync::mpsc::Receiver<Vec<u8>>,
-    )>
+    fn into_channels(self) -> io::Result<(TunPacketSender, TunPacketReceiver)>
     where
         Self: Sized + 'static,
     {

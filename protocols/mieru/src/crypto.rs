@@ -21,9 +21,10 @@ use zero_core::Error;
 pub const USER_HINT_LEN: usize = 4;
 
 /// Nonce pattern types matching upstream mieru.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum NoncePattern {
     /// No modification — full 24 random bytes.
+    #[default]
     Random,
     /// First N bytes rewritten to printable ASCII (0x20-0x7E).
     Printable { min_len: usize, max_len: usize },
@@ -34,12 +35,6 @@ pub enum NoncePattern {
     Fixed {
         hex_strings: &'static [&'static str],
     },
-}
-
-impl Default for NoncePattern {
-    fn default() -> Self {
-        Self::Random
-    }
 }
 
 /// Configuration for nonce generation (patterns + user hint).
@@ -155,7 +150,7 @@ impl MieruCipher {
     /// Encrypt plaintext, nonce handling depends on `include_nonce`:
     /// - If include_nonce: prepend 24-byte nonce to ciphertext, then increment
     /// - If !include_nonce: increment nonce, then encrypt (nonce not in output)
-    /// Returns: [nonce(24)?] || ciphertext || tag(16)
+    ///   Returns: [nonce(24)?] || ciphertext || tag(16)
     pub fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, Error> {
         use chacha20poly1305::{
             aead::{Aead, KeyInit},
@@ -294,7 +289,7 @@ fn to_common64(byte: u8) -> u8 {
 /// Simple hex string → bytes decoder.
 fn hex_decode(hex_str: &str) -> Option<alloc::vec::Vec<u8>> {
     let hex_str = hex_str.trim();
-    if hex_str.len() % 2 != 0 {
+    if !hex_str.len().is_multiple_of(2) {
         return None;
     }
     let mut bytes = alloc::vec![0u8; hex_str.len() / 2];
@@ -346,13 +341,13 @@ fn derive_key_for_time(username: &str, password: &str, rounded_secs: u64) -> [u8
     // Step 1: hashedPassword = SHA-256(password || 0x00 || username)
     let mut pw_hasher = sha2::Sha256::new();
     pw_hasher.update(password.as_bytes());
-    pw_hasher.update(&[0x00]);
+    pw_hasher.update([0x00]);
     pw_hasher.update(username.as_bytes());
     let hashed_password = pw_hasher.finalize();
 
     // Step 2: timeSalt = SHA-256(uint64_be(rounded_secs))
     let mut ts_hasher = sha2::Sha256::new();
-    ts_hasher.update(&rounded_secs.to_be_bytes());
+    ts_hasher.update(rounded_secs.to_be_bytes());
     let time_salt = ts_hasher.finalize();
 
     // Step 3: key = PBKDF2(HMAC-SHA256, 64 iter, 32 bytes)

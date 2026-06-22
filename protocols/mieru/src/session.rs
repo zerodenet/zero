@@ -92,3 +92,9 @@ impl MieruSession {
         (now.as_secs() / 60) as u32
     }
 }
+
+impl Default for MieruSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
