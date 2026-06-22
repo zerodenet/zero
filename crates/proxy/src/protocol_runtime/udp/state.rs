@@ -3,9 +3,13 @@ use crate::protocol_runtime::vless_udp::VlessUdpOutboundManager;
 use crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager;
 use tokio::task::JoinSet;
 use zero_core::Address;
-use zero_engine::EngineError;
+use zero_engine::{EngineError, ResolvedLeafOutbound};
 
+#[cfg(feature = "shadowsocks")]
+use super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use super::ChainTask;
+#[cfg(feature = "shadowsocks")]
+use super::FlowFailure;
 #[cfg(feature = "hysteria2")]
 use super::H2ChainManager;
 #[cfg(feature = "mieru")]
@@ -77,5 +81,19 @@ impl ProtocolUdpState {
         }
 
         Ok(None)
+    }
+
+    #[cfg(feature = "shadowsocks")]
+    pub(crate) async fn send_packet_path_chain(
+        &mut self,
+        context: UdpFlowContext<'_>,
+        proxy: &Proxy,
+        carrier_leaf: &ResolvedLeafOutbound<'_>,
+        datagram_leaf: &ResolvedLeafOutbound<'_>,
+        packet: UdpPacketRef<'_>,
+    ) -> Result<usize, FlowFailure> {
+        self.packet_path
+            .send(context, proxy, carrier_leaf, datagram_leaf, packet)
+            .await
     }
 }

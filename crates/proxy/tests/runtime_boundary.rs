@@ -437,6 +437,20 @@ fn udp_dispatch_cached_flow_fast_path_delegates_to_protocol_state() {
 }
 
 #[test]
+fn udp_relay_start_delegates_packet_path_chain_to_protocol_state() {
+    let content = read("src/runtime/udp_dispatch/start/relay.rs");
+
+    assert!(
+        content.contains("send_packet_path_chain"),
+        "UDP relay start should delegate packet-path manager work to ProtocolUdpState"
+    );
+    assert!(
+        !content.contains(".packet_path"),
+        "src/runtime/udp_dispatch/start/relay.rs should not reach into packet_path manager directly"
+    );
+}
+
+#[test]
 fn udp_forward_stays_protocol_neutral_and_does_not_construct_peer_types() {
     let content = read("src/runtime/udp_dispatch/forward.rs");
 

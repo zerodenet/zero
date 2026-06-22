@@ -28,8 +28,7 @@ impl UdpDispatch {
                 {
                     let sent = self
                         .protocol_state
-                        .packet_path
-                        .send(
+                        .send_packet_path_chain(
                             UdpFlowContext {
                                 chain_tasks: &mut self.chain_tasks,
                                 session_id: session.id,
