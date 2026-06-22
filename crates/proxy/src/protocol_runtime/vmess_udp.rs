@@ -263,18 +263,20 @@ async fn establish_vmess_udp_upstream(
         let mut mux_stream = request
             .proxy
             .vmess_mux_pool
-            .open_udp_stream(crate::runtime::vmess_mux_pool::VmessMuxOpenRequest {
-                proxy: request.proxy,
-                session: request.session,
-                server: request.server.to_owned(),
-                port: request.server_port,
-                id: uuid,
-                cipher: request.cipher.to_owned(),
-                tls: request.transport.and_then(|transport| transport.tls),
-                ws: request.transport.and_then(|transport| transport.ws),
-                grpc: request.transport.and_then(|transport| transport.grpc),
-                max_concurrency,
-            })
+            .open_udp_stream(
+                crate::protocol_runtime::vmess_mux_pool::VmessMuxOpenRequest {
+                    proxy: request.proxy,
+                    session: request.session,
+                    server: request.server.to_owned(),
+                    port: request.server_port,
+                    id: uuid,
+                    cipher: request.cipher.to_owned(),
+                    tls: request.transport.and_then(|transport| transport.tls),
+                    ws: request.transport.and_then(|transport| transport.ws),
+                    grpc: request.transport.and_then(|transport| transport.grpc),
+                    max_concurrency,
+                },
+            )
             .await?;
         mux_stream.write_all(&initial_packet).await?;
         tokio::io::AsyncWriteExt::flush(&mut mux_stream).await?;
@@ -399,19 +401,19 @@ async fn establish_vmess_udp_upstream(
     ))
 }
 
-pub(super) struct VmessUdpOutboundManager {
+pub(crate) struct VmessUdpOutboundManager {
     upstreams:
         HashMap<(Address, u16), (VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>)>,
 }
 
 impl VmessUdpOutboundManager {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             upstreams: HashMap::new(),
         }
     }
 
-    pub(super) async fn start_flow(
+    pub(crate) async fn start_flow(
         &mut self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         request: VmessUdpStartFlow<'_>,
@@ -435,7 +437,7 @@ impl VmessUdpOutboundManager {
         .await
     }
 
-    pub(super) async fn start_relay_flow(
+    pub(crate) async fn start_relay_flow(
         &mut self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         request: VmessUdpRelayFlow<'_>,
@@ -471,7 +473,7 @@ impl VmessUdpOutboundManager {
         Ok(())
     }
 
-    pub(super) async fn send_existing(
+    pub(crate) async fn send_existing(
         &self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         proxy: &Proxy,

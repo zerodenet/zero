@@ -61,10 +61,10 @@ use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 
 use crate::logging::{log_session_failed, log_session_finished};
-use crate::runtime::udp_associate::sessions::{UdpFlowSnapshot, UdpSessionFlows};
-use crate::runtime::vless_udp::VlessUdpOutboundManager;
+use crate::protocol_runtime::vless_udp::VlessUdpOutboundManager;
 #[cfg(feature = "vmess")]
-use crate::runtime::vmess_udp::VmessUdpOutboundManager;
+use crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager;
+use crate::runtime::udp_associate::sessions::{UdpFlowSnapshot, UdpSessionFlows};
 use crate::runtime::Proxy;
 use zero_core::{Address, Session};
 use zero_engine::{EngineError, SessionHandle, SessionOutcome};
@@ -96,7 +96,7 @@ mod trojan_manager;
 // Re-exports.
 
 #[cfg(all(feature = "shadowsocks", feature = "socks5"))]
-pub(crate) use crate::runtime::socks5_udp::build_socks5_packet_path;
+pub(crate) use crate::protocol_runtime::socks5_udp::build_socks5_packet_path;
 #[cfg(feature = "hysteria2")]
 use h2_manager::H2ChainManager;
 #[cfg(feature = "mieru")]
@@ -141,7 +141,7 @@ pub(crate) struct UdpDispatch {
     pub(crate) direct_socket: TokioDatagramSocket,
     /// SOCKS5 upstream association (shared across all flows in this session).
     pub(crate) socks5_upstream:
-        Option<crate::runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>,
+        Option<crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>,
     pub(crate) socks5_idle_deadline: Option<TokioInstant>,
     /// VLESS upstream manager (per-target connections).
     vless_manager: VlessUdpOutboundManager,

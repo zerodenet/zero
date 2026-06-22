@@ -2,7 +2,7 @@
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
 //! so the runtime dispatches via the `ProtocolAdapter` trait. UDP management
-//! lives in `crate::runtime::vmess_udp`.
+//! lives in `crate::protocol_runtime::vmess_udp`.
 
 use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::Session;
@@ -46,18 +46,20 @@ pub(crate) async fn connect_tcp(
     if let Some(max_concurrency) = mux_concurrency {
         return proxy
             .vmess_mux_pool
-            .open_stream(crate::runtime::vmess_mux_pool::VmessMuxOpenRequest {
-                proxy,
-                session,
-                server: server.to_owned(),
-                port,
-                id: uuid,
-                cipher: cipher.to_owned(),
-                tls,
-                ws,
-                grpc,
-                max_concurrency,
-            })
+            .open_stream(
+                crate::protocol_runtime::vmess_mux_pool::VmessMuxOpenRequest {
+                    proxy,
+                    session,
+                    server: server.to_owned(),
+                    port,
+                    id: uuid,
+                    cipher: cipher.to_owned(),
+                    tls,
+                    ws,
+                    grpc,
+                    max_concurrency,
+                },
+            )
             .await;
     }
     let _ = mux_idle_timeout_secs;

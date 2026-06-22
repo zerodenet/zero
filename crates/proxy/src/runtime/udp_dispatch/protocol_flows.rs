@@ -274,7 +274,7 @@ impl UdpDispatch {
         &mut self,
         flow: VlessUdpFlow<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::runtime::vless_udp::VlessUdpTransport {
+        let transport = crate::protocol_runtime::vless_udp::VlessUdpTransport {
             tls: flow.tls,
             reality: flow.reality,
             ws: flow.ws,
@@ -287,7 +287,7 @@ impl UdpDispatch {
         self.vless_manager
             .start_flow(
                 &mut self.chain_tasks,
-                crate::runtime::vless_udp::VlessUdpStartFlow {
+                crate::protocol_runtime::vless_udp::VlessUdpStartFlow {
                     proxy: flow.proxy,
                     session: flow.session,
                     server: flow.server,
@@ -315,7 +315,7 @@ impl UdpDispatch {
         self.vless_manager
             .start_relay_two_stream(
                 &mut self.chain_tasks,
-                crate::runtime::vless_udp::VlessUdpRelayTwoStream {
+                crate::protocol_runtime::vless_udp::VlessUdpRelayTwoStream {
                     proxy: flow.proxy,
                     session: flow.session,
                     post_carrier: flow.post_carrier,
@@ -339,7 +339,7 @@ impl UdpDispatch {
         &mut self,
         flow: VlessUdpRelayFinalHop<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::runtime::vless_udp::VlessUdpTransport {
+        let transport = crate::protocol_runtime::vless_udp::VlessUdpTransport {
             tls: flow.tls,
             reality: flow.reality,
             ws: flow.ws,
@@ -352,7 +352,7 @@ impl UdpDispatch {
         self.vless_manager
             .start_relay_final_hop(
                 &mut self.chain_tasks,
-                crate::runtime::vless_udp::VlessUdpRelayFinalHop {
+                crate::protocol_runtime::vless_udp::VlessUdpRelayFinalHop {
                     proxy: flow.proxy,
                     session: flow.session,
                     carrier: flow.carrier,
@@ -375,7 +375,7 @@ impl UdpDispatch {
         &mut self,
         flow: VmessUdpFlow<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::runtime::vmess_udp::VmessUdpTransport {
+        let transport = crate::protocol_runtime::vmess_udp::VmessUdpTransport {
             tls: flow.tls,
             ws: flow.ws,
             grpc: flow.grpc,
@@ -383,7 +383,7 @@ impl UdpDispatch {
         self.vmess_manager
             .start_flow(
                 &mut self.chain_tasks,
-                crate::runtime::vmess_udp::VmessUdpStartFlow {
+                crate::protocol_runtime::vmess_udp::VmessUdpStartFlow {
                     proxy: flow.proxy,
                     session: flow.session,
                     server: flow.server,
@@ -409,7 +409,7 @@ impl UdpDispatch {
         &mut self,
         flow: VmessUdpRelayFlow<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::runtime::vmess_udp::VmessUdpTransport {
+        let transport = crate::protocol_runtime::vmess_udp::VmessUdpTransport {
             tls: flow.tls,
             ws: flow.ws,
             grpc: flow.grpc,
@@ -417,7 +417,7 @@ impl UdpDispatch {
         self.vmess_manager
             .start_relay_flow(
                 &mut self.chain_tasks,
-                crate::runtime::vmess_udp::VmessUdpRelayFlow {
+                crate::protocol_runtime::vmess_udp::VmessUdpRelayFlow {
                     proxy: flow.proxy,
                     session: flow.session,
                     carrier: flow.carrier,

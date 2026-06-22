@@ -18,7 +18,7 @@ impl UdpDispatch {
         request: Socks5UdpSend<'_>,
     ) -> Result<usize, EngineError> {
         use crate::logging::log_udp_upstream_association_dropped;
-        use crate::runtime::socks5_udp::{
+        use crate::protocol_runtime::socks5_udp::{
             send_socks5_udp_packet, Socks5UdpAssociation, UpstreamAssociationCloseReason,
         };
 

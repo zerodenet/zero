@@ -270,7 +270,7 @@ async fn establish_vless_udp_upstream(
 ///
 /// Response bridge tasks are spawned into the shared `chain_tasks` JoinSet
 /// in [`UdpDispatch`], so all chain outbound responses are polled uniformly.
-pub(super) struct VlessUdpOutboundManager {
+pub(crate) struct VlessUdpOutboundManager {
     upstreams:
         HashMap<(Address, u16), (VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>)>,
 }
@@ -282,7 +282,7 @@ impl VlessUdpOutboundManager {
         }
     }
 
-    pub(super) async fn start_flow(
+    pub(crate) async fn start_flow(
         &mut self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         request: VlessUdpStartFlow<'_>,
@@ -296,21 +296,23 @@ impl VlessUdpOutboundManager {
             if let Ok((_mux_sid, up_tx, _down_rx)) = request
                 .proxy
                 .mux_pool
-                .open_udp_stream(crate::runtime::mux_pool::VlessMuxOpenRequest {
-                    proxy: request.proxy,
-                    session: None,
-                    server: request.server,
-                    port: request.port,
-                    id: &::vless::parse_uuid(request.id).map_err(|error| {
-                        EngineError::Io(std::io::Error::new(
-                            std::io::ErrorKind::InvalidInput,
-                            format!("invalid VLESS UUID: {error}"),
-                        ))
-                    })?,
-                    tls: request.transport.tls,
-                    reality: request.transport.reality,
-                    max_concurrency,
-                })
+                .open_udp_stream(
+                    crate::protocol_runtime::vless_mux_pool::VlessMuxOpenRequest {
+                        proxy: request.proxy,
+                        session: None,
+                        server: request.server,
+                        port: request.port,
+                        id: &::vless::parse_uuid(request.id).map_err(|error| {
+                            EngineError::Io(std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("invalid VLESS UUID: {error}"),
+                            ))
+                        })?,
+                        tls: request.transport.tls,
+                        reality: request.transport.reality,
+                        max_concurrency,
+                    },
+                )
                 .await
             {
                 let packet = <::vless::VlessOutbound as UdpPacketFraming<
@@ -348,7 +350,7 @@ impl VlessUdpOutboundManager {
         .await
     }
 
-    pub(super) async fn start_relay_two_stream(
+    pub(crate) async fn start_relay_two_stream(
         &mut self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         request: VlessUdpRelayTwoStream<'_>,
@@ -381,7 +383,7 @@ impl VlessUdpOutboundManager {
         Ok(())
     }
 
-    pub(super) async fn start_relay_final_hop(
+    pub(crate) async fn start_relay_final_hop(
         &mut self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         request: VlessUdpRelayFinalHop<'_>,
@@ -425,7 +427,7 @@ impl VlessUdpOutboundManager {
     }
 
     /// Send a packet through an existing upstream, if one is cached.
-    pub(super) async fn send_existing(
+    pub(crate) async fn send_existing(
         &self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
         proxy: &Proxy,

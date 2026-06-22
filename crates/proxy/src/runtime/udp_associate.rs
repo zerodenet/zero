@@ -19,7 +19,7 @@ use zero_engine::EngineError;
 pub(crate) mod helpers;
 pub(crate) mod sessions;
 
-use crate::runtime::socks5_udp::UpstreamAssociationCloseReason;
+use crate::protocol_runtime::socks5_udp::UpstreamAssociationCloseReason;
 use helpers::{
     address_from_socket_addr, log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };

@@ -302,7 +302,7 @@ fn protocol_inventory_keeps_protocol_instances_private() {
 #[test]
 fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let outbound = read("src/outbound/socks5.rs");
-    let runtime = read("src/runtime/socks5_udp.rs");
+    let runtime = read("src/protocol_runtime/socks5_udp.rs");
 
     for forbidden in [
         "ActiveUpstreamSocks5UdpAssociation",
@@ -326,8 +326,44 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     ] {
         assert!(
             runtime.contains(required),
-            "src/runtime/socks5_udp.rs should own SOCKS5 UDP runtime state; missing `{required}`"
+            "src/protocol_runtime/socks5_udp.rs should own SOCKS5 UDP runtime state; missing `{required}`"
         );
+    }
+}
+
+#[test]
+fn generic_runtime_root_does_not_import_protocol_crates_directly() {
+    let allowed_exact = [
+        "src/runtime/udp_associate.rs",
+        "src/runtime/udp_associate/helpers.rs",
+        "src/runtime/udp_dispatch/h2_manager.rs",
+        "src/runtime/udp_dispatch/mieru_manager.rs",
+        "src/runtime/udp_dispatch/packet_path_chain.rs",
+        "src/runtime/udp_dispatch/ss_manager.rs",
+        "src/runtime/udp_dispatch/trojan_manager.rs",
+    ];
+
+    for path in rust_sources_under("src/runtime") {
+        let source = relative(&path);
+        if allowed_exact.iter().any(|allowed| *allowed == source) {
+            continue;
+        }
+
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for protocol_crate in [
+            "use socks5::",
+            "use vless::",
+            "use vmess::",
+            "use shadowsocks::",
+            "use trojan::",
+            "use hysteria2::",
+            "use mieru::",
+        ] {
+            assert!(
+                !content.contains(protocol_crate),
+                "{source} should not import protocol crate `{protocol_crate}` directly; move protocol state to src/protocol_runtime"
+            );
+        }
     }
 }
 

@@ -160,23 +160,25 @@ impl ProtocolAdapter for VlessAdapter {
             let max_concurrency = 8u32;
             if let Ok((_mux_sid, up_tx, _down_rx)) = proxy
                 .mux_pool
-                .open_udp_stream(crate::runtime::mux_pool::VlessMuxOpenRequest {
-                    proxy,
-                    session: None,
-                    server,
-                    port: *port,
-                    id: &::vless::parse_uuid(id).map_err(|e| FlowFailure {
-                        stage: "udp_vless_mux_parse_uuid",
-                        error: EngineError::Io(std::io::Error::new(
-                            std::io::ErrorKind::InvalidInput,
-                            format!("invalid VLESS UUID: {e}"),
-                        )),
-                        upstream: Some(((*server).to_string(), *port)),
-                    })?,
-                    tls: *tls,
-                    reality: *reality,
-                    max_concurrency,
-                })
+                .open_udp_stream(
+                    crate::protocol_runtime::vless_mux_pool::VlessMuxOpenRequest {
+                        proxy,
+                        session: None,
+                        server,
+                        port: *port,
+                        id: &::vless::parse_uuid(id).map_err(|e| FlowFailure {
+                            stage: "udp_vless_mux_parse_uuid",
+                            error: EngineError::Io(std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("invalid VLESS UUID: {e}"),
+                            )),
+                            upstream: Some(((*server).to_string(), *port)),
+                        })?,
+                        tls: *tls,
+                        reality: *reality,
+                        max_concurrency,
+                    },
+                )
                 .await
             {
                 let packet = <::vless::VlessOutbound as UdpPacketFraming<

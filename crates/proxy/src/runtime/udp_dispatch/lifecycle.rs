@@ -79,7 +79,7 @@ impl UdpDispatch {
         &mut self,
     ) -> (
         &TokioDatagramSocket,
-        Option<&crate::runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>,
+        Option<&crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>,
         Option<TokioInstant>,
         &mut JoinSet<ChainTask>,
     ) {
@@ -95,7 +95,7 @@ impl UdpDispatch {
     #[allow(dead_code)]
     pub(crate) fn socks5_upstream(
         &self,
-    ) -> Option<&crate::runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation> {
+    ) -> Option<&crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation> {
         self.socks5_upstream.as_ref()
     }
 
@@ -142,7 +142,7 @@ impl UdpDispatch {
     #[allow(dead_code)]
     pub(crate) fn take_socks5_upstream(
         &mut self,
-    ) -> Option<crate::runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation> {
+    ) -> Option<crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation> {
         self.socks5_idle_deadline = None;
         self.socks5_upstream.take()
     }
@@ -151,7 +151,7 @@ impl UdpDispatch {
     #[allow(dead_code)]
     pub(crate) fn close_socks5_idle(&mut self) {
         use crate::logging::log_udp_upstream_association_idle_timeout;
-        use crate::runtime::socks5_udp::UpstreamAssociationCloseReason;
+        use crate::protocol_runtime::socks5_udp::UpstreamAssociationCloseReason;
 
         if let Some(assoc) = self.socks5_upstream.take() {
             let outbound_tag = assoc.outbound_tag().to_owned();
@@ -172,7 +172,7 @@ impl UdpDispatch {
     /// Finish all tracked flows and close upstreams.
     pub(crate) fn finish_all(mut self) -> Vec<CompletedUdpFlow> {
         if let Some(assoc) = self.socks5_upstream {
-            use crate::runtime::socks5_udp::UpstreamAssociationCloseReason;
+            use crate::protocol_runtime::socks5_udp::UpstreamAssociationCloseReason;
             assoc.close(UpstreamAssociationCloseReason::Closed);
         }
 

@@ -2,7 +2,7 @@
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
 //! so the runtime dispatches via the `ProtocolAdapter` trait. The VLESS UDP
-//! types and manager live in `crate::runtime::vless_udp` so that inbound
+//! types and manager live in `crate::protocol_runtime::vless_udp` so that inbound
 //! handlers can import them without depending on this module.
 
 #[cfg(feature = "vless")]
@@ -53,16 +53,18 @@ pub(crate) async fn connect_tcp(
     if flow == Some("xtls-rprx-vision") {
         return proxy
             .mux_pool
-            .open_stream(crate::runtime::mux_pool::VlessMuxOpenRequest {
-                proxy,
-                session: Some(session),
-                server,
-                port,
-                id: &id,
-                tls,
-                reality,
-                max_concurrency: mux_concurrency.unwrap_or(8),
-            })
+            .open_stream(
+                crate::protocol_runtime::vless_mux_pool::VlessMuxOpenRequest {
+                    proxy,
+                    session: Some(session),
+                    server,
+                    port,
+                    id: &id,
+                    tls,
+                    reality,
+                    max_concurrency: mux_concurrency.unwrap_or(8),
+                },
+            )
             .await;
     }
     let _ = mux_idle_timeout_secs;

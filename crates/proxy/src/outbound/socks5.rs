@@ -1,7 +1,7 @@
 //! SOCKS5 outbound protocol implementation.
 //!
 //! TCP connect and relay-hop handshake stay here. SOCKS5 UDP association
-//! runtime state lives in `crate::runtime::socks5_udp`.
+//! runtime state lives in `crate::protocol_runtime::socks5_udp`.
 
 use zero_core::Session;
 use zero_engine::EngineError;
