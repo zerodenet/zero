@@ -38,23 +38,23 @@ pub enum InboundProtocolConfig {
     Vless {
         users: Vec<VlessUserConfig>,
         #[serde(default)]
-        tls: Option<TlsConfig>,
+        tls: Option<Box<TlsConfig>>,
         #[serde(default)]
         reality: Option<Box<InboundRealityConfig>>,
         #[serde(default)]
-        ws: Option<WebSocketConfig>,
+        ws: Option<Box<WebSocketConfig>>,
         #[serde(default)]
-        grpc: Option<GrpcConfig>,
+        grpc: Option<Box<GrpcConfig>>,
         #[serde(default)]
-        h2: Option<H2Config>,
+        h2: Option<Box<H2Config>>,
         #[serde(default)]
-        http_upgrade: Option<HttpUpgradeConfig>,
+        http_upgrade: Option<Box<HttpUpgradeConfig>>,
         #[serde(default)]
-        fallback: Option<FallbackConfig>,
+        fallback: Option<Box<FallbackConfig>>,
         #[serde(default)]
-        quic: Option<QuicConfig>,
+        quic: Option<Box<QuicConfig>>,
         #[serde(default)]
-        split_http: Option<SplitHttpConfig>,
+        split_http: Option<Box<SplitHttpConfig>>,
     },
     #[serde(rename = "hysteria2")]
     Hysteria2 {
@@ -94,11 +94,11 @@ pub enum InboundProtocolConfig {
     Vmess {
         users: Vec<VmessUserConfig>,
         #[serde(default)]
-        tls: Option<TlsConfig>,
+        tls: Option<Box<TlsConfig>>,
         #[serde(default)]
-        ws: Option<WebSocketConfig>,
+        ws: Option<Box<WebSocketConfig>>,
         #[serde(default)]
-        grpc: Option<GrpcConfig>,
+        grpc: Option<Box<GrpcConfig>>,
     },
     #[serde(rename = "direct")]
     Direct {
@@ -114,9 +114,8 @@ pub enum InboundProtocolConfig {
 impl InboundProtocolConfig {
     pub fn tls_config(&self) -> Option<&TlsConfig> {
         match self {
-            Self::Vless { tls, .. } | Self::Trojan { tls, .. } | Self::Vmess { tls, .. } => {
-                tls.as_ref()
-            }
+            Self::Vless { tls, .. } | Self::Vmess { tls, .. } => tls.as_deref(),
+            Self::Trojan { tls, .. } => tls.as_ref(),
             _ => None,
         }
     }
@@ -168,7 +167,7 @@ impl InboundProtocolConfig {
 
     pub fn vless_tls(&self) -> Option<&TlsConfig> {
         match self {
-            Self::Vless { tls, .. } => tls.as_ref(),
+            Self::Vless { tls, .. } => tls.as_deref(),
             _ => None,
         }
     }
@@ -182,49 +181,49 @@ impl InboundProtocolConfig {
 
     pub fn vless_ws(&self) -> Option<&WebSocketConfig> {
         match self {
-            Self::Vless { ws, .. } => ws.as_ref(),
+            Self::Vless { ws, .. } => ws.as_deref(),
             _ => None,
         }
     }
 
     pub fn vless_grpc(&self) -> Option<&GrpcConfig> {
         match self {
-            Self::Vless { grpc, .. } => grpc.as_ref(),
+            Self::Vless { grpc, .. } => grpc.as_deref(),
             _ => None,
         }
     }
 
     pub fn vless_h2(&self) -> Option<&H2Config> {
         match self {
-            Self::Vless { h2, .. } => h2.as_ref(),
+            Self::Vless { h2, .. } => h2.as_deref(),
             _ => None,
         }
     }
 
     pub fn vless_http_upgrade(&self) -> Option<&HttpUpgradeConfig> {
         match self {
-            Self::Vless { http_upgrade, .. } => http_upgrade.as_ref(),
+            Self::Vless { http_upgrade, .. } => http_upgrade.as_deref(),
             _ => None,
         }
     }
 
     pub fn vless_split_http(&self) -> Option<&SplitHttpConfig> {
         match self {
-            Self::Vless { split_http, .. } => split_http.as_ref(),
+            Self::Vless { split_http, .. } => split_http.as_deref(),
             _ => None,
         }
     }
 
     pub fn vless_fallback(&self) -> Option<&FallbackConfig> {
         match self {
-            Self::Vless { fallback, .. } => fallback.as_ref(),
+            Self::Vless { fallback, .. } => fallback.as_deref(),
             _ => None,
         }
     }
 
     pub fn vless_quic(&self) -> Option<&QuicConfig> {
         match self {
-            Self::Vless { quic, .. } => quic.as_ref(),
+            Self::Vless { quic, .. } => quic.as_deref(),
             _ => None,
         }
     }

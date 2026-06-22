@@ -42,21 +42,21 @@ pub enum OutboundProtocolConfig {
         #[serde(default)]
         mux_idle_timeout_secs: Option<u64>,
         #[serde(default)]
-        tls: Option<ClientTlsConfig>,
+        tls: Option<Box<ClientTlsConfig>>,
         #[serde(default)]
         reality: Option<Box<RealityConfig>>,
         #[serde(default)]
-        ws: Option<WebSocketConfig>,
+        ws: Option<Box<WebSocketConfig>>,
         #[serde(default)]
-        grpc: Option<GrpcConfig>,
+        grpc: Option<Box<GrpcConfig>>,
         #[serde(default)]
-        h2: Option<H2Config>,
+        h2: Option<Box<H2Config>>,
         #[serde(default)]
-        http_upgrade: Option<HttpUpgradeConfig>,
+        http_upgrade: Option<Box<HttpUpgradeConfig>>,
         #[serde(default)]
-        split_http: Option<SplitHttpConfig>,
+        split_http: Option<Box<SplitHttpConfig>>,
         #[serde(default)]
-        quic: Option<QuicConfig>,
+        quic: Option<Box<QuicConfig>>,
     },
     #[serde(rename = "hysteria2")]
     Hysteria2 {
@@ -100,11 +100,11 @@ pub enum OutboundProtocolConfig {
         #[serde(default)]
         mux_idle_timeout_secs: Option<u64>,
         #[serde(default)]
-        tls: Option<ClientTlsConfig>,
+        tls: Option<Box<ClientTlsConfig>>,
         #[serde(default)]
-        ws: Option<WebSocketConfig>,
+        ws: Option<Box<WebSocketConfig>>,
         #[serde(default)]
-        grpc: Option<GrpcConfig>,
+        grpc: Option<Box<GrpcConfig>>,
     },
     #[serde(rename = "mieru")]
     Mieru {
