@@ -515,7 +515,7 @@ fn config_error_to_api(error: zero_config::ConfigError) -> ApiError {
 /// `None` when neither yields a usable token.
 fn invalid_config_field_path(message: &str) -> Option<String> {
     if let Some((prefix, _)) = message.split_once(':') {
-        let token = prefix.trim().split_whitespace().next()?.trim_matches('`');
+        let token = prefix.split_whitespace().next()?.trim_matches('`');
         if !token.is_empty() {
             return Some(token.to_owned());
         }

@@ -88,7 +88,7 @@ impl Tls13Stream<TcpStream> {
             Ok::<_, io::Error>((conn, stream_std))
         })
         .await
-        .map_err(|e| io::Error::other(e))??;
+        .map_err(io::Error::other)??;
 
         let stream = TcpStream::from_std(stream_std)?;
 

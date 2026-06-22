@@ -513,7 +513,7 @@ pub fn checksum(data: &[u8]) -> u16 {
     for i in 0..words {
         sum += u16::from_be_bytes([data[i * 2], data[i * 2 + 1]]) as u32;
     }
-    if len % 2 != 0 {
+    if !len.is_multiple_of(2) {
         sum += (data[len - 1] as u32) << 8;
     }
     while sum >> 16 != 0 {

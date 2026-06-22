@@ -751,7 +751,7 @@ fn validate_shadowsocks_cipher(kind: &'static str, cipher: &str) -> Result<(), C
         "2022-blake3-aes-256-gcm",
         "2022-blake3-chacha20-poly1305",
     ];
-    if !VALID_CIPHERS.iter().any(|c| *c == cipher) {
+    if !VALID_CIPHERS.contains(&cipher) {
         return Err(match kind {
             "inbound" => ConfigError::InvalidInbound(format!(
                 "`shadowsocks` {kind} cipher `{cipher}` is not valid; expected one of: {}",

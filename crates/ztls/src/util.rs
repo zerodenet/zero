@@ -28,7 +28,7 @@ pub fn extract_client_random(data: &[u8]) -> std::io::Result<[u8; 32]> {
 }
 
 /// Extract session ID slice from a full TLS ClientHello record.
-pub fn extract_session_id_slice<'a>(data: &'a [u8]) -> std::io::Result<&'a [u8]> {
+pub fn extract_session_id_slice(data: &[u8]) -> std::io::Result<&[u8]> {
     if data.len() < SID_LEN_OFFSET + 1 {
         return Err(std::io::Error::other("client hello too short"));
     }

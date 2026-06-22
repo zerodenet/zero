@@ -65,7 +65,7 @@ pub enum RouteDecision {
 }
 
 impl RouteDecision {
-    fn to_owned(self) -> RouteAction {
+    fn into_route_action(self) -> RouteAction {
         match self {
             Self::Route(tag) => RouteAction::Route(tag),
             Self::Direct => RouteAction::Direct,
@@ -227,7 +227,7 @@ impl Engine {
     }
 
     pub fn route_for(&self, address: &Address) -> RouteAction {
-        self.route_decision(address, None).to_owned()
+        self.route_decision(address, None).into_route_action()
     }
 
     pub fn route_decision(&self, address: &Address, sni: Option<&str>) -> RouteDecision {
