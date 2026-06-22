@@ -64,8 +64,8 @@ jobs:
       - name: Check (panel_connector)
         run: cargo check --workspace --features full,status_api,panel_connector
 
-      - name: Test
-        run: cargo test --workspace --lib --features full,status_api
+      - name: Test (workspace)
+        run: cargo test --workspace --features full,status_api
 
       - name: Architecture boundary tests
         run: cargo test -p zero-proxy --test runtime_boundary --all-features
