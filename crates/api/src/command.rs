@@ -183,6 +183,8 @@ pub struct DiagnosticsTraceRouteCommand {
     pub port: u16,
     #[serde(default)]
     pub protocol: Option<String>,
+    #[serde(default)]
+    pub inbound_tag: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -65,6 +65,10 @@ impl RuleConditionConfig {
         compiled_rule_sets: &HashMap<String, RuleCondition>,
     ) -> Result<RuleCondition, ConfigError> {
         match self {
+            Self::Inbound { values } => {
+                validate_non_empty_values("inbound", values)?;
+                Ok(RuleCondition::Inbound(values.clone()))
+            }
             Self::Domain { values } => {
                 validate_domain_values(values)?;
                 Ok(RuleCondition::Domain(values.clone()))
@@ -138,16 +142,20 @@ impl RouteActionConfig {
 }
 
 fn validate_domain_values(values: &[String]) -> Result<(), ConfigError> {
+    validate_non_empty_values("domain", values)
+}
+
+fn validate_non_empty_values(kind: &str, values: &[String]) -> Result<(), ConfigError> {
     if values.is_empty() {
-        return Err(ConfigError::InvalidRuleCondition(
-            "`domain` condition requires at least one value".to_owned(),
-        ));
+        return Err(ConfigError::InvalidRuleCondition(format!(
+            "`{kind}` condition requires at least one value"
+        )));
     }
 
     if values.iter().any(|value| value.trim().is_empty()) {
-        return Err(ConfigError::InvalidRuleCondition(
-            "`domain` condition does not allow empty values".to_owned(),
-        ));
+        return Err(ConfigError::InvalidRuleCondition(format!(
+            "`{kind}` condition does not allow empty values"
+        )));
     }
 
     Ok(())

@@ -11,6 +11,7 @@ impl RouteConfig {
     pub(crate) fn validate(
         &self,
         route_target_tags: &HashSet<String>,
+        inbound_tags: &HashSet<String>,
         base_dir: Option<&std::path::Path>,
     ) -> Result<(), ConfigError> {
         let mut rule_set_tags = HashSet::new();
@@ -20,7 +21,7 @@ impl RouteConfig {
         }
 
         for rule in &self.rules {
-            rule.validate(route_target_tags, &rule_set_tags)?;
+            rule.validate(route_target_tags, inbound_tags, &rule_set_tags)?;
         }
 
         validate_route_action(&self.final_action, route_target_tags)?;
@@ -62,31 +63,33 @@ impl RouteRuleConfig {
     pub(crate) fn validate(
         &self,
         route_target_tags: &HashSet<String>,
+        inbound_tags: &HashSet<String>,
         rule_set_tags: &HashSet<String>,
     ) -> Result<(), ConfigError> {
-        self.condition.validate(rule_set_tags)?;
+        self.condition.validate(inbound_tags, rule_set_tags)?;
         validate_route_action(&self.action, route_target_tags)
     }
 }
 
 impl RuleConditionConfig {
-    fn validate(&self, rule_set_tags: &HashSet<String>) -> Result<(), ConfigError> {
+    fn validate(
+        &self,
+        inbound_tags: &HashSet<String>,
+        rule_set_tags: &HashSet<String>,
+    ) -> Result<(), ConfigError> {
         match self {
-            Self::Domain { values } => {
-                if values.is_empty() {
-                    return Err(ConfigError::InvalidRuleCondition(
-                        "`domain` condition requires at least one value".to_owned(),
-                    ));
+            Self::Inbound { values } => {
+                validate_values("inbound", values)?;
+                for tag in values {
+                    if !inbound_tags.contains(tag) {
+                        return Err(ConfigError::InvalidRuleCondition(format!(
+                            "`inbound` condition references undefined inbound tag `{tag}`"
+                        )));
+                    }
                 }
-
-                if values.iter().any(|value| value.trim().is_empty()) {
-                    return Err(ConfigError::InvalidRuleCondition(
-                        "`domain` condition does not allow empty values".to_owned(),
-                    ));
-                }
-
                 Ok(())
             }
+            Self::Domain { values } => validate_values("domain", values),
             Self::Ip { values } => {
                 if values.is_empty() {
                     return Err(ConfigError::InvalidRuleCondition(
@@ -139,8 +142,12 @@ impl RuleConditionConfig {
                 }
                 Ok(())
             }
-            Self::And { items } => validate_nested_condition("and", items, rule_set_tags),
-            Self::Or { items } => validate_nested_condition("or", items, rule_set_tags),
+            Self::And { items } => {
+                validate_nested_condition("and", items, inbound_tags, rule_set_tags)
+            }
+            Self::Or { items } => {
+                validate_nested_condition("or", items, inbound_tags, rule_set_tags)
+            }
         }
     }
 }
@@ -184,6 +191,7 @@ pub(super) fn validate_route_target_tag(
 fn validate_nested_condition(
     kind: &'static str,
     items: &[RuleConditionConfig],
+    inbound_tags: &HashSet<String>,
     rule_set_tags: &HashSet<String>,
 ) -> Result<(), ConfigError> {
     if items.is_empty() {
@@ -193,7 +201,23 @@ fn validate_nested_condition(
     }
 
     for item in items {
-        item.validate(rule_set_tags)?;
+        item.validate(inbound_tags, rule_set_tags)?;
+    }
+
+    Ok(())
+}
+
+fn validate_values(kind: &str, values: &[String]) -> Result<(), ConfigError> {
+    if values.is_empty() {
+        return Err(ConfigError::InvalidRuleCondition(format!(
+            "`{kind}` condition requires at least one value"
+        )));
+    }
+
+    if values.iter().any(|value| value.trim().is_empty()) {
+        return Err(ConfigError::InvalidRuleCondition(format!(
+            "`{kind}` condition does not allow empty values"
+        )));
     }
 
     Ok(())

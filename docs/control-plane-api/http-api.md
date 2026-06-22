@@ -572,7 +572,7 @@ Response（反向）：
 
 查看路由规则对指定目标的匹配结果。
 
-Params：`target` (string), `port` (number), `protocol` (string, 可选，默认 `"tcp"`)
+Params：`target` (string), `port` (number), `protocol` (string, 可选，默认 `"tcp"`), `inbound_tag` (string, 可选)
 
 Response：
 ```json
@@ -580,6 +580,7 @@ Response：
   "target": "1.1.1.1",
   "port": 443,
   "protocol": "tcp",
+  "inbound_tag": "hk-in",
   "effective_mode": "rule",
   "route_action": { "route": "proxy" },
   "matched_rule": { "index": 2, "condition": "ip: 1.0.0.0/8" }

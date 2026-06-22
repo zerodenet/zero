@@ -56,7 +56,8 @@ impl RuntimeConfig {
         }
         validate_group_reference_graph(&self.outbound_groups)?;
 
-        self.route.validate(&route_target_tags, self.source_dir())?;
+        self.route
+            .validate(&route_target_tags, &inbound_tags, self.source_dir())?;
         validate_runtime(&self.runtime)?;
         validate_mode(&self.mode, &route_target_tags)?;
         validate_api(&self.api)?;

@@ -87,7 +87,7 @@
 | `diagnostics.probe_target` | `target_tag` | 直连 TCP 可达性（不走代理，仅本机→server:port RTT） |
 | `diagnostics.probe_outbound` | `target_tag`, `url?` | 同步经代理单节点延迟（默认 url = `http://www.gstatic.com/generate_204`） |
 | `diagnostics.dns_lookup` | `hostname` | DNS 查询 |
-| `diagnostics.trace_route` | `target`, `port`, `protocol?` | 路由追踪 |
+| `diagnostics.trace_route` | `target`, `port`, `protocol?`, `inbound_tag?` | 路由追踪 |
 
 > **实现说明：** IPC Command 和 HTTP `POST /api/v1/commands` 共用同一条 serde 反序列化路径（`CommandRequest` 的 `#[serde(tag = "method", content = "params")]`）。新增 command 只需修改 `zero_api::CommandRequest`，传输层无需单独适配。
 

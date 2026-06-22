@@ -242,7 +242,7 @@ fn execute_engine_command(
         },
         CommandRequest::DiagnosticsTraceRoute(cmd) => {
             let protocol = cmd.protocol.as_deref().unwrap_or("tcp");
-            match engine.trace_route(&cmd.target, cmd.port, protocol) {
+            match engine.trace_route(&cmd.target, cmd.port, protocol, cmd.inbound_tag.as_deref()) {
                 Ok(result) => Ok(CommandResponse {
                     accepted: true,
                     result: Some(result),

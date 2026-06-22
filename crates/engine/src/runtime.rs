@@ -8,7 +8,7 @@ use tracing::{info, warn};
 use zero_api::{EventFilter, RawApiEvent};
 use zero_config::{ModeConfig, RuntimeConfig};
 use zero_core::{Address, Session};
-use zero_router::{RouteAction, RuleSet};
+use zero_router::{RouteAction, RouteContext, RuleSet};
 
 use super::completed_sessions::{CompletedSessionHistory, CompletedSessionRecord};
 use super::error::EngineError;
@@ -231,6 +231,15 @@ impl Engine {
     }
 
     pub fn route_decision(&self, address: &Address, sni: Option<&str>) -> RouteDecision {
+        self.route_decision_with_inbound(address, sni, None)
+    }
+
+    pub fn route_decision_with_inbound(
+        &self,
+        address: &Address,
+        sni: Option<&str>,
+        inbound_tag: Option<&str>,
+    ) -> RouteDecision {
         let mode = self.mode.lock().unwrap_or_else(|e| e.into_inner()).clone();
         match &mode {
             ModeConfig::Rule => {
@@ -238,7 +247,11 @@ impl Engine {
                     .router
                     .lock()
                     .expect("router lock poisoned")
-                    .decide(address, sni);
+                    .decide_with_context(RouteContext {
+                        address,
+                        sni,
+                        inbound_tag,
+                    });
                 match action {
                     RouteAction::Route(tag) => RouteDecision::Route(tag),
                     RouteAction::Direct => RouteDecision::Direct,
@@ -734,6 +747,7 @@ impl Engine {
         target: &str,
         port: u16,
         protocol: &str,
+        inbound_tag: Option<&str>,
     ) -> Result<serde_json::Value, EngineError> {
         let address = match target.parse::<std::net::IpAddr>() {
             Ok(std::net::IpAddr::V4(v4)) => zero_core::Address::Ipv4(v4.octets()),
@@ -742,7 +756,11 @@ impl Engine {
         };
 
         let router = self.router.lock().unwrap_or_else(|e| e.into_inner());
-        let decision = router.decide_trace(&address, None);
+        let decision = router.decide_trace_with_context(RouteContext {
+            address: &address,
+            sni: None,
+            inbound_tag,
+        });
 
         let mode = self.mode_kind();
 
@@ -757,6 +775,7 @@ impl Engine {
             "target": target,
             "port": port,
             "protocol": protocol,
+            "inbound_tag": inbound_tag,
             "effective_mode": mode,
             "route_action": match &decision.action {
                 zero_router::RouteAction::Route(tag) => serde_json::json!({"route": tag}),

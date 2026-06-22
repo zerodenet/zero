@@ -165,6 +165,78 @@ fn rule_set_routes_domain_and_cidr_targets() {
     cleanup_temp_dir(&project_dir);
 }
 
+#[test]
+fn route_rules_can_match_inbound_tag_to_group() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "hk-in",
+                    "listen": { "address": "127.0.0.1", "port": 7891 },
+                    "protocol": { "type": "mixed" }
+                },
+                {
+                    "tag": "jp-in",
+                    "listen": { "address": "127.0.0.1", "port": 7892 },
+                    "protocol": { "type": "mixed" }
+                }
+            ],
+            "outbounds": [
+                { "tag": "hk-a", "protocol": { "type": "direct" } },
+                { "tag": "hk-b", "protocol": { "type": "direct" } },
+                { "tag": "jp-a", "protocol": { "type": "direct" } },
+                { "tag": "jp-b", "protocol": { "type": "direct" } }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "hk-lb",
+                    "type": "load_balance",
+                    "outbounds": ["hk-a", "hk-b"],
+                    "strategy": "round_robin"
+                },
+                {
+                    "tag": "jp-lb",
+                    "type": "load_balance",
+                    "outbounds": ["jp-a", "jp-b"],
+                    "strategy": "round_robin"
+                }
+            ],
+            "route": {
+                "rules": [
+                    {
+                        "condition": { "type": "inbound", "values": ["hk-in"] },
+                        "action": { "type": "route", "outbound": "hk-lb" }
+                    },
+                    {
+                        "condition": { "type": "inbound", "values": ["jp-in"] },
+                        "action": { "type": "route", "outbound": "jp-lb" }
+                    }
+                ],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    let engine = Engine::new(config).expect("engine should build");
+    let address = zero_core::Address::Domain("example.com".to_owned());
+
+    let hk_action = engine.route_decision_with_inbound(&address, None, Some("hk-in"));
+    assert!(matches!(
+        hk_action,
+        zero_engine::RouteDecision::Route(ref tag) if tag == "hk-lb"
+    ));
+
+    let jp_action = engine.route_decision_with_inbound(&address, None, Some("jp-in"));
+    assert!(matches!(
+        jp_action,
+        zero_engine::RouteDecision::Route(ref tag) if tag == "jp-lb"
+    ));
+
+    let default_action = engine.route_decision_with_inbound(&address, None, None);
+    assert!(matches!(default_action, zero_engine::RouteDecision::Direct));
+}
+
 fn temp_test_dir(prefix: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)

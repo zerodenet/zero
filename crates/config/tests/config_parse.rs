@@ -1819,6 +1819,70 @@ fn rejects_undefined_rule_set_reference() {
 }
 
 #[test]
+fn parses_inbound_route_condition() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "hk-in",
+                    "listen": { "address": "127.0.0.1", "port": 7891 },
+                    "protocol": { "type": "mixed" }
+                }
+            ],
+            "outbounds": [
+                { "tag": "hk-out", "protocol": { "type": "direct" } }
+            ],
+            "route": {
+                "rules": [
+                    {
+                        "condition": { "type": "inbound", "values": ["hk-in"] },
+                        "action": { "type": "route", "outbound": "hk-out" }
+                    }
+                ],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert!(matches!(
+        config.route.rules[0].condition,
+        RuleConditionConfig::Inbound { .. }
+    ));
+}
+
+#[test]
+fn rejects_undefined_inbound_route_condition_reference() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [
+                {
+                    "tag": "hk-in",
+                    "listen": { "address": "127.0.0.1", "port": 7891 },
+                    "protocol": { "type": "mixed" }
+                }
+            ],
+            "route": {
+                "rules": [
+                    {
+                        "condition": { "type": "inbound", "values": ["missing-in"] },
+                        "action": { "type": "direct" }
+                    }
+                ],
+                "final": { "type": "direct" }
+            }
+        }"#,
+    )
+    .expect_err("config should fail");
+
+    assert!(matches!(
+        error,
+        zero_config::ConfigError::InvalidRuleCondition(_)
+    ));
+    assert!(error.to_string().contains("missing-in"));
+}
+
+#[test]
 fn rejects_invalid_cidr_rule_set_entry() {
     let project_dir = temp_test_dir("config-rule-set-invalid-cidr");
     let rules_dir = project_dir.join("rules");

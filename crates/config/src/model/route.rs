@@ -91,6 +91,8 @@ pub struct RouteRuleConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", deny_unknown_fields)]
 pub enum RuleConditionConfig {
+    #[serde(rename = "inbound")]
+    Inbound { values: Vec<String> },
     #[serde(rename = "domain")]
     Domain { values: Vec<String> },
     #[serde(rename = "domain_keyword")]
