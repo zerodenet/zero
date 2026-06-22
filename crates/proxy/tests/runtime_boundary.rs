@@ -370,6 +370,7 @@ fn generic_runtime_udp_state_uses_protocol_neutral_module_name() {
 #[test]
 fn generic_udp_dispatch_does_not_contain_protocol_manager_modules() {
     let forbidden = [
+        "protocol_flows.rs",
         "h2_manager.rs",
         "mieru_manager.rs",
         "packet_path_chain.rs",
@@ -475,6 +476,7 @@ fn adapters_do_not_reach_into_udp_dispatch_manager_fields() {
         let source = relative(&path);
         let content = fs::read_to_string(&path).expect("read rust source");
         for forbidden in [
+            ".protocol_state",
             ".ss_manager",
             ".h2_manager",
             ".trojan_manager",

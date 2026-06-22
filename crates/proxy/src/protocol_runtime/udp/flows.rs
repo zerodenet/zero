@@ -1,4 +1,6 @@
-use super::*;
+use zero_core::Session;
+
+use crate::runtime::udp_dispatch::{FlowFailure, UdpDispatch};
 use crate::runtime::Proxy;
 
 #[cfg(feature = "shadowsocks")]

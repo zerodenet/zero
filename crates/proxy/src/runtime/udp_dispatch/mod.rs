@@ -69,7 +69,6 @@ use zero_platform_tokio::TokioDatagramSocket;
 mod dispatch;
 mod forward;
 mod lifecycle;
-mod protocol_flows;
 mod socks5_flow;
 mod start;
 mod types;
@@ -83,19 +82,21 @@ pub(crate) use crate::protocol_runtime::udp::build_hysteria2_packet_path;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use crate::protocol_runtime::udp::build_shadowsocks_packet_path;
 pub(crate) use crate::protocol_runtime::udp::ChainTask;
+#[cfg(feature = "mieru")]
+pub(crate) use crate::protocol_runtime::udp::MieruUdpRelayFlow;
 use crate::protocol_runtime::udp::ProtocolUdpState;
+#[cfg(feature = "shadowsocks")]
+pub(crate) use crate::protocol_runtime::udp::ShadowsocksUdpFlow;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use crate::protocol_runtime::udp::{
     PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
 };
-#[cfg(feature = "mieru")]
-pub(crate) use protocol_flows::MieruUdpRelayFlow;
-#[cfg(feature = "shadowsocks")]
-pub(crate) use protocol_flows::ShadowsocksUdpFlow;
 #[cfg(feature = "vless")]
-pub(crate) use protocol_flows::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
+pub(crate) use crate::protocol_runtime::udp::{
+    VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream,
+};
 #[cfg(feature = "vmess")]
-pub(crate) use protocol_flows::{VmessUdpFlow, VmessUdpRelayFlow};
+pub(crate) use crate::protocol_runtime::udp::{VmessUdpFlow, VmessUdpRelayFlow};
 pub(crate) use socks5_flow::Socks5UdpSend;
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
@@ -115,7 +116,7 @@ pub(crate) struct UdpDispatch {
         Option<crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>,
     pub(crate) socks5_idle_deadline: Option<TokioInstant>,
     /// Protocol-specific UDP managers.
-    protocol_state: ProtocolUdpState,
+    pub(crate) protocol_state: ProtocolUdpState,
     /// Session handles for VLESS chain flows. These are not tracked by
     /// [`UdpSessionFlows`] because the VLESS manager owns the per-target
     /// upstream connections. We store handles here so `finish_all()` can

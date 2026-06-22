@@ -5,6 +5,7 @@
 
 pub(crate) mod packet_path_traits;
 
+mod flows;
 #[cfg(feature = "hysteria2")]
 mod h2_manager;
 #[cfg(feature = "mieru")]
@@ -18,6 +19,14 @@ mod state;
 mod trojan_manager;
 
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
+#[cfg(feature = "mieru")]
+pub(crate) use flows::MieruUdpRelayFlow;
+#[cfg(feature = "shadowsocks")]
+pub(crate) use flows::ShadowsocksUdpFlow;
+#[cfg(feature = "vless")]
+pub(crate) use flows::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
+#[cfg(feature = "vmess")]
+pub(crate) use flows::{VmessUdpFlow, VmessUdpRelayFlow};
 #[cfg(feature = "hysteria2")]
 pub(crate) use h2_manager::{H2ChainManager, H2SendExisting};
 #[cfg(feature = "mieru")]
