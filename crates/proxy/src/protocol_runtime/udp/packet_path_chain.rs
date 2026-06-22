@@ -265,7 +265,7 @@ impl PacketPathManager {
     pub(crate) async fn send_with_snapshot(
         &mut self,
         ctx: UdpFlowContext<'_>,
-        carrier: &crate::runtime::udp_flow::sessions::UdpPacketPathCarrier,
+        carrier: &crate::protocol_runtime::udp::UdpPacketPathCarrier,
         datagram_tag: &str,
         datagram_server: &str,
         datagram_port: u16,

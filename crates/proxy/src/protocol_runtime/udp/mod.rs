@@ -12,6 +12,7 @@ mod h2_manager;
 mod mieru_manager;
 #[cfg(feature = "shadowsocks")]
 mod packet_path_chain;
+mod packet_path_snapshot;
 #[cfg(feature = "shadowsocks")]
 mod ss_manager;
 mod state;
@@ -35,6 +36,7 @@ pub(crate) use mieru_manager::MieruChainManager;
 pub(crate) use packet_path_chain::build_hysteria2_packet_path;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_chain::{build_shadowsocks_packet_path, PacketPathManager};
+pub(crate) use packet_path_snapshot::UdpPacketPathCarrier;
 pub(crate) use packet_path_traits::ChainTask;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_traits::{

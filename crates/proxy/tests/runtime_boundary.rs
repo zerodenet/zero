@@ -368,6 +368,21 @@ fn generic_runtime_udp_state_uses_protocol_neutral_module_name() {
 }
 
 #[test]
+fn udp_packet_path_carrier_snapshot_lives_with_protocol_runtime() {
+    let runtime = read("src/runtime/udp_flow/sessions.rs");
+    let protocol_runtime = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
+
+    assert!(
+        !runtime.contains("enum UdpPacketPathCarrier"),
+        "UdpPacketPathCarrier should not be declared in generic runtime UDP flow state"
+    );
+    assert!(
+        protocol_runtime.contains("enum UdpPacketPathCarrier"),
+        "protocol_runtime::udp should own UdpPacketPathCarrier"
+    );
+}
+
+#[test]
 fn generic_udp_dispatch_does_not_contain_protocol_manager_modules() {
     let forbidden = [
         "protocol_flows.rs",

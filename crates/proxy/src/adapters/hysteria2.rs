@@ -57,8 +57,8 @@ impl ProtocolAdapter for Hysteria2Adapter {
     fn udp_packet_path_carrier_snapshot(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::runtime::udp_flow::sessions::UdpPacketPathCarrier> {
-        use crate::runtime::udp_flow::sessions::UdpPacketPathCarrier;
+    ) -> Option<crate::protocol_runtime::udp::UdpPacketPathCarrier> {
+        use crate::protocol_runtime::udp::UdpPacketPathCarrier;
 
         let ResolvedLeafOutbound::Hysteria2 {
             tag,
