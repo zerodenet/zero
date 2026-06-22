@@ -18,7 +18,7 @@ use crate::runtime::Proxy;
 #[allow(unused_imports)]
 pub(super) use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 #[allow(unused_imports)]
-pub(super) use crate::runtime::udp_flow::sessions::UdpFlowOutbound;
+pub(super) use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
 impl UdpDispatch {
     /// Start a new UDP flow by dispatching to the resolved outbound.

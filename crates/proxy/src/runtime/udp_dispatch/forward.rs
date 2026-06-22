@@ -17,7 +17,8 @@ use std::time::Instant;
 use zero_engine::EngineError;
 
 use super::UdpDispatch;
-use crate::runtime::udp_flow::sessions::{UdpFlowOutbound, UdpFlowSnapshot, UdpPathCategory};
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
+use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpPathCategory};
 use crate::runtime::udp_helpers::send_direct_udp_packet;
 use crate::runtime::Proxy;
 

@@ -20,7 +20,7 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_dispatch::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
 #[cfg(feature = "vmess")]
 use crate::runtime::udp_dispatch::{VmessUdpFlow, VmessUdpRelayFlow};
-use crate::runtime::udp_flow::sessions::UdpFlowOutbound;
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, QuicInbound, TcpOutboundFailure};
 

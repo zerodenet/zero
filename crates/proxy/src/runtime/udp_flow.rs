@@ -4,4 +4,5 @@
 //! `protocol_runtime::socks5_udp_associate`.
 
 pub(crate) mod helpers;
+pub(crate) mod outbound;
 pub(crate) mod sessions;

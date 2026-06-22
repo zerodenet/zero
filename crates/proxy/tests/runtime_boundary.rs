@@ -383,6 +383,21 @@ fn udp_packet_path_carrier_snapshot_lives_with_protocol_runtime() {
 }
 
 #[test]
+fn udp_flow_outbound_snapshot_is_not_declared_in_session_bookkeeping() {
+    let sessions = read("src/runtime/udp_flow/sessions.rs");
+    let outbound = read("src/runtime/udp_flow/outbound.rs");
+
+    assert!(
+        !sessions.contains("enum UdpFlowOutbound"),
+        "UdpFlowOutbound should not be declared in generic UDP session bookkeeping"
+    );
+    assert!(
+        outbound.contains("enum UdpFlowOutbound"),
+        "runtime::udp_flow::outbound should own UdpFlowOutbound"
+    );
+}
+
+#[test]
 fn generic_udp_dispatch_does_not_contain_protocol_manager_modules() {
     let forbidden = [
         "protocol_flows.rs",

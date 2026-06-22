@@ -17,7 +17,8 @@ use super::MieruChainManager;
 use super::TrojanChainManager;
 #[cfg(feature = "shadowsocks")]
 use super::{PacketPathManager, SsChainManager};
-use crate::runtime::udp_flow::sessions::{UdpFlowOutbound, UdpFlowSnapshot};
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
+use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
 pub(crate) struct ProtocolUdpState {
