@@ -71,7 +71,7 @@ fn assert_src_pattern_confined(
 #[test]
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     for source in [
-        "src/runtime/udp_associate.rs",
+        "src/protocol_runtime/socks5_udp_associate.rs",
         "src/inbound/vless/udp_session.rs",
         "src/inbound/trojan.rs",
         "src/inbound/shadowsocks.rs",
@@ -333,13 +333,8 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
 
 #[test]
 fn generic_runtime_root_does_not_import_protocol_crates_directly() {
-    let allowed_exact = ["src/runtime/udp_associate.rs"];
-
     for path in rust_sources_under("src/runtime") {
         let source = relative(&path);
-        if allowed_exact.iter().any(|allowed| *allowed == source) {
-            continue;
-        }
 
         let content = fs::read_to_string(&path).expect("read rust source");
         for protocol_crate in [

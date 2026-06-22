@@ -36,7 +36,7 @@ pub(crate) async fn wait_for_upstream_idle(deadline: Option<TokioInstant>) {
     }
 }
 
-pub(super) fn address_from_socket_addr(addr: SocketAddr) -> Address {
+pub(crate) fn address_from_socket_addr(addr: SocketAddr) -> Address {
     match zero_platform_tokio::socket_addr_to_ip(addr) {
         zero_traits::IpAddress::V4(ip) => Address::Ipv4(ip),
         zero_traits::IpAddress::V6(ip) => Address::Ipv6(ip),
