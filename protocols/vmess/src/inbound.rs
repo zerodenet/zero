@@ -37,6 +37,17 @@ pub struct VmessAccept {
     pub response_header: u8,
 }
 
+struct ParsedCommand {
+    session: Session,
+    body_key: Vec<u8>,
+    body_nonce: Vec<u8>,
+    response_header: u8,
+    cipher: VmessCipher,
+    authenticated_length: bool,
+    chunk_masking: bool,
+    global_padding: bool,
+}
+
 impl VmessInbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Vmess
@@ -59,31 +70,27 @@ impl VmessInbound {
         user: &VmessUser,
     ) -> Result<VmessAccept, Error> {
         let buf = VmessReadBuffer::read(stream, std::slice::from_ref(user)).await?;
-        let (
-            session,
-            body_key,
-            body_nonce,
-            response_header,
-            cipher,
-            authenticated_length,
-            chunk_masking,
-            global_padding,
-        ) = try_user(&buf, user)?;
-        let (download_key, download_nonce) =
-            send_auth_response(stream, &body_key, &body_nonce, response_header).await?;
+        let parsed = try_user(&buf, user)?;
+        let (download_key, download_nonce) = send_auth_response(
+            stream,
+            &parsed.body_key,
+            &parsed.body_nonce,
+            parsed.response_header,
+        )
+        .await?;
         Ok(VmessAccept {
-            session,
-            upload_key: body_key.clone(),
-            upload_nonce: body_nonce.clone(),
+            session: parsed.session,
+            upload_key: parsed.body_key.clone(),
+            upload_nonce: parsed.body_nonce.clone(),
             download_key,
             download_nonce,
-            cipher,
-            authenticated_length,
-            chunk_masking,
-            global_padding,
-            length_key_source: body_key,
-            length_nonce_source: body_nonce,
-            response_header,
+            cipher: parsed.cipher,
+            authenticated_length: parsed.authenticated_length,
+            chunk_masking: parsed.chunk_masking,
+            global_padding: parsed.global_padding,
+            length_key_source: parsed.body_key,
+            length_nonce_source: parsed.body_nonce,
+            response_header: parsed.response_header,
         })
     }
 
@@ -109,31 +116,27 @@ impl VmessInbound {
 
         for user in users {
             match try_user(&buf, user) {
-                Ok((
-                    session,
-                    body_key,
-                    body_nonce,
-                    response_header,
-                    cipher,
-                    authenticated_length,
-                    chunk_masking,
-                    global_padding,
-                )) => {
-                    let (download_key, download_nonce) =
-                        send_auth_response(stream, &body_key, &body_nonce, response_header).await?;
+                Ok(parsed) => {
+                    let (download_key, download_nonce) = send_auth_response(
+                        stream,
+                        &parsed.body_key,
+                        &parsed.body_nonce,
+                        parsed.response_header,
+                    )
+                    .await?;
                     return Ok(VmessAccept {
-                        session,
-                        upload_key: body_key.clone(),
-                        upload_nonce: body_nonce.clone(),
+                        session: parsed.session,
+                        upload_key: parsed.body_key.clone(),
+                        upload_nonce: parsed.body_nonce.clone(),
                         download_key,
                         download_nonce,
-                        cipher,
-                        authenticated_length,
-                        chunk_masking,
-                        global_padding,
-                        length_key_source: body_key,
-                        length_nonce_source: body_nonce,
-                        response_header,
+                        cipher: parsed.cipher,
+                        authenticated_length: parsed.authenticated_length,
+                        chunk_masking: parsed.chunk_masking,
+                        global_padding: parsed.global_padding,
+                        length_key_source: parsed.body_key,
+                        length_nonce_source: parsed.body_nonce,
+                        response_header: parsed.response_header,
                     });
                 }
                 Err(_) => continue,
@@ -190,10 +193,7 @@ impl VmessReadBuffer {
 /// Try one user against the buffered wire data.
 /// Returns (session, body_key, auth_id, cipher) on success so the caller
 /// can send the response through the live stream.
-fn try_user(
-    buf: &VmessReadBuffer,
-    user: &VmessUser,
-) -> Result<(Session, Vec<u8>, Vec<u8>, u8, VmessCipher, bool, bool, bool), Error> {
+fn try_user(buf: &VmessReadBuffer, user: &VmessUser) -> Result<ParsedCommand, Error> {
     let cmd_key = derive_xray_cmd_key(&user.id);
     let plaintext =
         open_xray_aead_header_payload(&cmd_key, &buf.auth_id, &buf.nonce, &buf.encrypted_payload)?;
@@ -201,10 +201,7 @@ fn try_user(
 }
 
 /// Parse the decrypted command body.
-fn parse_command_body(
-    plaintext: &[u8],
-    user: &VmessUser,
-) -> Result<(Session, Vec<u8>, Vec<u8>, u8, VmessCipher, bool, bool, bool), Error> {
+fn parse_command_body(plaintext: &[u8], user: &VmessUser) -> Result<ParsedCommand, Error> {
     if plaintext.len() < 42 {
         return Err(Error::Protocol("vmess body too short"));
     }
@@ -262,16 +259,16 @@ fn parse_command_body(
         };
         let mut session = Session::new(0, target, port, network, ProtocolType::Vmess);
         apply_user_auth(&mut session, user);
-        return Ok((
+        return Ok(ParsedCommand {
             session,
             body_key,
             body_nonce,
             response_header,
             cipher,
-            options & 0x10 != 0,
-            options & 0x04 != 0,
-            options & 0x08 != 0,
-        ));
+            authenticated_length: options & 0x10 != 0,
+            chunk_masking: options & 0x04 != 0,
+            global_padding: options & 0x08 != 0,
+        });
     };
 
     let mut session = Session::new(
@@ -283,16 +280,16 @@ fn parse_command_body(
     );
     apply_user_auth(&mut session, user);
     let _ = padding_len;
-    Ok((
+    Ok(ParsedCommand {
         session,
         body_key,
         body_nonce,
         response_header,
         cipher,
-        options & 0x10 != 0,
-        options & 0x04 != 0,
-        options & 0x08 != 0,
-    ))
+        authenticated_length: options & 0x10 != 0,
+        chunk_masking: options & 0x04 != 0,
+        global_padding: options & 0x08 != 0,
+    })
 }
 
 fn apply_user_auth(session: &mut Session, user: &VmessUser) {

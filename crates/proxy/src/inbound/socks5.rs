@@ -51,7 +51,7 @@ impl InboundProtocol for Socks5InboundHandler {
             .accept_command_with_auth(&mut metered, &auth)
             .await?
         {
-            Socks5Request::Connect(session) => Ok((session, metered.into_inner())),
+            Socks5Request::Connect(session) => Ok((*session, metered.into_inner())),
             Socks5Request::UdpAssociate(_) => Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::Unsupported,
                 "UDP ASSOCIATE - dispatch from listener",
@@ -150,7 +150,7 @@ pub(crate) async fn run_socks5_listener_with_bound(
                                 Ok(Socks5Request::Connect(session)) => {
                                     let _ = serve_inbound(
                                         &engine,
-                                        session,
+                                        *session,
                                         metered.into_inner(),
                                         &handler,
                                         &tag,

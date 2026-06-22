@@ -76,7 +76,7 @@ pub(crate) async fn run_mixed_listener_with_bound(
                                 {
                                     Ok(Socks5Request::Connect(session)) => {
                                         let _ = serve_inbound(
-                                            &engine, session, metered.into_inner(),
+                                            &engine, *session, metered.into_inner(),
                                             &socks5_h, &tag, source_addr,
                                         ).await;
                                     }

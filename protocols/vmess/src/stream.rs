@@ -5,8 +5,8 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::crypto::{
-    open_xray_response_header_length, open_xray_response_header_payload, BodyAead, GCM_TAG_LEN,
-    MAX_BODY_PAYLOAD_SIZE,
+    open_xray_response_header_length, open_xray_response_header_payload, BodyAead, BodyAeadConfig,
+    GCM_TAG_LEN, MAX_BODY_PAYLOAD_SIZE,
 };
 use crate::inbound::VmessAccept;
 use crate::outbound::VmessOutboundSession;
@@ -58,40 +58,61 @@ struct PlainBodyCodec {
     inner: BodyAead,
 }
 
+struct BodyCodecConfig {
+    key: Vec<u8>,
+    nonce: Vec<u8>,
+    length_key_source: Vec<u8>,
+    length_nonce_source: Vec<u8>,
+    cipher: crate::shared::VmessCipher,
+    authenticated_length: bool,
+    chunk_masking: bool,
+    global_padding: bool,
+}
+
+struct VmessAeadStreamConfig<S> {
+    inner: S,
+    read_key: Vec<u8>,
+    read_nonce: Vec<u8>,
+    read_length_key_source: Vec<u8>,
+    read_length_nonce_source: Vec<u8>,
+    write_key: Vec<u8>,
+    write_nonce: Vec<u8>,
+    write_length_key_source: Vec<u8>,
+    write_length_nonce_source: Vec<u8>,
+    cipher: crate::shared::VmessCipher,
+    authenticated_length: bool,
+    chunk_masking: bool,
+    global_padding: bool,
+    response_header: Option<u8>,
+}
+
 impl BodyCodec {
-    fn new(
-        key: Vec<u8>,
-        nonce: Vec<u8>,
-        length_key_source: Vec<u8>,
-        length_nonce_source: Vec<u8>,
-        cipher: crate::shared::VmessCipher,
-        authenticated_length: bool,
-        chunk_masking: bool,
-        global_padding: bool,
-    ) -> Result<Self, zero_core::Error> {
-        if cipher.uses_plain_body() {
+    fn new(config: BodyCodecConfig) -> Result<Self, zero_core::Error> {
+        if config.cipher.uses_plain_body() {
             Ok(Self::Plain(PlainBodyCodec {
-                inner: BodyAead::new_with_length_source(
-                    key,
-                    nonce,
-                    length_key_source,
-                    length_nonce_source,
-                    crate::shared::VmessCipher::None,
-                    false,
-                    chunk_masking,
-                    global_padding,
-                )?,
+                inner: BodyAead::new_with_length_source(BodyAeadConfig {
+                    key: config.key,
+                    nonce_prefix: config.nonce,
+                    length_key_source: config.length_key_source,
+                    length_nonce_prefix: config.length_nonce_source,
+                    cipher: crate::shared::VmessCipher::None,
+                    authenticated_length: false,
+                    chunk_masking: config.chunk_masking,
+                    global_padding: config.global_padding,
+                })?,
             }))
         } else {
             Ok(Self::Aead(BodyAead::new_with_length_source(
-                key,
-                nonce,
-                length_key_source,
-                length_nonce_source,
-                cipher,
-                authenticated_length,
-                chunk_masking,
-                global_padding,
+                BodyAeadConfig {
+                    key: config.key,
+                    nonce_prefix: config.nonce,
+                    length_key_source: config.length_key_source,
+                    length_nonce_prefix: config.length_nonce_source,
+                    cipher: config.cipher,
+                    authenticated_length: config.authenticated_length,
+                    chunk_masking: config.chunk_masking,
+                    global_padding: config.global_padding,
+                },
             )?))
         }
     }
@@ -165,65 +186,66 @@ impl PlainBodyCodec {
 
 impl<S> VmessAeadStream<S> {
     pub fn outbound(inner: S, session: VmessOutboundSession) -> Result<Self, zero_core::Error> {
-        Self::new(
+        Self::new(VmessAeadStreamConfig {
             inner,
-            session.download_key,
-            session.download_nonce,
-            session.length_key_source,
-            session.length_nonce_source,
-            session.upload_key,
-            session.upload_nonce,
-            Vec::new(),
-            Vec::new(),
-            session.cipher,
-            session.authenticated_length,
-            session.chunk_masking,
-            session.global_padding,
-            session.response_header,
-        )
+            read_key: session.download_key,
+            read_nonce: session.download_nonce,
+            read_length_key_source: session.length_key_source,
+            read_length_nonce_source: session.length_nonce_source,
+            write_key: session.upload_key,
+            write_nonce: session.upload_nonce,
+            write_length_key_source: Vec::new(),
+            write_length_nonce_source: Vec::new(),
+            cipher: session.cipher,
+            authenticated_length: session.authenticated_length,
+            chunk_masking: session.chunk_masking,
+            global_padding: session.global_padding,
+            response_header: session.response_header,
+        })
     }
 
     pub fn inbound(inner: S, accept: VmessAccept) -> Result<Self, zero_core::Error> {
         let read_length_key_source = accept.upload_key.clone();
         let read_length_nonce_source = accept.upload_nonce.clone();
-        Self::new(
+        Self::new(VmessAeadStreamConfig {
             inner,
-            accept.upload_key,
-            accept.upload_nonce,
+            read_key: accept.upload_key,
+            read_nonce: accept.upload_nonce,
             read_length_key_source,
             read_length_nonce_source,
-            accept.download_key,
-            accept.download_nonce,
-            accept.length_key_source,
-            accept.length_nonce_source,
-            accept.cipher,
-            accept.authenticated_length,
-            accept.chunk_masking,
-            accept.global_padding,
-            None,
-        )
+            write_key: accept.download_key,
+            write_nonce: accept.download_nonce,
+            write_length_key_source: accept.length_key_source,
+            write_length_nonce_source: accept.length_nonce_source,
+            cipher: accept.cipher,
+            authenticated_length: accept.authenticated_length,
+            chunk_masking: accept.chunk_masking,
+            global_padding: accept.global_padding,
+            response_header: None,
+        })
     }
 
     pub fn into_inner(self) -> S {
         self.inner
     }
 
-    fn new(
-        inner: S,
-        read_key: Vec<u8>,
-        read_nonce: Vec<u8>,
-        mut read_length_key_source: Vec<u8>,
-        mut read_length_nonce_source: Vec<u8>,
-        write_key: Vec<u8>,
-        write_nonce: Vec<u8>,
-        mut write_length_key_source: Vec<u8>,
-        mut write_length_nonce_source: Vec<u8>,
-        cipher: crate::shared::VmessCipher,
-        authenticated_length: bool,
-        chunk_masking: bool,
-        global_padding: bool,
-        response_header: Option<u8>,
-    ) -> Result<Self, zero_core::Error> {
+    fn new(config: VmessAeadStreamConfig<S>) -> Result<Self, zero_core::Error> {
+        let VmessAeadStreamConfig {
+            inner,
+            read_key,
+            read_nonce,
+            mut read_length_key_source,
+            mut read_length_nonce_source,
+            write_key,
+            write_nonce,
+            mut write_length_key_source,
+            mut write_length_nonce_source,
+            cipher,
+            authenticated_length,
+            chunk_masking,
+            global_padding,
+            response_header,
+        } = config;
         let response_read_key = read_key.clone();
         let response_read_nonce = read_nonce.clone();
         if read_length_key_source.is_empty() {
@@ -238,26 +260,26 @@ impl<S> VmessAeadStream<S> {
         if write_length_nonce_source.is_empty() {
             write_length_nonce_source = write_nonce.clone();
         }
-        let reader = BodyCodec::new(
-            read_key,
-            read_nonce,
-            read_length_key_source,
-            read_length_nonce_source,
+        let reader = BodyCodec::new(BodyCodecConfig {
+            key: read_key,
+            nonce: read_nonce,
+            length_key_source: read_length_key_source,
+            length_nonce_source: read_length_nonce_source,
             cipher,
             authenticated_length,
             chunk_masking,
             global_padding,
-        )?;
-        let writer = BodyCodec::new(
-            write_key,
-            write_nonce,
-            write_length_key_source,
-            write_length_nonce_source,
+        })?;
+        let writer = BodyCodec::new(BodyCodecConfig {
+            key: write_key,
+            nonce: write_nonce,
+            length_key_source: write_length_key_source,
+            length_nonce_source: write_length_nonce_source,
             cipher,
             authenticated_length,
             chunk_masking,
             global_padding,
-        )?;
+        })?;
         let (read_state, response_header_key, response_header_nonce) =
             if let Some(expected_header) = response_header {
                 (

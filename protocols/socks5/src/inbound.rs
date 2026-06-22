@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec;
 
@@ -15,7 +16,7 @@ pub struct Socks5Inbound;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Socks5Request {
-    Connect(Session),
+    Connect(Box<Session>),
     UdpAssociate(Socks5UdpAssociateRequest),
 }
 
@@ -62,7 +63,7 @@ impl Socks5Inbound {
         S: AsyncSocket,
     {
         match self.accept_command(stream).await? {
-            Socks5Request::Connect(session) => Ok(session),
+            Socks5Request::Connect(session) => Ok(*session),
             Socks5Request::UdpAssociate(_) => {
                 write_reply(stream, Socks5Reply::CommandNotSupported).await?;
                 Err(Error::Unsupported("SOCKS5 command is not supported"))
@@ -144,7 +145,7 @@ impl Socks5Inbound {
         A: Socks5PasswordAuth,
     {
         let session = match self.accept_command_with_auth(stream, auth).await? {
-            Socks5Request::Connect(session) => session,
+            Socks5Request::Connect(session) => *session,
             Socks5Request::UdpAssociate(_) => {
                 write_reply(stream, Socks5Reply::CommandNotSupported).await?;
                 return Err(Error::Unsupported("SOCKS5 command is not supported"));
@@ -300,13 +301,13 @@ where
     let port = u16::from_be_bytes(port);
 
     match header[1] {
-        CMD_CONNECT => Ok(Socks5Request::Connect(Session::new(
+        CMD_CONNECT => Ok(Socks5Request::Connect(Box::new(Session::new(
             0,
             address,
             port,
             Network::Tcp,
             ProtocolType::Socks5,
-        ))),
+        )))),
         CMD_UDP_ASSOCIATE => Ok(Socks5Request::UdpAssociate(Socks5UdpAssociateRequest {
             client_hint: address,
             client_port: port,

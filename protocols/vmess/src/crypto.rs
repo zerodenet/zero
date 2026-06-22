@@ -254,17 +254,29 @@ pub(crate) struct BodyAead {
     chunks_since_rekey: u64,
 }
 
+pub(crate) struct BodyAeadConfig {
+    pub(crate) key: Vec<u8>,
+    pub(crate) nonce_prefix: Vec<u8>,
+    pub(crate) length_key_source: Vec<u8>,
+    pub(crate) length_nonce_prefix: Vec<u8>,
+    pub(crate) cipher: VmessCipher,
+    pub(crate) authenticated_length: bool,
+    pub(crate) chunk_masking: bool,
+    pub(crate) global_padding: bool,
+}
+
 impl BodyAead {
-    pub fn new_with_length_source(
-        key: Vec<u8>,
-        nonce_prefix: Vec<u8>,
-        length_key_source: Vec<u8>,
-        length_nonce_prefix: Vec<u8>,
-        cipher: VmessCipher,
-        authenticated_length: bool,
-        chunk_masking: bool,
-        global_padding: bool,
-    ) -> Result<Self, Error> {
+    pub fn new_with_length_source(config: BodyAeadConfig) -> Result<Self, Error> {
+        let BodyAeadConfig {
+            key,
+            nonce_prefix,
+            length_key_source,
+            length_nonce_prefix,
+            cipher,
+            authenticated_length,
+            chunk_masking,
+            global_padding,
+        } = config;
         if nonce_prefix.len() < NONCE_LEN {
             return Err(Error::Protocol("vmess invalid body nonce length"));
         }
@@ -533,7 +545,7 @@ impl ShakeSizeMask {
 
 fn derive_chacha20_poly1305_key(input: &[u8]) -> Vec<u8> {
     let first = md5::compute(input);
-    let second = md5::compute(&first.0);
+    let second = md5::compute(first.0);
     let mut key = Vec::with_capacity(32);
     key.extend_from_slice(&first.0);
     key.extend_from_slice(&second.0);
