@@ -1,17 +1,21 @@
 use super::*;
 
+pub(crate) struct Socks5UdpSend<'a> {
+    pub(crate) proxy: &'a Proxy,
+    pub(crate) tag: &'a str,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) username: Option<&'a str>,
+    pub(crate) password: Option<&'a str>,
+    pub(crate) session: &'a Session,
+    pub(crate) payload: &'a [u8],
+}
+
 impl UdpDispatch {
     /// Send via SOCKS5 upstream association, establishing one if needed.
     pub(crate) async fn send_socks5(
         &mut self,
-        proxy: &Proxy,
-        tag: &str,
-        server: &str,
-        port: u16,
-        username: Option<&str>,
-        password: Option<&str>,
-        session: &Session,
-        payload: &[u8],
+        request: Socks5UdpSend<'_>,
     ) -> Result<usize, EngineError> {
         use crate::logging::log_udp_upstream_association_dropped;
         use crate::runtime::socks5_udp::{
@@ -19,20 +23,21 @@ impl UdpDispatch {
         };
 
         let association = Socks5UdpAssociation {
-            tag: tag.to_owned(),
-            server: server.to_owned(),
-            port,
-            auth: username
-                .zip(password)
+            tag: request.tag.to_owned(),
+            server: request.server.to_owned(),
+            port: request.port,
+            auth: request
+                .username
+                .zip(request.password)
                 .map(|(u, p)| (u.to_owned(), p.to_owned())),
         };
 
         match send_socks5_udp_packet(
-            proxy,
+            request.proxy,
             &self.inbound_tag,
             &association,
-            session,
-            payload,
+            request.session,
+            request.payload,
             &mut self.socks5_upstream,
             &mut self.socks5_idle_deadline,
         )
@@ -57,7 +62,7 @@ impl UdpDispatch {
                     );
                 }
                 self.socks5_idle_deadline = None;
-                proxy.record_udp_upstream_send_failure();
+                request.proxy.record_udp_upstream_send_failure();
                 Err(error)
             }
         }

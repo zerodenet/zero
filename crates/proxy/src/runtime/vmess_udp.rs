@@ -24,10 +24,48 @@ pub(super) struct VmessUdpUpstream {
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct VmessUdpTransport<'a> {
+pub(crate) struct VmessUdpTransport<'a> {
     pub(crate) tls: Option<&'a ClientTlsConfig>,
     pub(crate) ws: Option<&'a WebSocketConfig>,
     pub(crate) grpc: Option<&'a GrpcConfig>,
+}
+
+pub(crate) struct VmessUdpStartFlow<'a> {
+    pub(crate) proxy: &'a Proxy,
+    pub(crate) session: &'a Session,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) id: &'a str,
+    pub(crate) cipher: &'a str,
+    pub(crate) mux_concurrency: Option<u32>,
+    pub(crate) transport: VmessUdpTransport<'a>,
+    pub(crate) payload: &'a [u8],
+}
+
+pub(crate) struct VmessUdpRelayFlow<'a> {
+    pub(crate) proxy: &'a Proxy,
+    pub(crate) session: &'a Session,
+    pub(crate) carrier: crate::transport::RelayCarrier,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) id: &'a str,
+    pub(crate) cipher: &'a str,
+    pub(crate) transport: VmessUdpTransport<'a>,
+    pub(crate) payload: &'a [u8],
+}
+
+pub(super) struct VmessUdpUpstreamRequest<'a> {
+    proxy: &'a Proxy,
+    session: &'a Session,
+    target: Address,
+    port: u16,
+    server: &'a str,
+    server_port: u16,
+    id: &'a str,
+    cipher: &'a str,
+    initial_payload: &'a [u8],
+    transport: Option<&'a VmessUdpTransport<'a>>,
+    mux_concurrency: Option<u32>,
 }
 
 fn spawn_vmess_udp_relay(
@@ -202,46 +240,39 @@ async fn establish_vmess_udp_upstream_over_stream(
 }
 
 async fn establish_vmess_udp_upstream(
-    proxy: &Proxy,
-    session: &Session,
-    server: &str,
-    port: u16,
-    id: &str,
-    cipher: &str,
-    initial_payload: &[u8],
-    transport: Option<&VmessUdpTransport<'_>>,
-    mux_concurrency: Option<u32>,
+    request: &VmessUdpUpstreamRequest<'_>,
 ) -> Result<(VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>), EngineError> {
-    let uuid = parse_uuid(id)?;
-    let vmess_cipher = VmessCipher::from_name(cipher).ok_or_else(|| {
+    let uuid = parse_uuid(request.id)?;
+    let vmess_cipher = VmessCipher::from_name(request.cipher).ok_or_else(|| {
         EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("vmess unknown cipher: {cipher}"),
+            format!("vmess unknown cipher: {}", request.cipher),
         ))
     })?;
     let initial_packet =
         <vmess::VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::encode_udp_packet(
-            &proxy.protocols.vmess_outbound_protocol(),
+            &request.proxy.protocols.vmess_outbound_protocol(),
             &vmess::VmessUdpPacketTarget {
-                address: &session.target,
-                port: session.port,
-                payload: initial_payload,
+                address: &request.session.target,
+                port: request.session.port,
+                payload: request.initial_payload,
             },
         )?;
 
-    if let Some(max_concurrency) = mux_concurrency {
-        let mut mux_stream = proxy
+    if let Some(max_concurrency) = request.mux_concurrency {
+        let mut mux_stream = request
+            .proxy
             .vmess_mux_pool
             .open_udp_stream(crate::runtime::vmess_mux_pool::VmessMuxOpenRequest {
-                proxy,
-                session,
-                server: server.to_owned(),
-                port,
+                proxy: request.proxy,
+                session: request.session,
+                server: request.server.to_owned(),
+                port: request.server_port,
                 id: uuid,
-                cipher: cipher.to_owned(),
-                tls: transport.and_then(|transport| transport.tls),
-                ws: transport.and_then(|transport| transport.ws),
-                grpc: transport.and_then(|transport| transport.grpc),
+                cipher: request.cipher.to_owned(),
+                tls: request.transport.and_then(|transport| transport.tls),
+                ws: request.transport.and_then(|transport| transport.ws),
+                grpc: request.transport.and_then(|transport| transport.grpc),
                 max_concurrency,
             })
             .await?;
@@ -249,20 +280,25 @@ async fn establish_vmess_udp_upstream(
         tokio::io::AsyncWriteExt::flush(&mut mux_stream).await?;
         let metered = MeteredStream::new(mux_stream);
         return Ok(spawn_vmess_udp_relay(
-            proxy,
-            session.id,
+            request.proxy,
+            request.session.id,
             metered,
             initial_packet.len(),
         ));
     }
 
-    let socket = proxy
+    let socket = request
+        .proxy
         .protocols
         .direct_connector()
-        .connect_host(server, port, proxy.resolver.as_ref())
+        .connect_host(
+            request.server,
+            request.server_port,
+            request.proxy.resolver.as_ref(),
+        )
         .await?;
 
-    let stream: TcpRelayStream = match transport {
+    let stream: TcpRelayStream = match request.transport {
         Some(VmessUdpTransport {
             grpc: Some(grpc_cfg),
             ws: None,
@@ -271,8 +307,8 @@ async fn establish_vmess_udp_upstream(
             let tls_stream = zero_transport::tls::connect_tls_upstream(
                 socket,
                 tls_cfg,
-                proxy.config.source_dir(),
-                server,
+                request.proxy.config.source_dir(),
+                request.server,
             )
             .await?;
             TcpRelayStream::new(
@@ -294,21 +330,28 @@ async fn establish_vmess_udp_upstream(
             let tls_stream = zero_transport::tls::connect_tls_upstream(
                 socket,
                 tls_cfg,
-                proxy.config.source_dir(),
-                server,
+                request.proxy.config.source_dir(),
+                request.server,
             )
             .await?;
             TcpRelayStream::new(
-                zero_transport::ws::connect_ws(tls_stream, ws_cfg, server, port).await?,
+                zero_transport::ws::connect_ws(
+                    tls_stream,
+                    ws_cfg,
+                    request.server,
+                    request.server_port,
+                )
+                .await?,
             )
         }
         Some(VmessUdpTransport {
             grpc: None,
             ws: Some(ws_cfg),
             tls: None,
-        }) => {
-            TcpRelayStream::new(zero_transport::ws::connect_ws(socket, ws_cfg, server, port).await?)
-        }
+        }) => TcpRelayStream::new(
+            zero_transport::ws::connect_ws(socket, ws_cfg, request.server, request.server_port)
+                .await?,
+        ),
         Some(VmessUdpTransport {
             grpc: None,
             ws: None,
@@ -317,8 +360,8 @@ async fn establish_vmess_udp_upstream(
             let tls_stream = zero_transport::tls::connect_tls_upstream(
                 socket,
                 tls_cfg,
-                proxy.config.source_dir(),
-                server,
+                request.proxy.config.source_dir(),
+                request.server,
             )
             .await?;
             TcpRelayStream::new(tls_stream)
@@ -339,8 +382,8 @@ async fn establish_vmess_udp_upstream(
 
     let vmess_stream = vmess::VmessAeadStream::establish_udp_outbound(
         stream,
-        &proxy.protocols.vmess_outbound_protocol(),
-        session,
+        &request.proxy.protocols.vmess_outbound_protocol(),
+        request.session,
         &uuid,
         vmess_cipher,
     )
@@ -349,8 +392,8 @@ async fn establish_vmess_udp_upstream(
     metered.write_all(&initial_packet).await?;
 
     Ok(spawn_vmess_udp_relay(
-        proxy,
-        session.id,
+        request.proxy,
+        request.session.id,
         metered,
         initial_packet.len(),
     ))
@@ -371,32 +414,23 @@ impl VmessUdpOutboundManager {
     pub(super) async fn start_flow(
         &mut self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
-        proxy: &Proxy,
-        session: &Session,
-        server: &str,
-        port: u16,
-        id: &str,
-        cipher: &str,
-        mux_concurrency: Option<u32>,
-        tls: Option<&ClientTlsConfig>,
-        ws: Option<&WebSocketConfig>,
-        grpc: Option<&GrpcConfig>,
-        payload: &[u8],
+        request: VmessUdpStartFlow<'_>,
     ) -> Result<(), EngineError> {
-        let transport = VmessUdpTransport { tls, ws, grpc };
         self.get_or_create_upstream(
             chain_tasks,
-            proxy,
-            session,
-            session.target.clone(),
-            session.port,
-            server.to_string(),
-            port,
-            id.to_string(),
-            cipher.to_string(),
-            payload.to_vec(),
-            Some(&transport),
-            mux_concurrency,
+            VmessUdpUpstreamRequest {
+                proxy: request.proxy,
+                session: request.session,
+                target: request.session.target.clone(),
+                port: request.session.port,
+                server: request.server,
+                server_port: request.port,
+                id: request.id,
+                cipher: request.cipher,
+                initial_payload: request.payload,
+                transport: Some(&request.transport),
+                mux_concurrency: request.mux_concurrency,
+            },
         )
         .await
     }
@@ -404,36 +438,35 @@ impl VmessUdpOutboundManager {
     pub(super) async fn start_relay_flow(
         &mut self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
-        proxy: &Proxy,
-        session: &Session,
-        carrier: crate::transport::RelayCarrier,
-        server: &str,
-        port: u16,
-        id: &str,
-        cipher: &str,
-        tls: Option<&ClientTlsConfig>,
-        ws: Option<&WebSocketConfig>,
-        grpc: Option<&GrpcConfig>,
-        payload: &[u8],
+        request: VmessUdpRelayFlow<'_>,
     ) -> Result<(), EngineError> {
-        let transport = VmessUdpTransport { tls, ws, grpc };
         let stream = build_vmess_udp_transport_over_stream(
-            carrier.stream,
-            Some(&transport),
-            proxy.config.source_dir(),
-            server,
-            port,
+            request.carrier.stream,
+            Some(&request.transport),
+            request.proxy.config.source_dir(),
+            request.server,
+            request.port,
         )
         .await?;
-        let (upstream, recv_tx) =
-            establish_vmess_udp_upstream_over_stream(proxy, session, id, cipher, payload, stream)
-                .await?;
-        self.insert_upstream((session.target.clone(), session.port), upstream, recv_tx);
+        let (upstream, recv_tx) = establish_vmess_udp_upstream_over_stream(
+            request.proxy,
+            request.session,
+            request.id,
+            request.cipher,
+            request.payload,
+            stream,
+        )
+        .await?;
+        self.insert_upstream(
+            (request.session.target.clone(), request.session.port),
+            upstream,
+            recv_tx,
+        );
         self.spawn_bridge(
             chain_tasks,
-            session.target.clone(),
-            session.port,
-            session.id,
+            request.session.target.clone(),
+            request.session.port,
+            request.session.id,
         );
         Ok(())
     }
@@ -499,53 +532,42 @@ impl VmessUdpOutboundManager {
     pub(super) async fn get_or_create_upstream(
         &mut self,
         chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
-        proxy: &Proxy,
-        session: &Session,
-        target: Address,
-        port: u16,
-        server: String,
-        server_port: u16,
-        id: String,
-        cipher: String,
-        initial_payload: Vec<u8>,
-        transport: Option<&VmessUdpTransport<'_>>,
-        mux_concurrency: Option<u32>,
+        request: VmessUdpUpstreamRequest<'_>,
     ) -> Result<(), EngineError> {
-        let key = (target.clone(), port);
+        let key = (request.target.clone(), request.port);
         if let Some((upstream, _)) = self.upstreams.get(&key) {
-            proxy.record_session_inbound_rx(upstream.session_id, initial_payload.len() as u64);
+            request.proxy.record_session_inbound_rx(
+                upstream.session_id,
+                request.initial_payload.len() as u64,
+            );
             let packet = <vmess::VmessOutbound as UdpPacketFraming<
                 vmess::VmessUdpPacketTarget,
             >>::encode_udp_packet(
-                &proxy.protocols.vmess_outbound_protocol(),
+                &request.proxy.protocols.vmess_outbound_protocol(),
                 &vmess::VmessUdpPacketTarget {
-                    address: &target,
-                    port,
-                    payload: &initial_payload,
+                    address: &request.target,
+                    port: request.port,
+                    payload: request.initial_payload,
                 },
             )?;
             let packet_len = packet.len() as u64;
             let _ = upstream.send_tx.send(packet).await;
-            proxy.record_session_outbound_tx(upstream.session_id, packet_len);
-            self.spawn_bridge(chain_tasks, target, port, upstream.session_id);
+            request
+                .proxy
+                .record_session_outbound_tx(upstream.session_id, packet_len);
+            self.spawn_bridge(
+                chain_tasks,
+                request.target,
+                request.port,
+                upstream.session_id,
+            );
             return Ok(());
         }
 
-        let (upstream, recv_tx) = establish_vmess_udp_upstream(
-            proxy,
-            session,
-            &server,
-            server_port,
-            &id,
-            &cipher,
-            &initial_payload,
-            transport,
-            mux_concurrency,
-        )
-        .await?;
+        let (upstream, recv_tx) = establish_vmess_udp_upstream(&request).await?;
         let session_id = upstream.session_id;
         self.upstreams.insert(key, (upstream, recv_tx));
-        self.spawn_bridge(chain_tasks, target, port, session_id);
+        self.spawn_bridge(chain_tasks, request.target, request.port, session_id);
         Ok(())
     }
 }

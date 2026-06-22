@@ -323,16 +323,21 @@ impl Proxy {
 
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
-                    if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                        if let Some(&client) = client_sessions.get(&sid) {
-                            ss_send_encrypted(
-                                udp_socket.as_ref(), cipher, password,
-                                client_ss_session_ids.get(&sid).copied(),
-                                &address_from_socket_addr(sender),
-                                sender.port(),
-                                &direct_buf[..n],
-                                client,
-                            ).await;
+                            if let Some(sid) = dispatch.direct_response_session_id(sender) {
+                                if let Some(&client) = client_sessions.get(&sid) {
+                                    ss_send_encrypted(SsEncryptedResponse {
+                                        socket: udp_socket.as_ref(),
+                                        cipher,
+                                        password,
+                                        client_session_id: client_ss_session_ids
+                                            .get(&sid)
+                                            .copied(),
+                                        target: &address_from_socket_addr(sender),
+                                        port: sender.port(),
+                                        payload: &direct_buf[..n],
+                                        client,
+                                    })
+                                    .await;
                         }
                     }
                 }
@@ -342,11 +347,19 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             if let Some(sid) = session_id {
                                 if let Some(&client) = client_sessions.get(&sid) {
-                                    ss_send_encrypted(
-                                        udp_socket.as_ref(), cipher, password,
-                                        client_ss_session_ids.get(&sid).copied(),
-                                        &target, port, &payload, client,
-                                    ).await;
+                                    ss_send_encrypted(SsEncryptedResponse {
+                                        socket: udp_socket.as_ref(),
+                                        cipher,
+                                        password,
+                                        client_session_id: client_ss_session_ids
+                                            .get(&sid)
+                                            .copied(),
+                                        target: &target,
+                                        port,
+                                        payload: &payload,
+                                        client,
+                                    })
+                                    .await;
                                 }
                             }
                         }
@@ -368,32 +381,40 @@ impl Proxy {
 /// For 2022 (blake3) ciphers this produces a server-to-client response that
 /// echoes `client_session_id` (SIP022 3.2.3); for legacy AEAD it produces the
 /// stateless datagram via the shared codec.
-async fn ss_send_encrypted(
-    socket: &UdpSocket,
+struct SsEncryptedResponse<'a> {
+    socket: &'a UdpSocket,
     cipher: CipherKind,
-    password: &str,
+    password: &'a str,
     client_session_id: Option<u64>,
-    target: &Address,
+    target: &'a Address,
     port: u16,
-    payload: &[u8],
+    payload: &'a [u8],
     client: SocketAddr,
-) {
-    let resp = if cipher.is_blake3() {
+}
+
+async fn ss_send_encrypted(response: SsEncryptedResponse<'_>) {
+    let resp = if response.cipher.is_blake3() {
         shadowsocks::encode_udp_response_2022(
-            cipher,
-            password.as_bytes(),
-            client_session_id.unwrap_or(0),
-            target,
-            port,
-            payload,
+            response.cipher,
+            response.password.as_bytes(),
+            response.client_session_id.unwrap_or(0),
+            response.target,
+            response.port,
+            response.payload,
         )
     } else {
-        legacy_ss_udp_encode(cipher, password, target, port, payload)
+        legacy_ss_udp_encode(
+            response.cipher,
+            response.password,
+            response.target,
+            response.port,
+            response.payload,
+        )
     };
     let Ok(resp) = resp else {
         return;
     };
-    let _ = socket.send_to(&resp, client).await;
+    let _ = response.socket.send_to(&resp, response.client).await;
 }
 
 /// Encode a legacy (non-2022) Shadowsocks UDP datagram.

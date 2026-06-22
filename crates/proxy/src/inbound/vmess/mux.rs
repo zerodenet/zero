@@ -19,6 +19,26 @@ use crate::transport::TcpRelayStream;
 /// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
 use super::*;
 
+pub(crate) struct VmessMuxTcpStreamTask<'a> {
+    pub(crate) tasks: &'a mut JoinSet<()>,
+    pub(crate) mux_session_id: u16,
+    pub(crate) target: Address,
+    pub(crate) port: u16,
+    pub(crate) up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    pub(crate) write_tx: mpsc::UnboundedSender<Vec<u8>>,
+    pub(crate) inbound_tag: String,
+}
+
+pub(crate) struct VmessMuxUdpStreamTask<'a> {
+    pub(crate) tasks: &'a mut JoinSet<()>,
+    pub(crate) mux_session_id: u16,
+    pub(crate) default_target: Address,
+    pub(crate) default_port: u16,
+    pub(crate) up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    pub(crate) write_tx: mpsc::UnboundedSender<Vec<u8>>,
+    pub(crate) inbound_tag: String,
+}
+
 impl Proxy {
     pub(crate) async fn run_vmess_mux_session(
         &self,
@@ -84,24 +104,28 @@ impl Proxy {
                             let _ = up_tx.send(frame.payload);
                         }
                         match network {
-                            Network::Tcp => self.spawn_vmess_mux_tcp_stream_task(
-                                &mut mux_tasks,
-                                frame.session_id,
-                                target,
-                                port,
-                                up_rx,
-                                write_tx.clone(),
-                                inbound_tag.to_owned(),
-                            ),
-                            Network::Udp => self.spawn_vmess_mux_udp_stream_task(
-                                &mut mux_tasks,
-                                frame.session_id,
-                                target,
-                                port,
-                                up_rx,
-                                write_tx.clone(),
-                                inbound_tag.to_owned(),
-                            ),
+                            Network::Tcp => {
+                                self.spawn_vmess_mux_tcp_stream_task(VmessMuxTcpStreamTask {
+                                    tasks: &mut mux_tasks,
+                                    mux_session_id: frame.session_id,
+                                    target,
+                                    port,
+                                    up_rx,
+                                    write_tx: write_tx.clone(),
+                                    inbound_tag: inbound_tag.to_owned(),
+                                })
+                            }
+                            Network::Udp => {
+                                self.spawn_vmess_mux_udp_stream_task(VmessMuxUdpStreamTask {
+                                    tasks: &mut mux_tasks,
+                                    mux_session_id: frame.session_id,
+                                    default_target: target,
+                                    default_port: port,
+                                    up_rx,
+                                    write_tx: write_tx.clone(),
+                                    inbound_tag: inbound_tag.to_owned(),
+                                })
+                            }
                         }
                     } else if frame.status == vmess::MUX_STATUS_KEEP {
                         if let Some(tx) = streams.get(&frame.session_id) {
@@ -131,16 +155,17 @@ impl Proxy {
         Ok(())
     }
 
-    pub(crate) fn spawn_vmess_mux_tcp_stream_task(
-        &self,
-        tasks: &mut JoinSet<()>,
-        mux_session_id: u16,
-        target: Address,
-        port: u16,
-        mut up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        write_tx: mpsc::UnboundedSender<Vec<u8>>,
-        inbound_tag: String,
-    ) {
+    pub(crate) fn spawn_vmess_mux_tcp_stream_task(&self, request: VmessMuxTcpStreamTask<'_>) {
+        let VmessMuxTcpStreamTask {
+            tasks,
+            mux_session_id,
+            target,
+            port,
+            up_rx,
+            write_tx,
+            inbound_tag,
+        } = request;
+        let mut up_rx = up_rx;
         let proxy = self.clone();
         tasks.spawn(async move {
             let mut session =
@@ -202,16 +227,17 @@ impl Proxy {
         });
     }
 
-    pub(crate) fn spawn_vmess_mux_udp_stream_task(
-        &self,
-        tasks: &mut JoinSet<()>,
-        mux_session_id: u16,
-        default_target: Address,
-        default_port: u16,
-        mut up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        write_tx: mpsc::UnboundedSender<Vec<u8>>,
-        inbound_tag: String,
-    ) {
+    pub(crate) fn spawn_vmess_mux_udp_stream_task(&self, request: VmessMuxUdpStreamTask<'_>) {
+        let VmessMuxUdpStreamTask {
+            tasks,
+            mux_session_id,
+            default_target,
+            default_port,
+            up_rx,
+            write_tx,
+            inbound_tag,
+        } = request;
+        let mut up_rx = up_rx;
         let proxy = self.clone();
         tasks.spawn(async move {
             let mut payload_mode = VmessUdpPayloadMode::Unknown;

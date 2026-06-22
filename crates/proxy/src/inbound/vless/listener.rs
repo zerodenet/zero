@@ -100,6 +100,15 @@ pub(crate) async fn run_vless_listener_with_bound(
                         let fallback_config = fallback_config.clone();
 
                         connections.spawn(async move {
+                            let transport = VlessStreamTransport {
+                                ws_config: ws_config.as_ref(),
+                                grpc_config: grpc_config.as_ref(),
+                                h2_config: h2_config.as_ref(),
+                                split_http_config: split_http_config.as_ref(),
+                                split_http_registry: split_http_registry.as_ref(),
+                                http_upgrade_config: http_upgrade_config.as_ref(),
+                            };
+
                             let result = match (tls_acceptor, reality_config) {
                                 (Some(acceptor), None) => {
                                     // Always peek ClientHello to extract SNI for routing.
@@ -138,27 +147,33 @@ pub(crate) async fn run_vless_listener_with_bound(
                                             TokioSocket::new(raw), hello.consumed,
                                         );
                                         match acceptor.accept(prefixed).await {
-                                            Ok(tls_stream) => engine.handle_vless_stream(
-                                                InboundTlsStream::new_generic(tls_stream),
-                                                inbound_tag.as_str(), &vless_users,
-                                                ws_config.as_ref(), grpc_config.as_ref(),
-                                                h2_config.as_ref(),
-                                                split_http_config.as_ref(), split_http_registry.as_ref(), http_upgrade_config.as_ref(), fallback_config.as_ref(),
-                                                sni,
-                                            ).await,
+                                            Ok(tls_stream) => engine
+                                                .handle_vless_stream(VlessStreamRequest {
+                                                    stream: InboundTlsStream::new_generic(
+                                                        tls_stream,
+                                                    ),
+                                                    inbound_tag: inbound_tag.as_str(),
+                                                    users: &vless_users,
+                                                    transport,
+                                                    fallback: fallback_config.as_ref(),
+                                                    sni,
+                                                })
+                                                .await,
                                             Err(error) => Err(error.into()),
                                         }
                                     } else {
                                         // Not valid TLS — direct TLS accept without peek
                                         match acceptor.accept(raw).await {
-                                            Ok(tls_stream) => engine.handle_vless_stream(
-                                                InboundTlsStream::new(tls_stream),
-                                                inbound_tag.as_str(), &vless_users,
-                                                ws_config.as_ref(), grpc_config.as_ref(),
-                                                h2_config.as_ref(),
-                                                split_http_config.as_ref(), split_http_registry.as_ref(), http_upgrade_config.as_ref(), fallback_config.as_ref(),
-                                                None,
-                                            ).await,
+                                            Ok(tls_stream) => engine
+                                                .handle_vless_stream(VlessStreamRequest {
+                                                    stream: InboundTlsStream::new(tls_stream),
+                                                    inbound_tag: inbound_tag.as_str(),
+                                                    users: &vless_users,
+                                                    transport,
+                                                    fallback: fallback_config.as_ref(),
+                                                    sni: None,
+                                                })
+                                                .await,
                                             Err(error) => Err(error.into()),
                                         }
                                     }
@@ -167,19 +182,14 @@ pub(crate) async fn run_vless_listener_with_bound(
                                     match upgrade_vless_reality_server(stream, &reality).await {
                                         Ok(reality_stream) => {
                                             engine
-                                                .handle_vless_stream(
-                                                    reality_stream,
-                                                    inbound_tag.as_str(),
-                                                    &vless_users,
-                                                    ws_config.as_ref(),
-                                                    grpc_config.as_ref(),
-                                                h2_config.as_ref(),
-                                                split_http_config.as_ref(),
-                                                split_http_registry.as_ref(),
-                                                http_upgrade_config.as_ref(),
-                                                fallback_config.as_ref(),
-                                                None,
-                                                )
+                                                .handle_vless_stream(VlessStreamRequest {
+                                                    stream: reality_stream,
+                                                    inbound_tag: inbound_tag.as_str(),
+                                                    users: &vless_users,
+                                                    transport,
+                                                    fallback: fallback_config.as_ref(),
+                                                    sni: None,
+                                                })
                                                 .await
                                         }
                                         Err(error) => Err(error.into()),
@@ -187,19 +197,14 @@ pub(crate) async fn run_vless_listener_with_bound(
                                 }
                                 (None, None) => {
                                     engine
-                                        .handle_vless_stream(
+                                        .handle_vless_stream(VlessStreamRequest {
                                             stream,
-                                            inbound_tag.as_str(),
-                                            &vless_users,
-                                            ws_config.as_ref(),
-                                            grpc_config.as_ref(),
-                                            h2_config.as_ref(),
-                                            split_http_config.as_ref(),
-                                            split_http_registry.as_ref(),
-                                            http_upgrade_config.as_ref(),
-                                            fallback_config.as_ref(),
-                                            None,
-                                        )
+                                            inbound_tag: inbound_tag.as_str(),
+                                            users: &vless_users,
+                                            transport,
+                                            fallback: fallback_config.as_ref(),
+                                            sni: None,
+                                        })
                                         .await
                                 }
                                 (Some(_), Some(_)) => Err(std::io::Error::new(

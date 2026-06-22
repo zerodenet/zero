@@ -29,6 +29,19 @@ struct H2Entry {
 }
 
 #[cfg(feature = "hysteria2")]
+pub(crate) struct H2SendExisting<'a> {
+    pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub(crate) session_id: u64,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) password: &'a str,
+    pub(crate) client_fingerprint: Option<&'a str>,
+    pub(crate) target: &'a Address,
+    pub(crate) target_port: u16,
+    pub(crate) payload: &'a [u8],
+}
+
+#[cfg(feature = "hysteria2")]
 impl H2ChainManager {
     pub(super) fn new() -> Self {
         Self {
@@ -83,30 +96,25 @@ impl H2ChainManager {
 
     pub(crate) async fn send_existing(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        session_id: u64,
-        server: &str,
-        port: u16,
-        password: &str,
-        client_fingerprint: Option<&str>,
-        target: &Address,
-        target_port: u16,
-        payload: &[u8],
+        request: H2SendExisting<'_>,
     ) -> Result<usize, FlowFailure> {
         self.send(
             UdpFlowContext {
-                chain_tasks,
-                session_id,
+                chain_tasks: request.chain_tasks,
+                session_id: request.session_id,
             },
             H2UdpPeer {
-                endpoint: UdpPeerEndpoint { server, port },
-                password,
-                client_fingerprint,
+                endpoint: UdpPeerEndpoint {
+                    server: request.server,
+                    port: request.port,
+                },
+                password: request.password,
+                client_fingerprint: request.client_fingerprint,
             },
             UdpPacketRef {
-                target,
-                port: target_port,
-                payload,
+                target: request.target,
+                port: request.target_port,
+                payload: request.payload,
             },
         )
         .await

@@ -120,6 +120,7 @@ pub(crate) use protocol_flows::ShadowsocksUdpFlow;
 pub(crate) use protocol_flows::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
 #[cfg(feature = "vmess")]
 pub(crate) use protocol_flows::{VmessUdpFlow, VmessUdpRelayFlow};
+pub(crate) use socks5_flow::Socks5UdpSend;
 #[cfg(feature = "shadowsocks")]
 use ss_manager::SsChainManager;
 #[cfg(feature = "trojan")]

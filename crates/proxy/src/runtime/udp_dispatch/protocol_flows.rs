@@ -58,8 +58,6 @@ pub(crate) struct VlessUdpRelayFinalHop<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) session: &'a Session,
     pub(crate) carrier: crate::transport::RelayCarrier,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
     pub(crate) id: &'a str,
     pub(crate) tls: Option<&'a zero_config::ClientTlsConfig>,
     pub(crate) reality: Option<&'a zero_config::RealityConfig>,
@@ -108,18 +106,18 @@ impl UdpDispatch {
         flow: ShadowsocksUdpFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         self.ss_manager
-            .send_existing(
-                &mut self.chain_tasks,
-                flow.session.id,
-                flow.proxy,
-                flow.server,
-                flow.port,
-                flow.password,
-                flow.cipher,
-                &flow.session.target,
-                flow.session.port,
-                flow.payload,
-            )
+            .send_existing(super::ss_manager::SsSendExisting {
+                chain_tasks: &mut self.chain_tasks,
+                session_id: flow.session.id,
+                proxy: flow.proxy,
+                server: flow.server,
+                port: flow.port,
+                password: flow.password,
+                cipher: flow.cipher,
+                target: &flow.session.target,
+                target_port: flow.session.port,
+                payload: flow.payload,
+            })
             .await
     }
 
@@ -134,17 +132,17 @@ impl UdpDispatch {
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         self.h2_manager
-            .send_existing(
-                &mut self.chain_tasks,
-                session.id,
+            .send_existing(super::h2_manager::H2SendExisting {
+                chain_tasks: &mut self.chain_tasks,
+                session_id: session.id,
                 server,
                 port,
                 password,
                 client_fingerprint,
-                &session.target,
-                session.port,
+                target: &session.target,
+                target_port: session.port,
                 payload,
-            )
+            })
             .await
     }
 
@@ -164,9 +162,9 @@ impl UdpDispatch {
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         self.trojan_manager
-            .send_existing(
-                &mut self.chain_tasks,
-                session.id,
+            .send_existing(super::trojan_manager::TrojanSendExisting {
+                chain_tasks: &mut self.chain_tasks,
+                session_id: session.id,
                 proxy,
                 session,
                 server,
@@ -176,10 +174,10 @@ impl UdpDispatch {
                 insecure,
                 client_fingerprint,
                 relay_chain,
-                &session.target,
-                session.port,
+                target: &session.target,
+                target_port: session.port,
                 payload,
-            )
+            })
             .await
     }
 
@@ -199,11 +197,11 @@ impl UdpDispatch {
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         self.trojan_manager
-            .send_relay_existing(
-                &mut self.chain_tasks,
-                session.id,
-                carrier.stream,
-                None,
+            .send_relay_existing(super::trojan_manager::TrojanRelayExisting {
+                chain_tasks: &mut self.chain_tasks,
+                session_id: session.id,
+                stream: carrier.stream,
+                tls_server_name: None,
                 proxy,
                 session,
                 server,
@@ -212,10 +210,10 @@ impl UdpDispatch {
                 sni,
                 insecure,
                 client_fingerprint,
-                &session.target,
-                session.port,
+                target: &session.target,
+                target_port: session.port,
                 payload,
-            )
+            })
             .await
     }
 
@@ -276,24 +274,29 @@ impl UdpDispatch {
         &mut self,
         flow: VlessUdpFlow<'_>,
     ) -> Result<(), FlowFailure> {
+        let transport = crate::runtime::vless_udp::VlessUdpTransport {
+            tls: flow.tls,
+            reality: flow.reality,
+            ws: flow.ws,
+            grpc: flow.grpc,
+            h2: flow.h2,
+            http_upgrade: flow.http_upgrade,
+            split_http: flow.split_http,
+            quic: flow.quic,
+        };
         self.vless_manager
             .start_flow(
                 &mut self.chain_tasks,
-                flow.proxy,
-                flow.session,
-                flow.server,
-                flow.port,
-                flow.id,
-                flow.flow,
-                flow.tls,
-                flow.reality,
-                flow.ws,
-                flow.grpc,
-                flow.h2,
-                flow.http_upgrade,
-                flow.split_http,
-                flow.quic,
-                flow.payload,
+                crate::runtime::vless_udp::VlessUdpStartFlow {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    server: flow.server,
+                    port: flow.port,
+                    id: flow.id,
+                    flow: flow.flow,
+                    transport,
+                    payload: flow.payload,
+                },
             )
             .await
             .map_err(|error| FlowFailure {
@@ -312,13 +315,15 @@ impl UdpDispatch {
         self.vless_manager
             .start_relay_two_stream(
                 &mut self.chain_tasks,
-                flow.proxy,
-                flow.session,
-                flow.post_carrier,
-                flow.get_carrier,
-                flow.id,
-                flow.split_http,
-                flow.payload,
+                crate::runtime::vless_udp::VlessUdpRelayTwoStream {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    post_carrier: flow.post_carrier,
+                    get_carrier: flow.get_carrier,
+                    id: flow.id,
+                    split_http: flow.split_http,
+                    payload: flow.payload,
+                },
             )
             .await
             .map_err(|error| FlowFailure {
@@ -334,23 +339,27 @@ impl UdpDispatch {
         &mut self,
         flow: VlessUdpRelayFinalHop<'_>,
     ) -> Result<(), FlowFailure> {
+        let transport = crate::runtime::vless_udp::VlessUdpTransport {
+            tls: flow.tls,
+            reality: flow.reality,
+            ws: flow.ws,
+            grpc: flow.grpc,
+            h2: flow.h2,
+            http_upgrade: flow.http_upgrade,
+            split_http: flow.split_http,
+            quic: None,
+        };
         self.vless_manager
             .start_relay_final_hop(
                 &mut self.chain_tasks,
-                flow.proxy,
-                flow.session,
-                flow.carrier,
-                flow.server,
-                flow.port,
-                flow.id,
-                flow.tls,
-                flow.reality,
-                flow.ws,
-                flow.grpc,
-                flow.h2,
-                flow.http_upgrade,
-                flow.split_http,
-                flow.payload,
+                crate::runtime::vless_udp::VlessUdpRelayFinalHop {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    carrier: flow.carrier,
+                    id: flow.id,
+                    transport,
+                    payload: flow.payload,
+                },
             )
             .await
             .map_err(|error| FlowFailure {
@@ -366,20 +375,25 @@ impl UdpDispatch {
         &mut self,
         flow: VmessUdpFlow<'_>,
     ) -> Result<(), FlowFailure> {
+        let transport = crate::runtime::vmess_udp::VmessUdpTransport {
+            tls: flow.tls,
+            ws: flow.ws,
+            grpc: flow.grpc,
+        };
         self.vmess_manager
             .start_flow(
                 &mut self.chain_tasks,
-                flow.proxy,
-                flow.session,
-                flow.server,
-                flow.port,
-                flow.id,
-                flow.cipher,
-                flow.mux_concurrency,
-                flow.tls,
-                flow.ws,
-                flow.grpc,
-                flow.payload,
+                crate::runtime::vmess_udp::VmessUdpStartFlow {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    server: flow.server,
+                    port: flow.port,
+                    id: flow.id,
+                    cipher: flow.cipher,
+                    mux_concurrency: flow.mux_concurrency,
+                    transport,
+                    payload: flow.payload,
+                },
             )
             .await
             .map_err(|error| FlowFailure {
@@ -395,20 +409,25 @@ impl UdpDispatch {
         &mut self,
         flow: VmessUdpRelayFlow<'_>,
     ) -> Result<(), FlowFailure> {
+        let transport = crate::runtime::vmess_udp::VmessUdpTransport {
+            tls: flow.tls,
+            ws: flow.ws,
+            grpc: flow.grpc,
+        };
         self.vmess_manager
             .start_relay_flow(
                 &mut self.chain_tasks,
-                flow.proxy,
-                flow.session,
-                flow.carrier,
-                flow.server,
-                flow.port,
-                flow.id,
-                flow.cipher,
-                flow.tls,
-                flow.ws,
-                flow.grpc,
-                flow.payload,
+                crate::runtime::vmess_udp::VmessUdpRelayFlow {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    carrier: flow.carrier,
+                    server: flow.server,
+                    port: flow.port,
+                    id: flow.id,
+                    cipher: flow.cipher,
+                    transport,
+                    payload: flow.payload,
+                },
             )
             .await
             .map_err(|error| FlowFailure {

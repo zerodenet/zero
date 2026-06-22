@@ -191,9 +191,16 @@ impl ProtocolAdapter for Socks5Adapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         let sent = dispatch
-            .send_socks5(
-                proxy, tag, server, *port, *username, *password, session, payload,
-            )
+            .send_socks5(crate::runtime::udp_dispatch::Socks5UdpSend {
+                proxy,
+                tag,
+                server,
+                port: *port,
+                username: *username,
+                password: *password,
+                session,
+                payload,
+            })
             .await
             .map_err(|error| FlowFailure {
                 stage: "udp_upstream_send",

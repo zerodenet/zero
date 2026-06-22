@@ -325,8 +325,8 @@ impl ProtocolAdapter for VlessAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         let ResolvedLeafOutbound::Vless {
             tag,
-            server,
-            port,
+            server: _,
+            port: _,
             id,
             tls,
             reality,
@@ -359,8 +359,6 @@ impl ProtocolAdapter for VlessAdapter {
                 proxy,
                 session,
                 carrier,
-                server,
-                port: *port,
                 id,
                 tls: *tls,
                 reality: *reality,

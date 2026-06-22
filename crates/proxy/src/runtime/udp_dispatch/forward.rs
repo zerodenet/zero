@@ -67,16 +67,16 @@ impl UdpDispatch {
                     unreachable!("Relay category maps to Socks5 variant only");
                 };
                 match self
-                    .send_socks5(
+                    .send_socks5(super::socks5_flow::Socks5UdpSend {
                         proxy,
                         tag,
                         server,
-                        *port,
-                        username.as_deref(),
-                        password.as_deref(),
-                        &flow.session,
+                        port: *port,
+                        username: username.as_deref(),
+                        password: password.as_deref(),
+                        session: &flow.session,
                         payload,
-                    )
+                    })
                     .await
                 {
                     Ok(sent) => {
@@ -123,18 +123,18 @@ impl UdpDispatch {
                             .await
                     } else {
                         self.ss_manager
-                            .send_existing(
-                                &mut self.chain_tasks,
-                                flow.session.id,
+                            .send_existing(super::ss_manager::SsSendExisting {
+                                chain_tasks: &mut self.chain_tasks,
+                                session_id: flow.session.id,
                                 proxy,
-                                server.as_str(),
-                                *port,
-                                password.as_str(),
-                                cipher.as_str(),
-                                &flow.session.target,
-                                flow.session.port,
+                                server: server.as_str(),
+                                port: *port,
+                                password: password.as_str(),
+                                cipher: cipher.as_str(),
+                                target: &flow.session.target,
+                                target_port: flow.session.port,
                                 payload,
-                            )
+                            })
                             .await
                     };
 
@@ -150,17 +150,17 @@ impl UdpDispatch {
                 } => {
                     let result = self
                         .h2_manager
-                        .send_existing(
-                            &mut self.chain_tasks,
-                            flow.session.id,
-                            server.as_str(),
-                            *port,
-                            password.as_str(),
-                            client_fingerprint.as_deref(),
-                            &flow.session.target,
-                            flow.session.port,
+                        .send_existing(super::h2_manager::H2SendExisting {
+                            chain_tasks: &mut self.chain_tasks,
+                            session_id: flow.session.id,
+                            server: server.as_str(),
+                            port: *port,
+                            password: password.as_str(),
+                            client_fingerprint: client_fingerprint.as_deref(),
+                            target: &flow.session.target,
+                            target_port: flow.session.port,
                             payload,
-                        )
+                        })
                         .await;
                     self.record_or_fail(flow, proxy, started_at, result)?;
                 }
@@ -182,22 +182,22 @@ impl UdpDispatch {
                 } => {
                     let result = self
                         .trojan_manager
-                        .send_existing(
-                            &mut self.chain_tasks,
-                            flow.session.id,
+                        .send_existing(super::trojan_manager::TrojanSendExisting {
+                            chain_tasks: &mut self.chain_tasks,
+                            session_id: flow.session.id,
                             proxy,
-                            &flow.session,
-                            server.as_str(),
-                            *port,
-                            password.as_str(),
-                            sni.as_deref(),
-                            *insecure,
-                            client_fingerprint.as_deref(),
-                            *relay_chain,
-                            &flow.session.target,
-                            flow.session.port,
+                            session: &flow.session,
+                            server: server.as_str(),
+                            port: *port,
+                            password: password.as_str(),
+                            sni: sni.as_deref(),
+                            insecure: *insecure,
+                            client_fingerprint: client_fingerprint.as_deref(),
+                            relay_chain: *relay_chain,
+                            target: &flow.session.target,
+                            target_port: flow.session.port,
                             payload,
-                        )
+                        })
                         .await;
                     self.record_or_fail(flow, proxy, started_at, result)?;
                 }

@@ -28,6 +28,19 @@ pub(crate) struct SsChainManager {
     upstreams: HashMap<(String, u16, String, String), Arc<SsUpstream>>,
 }
 
+pub(crate) struct SsSendExisting<'a> {
+    pub(crate) chain_tasks: &'a mut tokio::task::JoinSet<super::ChainTask>,
+    pub(crate) session_id: u64,
+    pub(crate) proxy: &'a Proxy,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) password: &'a str,
+    pub(crate) cipher: &'a str,
+    pub(crate) target: &'a Address,
+    pub(crate) target_port: u16,
+    pub(crate) payload: &'a [u8],
+}
+
 impl SsChainManager {
     pub(super) fn new() -> Self {
         Self {
@@ -134,32 +147,26 @@ impl SsChainManager {
 
     pub(crate) async fn send_existing(
         &mut self,
-        chain_tasks: &mut tokio::task::JoinSet<super::ChainTask>,
-        session_id: u64,
-        proxy: &Proxy,
-        server: &str,
-        port: u16,
-        password: &str,
-        cipher: &str,
-        target: &Address,
-        target_port: u16,
-        payload: &[u8],
+        request: SsSendExisting<'_>,
     ) -> Result<usize, FlowFailure> {
         self.send(
             UdpFlowContext {
-                chain_tasks,
-                session_id,
+                chain_tasks: request.chain_tasks,
+                session_id: request.session_id,
             },
-            proxy,
+            request.proxy,
             SsUdpPeer {
-                endpoint: UdpPeerEndpoint { server, port },
-                password,
-                cipher,
+                endpoint: UdpPeerEndpoint {
+                    server: request.server,
+                    port: request.port,
+                },
+                password: request.password,
+                cipher: request.cipher,
             },
             UdpPacketRef {
-                target,
-                port: target_port,
-                payload,
+                target: request.target,
+                port: request.target_port,
+                payload: request.payload,
             },
         )
         .await

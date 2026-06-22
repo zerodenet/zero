@@ -81,16 +81,6 @@ impl KernelPipe for UdpPipe<'_> {
     type Error = EngineError;
 
     async fn dispatch(&mut self, input: Self::Input<'_>) -> Result<Self::Output, Self::Error> {
-        UdpDispatch::dispatch(
-            self.dispatch,
-            self.proxy,
-            input.target,
-            input.port,
-            input.payload,
-            input.protocol,
-            input.auth,
-            input.client_session_id,
-        )
-        .await
+        UdpDispatch::dispatch(self.dispatch, self.proxy, input).await
     }
 }

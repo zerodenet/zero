@@ -1,11 +1,12 @@
 use std::time::Instant;
 
-use zero_core::{Address, Network, ProtocolType, Session, SessionAuth};
+use zero_core::{Network, Session};
 use zero_engine::{EngineError, ResolvedOutbound, SessionOutcome};
 
 use super::{FlowStartResult, UdpCandidate, UdpDispatch};
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
 use crate::runtime::inbound_protocol::apply_kernel_rate_limits;
+use crate::runtime::pipe::UdpPipeInput;
 use crate::runtime::Proxy;
 
 impl UdpDispatch {
@@ -18,16 +19,17 @@ impl UdpDispatch {
     pub(crate) async fn dispatch(
         &mut self,
         proxy: &Proxy,
-        target: Address,
-        port: u16,
-        payload: &[u8],
-        protocol: ProtocolType,
-        auth: Option<&SessionAuth>,
-        client_session_id: Option<u64>,
+        input: UdpPipeInput<'_>,
     ) -> Result<u64, EngineError> {
         if let Some(session_id) = self
             .vless_manager
-            .send_existing(&mut self.chain_tasks, proxy, &target, port, payload)
+            .send_existing(
+                &mut self.chain_tasks,
+                proxy,
+                &input.target,
+                input.port,
+                input.payload,
+            )
             .await?
         {
             return Ok(session_id);
@@ -36,49 +38,43 @@ impl UdpDispatch {
         #[cfg(feature = "vmess")]
         if let Some(session_id) = self
             .vmess_manager
-            .send_existing(&mut self.chain_tasks, proxy, &target, port, payload)
+            .send_existing(
+                &mut self.chain_tasks,
+                proxy,
+                &input.target,
+                input.port,
+                input.payload,
+            )
             .await?
         {
             return Ok(session_id);
         }
 
-        if let Some(flow) = self.flows.snapshot(&target, port, client_session_id) {
-            self.forward_existing(proxy, &flow, payload).await?;
+        if let Some(flow) = self
+            .flows
+            .snapshot(&input.target, input.port, input.client_session_id)
+        {
+            self.forward_existing(proxy, &flow, input.payload).await?;
             return Ok(flow.session.id);
         }
 
-        self.start_new_routed_flow(
-            proxy,
-            target,
-            port,
-            payload,
-            protocol,
-            auth,
-            client_session_id,
-        )
-        .await
+        self.start_new_routed_flow(proxy, input).await
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn start_new_routed_flow(
         &mut self,
         proxy: &Proxy,
-        target: Address,
-        port: u16,
-        payload: &[u8],
-        protocol: ProtocolType,
-        auth: Option<&SessionAuth>,
-        client_session_id: Option<u64>,
+        input: UdpPipeInput<'_>,
     ) -> Result<u64, EngineError> {
-        let mut session = Session::new(0, target, port, Network::Udp, protocol);
-        if let Some(auth) = auth {
+        let mut session = Session::new(0, input.target, input.port, Network::Udp, input.protocol);
+        if let Some(auth) = input.auth {
             session.auth = Some(auth.clone());
         }
         proxy.prepare_session(&mut session, &self.inbound_tag, None);
         apply_kernel_rate_limits(proxy, &mut session, &self.inbound_tag);
         let mut session_handle = proxy.track_session(session.id);
         let started_at = Instant::now();
-        proxy.record_session_inbound_rx(session.id, payload.len() as u64);
+        proxy.record_session_inbound_rx(session.id, input.payload.len() as u64);
 
         proxy.resolve_fake_ip_target(&mut session).await;
         let action = proxy.route_decision(&session);
@@ -110,13 +106,16 @@ impl UdpDispatch {
         let mut last_failure = None;
 
         for candidate in candidates {
-            match self.start_flow(proxy, candidate, &session, payload).await {
+            match self
+                .start_flow(proxy, candidate, &session, input.payload)
+                .await
+            {
                 Ok(FlowStartResult::Flow { outbound, tx_bytes }) => {
                     let session_id = session.id;
                     session.outbound_tag = Some(outbound.tag().to_owned());
                     proxy.set_session_outbound(&session);
                     self.flows
-                        .insert(session, session_handle, *outbound, client_session_id);
+                        .insert(session, session_handle, *outbound, input.client_session_id);
                     proxy.record_session_outbound_tx(session_id, tx_bytes);
                     return Ok(session_id);
                 }
@@ -127,7 +126,7 @@ impl UdpDispatch {
                         (session.target.clone(), session.port),
                         (session, session_handle),
                     );
-                    proxy.record_session_outbound_tx(session_id, payload.len() as u64);
+                    proxy.record_session_outbound_tx(session_id, input.payload.len() as u64);
                     return Ok(session_id);
                 }
                 #[cfg(feature = "vmess")]
@@ -138,7 +137,7 @@ impl UdpDispatch {
                         (session.target.clone(), session.port),
                         (session, session_handle),
                     );
-                    proxy.record_session_outbound_tx(session_id, payload.len() as u64);
+                    proxy.record_session_outbound_tx(session_id, input.payload.len() as u64);
                     return Ok(session_id);
                 }
                 Ok(FlowStartResult::Blocked { tag }) => {

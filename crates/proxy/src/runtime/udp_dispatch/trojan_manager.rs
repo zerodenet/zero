@@ -46,6 +46,54 @@ struct TrojanEntry {
 }
 
 #[cfg(feature = "trojan")]
+pub(crate) struct TrojanSendExisting<'a> {
+    pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub(crate) session_id: u64,
+    pub(crate) proxy: &'a Proxy,
+    pub(crate) session: &'a Session,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) password: &'a str,
+    pub(crate) sni: Option<&'a str>,
+    pub(crate) insecure: bool,
+    pub(crate) client_fingerprint: Option<&'a str>,
+    pub(crate) relay_chain: bool,
+    pub(crate) target: &'a Address,
+    pub(crate) target_port: u16,
+    pub(crate) payload: &'a [u8],
+}
+
+#[cfg(feature = "trojan")]
+pub(crate) struct TrojanRelaySend<'a> {
+    pub(crate) ctx: UdpFlowContext<'a>,
+    pub(crate) stream: TcpRelayStream,
+    pub(crate) tls_server_name: Option<&'a str>,
+    pub(crate) proxy: &'a Proxy,
+    pub(crate) session: &'a Session,
+    pub(crate) peer: TrojanUdpPeer<'a>,
+    pub(crate) packet: UdpPacketRef<'a>,
+}
+
+#[cfg(feature = "trojan")]
+pub(crate) struct TrojanRelayExisting<'a> {
+    pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub(crate) session_id: u64,
+    pub(crate) stream: TcpRelayStream,
+    pub(crate) tls_server_name: Option<&'a str>,
+    pub(crate) proxy: &'a Proxy,
+    pub(crate) session: &'a Session,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) password: &'a str,
+    pub(crate) sni: Option<&'a str>,
+    pub(crate) insecure: bool,
+    pub(crate) client_fingerprint: Option<&'a str>,
+    pub(crate) target: &'a Address,
+    pub(crate) target_port: u16,
+    pub(crate) payload: &'a [u8],
+}
+
+#[cfg(feature = "trojan")]
 impl TrojanChainManager {
     pub(super) fn new() -> Self {
         Self {
@@ -121,65 +169,48 @@ impl TrojanChainManager {
         Ok(sent)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn send_existing(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        session_id: u64,
-        proxy: &Proxy,
-        session: &Session,
-        server: &str,
-        port: u16,
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
-        relay_chain: bool,
-        target: &Address,
-        target_port: u16,
-        payload: &[u8],
+        request: TrojanSendExisting<'_>,
     ) -> Result<usize, FlowFailure> {
         self.send(
             UdpFlowContext {
-                chain_tasks,
-                session_id,
+                chain_tasks: request.chain_tasks,
+                session_id: request.session_id,
             },
-            proxy,
-            session,
+            request.proxy,
+            request.session,
             TrojanUdpPeer {
-                endpoint: UdpPeerEndpoint { server, port },
-                password,
-                sni,
-                insecure,
-                client_fingerprint,
-                relay_chain,
+                endpoint: UdpPeerEndpoint {
+                    server: request.server,
+                    port: request.port,
+                },
+                password: request.password,
+                sni: request.sni,
+                insecure: request.insecure,
+                client_fingerprint: request.client_fingerprint,
+                relay_chain: request.relay_chain,
             },
             UdpPacketRef {
-                target,
-                port: target_port,
-                payload,
+                target: request.target,
+                port: request.target_port,
+                payload: request.payload,
             },
         )
         .await
     }
 
-    async fn send_relay(
-        &mut self,
-        ctx: UdpFlowContext<'_>,
-        stream: TcpRelayStream,
-        tls_server_name: Option<&str>,
-        proxy: &Proxy,
-        session: &Session,
-        peer: TrojanUdpPeer<'_>,
-        packet_ref: UdpPacketRef<'_>,
-    ) -> Result<usize, FlowFailure> {
+    async fn send_relay(&mut self, request: TrojanRelaySend<'_>) -> Result<usize, FlowFailure> {
+        let ctx = request.ctx;
+        let packet_ref = request.packet;
+        let peer = request.peer;
         let session_id = ctx.session_id;
         let key = TrojanKey::Relay { session_id };
         let entry = Self::establish_over_relay_stream(
-            stream,
-            tls_server_name,
-            proxy,
-            session,
+            request.stream,
+            request.tls_server_name,
+            request.proxy,
+            request.session,
             &peer,
             packet_ref.target,
             packet_ref.port,
@@ -205,48 +236,36 @@ impl TrojanChainManager {
         Ok(packet_ref.payload.len())
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn send_relay_existing(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        session_id: u64,
-        stream: TcpRelayStream,
-        tls_server_name: Option<&str>,
-        proxy: &Proxy,
-        session: &Session,
-        server: &str,
-        port: u16,
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
-        target: &Address,
-        target_port: u16,
-        payload: &[u8],
+        request: TrojanRelayExisting<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.send_relay(
-            UdpFlowContext {
-                chain_tasks,
-                session_id,
+        self.send_relay(TrojanRelaySend {
+            ctx: UdpFlowContext {
+                chain_tasks: request.chain_tasks,
+                session_id: request.session_id,
             },
-            stream,
-            tls_server_name,
-            proxy,
-            session,
-            TrojanUdpPeer {
-                endpoint: UdpPeerEndpoint { server, port },
-                password,
-                sni,
-                insecure,
-                client_fingerprint,
+            stream: request.stream,
+            tls_server_name: request.tls_server_name,
+            proxy: request.proxy,
+            session: request.session,
+            peer: TrojanUdpPeer {
+                endpoint: UdpPeerEndpoint {
+                    server: request.server,
+                    port: request.port,
+                },
+                password: request.password,
+                sni: request.sni,
+                insecure: request.insecure,
+                client_fingerprint: request.client_fingerprint,
                 relay_chain: true,
             },
-            UdpPacketRef {
-                target,
-                port: target_port,
-                payload,
+            packet: UdpPacketRef {
+                target: request.target,
+                port: request.target_port,
+                payload: request.payload,
             },
-        )
+        })
         .await
     }
 
