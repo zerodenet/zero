@@ -9,10 +9,7 @@
 //!
 //! - [`forward`]: re-dispatch packets on existing outbound flows
 //! - [`start`]: establish new outbound flows (single-hop and relay chains)
-//! - [`ss_manager`]: Shadowsocks direct datagram manager
-//! - [`h2_manager`]: Hysteria2 QUIC datagram manager
-//! - [`trojan_manager`]: Trojan stream-packet manager
-//! - [`mieru_manager`]: Mieru stream-packet manager
+//! - [`crate::protocol_runtime::udp`]: protocol-specific UDP managers
 //! - [`packet_path_chain`]: generic datagram-over-packet-path manager for
 //!   relay chains (Shadowsocks -> Shadowsocks, SOCKS5 -> Shadowsocks, etc.)
 //!
@@ -44,7 +41,7 @@
 //! // Poll for responses in a select loop:
 //! select! {
 //!     recv = dispatch.direct_socket().recv_from_addr(&mut buf) => { /* direct response */ }
-//!     resp = dispatch.vless_manager().next_response() => { /* VLESS chain */ }
+//!     resp = dispatch.poll_chain_response() => { /* chain response */ }
 //!     // ...
 //! }
 //!
@@ -61,9 +58,6 @@ use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 
 use crate::logging::{log_session_failed, log_session_finished};
-use crate::protocol_runtime::vless_udp::VlessUdpOutboundManager;
-#[cfg(feature = "vmess")]
-use crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager;
 use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpSessionFlows};
 use crate::runtime::Proxy;
 use zero_core::{Address, Session};
@@ -89,16 +83,7 @@ pub(crate) use crate::protocol_runtime::udp::build_hysteria2_packet_path;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use crate::protocol_runtime::udp::build_shadowsocks_packet_path;
 pub(crate) use crate::protocol_runtime::udp::ChainTask;
-#[cfg(feature = "hysteria2")]
-use crate::protocol_runtime::udp::H2ChainManager;
-#[cfg(feature = "mieru")]
-use crate::protocol_runtime::udp::MieruChainManager;
-#[cfg(feature = "shadowsocks")]
-use crate::protocol_runtime::udp::PacketPathManager;
-#[cfg(feature = "shadowsocks")]
-use crate::protocol_runtime::udp::SsChainManager;
-#[cfg(feature = "trojan")]
-use crate::protocol_runtime::udp::TrojanChainManager;
+use crate::protocol_runtime::udp::ProtocolUdpState;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use crate::protocol_runtime::udp::{
     PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
@@ -118,9 +103,8 @@ pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
 /// Protocol-agnostic UDP dispatch state.
 ///
-/// Owns all outbound-specific state (direct socket, upstream associations,
-/// VLESS manager) and session flow tracking.  Created per inbound UDP
-/// session/association.
+/// Owns generic UDP dispatch state and a protocol runtime state bundle.
+/// Created per inbound UDP session/association.
 pub(crate) struct UdpDispatch {
     pub(crate) inbound_tag: String,
     pub(crate) flows: UdpSessionFlows,
@@ -130,11 +114,8 @@ pub(crate) struct UdpDispatch {
     pub(crate) socks5_upstream:
         Option<crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>,
     pub(crate) socks5_idle_deadline: Option<TokioInstant>,
-    /// VLESS upstream manager (per-target connections).
-    vless_manager: VlessUdpOutboundManager,
-    /// VMess upstream manager (per-target connections).
-    #[cfg(feature = "vmess")]
-    vmess_manager: VmessUdpOutboundManager,
+    /// Protocol-specific UDP managers.
+    protocol_state: ProtocolUdpState,
     /// Session handles for VLESS chain flows. These are not tracked by
     /// [`UdpSessionFlows`] because the VLESS manager owns the per-target
     /// upstream connections. We store handles here so `finish_all()` can
@@ -146,22 +127,6 @@ pub(crate) struct UdpDispatch {
     /// Unified JoinSet for chain-outbound (SS/H2/Trojan/Mieru/VLESS)
     /// response bridge tasks. Polled by [`poll_chain_response`].
     pub(crate) chain_tasks: JoinSet<ChainTask>,
-    /// Per-dispatcher SS chain manager. Caches upstream sockets.
-    #[cfg(feature = "shadowsocks")]
-    ss_manager: SsChainManager,
-    /// Per-dispatcher datagram-over-packet-path manager for UDP relay chains.
-    /// Caches packet path carrier connections.
-    #[cfg(feature = "shadowsocks")]
-    packet_path_manager: PacketPathManager,
-    /// Per-dispatcher Trojan chain manager. Caches TLS upstream streams.
-    #[cfg(feature = "trojan")]
-    trojan_manager: TrojanChainManager,
-    /// Per-dispatcher Mieru chain manager. Caches encrypted upstream streams.
-    #[cfg(feature = "mieru")]
-    mieru_manager: MieruChainManager,
-    /// Per-dispatcher H2 chain manager. Caches QUIC upstream connections.
-    #[cfg(feature = "hysteria2")]
-    h2_manager: H2ChainManager,
 }
 
 impl UdpDispatch {

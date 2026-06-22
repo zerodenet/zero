@@ -13,6 +13,7 @@ mod mieru_manager;
 mod packet_path_chain;
 #[cfg(feature = "shadowsocks")]
 mod ss_manager;
+mod state;
 #[cfg(feature = "trojan")]
 mod trojan_manager;
 
@@ -32,5 +33,6 @@ pub(crate) use packet_path_traits::{
 };
 #[cfg(feature = "shadowsocks")]
 pub(crate) use ss_manager::{SsChainManager, SsSendExisting};
+pub(crate) use state::ProtocolUdpState;
 #[cfg(feature = "trojan")]
 pub(crate) use trojan_manager::{TrojanChainManager, TrojanRelayExisting, TrojanSendExisting};

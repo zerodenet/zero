@@ -72,7 +72,7 @@ KernelPipe -> TcpPipe / UdpPipe -> 协议特征 -> 协议 crates
 
 `KernelPipe` 是运行时编排边界，不是协议特征。它依赖于运行时状态，如路由、会话、统计、事件、传输设置和任务生命周期，因此它属于 `zero-proxy`。
 
-`TcpPipe` 拥有常规 TCP 流的 TCP 路由执行和出站建立。`UdpPipe` 拥有将 UDP 数据包提交到 UDP 运行时状态机的功能。`UdpDispatch` 仍然是 UDP 管道的内部状态持有者，用于 direct socket、上游关联、缓存管理器、响应任务、会话核算和 fallback 处理。
+`TcpPipe` 拥有常规 TCP 流的 TCP 路由执行和出站建立。`UdpPipe` 拥有将 UDP 数据包提交到 UDP 运行时状态机的功能。`UdpDispatch` 仍然是 UDP 管道的内部状态持有者，用于 direct socket、上游关联、协议运行时状态聚合、响应任务、会话核算和 fallback 处理。
 
 协议 crates 不实现 `KernelPipe`。它们实现协议无关的行为特征，用于握手、会话状态、流数据包帧封装或 datagram 帧封装。
 

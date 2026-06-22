@@ -27,7 +27,8 @@ impl UdpDispatch {
                         .is_some()
                 {
                     let sent = self
-                        .packet_path_manager
+                        .protocol_state
+                        .packet_path
                         .send(
                             UdpFlowContext {
                                 chain_tasks: &mut self.chain_tasks,

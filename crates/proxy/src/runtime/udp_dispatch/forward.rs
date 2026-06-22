@@ -102,7 +102,8 @@ impl UdpDispatch {
                 } => {
                     #[cfg(feature = "shadowsocks")]
                     let result = if let Some(carrier) = packet_path_carrier {
-                        self.packet_path_manager
+                        self.protocol_state
+                            .packet_path
                             .send_with_snapshot(
                                 crate::protocol_runtime::udp::packet_path_traits::UdpFlowContext {
                                     chain_tasks: &mut self.chain_tasks,
@@ -122,7 +123,8 @@ impl UdpDispatch {
                             )
                             .await
                     } else {
-                        self.ss_manager
+                        self.protocol_state
+                            .shadowsocks
                             .send_existing(crate::protocol_runtime::udp::SsSendExisting {
                                 chain_tasks: &mut self.chain_tasks,
                                 session_id: flow.session.id,
@@ -149,7 +151,8 @@ impl UdpDispatch {
                     client_fingerprint,
                 } => {
                     let result = self
-                        .h2_manager
+                        .protocol_state
+                        .hysteria2
                         .send_existing(crate::protocol_runtime::udp::H2SendExisting {
                             chain_tasks: &mut self.chain_tasks,
                             session_id: flow.session.id,
@@ -181,7 +184,8 @@ impl UdpDispatch {
                     relay_chain,
                 } => {
                     let result = self
-                        .trojan_manager
+                        .protocol_state
+                        .trojan
                         .send_existing(crate::protocol_runtime::udp::TrojanSendExisting {
                             chain_tasks: &mut self.chain_tasks,
                             session_id: flow.session.id,
@@ -211,7 +215,8 @@ impl UdpDispatch {
                     relay_chain,
                 } => {
                     let result = self
-                        .mieru_manager
+                        .protocol_state
+                        .mieru
                         .send_existing(
                             &mut self.chain_tasks,
                             flow.session.id,

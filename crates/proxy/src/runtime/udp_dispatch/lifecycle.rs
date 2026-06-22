@@ -13,23 +13,11 @@ impl UdpDispatch {
             direct_socket,
             socks5_upstream: None,
             socks5_idle_deadline: None,
-            vless_manager: VlessUdpOutboundManager::new(),
-            #[cfg(feature = "vmess")]
-            vmess_manager: VmessUdpOutboundManager::new(),
+            protocol_state: ProtocolUdpState::new(),
             vless_handles: HashMap::new(),
             #[cfg(feature = "vmess")]
             vmess_handles: HashMap::new(),
             chain_tasks: JoinSet::new(),
-            #[cfg(feature = "shadowsocks")]
-            ss_manager: SsChainManager::new(),
-            #[cfg(feature = "shadowsocks")]
-            packet_path_manager: PacketPathManager::new(),
-            #[cfg(feature = "trojan")]
-            trojan_manager: TrojanChainManager::new(),
-            #[cfg(feature = "mieru")]
-            mieru_manager: MieruChainManager::new(),
-            #[cfg(feature = "hysteria2")]
-            h2_manager: H2ChainManager::new(),
         })
     }
 
@@ -42,23 +30,11 @@ impl UdpDispatch {
             direct_socket,
             socks5_upstream: None,
             socks5_idle_deadline: None,
-            vless_manager: VlessUdpOutboundManager::new(),
-            #[cfg(feature = "vmess")]
-            vmess_manager: VmessUdpOutboundManager::new(),
+            protocol_state: ProtocolUdpState::new(),
             vless_handles: HashMap::new(),
             #[cfg(feature = "vmess")]
             vmess_handles: HashMap::new(),
             chain_tasks: JoinSet::new(),
-            #[cfg(feature = "shadowsocks")]
-            ss_manager: SsChainManager::new(),
-            #[cfg(feature = "shadowsocks")]
-            packet_path_manager: PacketPathManager::new(),
-            #[cfg(feature = "trojan")]
-            trojan_manager: TrojanChainManager::new(),
-            #[cfg(feature = "mieru")]
-            mieru_manager: MieruChainManager::new(),
-            #[cfg(feature = "hysteria2")]
-            h2_manager: H2ChainManager::new(),
         }
     }
 

@@ -390,6 +390,31 @@ fn generic_udp_dispatch_does_not_contain_protocol_manager_modules() {
 }
 
 #[test]
+fn udp_dispatch_keeps_protocol_managers_in_protocol_runtime_state() {
+    let content = read("src/runtime/udp_dispatch/mod.rs");
+
+    assert!(
+        content.contains("protocol_state: ProtocolUdpState"),
+        "UdpDispatch should keep protocol-specific managers behind ProtocolUdpState"
+    );
+
+    for forbidden in [
+        "vless_manager:",
+        "vmess_manager:",
+        "ss_manager:",
+        "packet_path_manager:",
+        "trojan_manager:",
+        "mieru_manager:",
+        "h2_manager:",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "UdpDispatch should not declare protocol manager field `{forbidden}` directly"
+        );
+    }
+}
+
+#[test]
 fn udp_forward_stays_protocol_neutral_and_does_not_construct_peer_types() {
     let content = read("src/runtime/udp_dispatch/forward.rs");
 

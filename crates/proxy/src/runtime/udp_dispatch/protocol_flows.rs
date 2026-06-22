@@ -105,7 +105,8 @@ impl UdpDispatch {
         &mut self,
         flow: ShadowsocksUdpFlow<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.ss_manager
+        self.protocol_state
+            .shadowsocks
             .send_existing(crate::protocol_runtime::udp::SsSendExisting {
                 chain_tasks: &mut self.chain_tasks,
                 session_id: flow.session.id,
@@ -131,7 +132,8 @@ impl UdpDispatch {
         client_fingerprint: Option<&str>,
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
-        self.h2_manager
+        self.protocol_state
+            .hysteria2
             .send_existing(crate::protocol_runtime::udp::H2SendExisting {
                 chain_tasks: &mut self.chain_tasks,
                 session_id: session.id,
@@ -161,7 +163,8 @@ impl UdpDispatch {
         relay_chain: bool,
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
-        self.trojan_manager
+        self.protocol_state
+            .trojan
             .send_existing(crate::protocol_runtime::udp::TrojanSendExisting {
                 chain_tasks: &mut self.chain_tasks,
                 session_id: session.id,
@@ -196,7 +199,8 @@ impl UdpDispatch {
         client_fingerprint: Option<&str>,
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
-        self.trojan_manager
+        self.protocol_state
+            .trojan
             .send_relay_existing(crate::protocol_runtime::udp::TrojanRelayExisting {
                 chain_tasks: &mut self.chain_tasks,
                 session_id: session.id,
@@ -230,7 +234,8 @@ impl UdpDispatch {
         relay_chain: bool,
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
-        self.mieru_manager
+        self.protocol_state
+            .mieru
             .send_existing(
                 &mut self.chain_tasks,
                 session.id,
@@ -253,7 +258,8 @@ impl UdpDispatch {
         &mut self,
         flow: MieruUdpRelayFlow<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.mieru_manager
+        self.protocol_state
+            .mieru
             .send_relay_existing(
                 &mut self.chain_tasks,
                 flow.session.id,
@@ -284,7 +290,8 @@ impl UdpDispatch {
             split_http: flow.split_http,
             quic: flow.quic,
         };
-        self.vless_manager
+        self.protocol_state
+            .vless
             .start_flow(
                 &mut self.chain_tasks,
                 crate::protocol_runtime::vless_udp::VlessUdpStartFlow {
@@ -312,7 +319,8 @@ impl UdpDispatch {
         &mut self,
         flow: VlessUdpRelayTwoStream<'_>,
     ) -> Result<(), FlowFailure> {
-        self.vless_manager
+        self.protocol_state
+            .vless
             .start_relay_two_stream(
                 &mut self.chain_tasks,
                 crate::protocol_runtime::vless_udp::VlessUdpRelayTwoStream {
@@ -349,7 +357,8 @@ impl UdpDispatch {
             split_http: flow.split_http,
             quic: None,
         };
-        self.vless_manager
+        self.protocol_state
+            .vless
             .start_relay_final_hop(
                 &mut self.chain_tasks,
                 crate::protocol_runtime::vless_udp::VlessUdpRelayFinalHop {
@@ -380,7 +389,8 @@ impl UdpDispatch {
             ws: flow.ws,
             grpc: flow.grpc,
         };
-        self.vmess_manager
+        self.protocol_state
+            .vmess
             .start_flow(
                 &mut self.chain_tasks,
                 crate::protocol_runtime::vmess_udp::VmessUdpStartFlow {
@@ -414,7 +424,8 @@ impl UdpDispatch {
             ws: flow.ws,
             grpc: flow.grpc,
         };
-        self.vmess_manager
+        self.protocol_state
+            .vmess
             .start_relay_flow(
                 &mut self.chain_tasks,
                 crate::protocol_runtime::vmess_udp::VmessUdpRelayFlow {

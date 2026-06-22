@@ -22,7 +22,8 @@ impl UdpDispatch {
         input: UdpPipeInput<'_>,
     ) -> Result<u64, EngineError> {
         if let Some(session_id) = self
-            .vless_manager
+            .protocol_state
+            .vless
             .send_existing(
                 &mut self.chain_tasks,
                 proxy,
@@ -37,7 +38,8 @@ impl UdpDispatch {
 
         #[cfg(feature = "vmess")]
         if let Some(session_id) = self
-            .vmess_manager
+            .protocol_state
+            .vmess
             .send_existing(
                 &mut self.chain_tasks,
                 proxy,
