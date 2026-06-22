@@ -454,12 +454,26 @@ fn udp_relay_start_delegates_packet_path_chain_to_protocol_state() {
 fn udp_forward_stays_protocol_neutral_and_does_not_construct_peer_types() {
     let content = read("src/runtime/udp_dispatch/forward.rs");
 
+    assert!(
+        content.contains("forward_existing_protocol_flow"),
+        "src/runtime/udp_dispatch/forward.rs should delegate protocol manager forwarding to ProtocolUdpState"
+    );
+
     for forbidden in [
         "SsUdpPeer",
         "H2UdpPeer",
         "TrojanUdpPeer",
         "MieruUdpPeer",
         "UdpPeerEndpoint",
+        ".packet_path",
+        ".shadowsocks",
+        ".hysteria2",
+        ".trojan",
+        ".mieru",
+        "UdpFlowOutbound::Shadowsocks",
+        "UdpFlowOutbound::Hysteria2",
+        "UdpFlowOutbound::Trojan",
+        "UdpFlowOutbound::Mieru",
     ] {
         assert!(
             !content.contains(forbidden),
