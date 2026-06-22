@@ -5,6 +5,7 @@
 //! drift into generic runtime modules.
 
 pub(crate) mod socks5_udp;
+pub(crate) mod udp;
 pub(crate) mod vless_mux_pool;
 pub(crate) mod vless_udp;
 

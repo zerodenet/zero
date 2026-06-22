@@ -42,7 +42,7 @@ pub(crate) struct SsSendExisting<'a> {
 }
 
 impl SsChainManager {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             upstreams: HashMap::new(),
         }

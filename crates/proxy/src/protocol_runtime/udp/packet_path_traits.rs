@@ -30,7 +30,7 @@ use crate::runtime::orchestration::OutboundEndpoint;
 
 /// Datagram codec for encoding/decoding inner protocol datagrams.
 #[cfg(feature = "shadowsocks")]
-pub(in crate::runtime) use zero_traits::DatagramCodec;
+pub(crate) use zero_traits::DatagramCodec;
 
 /// Object-safe packet-path carrier.
 ///

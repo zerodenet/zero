@@ -232,7 +232,7 @@ pub(crate) struct PacketPathManager {
 }
 
 impl PacketPathManager {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             upstreams: HashMap::new(),
         }
@@ -240,7 +240,7 @@ impl PacketPathManager {
 
     /// Start path: resolve carrier+datagram via the adapter registry, build on
     /// cache miss, encode + send. Takes the resolved leaves directly.
-    pub(super) async fn send(
+    pub(crate) async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
@@ -262,7 +262,7 @@ impl PacketPathManager {
     /// Forward path: the carrier was cached at start time; look it up by the
     /// stored snapshot's cache key. No leaves available, so no re-dial.
     #[allow(clippy::too_many_arguments)]
-    pub(super) async fn send_with_snapshot(
+    pub(crate) async fn send_with_snapshot(
         &mut self,
         ctx: UdpFlowContext<'_>,
         carrier: &crate::runtime::udp_associate::sessions::UdpPacketPathCarrier,

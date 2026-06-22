@@ -14,11 +14,11 @@ use super::{FlowFailure, FlowStartResult, UdpCandidate, UdpDispatch};
 use crate::runtime::Proxy;
 
 // Re-exports consumed by `relay` submodule via `use super::*`.
-#[allow(unused_imports)]
-pub(super) use crate::runtime::udp_associate::sessions::UdpFlowOutbound;
 #[cfg(feature = "shadowsocks")]
 #[allow(unused_imports)]
-pub(super) use crate::runtime::udp_dispatch::packet_path_traits::{UdpFlowContext, UdpPacketRef};
+pub(super) use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
+#[allow(unused_imports)]
+pub(super) use crate::runtime::udp_associate::sessions::UdpFlowOutbound;
 
 impl UdpDispatch {
     /// Start a new UDP flow by dispatching to the resolved outbound.

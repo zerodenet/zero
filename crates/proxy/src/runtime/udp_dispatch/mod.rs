@@ -80,36 +80,27 @@ mod socks5_flow;
 mod start;
 mod types;
 
-mod packet_path_traits;
-
-#[cfg(feature = "hysteria2")]
-mod h2_manager;
-#[cfg(feature = "mieru")]
-mod mieru_manager;
-#[cfg(feature = "shadowsocks")]
-mod packet_path_chain;
-#[cfg(feature = "shadowsocks")]
-mod ss_manager;
-#[cfg(feature = "trojan")]
-mod trojan_manager;
-
 // Re-exports.
 
 #[cfg(all(feature = "shadowsocks", feature = "socks5"))]
 pub(crate) use crate::protocol_runtime::socks5_udp::build_socks5_packet_path;
-#[cfg(feature = "hysteria2")]
-use h2_manager::H2ChainManager;
-#[cfg(feature = "mieru")]
-use mieru_manager::MieruChainManager;
 #[cfg(all(feature = "shadowsocks", feature = "hysteria2"))]
-pub(crate) use packet_path_chain::build_hysteria2_packet_path;
+pub(crate) use crate::protocol_runtime::udp::build_hysteria2_packet_path;
 #[cfg(feature = "shadowsocks")]
-pub(crate) use packet_path_chain::build_shadowsocks_packet_path;
+pub(crate) use crate::protocol_runtime::udp::build_shadowsocks_packet_path;
+pub(crate) use crate::protocol_runtime::udp::ChainTask;
+#[cfg(feature = "hysteria2")]
+use crate::protocol_runtime::udp::H2ChainManager;
+#[cfg(feature = "mieru")]
+use crate::protocol_runtime::udp::MieruChainManager;
 #[cfg(feature = "shadowsocks")]
-use packet_path_chain::PacketPathManager;
-pub(crate) use packet_path_traits::ChainTask;
+use crate::protocol_runtime::udp::PacketPathManager;
 #[cfg(feature = "shadowsocks")]
-pub(crate) use packet_path_traits::{
+use crate::protocol_runtime::udp::SsChainManager;
+#[cfg(feature = "trojan")]
+use crate::protocol_runtime::udp::TrojanChainManager;
+#[cfg(feature = "shadowsocks")]
+pub(crate) use crate::protocol_runtime::udp::{
     PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
 };
 #[cfg(feature = "mieru")]
@@ -121,10 +112,6 @@ pub(crate) use protocol_flows::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRel
 #[cfg(feature = "vmess")]
 pub(crate) use protocol_flows::{VmessUdpFlow, VmessUdpRelayFlow};
 pub(crate) use socks5_flow::Socks5UdpSend;
-#[cfg(feature = "shadowsocks")]
-use ss_manager::SsChainManager;
-#[cfg(feature = "trojan")]
-use trojan_manager::TrojanChainManager;
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
 // UdpDispatch.

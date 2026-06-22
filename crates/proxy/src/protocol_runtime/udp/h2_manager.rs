@@ -43,7 +43,7 @@ pub(crate) struct H2SendExisting<'a> {
 
 #[cfg(feature = "hysteria2")]
 impl H2ChainManager {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             upstreams: HashMap::new(),
         }

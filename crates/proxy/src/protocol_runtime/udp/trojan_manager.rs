@@ -95,7 +95,7 @@ pub(crate) struct TrojanRelayExisting<'a> {
 
 #[cfg(feature = "trojan")]
 impl TrojanChainManager {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             upstreams: HashMap::new(),
         }

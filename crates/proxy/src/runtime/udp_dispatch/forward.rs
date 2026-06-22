@@ -104,7 +104,7 @@ impl UdpDispatch {
                     let result = if let Some(carrier) = packet_path_carrier {
                         self.packet_path_manager
                             .send_with_snapshot(
-                                super::packet_path_traits::UdpFlowContext {
+                                crate::protocol_runtime::udp::packet_path_traits::UdpFlowContext {
                                     chain_tasks: &mut self.chain_tasks,
                                     session_id: flow.session.id,
                                 },
@@ -114,7 +114,7 @@ impl UdpDispatch {
                                 *port,
                                 password.as_str(),
                                 cipher.as_str(),
-                                super::packet_path_traits::UdpPacketRef {
+                                crate::protocol_runtime::udp::packet_path_traits::UdpPacketRef {
                                     target: &flow.session.target,
                                     port: flow.session.port,
                                     payload,
@@ -123,7 +123,7 @@ impl UdpDispatch {
                             .await
                     } else {
                         self.ss_manager
-                            .send_existing(super::ss_manager::SsSendExisting {
+                            .send_existing(crate::protocol_runtime::udp::SsSendExisting {
                                 chain_tasks: &mut self.chain_tasks,
                                 session_id: flow.session.id,
                                 proxy,
@@ -150,7 +150,7 @@ impl UdpDispatch {
                 } => {
                     let result = self
                         .h2_manager
-                        .send_existing(super::h2_manager::H2SendExisting {
+                        .send_existing(crate::protocol_runtime::udp::H2SendExisting {
                             chain_tasks: &mut self.chain_tasks,
                             session_id: flow.session.id,
                             server: server.as_str(),
@@ -182,7 +182,7 @@ impl UdpDispatch {
                 } => {
                     let result = self
                         .trojan_manager
-                        .send_existing(super::trojan_manager::TrojanSendExisting {
+                        .send_existing(crate::protocol_runtime::udp::TrojanSendExisting {
                             chain_tasks: &mut self.chain_tasks,
                             session_id: flow.session.id,
                             proxy,

@@ -333,15 +333,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
 
 #[test]
 fn generic_runtime_root_does_not_import_protocol_crates_directly() {
-    let allowed_exact = [
-        "src/runtime/udp_associate.rs",
-        "src/runtime/udp_associate/helpers.rs",
-        "src/runtime/udp_dispatch/h2_manager.rs",
-        "src/runtime/udp_dispatch/mieru_manager.rs",
-        "src/runtime/udp_dispatch/packet_path_chain.rs",
-        "src/runtime/udp_dispatch/ss_manager.rs",
-        "src/runtime/udp_dispatch/trojan_manager.rs",
-    ];
+    let allowed_exact = ["src/runtime/udp_associate.rs"];
 
     for path in rust_sources_under("src/runtime") {
         let source = relative(&path);
@@ -364,6 +356,28 @@ fn generic_runtime_root_does_not_import_protocol_crates_directly() {
                 "{source} should not import protocol crate `{protocol_crate}` directly; move protocol state to src/protocol_runtime"
             );
         }
+    }
+}
+
+#[test]
+fn generic_udp_dispatch_does_not_contain_protocol_manager_modules() {
+    let forbidden = [
+        "h2_manager.rs",
+        "mieru_manager.rs",
+        "packet_path_chain.rs",
+        "packet_path_traits.rs",
+        "ss_manager.rs",
+        "trojan_manager.rs",
+    ];
+
+    for file_name in forbidden {
+        let path = manifest_dir()
+            .join("src/runtime/udp_dispatch")
+            .join(file_name);
+        assert!(
+            !path.exists(),
+            "src/runtime/udp_dispatch/{file_name} should live under src/protocol_runtime/udp"
+        );
     }
 }
 
@@ -408,7 +422,7 @@ fn adapters_do_not_construct_udp_dispatch_peer_helpers() {
 
 #[test]
 fn packet_path_chain_does_not_own_socks5_runtime_state() {
-    let content = read("src/runtime/udp_dispatch/packet_path_chain.rs");
+    let content = read("src/protocol_runtime/udp/packet_path_chain.rs");
 
     for forbidden in [
         "ActiveUpstreamSocks5UdpAssociation",
@@ -417,7 +431,7 @@ fn packet_path_chain_does_not_own_socks5_runtime_state() {
     ] {
         assert!(
             !content.contains(forbidden),
-            "src/runtime/udp_dispatch/packet_path_chain.rs should stay generic; found `{forbidden}`"
+            "src/protocol_runtime/udp/packet_path_chain.rs should stay generic; found `{forbidden}`"
         );
     }
 }

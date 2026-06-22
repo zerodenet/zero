@@ -106,7 +106,7 @@ impl UdpDispatch {
         flow: ShadowsocksUdpFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         self.ss_manager
-            .send_existing(super::ss_manager::SsSendExisting {
+            .send_existing(crate::protocol_runtime::udp::SsSendExisting {
                 chain_tasks: &mut self.chain_tasks,
                 session_id: flow.session.id,
                 proxy: flow.proxy,
@@ -132,7 +132,7 @@ impl UdpDispatch {
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         self.h2_manager
-            .send_existing(super::h2_manager::H2SendExisting {
+            .send_existing(crate::protocol_runtime::udp::H2SendExisting {
                 chain_tasks: &mut self.chain_tasks,
                 session_id: session.id,
                 server,
@@ -162,7 +162,7 @@ impl UdpDispatch {
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         self.trojan_manager
-            .send_existing(super::trojan_manager::TrojanSendExisting {
+            .send_existing(crate::protocol_runtime::udp::TrojanSendExisting {
                 chain_tasks: &mut self.chain_tasks,
                 session_id: session.id,
                 proxy,
@@ -197,7 +197,7 @@ impl UdpDispatch {
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         self.trojan_manager
-            .send_relay_existing(super::trojan_manager::TrojanRelayExisting {
+            .send_relay_existing(crate::protocol_runtime::udp::TrojanRelayExisting {
                 chain_tasks: &mut self.chain_tasks,
                 session_id: session.id,
                 stream: carrier.stream,
