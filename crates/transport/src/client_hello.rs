@@ -117,7 +117,7 @@ pub fn chrome_padding_size(current_size: usize) -> usize {
         512
     } else {
         // Round up to next 256-byte boundary
-        ((current_size + 255) / 256) * 256
+        current_size.div_ceil(256) * 256
     };
     target.saturating_sub(current_size)
 }

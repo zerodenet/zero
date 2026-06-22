@@ -80,16 +80,17 @@ pub(crate) async fn connect_tcp(
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
 
-    let connector = crate::transport::VlessTransportConnector::new(
-        tls,
-        reality,
-        ws,
-        grpc,
-        h2,
-        http_upgrade,
-        split_http,
-        proxy.config.source_dir(),
-    );
+    let connector =
+        crate::transport::VlessTransportConnector::new(crate::transport::VlessTransportOptions {
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            source_dir: proxy.config.source_dir(),
+        });
     let stream = connector.connect(socket, server, port).await?;
 
     let is_reality = reality.is_some();

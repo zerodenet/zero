@@ -247,14 +247,16 @@ async fn establish_vless_udp_upstream(
     let stream: TcpRelayStream = match transport {
         Some(t) => {
             let connector = crate::transport::VlessTransportConnector::new(
-                t.tls,
-                t.reality,
-                t.ws,
-                t.grpc,
-                t.h2,
-                t.http_upgrade,
-                t.split_http,
-                proxy.config.source_dir(),
+                crate::transport::VlessTransportOptions {
+                    tls: t.tls,
+                    reality: t.reality,
+                    ws: t.ws,
+                    grpc: t.grpc,
+                    h2: t.h2,
+                    http_upgrade: t.http_upgrade,
+                    split_http: t.split_http,
+                    source_dir: proxy.config.source_dir(),
+                },
             );
             connector.connect(socket, server, port).await?
         }
@@ -385,15 +387,19 @@ impl VlessUdpOutboundManager {
         request: VlessUdpRelayFinalHop<'_>,
     ) -> Result<(), EngineError> {
         let stream = crate::transport::build_vless_outbound_transport_over_stream(
-            request.carrier,
-            request.transport.tls,
-            request.transport.reality,
-            request.transport.ws,
-            request.transport.grpc,
-            request.transport.h2,
-            request.transport.http_upgrade,
-            request.transport.split_http,
-            request.proxy.config.source_dir(),
+            crate::transport::VlessFinalHopTransportRequest {
+                carrier: request.carrier,
+                options: crate::transport::VlessTransportOptions {
+                    tls: request.transport.tls,
+                    reality: request.transport.reality,
+                    ws: request.transport.ws,
+                    grpc: request.transport.grpc,
+                    h2: request.transport.h2,
+                    http_upgrade: request.transport.http_upgrade,
+                    split_http: request.transport.split_http,
+                    source_dir: request.proxy.config.source_dir(),
+                },
+            },
         )
         .await?;
         let (upstream, recv_tx) = establish_vless_udp_upstream_over_stream(

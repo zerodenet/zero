@@ -271,14 +271,16 @@ impl MuxConnectionPool {
             .await?;
 
         let connector = crate::transport::VlessTransportConnector::new(
-            request.tls,
-            request.reality,
-            None,
-            None,
-            None,
-            None,
-            None,
-            proxy.config.source_dir(),
+            crate::transport::VlessTransportOptions {
+                tls: request.tls,
+                reality: request.reality,
+                ws: None,
+                grpc: None,
+                h2: None,
+                http_upgrade: None,
+                split_http: None,
+                source_dir: proxy.config.source_dir(),
+            },
         );
         let stream: TcpRelayStream = connector.connect(socket, &key.server, key.port).await?;
 

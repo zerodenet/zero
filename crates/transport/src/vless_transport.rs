@@ -20,23 +20,54 @@ use zero_platform_tokio::TransportConnector;
 use crate::{grpc, h2, http_upgrade, split_http, tls, ws};
 use vless::{upgrade_reality_client, RealityClientOptions};
 
+#[derive(Clone, Copy)]
+pub struct VlessTransportOptions<'a> {
+    pub tls: Option<&'a ClientTlsConfig>,
+    pub reality: Option<&'a RealityConfig>,
+    pub ws: Option<&'a WebSocketConfig>,
+    pub grpc: Option<&'a GrpcConfig>,
+    pub h2: Option<&'a H2Config>,
+    pub http_upgrade: Option<&'a HttpUpgradeConfig>,
+    pub split_http: Option<&'a SplitHttpConfig>,
+    pub source_dir: Option<&'a Path>,
+}
+
+pub struct VlessOutboundTransportRequest<'a> {
+    pub socket: TokioSocket,
+    pub options: VlessTransportOptions<'a>,
+    pub server: &'a str,
+    pub port: u16,
+}
+
+pub struct VlessFinalHopTransportRequest<'a> {
+    pub carrier: RelayCarrier,
+    pub options: VlessTransportOptions<'a>,
+}
+
 /// Wrap a raw TCP socket with the configured VLESS transport layer.
 ///
 /// Handles every valid combination of TLS, Reality, WebSocket, gRPC, and H2.
 /// Pass `None` for transports that are not configured.
 pub async fn build_vless_outbound_transport(
-    socket: TokioSocket,
-    tls_config: Option<&ClientTlsConfig>,
-    reality: Option<&RealityConfig>,
-    ws_config: Option<&WebSocketConfig>,
-    grpc_config: Option<&GrpcConfig>,
-    h2_config: Option<&H2Config>,
-    http_upgrade_config: Option<&HttpUpgradeConfig>,
-    split_http_config: Option<&SplitHttpConfig>,
-    source_dir: Option<&Path>,
-    server: &str,
-    port: u16,
+    request: VlessOutboundTransportRequest<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
+    let VlessOutboundTransportRequest {
+        socket,
+        options,
+        server,
+        port,
+    } = request;
+    let VlessTransportOptions {
+        tls: tls_config,
+        reality,
+        ws: ws_config,
+        grpc: grpc_config,
+        h2: h2_config,
+        http_upgrade: http_upgrade_config,
+        split_http: split_http_config,
+        source_dir,
+    } = options;
+
     // XHTTP is handled first because it is mutually exclusive with other transports.
     if let Some(cfg) = split_http_config {
         let mode = split_http::XhttpMode::parse(&cfg.mode);
@@ -183,16 +214,9 @@ pub async fn build_vless_outbound_transport(
 /// Transports that need a second connection or a non-TCP carrier are rejected
 /// here instead of being emulated in the proxy runtime.
 pub async fn build_vless_outbound_transport_over_stream(
-    carrier: RelayCarrier,
-    tls_config: Option<&ClientTlsConfig>,
-    reality: Option<&RealityConfig>,
-    ws_config: Option<&WebSocketConfig>,
-    grpc_config: Option<&GrpcConfig>,
-    h2_config: Option<&H2Config>,
-    http_upgrade_config: Option<&HttpUpgradeConfig>,
-    split_http_config: Option<&SplitHttpConfig>,
-    source_dir: Option<&Path>,
+    request: VlessFinalHopTransportRequest<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
+    let VlessFinalHopTransportRequest { carrier, options } = request;
     let RelayCarrier {
         stream,
         server,
@@ -200,6 +224,17 @@ pub async fn build_vless_outbound_transport_over_stream(
     } = carrier;
     // Shadow to match the original &str / u16 types used throughout the function.
     let server: &str = &server;
+    let VlessTransportOptions {
+        tls: tls_config,
+        reality,
+        ws: ws_config,
+        grpc: grpc_config,
+        h2: h2_config,
+        http_upgrade: http_upgrade_config,
+        split_http: split_http_config,
+        source_dir,
+    } = options;
+
     if let Some(cfg) = split_http_config {
         let mode = split_http::XhttpMode::parse(&cfg.mode);
         // stream-one (and `auto`): a single bidirectional connection. This is
@@ -311,38 +346,13 @@ pub async fn build_vless_split_http_over_relay(
 ///
 /// [`connect`]: TransportConnector::connect
 pub struct VlessTransportConnector<'a> {
-    tls: Option<&'a ClientTlsConfig>,
-    reality: Option<&'a RealityConfig>,
-    ws: Option<&'a WebSocketConfig>,
-    grpc: Option<&'a GrpcConfig>,
-    h2: Option<&'a H2Config>,
-    http_upgrade: Option<&'a HttpUpgradeConfig>,
-    split_http: Option<&'a SplitHttpConfig>,
-    source_dir: Option<&'a Path>,
+    options: VlessTransportOptions<'a>,
 }
 
 impl<'a> VlessTransportConnector<'a> {
     /// Create a new connector with the given transport configuration.
-    pub fn new(
-        tls: Option<&'a ClientTlsConfig>,
-        reality: Option<&'a RealityConfig>,
-        ws: Option<&'a WebSocketConfig>,
-        grpc: Option<&'a GrpcConfig>,
-        h2: Option<&'a H2Config>,
-        http_upgrade: Option<&'a HttpUpgradeConfig>,
-        split_http: Option<&'a SplitHttpConfig>,
-        source_dir: Option<&'a Path>,
-    ) -> Self {
-        Self {
-            tls,
-            reality,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            source_dir,
-        }
+    pub fn new(options: VlessTransportOptions<'a>) -> Self {
+        Self { options }
     }
 }
 
@@ -355,19 +365,12 @@ impl TransportConnector for VlessTransportConnector<'_> {
         server: &str,
         port: u16,
     ) -> io::Result<Self::Stream> {
-        build_vless_outbound_transport(
+        build_vless_outbound_transport(VlessOutboundTransportRequest {
             socket,
-            self.tls,
-            self.reality,
-            self.ws,
-            self.grpc,
-            self.h2,
-            self.http_upgrade,
-            self.split_http,
-            self.source_dir,
+            options: self.options,
             server,
             port,
-        )
+        })
         .await
         .map_err(|e| match e {
             EngineError::Io(io_err) => io_err,

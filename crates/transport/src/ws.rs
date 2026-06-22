@@ -31,7 +31,12 @@ where
 {
     use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 
-    let callback = |request: &Request, response: Response| -> Result<Response, ErrorResponse> {
+    #[allow(clippy::result_large_err)]
+    fn validate_ws_path(
+        request: &Request,
+        response: Response,
+        expected_path: &str,
+    ) -> Result<Response, ErrorResponse> {
         let path = request.uri().path();
         if path != expected_path {
             return Err(ErrorResponse::new(Some(format!(
@@ -39,7 +44,11 @@ where
             ))));
         }
         Ok(response)
-    };
+    }
+
+    #[allow(clippy::result_large_err)]
+    let callback =
+        |request: &Request, response: Response| validate_ws_path(request, response, expected_path);
 
     let ws_stream = tokio_tungstenite::accept_hdr_async(stream, callback)
         .await
