@@ -23,24 +23,7 @@ impl UdpDispatch {
     ) -> Result<u64, EngineError> {
         if let Some(session_id) = self
             .protocol_state
-            .vless
-            .send_existing(
-                &mut self.chain_tasks,
-                proxy,
-                &input.target,
-                input.port,
-                input.payload,
-            )
-            .await?
-        {
-            return Ok(session_id);
-        }
-
-        #[cfg(feature = "vmess")]
-        if let Some(session_id) = self
-            .protocol_state
-            .vmess
-            .send_existing(
+            .send_existing_cached_flow(
                 &mut self.chain_tasks,
                 proxy,
                 &input.target,

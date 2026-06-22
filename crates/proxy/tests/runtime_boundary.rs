@@ -416,6 +416,27 @@ fn udp_dispatch_keeps_protocol_managers_in_protocol_runtime_state() {
 }
 
 #[test]
+fn udp_dispatch_cached_flow_fast_path_delegates_to_protocol_state() {
+    let content = read("src/runtime/udp_dispatch/dispatch.rs");
+
+    assert!(
+        content.contains("send_existing_cached_flow"),
+        "UDP dispatch should delegate cached protocol flow handling to ProtocolUdpState"
+    );
+
+    let normalized = content.replace("\r\n", "\n");
+    for forbidden in [
+        ".protocol_state\n            .vless",
+        ".protocol_state\n            .vmess",
+    ] {
+        assert!(
+            !normalized.contains(forbidden),
+            "src/runtime/udp_dispatch/dispatch.rs should not reach into protocol manager `{forbidden}` directly"
+        );
+    }
+}
+
+#[test]
 fn udp_forward_stays_protocol_neutral_and_does_not_construct_peer_types() {
     let content = read("src/runtime/udp_dispatch/forward.rs");
 
