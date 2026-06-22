@@ -21,19 +21,19 @@ use crate::runtime::udp_flow::sessions::{UdpFlowOutbound, UdpFlowSnapshot};
 use crate::runtime::Proxy;
 
 pub(crate) struct ProtocolUdpState {
-    pub(crate) vless: VlessUdpOutboundManager,
+    pub(super) vless: VlessUdpOutboundManager,
     #[cfg(feature = "vmess")]
-    pub(crate) vmess: VmessUdpOutboundManager,
+    pub(super) vmess: VmessUdpOutboundManager,
     #[cfg(feature = "shadowsocks")]
-    pub(crate) shadowsocks: SsChainManager,
+    pub(super) shadowsocks: SsChainManager,
     #[cfg(feature = "shadowsocks")]
-    pub(crate) packet_path: PacketPathManager,
+    pub(super) packet_path: PacketPathManager,
     #[cfg(feature = "trojan")]
-    pub(crate) trojan: TrojanChainManager,
+    pub(super) trojan: TrojanChainManager,
     #[cfg(feature = "mieru")]
-    pub(crate) mieru: MieruChainManager,
+    pub(super) mieru: MieruChainManager,
     #[cfg(feature = "hysteria2")]
-    pub(crate) hysteria2: H2ChainManager,
+    pub(super) hysteria2: H2ChainManager,
 }
 
 impl ProtocolUdpState {

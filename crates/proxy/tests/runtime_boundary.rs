@@ -416,6 +416,26 @@ fn udp_dispatch_keeps_protocol_managers_in_protocol_runtime_state() {
 }
 
 #[test]
+fn protocol_udp_state_manager_fields_are_not_crate_public() {
+    let content = read("src/protocol_runtime/udp/state.rs");
+
+    for field in [
+        "vless",
+        "vmess",
+        "shadowsocks",
+        "packet_path",
+        "trojan",
+        "mieru",
+        "hysteria2",
+    ] {
+        assert!(
+            !content.contains(&format!("pub(crate) {field}:")),
+            "ProtocolUdpState manager field `{field}` should not be crate-public"
+        );
+    }
+}
+
+#[test]
 fn udp_dispatch_cached_flow_fast_path_delegates_to_protocol_state() {
     let content = read("src/runtime/udp_dispatch/dispatch.rs");
 
