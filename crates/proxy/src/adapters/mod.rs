@@ -11,7 +11,6 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::protocol_adapter::{BoundInbound, ProtocolAdapter};
 use crate::protocol_capability::protocol_descriptor;
-use crate::runtime::udp_associate::sessions::UdpFlowOutbound;
 #[cfg(feature = "mieru")]
 use crate::runtime::udp_dispatch::MieruUdpRelayFlow;
 #[cfg(feature = "shadowsocks")]
@@ -21,6 +20,7 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_dispatch::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
 #[cfg(feature = "vmess")]
 use crate::runtime::udp_dispatch::{VmessUdpFlow, VmessUdpRelayFlow};
+use crate::runtime::udp_flow::sessions::UdpFlowOutbound;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, QuicInbound, TcpOutboundFailure};
 

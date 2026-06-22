@@ -23,8 +23,8 @@ mod listeners;
 pub(crate) mod orchestration;
 pub(crate) mod pipe;
 mod tcp_dispatch;
-pub(crate) mod udp_associate;
 pub(crate) mod udp_dispatch;
+pub(crate) mod udp_flow;
 pub(crate) mod udp_helpers;
 
 #[derive(Debug, Clone)]

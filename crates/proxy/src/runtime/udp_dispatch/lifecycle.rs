@@ -1,7 +1,7 @@
 use super::*;
 use std::net::SocketAddr;
 
-use crate::runtime::udp_associate::sessions::CompletedUdpFlow;
+use crate::runtime::udp_flow::sessions::CompletedUdpFlow;
 
 impl UdpDispatch {
     /// Create a new dispatcher with an ephemeral direct socket.

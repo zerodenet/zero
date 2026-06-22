@@ -290,7 +290,7 @@ pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     fn udp_packet_path_carrier_snapshot(
         &self,
         _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::runtime::udp_associate::sessions::UdpPacketPathCarrier> {
+    ) -> Option<crate::runtime::udp_flow::sessions::UdpPacketPathCarrier> {
         None
     }
 

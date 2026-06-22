@@ -16,10 +16,10 @@ use zero_traits::{AsyncSocket, UdpPacketStreamFraming};
 
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
-use crate::runtime::udp_associate::helpers::{
+use crate::runtime::udp_dispatch::UdpDispatch;
+use crate::runtime::udp_flow::helpers::{
     log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };
-use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 

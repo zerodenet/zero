@@ -1,6 +1,6 @@
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use crate::runtime::udp_associate::sessions::UdpFlowOutbound;
+use crate::runtime::udp_flow::sessions::UdpFlowOutbound;
 
 /// Result of starting a new UDP flow.
 pub(crate) enum FlowStartResult {

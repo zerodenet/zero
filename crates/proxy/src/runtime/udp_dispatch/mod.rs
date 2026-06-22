@@ -64,7 +64,7 @@ use crate::logging::{log_session_failed, log_session_finished};
 use crate::protocol_runtime::vless_udp::VlessUdpOutboundManager;
 #[cfg(feature = "vmess")]
 use crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager;
-use crate::runtime::udp_associate::sessions::{UdpFlowSnapshot, UdpSessionFlows};
+use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpSessionFlows};
 use crate::runtime::Proxy;
 use zero_core::{Address, Session};
 use zero_engine::{EngineError, SessionHandle, SessionOutcome};

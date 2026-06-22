@@ -17,7 +17,7 @@ use zero_core::{Address, ProtocolType};
 use zero_engine::EngineError;
 
 use crate::protocol_runtime::socks5_udp::UpstreamAssociationCloseReason;
-use crate::runtime::udp_associate::helpers::{
+use crate::runtime::udp_flow::helpers::{
     address_from_socket_addr, log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
 };
 

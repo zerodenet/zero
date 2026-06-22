@@ -355,6 +355,19 @@ fn generic_runtime_root_does_not_import_protocol_crates_directly() {
 }
 
 #[test]
+fn generic_runtime_udp_state_uses_protocol_neutral_module_name() {
+    let runtime_root = manifest_dir().join("src/runtime");
+
+    for forbidden in ["udp_associate.rs", "udp_associate"] {
+        let path = runtime_root.join(forbidden);
+        assert!(
+            !path.exists(),
+            "src/runtime/{forbidden} should stay protocol-neutral as src/runtime/udp_flow"
+        );
+    }
+}
+
+#[test]
 fn generic_udp_dispatch_does_not_contain_protocol_manager_modules() {
     let forbidden = [
         "h2_manager.rs",
