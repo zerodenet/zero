@@ -147,7 +147,6 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
             "src/protocol_adapter/registry.rs",
             "src/protocol_adapter/registry/tests.rs",
             "src/inbound/hysteria2.rs",
-            "src/inbound/vmess/listener.rs",
         ],
         &["src/adapters/"],
         "protocol config variant matching should stay inside adapters or protocol-owned inbound entrypoints",
@@ -340,6 +339,27 @@ fn trojan_inbound_uses_adapter_request_model() {
         adapter.contains("InboundProtocolConfig::Trojan")
             && adapter.contains("TrojanInboundRequest"),
         "Trojan adapter should extract Trojan config and pass TrojanInboundRequest"
+    );
+}
+
+#[test]
+fn vmess_inbound_uses_adapter_request_model() {
+    let inbound = read("src/inbound/vmess/listener.rs");
+    let model = read("src/inbound/vmess/mod.rs");
+    let adapter = read("src/adapters/vmess/inbound.rs");
+
+    assert!(
+        model.contains("struct VmessInboundRequest")
+            && inbound.contains("request: VmessInboundRequest"),
+        "VMess inbound listener should receive an adapter-built request model"
+    );
+    assert!(
+        !inbound.contains("InboundProtocolConfig::Vmess"),
+        "VMess inbound entrypoint should not parse VMess config variants"
+    );
+    assert!(
+        adapter.contains("InboundProtocolConfig::Vmess") && adapter.contains("VmessInboundRequest"),
+        "VMess adapter should extract VMess config and pass VmessInboundRequest"
     );
 }
 

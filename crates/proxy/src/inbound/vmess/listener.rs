@@ -3,7 +3,6 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 use vmess::{VmessCipher, VmessInbound, VmessUser};
-use zero_config::InboundConfig;
 use zero_engine::EngineError;
 
 use super::*;
@@ -11,24 +10,17 @@ use crate::runtime::Proxy;
 
 pub(crate) async fn run_vmess_listener_with_bound(
     proxy: &Proxy,
-    inbound: InboundConfig,
+    request: VmessInboundRequest,
     listener: zero_platform_tokio::TokioListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let (users, tls_cfg, ws_config, grpc_config) = match &inbound.protocol {
-        zero_config::InboundProtocolConfig::Vmess {
-            users,
-            tls,
-            ws,
-            grpc,
-        } => (users.clone(), tls.clone(), ws.clone(), grpc.clone()),
-        _ => {
-            return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "vmess config",
-            )))
-        }
-    };
+    let VmessInboundRequest {
+        inbound,
+        users,
+        tls: tls_cfg,
+        ws: ws_config,
+        grpc: grpc_config,
+    } = request;
     if users.is_empty() {
         return Err(EngineError::Io(io::Error::new(
             io::ErrorKind::InvalidInput,

@@ -38,4 +38,4 @@ pub(crate) use trojan::{run_trojan_listener_with_bound, TrojanInboundRequest};
 #[cfg(feature = "vless")]
 pub(crate) use vless::run_vless_listener_with_bound;
 #[cfg(feature = "vmess")]
-pub(crate) use vmess::run_vmess_listener_with_bound;
+pub(crate) use vmess::{run_vmess_listener_with_bound, VmessInboundRequest};
