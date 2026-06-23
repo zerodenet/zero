@@ -146,7 +146,6 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
             "src/protocol_adapter.rs",
             "src/protocol_adapter/registry.rs",
             "src/protocol_adapter/registry/tests.rs",
-            "src/inbound/hysteria2.rs",
         ],
         &["src/adapters/"],
         "protocol config variant matching should stay inside adapters or protocol-owned inbound entrypoints",
@@ -360,6 +359,27 @@ fn vmess_inbound_uses_adapter_request_model() {
     assert!(
         adapter.contains("InboundProtocolConfig::Vmess") && adapter.contains("VmessInboundRequest"),
         "VMess adapter should extract VMess config and pass VmessInboundRequest"
+    );
+}
+
+#[test]
+fn hysteria2_inbound_uses_adapter_request_model() {
+    let inbound = read("src/inbound/hysteria2.rs");
+    let adapter = read("src/adapters/hysteria2/inbound.rs");
+
+    assert!(
+        inbound.contains("struct Hysteria2InboundRequest")
+            && inbound.contains("request: Hysteria2InboundRequest"),
+        "Hysteria2 inbound listener should receive an adapter-built request model"
+    );
+    assert!(
+        !inbound.contains("InboundProtocolConfig::Hysteria2"),
+        "Hysteria2 inbound entrypoint should not parse Hysteria2 config variants"
+    );
+    assert!(
+        adapter.contains("InboundProtocolConfig::Hysteria2")
+            && adapter.contains("Hysteria2InboundRequest"),
+        "Hysteria2 adapter should extract Hysteria2 config and pass Hysteria2InboundRequest"
     );
 }
 

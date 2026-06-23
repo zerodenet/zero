@@ -36,7 +36,32 @@ impl Hysteria2Adapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            crate::inbound::run_hysteria2_listener_with_bound(&p, inbound, bound, shutdown_rx).await
+            let (password, up_bps, down_bps) = match &inbound.protocol {
+                InboundProtocolConfig::Hysteria2 {
+                    password,
+                    up_bps,
+                    down_bps,
+                    ..
+                } => (password.clone(), *up_bps, *down_bps),
+                _ => {
+                    return Err(EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "hysteria2 adapter received non-hysteria2 inbound config",
+                    )));
+                }
+            };
+            crate::inbound::run_hysteria2_listener_with_bound(
+                &p,
+                crate::inbound::Hysteria2InboundRequest {
+                    inbound,
+                    password,
+                    up_bps,
+                    down_bps,
+                },
+                bound,
+                shutdown_rx,
+            )
+            .await
         });
     }
 }

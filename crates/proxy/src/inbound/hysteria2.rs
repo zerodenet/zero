@@ -25,6 +25,14 @@ use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::Proxy;
 use crate::transport::{copy_one_way, Hysteria2Stream};
 
+#[derive(Debug)]
+pub(crate) struct Hysteria2InboundRequest {
+    pub(crate) inbound: InboundConfig,
+    pub(crate) password: String,
+    pub(crate) up_bps: Option<u64>,
+    pub(crate) down_bps: Option<u64>,
+}
+
 // ── Handler for individual TCP streams ─────────────────────────────────
 
 /// Handler for a single Hysteria2 TCP stream (QUIC bi-directional stream).
@@ -116,25 +124,16 @@ impl InboundProtocol for Hysteria2StreamHandler {
 
 pub(crate) async fn run_hysteria2_listener_with_bound(
     proxy: &Proxy,
-    inbound: InboundConfig,
+    request: Hysteria2InboundRequest,
     bound: crate::protocol_adapter::BoundInbound,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let (password, _up_bps, _down_bps) = match &inbound.protocol {
-        zero_config::InboundProtocolConfig::Hysteria2 {
-            password,
-            up_bps,
-            down_bps,
-            ..
-        } => (password.clone(), *up_bps, *down_bps),
-        _ => {
-            return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "hysteria2 listener requires hysteria2 protocol config",
-            )))
-        }
-    };
-
+    let Hysteria2InboundRequest {
+        inbound,
+        password,
+        up_bps: _up_bps,
+        down_bps: _down_bps,
+    } = request;
     let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
     let quic_inbound = match bound {
         crate::protocol_adapter::BoundInbound::Quic(e) => e,

@@ -24,7 +24,7 @@ pub(crate) use direct::{run_direct_listener_with_bound, DirectInboundRequest};
 #[cfg(feature = "http_connect")]
 pub(crate) use http_connect::run_http_connect_listener_with_bound;
 #[cfg(feature = "hysteria2")]
-pub(crate) use hysteria2::run_hysteria2_listener_with_bound;
+pub(crate) use hysteria2::{run_hysteria2_listener_with_bound, Hysteria2InboundRequest};
 #[cfg(feature = "mieru")]
 pub(crate) use mieru::{run_mieru_listener_with_bound, MieruInboundRequest};
 #[cfg(feature = "mixed")]
