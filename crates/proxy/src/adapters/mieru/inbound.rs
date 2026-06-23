@@ -11,9 +11,21 @@ impl MieruAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
+            let users = match &inbound.protocol {
+                InboundProtocolConfig::Mieru { users } => users
+                    .iter()
+                    .map(|user| (user.username.clone(), user.password.clone()))
+                    .collect::<Vec<_>>(),
+                _ => {
+                    return Err(EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "mieru adapter received non-mieru inbound config",
+                    )));
+                }
+            };
             crate::inbound::run_mieru_listener_with_bound(
                 &p,
-                inbound,
+                crate::inbound::MieruInboundRequest { inbound, users },
                 bound.into_tcp(),
                 shutdown_rx,
             )

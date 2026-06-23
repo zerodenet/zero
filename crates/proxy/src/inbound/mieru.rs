@@ -24,6 +24,12 @@ mod model;
 
 use model::MieruClientStream;
 
+#[derive(Debug)]
+pub(crate) struct MieruInboundRequest {
+    pub(crate) inbound: InboundConfig,
+    pub(crate) users: Vec<(String, String)>,
+}
+
 // Client stream wrapper.
 
 /// Run the in-tunnel socks5 server side: read the client's socks5 request
@@ -148,23 +154,11 @@ impl InboundProtocol for MieruInboundHandler {
 
 pub(crate) async fn run_mieru_listener_with_bound(
     proxy: &Proxy,
-    inbound: InboundConfig,
+    request: MieruInboundRequest,
     listener: zero_platform_tokio::TokioListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let users = match &inbound.protocol {
-        zero_config::InboundProtocolConfig::Mieru { users } => users
-            .iter()
-            .map(|u| (u.username.clone(), u.password.clone()))
-            .collect::<Vec<_>>(),
-        _ => {
-            return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "mieru listener requires mieru config",
-            )))
-        }
-    };
-
+    let MieruInboundRequest { inbound, users } = request;
     let local_addr = listener.local_addr()?;
 
     let handler = MieruInboundHandler {

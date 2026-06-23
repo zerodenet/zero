@@ -147,7 +147,6 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
             "src/protocol_adapter/registry.rs",
             "src/protocol_adapter/registry/tests.rs",
             "src/inbound/hysteria2.rs",
-            "src/inbound/mieru.rs",
             "src/inbound/shadowsocks.rs",
             "src/inbound/trojan.rs",
             "src/inbound/vmess/listener.rs",
@@ -281,6 +280,26 @@ fn direct_inbound_uses_adapter_request_model() {
         adapter.contains("InboundProtocolConfig::Direct")
             && adapter.contains("DirectInboundRequest"),
         "direct adapter should extract direct config and pass DirectInboundRequest"
+    );
+}
+
+#[test]
+fn mieru_inbound_uses_adapter_request_model() {
+    let inbound = read("src/inbound/mieru.rs");
+    let adapter = read("src/adapters/mieru/inbound.rs");
+
+    assert!(
+        inbound.contains("struct MieruInboundRequest")
+            && inbound.contains("request: MieruInboundRequest"),
+        "Mieru inbound listener should receive an adapter-built request model"
+    );
+    assert!(
+        !inbound.contains("InboundProtocolConfig::Mieru"),
+        "Mieru inbound entrypoint should not parse Mieru config variants"
+    );
+    assert!(
+        adapter.contains("InboundProtocolConfig::Mieru") && adapter.contains("MieruInboundRequest"),
+        "Mieru adapter should extract Mieru config and pass MieruInboundRequest"
     );
 }
 
