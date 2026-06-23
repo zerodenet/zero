@@ -1,4 +1,7 @@
-use super::*;
+use zero_config::InboundProtocolConfig;
+use zero_engine::ResolvedLeafOutbound;
+
+use crate::protocol_adapter::ProtocolRegistry;
 
 fn inbound_protocol_name(config: &InboundProtocolConfig) -> &'static str {
     match config {
@@ -204,7 +207,7 @@ fn compiled_in_outbound_leaves<'a>() -> Vec<(ResolvedLeafOutbound<'a>, usize)> {
 
 #[test]
 fn compiled_in_inbound_variants_have_exactly_one_registered_adapter() {
-    let registry = crate::protocol_adapter::ProtocolRegistry::build();
+    let registry = ProtocolRegistry::build();
 
     for config in compiled_in_inbound_configs() {
         let claim_count = registry
@@ -228,7 +231,7 @@ fn compiled_in_inbound_variants_have_exactly_one_registered_adapter() {
 
 #[test]
 fn compiled_in_outbound_leaf_variants_have_expected_adapter_claims() {
-    let registry = crate::protocol_adapter::ProtocolRegistry::build();
+    let registry = ProtocolRegistry::build();
 
     for (leaf, expected_claims) in compiled_in_outbound_leaves() {
         let claim_count = registry

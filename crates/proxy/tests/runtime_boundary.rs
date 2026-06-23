@@ -1597,6 +1597,11 @@ fn protocol_registry_tests_live_outside_logic_file() {
         tests.exists(),
         "protocol registry boundary tests should stay in a sibling tests module"
     );
+    let tests_content = read("src/protocol_adapter/registry/tests.rs");
+    assert!(
+        !tests_content.contains("use super::*;"),
+        "protocol registry tests should import registry dependencies explicitly"
+    );
 }
 
 #[test]
