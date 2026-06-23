@@ -896,8 +896,11 @@ fn protocol_crates_do_not_depend_on_proxy_runtime_layers() {
     let protocols_root = repo_root().join("protocols");
     let forbidden = [
         "zero-proxy",
-        "zero-engine",
+        "zero-api",
         "zero-config",
+        "zero-router",
+        "zero-engine",
+        "zero-logging",
         "zero-dns",
         "zero-platform-tokio",
         "zero-transport",
@@ -917,6 +920,13 @@ fn protocol_crates_do_not_depend_on_proxy_runtime_layers() {
             assert!(
                 !content.contains(crate_name),
                 "{} should not depend on forbidden runtime crate `{crate_name}`",
+                manifest.display()
+            );
+        }
+        for required in ["zero-core", "zero-traits"] {
+            assert!(
+                content.contains(required),
+                "{} should stay anchored on protocol base crate `{required}`",
                 manifest.display()
             );
         }
