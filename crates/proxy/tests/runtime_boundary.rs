@@ -185,6 +185,30 @@ fn runtime_does_not_match_protocol_config_variants() {
 }
 
 #[test]
+fn mixed_inbound_is_adapter_owned_not_runtime_special_case() {
+    let adapter = read("src/adapters/mixed/inbound.rs");
+    assert!(
+        adapter.contains("run_mixed_listener_with_bound") && adapter.contains("bound.into_tcp()"),
+        "MixedAdapter should own mixed listener spawn through the adapter inbound module"
+    );
+
+    for path in rust_sources_under("src/runtime") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in [
+            "InboundProtocolConfig::Mixed",
+            "run_mixed_listener_with_bound",
+            "MixedAdapter",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should not special-case mixed inbound; found `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn runtime_control_handle_lives_outside_runtime_root() {
     let runtime = read("src/runtime.rs");
     let handle = read("src/runtime/handle.rs");
