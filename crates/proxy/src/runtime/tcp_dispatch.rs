@@ -8,9 +8,7 @@ use std::sync::Arc;
 
 use zero_core::Session;
 
-use crate::runtime::orchestration::{
-    endpoint, health_tag, kernel_leaf_tag, tcp_path_category, TcpPathCategory,
-};
+use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory};
 use crate::runtime::Proxy;
 use crate::transport::{
     extract_tcp_stream, EstablishedTcpOutbound, RelayCarrier, TcpOutboundFailure, TcpRelayStream,
@@ -75,12 +73,20 @@ impl Proxy {
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
         // Kernel primitive: circuit breaker.
         // Check health before connecting (skip for Direct / Block).
-        let path_category = tcp_path_category(&candidate);
+        let runtime = self
+            .protocols
+            .outbound_leaf_runtime(&candidate)
+            .map_err(|error| TcpOutboundFailure {
+                stage: "outbound_leaf_runtime",
+                error,
+                upstream_endpoint: None,
+            })?;
+        let path_category = runtime.tcp_path;
         let chained_tag = match path_category {
             TcpPathCategory::Direct | TcpPathCategory::Block => None,
             TcpPathCategory::Tunnel
             | TcpPathCategory::Session
-            | TcpPathCategory::TransportSession => health_tag(&candidate).map(ToOwned::to_owned),
+            | TcpPathCategory::TransportSession => runtime.health_tag.map(ToOwned::to_owned),
         };
         if let Some(tag) = chained_tag.as_deref() {
             if let Err(e) = self.check_outbound_health(tag) {
@@ -97,7 +103,7 @@ impl Proxy {
         // adding a protocol = register an adapter, zero changes here.
         let result = if matches!(path_category, TcpPathCategory::Block) {
             Ok(EstablishedTcpOutbound::Block {
-                tag: kernel_leaf_tag(&candidate).unwrap_or("block").to_string(),
+                tag: runtime.kernel_tag.unwrap_or("block").to_string(),
             })
         } else {
             let adapter = self
@@ -153,15 +159,8 @@ impl Proxy {
         let first = hops.next().expect("relay chain must have at least 2 hops");
         let second = hops.next().expect("relay chain must have at least 2 hops");
 
-        let mut session_for_next = Session::new(
-            0,
-            endpoint(&second)
-                .map(|endpoint| endpoint.address())
-                .unwrap_or_else(|| zero_core::Address::Domain("unknown".to_owned())),
-            endpoint(&second).map(|endpoint| endpoint.port).unwrap_or(0),
-            zero_core::Network::Tcp,
-            zero_core::ProtocolType::Unknown,
-        );
+        let second_endpoint = self.outbound_endpoint(&second)?;
+        let mut session_for_next = relay_next_session(second_endpoint);
 
         let outbound = self
             .dispatch_tcp_candidate(&session_for_next, first)
@@ -190,17 +189,7 @@ impl Proxy {
 
         let mut current_hop = second;
         for next_hop in hops {
-            session_for_next = Session::new(
-                0,
-                endpoint(&next_hop)
-                    .map(|endpoint| endpoint.address())
-                    .unwrap_or_else(|| zero_core::Address::Domain("unknown".to_owned())),
-                endpoint(&next_hop)
-                    .map(|endpoint| endpoint.port)
-                    .unwrap_or(0),
-                zero_core::Network::Tcp,
-                zero_core::ProtocolType::Unknown,
-            );
+            session_for_next = relay_next_session(self.outbound_endpoint(&next_hop)?);
             stream = apply_hop_protocol(self, stream, &current_hop, &session_for_next)
                 .await
                 .map_err(|error| TcpOutboundFailure {
@@ -211,7 +200,7 @@ impl Proxy {
             current_hop = next_hop;
         }
 
-        let ep = endpoint(&current_hop).expect("final relay hop must have an endpoint");
+        let ep = self.outbound_endpoint(&current_hop)?;
         Ok((
             RelayCarrier {
                 stream,
@@ -221,6 +210,38 @@ impl Proxy {
             current_hop,
         ))
     }
+
+    pub(crate) fn outbound_endpoint<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Result<OutboundEndpoint<'a>, TcpOutboundFailure> {
+        self.protocols
+            .outbound_leaf_runtime(leaf)
+            .map_err(|error| TcpOutboundFailure {
+                stage: "outbound_leaf_runtime",
+                error,
+                upstream_endpoint: None,
+            })?
+            .endpoint
+            .ok_or_else(|| TcpOutboundFailure {
+                stage: "outbound_leaf_endpoint",
+                error: EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "relay hop resolved without upstream endpoint",
+                )),
+                upstream_endpoint: None,
+            })
+    }
+}
+
+fn relay_next_session(endpoint: OutboundEndpoint<'_>) -> Session {
+    Session::new(
+        0,
+        endpoint.address(),
+        endpoint.port,
+        zero_core::Network::Tcp,
+        zero_core::ProtocolType::Unknown,
+    )
 }
 
 /// Apply a single hop's protocol request to an existing stream.

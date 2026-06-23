@@ -35,6 +35,12 @@ impl ProtocolAdapter for VlessAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         matches!(leaf, ResolvedLeafOutbound::Vless { .. })
     }
+    fn outbound_leaf_runtime<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafRuntime<'a>> {
+        proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
+    }
     async fn bind_inbound(
         &self,
         inbound: &InboundConfig,

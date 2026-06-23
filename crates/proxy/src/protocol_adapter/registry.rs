@@ -8,8 +8,9 @@ use crate::adapters::{
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use crate::protocol_adapter::{BoundInbound, ProtocolAdapter};
+use crate::protocol_adapter::{BoundInbound, OutboundLeafRuntime, ProtocolAdapter};
 use crate::protocol_capability::{protocol_capability, protocol_descriptor};
+use crate::runtime::orchestration::TcpPathCategory;
 
 /// Registry of all compiled-in protocol adapters.
 ///
@@ -243,6 +244,40 @@ impl ProtocolRegistry {
         Err(EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "no compiled adapter handles this outbound leaf",
+        )))
+    }
+
+    /// Return neutral runtime facts for a resolved outbound leaf.
+    ///
+    /// Kernel-level `block` is handled here because no adapter owns it.
+    /// Direct and proxy protocols are delegated to the adapter that claims the
+    /// leaf, so runtime code does not match protocol variants.
+    pub(crate) fn outbound_leaf_runtime<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Result<OutboundLeafRuntime<'a>, EngineError> {
+        if let ResolvedLeafOutbound::Block { tag } = leaf {
+            return Ok(OutboundLeafRuntime {
+                tcp_path: TcpPathCategory::Block,
+                health_tag: None,
+                endpoint: None,
+                kernel_tag: *tag,
+            });
+        }
+
+        for adapter in &self.adapters {
+            if !adapter.claims_outbound_leaf(leaf) {
+                continue;
+            }
+            if let Some(runtime) = adapter.outbound_leaf_runtime(leaf) {
+                return Ok(runtime);
+            }
+            break;
+        }
+
+        Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "no compiled adapter describes this outbound leaf",
         )))
     }
 

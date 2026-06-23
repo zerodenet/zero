@@ -35,6 +35,12 @@ impl ProtocolAdapter for MieruAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         matches!(leaf, ResolvedLeafOutbound::Mieru { .. })
     }
+    fn outbound_leaf_runtime<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafRuntime<'a>> {
+        proxy_leaf_runtime(leaf, TcpPathCategory::Session)
+    }
     async fn connect_tcp(
         &self,
         proxy: &Proxy,

@@ -225,18 +225,43 @@ fn proxy_does_not_own_protocol_listener_entrypoints() {
 }
 
 #[test]
-fn resolved_outbound_variant_matching_is_confined_to_adapters_and_neutral_orchestration() {
+fn resolved_outbound_variant_matching_is_confined_to_adapters_and_registry() {
     assert_src_pattern_confined(
         "ResolvedLeafOutbound::",
         &[
             "src/protocol_adapter.rs",
             "src/protocol_adapter/registry.rs",
             "src/protocol_adapter/registry/tests.rs",
-            "src/runtime/orchestration.rs",
         ],
         &["src/adapters/"],
-        "resolved outbound variant matching should stay inside adapters or neutral runtime classification helpers",
+        "resolved outbound variant matching should stay inside adapters or protocol registry dispatch helpers",
     );
+}
+
+#[test]
+fn runtime_uses_registry_for_outbound_leaf_runtime_facts() {
+    let orchestration = read("src/runtime/orchestration.rs");
+    for forbidden in [
+        "ResolvedLeafOutbound::",
+        "fn health_tag",
+        "fn endpoint",
+        "fn kernel_leaf_tag",
+        "fn tcp_path_category",
+    ] {
+        assert!(
+            !orchestration.contains(forbidden),
+            "runtime/orchestration.rs should only define neutral fact types, not classify outbound leaf variants; found `{forbidden}`"
+        );
+    }
+
+    for path in rust_sources_under("src/runtime") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        assert!(
+            !content.contains("ResolvedLeafOutbound::"),
+            "{source} should use ProtocolRegistry::outbound_leaf_runtime instead of matching outbound leaf variants"
+        );
+    }
 }
 
 #[test]

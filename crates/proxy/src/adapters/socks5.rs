@@ -41,6 +41,12 @@ impl ProtocolAdapter for Socks5Adapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         matches!(leaf, ResolvedLeafOutbound::Socks5 { .. })
     }
+    fn outbound_leaf_runtime<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafRuntime<'a>> {
+        proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
+    }
 
     #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_descriptor(

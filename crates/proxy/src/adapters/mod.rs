@@ -9,8 +9,9 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::protocol_adapter::{BoundInbound, ProtocolAdapter};
+use crate::protocol_adapter::{BoundInbound, OutboundLeafRuntime, ProtocolAdapter};
 use crate::protocol_capability::protocol_descriptor;
+use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
@@ -37,7 +38,7 @@ mod vless;
 #[cfg(feature = "vmess")]
 mod vmess;
 
-use common::{unreachable_leaf, unreachable_udp_leaf};
+use common::{direct_leaf_runtime, proxy_leaf_runtime, unreachable_leaf, unreachable_udp_leaf};
 pub(crate) use direct::DirectAdapter;
 #[cfg(feature = "http_connect")]
 pub(crate) use http_connect::HttpConnectAdapter;

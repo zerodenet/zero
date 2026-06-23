@@ -35,6 +35,12 @@ impl ProtocolAdapter for Hysteria2Adapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         matches!(leaf, ResolvedLeafOutbound::Hysteria2 { .. })
     }
+    fn outbound_leaf_runtime<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafRuntime<'a>> {
+        proxy_leaf_runtime(leaf, TcpPathCategory::TransportSession)
+    }
 
     fn udp_packet_path_carrier_descriptor(
         &self,

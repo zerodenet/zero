@@ -57,7 +57,7 @@ impl PacketPathManager {
             .map_err(|error| FlowFailure {
                 stage: "packet_path_establish",
                 error,
-                upstream: Some(diagnostics::carrier_upstream(carrier_leaf)),
+                upstream: Some(diagnostics::carrier_upstream(proxy, carrier_leaf)),
             })?;
         dispatch_via_entry(entry, ctx, packet_ref).await
     }

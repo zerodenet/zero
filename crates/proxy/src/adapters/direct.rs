@@ -31,6 +31,12 @@ impl ProtocolAdapter for DirectAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         matches!(leaf, ResolvedLeafOutbound::Direct { .. })
     }
+    fn outbound_leaf_runtime<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafRuntime<'a>> {
+        direct_leaf_runtime(leaf)
+    }
     async fn connect_tcp(
         &self,
         proxy: &Proxy,

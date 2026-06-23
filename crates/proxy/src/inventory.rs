@@ -3,7 +3,7 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig, RuntimeConfig};
 use zero_api::ProtocolCapability;
 use zero_engine::EngineError;
 
-use crate::protocol_adapter::{BoundInbound, ProtocolRegistry};
+use crate::protocol_adapter::{BoundInbound, OutboundLeafRuntime, ProtocolRegistry};
 use crate::transport::DirectConnector;
 
 #[cfg(feature = "http_connect")]
@@ -141,6 +141,17 @@ impl ProtocolInventory {
         leaf: &zero_engine::ResolvedLeafOutbound<'_>,
     ) -> Result<std::sync::Arc<dyn crate::protocol_adapter::ProtocolAdapter>, EngineError> {
         self.registry.find_outbound_leaf(leaf)
+    }
+
+    /// Return the runtime-neutral facts for a resolved outbound leaf.
+    ///
+    /// The runtime asks the inventory for this instead of matching concrete
+    /// protocol variants.
+    pub(crate) fn outbound_leaf_runtime<'a>(
+        &self,
+        leaf: &zero_engine::ResolvedLeafOutbound<'a>,
+    ) -> Result<OutboundLeafRuntime<'a>, EngineError> {
+        self.registry.outbound_leaf_runtime(leaf)
     }
 
     /// Resolve an [`InboundProtocolConfig`] to its registered inbound adapter.

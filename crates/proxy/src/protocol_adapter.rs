@@ -15,6 +15,7 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::ProtocolMetadata;
 
+use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory};
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
@@ -33,6 +34,19 @@ pub(crate) enum BoundInbound {
     Tcp(zero_platform_tokio::TokioListener),
     #[cfg(any(feature = "vless", feature = "hysteria2"))]
     Quic(crate::transport::QuicInbound),
+}
+
+/// Runtime-neutral facts about one resolved outbound leaf.
+///
+/// The proxy runtime uses this for orchestration decisions without matching on
+/// concrete protocol variants. Protocol-private fields remain owned by the
+/// adapter that claimed the leaf.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct OutboundLeafRuntime<'a> {
+    pub(crate) tcp_path: TcpPathCategory,
+    pub(crate) health_tag: Option<&'a str>,
+    pub(crate) endpoint: Option<OutboundEndpoint<'a>>,
+    pub(crate) kernel_tag: Option<&'a str>,
 }
 
 impl BoundInbound {
@@ -108,6 +122,14 @@ pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     /// adapter returns `true` only for `ResolvedLeafOutbound::Socks5 { .. }`.
     fn claims_outbound_leaf(&self, _leaf: &ResolvedLeafOutbound<'_>) -> bool {
         false
+    }
+
+    /// Return the neutral runtime facts for a leaf this adapter owns.
+    fn outbound_leaf_runtime<'a>(
+        &self,
+        _leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafRuntime<'a>> {
+        None
     }
 
     /// Establish a TCP outbound connection for the resolved leaf.

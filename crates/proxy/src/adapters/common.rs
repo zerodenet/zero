@@ -1,4 +1,6 @@
 use super::{EngineError, FlowFailure, ResolvedLeafOutbound, TcpOutboundFailure};
+use crate::protocol_adapter::OutboundLeafRuntime;
+use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory};
 
 /// Build a `TcpOutboundFailure` for the impossible case where an adapter's
 /// `connect_tcp` receives a leaf variant it did not claim.
@@ -30,4 +32,55 @@ pub(super) fn unreachable_udp_leaf(
         ))),
         upstream: None,
     }
+}
+
+pub(super) fn direct_leaf_runtime<'a>(
+    leaf: &ResolvedLeafOutbound<'a>,
+) -> Option<OutboundLeafRuntime<'a>> {
+    match leaf {
+        ResolvedLeafOutbound::Direct { tag } => Some(OutboundLeafRuntime {
+            tcp_path: TcpPathCategory::Direct,
+            health_tag: None,
+            endpoint: None,
+            kernel_tag: *tag,
+        }),
+        _ => None,
+    }
+}
+
+pub(super) fn proxy_leaf_runtime<'a>(
+    leaf: &ResolvedLeafOutbound<'a>,
+    tcp_path: TcpPathCategory,
+) -> Option<OutboundLeafRuntime<'a>> {
+    let (tag, server, port) = match leaf {
+        ResolvedLeafOutbound::Socks5 {
+            tag, server, port, ..
+        }
+        | ResolvedLeafOutbound::Vless {
+            tag, server, port, ..
+        }
+        | ResolvedLeafOutbound::Hysteria2 {
+            tag, server, port, ..
+        }
+        | ResolvedLeafOutbound::Shadowsocks {
+            tag, server, port, ..
+        }
+        | ResolvedLeafOutbound::Trojan {
+            tag, server, port, ..
+        }
+        | ResolvedLeafOutbound::Vmess {
+            tag, server, port, ..
+        }
+        | ResolvedLeafOutbound::Mieru {
+            tag, server, port, ..
+        } => (*tag, *server, *port),
+        _ => return None,
+    };
+
+    Some(OutboundLeafRuntime {
+        tcp_path,
+        health_tag: Some(tag),
+        endpoint: Some(OutboundEndpoint { server, port }),
+        kernel_tag: None,
+    })
 }

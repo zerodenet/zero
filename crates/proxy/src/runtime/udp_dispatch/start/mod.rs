@@ -37,14 +37,20 @@ impl UdpDispatch {
         // Block is kernel-level (no adapter owns it): reject immediately.
         // Direct and every proxy protocol go through the adapter registry:
         // adding a protocol = register an adapter, zero changes here.
+        let runtime = proxy
+            .protocols
+            .outbound_leaf_runtime(&candidate)
+            .map_err(|error| FlowFailure {
+                stage: "outbound_leaf_runtime",
+                error,
+                upstream: None,
+            })?;
         if matches!(
-            crate::runtime::orchestration::tcp_path_category(&candidate),
+            runtime.tcp_path,
             crate::runtime::orchestration::TcpPathCategory::Block
         ) {
             return Ok(FlowStartResult::Blocked {
-                tag: crate::runtime::orchestration::kernel_leaf_tag(&candidate)
-                    .unwrap_or("block")
-                    .to_string(),
+                tag: runtime.kernel_tag.unwrap_or("block").to_string(),
             });
         }
 
