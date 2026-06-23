@@ -2,6 +2,7 @@ use zero_config::InboundProtocolConfig;
 use zero_engine::ResolvedLeafOutbound;
 
 use crate::protocol_adapter::ProtocolRegistry;
+use crate::runtime::orchestration::TcpPathCategory;
 
 fn inbound_protocol_name(config: &InboundProtocolConfig) -> &'static str {
     match config {
@@ -254,4 +255,31 @@ fn compiled_in_outbound_leaf_variants_have_expected_adapter_claims() {
             outbound_leaf_name(&leaf)
         );
     }
+}
+
+#[test]
+fn block_outbound_leaf_is_kernel_fact_not_adapter_protocol() {
+    let registry = ProtocolRegistry::build();
+    let leaf = ResolvedLeafOutbound::Block {
+        tag: Some("blocked"),
+    };
+
+    let claim_count = registry
+        .adapters
+        .iter()
+        .filter(|adapter| adapter.claims_outbound_leaf(&leaf))
+        .count();
+    assert_eq!(claim_count, 0, "block should not be claimed by adapters");
+    assert!(
+        registry.find_outbound_leaf(&leaf).is_err(),
+        "block should not resolve through adapter outbound dispatch"
+    );
+
+    let runtime = registry
+        .outbound_leaf_runtime(&leaf)
+        .expect("block should still expose neutral runtime facts");
+    assert_eq!(runtime.tcp_path, TcpPathCategory::Block);
+    assert_eq!(runtime.health_tag, None);
+    assert_eq!(runtime.endpoint, None);
+    assert_eq!(runtime.kernel_tag, Some("blocked"));
 }

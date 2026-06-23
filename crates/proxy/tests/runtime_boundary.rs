@@ -233,6 +233,35 @@ fn resolved_outbound_variant_matching_is_confined_to_adapters_and_registry() {
 }
 
 #[test]
+fn block_outbound_leaf_is_registry_kernel_exception_not_adapter_protocol() {
+    let registry = read("src/protocol_adapter/registry.rs");
+    assert!(
+        registry.contains("ResolvedLeafOutbound::Block")
+            && registry.contains("TcpPathCategory::Block"),
+        "ProtocolRegistry should own the kernel-level Block leaf classification"
+    );
+
+    for path in rust_sources_under("src/adapters") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        assert!(
+            !content.contains("ResolvedLeafOutbound::Block")
+                && !content.contains("TcpPathCategory::Block"),
+            "{source} should not model block as an adapter-owned protocol"
+        );
+    }
+
+    for path in rust_sources_under("src/runtime") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        assert!(
+            !content.contains("ResolvedLeafOutbound::Block"),
+            "{source} should get block facts from ProtocolRegistry::outbound_leaf_runtime"
+        );
+    }
+}
+
+#[test]
 fn runtime_uses_registry_for_outbound_leaf_runtime_facts() {
     let orchestration = read("src/runtime/orchestration.rs");
     for forbidden in [
