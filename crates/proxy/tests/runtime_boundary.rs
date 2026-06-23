@@ -296,8 +296,8 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
         (
             "trojan",
             &[
-                "start_trojan_udp_flow",
-                "start_trojan_udp_relay_flow",
+                "TrojanUdpFlowRequest",
+                "TrojanUdpRelayFlowRequest",
                 "UdpFlowOutbound::Trojan",
             ],
         ),
@@ -1260,8 +1260,8 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     let mieru = manifest_dir().join("src/protocol_runtime/udp/start/mieru.rs");
 
     for forbidden in [
-        "start_trojan_udp_flow",
-        "start_trojan_udp_relay_flow",
+        "TrojanUdpFlowRequest",
+        "TrojanUdpRelayFlowRequest",
         "MieruUdpFlowRequest",
         "start_mieru_udp_relay_flow",
         "TrojanSendExisting",
@@ -1308,8 +1308,8 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
             "VmessUdpRelayFlow",
             "start_shadowsocks_udp_flow",
             "Hysteria2UdpFlowRequest",
-            "start_trojan_udp_flow",
-            "start_trojan_udp_relay_flow",
+            "TrojanUdpFlowRequest",
+            "TrojanUdpRelayFlowRequest",
             "MieruUdpFlowRequest",
             "start_mieru_udp_relay_flow",
             "start_vless_udp_flow",

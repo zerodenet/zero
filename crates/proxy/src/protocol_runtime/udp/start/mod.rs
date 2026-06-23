@@ -12,3 +12,5 @@ mod vmess;
 pub(crate) use datagram::Hysteria2UdpFlowRequest;
 #[cfg(feature = "mieru")]
 pub(crate) use mieru::MieruUdpFlowRequest;
+#[cfg(feature = "trojan")]
+pub(crate) use trojan::{TrojanUdpFlowRequest, TrojanUdpRelayFlowRequest};

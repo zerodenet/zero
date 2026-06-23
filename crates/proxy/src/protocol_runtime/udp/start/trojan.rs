@@ -6,74 +6,90 @@ use super::super::{ChainTask, FlowFailure, TrojanRelayExisting, TrojanSendExisti
 use crate::runtime::Proxy;
 
 impl ProtocolUdpState {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn start_trojan_udp_flow(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        proxy: &Proxy,
-        session: &Session,
-        server: &str,
-        port: u16,
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
-        relay_chain: bool,
-        payload: &[u8],
+        request: TrojanUdpFlowRequest<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.trojan
-            .send_existing(TrojanSendExisting {
-                chain_tasks,
-                session_id: session.id,
-                proxy,
-                session,
-                server,
-                port,
-                password,
-                sni,
-                insecure,
-                client_fingerprint,
-                relay_chain,
-                target: &session.target,
-                target_port: session.port,
-                payload,
-            })
-            .await
+        self.trojan.send_existing(request.into_existing()).await
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn start_trojan_udp_relay_flow(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        proxy: &Proxy,
-        session: &Session,
-        carrier: crate::transport::RelayCarrier,
-        server: &str,
-        port: u16,
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
-        payload: &[u8],
+        request: TrojanUdpRelayFlowRequest<'_>,
     ) -> Result<usize, FlowFailure> {
         self.trojan
-            .send_relay_existing(TrojanRelayExisting {
-                chain_tasks,
-                session_id: session.id,
-                stream: carrier.stream,
-                tls_server_name: None,
-                proxy,
-                session,
-                server,
-                port,
-                password,
-                sni,
-                insecure,
-                client_fingerprint,
-                target: &session.target,
-                target_port: session.port,
-                payload,
-            })
+            .send_relay_existing(request.into_existing())
             .await
+    }
+}
+
+pub(crate) struct TrojanUdpFlowRequest<'a> {
+    pub chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub proxy: &'a Proxy,
+    pub session: &'a Session,
+    pub server: &'a str,
+    pub port: u16,
+    pub password: &'a str,
+    pub sni: Option<&'a str>,
+    pub insecure: bool,
+    pub client_fingerprint: Option<&'a str>,
+    pub relay_chain: bool,
+    pub payload: &'a [u8],
+}
+
+impl<'a> TrojanUdpFlowRequest<'a> {
+    fn into_existing(self) -> TrojanSendExisting<'a> {
+        TrojanSendExisting {
+            chain_tasks: self.chain_tasks,
+            session_id: self.session.id,
+            proxy: self.proxy,
+            session: self.session,
+            server: self.server,
+            port: self.port,
+            password: self.password,
+            sni: self.sni,
+            insecure: self.insecure,
+            client_fingerprint: self.client_fingerprint,
+            relay_chain: self.relay_chain,
+            target: &self.session.target,
+            target_port: self.session.port,
+            payload: self.payload,
+        }
+    }
+}
+
+pub(crate) struct TrojanUdpRelayFlowRequest<'a> {
+    pub chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub proxy: &'a Proxy,
+    pub session: &'a Session,
+    pub carrier: crate::transport::RelayCarrier,
+    pub server: &'a str,
+    pub port: u16,
+    pub password: &'a str,
+    pub sni: Option<&'a str>,
+    pub insecure: bool,
+    pub client_fingerprint: Option<&'a str>,
+    pub payload: &'a [u8],
+}
+
+impl<'a> TrojanUdpRelayFlowRequest<'a> {
+    fn into_existing(self) -> TrojanRelayExisting<'a> {
+        TrojanRelayExisting {
+            chain_tasks: self.chain_tasks,
+            session_id: self.session.id,
+            stream: self.carrier.stream,
+            tls_server_name: None,
+            proxy: self.proxy,
+            session: self.session,
+            server: self.server,
+            port: self.port,
+            password: self.password,
+            sni: self.sni,
+            insecure: self.insecure,
+            client_fingerprint: self.client_fingerprint,
+            target: &self.session.target,
+            target_port: self.session.port,
+            payload: self.payload,
+        }
     }
 }

@@ -23,19 +23,19 @@ impl TrojanAdapter {
         };
         let (protocol_state, chain_tasks) = dispatch.protocol_parts();
         let sent = protocol_state
-            .start_trojan_udp_flow(
+            .start_trojan_udp_flow(crate::protocol_runtime::udp::TrojanUdpFlowRequest {
                 chain_tasks,
                 proxy,
                 session,
                 server,
-                *port,
+                port: *port,
                 password,
-                *sni,
-                *insecure,
-                *client_fingerprint,
-                false,
+                sni: *sni,
+                insecure: *insecure,
+                client_fingerprint: *client_fingerprint,
+                relay_chain: false,
                 payload,
-            )
+            })
             .await
             .map_err(|f: FlowFailure| FlowFailure {
                 stage: f.stage,
@@ -80,19 +80,19 @@ impl TrojanAdapter {
         };
         let (protocol_state, chain_tasks) = dispatch.protocol_parts();
         let sent = protocol_state
-            .start_trojan_udp_relay_flow(
+            .start_trojan_udp_relay_flow(crate::protocol_runtime::udp::TrojanUdpRelayFlowRequest {
                 chain_tasks,
                 proxy,
                 session,
                 carrier,
                 server,
-                *port,
+                port: *port,
                 password,
-                *sni,
-                *insecure,
-                *client_fingerprint,
+                sni: *sni,
+                insecure: *insecure,
+                client_fingerprint: *client_fingerprint,
                 payload,
-            )
+            })
             .await?;
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Trojan {

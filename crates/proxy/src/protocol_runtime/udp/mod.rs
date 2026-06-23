@@ -49,6 +49,8 @@ pub(crate) use ss_manager::{SsChainManager, SsSendExisting};
 pub(crate) use start::Hysteria2UdpFlowRequest;
 #[cfg(feature = "mieru")]
 pub(crate) use start::MieruUdpFlowRequest;
+#[cfg(feature = "trojan")]
+pub(crate) use start::{TrojanUdpFlowRequest, TrojanUdpRelayFlowRequest};
 pub(crate) use state::ProtocolUdpState;
 #[cfg(feature = "trojan")]
 pub(crate) use trojan_manager::{TrojanChainManager, TrojanRelayExisting, TrojanSendExisting};
