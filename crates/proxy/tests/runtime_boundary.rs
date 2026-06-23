@@ -456,6 +456,26 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
 }
 
 #[test]
+fn trojan_tcp_connect_uses_request_model() {
+    let outbound = read("src/outbound/trojan.rs");
+    let adapter = read("src/adapters/trojan/tcp.rs");
+
+    assert!(
+        !outbound.contains("#[allow(clippy::too_many_arguments)]"),
+        "Trojan TCP connect should not need a too_many_arguments allowance"
+    );
+    assert!(
+        outbound.contains("struct TrojanTcpConnectRequest")
+            && outbound.contains("request: TrojanTcpConnectRequest<'_>"),
+        "Trojan TCP connect should use TrojanTcpConnectRequest"
+    );
+    assert!(
+        adapter.contains("TrojanTcpConnectRequest {"),
+        "Trojan adapter TCP module should pass TrojanTcpConnectRequest"
+    );
+}
+
+#[test]
 fn adapter_roots_keep_inbound_runtime_details_in_inbound_modules() {
     let cases: &[(&str, &[&str])] = &[
         (

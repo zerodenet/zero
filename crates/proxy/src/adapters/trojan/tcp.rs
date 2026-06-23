@@ -20,14 +20,16 @@ impl TrojanAdapter {
             return Err(unreachable_leaf(self.name(), leaf));
         };
         match crate::outbound::trojan::connect_tcp(
-            proxy,
-            session,
-            server,
-            *port,
-            password,
-            *sni,
-            *insecure,
-            *client_fingerprint,
+            crate::outbound::trojan::TrojanTcpConnectRequest {
+                proxy,
+                session,
+                server,
+                port: *port,
+                password,
+                sni: *sni,
+                insecure: *insecure,
+                client_fingerprint: *client_fingerprint,
+            },
         )
         .await
         {

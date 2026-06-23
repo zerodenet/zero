@@ -18,17 +18,20 @@ use crate::transport::{MeteredStream, TcpRelayStream};
 ///
 /// Moved from `runtime/upstream.rs`. The runtime dispatches via the adapter
 /// trait instead of a per-protocol `connect_via_*` method.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn connect_tcp(
-    proxy: &Proxy,
-    session: &Session,
-    server: &str,
-    port: u16,
-    password: &str,
-    sni: Option<&str>,
-    insecure: bool,
-    client_fingerprint: Option<&str>,
+    request: TrojanTcpConnectRequest<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
+    let TrojanTcpConnectRequest {
+        proxy,
+        session,
+        server,
+        port,
+        password,
+        sni,
+        insecure,
+        client_fingerprint,
+    } = request;
+
     let upstream = proxy
         .protocols
         .direct_connector()
@@ -69,6 +72,17 @@ pub(crate) async fn connect_tcp(
     );
     proxy.record_session_outbound_traffic(session.id, traffic);
     Ok(metered.into_inner())
+}
+
+pub(crate) struct TrojanTcpConnectRequest<'a> {
+    pub proxy: &'a Proxy,
+    pub session: &'a Session,
+    pub server: &'a str,
+    pub port: u16,
+    pub password: &'a str,
+    pub sni: Option<&'a str>,
+    pub insecure: bool,
+    pub client_fingerprint: Option<&'a str>,
 }
 
 /// Apply a Trojan tunnel handshake over an existing stream (relay hop).
