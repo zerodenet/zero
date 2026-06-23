@@ -7,16 +7,9 @@
 //! [`ProtocolAdapter::udp_datagram_source`]); there is no per-protocol match
 //! here.
 
-use zero_core::Session;
-use zero_engine::ResolvedLeafOutbound;
-
 use super::{FlowFailure, FlowStartResult, UdpCandidate, UdpDispatch};
 use crate::runtime::Proxy;
-
-// Re-exports consumed by `relay` submodule via `use super::*`.
-#[cfg(feature = "shadowsocks")]
-#[allow(unused_imports)]
-pub(super) use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
+use zero_core::Session;
 
 impl UdpDispatch {
     /// Start a new UDP flow by dispatching to the resolved outbound.

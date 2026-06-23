@@ -1,4 +1,6 @@
-use super::*;
+use zero_engine::EngineError;
+
+use crate::runtime::udp_dispatch::UdpDispatch;
 
 impl UdpDispatch {
     /// Send via SOCKS5 upstream association, establishing one if needed.

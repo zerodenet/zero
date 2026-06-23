@@ -55,9 +55,8 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use tokio::task::JoinSet;
-use tokio::time::Instant as TokioInstant;
 
-use crate::logging::{log_session_failed, log_session_finished};
+use crate::logging::log_session_failed;
 use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpSessionFlows};
 use zero_core::{Address, Session};
 use zero_engine::{EngineError, SessionHandle, SessionOutcome};

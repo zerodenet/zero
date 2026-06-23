@@ -1,4 +1,9 @@
-use super::*;
+use zero_core::Session;
+use zero_engine::ResolvedLeafOutbound;
+
+use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::Proxy;
 
 impl UdpDispatch {
     pub(super) async fn start_relay_flow(
