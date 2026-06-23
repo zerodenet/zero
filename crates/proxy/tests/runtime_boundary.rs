@@ -74,7 +74,7 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
         "src/protocol_runtime/socks5_udp_associate/dispatch.rs",
         "src/inbound/vless/udp_session.rs",
         "src/inbound/trojan.rs",
-        "src/inbound/shadowsocks.rs",
+        "src/inbound/shadowsocks/udp.rs",
         "src/inbound/hysteria2.rs",
     ] {
         let content = read(source);
@@ -302,6 +302,7 @@ fn mieru_inbound_uses_adapter_request_model() {
 #[test]
 fn shadowsocks_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/shadowsocks.rs");
+    let udp = read("src/inbound/shadowsocks/udp.rs");
     let adapter = read("src/adapters/shadowsocks/inbound.rs");
 
     assert!(
@@ -317,6 +318,21 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         adapter.contains("InboundProtocolConfig::Shadowsocks")
             && adapter.contains("ShadowsocksInboundRequest"),
         "Shadowsocks adapter should extract Shadowsocks config and pass ShadowsocksInboundRequest"
+    );
+    assert!(
+        !inbound.contains("#[allow(clippy::too_many_lines)]"),
+        "Shadowsocks inbound listener should stay small enough without a too_many_lines allowance"
+    );
+    assert!(
+        !inbound.contains("async fn ss_udp_relay_loop")
+            && !inbound.contains("struct SsEncryptedResponse"),
+        "Shadowsocks UDP relay details should live outside the listener entrypoint"
+    );
+    assert!(
+        udp.contains("async fn ss_udp_relay_loop")
+            && udp.contains("struct SsEncryptedResponse")
+            && udp.contains("UdpPipe::new"),
+        "Shadowsocks UDP relay should live in src/inbound/shadowsocks/udp.rs and route through UdpPipe"
     );
 }
 
