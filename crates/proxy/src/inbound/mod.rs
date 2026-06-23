@@ -20,7 +20,7 @@ mod vless;
 #[cfg(feature = "vmess")]
 mod vmess;
 
-pub(crate) use direct::run_direct_listener_with_bound;
+pub(crate) use direct::{run_direct_listener_with_bound, DirectInboundRequest};
 #[cfg(feature = "http_connect")]
 pub(crate) use http_connect::run_http_connect_listener_with_bound;
 #[cfg(feature = "hysteria2")]

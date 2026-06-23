@@ -18,6 +18,13 @@ use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
+#[derive(Debug)]
+pub(crate) struct DirectInboundRequest {
+    pub(crate) inbound: zero_config::InboundConfig,
+    pub(crate) target: Option<String>,
+    pub(crate) port: Option<u16>,
+}
+
 // ── Handler ────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -55,20 +62,15 @@ impl InboundProtocol for DirectInboundHandler {
 
 pub(crate) async fn run_direct_listener_with_bound(
     proxy: &Proxy,
-    inbound: zero_config::InboundConfig,
+    request: DirectInboundRequest,
     listener: zero_platform_tokio::TokioListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let (target, port) = match &inbound.protocol {
-        zero_config::InboundProtocolConfig::Direct { target, port } => (target.clone(), *port),
-        _ => {
-            return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "direct listener requires direct config",
-            )))
-        }
-    };
-
+    let DirectInboundRequest {
+        inbound,
+        target,
+        port,
+    } = request;
     let local_addr = listener.local_addr()?;
     let mut connections = JoinSet::new();
     let handler = DirectInboundHandler;

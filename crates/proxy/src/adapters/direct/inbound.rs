@@ -11,9 +11,22 @@ impl DirectAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
+            let (target, port) = match &inbound.protocol {
+                InboundProtocolConfig::Direct { target, port } => (target.clone(), *port),
+                _ => {
+                    return Err(EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "direct adapter received non-direct inbound config",
+                    )));
+                }
+            };
             crate::inbound::run_direct_listener_with_bound(
                 &p,
-                inbound,
+                crate::inbound::DirectInboundRequest {
+                    inbound,
+                    target,
+                    port,
+                },
                 bound.into_tcp(),
                 shutdown_rx,
             )
