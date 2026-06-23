@@ -21,17 +21,17 @@ impl MieruAdapter {
         };
         let (protocol_state, chain_tasks) = dispatch.protocol_parts();
         let sent = protocol_state
-            .start_mieru_udp_flow(
+            .start_mieru_udp_flow(crate::protocol_runtime::udp::MieruUdpFlowRequest {
                 chain_tasks,
                 proxy,
                 session,
                 server,
-                *port,
+                port: *port,
                 username,
                 password,
-                false,
+                relay_chain: false,
                 payload,
-            )
+            })
             .await
             .map_err(|f: FlowFailure| FlowFailure {
                 stage: f.stage,

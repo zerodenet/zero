@@ -266,7 +266,7 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
             "mieru",
             &[
                 "MieruUdpRelayFlow",
-                "start_mieru_udp_flow",
+                "MieruUdpFlowRequest",
                 "start_mieru_udp_relay_flow",
                 "UdpFlowOutbound::Mieru",
             ],
@@ -1262,7 +1262,7 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     for forbidden in [
         "start_trojan_udp_flow",
         "start_trojan_udp_relay_flow",
-        "start_mieru_udp_flow",
+        "MieruUdpFlowRequest",
         "start_mieru_udp_relay_flow",
         "TrojanSendExisting",
         "MieruSendExisting",
@@ -1310,7 +1310,7 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
             "Hysteria2UdpFlowRequest",
             "start_trojan_udp_flow",
             "start_trojan_udp_relay_flow",
-            "start_mieru_udp_flow",
+            "MieruUdpFlowRequest",
             "start_mieru_udp_relay_flow",
             "start_vless_udp_flow",
             "start_vless_udp_relay_two_stream",

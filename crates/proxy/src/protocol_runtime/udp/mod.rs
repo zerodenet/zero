@@ -47,6 +47,8 @@ pub(crate) use packet_path_traits::{
 pub(crate) use ss_manager::{SsChainManager, SsSendExisting};
 #[cfg(feature = "hysteria2")]
 pub(crate) use start::Hysteria2UdpFlowRequest;
+#[cfg(feature = "mieru")]
+pub(crate) use start::MieruUdpFlowRequest;
 pub(crate) use state::ProtocolUdpState;
 #[cfg(feature = "trojan")]
 pub(crate) use trojan_manager::{TrojanChainManager, TrojanRelayExisting, TrojanSendExisting};

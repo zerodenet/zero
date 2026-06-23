@@ -8,35 +8,11 @@ use super::super::{
 use crate::runtime::Proxy;
 
 impl ProtocolUdpState {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn start_mieru_udp_flow(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        proxy: &Proxy,
-        session: &Session,
-        server: &str,
-        port: u16,
-        username: &str,
-        password: &str,
-        relay_chain: bool,
-        payload: &[u8],
+        request: MieruUdpFlowRequest<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.mieru
-            .send_existing(MieruSendExisting {
-                chain_tasks,
-                session_id: session.id,
-                proxy,
-                session,
-                server,
-                port,
-                username,
-                password,
-                relay_chain,
-                target: &session.target,
-                target_port: session.port,
-                payload,
-            })
-            .await
+        self.mieru.send_existing(request.into_existing()).await
     }
 
     pub(crate) async fn start_mieru_udp_relay_flow(
@@ -58,5 +34,36 @@ impl ProtocolUdpState {
                 payload: flow.payload,
             })
             .await
+    }
+}
+
+pub(crate) struct MieruUdpFlowRequest<'a> {
+    pub chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub proxy: &'a Proxy,
+    pub session: &'a Session,
+    pub server: &'a str,
+    pub port: u16,
+    pub username: &'a str,
+    pub password: &'a str,
+    pub relay_chain: bool,
+    pub payload: &'a [u8],
+}
+
+impl<'a> MieruUdpFlowRequest<'a> {
+    fn into_existing(self) -> MieruSendExisting<'a> {
+        MieruSendExisting {
+            chain_tasks: self.chain_tasks,
+            session_id: self.session.id,
+            proxy: self.proxy,
+            session: self.session,
+            server: self.server,
+            port: self.port,
+            username: self.username,
+            password: self.password,
+            relay_chain: self.relay_chain,
+            target: &self.session.target,
+            target_port: self.session.port,
+            payload: self.payload,
+        }
     }
 }
