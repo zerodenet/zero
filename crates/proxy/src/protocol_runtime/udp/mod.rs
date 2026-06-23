@@ -36,7 +36,9 @@ pub(crate) use mieru_manager::{MieruChainManager, MieruRelayExisting, MieruSendE
 #[cfg(all(feature = "shadowsocks", feature = "hysteria2"))]
 pub(crate) use packet_path_chain::build_hysteria2_packet_path;
 #[cfg(feature = "shadowsocks")]
-pub(crate) use packet_path_chain::{build_shadowsocks_packet_path, PacketPathManager};
+pub(crate) use packet_path_chain::{
+    build_shadowsocks_packet_path, PacketPathManager, SendWithSnapshotRequest,
+};
 pub(crate) use packet_path_snapshot::UdpPacketPathCarrier;
 pub(crate) use packet_path_traits::ChainTask;
 #[cfg(feature = "shadowsocks")]

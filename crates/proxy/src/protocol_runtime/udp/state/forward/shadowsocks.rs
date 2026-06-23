@@ -2,7 +2,9 @@ use tokio::task::JoinSet;
 
 use super::super::ProtocolUdpState;
 use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
-use crate::protocol_runtime::udp::{ChainTask, FlowFailure, SsSendExisting, UdpPacketPathCarrier};
+use crate::protocol_runtime::udp::{
+    ChainTask, FlowFailure, SendWithSnapshotRequest, SsSendExisting, UdpPacketPathCarrier,
+};
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
@@ -26,23 +28,23 @@ pub(super) async fn forward(
     if let Some(carrier) = existing.packet_path_carrier {
         state
             .packet_path
-            .send_with_snapshot(
-                UdpFlowContext {
+            .send_with_snapshot(SendWithSnapshotRequest {
+                ctx: UdpFlowContext {
                     chain_tasks,
                     session_id: flow.session.id,
                 },
                 carrier,
-                existing.tag,
-                existing.server,
-                existing.port,
-                existing.password,
-                existing.cipher,
-                UdpPacketRef {
+                datagram_tag: existing.tag,
+                datagram_server: existing.server,
+                datagram_port: existing.port,
+                datagram_password: existing.password,
+                datagram_cipher: existing.cipher,
+                packet_ref: UdpPacketRef {
                     target: &flow.session.target,
                     port: flow.session.port,
                     payload: existing.payload,
                 },
-            )
+            })
             .await
     } else {
         state

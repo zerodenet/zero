@@ -1806,6 +1806,22 @@ fn packet_path_snapshot_lookup_lives_outside_chain_manager() {
 }
 
 #[test]
+fn packet_path_snapshot_send_uses_request_model() {
+    let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
+    let forward = read("src/protocol_runtime/udp/state/forward/shadowsocks.rs");
+
+    assert!(
+        manager.contains("struct SendWithSnapshotRequest")
+            && manager.contains("request: SendWithSnapshotRequest<'_>"),
+        "packet-path snapshot send should use a request model"
+    );
+    assert!(
+        forward.contains("SendWithSnapshotRequest {"),
+        "packet-path snapshot forward path should pass SendWithSnapshotRequest"
+    );
+}
+
+#[test]
 fn feature_gated_udp_manager_modules_do_not_embed_disabled_stubs() {
     for source in [
         "src/protocol_runtime/udp/h2_manager.rs",

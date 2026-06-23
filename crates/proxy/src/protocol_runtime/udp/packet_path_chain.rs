@@ -64,30 +64,22 @@ impl PacketPathManager {
 
     /// Forward path: the carrier was cached at start time; look it up by the
     /// stored snapshot's cache key. No leaves available, so no re-dial.
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn send_with_snapshot(
         &mut self,
-        ctx: UdpFlowContext<'_>,
-        carrier: &crate::protocol_runtime::udp::UdpPacketPathCarrier,
-        datagram_tag: &str,
-        datagram_server: &str,
-        datagram_port: u16,
-        datagram_password: &str,
-        datagram_cipher: &str,
-        packet_ref: UdpPacketRef<'_>,
+        request: SendWithSnapshotRequest<'_>,
     ) -> Result<usize, FlowFailure> {
         let entry = snapshot::lookup_entry(
             &self.upstreams,
             snapshot::SnapshotLookup {
-                carrier,
-                datagram_tag,
-                datagram_server,
-                datagram_port,
-                datagram_password,
-                datagram_cipher,
+                carrier: request.carrier,
+                datagram_tag: request.datagram_tag,
+                datagram_server: request.datagram_server,
+                datagram_port: request.datagram_port,
+                datagram_password: request.datagram_password,
+                datagram_cipher: request.datagram_cipher,
             },
         )?;
-        dispatch_via_entry(entry, ctx, packet_ref).await
+        dispatch_via_entry(entry, request.ctx, request.packet_ref).await
     }
 
     async fn ensure_entry(
@@ -109,4 +101,15 @@ impl PacketPathManager {
             .get(&key)
             .expect("packet path entry inserted"))
     }
+}
+
+pub(crate) struct SendWithSnapshotRequest<'a> {
+    pub ctx: UdpFlowContext<'a>,
+    pub carrier: &'a crate::protocol_runtime::udp::UdpPacketPathCarrier,
+    pub datagram_tag: &'a str,
+    pub datagram_server: &'a str,
+    pub datagram_port: u16,
+    pub datagram_password: &'a str,
+    pub datagram_cipher: &'a str,
+    pub packet_ref: UdpPacketRef<'a>,
 }
