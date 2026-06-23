@@ -147,7 +147,6 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
             "src/protocol_adapter/registry.rs",
             "src/protocol_adapter/registry/tests.rs",
             "src/inbound/hysteria2.rs",
-            "src/inbound/trojan.rs",
             "src/inbound/vmess/listener.rs",
         ],
         &["src/adapters/"],
@@ -320,6 +319,27 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         adapter.contains("InboundProtocolConfig::Shadowsocks")
             && adapter.contains("ShadowsocksInboundRequest"),
         "Shadowsocks adapter should extract Shadowsocks config and pass ShadowsocksInboundRequest"
+    );
+}
+
+#[test]
+fn trojan_inbound_uses_adapter_request_model() {
+    let inbound = read("src/inbound/trojan.rs");
+    let adapter = read("src/adapters/trojan/inbound.rs");
+
+    assert!(
+        inbound.contains("struct TrojanInboundRequest")
+            && inbound.contains("request: TrojanInboundRequest"),
+        "Trojan inbound listener should receive an adapter-built request model"
+    );
+    assert!(
+        !inbound.contains("InboundProtocolConfig::Trojan"),
+        "Trojan inbound entrypoint should not parse Trojan config variants"
+    );
+    assert!(
+        adapter.contains("InboundProtocolConfig::Trojan")
+            && adapter.contains("TrojanInboundRequest"),
+        "Trojan adapter should extract Trojan config and pass TrojanInboundRequest"
     );
 }
 

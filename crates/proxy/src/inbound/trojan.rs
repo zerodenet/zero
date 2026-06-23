@@ -22,6 +22,13 @@ use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstrea
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
+#[derive(Debug)]
+pub(crate) struct TrojanInboundRequest {
+    pub(crate) inbound: InboundConfig,
+    pub(crate) password: String,
+    pub(crate) tls: Option<zero_config::TlsConfig>,
+}
+
 /// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
 struct TlsStream(tokio_rustls::server::TlsStream<TcpRelayStream>);
 
@@ -94,25 +101,15 @@ impl InboundProtocol for TrojanInboundHandler {
 
 pub(crate) async fn run_trojan_listener_with_bound(
     proxy: &Proxy,
-    inbound: InboundConfig,
+    request: TrojanInboundRequest,
     listener: zero_platform_tokio::TokioListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let (password, tls_cfg, _up_bps, _down_bps) = match &inbound.protocol {
-        zero_config::InboundProtocolConfig::Trojan {
-            password,
-            sni: _,
-            tls,
-            up_bps,
-            down_bps,
-        } => (password.clone(), tls.clone(), *up_bps, *down_bps),
-        _ => {
-            return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "trojan config",
-            )))
-        }
-    };
+    let TrojanInboundRequest {
+        inbound,
+        password,
+        tls: tls_cfg,
+    } = request;
     let tls_cfg = tls_cfg.ok_or_else(|| {
         EngineError::Io(io::Error::new(
             io::ErrorKind::InvalidInput,

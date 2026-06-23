@@ -11,9 +11,24 @@ impl TrojanAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
+            let (password, tls) = match &inbound.protocol {
+                InboundProtocolConfig::Trojan { password, tls, .. } => {
+                    (password.clone(), tls.clone())
+                }
+                _ => {
+                    return Err(EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "trojan adapter received non-trojan inbound config",
+                    )));
+                }
+            };
             crate::inbound::run_trojan_listener_with_bound(
                 &p,
-                inbound,
+                crate::inbound::TrojanInboundRequest {
+                    inbound,
+                    password,
+                    tls,
+                },
                 bound.into_tcp(),
                 shutdown_rx,
             )

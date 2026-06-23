@@ -34,7 +34,7 @@ pub(crate) use shadowsocks::{run_shadowsocks_listener_with_bound, ShadowsocksInb
 #[cfg(feature = "socks5")]
 pub(crate) use socks5::run_socks5_listener_with_bound;
 #[cfg(feature = "trojan")]
-pub(crate) use trojan::run_trojan_listener_with_bound;
+pub(crate) use trojan::{run_trojan_listener_with_bound, TrojanInboundRequest};
 #[cfg(feature = "vless")]
 pub(crate) use vless::run_vless_listener_with_bound;
 #[cfg(feature = "vmess")]
