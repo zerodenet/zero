@@ -27,24 +27,24 @@ impl VlessAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        match crate::outbound::vless::connect_tcp(
+        match crate::outbound::vless::connect_tcp(crate::outbound::vless::VlessTcpConnectRequest {
             proxy,
             session,
             server,
-            *port,
+            port: *port,
             id,
-            *flow,
-            *mux_concurrency,
-            *mux_idle_timeout_secs,
-            *tls,
-            *reality,
-            *ws,
-            *grpc,
-            *h2,
-            *http_upgrade,
-            *quic,
-            *split_http,
-        )
+            flow: *flow,
+            mux_concurrency: *mux_concurrency,
+            mux_idle_timeout_secs: *mux_idle_timeout_secs,
+            tls: *tls,
+            reality: *reality,
+            ws: *ws,
+            grpc: *grpc,
+            h2: *h2,
+            http_upgrade: *http_upgrade,
+            quic: *quic,
+            split_http: *split_http,
+        })
         .await
         {
             Ok(upstream) => Ok(EstablishedTcpOutbound::Vless {

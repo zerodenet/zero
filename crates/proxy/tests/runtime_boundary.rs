@@ -496,6 +496,26 @@ fn vmess_tcp_connect_uses_request_model() {
 }
 
 #[test]
+fn vless_tcp_connect_uses_request_model() {
+    let outbound = read("src/outbound/vless.rs");
+    let adapter = read("src/adapters/vless/tcp.rs");
+
+    assert!(
+        !outbound.contains("#[allow(clippy::too_many_arguments)]"),
+        "VLESS TCP connect should not need a too_many_arguments allowance"
+    );
+    assert!(
+        outbound.contains("struct VlessTcpConnectRequest")
+            && outbound.contains("request: VlessTcpConnectRequest<'_>"),
+        "VLESS TCP connect should use VlessTcpConnectRequest"
+    );
+    assert!(
+        adapter.contains("VlessTcpConnectRequest {"),
+        "VLESS adapter TCP module should pass VlessTcpConnectRequest"
+    );
+}
+
+#[test]
 fn adapter_roots_keep_inbound_runtime_details_in_inbound_modules() {
     let cases: &[(&str, &[&str])] = &[
         (

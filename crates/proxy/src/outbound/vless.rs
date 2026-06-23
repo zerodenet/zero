@@ -28,25 +28,28 @@ use crate::transport::TcpRelayStream;
 /// Moved from `runtime/upstream.rs`. The runtime dispatches via the adapter
 /// trait instead of a per-protocol `connect_via_*` method.
 #[cfg(feature = "vless")]
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn connect_tcp(
-    proxy: &Proxy,
-    session: &Session,
-    server: &str,
-    port: u16,
-    id: &str,
-    flow: Option<&str>,
-    mux_concurrency: Option<u32>,
-    mux_idle_timeout_secs: Option<u64>,
-    tls: Option<&ClientTlsConfig>,
-    reality: Option<&RealityConfig>,
-    ws: Option<&WebSocketConfig>,
-    grpc: Option<&GrpcConfig>,
-    h2: Option<&H2Config>,
-    http_upgrade: Option<&HttpUpgradeConfig>,
-    quic: Option<&QuicConfig>,
-    split_http: Option<&SplitHttpConfig>,
+    request: VlessTcpConnectRequest<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
+    let VlessTcpConnectRequest {
+        proxy,
+        session,
+        server,
+        port,
+        id,
+        flow,
+        mux_concurrency,
+        mux_idle_timeout_secs,
+        tls,
+        reality,
+        ws,
+        grpc,
+        h2,
+        http_upgrade,
+        quic,
+        split_http,
+    } = request;
+
     let id = vless::parse_uuid(id)?;
 
     // If MUX flow is configured, use connection pool.
@@ -133,6 +136,26 @@ pub(crate) async fn connect_tcp(
 
         Ok(metered.into_inner())
     }
+}
+
+#[cfg(feature = "vless")]
+pub(crate) struct VlessTcpConnectRequest<'a> {
+    pub proxy: &'a Proxy,
+    pub session: &'a Session,
+    pub server: &'a str,
+    pub port: u16,
+    pub id: &'a str,
+    pub flow: Option<&'a str>,
+    pub mux_concurrency: Option<u32>,
+    pub mux_idle_timeout_secs: Option<u64>,
+    pub tls: Option<&'a ClientTlsConfig>,
+    pub reality: Option<&'a RealityConfig>,
+    pub ws: Option<&'a WebSocketConfig>,
+    pub grpc: Option<&'a GrpcConfig>,
+    pub h2: Option<&'a H2Config>,
+    pub http_upgrade: Option<&'a HttpUpgradeConfig>,
+    pub quic: Option<&'a QuicConfig>,
+    pub split_http: Option<&'a SplitHttpConfig>,
 }
 
 /// Apply a VLESS tunnel/session handshake over an existing stream (relay hop).
