@@ -18,21 +18,24 @@ use crate::transport::{MeteredStream, TcpRelayStream};
 ///
 /// Moved from `runtime/upstream.rs`. The runtime dispatches via the adapter
 /// trait instead of a per-protocol `connect_via_*` method.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn connect_tcp(
-    proxy: &Proxy,
-    session: &Session,
-    server: &str,
-    port: u16,
-    id: &str,
-    cipher: &str,
-    mux_concurrency: Option<u32>,
-    mux_idle_timeout_secs: Option<u64>,
-    tls: Option<&ClientTlsConfig>,
-    ws: Option<&WebSocketConfig>,
-    grpc: Option<&GrpcConfig>,
+    request: VmessTcpConnectRequest<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
     use vmess::{parse_uuid, VmessCipher, VmessOutbound};
+
+    let VmessTcpConnectRequest {
+        proxy,
+        session,
+        server,
+        port,
+        id,
+        cipher,
+        mux_concurrency,
+        mux_idle_timeout_secs,
+        tls,
+        ws,
+        grpc,
+    } = request;
 
     let uuid = parse_uuid(id)
         .map_err(|e| EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?;
@@ -138,6 +141,20 @@ pub(crate) async fn connect_tcp(
         sock.into_inner(),
         vmess_session,
     )?))
+}
+
+pub(crate) struct VmessTcpConnectRequest<'a> {
+    pub proxy: &'a Proxy,
+    pub session: &'a Session,
+    pub server: &'a str,
+    pub port: u16,
+    pub id: &'a str,
+    pub cipher: &'a str,
+    pub mux_concurrency: Option<u32>,
+    pub mux_idle_timeout_secs: Option<u64>,
+    pub tls: Option<&'a ClientTlsConfig>,
+    pub ws: Option<&'a WebSocketConfig>,
+    pub grpc: Option<&'a GrpcConfig>,
 }
 
 /// Apply a VMess AEAD session handshake over an existing stream (relay hop).

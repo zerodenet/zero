@@ -476,6 +476,26 @@ fn trojan_tcp_connect_uses_request_model() {
 }
 
 #[test]
+fn vmess_tcp_connect_uses_request_model() {
+    let outbound = read("src/outbound/vmess.rs");
+    let adapter = read("src/adapters/vmess/tcp.rs");
+
+    assert!(
+        !outbound.contains("#[allow(clippy::too_many_arguments)]"),
+        "VMess TCP connect should not need a too_many_arguments allowance"
+    );
+    assert!(
+        outbound.contains("struct VmessTcpConnectRequest")
+            && outbound.contains("request: VmessTcpConnectRequest<'_>"),
+        "VMess TCP connect should use VmessTcpConnectRequest"
+    );
+    assert!(
+        adapter.contains("VmessTcpConnectRequest {"),
+        "VMess adapter TCP module should pass VmessTcpConnectRequest"
+    );
+}
+
+#[test]
 fn adapter_roots_keep_inbound_runtime_details_in_inbound_modules() {
     let cases: &[(&str, &[&str])] = &[
         (

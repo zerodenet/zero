@@ -22,19 +22,19 @@ impl VmessAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        match crate::outbound::vmess::connect_tcp(
+        match crate::outbound::vmess::connect_tcp(crate::outbound::vmess::VmessTcpConnectRequest {
             proxy,
             session,
             server,
-            *port,
+            port: *port,
             id,
             cipher,
-            *mux_concurrency,
-            *mux_idle_timeout_secs,
-            *tls,
-            *ws,
-            *grpc,
-        )
+            mux_concurrency: *mux_concurrency,
+            mux_idle_timeout_secs: *mux_idle_timeout_secs,
+            tls: *tls,
+            ws: *ws,
+            grpc: *grpc,
+        })
         .await
         {
             Ok(upstream) => Ok(EstablishedTcpOutbound::Vmess {
