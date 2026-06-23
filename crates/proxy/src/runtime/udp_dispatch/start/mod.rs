@@ -17,8 +17,6 @@ use crate::runtime::Proxy;
 #[cfg(feature = "shadowsocks")]
 #[allow(unused_imports)]
 pub(super) use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
-#[allow(unused_imports)]
-pub(super) use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
 impl UdpDispatch {
     /// Start a new UDP flow by dispatching to the resolved outbound.
@@ -37,7 +35,7 @@ impl UdpDispatch {
         };
 
         // Block is kernel-level (no adapter owns it): reject immediately.
-        // Direct and every proxy protocol go through the adapter registry —
+        // Direct and every proxy protocol go through the adapter registry:
         // adding a protocol = register an adapter, zero changes here.
         if matches!(
             crate::runtime::orchestration::tcp_path_category(&candidate),

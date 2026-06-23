@@ -10,7 +10,7 @@ impl UdpDispatch {
     ) -> Result<FlowStartResult, FlowFailure> {
         // Datagram-over-packet-path: carrier provides a raw send/recv channel,
         // datagram encodes through it. Resolve both positions via the adapter
-        // registry — no match on the protocol enum.
+        // registry; no match on the protocol enum.
         #[cfg(feature = "shadowsocks")]
         if chain.len() == 2 {
             let carrier_leaf = &chain[0];
@@ -47,16 +47,13 @@ impl UdpDispatch {
                     let datagram = datagram_adapter
                         .udp_datagram_source(datagram_leaf)
                         .expect("checked above");
+                    let packet_path_carrier =
+                        carrier_adapter.udp_packet_path_carrier_snapshot(carrier_leaf);
                     return Ok(FlowStartResult::Flow {
-                        outbound: Box::new(UdpFlowOutbound::Shadowsocks {
-                            tag: datagram.tag.to_owned(),
-                            server: datagram.server.to_owned(),
-                            port: datagram.port,
-                            password: datagram.password.to_owned(),
-                            cipher: datagram.cipher.to_owned(),
-                            packet_path_carrier: carrier_adapter
-                                .udp_packet_path_carrier_snapshot(carrier_leaf),
-                        }),
+                        outbound: Box::new(
+                            self.protocol_state
+                                .datagram_chain_flow_outbound(datagram, packet_path_carrier),
+                        ),
                         tx_bytes: sent as u64,
                     });
                 }

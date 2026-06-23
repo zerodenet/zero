@@ -1,6 +1,13 @@
 use super::*;
 
 #[cfg(feature = "hysteria2")]
+mod inbound;
+#[cfg(feature = "hysteria2")]
+mod tcp;
+#[cfg(feature = "hysteria2")]
+mod udp;
+
+#[cfg(feature = "hysteria2")]
 #[derive(Debug)]
 pub(crate) struct Hysteria2Adapter;
 
@@ -32,56 +39,15 @@ impl ProtocolAdapter for Hysteria2Adapter {
     fn udp_packet_path_carrier_descriptor(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::runtime::udp_dispatch::PacketPathCarrierDescriptor> {
-        let ResolvedLeafOutbound::Hysteria2 {
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-            ..
-        } = leaf
-        else {
-            return None;
-        };
-        let fingerprint = client_fingerprint
-            .map(|value| format!("|fp:{value}"))
-            .unwrap_or_default();
-        Some(crate::runtime::udp_dispatch::PacketPathCarrierDescriptor {
-            cache_key: format!("hysteria2|{tag}|{server}:{port}|{password}{fingerprint}"),
-            server: (*server).to_string(),
-            port: *port,
-        })
+    ) -> Option<crate::protocol_runtime::udp::PacketPathCarrierDescriptor> {
+        self.udp_packet_path_carrier_descriptor_impl(leaf)
     }
 
     fn udp_packet_path_carrier_snapshot(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<crate::protocol_runtime::udp::UdpPacketPathCarrier> {
-        use crate::protocol_runtime::udp::UdpPacketPathCarrier;
-
-        let ResolvedLeafOutbound::Hysteria2 {
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-            ..
-        } = leaf
-        else {
-            return None;
-        };
-        let fingerprint = client_fingerprint
-            .map(|value| format!("|fp:{value}"))
-            .unwrap_or_default();
-        Some(UdpPacketPathCarrier::Hysteria2 {
-            cache_key: format!("hysteria2|{tag}|{server}:{port}|{password}{fingerprint}"),
-            tag: (*tag).to_string(),
-            server: (*server).to_string(),
-            port: *port,
-            password: (*password).to_string(),
-            client_fingerprint: (*client_fingerprint).map(|value| value.to_string()),
-        })
+        self.udp_packet_path_carrier_snapshot_impl(leaf)
     }
 
     #[cfg(feature = "shadowsocks")]
@@ -89,24 +55,8 @@ impl ProtocolAdapter for Hysteria2Adapter {
         &self,
         _proxy: &Proxy,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn crate::runtime::udp_dispatch::PacketPathCarrier>, EngineError> {
-        let ResolvedLeafOutbound::Hysteria2 {
-            server,
-            port,
-            password,
-            client_fingerprint,
-            ..
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf).error);
-        };
-        crate::runtime::udp_dispatch::build_hysteria2_packet_path(
-            server,
-            *port,
-            password,
-            *client_fingerprint,
-        )
-        .await
+    ) -> Result<Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError> {
+        self.build_udp_packet_path_impl(leaf).await
     }
 
     async fn bind_inbound(
@@ -114,24 +64,7 @@ impl ProtocolAdapter for Hysteria2Adapter {
         inbound: &InboundConfig,
         source_dir: Option<&std::path::Path>,
     ) -> Result<BoundInbound, EngineError> {
-        let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
-        if let InboundProtocolConfig::Hysteria2 {
-            cert_path,
-            key_path,
-            ..
-        } = &inbound.protocol
-        {
-            let cert = cert_path
-                .clone()
-                .unwrap_or_else(|| "certs/fullchain.pem".to_string());
-            let key = key_path
-                .clone()
-                .unwrap_or_else(|| "certs/privkey.pem".to_string());
-            let endpoint = QuicInbound::bind(&listen, &cert, &key, source_dir).await?;
-            Ok(BoundInbound::Quic(endpoint))
-        } else {
-            unreachable!("hysteria2 adapter only handles Hysteria2 config")
-        }
+        self.bind_inbound_impl(inbound, source_dir).await
     }
     async fn connect_tcp(
         &self,
@@ -139,39 +72,7 @@ impl ProtocolAdapter for Hysteria2Adapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        let ResolvedLeafOutbound::Hysteria2 {
-            tag,
-            server,
-            port,
-            password,
-            insecure: _,
-            client_fingerprint,
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf));
-        };
-        match crate::outbound::hysteria2::connect_tcp(
-            proxy,
-            session,
-            server,
-            *port,
-            password,
-            *client_fingerprint,
-        )
-        .await
-        {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Hysteria2 {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                upstream,
-            }),
-            Err(error) => Err(TcpOutboundFailure {
-                stage: "connect_upstream_hysteria2",
-                error,
-                upstream_endpoint: Some(((*server).to_string(), *port)),
-            }),
-        }
+        self.connect_tcp_impl(proxy, session, leaf).await
     }
     async fn start_udp_flow(
         &self,
@@ -181,42 +82,8 @@ impl ProtocolAdapter for Hysteria2Adapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Hysteria2 {
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-            ..
-        } = leaf
-        else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let sent = dispatch
-            .start_hysteria2_udp_flow(
-                session,
-                server,
-                *port,
-                password,
-                *client_fingerprint,
-                payload,
-            )
+        self.start_udp_flow_impl(dispatch, session, leaf, payload)
             .await
-            .map_err(|f: FlowFailure| FlowFailure {
-                stage: f.stage,
-                error: f.error,
-                upstream: f.upstream,
-            })?;
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Hysteria2 {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                password: (*password).to_string(),
-                client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
-            }),
-            tx_bytes: sent as u64,
-        })
     }
     fn spawn_inbound(
         &self,
@@ -226,10 +93,7 @@ impl ProtocolAdapter for Hysteria2Adapter {
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        let p = proxy.clone();
-        listeners.spawn(async move {
-            crate::inbound::run_hysteria2_listener_with_bound(&p, inbound, bound, shutdown_rx).await
-        });
+        self.spawn_inbound_impl(proxy, inbound, bound, shutdown_rx, listeners);
     }
 }
 

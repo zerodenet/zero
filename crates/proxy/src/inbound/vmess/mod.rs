@@ -112,6 +112,7 @@ impl InboundProtocol for VmessTransportHandler {
 
 mod helpers;
 mod listener;
+mod model;
 mod mux;
 mod transport;
 

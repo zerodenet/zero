@@ -161,87 +161,29 @@ impl UdpSessionFlows {
     }
 
     fn index_flow(&mut self, key: &UdpFlowKey, outbound: &UdpFlowOutbound) {
-        match outbound {
-            UdpFlowOutbound::Direct { target_addr, .. } => {
-                self.direct_by_sender.insert(*target_addr, key.clone());
-            }
-            UdpFlowOutbound::Socks5 { tag, .. } => {
-                self.upstream_by_response.insert(
-                    UdpUpstreamResponseKey::new(tag, &key.target, key.port),
-                    key.clone(),
-                );
-            }
-            #[cfg(feature = "shadowsocks")]
-            UdpFlowOutbound::Shadowsocks { tag, .. } => {
-                self.upstream_by_response.insert(
-                    UdpUpstreamResponseKey::new(tag, &key.target, key.port),
-                    key.clone(),
-                );
-            }
-            #[cfg(feature = "hysteria2")]
-            UdpFlowOutbound::Hysteria2 { tag, .. } => {
-                self.upstream_by_response.insert(
-                    UdpUpstreamResponseKey::new(tag, &key.target, key.port),
-                    key.clone(),
-                );
-            }
-            #[cfg(feature = "trojan")]
-            UdpFlowOutbound::Trojan { tag, .. } => {
-                self.upstream_by_response.insert(
-                    UdpUpstreamResponseKey::new(tag, &key.target, key.port),
-                    key.clone(),
-                );
-            }
-            #[cfg(feature = "mieru")]
-            UdpFlowOutbound::Mieru { tag, .. } => {
-                self.upstream_by_response.insert(
-                    UdpUpstreamResponseKey::new(tag, &key.target, key.port),
-                    key.clone(),
-                );
-            }
+        if let Some(sender) = outbound.direct_sender() {
+            self.direct_by_sender.insert(sender, key.clone());
+        }
+
+        if let Some(tag) = outbound.upstream_response_tag() {
+            self.upstream_by_response.insert(
+                UdpUpstreamResponseKey::new(tag, &key.target, key.port),
+                key.clone(),
+            );
         }
     }
 
     fn unindex_flow(&mut self, key: &UdpFlowKey, outbound: &UdpFlowOutbound) {
-        match outbound {
-            UdpFlowOutbound::Direct { target_addr, .. } => {
-                if self.direct_by_sender.get(target_addr) == Some(key) {
-                    self.direct_by_sender.remove(target_addr);
-                }
+        if let Some(sender) = outbound.direct_sender() {
+            if self.direct_by_sender.get(&sender) == Some(key) {
+                self.direct_by_sender.remove(&sender);
             }
-            UdpFlowOutbound::Socks5 { tag, .. } => {
-                let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
-                if self.upstream_by_response.get(&response_key) == Some(key) {
-                    self.upstream_by_response.remove(&response_key);
-                }
-            }
-            #[cfg(feature = "shadowsocks")]
-            UdpFlowOutbound::Shadowsocks { tag, .. } => {
-                let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
-                if self.upstream_by_response.get(&response_key) == Some(key) {
-                    self.upstream_by_response.remove(&response_key);
-                }
-            }
-            #[cfg(feature = "hysteria2")]
-            UdpFlowOutbound::Hysteria2 { tag, .. } => {
-                let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
-                if self.upstream_by_response.get(&response_key) == Some(key) {
-                    self.upstream_by_response.remove(&response_key);
-                }
-            }
-            #[cfg(feature = "trojan")]
-            UdpFlowOutbound::Trojan { tag, .. } => {
-                let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
-                if self.upstream_by_response.get(&response_key) == Some(key) {
-                    self.upstream_by_response.remove(&response_key);
-                }
-            }
-            #[cfg(feature = "mieru")]
-            UdpFlowOutbound::Mieru { tag, .. } => {
-                let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
-                if self.upstream_by_response.get(&response_key) == Some(key) {
-                    self.upstream_by_response.remove(&response_key);
-                }
+        }
+
+        if let Some(tag) = outbound.upstream_response_tag() {
+            let response_key = UdpUpstreamResponseKey::new(tag, &key.target, key.port);
+            if self.upstream_by_response.get(&response_key) == Some(key) {
+                self.upstream_by_response.remove(&response_key);
             }
         }
     }
@@ -250,24 +192,16 @@ impl UdpSessionFlows {
         let mut direct_flows = self
             .flows
             .values()
-            .filter(|flow| matches!(flow.outbound, UdpFlowOutbound::Direct { .. }));
+            .filter(|flow| flow.outbound.direct_sender().is_some());
         let flow = direct_flows.next()?;
         direct_flows.next().is_none().then_some(flow.session.id)
     }
 
     fn single_socks5_flow_session_id(&self, outbound_tag: &str) -> Option<u64> {
-        let mut upstream_flows = self.flows.values().filter(|flow| match &flow.outbound {
-            UdpFlowOutbound::Socks5 { tag, .. } => tag == outbound_tag,
-            #[cfg(feature = "shadowsocks")]
-            UdpFlowOutbound::Shadowsocks { tag, .. } => tag == outbound_tag,
-            #[cfg(feature = "hysteria2")]
-            UdpFlowOutbound::Hysteria2 { tag, .. } => tag == outbound_tag,
-            #[cfg(feature = "trojan")]
-            UdpFlowOutbound::Trojan { tag, .. } => tag == outbound_tag,
-            #[cfg(feature = "mieru")]
-            UdpFlowOutbound::Mieru { tag, .. } => tag == outbound_tag,
-            UdpFlowOutbound::Direct { .. } => false,
-        });
+        let mut upstream_flows = self
+            .flows
+            .values()
+            .filter(|flow| flow.outbound.matches_upstream_tag(outbound_tag));
         let flow = upstream_flows.next()?;
         upstream_flows.next().is_none().then_some(flow.session.id)
     }

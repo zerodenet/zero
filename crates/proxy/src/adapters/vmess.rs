@@ -1,6 +1,13 @@
 use super::*;
 
 #[cfg(feature = "vmess")]
+mod inbound;
+#[cfg(feature = "vmess")]
+mod tcp;
+#[cfg(feature = "vmess")]
+mod udp;
+
+#[cfg(feature = "vmess")]
 #[derive(Debug)]
 pub(crate) struct VmessAdapter;
 
@@ -34,48 +41,7 @@ impl ProtocolAdapter for VmessAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        let ResolvedLeafOutbound::Vmess {
-            tag,
-            server,
-            port,
-            id,
-            cipher,
-            mux_concurrency,
-            mux_idle_timeout_secs,
-            tls,
-            ws,
-            grpc,
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf));
-        };
-        match crate::outbound::vmess::connect_tcp(
-            proxy,
-            session,
-            server,
-            *port,
-            id,
-            cipher,
-            *mux_concurrency,
-            *mux_idle_timeout_secs,
-            *tls,
-            *ws,
-            *grpc,
-        )
-        .await
-        {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Vmess {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                upstream,
-            }),
-            Err(error) => Err(TcpOutboundFailure {
-                stage: "connect_upstream_vmess",
-                error,
-                upstream_endpoint: Some(((*server).to_string(), *port)),
-            }),
-        }
+        self.connect_tcp_impl(proxy, session, leaf).await
     }
     async fn apply_relay_hop(
         &self,
@@ -84,10 +50,7 @@ impl ProtocolAdapter for VmessAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        let ResolvedLeafOutbound::Vmess { id, cipher, .. } = leaf else {
-            return Err(unreachable_leaf(self.name(), leaf).error);
-        };
-        crate::outbound::vmess::apply_tcp_hop(stream, session, id, cipher).await
+        self.apply_relay_hop_impl(stream, session, leaf).await
     }
     async fn start_udp_flow(
         &self,
@@ -97,42 +60,8 @@ impl ProtocolAdapter for VmessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Vmess {
-            tag,
-            server,
-            port,
-            id,
-            cipher,
-            mux_concurrency,
-            mux_idle_timeout_secs: _,
-            tls,
-            ws,
-            grpc,
-        } = leaf
-        else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let tag_owned = (*tag).to_string();
-        dispatch
-            .start_vmess_udp_flow(VmessUdpFlow {
-                proxy,
-                session,
-                server,
-                port: *port,
-                id,
-                cipher,
-                mux_concurrency: *mux_concurrency,
-                tls: *tls,
-                ws: *ws,
-                grpc: *grpc,
-                payload,
-            })
-            .await?;
-
-        Ok(FlowStartResult::VmessFlow {
-            session_id: session.id,
-            tag: tag_owned,
-        })
+        self.start_udp_flow_impl(dispatch, proxy, session, leaf, payload)
+            .await
     }
     fn spawn_inbound(
         &self,
@@ -142,16 +71,7 @@ impl ProtocolAdapter for VmessAdapter {
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        let p = proxy.clone();
-        listeners.spawn(async move {
-            crate::inbound::run_vmess_listener_with_bound(
-                &p,
-                inbound,
-                bound.into_tcp(),
-                shutdown_rx,
-            )
-            .await
-        });
+        self.spawn_inbound_impl(proxy, inbound, bound, shutdown_rx, listeners);
     }
     async fn start_udp_relay_final_hop(
         &self,
@@ -162,41 +82,8 @@ impl ProtocolAdapter for VmessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Vmess {
-            tag,
-            server,
-            port,
-            id,
-            cipher,
-            tls,
-            ws,
-            grpc,
-            ..
-        } = leaf
-        else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let tag_owned = (*tag).to_string();
-        dispatch
-            .start_vmess_udp_relay_flow(VmessUdpRelayFlow {
-                proxy,
-                session,
-                carrier,
-                server,
-                port: *port,
-                id,
-                cipher,
-                tls: *tls,
-                ws: *ws,
-                grpc: *grpc,
-                payload,
-            })
-            .await?;
-
-        Ok(FlowStartResult::VmessFlow {
-            session_id: session.id,
-            tag: tag_owned,
-        })
+        self.start_udp_relay_final_hop_impl(dispatch, proxy, session, carrier, leaf, payload)
+            .await
     }
 }
 

@@ -1,5 +1,9 @@
 use super::*;
 
+mod inbound;
+mod tcp;
+mod udp;
+
 // Direct inbound is always available (no feature gate).
 #[derive(Debug)]
 pub(crate) struct DirectAdapter;
@@ -33,25 +37,7 @@ impl ProtocolAdapter for DirectAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        let ResolvedLeafOutbound::Direct { tag } = leaf else {
-            return Err(unreachable_leaf(self.name(), leaf));
-        };
-        match proxy
-            .protocols
-            .direct_connector()
-            .connect(session, proxy.resolver.as_ref())
-            .await
-        {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Direct {
-                tag: (*tag).unwrap_or("direct").to_string(),
-                upstream: upstream.into(),
-            }),
-            Err(error) => Err(TcpOutboundFailure {
-                stage: "connect_direct",
-                error: error.into(),
-                upstream_endpoint: None,
-            }),
-        }
+        self.connect_tcp_impl(proxy, session, leaf).await
     }
     async fn start_udp_flow(
         &self,
@@ -61,35 +47,8 @@ impl ProtocolAdapter for DirectAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Direct { tag } = leaf else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let target_addr = proxy
-            .protocols
-            .direct_connector()
-            .resolve_target_addr(session, proxy.resolver.as_ref())
+        self.start_udp_flow_impl(dispatch, proxy, session, leaf, payload)
             .await
-            .map_err(|error| FlowFailure {
-                stage: "resolve_udp_target",
-                error: error.into(),
-                upstream: None,
-            })?;
-        let sent = dispatch
-            .direct_socket
-            .send_to_addr(payload, target_addr)
-            .await
-            .map_err(|error| FlowFailure {
-                stage: "udp_direct_send",
-                error: error.into(),
-                upstream: None,
-            })?;
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Direct {
-                tag: (*tag).unwrap_or("direct").to_string(),
-                target_addr,
-            }),
-            tx_bytes: sent as u64,
-        })
     }
     fn spawn_inbound(
         &self,
@@ -99,16 +58,7 @@ impl ProtocolAdapter for DirectAdapter {
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        let p = proxy.clone();
-        listeners.spawn(async move {
-            crate::inbound::run_direct_listener_with_bound(
-                &p,
-                inbound,
-                bound.into_tcp(),
-                shutdown_rx,
-            )
-            .await
-        });
+        self.spawn_inbound_impl(proxy, inbound, bound, shutdown_rx, listeners);
     }
 }
 

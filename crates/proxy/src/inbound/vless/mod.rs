@@ -51,6 +51,7 @@ impl InboundProtocol for VlessInboundHandler {
 mod fallback;
 mod helpers;
 mod listener;
+mod model;
 mod mux;
 mod session;
 mod udp_session;

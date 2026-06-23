@@ -59,7 +59,6 @@ use tokio::time::Instant as TokioInstant;
 
 use crate::logging::{log_session_failed, log_session_finished};
 use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpSessionFlows};
-use crate::runtime::Proxy;
 use zero_core::{Address, Session};
 use zero_engine::{EngineError, SessionHandle, SessionOutcome};
 use zero_platform_tokio::TokioDatagramSocket;
@@ -75,29 +74,9 @@ mod types;
 
 // Re-exports.
 
-#[cfg(all(feature = "shadowsocks", feature = "socks5"))]
-pub(crate) use crate::protocol_runtime::socks5_udp::build_socks5_packet_path;
-#[cfg(all(feature = "shadowsocks", feature = "hysteria2"))]
-pub(crate) use crate::protocol_runtime::udp::build_hysteria2_packet_path;
-#[cfg(feature = "shadowsocks")]
-pub(crate) use crate::protocol_runtime::udp::build_shadowsocks_packet_path;
-pub(crate) use crate::protocol_runtime::udp::ChainTask;
-#[cfg(feature = "mieru")]
-pub(crate) use crate::protocol_runtime::udp::MieruUdpRelayFlow;
+use crate::protocol_runtime::socks5_udp::Socks5UdpRuntime;
+use crate::protocol_runtime::udp::ChainTask;
 use crate::protocol_runtime::udp::ProtocolUdpState;
-#[cfg(feature = "shadowsocks")]
-pub(crate) use crate::protocol_runtime::udp::ShadowsocksUdpFlow;
-#[cfg(feature = "shadowsocks")]
-pub(crate) use crate::protocol_runtime::udp::{
-    PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
-};
-#[cfg(feature = "vless")]
-pub(crate) use crate::protocol_runtime::udp::{
-    VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream,
-};
-#[cfg(feature = "vmess")]
-pub(crate) use crate::protocol_runtime::udp::{VmessUdpFlow, VmessUdpRelayFlow};
-pub(crate) use socks5_flow::Socks5UdpSend;
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
 // UdpDispatch.
@@ -107,16 +86,14 @@ pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 /// Owns generic UDP dispatch state and a protocol runtime state bundle.
 /// Created per inbound UDP session/association.
 pub(crate) struct UdpDispatch {
-    pub(crate) inbound_tag: String,
-    pub(crate) flows: UdpSessionFlows,
+    inbound_tag: String,
+    flows: UdpSessionFlows,
     /// Ephemeral UDP socket for direct outbound (sends to target, receives responses).
-    pub(crate) direct_socket: TokioDatagramSocket,
-    /// SOCKS5 upstream association (shared across all flows in this session).
-    pub(crate) socks5_upstream:
-        Option<crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>,
-    pub(crate) socks5_idle_deadline: Option<TokioInstant>,
+    direct_socket: TokioDatagramSocket,
+    /// SOCKS5 upstream association runtime (shared across all flows in this session).
+    socks5: Socks5UdpRuntime,
     /// Protocol-specific UDP managers.
-    pub(crate) protocol_state: ProtocolUdpState,
+    protocol_state: ProtocolUdpState,
     /// Session handles for VLESS chain flows. These are not tracked by
     /// [`UdpSessionFlows`] because the VLESS manager owns the per-target
     /// upstream connections. We store handles here so `finish_all()` can
@@ -127,7 +104,7 @@ pub(crate) struct UdpDispatch {
     vmess_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
     /// Unified JoinSet for chain-outbound (SS/H2/Trojan/Mieru/VLESS)
     /// response bridge tasks. Polled by [`poll_chain_response`].
-    pub(crate) chain_tasks: JoinSet<ChainTask>,
+    chain_tasks: JoinSet<ChainTask>,
 }
 
 impl UdpDispatch {

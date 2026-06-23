@@ -4,69 +4,22 @@
 //! dialing transports, caching per-target upstream streams, metering, and
 //! response bridge tasks.
 
+mod model;
+
 use std::collections::HashMap;
 
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use vmess::{parse_uuid, VmessCipher};
-use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_traits::{AsyncSocket, UdpPacketFraming};
 
+pub(crate) use model::{VmessUdpRelayFlow, VmessUdpStartFlow, VmessUdpTransport};
+
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
-
-#[derive(Clone)]
-pub(super) struct VmessUdpUpstream {
-    pub(crate) session_id: u64,
-    pub(crate) send_tx: mpsc::Sender<Vec<u8>>,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct VmessUdpTransport<'a> {
-    pub(crate) tls: Option<&'a ClientTlsConfig>,
-    pub(crate) ws: Option<&'a WebSocketConfig>,
-    pub(crate) grpc: Option<&'a GrpcConfig>,
-}
-
-pub(crate) struct VmessUdpStartFlow<'a> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) id: &'a str,
-    pub(crate) cipher: &'a str,
-    pub(crate) mux_concurrency: Option<u32>,
-    pub(crate) transport: VmessUdpTransport<'a>,
-    pub(crate) payload: &'a [u8],
-}
-
-pub(crate) struct VmessUdpRelayFlow<'a> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) carrier: crate::transport::RelayCarrier,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) id: &'a str,
-    pub(crate) cipher: &'a str,
-    pub(crate) transport: VmessUdpTransport<'a>,
-    pub(crate) payload: &'a [u8],
-}
-
-pub(super) struct VmessUdpUpstreamRequest<'a> {
-    proxy: &'a Proxy,
-    session: &'a Session,
-    target: Address,
-    port: u16,
-    server: &'a str,
-    server_port: u16,
-    id: &'a str,
-    cipher: &'a str,
-    initial_payload: &'a [u8],
-    transport: Option<&'a VmessUdpTransport<'a>>,
-    mux_concurrency: Option<u32>,
-}
+use model::{VmessUdpUpstream, VmessUdpUpstreamRequest};
 
 fn spawn_vmess_udp_relay(
     proxy: &Proxy,
@@ -415,7 +368,7 @@ impl VmessUdpOutboundManager {
 
     pub(crate) async fn start_flow(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         request: VmessUdpStartFlow<'_>,
     ) -> Result<(), EngineError> {
         self.get_or_create_upstream(
@@ -439,7 +392,7 @@ impl VmessUdpOutboundManager {
 
     pub(crate) async fn start_relay_flow(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         request: VmessUdpRelayFlow<'_>,
     ) -> Result<(), EngineError> {
         let stream = build_vmess_udp_transport_over_stream(
@@ -475,7 +428,7 @@ impl VmessUdpOutboundManager {
 
     pub(crate) async fn send_existing(
         &self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         proxy: &Proxy,
         target: &Address,
         port: u16,
@@ -503,7 +456,7 @@ impl VmessUdpOutboundManager {
         Ok(Some(upstream.session_id))
     }
 
-    pub(super) fn insert_upstream(
+    fn insert_upstream(
         &mut self,
         key: (Address, u16),
         upstream: VmessUdpUpstream,
@@ -514,7 +467,7 @@ impl VmessUdpOutboundManager {
 
     pub(super) fn spawn_bridge(
         &self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         target: Address,
         port: u16,
         session_id: u64,
@@ -531,9 +484,9 @@ impl VmessUdpOutboundManager {
         }
     }
 
-    pub(super) async fn get_or_create_upstream(
+    async fn get_or_create_upstream(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         request: VmessUdpUpstreamRequest<'_>,
     ) -> Result<(), EngineError> {
         let key = (request.target.clone(), request.port);

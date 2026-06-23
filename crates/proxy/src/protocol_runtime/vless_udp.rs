@@ -3,84 +3,25 @@
 //! Moved from outbound/vless.rs so inbound can import them without
 //! depending on the outbound module.
 
+mod model;
+
 use std::collections::HashMap;
 
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use vless::parse_uuid;
-use zero_config::{
-    ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, QuicConfig, RealityConfig,
-    SplitHttpConfig, WebSocketConfig,
-};
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
 
+pub(crate) use model::{
+    VlessUdpRelayFinalHop, VlessUdpRelayTwoStream, VlessUdpStartFlow, VlessUdpTransport,
+};
+
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
-
-/// Handle to an established VLESS UDP upstream connection.
-#[derive(Clone)]
-pub(super) struct VlessUdpUpstream {
-    pub session_id: u64,
-    pub send_tx: mpsc::Sender<Vec<u8>>,
-}
-
-/// Transport options for VLESS UDP upstream connections.
-#[derive(Clone, Copy)]
-pub(crate) struct VlessUdpTransport<'a> {
-    pub(crate) tls: Option<&'a ClientTlsConfig>,
-    pub(crate) reality: Option<&'a RealityConfig>,
-    pub(crate) ws: Option<&'a WebSocketConfig>,
-    pub(crate) grpc: Option<&'a GrpcConfig>,
-    pub(crate) h2: Option<&'a H2Config>,
-    pub(crate) http_upgrade: Option<&'a HttpUpgradeConfig>,
-    pub(crate) split_http: Option<&'a SplitHttpConfig>,
-    pub(crate) quic: Option<&'a QuicConfig>,
-}
-
-pub(crate) struct VlessUdpStartFlow<'a> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) id: &'a str,
-    pub(crate) flow: Option<&'a str>,
-    pub(crate) transport: VlessUdpTransport<'a>,
-    pub(crate) payload: &'a [u8],
-}
-
-pub(crate) struct VlessUdpRelayTwoStream<'a> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) post_carrier: crate::transport::RelayCarrier,
-    pub(crate) get_carrier: crate::transport::RelayCarrier,
-    pub(crate) id: &'a str,
-    pub(crate) split_http: &'a SplitHttpConfig,
-    pub(crate) payload: &'a [u8],
-}
-
-pub(crate) struct VlessUdpRelayFinalHop<'a> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) carrier: crate::transport::RelayCarrier,
-    pub(crate) id: &'a str,
-    pub(crate) transport: VlessUdpTransport<'a>,
-    pub(crate) payload: &'a [u8],
-}
-
-pub(super) struct VlessUdpUpstreamRequest<'a> {
-    proxy: &'a Proxy,
-    session: &'a Session,
-    target: Address,
-    port: u16,
-    server: &'a str,
-    server_port: u16,
-    id: &'a str,
-    initial_payload: &'a [u8],
-    transport: Option<&'a VlessUdpTransport<'a>>,
-}
+use model::{VlessUdpUpstream, VlessUdpUpstreamRequest};
 
 /// Spawn the bidirectional meter + relay task for a VLESS UDP upstream,
 /// returning the upstream handle and a broadcast sender for decoded responses.
@@ -284,7 +225,7 @@ impl VlessUdpOutboundManager {
 
     pub(crate) async fn start_flow(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         request: VlessUdpStartFlow<'_>,
     ) -> Result<(), EngineError> {
         use zero_traits::UdpPacketFraming;
@@ -352,7 +293,7 @@ impl VlessUdpOutboundManager {
 
     pub(crate) async fn start_relay_two_stream(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         request: VlessUdpRelayTwoStream<'_>,
     ) -> Result<(), EngineError> {
         let stream = crate::transport::build_vless_split_http_over_relay(
@@ -385,7 +326,7 @@ impl VlessUdpOutboundManager {
 
     pub(crate) async fn start_relay_final_hop(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         request: VlessUdpRelayFinalHop<'_>,
     ) -> Result<(), EngineError> {
         let stream = crate::transport::build_vless_outbound_transport_over_stream(
@@ -429,7 +370,7 @@ impl VlessUdpOutboundManager {
     /// Send a packet through an existing upstream, if one is cached.
     pub(crate) async fn send_existing(
         &self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         proxy: &Proxy,
         target: &Address,
         port: u16,
@@ -457,7 +398,7 @@ impl VlessUdpOutboundManager {
         Ok(Some(upstream.session_id))
     }
 
-    pub(super) fn insert_upstream(
+    fn insert_upstream(
         &mut self,
         key: (Address, u16),
         upstream: VlessUdpUpstream,
@@ -469,7 +410,7 @@ impl VlessUdpOutboundManager {
     /// Spawn a one-shot bridge task for a cached upstream.
     pub(super) fn spawn_bridge(
         &self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         target: Address,
         port: u16,
         session_id: u64,
@@ -488,9 +429,9 @@ impl VlessUdpOutboundManager {
 
     /// Get or create an upstream for a target.
     /// Spawns a bridge task into `chain_tasks` for response polling.
-    pub(super) async fn get_or_create_upstream(
+    async fn get_or_create_upstream(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::runtime::udp_dispatch::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         request: VlessUdpUpstreamRequest<'_>,
     ) -> Result<(), EngineError> {
         let key = (request.target.clone(), request.port);

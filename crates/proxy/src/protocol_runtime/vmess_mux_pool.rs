@@ -1,64 +1,18 @@
+mod model;
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
-use zero_core::{Network, Session};
+use zero_core::Network;
 use zero_engine::EngineError;
 
-use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct VmessMuxPoolKey {
-    server: String,
-    port: u16,
-    id: [u8; 16],
-    cipher: String,
-    transport: VmessMuxTransportKey,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum VmessMuxTransportKey {
-    RawTls {
-        server_name: Option<String>,
-    },
-    Ws {
-        server_name: Option<String>,
-        path: String,
-    },
-    Grpc {
-        server_name: Option<String>,
-        service_names: Vec<String>,
-    },
-}
-
-struct VmessMuxConn {
-    write_tx: mpsc::UnboundedSender<Vec<u8>>,
-    streams: Arc<Mutex<HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>>>,
-    next_id: Mutex<u16>,
-    active: Arc<Mutex<usize>>,
-    max_concurrency: u32,
-}
-
-pub(crate) struct VmessMuxOpenRequest<'a> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) server: String,
-    pub(crate) port: u16,
-    pub(crate) id: [u8; 16],
-    pub(crate) cipher: String,
-    pub(crate) tls: Option<&'a ClientTlsConfig>,
-    pub(crate) ws: Option<&'a WebSocketConfig>,
-    pub(crate) grpc: Option<&'a GrpcConfig>,
-    pub(crate) max_concurrency: u32,
-}
-
-#[derive(Clone)]
-pub(crate) struct VmessMuxConnectionPool {
-    pool: Arc<Mutex<HashMap<VmessMuxPoolKey, Arc<VmessMuxConn>>>>,
-}
+use model::{VmessMuxConn, VmessMuxPoolKey, VmessMuxTransportKey};
+pub(crate) use model::{VmessMuxConnectionPool, VmessMuxOpenRequest};
 
 impl std::fmt::Debug for VmessMuxConnectionPool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

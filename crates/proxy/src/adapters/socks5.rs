@@ -1,6 +1,13 @@
 use super::*;
 
 #[cfg(feature = "socks5")]
+mod inbound;
+#[cfg(feature = "socks5")]
+mod tcp;
+#[cfg(feature = "socks5")]
+mod udp;
+
+#[cfg(feature = "socks5")]
 #[derive(Debug)]
 pub(crate) struct Socks5Adapter;
 
@@ -39,26 +46,8 @@ impl ProtocolAdapter for Socks5Adapter {
     fn udp_packet_path_carrier_descriptor(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::runtime::udp_dispatch::PacketPathCarrierDescriptor> {
-        let ResolvedLeafOutbound::Socks5 {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } = leaf
-        else {
-            return None;
-        };
-        let auth = match (username, password) {
-            (Some(user), Some(_)) => format!("|auth:{user}"),
-            _ => String::new(),
-        };
-        Some(crate::runtime::udp_dispatch::PacketPathCarrierDescriptor {
-            cache_key: format!("socks5|{tag}|{server}:{port}{auth}"),
-            server: (*server).to_string(),
-            port: *port,
-        })
+    ) -> Option<crate::protocol_runtime::udp::PacketPathCarrierDescriptor> {
+        self.udp_packet_path_carrier_descriptor_impl(leaf)
     }
 
     #[cfg(feature = "shadowsocks")]
@@ -66,30 +55,7 @@ impl ProtocolAdapter for Socks5Adapter {
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<crate::protocol_runtime::udp::UdpPacketPathCarrier> {
-        use crate::protocol_runtime::udp::UdpPacketPathCarrier;
-
-        let ResolvedLeafOutbound::Socks5 {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } = leaf
-        else {
-            return None;
-        };
-        let auth = match (username, password) {
-            (Some(user), Some(_)) => format!("|auth:{user}"),
-            _ => String::new(),
-        };
-        Some(UdpPacketPathCarrier::Socks5 {
-            cache_key: format!("socks5|{tag}|{server}:{port}{auth}"),
-            tag: (*tag).to_string(),
-            server: (*server).to_string(),
-            port: *port,
-            username: (*username).map(|value| value.to_string()),
-            password: (*password).map(|value| value.to_string()),
-        })
+        self.udp_packet_path_carrier_snapshot_impl(leaf)
     }
 
     #[cfg(feature = "shadowsocks")]
@@ -97,25 +63,8 @@ impl ProtocolAdapter for Socks5Adapter {
         &self,
         proxy: &Proxy,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn crate::runtime::udp_dispatch::PacketPathCarrier>, EngineError> {
-        let ResolvedLeafOutbound::Socks5 {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf).error);
-        };
-        crate::runtime::udp_dispatch::build_socks5_packet_path(
-            proxy,
-            tag,
-            server,
-            *port,
-            username.zip(*password),
-        )
-        .await
+    ) -> Result<Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError> {
+        self.build_udp_packet_path_impl(proxy, leaf).await
     }
 
     async fn connect_tcp(
@@ -124,37 +73,7 @@ impl ProtocolAdapter for Socks5Adapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        let ResolvedLeafOutbound::Socks5 {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf));
-        };
-        match crate::outbound::socks5::connect_tcp(
-            proxy,
-            session,
-            server,
-            *port,
-            username.zip(*password),
-        )
-        .await
-        {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Socks5 {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                upstream,
-            }),
-            Err(error) => Err(TcpOutboundFailure {
-                stage: "connect_upstream_socks5",
-                error,
-                upstream_endpoint: Some(((*server).to_string(), *port)),
-            }),
-        }
+        self.connect_tcp_impl(proxy, session, leaf).await
     }
     async fn apply_relay_hop(
         &self,
@@ -163,13 +82,7 @@ impl ProtocolAdapter for Socks5Adapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        let ResolvedLeafOutbound::Socks5 {
-            username, password, ..
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf).error);
-        };
-        crate::outbound::socks5::apply_tcp_hop(proxy, stream, session, username.zip(*password))
+        self.apply_relay_hop_impl(proxy, stream, session, leaf)
             .await
     }
     async fn start_udp_flow(
@@ -180,43 +93,8 @@ impl ProtocolAdapter for Socks5Adapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Socks5 {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } = leaf
-        else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let sent = dispatch
-            .send_socks5(crate::runtime::udp_dispatch::Socks5UdpSend {
-                proxy,
-                tag,
-                server,
-                port: *port,
-                username: *username,
-                password: *password,
-                session,
-                payload,
-            })
+        self.start_udp_flow_impl(dispatch, proxy, session, leaf, payload)
             .await
-            .map_err(|error| FlowFailure {
-                stage: "udp_upstream_send",
-                error,
-                upstream: Some(((*server).to_string(), *port)),
-            })?;
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Socks5 {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                username: (*username).map(|u| u.to_string()),
-                password: (*password).map(|p| p.to_string()),
-            }),
-            tx_bytes: sent as u64,
-        })
     }
     fn spawn_inbound(
         &self,
@@ -226,16 +104,7 @@ impl ProtocolAdapter for Socks5Adapter {
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        let p = proxy.clone();
-        listeners.spawn(async move {
-            crate::inbound::run_socks5_listener_with_bound(
-                &p,
-                inbound,
-                bound.into_tcp(),
-                shutdown_rx,
-            )
-            .await
-        });
+        self.spawn_inbound_impl(proxy, inbound, bound, shutdown_rx, listeners);
     }
 }
 

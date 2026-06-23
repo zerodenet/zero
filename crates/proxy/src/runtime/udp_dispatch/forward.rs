@@ -1,9 +1,9 @@
 //! UDP flow forwarding for existing outbound connections.
 //!
 //! Handles re-dispatching packets on already-established UDP flows via
-//! [`UdpDispatch::forward_existing`]. First-level dispatch by
-//! [`UdpPathCategory`], then by individual protocol variant within each
-//! category:
+//! [`UdpDispatch::forward_existing`]. First-level dispatch is by
+//! [`UdpPathCategory`]; per-protocol variants stay behind flow snapshot
+//! accessors or `ProtocolUdpState`.
 //!
 //! | Category | Variants | Transport |
 //! |----------|----------|-----------|
@@ -17,7 +17,6 @@ use std::time::Instant;
 use zero_engine::EngineError;
 
 use super::UdpDispatch;
-use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpPathCategory};
 use crate::runtime::udp_helpers::send_direct_udp_packet;
 use crate::runtime::Proxy;
@@ -25,10 +24,8 @@ use crate::runtime::Proxy;
 impl UdpDispatch {
     /// Forward a packet to an existing flow.
     ///
-    /// Dispatches by [`UdpPathCategory`] first, then by protocol variant
-    /// within each category. Adding a new protocol to an existing category
-    /// only requires a new arm in the inner match; the outer category
-    /// dispatch stays unchanged.
+    /// Dispatches by [`UdpPathCategory`] first, then by protocol-neutral flow
+    /// accessors or `ProtocolUdpState`.
     pub(super) async fn forward_existing(
         &mut self,
         proxy: &Proxy,
@@ -41,10 +38,10 @@ impl UdpDispatch {
         match flow.outbound.path_category() {
             // Direct path.
             UdpPathCategory::Direct => {
-                let UdpFlowOutbound::Direct { target_addr, .. } = &flow.outbound else {
+                let Some(target_addr) = flow.outbound.direct_target_addr() else {
                     unreachable!("Direct category maps to Direct variant only");
                 };
-                match send_direct_udp_packet(&self.direct_socket, *target_addr, payload).await {
+                match send_direct_udp_packet(&self.direct_socket, target_addr, payload).await {
                     Ok(sent) => {
                         proxy.record_session_outbound_tx(flow.session.id, sent as u64);
                     }
@@ -57,24 +54,17 @@ impl UdpDispatch {
 
             // Relay path.
             UdpPathCategory::Relay => {
-                let UdpFlowOutbound::Socks5 {
-                    tag,
-                    server,
-                    port,
-                    username,
-                    password,
-                } = &flow.outbound
-                else {
+                let Some(relay) = flow.outbound.socks5_relay() else {
                     unreachable!("Relay category maps to Socks5 variant only");
                 };
                 match self
-                    .send_socks5(super::socks5_flow::Socks5UdpSend {
+                    .send_socks5(crate::protocol_runtime::socks5_udp::Socks5UdpSend {
                         proxy,
-                        tag,
-                        server,
-                        port: *port,
-                        username: username.as_deref(),
-                        password: password.as_deref(),
+                        tag: relay.tag,
+                        server: relay.server,
+                        port: relay.port,
+                        username: relay.username,
+                        password: relay.password,
                         session: &flow.session,
                         payload,
                     })

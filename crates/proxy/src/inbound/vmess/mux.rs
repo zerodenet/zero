@@ -8,36 +8,17 @@ use tracing::{info, warn};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
 
+use crate::protocol_runtime::socks5_udp::recv_upstream_packet;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
-};
+use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 /// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
 use super::*;
 
-pub(crate) struct VmessMuxTcpStreamTask<'a> {
-    pub(crate) tasks: &'a mut JoinSet<()>,
-    pub(crate) mux_session_id: u16,
-    pub(crate) target: Address,
-    pub(crate) port: u16,
-    pub(crate) up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-    pub(crate) write_tx: mpsc::UnboundedSender<Vec<u8>>,
-    pub(crate) inbound_tag: String,
-}
-
-pub(crate) struct VmessMuxUdpStreamTask<'a> {
-    pub(crate) tasks: &'a mut JoinSet<()>,
-    pub(crate) mux_session_id: u16,
-    pub(crate) default_target: Address,
-    pub(crate) default_port: u16,
-    pub(crate) up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-    pub(crate) write_tx: mpsc::UnboundedSender<Vec<u8>>,
-    pub(crate) inbound_tag: String,
-}
+use super::model::{VmessMuxTcpStreamTask, VmessMuxUdpStreamTask};
 
 impl Proxy {
     pub(crate) async fn run_vmess_mux_session(

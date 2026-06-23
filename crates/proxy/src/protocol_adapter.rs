@@ -277,7 +277,7 @@ pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     fn udp_packet_path_carrier_descriptor(
         &self,
         _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::runtime::udp_dispatch::PacketPathCarrierDescriptor> {
+    ) -> Option<crate::protocol_runtime::udp::PacketPathCarrierDescriptor> {
         None
     }
 
@@ -301,7 +301,7 @@ pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
         &self,
         _proxy: &Proxy,
         _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<std::sync::Arc<dyn crate::runtime::udp_dispatch::PacketPathCarrier>, EngineError>
+    ) -> Result<std::sync::Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError>
     {
         Err(EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
@@ -316,7 +316,7 @@ pub trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     fn udp_datagram_source<'a>(
         &self,
         _leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<crate::runtime::udp_dispatch::UdpDatagramSource<'a>> {
+    ) -> Option<crate::protocol_runtime::udp::UdpDatagramSource<'a>> {
         None
     }
 }

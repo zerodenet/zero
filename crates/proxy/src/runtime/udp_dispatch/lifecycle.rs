@@ -2,6 +2,7 @@ use super::*;
 use std::net::SocketAddr;
 
 use crate::runtime::udp_flow::sessions::CompletedUdpFlow;
+use crate::runtime::udp_helpers::send_direct_udp_packet;
 
 impl UdpDispatch {
     /// Create a new dispatcher with an ephemeral direct socket.
@@ -11,8 +12,7 @@ impl UdpDispatch {
             inbound_tag: inbound_tag.to_owned(),
             flows: UdpSessionFlows::default(),
             direct_socket,
-            socks5_upstream: None,
-            socks5_idle_deadline: None,
+            socks5: Socks5UdpRuntime::default(),
             protocol_state: ProtocolUdpState::new(),
             vless_handles: HashMap::new(),
             #[cfg(feature = "vmess")]
@@ -28,8 +28,7 @@ impl UdpDispatch {
             inbound_tag: inbound_tag.to_owned(),
             flows: UdpSessionFlows::default(),
             direct_socket,
-            socks5_upstream: None,
-            socks5_idle_deadline: None,
+            socks5: Socks5UdpRuntime::default(),
             protocol_state: ProtocolUdpState::new(),
             vless_handles: HashMap::new(),
             #[cfg(feature = "vmess")]
@@ -45,9 +44,22 @@ impl UdpDispatch {
         &self.direct_socket
     }
 
+    /// Send a direct UDP packet through the dispatch-owned socket.
+    pub(crate) async fn send_direct_packet(
+        &self,
+        target_addr: SocketAddr,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        send_direct_udp_packet(&self.direct_socket, target_addr, payload).await
+    }
+
     /// Borrow direct socket and chain_tasks for `select!` polling.
     pub(crate) fn poll_sockets(&mut self) -> (&TokioDatagramSocket, &mut JoinSet<ChainTask>) {
         (&self.direct_socket, &mut self.chain_tasks)
+    }
+
+    pub(crate) fn protocol_parts(&mut self) -> (&mut ProtocolUdpState, &mut JoinSet<ChainTask>) {
+        (&mut self.protocol_state, &mut self.chain_tasks)
     }
 
     /// Borrow all polling sources simultaneously for `select!` loops.
@@ -55,36 +67,36 @@ impl UdpDispatch {
         &mut self,
     ) -> (
         &TokioDatagramSocket,
-        Option<&crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>,
+        &crate::protocol_runtime::socks5_udp::Socks5UdpRuntime,
         Option<TokioInstant>,
         &mut JoinSet<ChainTask>,
     ) {
         (
             &self.direct_socket,
-            self.socks5_upstream.as_ref(),
-            self.socks5_idle_deadline,
+            &self.socks5,
+            self.socks5.idle_deadline(),
             &mut self.chain_tasks,
         )
     }
 
-    /// The SOCKS5 upstream association, if established.
+    /// View of the SOCKS5 upstream association, if established.
     #[allow(dead_code)]
-    pub(crate) fn socks5_upstream(
+    pub(crate) fn socks5_upstream_view(
         &self,
-    ) -> Option<&crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation> {
-        self.socks5_upstream.as_ref()
+    ) -> Option<crate::protocol_runtime::socks5_udp::Socks5UdpAssociationView<'_>> {
+        self.socks5.upstream_view()
     }
 
     /// The SOCKS5 idle deadline.
     #[allow(dead_code)]
     pub(crate) fn socks5_idle_deadline(&self) -> Option<TokioInstant> {
-        self.socks5_idle_deadline
+        self.socks5.idle_deadline()
     }
 
     /// Update the SOCKS5 idle deadline (called after each send / recv).
     #[allow(dead_code)]
     pub(crate) fn touch_socks5_idle(&mut self, timeout: std::time::Duration) {
-        self.socks5_idle_deadline = Some(TokioInstant::now() + timeout);
+        self.socks5.touch_idle(timeout);
     }
 
     /// Look up the session ID for a direct response sender.
@@ -114,43 +126,37 @@ impl UdpDispatch {
             .upstream_response_session_id(outbound_tag, target, port)
     }
 
-    /// Take and close the SOCKS5 upstream association (for idle timeout / error).
-    #[allow(dead_code)]
-    pub(crate) fn take_socks5_upstream(
+    /// Drop the SOCKS5 upstream association after a receive error.
+    pub(crate) fn drop_socks5_upstream(
         &mut self,
-    ) -> Option<crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation> {
-        self.socks5_idle_deadline = None;
-        self.socks5_upstream.take()
+    ) -> Option<crate::protocol_runtime::socks5_udp::ClosedSocks5UdpAssociation> {
+        self.socks5.close_dropped()
     }
 
     /// Close the SOCKS5 upstream association on idle timeout.
     #[allow(dead_code)]
     pub(crate) fn close_socks5_idle(&mut self) {
         use crate::logging::log_udp_upstream_association_idle_timeout;
-        use crate::protocol_runtime::socks5_udp::UpstreamAssociationCloseReason;
-
-        if let Some(assoc) = self.socks5_upstream.take() {
-            let outbound_tag = assoc.outbound_tag().to_owned();
-            let (server, port) = assoc.upstream_endpoint();
-            let server = server.to_owned();
-            assoc.close(UpstreamAssociationCloseReason::IdleTimeout);
+        if let Some(closed) = self.socks5.close_idle() {
             log_udp_upstream_association_idle_timeout(
                 &self.inbound_tag,
-                &outbound_tag,
-                &server,
-                port,
+                &closed.outbound_tag,
+                &closed.server,
+                closed.port,
                 std::time::Duration::default(),
             );
-            self.socks5_idle_deadline = None;
         }
+    }
+
+    pub(crate) fn drop_socks5_idle(
+        &mut self,
+    ) -> Option<crate::protocol_runtime::socks5_udp::ClosedSocks5UdpAssociation> {
+        self.socks5.close_idle()
     }
 
     /// Finish all tracked flows and close upstreams.
     pub(crate) fn finish_all(mut self) -> Vec<CompletedUdpFlow> {
-        if let Some(assoc) = self.socks5_upstream {
-            use crate::protocol_runtime::socks5_udp::UpstreamAssociationCloseReason;
-            assoc.close(UpstreamAssociationCloseReason::Closed);
-        }
+        self.socks5.close_all();
 
         for (_key, (session, mut handle)) in self.vless_handles.drain() {
             if let Some(record) = handle.finish(SessionOutcome::ChainedRelayed) {

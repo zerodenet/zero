@@ -74,6 +74,14 @@ pub(crate) enum UdpFlowOutbound {
     },
 }
 
+pub(crate) struct Socks5UdpRelay<'a> {
+    pub(crate) tag: &'a str,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) username: Option<&'a str>,
+    pub(crate) password: Option<&'a str>,
+}
+
 impl UdpFlowOutbound {
     pub(crate) fn tag(&self) -> &str {
         match self {
@@ -103,6 +111,74 @@ impl UdpFlowOutbound {
             #[cfg(feature = "mieru")]
             Self::Mieru { .. } => UdpPathCategory::StreamPacket,
         }
+    }
+
+    pub(super) fn direct_sender(&self) -> Option<SocketAddr> {
+        self.direct_target_addr()
+    }
+
+    pub(crate) fn direct_target_addr(&self) -> Option<SocketAddr> {
+        match self {
+            Self::Direct { target_addr, .. } => Some(*target_addr),
+            Self::Socks5 { .. } => None,
+            #[cfg(feature = "shadowsocks")]
+            Self::Shadowsocks { .. } => None,
+            #[cfg(feature = "hysteria2")]
+            Self::Hysteria2 { .. } => None,
+            #[cfg(feature = "trojan")]
+            Self::Trojan { .. } => None,
+            #[cfg(feature = "mieru")]
+            Self::Mieru { .. } => None,
+        }
+    }
+
+    pub(crate) fn socks5_relay(&self) -> Option<Socks5UdpRelay<'_>> {
+        match self {
+            Self::Socks5 {
+                tag,
+                server,
+                port,
+                username,
+                password,
+            } => Some(Socks5UdpRelay {
+                tag,
+                server,
+                port: *port,
+                username: username.as_deref(),
+                password: password.as_deref(),
+            }),
+            Self::Direct { .. } => None,
+            #[cfg(feature = "shadowsocks")]
+            Self::Shadowsocks { .. } => None,
+            #[cfg(feature = "hysteria2")]
+            Self::Hysteria2 { .. } => None,
+            #[cfg(feature = "trojan")]
+            Self::Trojan { .. } => None,
+            #[cfg(feature = "mieru")]
+            Self::Mieru { .. } => None,
+        }
+    }
+
+    pub(super) fn upstream_response_tag(&self) -> Option<&str> {
+        match self {
+            Self::Direct { .. } => None,
+            Self::Socks5 { tag, .. } => Some(tag),
+            #[cfg(feature = "shadowsocks")]
+            Self::Shadowsocks { tag, .. } => Some(tag),
+            #[cfg(feature = "hysteria2")]
+            Self::Hysteria2 { tag, .. } => Some(tag),
+            #[cfg(feature = "trojan")]
+            Self::Trojan { tag, .. } => Some(tag),
+            #[cfg(feature = "mieru")]
+            Self::Mieru { tag, .. } => Some(tag),
+        }
+    }
+
+    pub(super) fn matches_upstream_tag(&self, outbound_tag: &str) -> bool {
+        let Some(tag) = self.upstream_response_tag() else {
+            return false;
+        };
+        tag == outbound_tag
     }
 
     pub(super) fn upstream_endpoint(&self) -> Option<(String, u16)> {

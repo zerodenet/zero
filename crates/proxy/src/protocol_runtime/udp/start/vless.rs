@@ -1,0 +1,108 @@
+use tokio::task::JoinSet;
+
+use super::super::state::ProtocolUdpState;
+use super::super::{ChainTask, FlowFailure};
+use super::super::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
+
+impl ProtocolUdpState {
+    pub(crate) async fn start_vless_udp_flow(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        flow: VlessUdpFlow<'_>,
+    ) -> Result<(), FlowFailure> {
+        let transport = crate::protocol_runtime::vless_udp::VlessUdpTransport {
+            tls: flow.tls,
+            reality: flow.reality,
+            ws: flow.ws,
+            grpc: flow.grpc,
+            h2: flow.h2,
+            http_upgrade: flow.http_upgrade,
+            split_http: flow.split_http,
+            quic: flow.quic,
+        };
+        self.vless
+            .start_flow(
+                chain_tasks,
+                crate::protocol_runtime::vless_udp::VlessUdpStartFlow {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    server: flow.server,
+                    port: flow.port,
+                    id: flow.id,
+                    flow: flow.flow,
+                    transport,
+                    payload: flow.payload,
+                },
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_upstream",
+                error,
+                upstream: Some((flow.server.to_string(), flow.port)),
+            })?;
+        Ok(())
+    }
+
+    pub(crate) async fn start_vless_udp_relay_two_stream(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        flow: VlessUdpRelayTwoStream<'_>,
+    ) -> Result<(), FlowFailure> {
+        self.vless
+            .start_relay_two_stream(
+                chain_tasks,
+                crate::protocol_runtime::vless_udp::VlessUdpRelayTwoStream {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    post_carrier: flow.post_carrier,
+                    get_carrier: flow.get_carrier,
+                    id: flow.id,
+                    split_http: flow.split_http,
+                    payload: flow.payload,
+                },
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        Ok(())
+    }
+
+    pub(crate) async fn start_vless_udp_relay_final_hop(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        flow: VlessUdpRelayFinalHop<'_>,
+    ) -> Result<(), FlowFailure> {
+        let transport = crate::protocol_runtime::vless_udp::VlessUdpTransport {
+            tls: flow.tls,
+            reality: flow.reality,
+            ws: flow.ws,
+            grpc: flow.grpc,
+            h2: flow.h2,
+            http_upgrade: flow.http_upgrade,
+            split_http: flow.split_http,
+            quic: None,
+        };
+        self.vless
+            .start_relay_final_hop(
+                chain_tasks,
+                crate::protocol_runtime::vless_udp::VlessUdpRelayFinalHop {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    carrier: flow.carrier,
+                    id: flow.id,
+                    transport,
+                    payload: flow.payload,
+                },
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        Ok(())
+    }
+}

@@ -1,6 +1,13 @@
 use super::*;
 
 #[cfg(feature = "shadowsocks")]
+mod inbound;
+#[cfg(feature = "shadowsocks")]
+mod tcp;
+#[cfg(feature = "shadowsocks")]
+mod udp;
+
+#[cfg(feature = "shadowsocks")]
 #[derive(Debug)]
 pub(crate) struct ShadowsocksAdapter;
 
@@ -32,92 +39,30 @@ impl ProtocolAdapter for ShadowsocksAdapter {
     fn udp_packet_path_carrier_descriptor(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::runtime::udp_dispatch::PacketPathCarrierDescriptor> {
-        let ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-        } = leaf
-        else {
-            return None;
-        };
-        Some(crate::runtime::udp_dispatch::PacketPathCarrierDescriptor {
-            cache_key: format!("shadowsocks|{tag}|{server}:{port}|{cipher}|{password}"),
-            server: (*server).to_string(),
-            port: *port,
-        })
+    ) -> Option<crate::protocol_runtime::udp::PacketPathCarrierDescriptor> {
+        self.udp_packet_path_carrier_descriptor_impl(leaf)
     }
 
     fn udp_packet_path_carrier_snapshot(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<crate::protocol_runtime::udp::UdpPacketPathCarrier> {
-        use crate::protocol_runtime::udp::UdpPacketPathCarrier;
-
-        let ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-        } = leaf
-        else {
-            return None;
-        };
-        Some(UdpPacketPathCarrier::Shadowsocks {
-            cache_key: format!("shadowsocks|{tag}|{server}:{port}|{cipher}|{password}"),
-            tag: (*tag).to_string(),
-            server: (*server).to_string(),
-            port: *port,
-            password: (*password).to_string(),
-            cipher: (*cipher).to_string(),
-        })
+        self.udp_packet_path_carrier_snapshot_impl(leaf)
     }
 
     async fn build_udp_packet_path(
         &self,
         proxy: &Proxy,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn crate::runtime::udp_dispatch::PacketPathCarrier>, EngineError> {
-        let ResolvedLeafOutbound::Shadowsocks {
-            server,
-            port,
-            password,
-            cipher,
-            ..
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf).error);
-        };
-        crate::runtime::udp_dispatch::build_shadowsocks_packet_path(
-            proxy, server, *port, password, cipher,
-        )
-        .await
+    ) -> Result<Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError> {
+        self.build_udp_packet_path_impl(proxy, leaf).await
     }
 
     fn udp_datagram_source<'a>(
         &self,
         leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<crate::runtime::udp_dispatch::UdpDatagramSource<'a>> {
-        let ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-        } = leaf
-        else {
-            return None;
-        };
-        Some(crate::runtime::udp_dispatch::UdpDatagramSource {
-            tag,
-            server,
-            port: *port,
-            password,
-            cipher,
-        })
+    ) -> Option<crate::protocol_runtime::udp::UdpDatagramSource<'a>> {
+        self.udp_datagram_source_impl(leaf)
     }
 
     async fn connect_tcp(
@@ -126,33 +71,7 @@ impl ProtocolAdapter for ShadowsocksAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        let ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf));
-        };
-        match crate::outbound::shadowsocks::connect_tcp(
-            proxy, session, server, *port, password, cipher,
-        )
-        .await
-        {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Shadowsocks {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                upstream,
-            }),
-            Err(error) => Err(TcpOutboundFailure {
-                stage: "connect_upstream_shadowsocks",
-                error,
-                upstream_endpoint: Some(((*server).to_string(), *port)),
-            }),
-        }
+        self.connect_tcp_impl(proxy, session, leaf).await
     }
     async fn apply_relay_hop(
         &self,
@@ -161,13 +80,7 @@ impl ProtocolAdapter for ShadowsocksAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        let ResolvedLeafOutbound::Shadowsocks {
-            password, cipher, ..
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf).error);
-        };
-        crate::outbound::shadowsocks::apply_tcp_hop(stream, session, password, cipher).await
+        self.apply_relay_hop_impl(stream, session, leaf).await
     }
     async fn start_udp_flow(
         &self,
@@ -177,44 +90,8 @@ impl ProtocolAdapter for ShadowsocksAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-            ..
-        } = leaf
-        else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let sent = dispatch
-            .start_shadowsocks_udp_flow(ShadowsocksUdpFlow {
-                proxy,
-                session,
-                server,
-                port: *port,
-                password,
-                cipher,
-                payload,
-            })
+        self.start_udp_flow_impl(dispatch, proxy, session, leaf, payload)
             .await
-            .map_err(|f: FlowFailure| FlowFailure {
-                stage: f.stage,
-                error: f.error,
-                upstream: f.upstream,
-            })?;
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Shadowsocks {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                password: (*password).to_string(),
-                cipher: (*cipher).to_string(),
-                packet_path_carrier: None,
-            }),
-            tx_bytes: sent as u64,
-        })
     }
     fn spawn_inbound(
         &self,
@@ -224,16 +101,7 @@ impl ProtocolAdapter for ShadowsocksAdapter {
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        let p = proxy.clone();
-        listeners.spawn(async move {
-            crate::inbound::run_shadowsocks_listener_with_bound(
-                &p,
-                inbound,
-                bound.into_tcp(),
-                shutdown_rx,
-            )
-            .await
-        });
+        self.spawn_inbound_impl(proxy, inbound, bound, shutdown_rx, listeners);
     }
 }
 

@@ -1,6 +1,13 @@
 use super::*;
 
 #[cfg(feature = "mieru")]
+mod inbound;
+#[cfg(feature = "mieru")]
+mod tcp;
+#[cfg(feature = "mieru")]
+mod udp;
+
+#[cfg(feature = "mieru")]
 #[derive(Debug)]
 pub(crate) struct MieruAdapter;
 
@@ -34,31 +41,7 @@ impl ProtocolAdapter for MieruAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        let ResolvedLeafOutbound::Mieru {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf));
-        };
-        match crate::outbound::mieru::connect_tcp(proxy, session, server, *port, username, password)
-            .await
-        {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Mieru {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                upstream,
-            }),
-            Err(error) => Err(TcpOutboundFailure {
-                stage: "connect_upstream_mieru",
-                error,
-                upstream_endpoint: Some(((*server).to_string(), *port)),
-            }),
-        }
+        self.connect_tcp_impl(proxy, session, leaf).await
     }
     async fn apply_relay_hop(
         &self,
@@ -67,13 +50,7 @@ impl ProtocolAdapter for MieruAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        let ResolvedLeafOutbound::Mieru {
-            username, password, ..
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf).error);
-        };
-        crate::outbound::mieru::apply_tcp_hop(stream, session, username, password).await
+        self.apply_relay_hop_impl(stream, session, leaf).await
     }
     async fn start_udp_flow(
         &self,
@@ -83,37 +60,8 @@ impl ProtocolAdapter for MieruAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Mieru {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } = leaf
-        else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let sent = dispatch
-            .start_mieru_udp_flow(
-                proxy, session, server, *port, username, password, false, payload,
-            )
+        self.start_udp_flow_impl(dispatch, proxy, session, leaf, payload)
             .await
-            .map_err(|f: FlowFailure| FlowFailure {
-                stage: f.stage,
-                error: f.error,
-                upstream: f.upstream,
-            })?;
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Mieru {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                username: (*username).to_string(),
-                password: (*password).to_string(),
-                relay_chain: false,
-            }),
-            tx_bytes: sent as u64,
-        })
     }
     fn spawn_inbound(
         &self,
@@ -123,16 +71,7 @@ impl ProtocolAdapter for MieruAdapter {
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        let p = proxy.clone();
-        listeners.spawn(async move {
-            crate::inbound::run_mieru_listener_with_bound(
-                &p,
-                inbound,
-                bound.into_tcp(),
-                shutdown_rx,
-            )
-            .await
-        });
+        self.spawn_inbound_impl(proxy, inbound, bound, shutdown_rx, listeners);
     }
     async fn start_udp_relay_final_hop(
         &self,
@@ -143,38 +82,8 @@ impl ProtocolAdapter for MieruAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Mieru {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } = leaf
-        else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let sent = dispatch
-            .start_mieru_udp_relay_flow(MieruUdpRelayFlow {
-                session,
-                carrier,
-                server,
-                port: *port,
-                username,
-                password,
-                payload,
-            })
-            .await?;
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Mieru {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                username: (*username).to_string(),
-                password: (*password).to_string(),
-                relay_chain: true,
-            }),
-            tx_bytes: sent as u64,
-        })
+        self.start_udp_relay_final_hop_impl(dispatch, session, carrier, leaf, payload)
+            .await
     }
 }
 

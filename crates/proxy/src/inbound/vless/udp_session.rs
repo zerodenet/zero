@@ -3,11 +3,10 @@ use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 use vless::build_udp_packet;
 
+use crate::protocol_runtime::socks5_udp::recv_upstream_packet;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, recv_upstream_packet, wait_for_upstream_idle,
-};
+use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;

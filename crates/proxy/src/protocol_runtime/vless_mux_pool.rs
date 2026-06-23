@@ -6,37 +6,22 @@
 // Types moved to vless::mux_pool; this module handles
 // connection establishment which depends on proxy I/O infrastructure.
 
+mod model;
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::mpsc;
-use zero_core::Session;
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
+pub(crate) use model::{MuxConnectionPool, VlessMuxOpenRequest};
 use vless::mux_pool::{
     decrypt_mux_payload, encrypt_mux_payload, MuxPoolConn, MuxStreamRelay, PoolKey, TransportKey,
 };
-use zero_config::{ClientTlsConfig, RealityConfig};
-
-#[derive(Clone)]
-pub(crate) struct MuxConnectionPool {
-    pool: Arc<Mutex<HashMap<PoolKey, Arc<MuxPoolConn>>>>,
-}
-
-pub(crate) struct VlessMuxOpenRequest<'a> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: Option<&'a Session>,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) id: &'a [u8; 16],
-    pub(crate) tls: Option<&'a ClientTlsConfig>,
-    pub(crate) reality: Option<&'a RealityConfig>,
-    pub(crate) max_concurrency: u32,
-}
 
 impl std::fmt::Debug for MuxConnectionPool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
