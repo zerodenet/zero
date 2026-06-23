@@ -982,8 +982,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     );
     assert!(
         chain_response.contains("async fn handle_chain_result")
-            && chain_response.contains("async fn forward_chain_response")
-            && chain_response.contains("socks5::build_udp_packet(target")
+            && chain_response.contains("pub(super) struct ChainResponseRequest")
+            && chain_response.contains("struct ForwardChainResponseRequest")
+            && chain_response.contains("socks5::build_udp_packet(request.target")
             && chain_response.contains("failed to send UDP chain response to client")
             && chain_response.contains("chain response task panicked"),
         "SOCKS5 UDP chain response result handling and framing should live in socks5_udp_associate/chain_response.rs"
@@ -1004,6 +1005,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     );
     assert!(
         relay_socket.contains("async fn handle_relay_packet")
+            && relay_socket.contains("pub(super) struct RelayPacketRequest")
             && relay_socket.contains("client_udp_addr.is_none")
             && relay_socket.contains("failed to process UDP packet")
             && relay_socket.contains("dropping udp packet from unexpected sender"),
