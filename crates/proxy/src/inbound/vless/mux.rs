@@ -3,6 +3,7 @@ use tokio::select;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
+use zero_traits::AsyncSocket;
 
 use crate::protocol_runtime::socks5_udp::recv_upstream_packet;
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
@@ -13,8 +14,8 @@ use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, TcpRelayStream};
 use zero_engine::EngineError;
 
+use super::encode_vless_mux_udp_response;
 use super::model::VlessMuxUdpStreamTask;
-use super::*;
 
 impl Proxy {
     pub(crate) async fn handle_vless_mux_session<S>(

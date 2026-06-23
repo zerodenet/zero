@@ -10,7 +10,7 @@ use tracing::{error, info};
 use zero_config::VlessUserConfig;
 use zero_engine::EngineError;
 
-use super::*;
+use super::{ConfiguredVlessUsers, RecordingStream, VlessInboundHandler};
 
 #[derive(Clone, Copy)]
 pub(crate) struct VlessStreamTransport<'a> {

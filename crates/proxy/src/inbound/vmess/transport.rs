@@ -1,7 +1,5 @@
 //! VMess inbound: TLS accept, transport dispatch (WS/gRPC), protocol auth, route, TCP relay.
 
-use super::*;
-
 use std::io;
 
 use tracing::warn;
@@ -9,7 +7,8 @@ use zero_config::{GrpcConfig, WebSocketConfig};
 use zero_core::Network;
 use zero_engine::EngineError;
 
-use crate::runtime::inbound_protocol::serve_inbound;
+use super::{wrap_vmess_client, VmessInboundHandler, VmessTransportHandler};
+use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 

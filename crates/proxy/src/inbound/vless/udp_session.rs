@@ -2,6 +2,7 @@ use tokio::select;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 use vless::build_udp_packet;
+use zero_traits::AsyncSocket;
 
 use crate::protocol_runtime::socks5_udp::recv_upstream_packet;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
@@ -10,8 +11,6 @@ use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstrea
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
-
-use super::*;
 
 impl Proxy {
     pub(crate) async fn handle_vless_udp_session<S>(

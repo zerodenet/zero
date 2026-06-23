@@ -9,7 +9,7 @@ use tracing::{error, info};
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 
-use super::*;
+use super::{upgrade_vless_reality_server, VlessStreamRequest, VlessStreamTransport};
 
 pub(crate) async fn run_vless_listener_with_bound(
     proxy: &Proxy,

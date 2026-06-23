@@ -7,6 +7,7 @@ use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
+use zero_traits::AsyncSocket;
 
 use crate::protocol_runtime::socks5_udp::recv_upstream_packet;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
@@ -15,10 +16,8 @@ use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstrea
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
-/// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
-use super::*;
-
 use super::model::{VmessMuxTcpStreamTask, VmessMuxUdpStreamTask};
+use super::{encode_vmess_mux_udp_response, encode_vmess_udp_response, VmessUdpPayloadMode};
 
 impl Proxy {
     pub(crate) async fn run_vmess_mux_session(

@@ -773,6 +773,20 @@ fn udp_dispatch_modules_do_not_use_wildcard_parent_imports() {
 }
 
 #[test]
+fn protocol_inbound_submodules_do_not_use_wildcard_parent_imports() {
+    for root in ["src/inbound/vless", "src/inbound/vmess"] {
+        for path in rust_sources_under(root) {
+            let source = relative(&path);
+            let content = fs::read_to_string(&path).expect("read inbound protocol module");
+            assert!(
+                !content.contains("use super::*;"),
+                "{source} should import protocol inbound dependencies explicitly"
+            );
+        }
+    }
+}
+
+#[test]
 fn protocol_crates_do_not_depend_on_proxy_runtime_layers() {
     let protocols_root = repo_root().join("protocols");
     let forbidden = [
