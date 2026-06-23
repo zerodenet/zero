@@ -3,7 +3,6 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig, RuntimeConfig};
 use zero_api::ProtocolCapability;
 use zero_engine::EngineError;
 
-use crate::adapters::build_registry;
 use crate::protocol_adapter::{BoundInbound, ProtocolRegistry};
 use crate::transport::DirectConnector;
 
@@ -32,7 +31,7 @@ pub struct ProtocolInventory {
 impl Default for ProtocolInventory {
     fn default() -> Self {
         Self {
-            registry: build_registry(),
+            registry: ProtocolRegistry::build(),
         }
     }
 }
