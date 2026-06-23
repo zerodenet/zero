@@ -87,7 +87,7 @@ pub(crate) trait InboundProtocol: Send + Sync {
 /// Single entry point for ALL TCP protocols (generic over the protocol type).
 ///
 /// Owns every protocol-agnostic capability:
-///   - connection counting / rate limiting (TODO — hook point)
+///   - per-inbound rate defaults and session admission metadata
 ///   - prepare → route → resolve → establish
 ///   - session tracking (track / finish)
 ///   - structured logging

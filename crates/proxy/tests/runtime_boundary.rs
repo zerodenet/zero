@@ -69,6 +69,20 @@ fn assert_src_pattern_confined(
 }
 
 #[test]
+fn proxy_production_sources_do_not_keep_todo_markers() {
+    for path in rust_sources_under("src") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for marker in ["TODO", "FIXME"] {
+            assert!(
+                !content.contains(marker),
+                "{source} should not keep unresolved `{marker}` markers in production code"
+            );
+        }
+    }
+}
+
+#[test]
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     for source in [
         "src/protocol_runtime/socks5_udp_associate/dispatch.rs",
