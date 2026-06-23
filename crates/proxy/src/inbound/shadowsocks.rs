@@ -24,6 +24,13 @@ use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
+#[derive(Debug)]
+pub(crate) struct ShadowsocksInboundRequest {
+    pub(crate) inbound: InboundConfig,
+    pub(crate) password: String,
+    pub(crate) cipher: String,
+}
+
 #[derive(Clone)]
 pub(crate) struct ShadowsocksInboundHandler {
     ss_inbound: ShadowsocksInbound,
@@ -84,25 +91,15 @@ impl InboundProtocol for ShadowsocksInboundHandler {
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run_shadowsocks_listener_with_bound(
     proxy: &Proxy,
-    inbound: InboundConfig,
+    request: ShadowsocksInboundRequest,
     listener: zero_platform_tokio::TokioListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let (password, cipher_str, _up_bps, _down_bps) = match &inbound.protocol {
-        zero_config::InboundProtocolConfig::Shadowsocks {
-            password,
-            cipher,
-            up_bps,
-            down_bps,
-        } => (password.clone(), cipher.clone(), *up_bps, *down_bps),
-        _ => {
-            return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "shadowsocks listener requires shadowsocks config",
-            )))
-        }
-    };
-
+    let ShadowsocksInboundRequest {
+        inbound,
+        password,
+        cipher: cipher_str,
+    } = request;
     let cipher = CipherKind::from_str(&cipher_str).ok_or_else(|| {
         EngineError::Io(io::Error::new(
             io::ErrorKind::InvalidInput,

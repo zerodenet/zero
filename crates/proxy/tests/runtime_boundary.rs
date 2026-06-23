@@ -147,7 +147,6 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
             "src/protocol_adapter/registry.rs",
             "src/protocol_adapter/registry/tests.rs",
             "src/inbound/hysteria2.rs",
-            "src/inbound/shadowsocks.rs",
             "src/inbound/trojan.rs",
             "src/inbound/vmess/listener.rs",
         ],
@@ -300,6 +299,27 @@ fn mieru_inbound_uses_adapter_request_model() {
     assert!(
         adapter.contains("InboundProtocolConfig::Mieru") && adapter.contains("MieruInboundRequest"),
         "Mieru adapter should extract Mieru config and pass MieruInboundRequest"
+    );
+}
+
+#[test]
+fn shadowsocks_inbound_uses_adapter_request_model() {
+    let inbound = read("src/inbound/shadowsocks.rs");
+    let adapter = read("src/adapters/shadowsocks/inbound.rs");
+
+    assert!(
+        inbound.contains("struct ShadowsocksInboundRequest")
+            && inbound.contains("request: ShadowsocksInboundRequest"),
+        "Shadowsocks inbound listener should receive an adapter-built request model"
+    );
+    assert!(
+        !inbound.contains("InboundProtocolConfig::Shadowsocks"),
+        "Shadowsocks inbound entrypoint should not parse Shadowsocks config variants"
+    );
+    assert!(
+        adapter.contains("InboundProtocolConfig::Shadowsocks")
+            && adapter.contains("ShadowsocksInboundRequest"),
+        "Shadowsocks adapter should extract Shadowsocks config and pass ShadowsocksInboundRequest"
     );
 }
 

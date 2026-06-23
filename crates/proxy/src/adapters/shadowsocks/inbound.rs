@@ -11,9 +11,24 @@ impl ShadowsocksAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
+            let (password, cipher) = match &inbound.protocol {
+                InboundProtocolConfig::Shadowsocks {
+                    password, cipher, ..
+                } => (password.clone(), cipher.clone()),
+                _ => {
+                    return Err(EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "shadowsocks adapter received non-shadowsocks inbound config",
+                    )));
+                }
+            };
             crate::inbound::run_shadowsocks_listener_with_bound(
                 &p,
-                inbound,
+                crate::inbound::ShadowsocksInboundRequest {
+                    inbound,
+                    password,
+                    cipher,
+                },
                 bound.into_tcp(),
                 shutdown_rx,
             )

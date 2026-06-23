@@ -30,7 +30,7 @@ pub(crate) use mieru::{run_mieru_listener_with_bound, MieruInboundRequest};
 #[cfg(feature = "mixed")]
 pub(crate) use mixed::run_mixed_listener_with_bound;
 #[cfg(feature = "shadowsocks")]
-pub(crate) use shadowsocks::run_shadowsocks_listener_with_bound;
+pub(crate) use shadowsocks::{run_shadowsocks_listener_with_bound, ShadowsocksInboundRequest};
 #[cfg(feature = "socks5")]
 pub(crate) use socks5::run_socks5_listener_with_bound;
 #[cfg(feature = "trojan")]
