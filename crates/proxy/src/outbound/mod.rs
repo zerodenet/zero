@@ -1,4 +1,3 @@
-pub mod direct;
 #[cfg(feature = "hysteria2")]
 pub mod hysteria2;
 #[cfg(feature = "mieru")]

@@ -177,6 +177,34 @@ fn outbound_config_variant_matching_is_confined_to_adapters_and_registry() {
 }
 
 #[test]
+fn direct_udp_helpers_do_not_live_in_outbound_facade() {
+    let outbound_root = read("src/outbound/mod.rs");
+    assert!(
+        !outbound_root.contains("mod direct") && !outbound_root.contains("pub mod direct"),
+        "direct UDP helpers should live in runtime::udp_helpers and direct adapter modules, not src/outbound/direct.rs"
+    );
+    assert!(
+        !manifest_dir().join("src/outbound/direct.rs").exists(),
+        "src/outbound/direct.rs should not be kept as an empty compatibility facade"
+    );
+
+    let helpers = read("src/runtime/udp_helpers.rs");
+    let adapter = read("src/adapters/direct/udp.rs");
+    assert!(
+        helpers.contains("resolve_udp_target") && helpers.contains("send_direct_udp_packet"),
+        "direct UDP target resolution and sending should live in runtime::udp_helpers"
+    );
+    assert!(
+        !helpers.contains("outbound/direct.rs"),
+        "runtime::udp_helpers should not keep historical references to removed outbound direct facades"
+    );
+    assert!(
+        adapter.contains("resolve_udp_target") && adapter.contains("send_direct_packet"),
+        "direct adapter UDP module should call runtime helpers through UdpDispatch"
+    );
+}
+
+#[test]
 fn runtime_does_not_match_protocol_config_variants() {
     for path in rust_sources_under("src/runtime") {
         let source = relative(&path);

@@ -1,6 +1,6 @@
 //! Shared UDP helper functions and types used by inbound handlers.
 //!
-//! Moved from outbound/direct.rs — these are runtime orchestration, not outbound protocol logic.
+//! These helpers are runtime orchestration, not outbound protocol logic.
 
 use std::net::SocketAddr;
 
