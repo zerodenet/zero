@@ -167,6 +167,16 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
 }
 
 #[test]
+fn outbound_config_variant_matching_is_confined_to_adapters_and_registry() {
+    assert_src_pattern_confined(
+        "OutboundProtocolConfig::",
+        &["src/protocol_adapter/registry.rs"],
+        &["src/adapters/"],
+        "outbound config variant matching should stay inside adapters or protocol registry feature helpers",
+    );
+}
+
+#[test]
 fn runtime_does_not_match_protocol_config_variants() {
     for path in rust_sources_under("src/runtime") {
         let source = relative(&path);
