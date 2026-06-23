@@ -830,19 +830,15 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
     let root = read("src/inbound/vless/mux.rs");
     let model = read("src/inbound/vless/model.rs");
 
-    for forbidden in ["struct VlessMuxUdpStreamTask"] {
-        assert!(
-            !root.contains(forbidden),
-            "inbound/vless/mux.rs should keep MUX task models in inbound/vless/model.rs; found `{forbidden}`"
-        );
-    }
+    assert!(
+        !root.contains("struct VlessMuxUdpStreamTask"),
+        "inbound/vless/mux.rs should keep MUX task models in inbound/vless/model.rs"
+    );
 
-    for required in ["struct VlessMuxUdpStreamTask"] {
-        assert!(
-            model.contains(required),
-            "VLESS inbound MUX task model should live in inbound/vless/model.rs; missing `{required}`"
-        );
-    }
+    assert!(
+        model.contains("struct VlessMuxUdpStreamTask"),
+        "VLESS inbound MUX task model should live in inbound/vless/model.rs"
+    );
 }
 
 #[test]
