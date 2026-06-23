@@ -1,4 +1,9 @@
-use super::*;
+use zero_config::{InboundConfig, InboundProtocolConfig};
+use zero_engine::EngineError;
+
+use crate::adapters::vmess::VmessAdapter;
+use crate::protocol_adapter::BoundInbound;
+use crate::runtime::Proxy;
 
 impl VmessAdapter {
     pub(super) fn spawn_inbound_impl(

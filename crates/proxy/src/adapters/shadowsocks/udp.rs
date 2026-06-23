@@ -1,4 +1,14 @@
-use super::*;
+use std::sync::Arc;
+
+use zero_core::Session;
+use zero_engine::{EngineError, ResolvedLeafOutbound};
+
+use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
+use crate::adapters::shadowsocks::ShadowsocksAdapter;
+use crate::protocol_adapter::ProtocolAdapter;
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
+use crate::runtime::Proxy;
 
 impl ShadowsocksAdapter {
     pub(super) fn udp_packet_path_carrier_descriptor_impl(

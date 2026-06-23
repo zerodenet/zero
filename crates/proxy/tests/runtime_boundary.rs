@@ -749,6 +749,18 @@ fn adapter_roots_keep_inbound_runtime_details_in_inbound_modules() {
 }
 
 #[test]
+fn adapter_modules_do_not_use_wildcard_parent_imports() {
+    for path in rust_sources_under("src/adapters") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read adapter module");
+        assert!(
+            !content.contains("use super::*;"),
+            "{source} should import its ProtocolAdapter dependencies explicitly"
+        );
+    }
+}
+
+#[test]
 fn protocol_crates_do_not_depend_on_proxy_runtime_layers() {
     let protocols_root = repo_root().join("protocols");
     let forbidden = [

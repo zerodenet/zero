@@ -1,6 +1,9 @@
-use super::{EngineError, FlowFailure, ResolvedLeafOutbound, TcpOutboundFailure};
+use zero_engine::{EngineError, ResolvedLeafOutbound};
+
 use crate::protocol_adapter::OutboundLeafRuntime;
 use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory};
+use crate::runtime::udp_dispatch::FlowFailure;
+use crate::transport::TcpOutboundFailure;
 
 /// Build a `TcpOutboundFailure` for the impossible case where an adapter's
 /// `connect_tcp` receives a leaf variant it did not claim.

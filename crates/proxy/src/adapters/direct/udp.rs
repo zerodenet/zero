@@ -1,4 +1,12 @@
-use super::*;
+use zero_core::Session;
+use zero_engine::ResolvedLeafOutbound;
+
+use crate::adapters::common::unreachable_udp_leaf;
+use crate::adapters::direct::DirectAdapter;
+use crate::protocol_adapter::ProtocolAdapter;
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
+use crate::runtime::Proxy;
 
 impl DirectAdapter {
     pub(super) async fn start_udp_flow_impl(

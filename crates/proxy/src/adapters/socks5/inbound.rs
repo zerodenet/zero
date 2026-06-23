@@ -1,4 +1,9 @@
-use super::*;
+use zero_config::InboundConfig;
+use zero_engine::EngineError;
+
+use crate::adapters::socks5::Socks5Adapter;
+use crate::protocol_adapter::BoundInbound;
+use crate::runtime::Proxy;
 
 impl Socks5Adapter {
     pub(super) fn spawn_inbound_impl(

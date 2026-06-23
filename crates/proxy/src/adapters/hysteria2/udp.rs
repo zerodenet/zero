@@ -1,4 +1,13 @@
-use super::*;
+use std::sync::Arc;
+
+use zero_core::Session;
+use zero_engine::{EngineError, ResolvedLeafOutbound};
+
+use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
+use crate::adapters::hysteria2::Hysteria2Adapter;
+use crate::protocol_adapter::ProtocolAdapter;
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
 impl Hysteria2Adapter {
     pub(super) fn udp_packet_path_carrier_descriptor_impl(

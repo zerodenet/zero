@@ -1,4 +1,10 @@
-use super::*;
+use zero_config::{InboundConfig, InboundProtocolConfig};
+use zero_engine::EngineError;
+
+use crate::adapters::vless::VlessAdapter;
+use crate::protocol_adapter::BoundInbound;
+use crate::runtime::Proxy;
+use crate::transport::QuicInbound;
 
 impl VlessAdapter {
     pub(super) async fn bind_inbound_impl(

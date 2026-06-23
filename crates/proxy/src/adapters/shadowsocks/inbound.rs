@@ -1,4 +1,9 @@
-use super::*;
+use zero_config::{InboundConfig, InboundProtocolConfig};
+use zero_engine::EngineError;
+
+use crate::adapters::shadowsocks::ShadowsocksAdapter;
+use crate::protocol_adapter::BoundInbound;
+use crate::runtime::Proxy;
 
 impl ShadowsocksAdapter {
     pub(super) fn spawn_inbound_impl(

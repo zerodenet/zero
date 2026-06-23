@@ -1,4 +1,11 @@
-use super::*;
+use zero_core::Session;
+use zero_engine::ResolvedLeafOutbound;
+
+use crate::adapters::common::unreachable_leaf;
+use crate::adapters::hysteria2::Hysteria2Adapter;
+use crate::protocol_adapter::ProtocolAdapter;
+use crate::runtime::Proxy;
+use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 impl Hysteria2Adapter {
     pub(super) async fn connect_tcp_impl(

@@ -1,4 +1,11 @@
-use super::*;
+use zero_core::Session;
+use zero_engine::{EngineError, ResolvedLeafOutbound};
+
+use crate::adapters::common::unreachable_leaf;
+use crate::adapters::vmess::VmessAdapter;
+use crate::protocol_adapter::ProtocolAdapter;
+use crate::runtime::Proxy;
+use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 impl VmessAdapter {
     pub(super) async fn connect_tcp_impl(

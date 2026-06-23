@@ -1,4 +1,11 @@
-use super::*;
+use zero_core::Session;
+use zero_engine::{EngineError, ResolvedLeafOutbound};
+
+use crate::adapters::common::unreachable_leaf;
+use crate::adapters::shadowsocks::ShadowsocksAdapter;
+use crate::protocol_adapter::ProtocolAdapter;
+use crate::runtime::Proxy;
+use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 impl ShadowsocksAdapter {
     pub(super) async fn connect_tcp_impl(

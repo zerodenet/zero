@@ -1,4 +1,11 @@
-use super::*;
+use zero_core::Session;
+use zero_engine::{EngineError, ResolvedLeafOutbound};
+
+use crate::adapters::common::unreachable_udp_leaf;
+use crate::adapters::vless::VlessAdapter;
+use crate::protocol_adapter::ProtocolAdapter;
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::Proxy;
 
 impl VlessAdapter {
     pub(super) async fn start_udp_flow_impl(
