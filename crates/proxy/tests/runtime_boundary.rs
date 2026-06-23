@@ -957,6 +957,9 @@ fn protocol_inventory_keeps_protocol_instances_private() {
     let content = read("src/inventory.rs");
 
     for forbidden in [
+        "InboundProtocolConfig::",
+        "OutboundProtocolConfig::",
+        "ResolvedLeafOutbound::",
         "pub socks5_inbound:",
         "pub socks5_outbound:",
         "pub http_connect_inbound:",
@@ -974,7 +977,7 @@ fn protocol_inventory_keeps_protocol_instances_private() {
     ] {
         assert!(
             !content.contains(forbidden),
-            "src/inventory.rs should keep protocol instances private; found `{forbidden}`"
+            "src/inventory.rs should keep protocol instances private and delegate protocol classification to ProtocolRegistry; found `{forbidden}`"
         );
     }
 
