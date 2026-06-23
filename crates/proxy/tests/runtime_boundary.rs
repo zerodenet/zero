@@ -205,6 +205,30 @@ fn direct_udp_helpers_do_not_live_in_outbound_facade() {
 }
 
 #[test]
+fn outbound_protocol_helpers_are_crate_private() {
+    let outbound_root = read("src/outbound/mod.rs");
+
+    for protocol in [
+        "hysteria2",
+        "mieru",
+        "shadowsocks",
+        "socks5",
+        "trojan",
+        "vless",
+        "vmess",
+    ] {
+        assert!(
+            !outbound_root.contains(&format!("pub mod {protocol};")),
+            "src/outbound/mod.rs should not expose `{protocol}` helpers as public modules"
+        );
+        assert!(
+            outbound_root.contains(&format!("pub(crate) mod {protocol};")),
+            "src/outbound/mod.rs should keep `{protocol}` helpers crate-private"
+        );
+    }
+}
+
+#[test]
 fn runtime_does_not_match_protocol_config_variants() {
     for path in rust_sources_under("src/runtime") {
         let source = relative(&path);
