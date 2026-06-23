@@ -6,12 +6,16 @@ mod tcp_outbound;
 mod tcp_relay;
 pub(crate) mod tls_hello;
 
-pub(crate) use direct::*;
-pub(crate) use metered::*;
-pub(crate) use stream::*;
-pub(crate) use tcp_flow::*;
-pub(crate) use tcp_outbound::*;
-pub(crate) use tcp_relay::*;
+pub(crate) use direct::DirectConnector;
+pub(crate) use metered::{MeteredStream, StreamTraffic};
+pub(crate) use stream::{ClientStream, PrefixedSocket, RelayCarrier, TcpRelayStream};
+pub(crate) use tcp_flow::is_block_error;
+pub(crate) use tcp_outbound::{
+    extract_tcp_stream, EstablishedTcpOutbound, TcpOutboundFailure, TcpRouteResult,
+};
+pub(crate) use tcp_relay::{
+    copy_one_way, relay_bidirectional_metered, relay_bidirectional_metered_throttled,
+};
 
 // Re-export transport implementations from zero-transport.
 // Only items used directly by proxy code are listed.

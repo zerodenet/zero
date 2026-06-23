@@ -1654,6 +1654,25 @@ fn protocol_registry_build_lives_outside_adapters_root() {
 }
 
 #[test]
+fn transport_facade_exports_are_explicit() {
+    let content = read("src/transport/mod.rs");
+
+    for forbidden in [
+        "pub(crate) use direct::*;",
+        "pub(crate) use metered::*;",
+        "pub(crate) use stream::*;",
+        "pub(crate) use tcp_flow::*;",
+        "pub(crate) use tcp_outbound::*;",
+        "pub(crate) use tcp_relay::*;",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "transport facade should explicitly list exported items; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn udp_dispatch_does_not_reexport_protocol_runtime_udp_types() {
     let content = read("src/runtime/udp_dispatch/mod.rs");
 
