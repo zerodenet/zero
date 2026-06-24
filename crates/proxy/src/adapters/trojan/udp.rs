@@ -4,6 +4,7 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::trojan::TrojanAdapter;
 use crate::protocol_adapter::ProtocolAdapter;
+use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
@@ -51,15 +52,17 @@ impl TrojanAdapter {
                 upstream: f.upstream,
             })?;
         Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Trojan {
+            outbound: Box::new(UdpFlowOutbound::StreamPacket {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,
-                password: (*password).to_string(),
-                sni: (*sni).map(|s| s.to_string()),
-                insecure: *insecure,
-                client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
-                relay_chain: false,
+                protocol: ProtocolUdpFlowSnapshot::Trojan {
+                    password: (*password).to_string(),
+                    sni: (*sni).map(|s| s.to_string()),
+                    insecure: *insecure,
+                    client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
+                    relay_chain: false,
+                },
             }),
             tx_bytes: sent as u64,
         })
@@ -103,15 +106,17 @@ impl TrojanAdapter {
             })
             .await?;
         Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Trojan {
+            outbound: Box::new(UdpFlowOutbound::StreamPacket {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,
-                password: (*password).to_string(),
-                sni: (*sni).map(|s| s.to_string()),
-                insecure: *insecure,
-                client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
-                relay_chain: true,
+                protocol: ProtocolUdpFlowSnapshot::Trojan {
+                    password: (*password).to_string(),
+                    sni: (*sni).map(|s| s.to_string()),
+                    insecure: *insecure,
+                    client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
+                    relay_chain: true,
+                },
             }),
             tx_bytes: sent as u64,
         })

@@ -94,7 +94,7 @@ impl VlessAdapter {
                 })?;
                 let _ = up_tx.send(packet);
                 proxy.record_session_outbound_tx(session_id, payload.len() as u64);
-                return Ok(FlowStartResult::VlessFlow {
+                return Ok(FlowStartResult::ManagedFlow {
                     session_id,
                     tag: tag_owned,
                 });
@@ -130,7 +130,7 @@ impl VlessAdapter {
                 upstream: error.upstream,
             })?;
 
-        Ok(FlowStartResult::VlessFlow {
+        Ok(FlowStartResult::ManagedFlow {
             session_id,
             tag: tag_owned,
         })
@@ -208,7 +208,7 @@ impl VlessAdapter {
             )
             .await?;
 
-        Ok(FlowStartResult::VlessFlow {
+        Ok(FlowStartResult::ManagedFlow {
             session_id,
             tag: (*tag).to_string(),
         })
@@ -278,7 +278,7 @@ impl VlessAdapter {
             )
             .await?;
 
-        Ok(FlowStartResult::VlessFlow {
+        Ok(FlowStartResult::ManagedFlow {
             session_id,
             tag: tag_owned,
         })

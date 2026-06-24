@@ -6,6 +6,7 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_adapter::ProtocolAdapter;
+use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
@@ -127,12 +128,14 @@ impl Hysteria2Adapter {
                 upstream: f.upstream,
             })?;
         Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Hysteria2 {
+            outbound: Box::new(UdpFlowOutbound::Datagram {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,
-                password: (*password).to_string(),
-                client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
+                protocol: ProtocolUdpFlowSnapshot::Hysteria2 {
+                    password: (*password).to_string(),
+                    client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
+                },
             }),
             tx_bytes: sent as u64,
         })

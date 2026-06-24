@@ -130,7 +130,7 @@ impl Socks5Adapter {
                 upstream: Some(((*server).to_string(), *port)),
             })?;
         Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Socks5 {
+            outbound: Box::new(UdpFlowOutbound::Relay {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,

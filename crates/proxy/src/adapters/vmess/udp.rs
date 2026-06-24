@@ -83,7 +83,7 @@ impl VmessAdapter {
             )
             .await?;
 
-        Ok(FlowStartResult::VmessFlow {
+        Ok(FlowStartResult::ManagedFlow {
             session_id: session.id,
             tag: tag_owned,
         })
@@ -141,7 +141,7 @@ impl VmessAdapter {
             )
             .await?;
 
-        Ok(FlowStartResult::VmessFlow {
+        Ok(FlowStartResult::ManagedFlow {
             session_id: session.id,
             tag: tag_owned,
         })

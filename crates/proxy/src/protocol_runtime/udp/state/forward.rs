@@ -11,7 +11,7 @@ mod mieru;
 mod shadowsocks;
 #[cfg(feature = "trojan")]
 mod trojan;
-use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
+use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
@@ -23,12 +23,19 @@ impl ProtocolUdpState {
         flow: &UdpFlowSnapshot,
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
-        match &flow.outbound {
+        let Some(snapshot) = flow.outbound.protocol_snapshot() else {
+            return Err(FlowFailure {
+                stage: "udp_protocol_forward",
+                error: EngineError::Io(std::io::Error::other(
+                    "direct and relay flows are handled by generic UDP dispatch",
+                )),
+                upstream: None,
+            });
+        };
+
+        match snapshot {
             #[cfg(feature = "shadowsocks")]
-            UdpFlowOutbound::Shadowsocks {
-                tag,
-                server,
-                port,
+            ProtocolUdpFlowSnapshot::Shadowsocks {
                 password,
                 datagram_cache_key,
                 cipher_kind,
@@ -40,9 +47,17 @@ impl ProtocolUdpState {
                     proxy,
                     flow,
                     shadowsocks::ExistingFlow {
-                        tag,
-                        server,
-                        port: *port,
+                        tag: flow.outbound.tag(),
+                        server: flow
+                            .outbound
+                            .upstream()
+                            .expect("protocol flow should have upstream")
+                            .server,
+                        port: flow
+                            .outbound
+                            .upstream()
+                            .expect("protocol flow should have upstream")
+                            .port,
                         password,
                         datagram_cache_key,
                         cipher_kind: *cipher_kind,
@@ -53,20 +68,25 @@ impl ProtocolUdpState {
                 .await
             }
             #[cfg(feature = "hysteria2")]
-            UdpFlowOutbound::Hysteria2 {
-                server,
-                port,
+            ProtocolUdpFlowSnapshot::Hysteria2 {
                 password,
                 client_fingerprint,
-                ..
             } => {
                 hysteria2::forward(
                     self,
                     chain_tasks,
                     flow,
                     hysteria2::ExistingFlow {
-                        server,
-                        port: *port,
+                        server: flow
+                            .outbound
+                            .upstream()
+                            .expect("protocol flow should have upstream")
+                            .server,
+                        port: flow
+                            .outbound
+                            .upstream()
+                            .expect("protocol flow should have upstream")
+                            .port,
                         password,
                         client_fingerprint: client_fingerprint.as_deref(),
                         payload,
@@ -75,15 +95,12 @@ impl ProtocolUdpState {
                 .await
             }
             #[cfg(feature = "trojan")]
-            UdpFlowOutbound::Trojan {
-                server,
-                port,
+            ProtocolUdpFlowSnapshot::Trojan {
                 password,
                 sni,
                 insecure,
                 client_fingerprint,
                 relay_chain,
-                ..
             } => {
                 trojan::forward(
                     self,
@@ -91,8 +108,16 @@ impl ProtocolUdpState {
                     proxy,
                     flow,
                     trojan::ExistingFlow {
-                        server,
-                        port: *port,
+                        server: flow
+                            .outbound
+                            .upstream()
+                            .expect("protocol flow should have upstream")
+                            .server,
+                        port: flow
+                            .outbound
+                            .upstream()
+                            .expect("protocol flow should have upstream")
+                            .port,
                         password,
                         sni: sni.as_deref(),
                         insecure: *insecure,
@@ -104,13 +129,10 @@ impl ProtocolUdpState {
                 .await
             }
             #[cfg(feature = "mieru")]
-            UdpFlowOutbound::Mieru {
-                server,
-                port,
+            ProtocolUdpFlowSnapshot::Mieru {
                 username,
                 password,
                 relay_chain,
-                ..
             } => {
                 mieru::forward(
                     self,
@@ -118,8 +140,16 @@ impl ProtocolUdpState {
                     proxy,
                     flow,
                     mieru::ExistingFlow {
-                        server,
-                        port: *port,
+                        server: flow
+                            .outbound
+                            .upstream()
+                            .expect("protocol flow should have upstream")
+                            .server,
+                        port: flow
+                            .outbound
+                            .upstream()
+                            .expect("protocol flow should have upstream")
+                            .port,
                         username,
                         password,
                         relay_chain: *relay_chain,
@@ -128,13 +158,6 @@ impl ProtocolUdpState {
                 )
                 .await
             }
-            UdpFlowOutbound::Direct { .. } | UdpFlowOutbound::Socks5 { .. } => Err(FlowFailure {
-                stage: "udp_protocol_forward",
-                error: EngineError::Io(std::io::Error::other(
-                    "direct and socks5 flows are handled by generic UDP dispatch",
-                )),
-                upstream: None,
-            }),
         }
     }
 }

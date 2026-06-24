@@ -1690,6 +1690,9 @@ fn protocol_crates_do_not_depend_on_proxy_runtime_layers() {
 #[test]
 fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
     let content = read("src/runtime/udp_dispatch/mod.rs");
+    let dispatch = read("src/runtime/udp_dispatch/dispatch.rs");
+    let lifecycle = read("src/runtime/udp_dispatch/lifecycle.rs");
+    let types = read("src/runtime/udp_dispatch/types.rs");
 
     for forbidden in [
         "proxy.protocols.vless_outbound",
@@ -1704,6 +1707,19 @@ fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
             "src/runtime/udp_dispatch/mod.rs should stay protocol-neutral; found `{forbidden}`"
         );
     }
+
+    for forbidden in ["VlessFlow", "VmessFlow", "vless_handles", "vmess_handles"] {
+        for source in [&dispatch, &lifecycle, &types] {
+            assert!(
+                !source.contains(forbidden),
+                "UDP dispatch should use neutral managed-flow state instead of `{forbidden}`"
+            );
+        }
+    }
+    assert!(
+        types.contains("ManagedFlow") && dispatch.contains("managed_handles"),
+        "UDP dispatch should track protocol-managed flows through neutral names"
+    );
 }
 
 #[test]
@@ -2442,6 +2458,43 @@ fn udp_flow_outbound_snapshot_is_not_declared_in_session_bookkeeping() {
         outbound.contains("enum UdpFlowOutbound"),
         "runtime::udp_flow::outbound should own UdpFlowOutbound"
     );
+}
+
+#[test]
+fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
+    let outbound = read("src/runtime/udp_flow/outbound.rs");
+    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+
+    for required in [
+        "Direct {",
+        "Relay {",
+        "Datagram {",
+        "StreamPacket {",
+        "ProtocolUdpFlowSnapshot",
+    ] {
+        assert!(
+            outbound.contains(required),
+            "runtime UDP outbound snapshot should expose neutral variant or opaque snapshot `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "Shadowsocks {",
+        "Hysteria2 {",
+        "Trojan {",
+        "Mieru {",
+        "shadowsocks::CipherKind",
+        "UdpPacketPathCarrier",
+    ] {
+        assert!(
+            !outbound.contains(forbidden),
+            "runtime UDP outbound snapshot should not declare protocol detail `{forbidden}`"
+        );
+        assert!(
+            snapshot.contains(forbidden),
+            "protocol UDP flow snapshot should own protocol detail `{forbidden}`"
+        );
+    }
 }
 
 #[test]

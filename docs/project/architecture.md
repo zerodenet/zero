@@ -78,6 +78,8 @@ Adapters call `crate::inbound::run_<protocol>_listener_with_bound`; `Proxy` does
 
 Runtime modules depend on `ProtocolInventory` operations, not adapter trait object lookup. Adapter resolution stays behind `ProtocolInventory` and `ProtocolRegistry`; protocol-private fields stay with each adapter. Protocol identity and cipher config parsing is adapter-owned: runtime modules receive validated protocol values, or opaque adapter-built keys when they need stable cache identity.
 
+UDP runtime flow snapshots use path categories rather than protocol variants. `runtime::udp_flow` records `Direct`, `Relay`, `Datagram`, and `StreamPacket` flow shape plus endpoint/session metadata. Protocol-specific snapshot data, packet-path carriers, parsed cipher values, and cache keys live under `protocol_runtime::udp`; `runtime::udp_dispatch` tracks externally managed protocol flows through neutral managed-flow state.
+
 `runtime.rs` owns the `Proxy` shell and run loop. Control-plane handle details live in `runtime/handle.rs`, the spawned runtime handle lives in `runtime/running.rs`, and reload channel bridging lives in `runtime/reload.rs`.
 
 Per-protocol outbound TCP helpers under `src/outbound/<protocol>.rs` are adapter implementation details. Only the owning `src/adapters/<protocol>/tcp.rs` module calls them; generic runtime and protocol-runtime modules dispatch through `ProtocolInventory` and `ProtocolAdapter`.

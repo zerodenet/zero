@@ -9,11 +9,8 @@ pub(crate) enum FlowStartResult {
         outbound: Box<UdpFlowOutbound>,
         tx_bytes: u64,
     },
-    /// A VLESS chain flow was established (tracked by the manager, not `UdpSessionFlows`).
-    VlessFlow { session_id: u64, tag: String },
-    /// A VMess UDP flow was established (tracked by the manager, not `UdpSessionFlows`).
-    #[cfg(feature = "vmess")]
-    VmessFlow { session_id: u64, tag: String },
+    /// A protocol-managed flow was established outside `UdpSessionFlows`.
+    ManagedFlow { session_id: u64, tag: String },
     /// The target was blocked.
     Blocked { tag: String },
 }

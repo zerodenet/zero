@@ -27,9 +27,7 @@ impl UdpDispatch {
             direct_socket,
             socks5: Socks5UdpRuntime::default(),
             protocol_state: ProtocolUdpState::new(),
-            vless_handles: HashMap::new(),
-            #[cfg(feature = "vmess")]
-            vmess_handles: HashMap::new(),
+            managed_handles: HashMap::new(),
             chain_tasks: JoinSet::new(),
         })
     }
@@ -43,9 +41,7 @@ impl UdpDispatch {
             direct_socket,
             socks5: Socks5UdpRuntime::default(),
             protocol_state: ProtocolUdpState::new(),
-            vless_handles: HashMap::new(),
-            #[cfg(feature = "vmess")]
-            vmess_handles: HashMap::new(),
+            managed_handles: HashMap::new(),
             chain_tasks: JoinSet::new(),
         }
     }
@@ -165,15 +161,7 @@ impl UdpDispatch {
     pub(crate) fn finish_all(mut self) -> Vec<CompletedUdpFlow> {
         self.socks5.close_all();
 
-        for (_key, (session, mut handle)) in self.vless_handles.drain() {
-            if let Some(record) = handle.finish(SessionOutcome::ChainedRelayed) {
-                log_session_finished(&record, None);
-                let _ = session;
-            }
-        }
-
-        #[cfg(feature = "vmess")]
-        for (_key, (session, mut handle)) in self.vmess_handles.drain() {
+        for (_key, (session, mut handle)) in self.managed_handles.drain() {
             if let Some(record) = handle.finish(SessionOutcome::ChainedRelayed) {
                 log_session_finished(&record, None);
                 let _ = session;

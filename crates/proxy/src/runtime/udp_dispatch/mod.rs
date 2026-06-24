@@ -93,14 +93,9 @@ pub(crate) struct UdpDispatch {
     socks5: Socks5UdpRuntime,
     /// Protocol-specific UDP managers.
     protocol_state: ProtocolUdpState,
-    /// Session handles for VLESS chain flows. These are not tracked by
-    /// [`UdpSessionFlows`] because the VLESS manager owns the per-target
-    /// upstream connections. We store handles here so `finish_all()` can
-    /// properly complete them.
-    vless_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
-    /// Session handles for VMess UDP flows owned by the VMess manager.
-    #[cfg(feature = "vmess")]
-    vmess_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
+    /// Session handles for protocol-managed flows owned outside
+    /// [`UdpSessionFlows`].
+    managed_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
     /// Unified JoinSet for chain-outbound (SS/H2/Trojan/Mieru/VLESS)
     /// response bridge tasks. Polled by [`poll_chain_response`].
     chain_tasks: JoinSet<ChainTask>,

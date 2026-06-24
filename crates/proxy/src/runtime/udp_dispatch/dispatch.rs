@@ -104,21 +104,10 @@ impl UdpDispatch {
                     proxy.record_session_outbound_tx(session_id, tx_bytes);
                     return Ok(session_id);
                 }
-                Ok(FlowStartResult::VlessFlow { session_id, tag }) => {
+                Ok(FlowStartResult::ManagedFlow { session_id, tag }) => {
                     session.outbound_tag = Some(tag);
                     proxy.set_session_outbound(&session);
-                    self.vless_handles.insert(
-                        (session.target.clone(), session.port),
-                        (session, session_handle),
-                    );
-                    proxy.record_session_outbound_tx(session_id, input.payload.len() as u64);
-                    return Ok(session_id);
-                }
-                #[cfg(feature = "vmess")]
-                Ok(FlowStartResult::VmessFlow { session_id, tag }) => {
-                    session.outbound_tag = Some(tag);
-                    proxy.set_session_outbound(&session);
-                    self.vmess_handles.insert(
+                    self.managed_handles.insert(
                         (session.target.clone(), session.port),
                         (session, session_handle),
                     );
