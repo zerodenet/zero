@@ -28,12 +28,13 @@ impl Socks5Adapter {
         else {
             return None;
         };
-        let auth = match (username, password) {
-            (Some(user), Some(_)) => format!("|auth:{user}"),
-            _ => String::new(),
-        };
         Some(crate::protocol_runtime::udp::PacketPathCarrierDescriptor {
-            cache_key: format!("socks5|{tag}|{server}:{port}{auth}"),
+            cache_key: crate::protocol_runtime::udp::socks5_udp_cache_key(
+                tag,
+                server,
+                *port,
+                username.zip(*password).map(|(user, _)| user),
+            ),
             server: (*server).to_string(),
             port: *port,
         })
@@ -57,12 +58,13 @@ impl Socks5Adapter {
         else {
             return None;
         };
-        let auth = match (username, password) {
-            (Some(user), Some(_)) => format!("|auth:{user}"),
-            _ => String::new(),
-        };
         Some(UdpPacketPathCarrier::Socks5 {
-            cache_key: format!("socks5|{tag}|{server}:{port}{auth}"),
+            cache_key: crate::protocol_runtime::udp::socks5_udp_cache_key(
+                tag,
+                server,
+                *port,
+                username.zip(*password).map(|(user, _)| user),
+            ),
             tag: (*tag).to_string(),
             server: (*server).to_string(),
             port: *port,

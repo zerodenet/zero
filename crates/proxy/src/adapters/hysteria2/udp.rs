@@ -27,11 +27,14 @@ impl Hysteria2Adapter {
         else {
             return None;
         };
-        let fingerprint = client_fingerprint
-            .map(|value| format!("|fp:{value}"))
-            .unwrap_or_default();
         Some(crate::protocol_runtime::udp::PacketPathCarrierDescriptor {
-            cache_key: format!("hysteria2|{tag}|{server}:{port}|{password}{fingerprint}"),
+            cache_key: crate::protocol_runtime::udp::hysteria2_udp_cache_key(
+                tag,
+                server,
+                *port,
+                password,
+                *client_fingerprint,
+            ),
             server: (*server).to_string(),
             port: *port,
         })
@@ -55,11 +58,14 @@ impl Hysteria2Adapter {
         else {
             return None;
         };
-        let fingerprint = client_fingerprint
-            .map(|value| format!("|fp:{value}"))
-            .unwrap_or_default();
         Some(UdpPacketPathCarrier::Hysteria2 {
-            cache_key: format!("hysteria2|{tag}|{server}:{port}|{password}{fingerprint}"),
+            cache_key: crate::protocol_runtime::udp::hysteria2_udp_cache_key(
+                tag,
+                server,
+                *port,
+                password,
+                *client_fingerprint,
+            ),
             tag: (*tag).to_string(),
             server: (*server).to_string(),
             port: *port,

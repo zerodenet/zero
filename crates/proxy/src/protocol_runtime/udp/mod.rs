@@ -5,6 +5,7 @@
 
 pub(crate) mod packet_path_traits;
 
+mod cache_key;
 mod flow_snapshot;
 mod flows;
 #[cfg(feature = "hysteria2")]
@@ -22,6 +23,10 @@ mod state;
 mod trojan_manager;
 
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
+pub(crate) use cache_key::{
+    hysteria2 as hysteria2_udp_cache_key, shadowsocks as shadowsocks_udp_cache_key,
+    socks5 as socks5_udp_cache_key,
+};
 pub(crate) use flow_snapshot::ProtocolUdpFlowSnapshot;
 #[cfg(feature = "mieru")]
 pub(crate) use flows::MieruUdpRelayFlow;

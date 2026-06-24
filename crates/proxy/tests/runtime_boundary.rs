@@ -4695,6 +4695,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
 #[test]
 fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
+    let cache_key = read("src/protocol_runtime/udp/cache_key.rs");
     let carrier = read("src/protocol_runtime/udp/packet_path_chain/carriers.rs");
     let entry = read("src/protocol_runtime/udp/packet_path_chain/entry.rs");
     let traits = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
@@ -4720,8 +4721,12 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     );
     assert!(
         traits.contains("datagram_cache_key: String")
-            && adapter.contains("datagram_cache_key: format!("),
-        "Shadowsocks adapter should provide an opaque datagram cache key"
+            && adapter.contains("shadowsocks_udp_cache_key"),
+        "Shadowsocks adapter should provide an opaque datagram cache key through protocol_runtime"
+    );
+    assert!(
+        cache_key.contains("fn shadowsocks("),
+        "protocol_runtime::udp cache_key module should own Shadowsocks cache identity construction"
     );
     for source in [
         &traits,
@@ -4740,6 +4745,38 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         !carrier_snapshot.contains("cipher: String"),
         "packet-path carrier snapshots should use adapter-built cache keys instead of raw Shadowsocks cipher strings"
     );
+}
+
+#[test]
+fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
+    for source in [
+        "src/adapters/socks5/udp.rs",
+        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/hysteria2/udp.rs",
+    ] {
+        let content = read(source);
+        for forbidden in ["socks5|", "shadowsocks|", "hysteria2|", "|auth:", "|fp:"] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should ask protocol_runtime::udp for packet-path cache identity instead of formatting `{forbidden}`"
+            );
+        }
+    }
+
+    let cache_key = read("src/protocol_runtime/udp/cache_key.rs");
+    for required in [
+        "fn socks5(",
+        "fn shadowsocks(",
+        "fn hysteria2(",
+        "socks5|",
+        "shadowsocks|",
+        "hysteria2|",
+    ] {
+        assert!(
+            cache_key.contains(required),
+            "protocol_runtime::udp cache_key module should own `{required}`"
+        );
+    }
 }
 
 #[test]

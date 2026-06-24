@@ -43,7 +43,9 @@ impl ShadowsocksAdapter {
             return None;
         };
         Some(crate::protocol_runtime::udp::PacketPathCarrierDescriptor {
-            cache_key: format!("shadowsocks|{tag}|{server}:{port}|{cipher}|{password}"),
+            cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
+                tag, server, *port, cipher, password,
+            ),
             server: (*server).to_string(),
             port: *port,
         })
@@ -67,7 +69,9 @@ impl ShadowsocksAdapter {
             return None;
         };
         Some(UdpPacketPathCarrier::Shadowsocks {
-            cache_key: format!("shadowsocks|{tag}|{server}:{port}|{cipher}|{password}"),
+            cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
+                tag, server, *port, cipher, password,
+            ),
             tag: (*tag).to_string(),
             server: (*server).to_string(),
             port: *port,
@@ -129,7 +133,9 @@ impl ShadowsocksAdapter {
             server,
             port: *port,
             password,
-            datagram_cache_key: format!("shadowsocks|{tag}|{server}:{port}|{cipher}|{password}"),
+            datagram_cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
+                tag, server, *port, cipher, password,
+            ),
             cipher_kind,
         })
     }
@@ -187,8 +193,8 @@ impl ShadowsocksAdapter {
                 port: *port,
                 protocol: ProtocolUdpFlowSnapshot::Shadowsocks {
                     password: (*password).to_string(),
-                    datagram_cache_key: format!(
-                        "shadowsocks|{tag}|{server}:{port}|{cipher}|{password}"
+                    datagram_cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
+                        tag, server, *port, cipher, password,
                     ),
                     cipher_kind,
                     packet_path_carrier: None,
