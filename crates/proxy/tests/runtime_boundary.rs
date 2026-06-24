@@ -1036,8 +1036,8 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
         (
             "hysteria2",
             &[
-                "PacketPathCarrierDescriptor {",
-                "UdpPacketPathCarrier::Hysteria2",
+                "hysteria2_packet_path_carrier_descriptor",
+                "hysteria2_packet_path_carrier_snapshot",
                 "build_hysteria2_packet_path",
                 "Hysteria2UdpFlowRequest",
                 "UdpFlowOutbound::Hysteria2",
@@ -1055,8 +1055,8 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
         (
             "shadowsocks",
             &[
-                "PacketPathCarrierDescriptor {",
-                "UdpPacketPathCarrier::Shadowsocks",
+                "shadowsocks_packet_path_carrier_descriptor",
+                "shadowsocks_packet_path_carrier_snapshot",
                 "build_shadowsocks_packet_path",
                 "UdpDatagramSource {",
                 "ShadowsocksUdpFlow",
@@ -1067,8 +1067,8 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
         (
             "socks5",
             &[
-                "PacketPathCarrierDescriptor {",
-                "UdpPacketPathCarrier::Socks5",
+                "socks5_packet_path_carrier_descriptor",
+                "socks5_packet_path_carrier_snapshot",
                 "build_socks5_packet_path",
                 "Socks5UdpSend",
                 "UdpFlowOutbound::Socks5",
@@ -4775,6 +4775,43 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         assert!(
             cache_key.contains(required),
             "protocol_runtime::udp cache_key module should own `{required}`"
+        );
+    }
+}
+
+#[test]
+fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
+    for source in [
+        "src/adapters/socks5/udp.rs",
+        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/hysteria2/udp.rs",
+    ] {
+        let content = read(source);
+        for forbidden in [
+            "PacketPathCarrierDescriptor {",
+            "UdpPacketPathCarrier::Socks5",
+            "UdpPacketPathCarrier::Shadowsocks",
+            "UdpPacketPathCarrier::Hysteria2",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should use protocol_runtime::udp packet-path constructors instead of `{forbidden}`"
+            );
+        }
+    }
+
+    let snapshot = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
+    for required in [
+        "socks5_packet_path_carrier_descriptor",
+        "socks5_packet_path_carrier_snapshot",
+        "shadowsocks_packet_path_carrier_descriptor",
+        "shadowsocks_packet_path_carrier_snapshot",
+        "hysteria2_packet_path_carrier_descriptor",
+        "hysteria2_packet_path_carrier_snapshot",
+    ] {
+        assert!(
+            snapshot.contains(required),
+            "protocol_runtime::udp packet-path snapshot module should own `{required}`"
         );
     }
 }

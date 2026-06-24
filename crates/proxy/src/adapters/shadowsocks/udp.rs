@@ -42,21 +42,17 @@ impl ShadowsocksAdapter {
         else {
             return None;
         };
-        Some(crate::protocol_runtime::udp::PacketPathCarrierDescriptor {
-            cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
+        Some(
+            crate::protocol_runtime::udp::shadowsocks_packet_path_carrier_descriptor(
                 tag, server, *port, cipher, password,
             ),
-            server: (*server).to_string(),
-            port: *port,
-        })
+        )
     }
 
     pub(super) fn udp_packet_path_carrier_snapshot_impl(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<crate::protocol_runtime::udp::UdpPacketPathCarrier> {
-        use crate::protocol_runtime::udp::UdpPacketPathCarrier;
-
         let _ = self;
         let ResolvedLeafOutbound::Shadowsocks {
             tag,
@@ -68,15 +64,11 @@ impl ShadowsocksAdapter {
         else {
             return None;
         };
-        Some(UdpPacketPathCarrier::Shadowsocks {
-            cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
+        Some(
+            crate::protocol_runtime::udp::shadowsocks_packet_path_carrier_snapshot(
                 tag, server, *port, cipher, password,
             ),
-            tag: (*tag).to_string(),
-            server: (*server).to_string(),
-            port: *port,
-            password: (*password).to_string(),
-        })
+        )
     }
 
     pub(super) async fn build_udp_packet_path_impl(
