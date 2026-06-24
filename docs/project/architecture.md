@@ -62,6 +62,30 @@ Inbound listener entrypoints live as module functions under `crates/proxy/src/in
 Adapters call `crate::inbound::run_<protocol>_listener_with_bound`; `Proxy` does not own `run_*_listener_with_bound` methods.
 `mixed` remains an inbound multiplexor rather than an external protocol, but it is registered through `MixedAdapter` so reload and spawn use the same adapter path as other inbounds.
 
+`zero-proxy` keeps facade roots thin:
+
+- `adapters/mod.rs` only declares concrete adapter modules and re-exports adapter types. Registry construction and protocol dispatch stay outside this facade.
+- `inbound/mod.rs` only declares inbound listener modules and re-exports `run_<protocol>_listener_with_bound` entrypoints. Request models and listener/session logic stay in protocol-local inbound modules.
+- `outbound/mod.rs` only declares crate-private per-protocol outbound helper modules. Helper logic lives in `outbound/<protocol>.rs` and is called only by adapter TCP modules.
+- `protocol_adapter.rs` only re-exports the crate-private adapter trait, adapter models, and registry.
+- `protocol_adapter/defaults.rs` only wires adapter default helper modules. TCP bind defaults live in `defaults/bind.rs`; unsupported error construction lives in `defaults/errors.rs`.
+- `protocol_adapter/model.rs` only wires adapter model modules. Inbound bind/spawn models live in `model/inbound.rs`; outbound runtime facts live in `model/outbound.rs`.
+- `protocol_adapter/registry.rs` only owns the registry struct and submodule wiring. Construction, inbound dispatch, outbound dispatch, metadata, support lookup, and validation live in `registry/{build,inbound,outbound,metadata,support,validation}.rs`.
+- `protocol_adapter/registry/tests.rs` only wires registry test modules. Shared fixtures live in `registry/tests/fixtures.rs`; inbound coverage lives in `registry/tests/inbound.rs`; outbound and `block` kernel fact coverage live in `registry/tests/outbound.rs`.
+- `inventory.rs` only owns the runtime-facing `ProtocolInventory` shell. Inbound, TCP, UDP, protocol accessors, metadata, and runtime-fact lookups live in sibling modules.
+- `inventory/protocols.rs` is the only `ProtocolInventory` module that imports concrete protocol crates to expose controlled protocol instances.
+- `inventory/udp.rs` only wires UDP inventory submodules. Single-hop leaf dispatch, relay final-hop dispatch, and packet-path adapter probing live in `inventory/udp/{leaf,relay,packet_path}.rs`.
+
+Runtime modules depend on `ProtocolInventory` operations, not adapter trait object lookup. Adapter resolution stays behind `ProtocolInventory` and `ProtocolRegistry`; protocol-private fields stay with each adapter. Protocol identity and cipher config parsing is adapter-owned: runtime modules receive validated protocol values, or opaque adapter-built keys when they need stable cache identity.
+
+`runtime.rs` owns the `Proxy` shell and run loop. Control-plane handle details live in `runtime/handle.rs`, the spawned runtime handle lives in `runtime/running.rs`, and reload channel bridging lives in `runtime/reload.rs`.
+
+Per-protocol outbound TCP helpers under `src/outbound/<protocol>.rs` are adapter implementation details. Only the owning `src/adapters/<protocol>/tcp.rs` module calls them; generic runtime and protocol-runtime modules dispatch through `ProtocolInventory` and `ProtocolAdapter`.
+
+UDP packet-path cache identity is also adapter-owned. Packet-path runtime may store carrier `cache_key`, datagram `datagram_cache_key`, and parsed protocol values such as `CipherKind`; it must not reconstruct cache identity from raw protocol-private config strings such as Shadowsocks cipher names.
+
+Protocol stream/datagram codecs own protocol crypto/framing state. For example, Mieru inbound data-phase encryption/decryption lives in `protocols/mieru::MieruInboundDataCodec`, and Shadowsocks inbound UDP decode/replay/response encoding lives in `protocols/shadowsocks::ShadowsocksInboundUdpCodec`; `zero-proxy` only wraps those codecs as Tokio stream/socket adapters and must not hold their cipher/session primitives or build/parse protocol frames directly.
+
 ### 内核管道和入站协议管道
 
 代理运行时围绕一个通用内核管道边界组织：

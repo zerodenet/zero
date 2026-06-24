@@ -86,7 +86,7 @@ If you change protocol behavior, config parsing, routing, or runtime wiring, run
   - platform abstraction (socket, listener, stream) -> `crates/traits` + `crates/platform/tokio`
   - transport implementations (TLS, QUIC, WS, etc.) -> `crates/transport`
   - concrete protocol implementations -> `protocols/*`
-- Protocol-private config fields (cert/key, cipher, etc.) are read by the protocol's own adapter, never by the proxy runtime directly
+- Protocol-private config fields (cert/key, cipher, identity/user IDs, etc.) are read and parsed by the protocol's own adapter, never by the proxy runtime directly. Runtime code receives validated protocol values or opaque adapter-built keys, not raw protocol config strings.
 - Port conflict detection is authoritative in config validation (`DuplicateInboundListen`); bind-time errors mean external port occupation only
 - `direct` and `block` target semantics stay inside `zero-engine`; socket-level direct execution stays in `zero-proxy`
 - `mixed` is an inbound multiplexor, not an external protocol, but it is still registered through `MixedAdapter` so runtime code does not special-case it
@@ -101,8 +101,16 @@ If you change protocol behavior, config parsing, routing, or runtime wiring, run
 - Generic UDP flow helpers and session state live under `runtime::udp_flow`; protocol-specific UDP ASSOCIATE handling lives under `protocol_runtime::socks5_udp_associate`, not under generic runtime.
 - Protocol-specific UDP flow request types and manager-driving methods live under `protocol_runtime::udp::flows`; `runtime::udp_dispatch` must not declare a protocol-named `protocol_flows` module.
 - UDP packet-path carrier snapshots live under `protocol_runtime::udp`; generic runtime flow state may reference them but must not declare the carrier enum.
+- UDP packet-path cache identity is adapter-built. Packet-path runtime may store opaque `cache_key` / `datagram_cache_key` values and parsed protocol values such as `CipherKind`, but it must not rebuild cache identity from raw protocol-private fields such as Shadowsocks cipher names.
+- Protocol stream/datagram codecs own protocol crypto/framing state. For example, Mieru inbound data-phase encryption/decryption lives in `protocols/mieru::MieruInboundDataCodec`, and Shadowsocks inbound UDP decode/replay/response encoding lives in `protocols/shadowsocks::ShadowsocksInboundUdpCodec`; `zero-proxy` may wrap these codecs as Tokio stream/socket adapters but must not directly hold their cipher/session primitives or build/parse protocol frames.
+- `crates/proxy/src/adapters/mod.rs`, `crates/proxy/src/inbound/mod.rs`, `crates/proxy/src/outbound/mod.rs`, `crates/proxy/src/protocol_adapter.rs`, `crates/proxy/src/protocol_adapter/registry.rs`, `crates/proxy/src/protocol_adapter/defaults.rs`, `crates/proxy/src/protocol_adapter/model.rs`, `crates/proxy/src/inventory.rs`, and `crates/proxy/src/inventory/udp.rs` are facades. Keep dispatch, validation, support lookup, metadata, adapter default bind/error helpers, adapter inbound/outbound models, and UDP leaf/relay/packet-path logic in their submodules; do not move adapter resolution or concrete helper logic back into facade roots.
+- Adapter default TCP bind logic lives in `protocol_adapter/defaults/bind.rs`; default unsupported error construction lives in `protocol_adapter/defaults/errors.rs`. Adapter inbound bind/spawn models live in `protocol_adapter/model/inbound.rs`; outbound runtime facts live in `protocol_adapter/model/outbound.rs`.
+- Protocol registry unit tests follow the same facade rule: `protocol_adapter/registry/tests.rs` only wires test modules, fixtures live in `registry/tests/fixtures.rs`, inbound registry coverage lives in `registry/tests/inbound.rs`, and outbound/block runtime coverage lives in `registry/tests/outbound.rs`.
+- `ProtocolInventory` is the runtime-facing facade. Runtime code asks it to bind/spawn inbounds, connect TCP leaves/hops, start UDP leaf flows, start UDP relay final hops, and resolve UDP packet-path candidates. Runtime modules must not resolve adapter trait objects directly.
+- `runtime.rs` owns `Proxy` construction and the run loop. Control-plane handle details live in `runtime/handle.rs`; spawned proxy handle details live in `runtime/running.rs`; reload channel bridging lives in `runtime/reload.rs`.
+- Concrete protocol crate accessors on `ProtocolInventory` live only in `inventory/protocols.rs`; inventory dispatch modules must not import protocol crates directly.
 - Port conflicts surface eagerly (before accept loop spawn) via `bind_inbound_listener`.
-- Per-protocol TCP connect logic lives in `crates/proxy/src/outbound/<protocol>.rs` (`connect_tcp` + `apply_tcp_hop`); the adapter in `adapters.rs` extracts the leaf variant and delegates.
+- Per-protocol TCP connect logic lives in `crates/proxy/src/outbound/<protocol>.rs` (`connect_tcp` + `apply_tcp_hop`); only the owning `crates/proxy/src/adapters/<protocol>/tcp.rs` module calls it after extracting the leaf variant.
 - UDP relay-chain datagram-over-packet-path helpers (`resolve_udp_packet_path_chain`, `owned_packet_path_carrier`) in `udp_dispatch/start/` still match on `ResolvedLeafOutbound` — these model carrier+datagram protocol *pairs* (SS→SS, SOCKS5→SS, H2→SS), not per-protocol dispatch.
 
 ## Docs
