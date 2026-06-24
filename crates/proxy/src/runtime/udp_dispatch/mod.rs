@@ -75,6 +75,7 @@ mod types;
 use crate::protocol_runtime::socks5_udp::Socks5UdpRuntime;
 use crate::protocol_runtime::udp::ChainTask;
 use crate::protocol_runtime::udp::ProtocolUdpState;
+pub(crate) use socks5_flow::Socks5RelaySend;
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
 // UdpDispatch.

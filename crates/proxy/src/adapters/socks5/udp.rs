@@ -6,7 +6,8 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::socks5::Socks5Adapter;
 use crate::protocol_adapter::ProtocolAdapter;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, Socks5RelaySend, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
@@ -114,15 +115,20 @@ impl Socks5Adapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let relay = crate::runtime::udp_flow::outbound::Socks5UdpRelay {
-            tag,
-            server,
-            port: *port,
-            username: *username,
-            password: *password,
+        let protocol = ProtocolUdpFlowSnapshot::Socks5 {
+            username: (*username).map(|u| u.to_string()),
+            password: (*password).map(|p| p.to_string()),
         };
         let sent = dispatch
-            .send_socks5(proxy, relay, session, payload)
+            .send_socks5(Socks5RelaySend {
+                proxy,
+                tag,
+                server,
+                port: *port,
+                protocol: &protocol,
+                session,
+                payload,
+            })
             .await
             .map_err(|error| FlowFailure {
                 stage: "udp_upstream_send",
@@ -134,8 +140,7 @@ impl Socks5Adapter {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
                 port: *port,
-                username: (*username).map(|u| u.to_string()),
-                password: (*password).map(|p| p.to_string()),
+                protocol,
             }),
             tx_bytes: sent as u64,
         })

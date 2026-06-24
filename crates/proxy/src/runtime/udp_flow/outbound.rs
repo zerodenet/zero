@@ -15,8 +15,7 @@ pub(crate) enum UdpFlowOutbound {
         tag: String,
         server: String,
         port: u16,
-        username: Option<String>,
-        password: Option<String>,
+        protocol: crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot,
     },
     Datagram {
         tag: String,
@@ -30,14 +29,6 @@ pub(crate) enum UdpFlowOutbound {
         port: u16,
         protocol: crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot,
     },
-}
-
-pub(crate) struct Socks5UdpRelay<'a> {
-    pub(crate) tag: &'a str,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) username: Option<&'a str>,
-    pub(crate) password: Option<&'a str>,
 }
 
 pub(super) struct UdpFlowIndexKeys<'a> {
@@ -82,23 +73,12 @@ impl UdpFlowOutbound {
         }
     }
 
-    pub(crate) fn socks5_relay(&self) -> Option<Socks5UdpRelay<'_>> {
+    pub(crate) fn relay_protocol_snapshot(
+        &self,
+    ) -> Option<&crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot> {
         match self {
-            Self::Relay {
-                tag,
-                server,
-                port,
-                username,
-                password,
-            } => Some(Socks5UdpRelay {
-                tag,
-                server,
-                port: *port,
-                username: username.as_deref(),
-                password: password.as_deref(),
-            }),
-            Self::Direct { .. } => None,
-            Self::Datagram { .. } | Self::StreamPacket { .. } => None,
+            Self::Relay { protocol, .. } => Some(protocol),
+            Self::Direct { .. } | Self::Datagram { .. } | Self::StreamPacket { .. } => None,
         }
     }
 

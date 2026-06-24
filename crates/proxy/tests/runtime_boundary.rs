@@ -2479,10 +2479,13 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
     }
 
     for forbidden in [
+        "Socks5 {",
         "Shadowsocks {",
         "Hysteria2 {",
         "Trojan {",
         "Mieru {",
+        "username: Option<String>",
+        "password: Option<String>",
         "shadowsocks::CipherKind",
         "UdpPacketPathCarrier",
     ] {

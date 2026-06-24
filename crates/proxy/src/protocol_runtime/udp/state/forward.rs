@@ -34,6 +34,13 @@ impl ProtocolUdpState {
         };
 
         match snapshot {
+            ProtocolUdpFlowSnapshot::Socks5 { .. } => Err(FlowFailure {
+                stage: "udp_protocol_forward",
+                error: EngineError::Io(std::io::Error::other(
+                    "SOCKS5 relay flows are handled by generic UDP dispatch",
+                )),
+                upstream: None,
+            }),
             #[cfg(feature = "shadowsocks")]
             ProtocolUdpFlowSnapshot::Shadowsocks {
                 password,
