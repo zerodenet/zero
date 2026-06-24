@@ -369,10 +369,12 @@ async fn execute_panel_command(service: &impl CommandService, cmd: &serde_json::
             };
             let port = params["port"].as_u64().unwrap_or(443) as u16;
             let protocol = params["protocol"].as_str().map(|s| s.to_owned());
+            let inbound_tag = params["inbound_tag"].as_str().map(|s| s.to_owned());
             CommandRequest::DiagnosticsTraceRoute(DiagnosticsTraceRouteCommand {
                 target,
                 port,
                 protocol,
+                inbound_tag,
             })
         }
         // Intentionally NOT exposed remotely:
@@ -420,4 +422,58 @@ struct Heartbeat {
     active_flows: usize,
     bytes_up: u64,
     bytes_down: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use zero_api::{CommandResponse, CommandService};
+
+    use super::*;
+
+    #[derive(Clone, Default)]
+    struct CaptureCommandService {
+        command: Arc<Mutex<Option<CommandRequest>>>,
+    }
+
+    impl CommandService for CaptureCommandService {
+        fn execute(&self, command: CommandRequest) -> zero_api::ApiResult<CommandResponse> {
+            *self.command.lock().expect("capture command lock poisoned") = Some(command);
+            Ok(CommandResponse::accepted())
+        }
+    }
+
+    #[tokio::test]
+    async fn panel_trace_route_command_preserves_inbound_tag() {
+        let service = CaptureCommandService::default();
+        let captured = service.command.clone();
+        let command = serde_json::json!({
+            "method": "diagnostics.trace_route",
+            "params": {
+                "target": "example.com",
+                "port": 8443,
+                "protocol": "udp",
+                "inbound_tag": "socks-in"
+            }
+        });
+
+        execute_panel_command(&service, &command).await;
+
+        let captured = captured
+            .lock()
+            .expect("capture command lock poisoned")
+            .clone()
+            .expect("panel command should execute");
+
+        assert_eq!(
+            captured,
+            CommandRequest::DiagnosticsTraceRoute(DiagnosticsTraceRouteCommand {
+                target: "example.com".to_owned(),
+                port: 8443,
+                protocol: Some("udp".to_owned()),
+                inbound_tag: Some("socks-in".to_owned()),
+            })
+        );
+    }
 }
