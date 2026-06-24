@@ -30,7 +30,7 @@ fn spawn_vmess_udp_relay(
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
     let (recv_tx, _) = broadcast::channel::<vmess::VmessUdpPacket>(32);
     let recv_tx_bg = recv_tx.clone();
-    let vmess_outbound = proxy.protocols.vmess_outbound_protocol();
+    let vmess_outbound = vmess::VmessOutbound;
 
     proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
 
@@ -158,7 +158,7 @@ async fn establish_vmess_udp_upstream_over_stream(
 ) -> Result<(VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>), EngineError> {
     let initial_packet =
         <vmess::VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::encode_udp_packet(
-            &proxy.protocols.vmess_outbound_protocol(),
+            &vmess::VmessOutbound,
             &vmess::VmessUdpPacketTarget {
                 address: &session.target,
                 port: session.port,
@@ -168,7 +168,7 @@ async fn establish_vmess_udp_upstream_over_stream(
 
     let vmess_stream = vmess::VmessAeadStream::establish_udp_outbound(
         stream,
-        &proxy.protocols.vmess_outbound_protocol(),
+        &vmess::VmessOutbound,
         session,
         &uuid,
         cipher,
@@ -190,7 +190,7 @@ async fn establish_vmess_udp_upstream(
 ) -> Result<(VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>), EngineError> {
     let initial_packet =
         <vmess::VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::encode_udp_packet(
-            &request.proxy.protocols.vmess_outbound_protocol(),
+            &vmess::VmessOutbound,
             &vmess::VmessUdpPacketTarget {
                 address: &request.session.target,
                 port: request.session.port,
@@ -324,7 +324,7 @@ async fn establish_vmess_udp_upstream(
 
     let vmess_stream = vmess::VmessAeadStream::establish_udp_outbound(
         stream,
-        &request.proxy.protocols.vmess_outbound_protocol(),
+        &vmess::VmessOutbound,
         request.session,
         &request.uuid,
         request.cipher,
@@ -430,7 +430,7 @@ impl VmessUdpOutboundManager {
         let packet = <vmess::VmessOutbound as UdpPacketFraming<
             vmess::VmessUdpPacketTarget,
         >>::encode_udp_packet(
-            &proxy.protocols.vmess_outbound_protocol(),
+            &vmess::VmessOutbound,
             &vmess::VmessUdpPacketTarget {
                 address: target,
                 port,
@@ -486,7 +486,7 @@ impl VmessUdpOutboundManager {
             let packet = <vmess::VmessOutbound as UdpPacketFraming<
                 vmess::VmessUdpPacketTarget,
             >>::encode_udp_packet(
-                &request.proxy.protocols.vmess_outbound_protocol(),
+                &vmess::VmessOutbound,
                 &vmess::VmessUdpPacketTarget {
                     address: &request.target,
                     port: request.port,

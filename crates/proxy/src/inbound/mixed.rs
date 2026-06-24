@@ -24,10 +24,9 @@ pub(crate) async fn run_mixed_listener_with_bound(
     let mut connections = JoinSet::new();
 
     let socks5_users = inbound.protocol.socks5_users().to_vec();
-    let socks5_handler =
-        Socks5InboundHandler::new(proxy.protocols.socks5_inbound_protocol(), socks5_users);
+    let socks5_handler = Socks5InboundHandler::new(socks5::Socks5Inbound, socks5_users);
     let http_handler = HttpConnectInboundHandler {
-        http_connect_inbound: proxy.protocols.http_connect_inbound_protocol(),
+        http_connect_inbound: http_connect::HttpConnectInbound,
     };
 
     info!(

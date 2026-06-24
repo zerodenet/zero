@@ -1,13 +1,12 @@
 use zero_engine::ResolvedLeafOutbound;
 
-use crate::protocol_adapter::ProtocolRegistry;
 use crate::runtime::orchestration::TcpPathCategory;
 
 use super::fixtures::{compiled_in_outbound_leaves, outbound_leaf_name};
 
 #[test]
 fn compiled_in_outbound_leaf_variants_have_expected_adapter_claims() {
-    let registry = ProtocolRegistry::build();
+    let registry = crate::register::protocol_registry();
 
     for (leaf, expected_claims) in compiled_in_outbound_leaves() {
         let claim_count = registry
@@ -34,7 +33,7 @@ fn compiled_in_outbound_leaf_variants_have_expected_adapter_claims() {
 
 #[test]
 fn block_outbound_leaf_is_kernel_fact_not_adapter_protocol() {
-    let registry = ProtocolRegistry::build();
+    let registry = crate::register::protocol_registry();
     let leaf = ResolvedLeafOutbound::Block {
         tag: Some("blocked"),
     };

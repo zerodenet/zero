@@ -79,7 +79,7 @@ pub(crate) async fn run_http_connect_listener_with_bound(
     let mut connections = JoinSet::new();
 
     let handler = HttpConnectInboundHandler {
-        http_connect_inbound: proxy.protocols.http_connect_inbound_protocol(),
+        http_connect_inbound: http_connect::HttpConnectInbound,
     };
 
     info!(

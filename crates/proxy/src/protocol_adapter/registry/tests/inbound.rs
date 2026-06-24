@@ -1,10 +1,8 @@
-use crate::protocol_adapter::ProtocolRegistry;
-
 use super::fixtures::{compiled_in_inbound_configs, inbound_protocol_name};
 
 #[test]
 fn compiled_in_inbound_variants_have_exactly_one_registered_adapter() {
-    let registry = ProtocolRegistry::build();
+    let registry = crate::register::protocol_registry();
 
     for config in compiled_in_inbound_configs() {
         let claim_count = registry

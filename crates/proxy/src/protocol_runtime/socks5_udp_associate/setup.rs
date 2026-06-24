@@ -14,7 +14,7 @@ pub(super) struct AssociateSetup {
 }
 
 pub(super) async fn setup_association<S>(
-    proxy: &Proxy,
+    _proxy: &Proxy,
     client: &mut MeteredStream<S>,
     inbound_tag: &str,
 ) -> Result<AssociateSetup, EngineError>
@@ -26,9 +26,7 @@ where
     let relay_addr = relay.local_addr()?;
     let relay_bind = address_from_socket_addr(relay_addr);
 
-    proxy
-        .protocols
-        .socks5_inbound_protocol()
+    socks5::Socks5Inbound
         .send_response_with_bound(
             client,
             Socks5Reply::Succeeded,

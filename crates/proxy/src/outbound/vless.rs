@@ -1,4 +1,4 @@
-//! VLESS outbound — TCP connect and UDP types.
+//! VLESS outbound -?TCP connect and UDP types.
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
 //! so the runtime dispatches via the `ProtocolAdapter` trait. The VLESS UDP
@@ -101,9 +101,7 @@ pub(crate) async fn connect_tcp(
 
     if is_reality {
         use zero_traits::DeferredTcpTunnelProtocol;
-        proxy
-            .protocols
-            .vless_outbound_protocol()
+        vless::VlessOutbound
             .send_deferred_tcp_tunnel_request(
                 &mut metered,
                 &vless::VlessFlowTcpTunnelTarget {
@@ -121,7 +119,7 @@ pub(crate) async fn connect_tcp(
     } else {
         use zero_traits::TcpTunnelProtocol;
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessFlowTcpTunnelTarget>>::establish_tcp_tunnel(
-            &proxy.protocols.vless_outbound_protocol(),
+            &vless::VlessOutbound,
             &mut metered,
             &vless::VlessFlowTcpTunnelTarget {
                 session,
@@ -161,7 +159,7 @@ pub(crate) struct VlessTcpConnectRequest<'a> {
 /// Unlike [`connect_tcp`] this does not dial. Flow (Vision) uses the deferred
 /// flow target; non-flow uses the plain target.
 pub(crate) async fn apply_tcp_hop(
-    proxy: &Proxy,
+    _proxy: &Proxy,
     mut stream: TcpRelayStream,
     session: &Session,
     uuid: [u8; 16],
@@ -170,7 +168,7 @@ pub(crate) async fn apply_tcp_hop(
     use zero_traits::TcpTunnelProtocol;
     if flow.is_some() {
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessFlowTcpTunnelTarget>>::establish_tcp_tunnel(
-            &proxy.protocols.vless_outbound_protocol(),
+            &vless::VlessOutbound,
             &mut stream,
             &vless::VlessFlowTcpTunnelTarget {
                 session,
@@ -182,7 +180,7 @@ pub(crate) async fn apply_tcp_hop(
         .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
     } else {
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessTcpTunnelTarget>>::establish_tcp_tunnel(
-            &proxy.protocols.vless_outbound_protocol(),
+            &vless::VlessOutbound,
             &mut stream,
             &vless::VlessTcpTunnelTarget {
                 session,

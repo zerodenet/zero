@@ -107,14 +107,14 @@ impl MuxConnectionPool {
     /// Open a UDP MUX sub-stream (SIP022 Mux.Cool NETWORK_UDP).
     ///
     /// Per Xray-core Mux.Cool semantics: UDP MUX sub-streams are
-    /// connectionless — each STATUS_KEEP frame carries its own
+    /// connectionless -?each STATUS_KEEP frame carries its own
     /// `[network:1][port:2][atyp:1][address…]` prefix, so one UDP
     /// sub-stream can serve all targets through this MUX connection.
     ///
-    /// Returns `(session_id, write_tx, down_rx)` — a tuple of:
-    ///   - `session_id` — MUX session id for response dispatch
-    ///   - `write_tx` — unbounded sender, submit raw VLESS UDP packets
-    ///   - `down_rx` — unbounded receiver for responses
+    /// Returns `(session_id, write_tx, down_rx)` -?a tuple of:
+    ///   - `session_id` -?MUX session id for response dispatch
+    ///   - `write_tx` -?unbounded sender, submit raw VLESS UDP packets
+    ///   - `down_rx` -?unbounded receiver for responses
     pub async fn open_udp_stream(
         &self,
         request: VlessMuxOpenRequest<'_>,
@@ -157,7 +157,7 @@ impl MuxConnectionPool {
             .send(req)
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
 
-        // Upload relay: raw VLESS UDP packets → encrypt → MUX frame → write_tx
+        // Upload relay: raw VLESS UDP packets -?encrypt -?MUX frame -?write_tx
         let write = conn.write_tx.clone();
         let conn_drop = conn.clone();
         let crypto = conn.crypto.clone();
@@ -215,7 +215,7 @@ impl MuxConnectionPool {
             .send(req)
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
 
-        // Spawn upload relay: up_rx → encrypt → MUX frame → write_tx
+        // Spawn upload relay: up_rx -?encrypt -?MUX frame -?write_tx
         let write = conn.write_tx.clone();
         let conn_drop = conn.clone();
         let crypto = conn.crypto.clone();
@@ -271,9 +271,7 @@ impl MuxConnectionPool {
         let stream: TcpRelayStream = connector.connect(socket, &key.server, key.port).await?;
 
         let mut metered = MeteredStream::new(stream);
-        let _mux = proxy
-            .protocols
-            .vless_outbound_protocol()
+        let _mux = vless::VlessOutbound
             .establish_mux(&mut metered, &key.uuid)
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
@@ -286,7 +284,7 @@ impl MuxConnectionPool {
         let crypto: Option<Arc<Mutex<vless::MuxCrypto>>> =
             Some(Arc::new(Mutex::new(vless::MuxCrypto::new(&key.uuid))));
 
-        // Write relay: frames → TCP
+        // Write relay: frames -?TCP
         tokio::spawn(async move {
             use tokio::io::AsyncWriteExt;
             let mut w = tcp_write;
@@ -303,7 +301,7 @@ impl MuxConnectionPool {
         let streams_for_relay = streams.clone();
         let streams_for_pool = streams;
 
-        // Read relay: TCP → dispatch MUX frames → decrypt → stream channels
+        // Read relay: TCP -?dispatch MUX frames -?decrypt -?stream channels
         let crypto_for_read = crypto.clone();
         tokio::spawn(async move {
             use tokio::io::AsyncReadExt;

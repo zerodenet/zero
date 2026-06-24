@@ -32,7 +32,7 @@ fn spawn_vless_udp_relay(
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
     let (recv_tx, _) = broadcast::channel::<vless::VlessUdpPacket>(32);
     let recv_tx_bg = recv_tx.clone();
-    let vless_outbound = proxy.protocols.vless_outbound_protocol();
+    let vless_outbound = vless::VlessOutbound;
 
     proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
 
@@ -96,7 +96,7 @@ async fn establish_vless_udp_upstream_over_stream(
 ) -> Result<(VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>), EngineError> {
     let initial_packet =
         <vless::VlessOutbound as UdpPacketFraming<vless::VlessUdpPacketTarget>>::encode_udp_packet(
-            &proxy.protocols.vless_outbound_protocol(),
+            &vless::VlessOutbound,
             &vless::VlessUdpPacketTarget {
                 address: &session.target,
                 port: session.port,
@@ -107,7 +107,7 @@ async fn establish_vless_udp_upstream_over_stream(
     let mut metered = MeteredStream::new(stream);
 
     <vless::VlessOutbound as UdpPacketTunnelProtocol<vless::VlessUdpPacketTunnelTarget>>::establish_udp_packet_tunnel(
-        &proxy.protocols.vless_outbound_protocol(),
+        &vless::VlessOutbound,
         &mut metered,
         &vless::VlessUdpPacketTunnelTarget {
             session,
@@ -137,7 +137,7 @@ async fn establish_vless_udp_upstream(
 ) -> Result<(VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>), EngineError> {
     let initial_packet =
         <vless::VlessOutbound as UdpPacketFraming<vless::VlessUdpPacketTarget>>::encode_udp_packet(
-            &proxy.protocols.vless_outbound_protocol(),
+            &vless::VlessOutbound,
             &vless::VlessUdpPacketTarget {
                 address: &session.target,
                 port: session.port,
@@ -145,7 +145,7 @@ async fn establish_vless_udp_upstream(
             },
         )?;
 
-    // QUIC uses UDP — handle before TCP connect entirely
+    // QUIC uses UDP -?handle before TCP connect entirely
     if let Some(t) = transport {
         if let Some(quic) = t.quic {
             let server_name = quic.server_name.as_deref().unwrap_or(server);
@@ -156,7 +156,7 @@ async fn establish_vless_udp_upstream(
             <vless::VlessOutbound as UdpPacketTunnelProtocol<
                 vless::VlessUdpPacketTunnelTarget,
             >>::establish_udp_packet_tunnel(
-                &proxy.protocols.vless_outbound_protocol(),
+                &vless::VlessOutbound,
                 &mut metered,
                 &vless::VlessUdpPacketTunnelTarget {
                     session,
@@ -203,7 +203,7 @@ async fn establish_vless_udp_upstream(
     establish_vless_udp_upstream_over_stream(proxy, session, uuid, initial_payload, stream).await
 }
 
-/// VLESS UDP outbound manager — manages per-target upstream connections.
+/// VLESS UDP outbound manager -?manages per-target upstream connections.
 ///
 /// Response bridge tasks are spawned into the shared `chain_tasks` JoinSet
 /// in [`UdpDispatch`], so all chain outbound responses are polled uniformly.
@@ -250,7 +250,7 @@ impl VlessUdpOutboundManager {
                 let packet = <::vless::VlessOutbound as UdpPacketFraming<
                     ::vless::VlessUdpPacketTarget,
                 >>::encode_udp_packet(
-                    &request.proxy.protocols.vless_outbound_protocol(),
+                    &vless::VlessOutbound,
                     &::vless::VlessUdpPacketTarget {
                         address: &request.session.target,
                         port: request.session.port,
@@ -375,7 +375,7 @@ impl VlessUdpOutboundManager {
         let packet = <vless::VlessOutbound as UdpPacketFraming<
             vless::VlessUdpPacketTarget,
         >>::encode_udp_packet(
-            &proxy.protocols.vless_outbound_protocol(),
+            &vless::VlessOutbound,
             &vless::VlessUdpPacketTarget {
                 address: target,
                 port,
@@ -435,7 +435,7 @@ impl VlessUdpOutboundManager {
             let packet = <vless::VlessOutbound as UdpPacketFraming<
                 vless::VlessUdpPacketTarget,
             >>::encode_udp_packet(
-                &request.proxy.protocols.vless_outbound_protocol(),
+                &vless::VlessOutbound,
                 &vless::VlessUdpPacketTarget {
                     address: &request.target,
                     port: request.port,

@@ -29,9 +29,7 @@ pub(crate) async fn connect_tcp(
         .await?;
     let mut upstream = MeteredStream::new(upstream);
 
-    proxy
-        .protocols
-        .socks5_outbound_protocol()
+    socks5::Socks5Outbound
         .establish_tcp_tunnel(
             &mut upstream,
             &socks5::Socks5TcpTunnelTarget {
@@ -51,14 +49,12 @@ pub(crate) async fn connect_tcp(
 /// Unlike [`connect_tcp`] this does not dial; the stream is already
 /// connected to the SOCKS5 server through the preceding hop.
 pub(crate) async fn apply_tcp_hop(
-    proxy: &Proxy,
+    _proxy: &Proxy,
     mut stream: TcpRelayStream,
     session: &Session,
     auth: Option<(&str, &str)>,
 ) -> Result<TcpRelayStream, EngineError> {
-    proxy
-        .protocols
-        .socks5_outbound_protocol()
+    socks5::Socks5Outbound
         .establish_tcp_tunnel(
             &mut stream,
             &socks5::Socks5TcpTunnelTarget {

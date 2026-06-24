@@ -1,4 +1,4 @@
-//! Trojan outbound — TCP connect.
+//! Trojan outbound -?TCP connect.
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
 //! so the runtime dispatches via the `ProtocolAdapter` trait. UDP stream-packet
@@ -53,9 +53,7 @@ pub(crate) async fn connect_tcp(
     )
     .await?;
     let mut metered = MeteredStream::new(tls_stream);
-    proxy
-        .protocols
-        .trojan_outbound_protocol()
+    trojan::TrojanOutbound
         .establish_tcp_tunnel(
             &mut metered,
             &trojan::TrojanTcpTunnelTarget { session, password },
@@ -88,14 +86,12 @@ pub(crate) struct TrojanTcpConnectRequest<'a> {
 /// Apply a Trojan tunnel handshake over an existing stream (relay hop).
 /// Unlike [`connect_tcp`] this does not dial.
 pub(crate) async fn apply_tcp_hop(
-    proxy: &Proxy,
+    _proxy: &Proxy,
     mut stream: TcpRelayStream,
     session: &Session,
     password: &str,
 ) -> Result<TcpRelayStream, EngineError> {
-    proxy
-        .protocols
-        .trojan_outbound_protocol()
+    trojan::TrojanOutbound
         .establish_tcp_tunnel(
             &mut stream,
             &trojan::TrojanTcpTunnelTarget { session, password },

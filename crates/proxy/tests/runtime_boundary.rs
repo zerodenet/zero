@@ -1736,28 +1736,14 @@ fn protocol_inventory_keeps_protocol_instances_private() {
         );
     }
 
-    for required in [
-        "fn direct_connector(&self)",
-        "fn socks5_inbound_protocol(&self)",
-        "fn http_connect_inbound_protocol(&self)",
-        "fn vless_inbound_protocol(&self)",
-        "fn vless_outbound_protocol(&self)",
-        "fn shadowsocks_outbound_protocol(&self)",
-        "fn trojan_outbound_protocol(&self)",
-        "fn vmess_outbound_protocol(&self)",
-    ] {
-        assert!(
-            protocols.contains(required),
-            "src/inventory/protocols.rs should expose controlled protocol accessors; missing `{required}`"
-        );
-    }
+    assert!(
+        protocols.contains("fn direct_connector(&self)"),
+        "src/inventory/protocols.rs should keep the neutral direct connector helper"
+    );
 }
 
 #[test]
-fn inventory_protocol_accessors_live_in_protocols_module() {
-    let root = read("src/inventory.rs");
-    let protocols = read("src/inventory/protocols.rs");
-
+fn inventory_does_not_expose_concrete_protocol_accessors() {
     let protocol_access_patterns = [
         "use http_connect::",
         "use shadowsocks::",
@@ -1765,7 +1751,6 @@ fn inventory_protocol_accessors_live_in_protocols_module() {
         "use trojan::",
         "use vless::",
         "use vmess::",
-        "fn direct_connector(&self)",
         "fn socks5_inbound_protocol(&self)",
         "fn socks5_outbound_protocol(&self)",
         "fn http_connect_inbound_protocol(&self)",
@@ -1776,27 +1761,13 @@ fn inventory_protocol_accessors_live_in_protocols_module() {
         "fn vmess_outbound_protocol(&self)",
     ];
 
-    for forbidden in protocol_access_patterns {
-        assert!(
-            !root.contains(forbidden),
-            "src/inventory.rs should keep protocol accessors and concrete protocol imports in src/inventory/protocols.rs; found `{forbidden}`"
-        );
-        assert!(
-            protocols.contains(forbidden),
-            "src/inventory/protocols.rs should own protocol accessor/import `{forbidden}`"
-        );
-    }
-
     for path in rust_sources_under("src/inventory") {
         let source = relative(&path);
-        if source == "src/inventory/protocols.rs" {
-            continue;
-        }
         let content = fs::read_to_string(&path).expect("read rust source");
         for forbidden in protocol_access_patterns {
             assert!(
                 !content.contains(forbidden),
-                "{source} should not import concrete protocol crates or define protocol accessors; keep `{forbidden}` in src/inventory/protocols.rs"
+                "{source} should not import concrete protocol crates or expose concrete protocol accessors; found `{forbidden}`"
             );
         }
     }
@@ -2814,10 +2785,11 @@ fn protocol_registry_root_is_facade_only() {
 }
 
 #[test]
-fn protocol_registry_build_lives_outside_adapters_root() {
+fn protocol_registry_build_lives_in_register_surface() {
     let adapters = read("src/adapters/mod.rs");
     let registry = read("src/protocol_adapter/registry.rs");
     let build = read("src/protocol_adapter/registry/build.rs");
+    let register = read("src/register.rs");
     let inventory = read("src/inventory.rs");
 
     assert!(
@@ -2826,22 +2798,27 @@ fn protocol_registry_build_lives_outside_adapters_root() {
     );
     assert!(
         !registry.contains("pub(crate) fn build() -> Self"),
-        "src/protocol_adapter/registry.rs should keep registry construction in src/protocol_adapter/registry/build.rs"
+        "src/protocol_adapter/registry.rs should keep registry construction out of the registry facade"
     );
     assert!(
-        build.contains("pub(crate) fn build() -> Self"),
-        "src/protocol_adapter/registry/build.rs should own registry construction"
+        !build.contains("pub(crate) fn build() -> Self"),
+        "src/protocol_adapter/registry/build.rs should only own the low-level register helper"
     );
     assert!(
-        inventory.contains("ProtocolRegistry::build()"),
-        "src/inventory.rs should build the registry through protocol_adapter::registry"
+        register.contains("pub(crate) fn protocol_registry() -> ProtocolRegistry"),
+        "src/register.rs should own compiled protocol registry construction"
+    );
+    assert!(
+        inventory.contains("crate::register::protocol_registry()"),
+        "src/inventory.rs should build the registry through the register surface"
     );
 }
 
 #[test]
-fn protocol_registry_adapter_imports_live_in_build_module() {
+fn protocol_adapter_imports_live_in_register_surface() {
     let registry = read("src/protocol_adapter/registry.rs");
     let build = read("src/protocol_adapter/registry/build.rs");
+    let register = read("src/register.rs");
 
     for adapter in [
         "DirectAdapter",
@@ -2856,18 +2833,18 @@ fn protocol_registry_adapter_imports_live_in_build_module() {
         "VmessAdapter",
     ] {
         assert!(
-            !registry.contains(adapter),
-            "src/protocol_adapter/registry.rs should keep concrete adapter imports in src/protocol_adapter/registry/build.rs; found `{adapter}`"
+            !registry.contains(adapter) && !build.contains(adapter),
+            "protocol_adapter registry modules should keep concrete adapter imports in src/register.rs; found `{adapter}`"
         );
         assert!(
-            build.contains(adapter),
-            "src/protocol_adapter/registry/build.rs should own concrete adapter import `{adapter}`"
+            register.contains(adapter),
+            "src/register.rs should own concrete adapter import `{adapter}`"
         );
     }
 }
 
 #[test]
-fn protocol_registry_register_lives_in_build_module() {
+fn protocol_registry_register_helper_stays_in_build_module() {
     let registry = read("src/protocol_adapter/registry.rs");
     let build = read("src/protocol_adapter/registry/build.rs");
 
@@ -2877,7 +2854,7 @@ fn protocol_registry_register_lives_in_build_module() {
     );
     assert!(
         build.contains("pub(crate) fn register("),
-        "src/protocol_adapter/registry/build.rs should own the register helper used by build()"
+        "src/protocol_adapter/registry/build.rs should own the register helper used by src/register.rs"
     );
 }
 
@@ -3265,7 +3242,6 @@ fn inventory_root_is_facade_only() {
     for expected in [
         "mod inbound;",
         "mod metadata;",
-        "mod protocols;",
         "mod runtime;",
         "mod tcp;",
         "mod udp;",

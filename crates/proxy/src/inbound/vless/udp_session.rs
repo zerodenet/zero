@@ -23,10 +23,7 @@ impl Proxy {
     where
         S: ClientStream,
     {
-        self.protocols
-            .vless_inbound_protocol()
-            .send_response(&mut client)
-            .await?;
+        vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(session.id, client.drain_traffic());
 
         let mut dispatch = UdpDispatch::new(inbound_tag).await?;
@@ -48,7 +45,7 @@ impl Proxy {
             // Split dispatch into disjoint borrows so select! can pin
             // all futures simultaneously without borrow conflicts.
             // VLESS chain responses now flow through chain_tasks.JoinSet
-            // alongside SS/H2/Trojan/Mieru — no separate vless_mgr poll.
+            // alongside SS/H2/Trojan/Mieru -?no separate vless_mgr poll.
             let (direct_sock, socks5_up, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
@@ -131,7 +128,7 @@ impl Proxy {
                     }
                 }
                 upstream = recv_upstream_packet(socks5_up, &mut upstream_buffer) => {
-                    // SOCKS5 chain upstream response — re-encode as VLESS.
+                    // SOCKS5 chain upstream response -?re-encode as VLESS.
                     use socks5::parse_udp_packet;
                     match upstream {
                         Ok(read) => {
@@ -149,7 +146,7 @@ impl Proxy {
                     }
                 }
                 _ = wait_for_upstream_idle(socks5_idle) => {
-                    // SOCKS5 upstream idle timeout — association will be
+                    // SOCKS5 upstream idle timeout -?association will be
                     // closed by finish_all() on session end.
                 }
                 Some(chain_result) = chain_tasks.join_next() => {

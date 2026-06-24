@@ -37,9 +37,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
             .connect_host(server, port, proxy.resolver.as_ref())
             .await?;
         let mut control = MeteredStream::new(control);
-        let (relay_address, relay_port) = proxy
-            .protocols
-            .socks5_outbound_protocol()
+        let (relay_address, relay_port) = socks5::Socks5Outbound
             .establish_udp_relay(
                 &mut control,
                 &socks5::Socks5UdpRelayTarget {

@@ -99,7 +99,7 @@ pub(crate) async fn run_socks5_listener_with_bound(
 
     let users = inbound.protocol.socks5_users().to_vec();
     let handler = Socks5InboundHandler {
-        socks5_inbound: proxy.protocols.socks5_inbound_protocol(),
+        socks5_inbound: socks5::Socks5Inbound,
         users,
     };
 

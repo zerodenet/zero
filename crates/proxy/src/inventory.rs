@@ -15,7 +15,7 @@ pub struct ProtocolInventory {
 impl Default for ProtocolInventory {
     fn default() -> Self {
         Self {
-            registry: ProtocolRegistry::build(),
+            registry: crate::register::protocol_registry(),
         }
     }
 }

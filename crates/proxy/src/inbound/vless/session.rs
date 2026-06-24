@@ -218,9 +218,7 @@ impl Proxy {
     {
         let mut metered = MeteredStream::new(RecordingStream::new(client));
         let auth = ConfiguredVlessUsers { users };
-        let result = self
-            .protocols
-            .vless_inbound_protocol()
+        let result = vless::VlessInbound
             .accept_tcp_with_auth_and_id(&mut metered, &auth)
             .await;
 
@@ -250,7 +248,7 @@ impl Proxy {
                 .await
         } else {
             let handler = VlessInboundHandler {
-                vless_inbound: self.protocols.vless_inbound_protocol(),
+                vless_inbound: vless::VlessInbound,
             };
             let source_addr = client.peer_addr().ok();
             serve_inbound(

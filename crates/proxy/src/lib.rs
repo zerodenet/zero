@@ -13,6 +13,7 @@ mod process_lookup;
 mod protocol_adapter;
 mod protocol_capability;
 mod protocol_runtime;
+mod register;
 mod runtime;
 mod transport;
 

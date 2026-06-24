@@ -35,10 +35,7 @@ impl Proxy {
             STATUS_NEW,
         };
 
-        self.protocols
-            .vless_inbound_protocol()
-            .send_response(&mut client)
-            .await?;
+        vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
 
         let mut mux = MuxServer::with_encryption(&uuid);
@@ -57,7 +54,7 @@ impl Proxy {
                     };
                     match frame.status {
                         STATUS_KEEP_ALIVE => {
-                            // Keep-alive — ignore
+                            // Keep-alive -?ignore
                             continue;
                         }
                         STATUS_NEW => {
@@ -159,7 +156,7 @@ impl Proxy {
                             if let Some(tx) = up_senders.get(&frame.session_id) {
                                 let _ = tx.send(frame.payload);
                             } else {
-                                // Data for unknown stream — ignore or send END
+                                // Data for unknown stream -?ignore or send END
                                 let _ =
                                     mux.write_end(&mut client, frame.session_id).await;
                             }
@@ -171,7 +168,7 @@ impl Proxy {
                                 "MUX stream ended by client");
                         }
                         _ => {
-                            // Unknown status — ignore
+                            // Unknown status -?ignore
                         }
                     }
                 }
@@ -180,7 +177,7 @@ impl Proxy {
                     if let Some((sid, payload)) = down {
                         if up_senders.contains_key(&sid) {
                             if payload.is_empty() {
-                                // Upstream closed — send END frame and clean up
+                                // Upstream closed -?send END frame and clean up
                                 let _ = mux.write_end(&mut client, sid).await;
                                 up_senders.remove(&sid);
                             } else {

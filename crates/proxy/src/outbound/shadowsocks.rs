@@ -1,4 +1,4 @@
-//! Shadowsocks outbound — TCP connect.
+//! Shadowsocks outbound -?TCP connect.
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
 //! so the runtime dispatches via the `ProtocolAdapter` trait. UDP datagram
@@ -38,7 +38,7 @@ pub(crate) async fn connect_tcp(
     let ss_session = <shadowsocks::ShadowsocksOutbound as TcpSessionProtocol<
         shadowsocks::ShadowsocksTcpTarget,
     >>::establish_tcp_session(
-        &proxy.protocols.shadowsocks_outbound_protocol(),
+        &shadowsocks::ShadowsocksOutbound,
         &mut metered,
         &shadowsocks::ShadowsocksTcpTarget {
             session,

@@ -1,4 +1,4 @@
-# 架构
+﻿# 架构
 
 仓库可以从以下分层来理解。
 
@@ -70,10 +70,10 @@ Adapters call `crate::inbound::run_<protocol>_listener_with_bound`; `Proxy` does
 - `protocol_adapter.rs` only re-exports the crate-private adapter trait, adapter models, and registry.
 - `protocol_adapter/defaults.rs` only wires adapter default helper modules. TCP bind defaults live in `defaults/bind.rs`; unsupported error construction lives in `defaults/errors.rs`.
 - `protocol_adapter/model.rs` only wires adapter model modules. Inbound bind/spawn models live in `model/inbound.rs`; outbound runtime facts live in `model/outbound.rs`.
-- `protocol_adapter/registry.rs` only owns the registry struct and submodule wiring. Construction, inbound dispatch, outbound dispatch, metadata, support lookup, and validation live in `registry/{build,inbound,outbound,metadata,support,validation}.rs`.
+- `protocol_adapter/registry.rs` only owns the registry struct and submodule wiring. The low-level register helper lives in `registry/build.rs`; compiled protocol collection lives in `src/register.rs`; inbound dispatch, outbound dispatch, metadata, support lookup, and validation live in `registry/{inbound,outbound,metadata,support,validation}.rs`.
 - `protocol_adapter/registry/tests.rs` only wires registry test modules. Shared fixtures live in `registry/tests/fixtures.rs`; inbound coverage lives in `registry/tests/inbound.rs`; outbound and `block` kernel fact coverage live in `registry/tests/outbound.rs`.
-- `inventory.rs` only owns the runtime-facing `ProtocolInventory` shell. Inbound, TCP, UDP, protocol accessors, metadata, and runtime-fact lookups live in sibling modules.
-- `inventory/protocols.rs` is the only `ProtocolInventory` module that imports concrete protocol crates to expose controlled protocol instances.
+- `inventory.rs` only owns the runtime-facing `ProtocolInventory` shell. Inbound, TCP, UDP, metadata, direct connector access, and runtime-fact lookups live in sibling modules.
+- `inventory/protocols.rs` exposes only neutral proxy-owned protocol helpers such as the direct connector; concrete protocol object construction stays in protocol-local integration code or the compiled registration surface.
 - `inventory/udp.rs` only wires UDP inventory submodules. Single-hop leaf dispatch, relay final-hop dispatch, and packet-path adapter probing live in `inventory/udp/{leaf,relay,packet_path}.rs`.
 
 Runtime modules depend on `ProtocolInventory` operations, not adapter trait object lookup. Adapter resolution stays behind `ProtocolInventory` and `ProtocolRegistry`; protocol-private fields stay with each adapter. Protocol identity and cipher config parsing is adapter-owned: runtime modules receive validated protocol values, or opaque adapter-built keys when they need stable cache identity.

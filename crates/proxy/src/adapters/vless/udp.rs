@@ -80,7 +80,7 @@ impl VlessAdapter {
                 let packet = <::vless::VlessOutbound as UdpPacketFraming<
                     ::vless::VlessUdpPacketTarget,
                 >>::encode_udp_packet(
-                    &proxy.protocols.vless_outbound_protocol(),
+                    &vless::VlessOutbound,
                     &::vless::VlessUdpPacketTarget {
                         address: &session.target,
                         port: session.port,

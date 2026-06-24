@@ -14,12 +14,12 @@ pub(super) struct PacketStream {
 }
 
 pub(super) async fn spawn_packet_stream(
-    proxy: &Proxy,
+    _proxy: &Proxy,
     session: &Session,
     stream: TcpRelayStream,
     password: &str,
 ) -> Result<PacketStream, EngineError> {
-    let trojan = proxy.protocols.trojan_outbound_protocol();
+    let trojan = trojan::TrojanOutbound;
     let mut metered = MeteredStream::new(stream);
     <TrojanOutbound as UdpPacketTunnelProtocol<TrojanUdpPacketTunnelTarget>>::establish_udp_packet_tunnel(
         &trojan,
