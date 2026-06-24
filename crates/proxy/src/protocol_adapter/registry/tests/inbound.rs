@@ -1,3 +1,5 @@
+use crate::protocol_adapter::ProtocolSupportCapability;
+
 use super::fixtures::{compiled_in_inbound_configs, inbound_protocol_name};
 
 #[test]
@@ -8,7 +10,9 @@ fn compiled_in_inbound_variants_have_exactly_one_registered_adapter() {
         let claim_count = registry
             .adapters
             .iter()
-            .filter(|adapter| adapter.supports_inbound(&config))
+            .filter(|adapter| {
+                ProtocolSupportCapability::supports_inbound(adapter.as_ref(), &config)
+            })
             .count();
         assert_eq!(
             claim_count,

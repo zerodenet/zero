@@ -1,6 +1,7 @@
 use zero_engine::EngineError;
 
 use super::super::ProtocolInventory;
+use crate::protocol_adapter::UdpPacketPathCapability;
 use crate::runtime::Proxy;
 
 impl ProtocolInventory {
@@ -18,15 +19,22 @@ impl ProtocolInventory {
         let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf).ok()?;
         let datagram_adapter = self.registry.find_outbound_leaf(datagram_leaf).ok()?;
 
-        carrier_adapter
-            .udp_packet_path_carrier_descriptor(carrier_leaf)
-            .is_some()
-            .then(|| {
-                let datagram = datagram_adapter.udp_datagram_source(datagram_leaf)?;
-                let packet_path_carrier =
-                    carrier_adapter.udp_packet_path_carrier_snapshot(carrier_leaf);
-                Some((datagram, packet_path_carrier))
-            })?
+        UdpPacketPathCapability::udp_packet_path_carrier_descriptor(
+            carrier_adapter.as_ref(),
+            carrier_leaf,
+        )
+        .is_some()
+        .then(|| {
+            let datagram = UdpPacketPathCapability::udp_datagram_source(
+                datagram_adapter.as_ref(),
+                datagram_leaf,
+            )?;
+            let packet_path_carrier = UdpPacketPathCapability::udp_packet_path_carrier_snapshot(
+                carrier_adapter.as_ref(),
+                carrier_leaf,
+            );
+            Some((datagram, packet_path_carrier))
+        })?
     }
 
     /// Resolve packet-path entry construction params through the carrier and
@@ -45,22 +53,24 @@ impl ProtocolInventory {
     > {
         let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf)?;
         let datagram_adapter = self.registry.find_outbound_leaf(datagram_leaf)?;
-        let carrier_desc = carrier_adapter
-            .udp_packet_path_carrier_descriptor(carrier_leaf)
-            .ok_or_else(|| {
-                EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    "outbound does not support UDP packet-path carrier role",
-                ))
-            })?;
-        let datagram = datagram_adapter
-            .udp_datagram_source(datagram_leaf)
-            .ok_or_else(|| {
-                EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    "outbound does not support UDP packet-path datagram role",
-                ))
-            })?;
+        let carrier_desc = UdpPacketPathCapability::udp_packet_path_carrier_descriptor(
+            carrier_adapter.as_ref(),
+            carrier_leaf,
+        )
+        .ok_or_else(|| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "outbound does not support UDP packet-path carrier role",
+            ))
+        })?;
+        let datagram =
+            UdpPacketPathCapability::udp_datagram_source(datagram_adapter.as_ref(), datagram_leaf)
+                .ok_or_else(|| {
+                    EngineError::Io(std::io::Error::new(
+                        std::io::ErrorKind::Unsupported,
+                        "outbound does not support UDP packet-path datagram role",
+                    ))
+                })?;
         Ok((carrier_desc, datagram))
     }
 
@@ -73,8 +83,11 @@ impl ProtocolInventory {
     ) -> Result<std::sync::Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError>
     {
         let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf)?;
-        carrier_adapter
-            .build_udp_packet_path(proxy, carrier_leaf)
-            .await
+        UdpPacketPathCapability::build_udp_packet_path(
+            carrier_adapter.as_ref(),
+            proxy,
+            carrier_leaf,
+        )
+        .await
     }
 }

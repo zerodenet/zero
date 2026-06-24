@@ -1,6 +1,7 @@
 use zero_engine::EngineError;
 
 use super::super::ProtocolInventory;
+use crate::protocol_adapter::UdpFlowCapability;
 use crate::runtime::Proxy;
 
 impl ProtocolInventory {
@@ -10,7 +11,10 @@ impl ProtocolInventory {
         leaf: &zero_engine::ResolvedLeafOutbound<'_>,
     ) -> Result<bool, EngineError> {
         let adapter = self.registry.find_outbound_leaf(leaf)?;
-        Ok(adapter.udp_relay_needs_two_streams(leaf))
+        Ok(UdpFlowCapability::udp_relay_needs_two_streams(
+            adapter.as_ref(),
+            leaf,
+        ))
     }
 
     /// Start a two-stream UDP relay path through the final hop adapter.
@@ -34,9 +38,15 @@ impl ProtocolInventory {
                 error,
                 upstream: None,
             })?;
-        adapter
-            .start_udp_relay_two_stream(dispatch, proxy, session, chain, payload)
-            .await
+        UdpFlowCapability::start_udp_relay_two_stream(
+            adapter.as_ref(),
+            dispatch,
+            proxy,
+            session,
+            chain,
+            payload,
+        )
+        .await
     }
 
     /// Start a single-stream UDP relay final hop through the final hop adapter.
@@ -59,8 +69,15 @@ impl ProtocolInventory {
                 upstream: None,
             }
         })?;
-        adapter
-            .start_udp_relay_final_hop(dispatch, proxy, session, carrier, leaf, payload)
-            .await
+        UdpFlowCapability::start_udp_relay_final_hop(
+            adapter.as_ref(),
+            dispatch,
+            proxy,
+            session,
+            carrier,
+            leaf,
+            payload,
+        )
+        .await
     }
 }

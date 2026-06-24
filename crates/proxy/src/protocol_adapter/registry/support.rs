@@ -1,12 +1,13 @@
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 
 use super::ProtocolRegistry;
+use crate::protocol_adapter::ProtocolSupportCapability;
 
 impl ProtocolRegistry {
     pub(crate) fn supports_inbound(&self, config: &InboundProtocolConfig) -> bool {
         self.adapters
             .iter()
-            .any(|adapter| adapter.supports_inbound(config))
+            .any(|adapter| ProtocolSupportCapability::supports_inbound(adapter.as_ref(), config))
     }
 
     pub(crate) fn supports_outbound(&self, config: &OutboundProtocolConfig) -> bool {
@@ -16,14 +17,14 @@ impl ProtocolRegistry {
         ) || self
             .adapters
             .iter()
-            .any(|adapter| adapter.supports_outbound(config))
+            .any(|adapter| ProtocolSupportCapability::supports_outbound(adapter.as_ref(), config))
     }
 
     /// Human-readable label for an inbound protocol config.
     pub(crate) fn inbound_protocol_label(&self, config: &InboundProtocolConfig) -> &'static str {
         for adapter in &self.adapters {
-            if adapter.supports_inbound(config) {
-                return adapter.name();
+            if ProtocolSupportCapability::supports_inbound(adapter.as_ref(), config) {
+                return ProtocolSupportCapability::name(adapter.as_ref());
             }
         }
         "unknown"
@@ -35,8 +36,8 @@ impl ProtocolRegistry {
         config: &InboundProtocolConfig,
     ) -> &'static str {
         for adapter in &self.adapters {
-            if adapter.supports_inbound(config) {
-                return adapter.feature_name();
+            if ProtocolSupportCapability::supports_inbound(adapter.as_ref(), config) {
+                return ProtocolSupportCapability::feature_name(adapter.as_ref());
             }
         }
         "protocol_not_compiled"
@@ -45,8 +46,8 @@ impl ProtocolRegistry {
     /// Human-readable label for an outbound protocol config.
     pub(crate) fn outbound_protocol_label(&self, config: &OutboundProtocolConfig) -> &'static str {
         for adapter in &self.adapters {
-            if adapter.supports_outbound(config) {
-                return adapter.name();
+            if ProtocolSupportCapability::supports_outbound(adapter.as_ref(), config) {
+                return ProtocolSupportCapability::name(adapter.as_ref());
             }
         }
         match config {
@@ -62,8 +63,8 @@ impl ProtocolRegistry {
         config: &OutboundProtocolConfig,
     ) -> &'static str {
         for adapter in &self.adapters {
-            if adapter.supports_outbound(config) {
-                return adapter.feature_name();
+            if ProtocolSupportCapability::supports_outbound(adapter.as_ref(), config) {
+                return ProtocolSupportCapability::feature_name(adapter.as_ref());
             }
         }
         match config {

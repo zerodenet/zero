@@ -4,7 +4,9 @@ use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 
 use super::ProtocolRegistry;
-use crate::protocol_adapter::{BoundInbound, ProtocolAdapter};
+use crate::protocol_adapter::{
+    BoundInbound, InboundListenerCapability, ProtocolAdapter, ProtocolSupportCapability,
+};
 
 impl ProtocolRegistry {
     /// Find the adapter that handles this inbound config, if any.
@@ -16,7 +18,7 @@ impl ProtocolRegistry {
         config: &InboundProtocolConfig,
     ) -> Result<Arc<dyn ProtocolAdapter>, EngineError> {
         for adapter in &self.adapters {
-            if adapter.supports_inbound(config) {
+            if ProtocolSupportCapability::supports_inbound(adapter.as_ref(), config) {
                 return Ok(adapter.clone());
             }
         }
@@ -40,8 +42,13 @@ impl ProtocolRegistry {
         source_dir: Option<&std::path::Path>,
     ) -> Result<BoundInbound, EngineError> {
         for adapter in &self.adapters {
-            if adapter.supports_inbound(&inbound.protocol) {
-                return adapter.bind_inbound(inbound, source_dir).await;
+            if ProtocolSupportCapability::supports_inbound(adapter.as_ref(), &inbound.protocol) {
+                return InboundListenerCapability::bind_inbound(
+                    adapter.as_ref(),
+                    inbound,
+                    source_dir,
+                )
+                .await;
             }
         }
         let name = self.inbound_protocol_label(&inbound.protocol);

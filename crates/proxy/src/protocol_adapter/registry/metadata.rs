@@ -1,4 +1,5 @@
 use super::ProtocolRegistry;
+use crate::protocol_adapter::ProtocolSupportCapability;
 use crate::protocol_capability::{protocol_capability, protocol_descriptor};
 
 impl ProtocolRegistry {
@@ -6,8 +7,8 @@ impl ProtocolRegistry {
     pub(crate) fn inbound_names(&self) -> Vec<&'static str> {
         self.adapters
             .iter()
-            .filter(|a| a.has_inbound())
-            .map(|a| a.name())
+            .filter(|a| ProtocolSupportCapability::has_inbound(a.as_ref()))
+            .map(|a| ProtocolSupportCapability::name(a.as_ref()))
             .collect::<Vec<_>>()
     }
 
@@ -17,8 +18,8 @@ impl ProtocolRegistry {
         names.extend(
             self.adapters
                 .iter()
-                .filter(|a| a.has_outbound())
-                .map(|a| a.name()),
+                .filter(|a| ProtocolSupportCapability::has_outbound(a.as_ref()))
+                .map(|a| ProtocolSupportCapability::name(a.as_ref())),
         );
         names
     }

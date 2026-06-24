@@ -6,10 +6,15 @@
 //! `ProtocolInventory`.
 
 mod adapter;
+mod capability;
 mod defaults;
 mod model;
 mod registry;
 
 pub(crate) use adapter::ProtocolAdapter;
+pub(crate) use capability::{
+    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
+};
 pub(crate) use model::{BoundInbound, OutboundLeafRuntime};
 pub(crate) use registry::ProtocolRegistry;

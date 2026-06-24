@@ -3,7 +3,7 @@ use std::sync::Arc;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::ProtocolRegistry;
-use crate::protocol_adapter::{OutboundLeafRuntime, ProtocolAdapter};
+use crate::protocol_adapter::{OutboundLeafRuntime, ProtocolAdapter, TcpOutboundCapability};
 use crate::runtime::orchestration::TcpPathCategory;
 
 impl ProtocolRegistry {
@@ -18,7 +18,7 @@ impl ProtocolRegistry {
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<Arc<dyn ProtocolAdapter>, EngineError> {
         for adapter in &self.adapters {
-            if adapter.claims_outbound_leaf(leaf) {
+            if TcpOutboundCapability::claims_outbound_leaf(adapter.as_ref(), leaf) {
                 return Ok(adapter.clone());
             }
         }
@@ -47,10 +47,12 @@ impl ProtocolRegistry {
         }
 
         for adapter in &self.adapters {
-            if !adapter.claims_outbound_leaf(leaf) {
+            if !TcpOutboundCapability::claims_outbound_leaf(adapter.as_ref(), leaf) {
                 continue;
             }
-            if let Some(runtime) = adapter.outbound_leaf_runtime(leaf) {
+            if let Some(runtime) =
+                TcpOutboundCapability::outbound_leaf_runtime(adapter.as_ref(), leaf)
+            {
                 return Ok(runtime);
             }
             break;

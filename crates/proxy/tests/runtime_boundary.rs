@@ -355,7 +355,7 @@ fn runtime_does_not_resolve_inbound_adapter_objects() {
     assert!(
         inventory_inbound.contains("pub(crate) fn spawn_inbound(")
             && inventory_inbound.contains("self.registry.find_inbound(&inbound.protocol)?")
-            && inventory_inbound.contains("adapter.spawn_inbound("),
+            && inventory_inbound.contains("InboundListenerCapability::spawn_inbound("),
         "src/inventory/inbound.rs should own inbound adapter resolution and spawn dispatch"
     );
 }
@@ -373,10 +373,9 @@ fn tcp_runtime_does_not_resolve_outbound_adapter_objects() {
     }
     assert!(
         inventory_tcp.contains("pub(crate) async fn connect_tcp_leaf(")
-            && inventory_tcp.contains("adapter.connect_tcp(proxy, session, leaf).await")
+            && inventory_tcp.contains("TcpOutboundCapability::connect_tcp(")
             && inventory_tcp.contains("pub(crate) async fn apply_tcp_relay_hop(")
-            && inventory_tcp
-                .contains("adapter.apply_relay_hop(proxy, stream, session, leaf).await"),
+            && inventory_tcp.contains("TcpOutboundCapability::apply_relay_hop("),
         "src/inventory/tcp.rs should own TCP outbound adapter resolution and dispatch"
     );
 }
@@ -394,8 +393,7 @@ fn udp_single_hop_runtime_does_not_resolve_outbound_adapter_objects() {
     }
     assert!(
         inventory_udp_leaf.contains("pub(crate) async fn start_udp_leaf_flow(")
-            && inventory_udp_leaf
-                .contains(".start_udp_flow(dispatch, proxy, session, leaf, payload)"),
+            && inventory_udp_leaf.contains("UdpFlowCapability::start_udp_flow("),
         "src/inventory/udp/leaf.rs should own single-hop UDP adapter resolution and dispatch"
     );
 }
@@ -444,9 +442,10 @@ fn udp_relay_runtime_does_not_resolve_packet_path_pair_adapters() {
     assert!(
         inventory_udp_packet_path.contains("pub(crate) fn udp_packet_path_pair")
             && inventory_udp_packet_path
-                .contains("udp_packet_path_carrier_descriptor(carrier_leaf)")
-            && inventory_udp_packet_path.contains("udp_datagram_source(datagram_leaf)")
-            && inventory_udp_packet_path.contains("udp_packet_path_carrier_snapshot(carrier_leaf)"),
+                .contains("UdpPacketPathCapability::udp_packet_path_carrier_descriptor")
+            && inventory_udp_packet_path.contains("UdpPacketPathCapability::udp_datagram_source")
+            && inventory_udp_packet_path
+                .contains("UdpPacketPathCapability::udp_packet_path_carrier_snapshot"),
         "src/inventory/udp/packet_path.rs should own packet-path pair adapter probing"
     );
 }
@@ -473,7 +472,8 @@ fn packet_path_entry_does_not_resolve_adapter_objects() {
         inventory_udp_packet_path.contains("pub(crate) fn resolve_udp_packet_path_candidate")
             && inventory_udp_packet_path
                 .contains("pub(crate) async fn build_udp_packet_path_carrier")
-            && inventory_udp_packet_path.contains(".build_udp_packet_path(proxy, carrier_leaf)"),
+            && inventory_udp_packet_path
+                .contains("UdpPacketPathCapability::build_udp_packet_path("),
         "src/inventory/udp/packet_path.rs should own packet-path carrier adapter resolution"
     );
 }
@@ -2963,7 +2963,7 @@ fn protocol_registry_inbound_dispatch_lives_in_inbound_module() {
     for forbidden in [
         "pub(crate) fn find_inbound",
         "pub(crate) async fn bind_inbound",
-        "adapter.bind_inbound(inbound, source_dir).await",
+        "InboundListenerCapability::bind_inbound(",
     ] {
         assert!(
             !registry.contains(forbidden),
@@ -2981,6 +2981,7 @@ fn protocol_adapter_dispatch_is_not_public_api() {
     let root = read("src/protocol_adapter.rs");
     let registry = read("src/protocol_adapter/registry.rs");
     let adapter = read("src/protocol_adapter/adapter.rs");
+    let capability = read("src/protocol_adapter/capability.rs");
 
     for forbidden in [
         "pub use registry::ProtocolRegistry;",
@@ -3006,6 +3007,10 @@ fn protocol_adapter_dispatch_is_not_public_api() {
         "src/protocol_adapter/adapter.rs should own the ProtocolAdapter trait definition"
     );
     assert!(
+        capability.contains("pub(crate) trait ProtocolSupportCapability"),
+        "src/protocol_adapter/capability.rs should own focused adapter capability traits"
+    );
+    assert!(
         registry.contains("pub(crate) struct ProtocolRegistry"),
         "src/protocol_adapter/registry.rs should keep ProtocolRegistry visible only inside zero-proxy"
     );
@@ -3017,10 +3022,12 @@ fn protocol_adapter_root_is_facade_only() {
 
     for expected in [
         "mod adapter;",
+        "mod capability;",
         "mod defaults;",
         "mod model;",
         "mod registry;",
         "pub(crate) use adapter::ProtocolAdapter;",
+        "pub(crate) use capability::",
         "pub(crate) use model::{BoundInbound, OutboundLeafRuntime};",
         "pub(crate) use registry::ProtocolRegistry;",
     ] {
@@ -3047,6 +3054,47 @@ fn protocol_adapter_root_is_facade_only() {
         assert!(
             !root.contains(forbidden),
             "src/protocol_adapter.rs should remain a facade over adapter/defaults/model/registry modules; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_adapter_capabilities_are_split_by_responsibility() {
+    let root = read("src/protocol_adapter.rs");
+    let adapter = read("src/protocol_adapter/adapter.rs");
+    let capability = read("src/protocol_adapter/capability.rs");
+
+    for expected in [
+        "pub(crate) trait ProtocolSupportCapability",
+        "pub(crate) trait InboundListenerCapability",
+        "pub(crate) trait TcpOutboundCapability",
+        "pub(crate) trait UdpFlowCapability",
+        "pub(crate) trait UdpPacketPathCapability",
+    ] {
+        assert!(
+            capability.contains(expected),
+            "src/protocol_adapter/capability.rs should expose focused capability trait `{expected}`"
+        );
+    }
+
+    assert!(
+        root.contains("mod capability;"),
+        "src/protocol_adapter.rs should wire the capability trait module"
+    );
+    assert!(
+        adapter.contains("pub(crate) trait ProtocolAdapter"),
+        "src/protocol_adapter/adapter.rs should keep the compatibility adapter trait"
+    );
+    for expected in [
+        "impl<T> ProtocolSupportCapability for T",
+        "impl<T> InboundListenerCapability for T",
+        "impl<T> TcpOutboundCapability for T",
+        "impl<T> UdpFlowCapability for T",
+        "impl<T> UdpPacketPathCapability for T",
+    ] {
+        assert!(
+            capability.contains(expected),
+            "src/protocol_adapter/capability.rs should provide compatibility blanket impl `{expected}`"
         );
     }
 }
