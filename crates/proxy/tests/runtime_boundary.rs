@@ -83,6 +83,50 @@ fn proxy_production_sources_do_not_keep_todo_markers() {
 }
 
 #[test]
+fn protocol_identity_parsing_is_confined_to_adapters() {
+    for path in rust_sources_under("src") {
+        let source = relative(&path);
+        if source.starts_with("src/adapters/") {
+            continue;
+        }
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in [
+            "parse_uuid",
+            "VmessCipher::from_name",
+            "CipherKind::from_str",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should not parse protocol identity/cipher config outside adapters; found `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
+fn runtime_protocol_runtime_references_are_confined_to_facades() {
+    let allowed_exact = [
+        "src/runtime/udp_dispatch/mod.rs",
+        "src/runtime/udp_dispatch/lifecycle.rs",
+        "src/runtime/udp_dispatch/socks5_flow.rs",
+        "src/runtime/udp_dispatch/start/relay.rs",
+        "src/runtime/udp_flow/outbound.rs",
+    ];
+
+    for path in rust_sources_under("src/runtime") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read runtime source");
+        if !content.contains("crate::protocol_runtime::") {
+            continue;
+        }
+        assert!(
+            allowed_exact.iter().any(|allowed| *allowed == source),
+            "{source} should not reference protocol_runtime directly; add a narrow facade or extend this allow-list with a boundary test"
+        );
+    }
+}
+
+#[test]
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     for source in [
         "src/protocol_runtime/socks5_udp_associate/dispatch.rs",
@@ -159,7 +203,9 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
         &[
             "src/protocol_adapter.rs",
             "src/protocol_adapter/registry.rs",
+            "src/protocol_adapter/registry/metadata.rs",
             "src/protocol_adapter/registry/tests.rs",
+            "src/protocol_adapter/registry/tests/fixtures.rs",
         ],
         &["src/adapters/"],
         "protocol config variant matching should stay inside adapters or protocol-owned inbound entrypoints",
@@ -170,7 +216,10 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
 fn outbound_config_variant_matching_is_confined_to_adapters_and_registry() {
     assert_src_pattern_confined(
         "OutboundProtocolConfig::",
-        &["src/protocol_adapter/registry.rs"],
+        &[
+            "src/protocol_adapter/registry.rs",
+            "src/protocol_adapter/registry/support.rs",
+        ],
         &["src/adapters/"],
         "outbound config variant matching should stay inside adapters or protocol registry feature helpers",
     );
@@ -229,6 +278,52 @@ fn outbound_protocol_helpers_are_crate_private() {
 }
 
 #[test]
+fn outbound_root_is_facade_only() {
+    let outbound_root = read("src/outbound/mod.rs");
+
+    for expected in [
+        "pub(crate) mod hysteria2;",
+        "pub(crate) mod mieru;",
+        "pub(crate) mod shadowsocks;",
+        "pub(crate) mod socks5;",
+        "pub(crate) mod trojan;",
+        "pub(crate) mod vless;",
+        "pub(crate) mod vmess;",
+    ] {
+        assert!(
+            outbound_root.contains(expected),
+            "src/outbound/mod.rs should expose outbound facade item `{expected}`"
+        );
+    }
+
+    for line in outbound_root.lines().map(str::trim) {
+        let allowed =
+            line.is_empty() || line.starts_with("#[cfg(") || line.starts_with("pub(crate) mod ");
+        assert!(
+            allowed,
+            "src/outbound/mod.rs should only declare crate-private outbound helper modules; found `{line}`"
+        );
+    }
+
+    for forbidden in [
+        "pub mod ",
+        "pub(crate) use ",
+        "async fn",
+        "fn ",
+        "impl ",
+        "match ",
+        "InboundProtocolConfig::",
+        "OutboundProtocolConfig::",
+        "ResolvedLeafOutbound::",
+    ] {
+        assert!(
+            !outbound_root.contains(forbidden),
+            "src/outbound/mod.rs should remain a facade over outbound helper modules; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn runtime_does_not_match_protocol_config_variants() {
     for path in rust_sources_under("src/runtime") {
         let source = relative(&path);
@@ -243,6 +338,143 @@ fn runtime_does_not_match_protocol_config_variants() {
     assert!(
         !runtime.contains("InboundProtocolConfig::"),
         "src/runtime.rs should dispatch inbound lifecycle through ProtocolAdapter"
+    );
+}
+
+#[test]
+fn runtime_does_not_resolve_inbound_adapter_objects() {
+    let listeners = read("src/runtime/listeners.rs");
+    let inventory_inbound = read("src/inventory/inbound.rs");
+
+    for forbidden in ["find_inbound", "adapter.spawn_inbound"] {
+        assert!(
+            !listeners.contains(forbidden),
+            "src/runtime/listeners.rs should ask ProtocolInventory to spawn inbounds without resolving adapter objects; found `{forbidden}`"
+        );
+    }
+    assert!(
+        inventory_inbound.contains("pub(crate) fn spawn_inbound(")
+            && inventory_inbound.contains("self.registry.find_inbound(&inbound.protocol)?")
+            && inventory_inbound.contains("adapter.spawn_inbound("),
+        "src/inventory/inbound.rs should own inbound adapter resolution and spawn dispatch"
+    );
+}
+
+#[test]
+fn tcp_runtime_does_not_resolve_outbound_adapter_objects() {
+    let tcp_dispatch = read("src/runtime/tcp_dispatch.rs");
+    let inventory_tcp = read("src/inventory/tcp.rs");
+
+    for forbidden in ["find_outbound_leaf", ".connect_tcp(", ".apply_relay_hop("] {
+        assert!(
+            !tcp_dispatch.contains(forbidden),
+            "src/runtime/tcp_dispatch.rs should ask ProtocolInventory to drive TCP adapters without resolving adapter objects; found `{forbidden}`"
+        );
+    }
+    assert!(
+        inventory_tcp.contains("pub(crate) async fn connect_tcp_leaf(")
+            && inventory_tcp.contains("adapter.connect_tcp(proxy, session, leaf).await")
+            && inventory_tcp.contains("pub(crate) async fn apply_tcp_relay_hop(")
+            && inventory_tcp
+                .contains("adapter.apply_relay_hop(proxy, stream, session, leaf).await"),
+        "src/inventory/tcp.rs should own TCP outbound adapter resolution and dispatch"
+    );
+}
+
+#[test]
+fn udp_single_hop_runtime_does_not_resolve_outbound_adapter_objects() {
+    let udp_start = read("src/runtime/udp_dispatch/start/mod.rs");
+    let inventory_udp_leaf = read("src/inventory/udp/leaf.rs");
+
+    for forbidden in ["find_outbound_leaf", ".start_udp_flow("] {
+        assert!(
+            !udp_start.contains(forbidden),
+            "src/runtime/udp_dispatch/start/mod.rs should ask ProtocolInventory to drive single-hop UDP adapters without resolving adapter objects; found `{forbidden}`"
+        );
+    }
+    assert!(
+        inventory_udp_leaf.contains("pub(crate) async fn start_udp_leaf_flow(")
+            && inventory_udp_leaf
+                .contains(".start_udp_flow(dispatch, proxy, session, leaf, payload)"),
+        "src/inventory/udp/leaf.rs should own single-hop UDP adapter resolution and dispatch"
+    );
+}
+
+#[test]
+fn udp_relay_runtime_does_not_resolve_final_hop_adapter_objects() {
+    let relay = read("src/runtime/udp_dispatch/start/relay.rs");
+    let inventory_udp_relay = read("src/inventory/udp/relay.rs");
+
+    for forbidden in [
+        "adapter.udp_relay_needs_two_streams(",
+        "adapter.start_udp_relay_two_stream(",
+        "adapter.start_udp_relay_final_hop(",
+        "find_outbound_leaf(chain.last()",
+    ] {
+        assert!(
+            !relay.contains(forbidden),
+            "src/runtime/udp_dispatch/start/relay.rs should ask ProtocolInventory to drive UDP relay final-hop adapters; found `{forbidden}`"
+        );
+    }
+    assert!(
+        inventory_udp_relay.contains("pub(crate) fn udp_relay_needs_two_streams(")
+            && inventory_udp_relay.contains("pub(crate) async fn start_udp_relay_two_stream(")
+            && inventory_udp_relay.contains("pub(crate) async fn start_udp_relay_final_hop("),
+        "src/inventory/udp/relay.rs should own UDP relay final-hop adapter resolution and dispatch"
+    );
+}
+
+#[test]
+fn udp_relay_runtime_does_not_resolve_packet_path_pair_adapters() {
+    let relay = read("src/runtime/udp_dispatch/start/relay.rs");
+    let inventory_udp_packet_path = read("src/inventory/udp/packet_path.rs");
+
+    for forbidden in [
+        "carrier_adapter",
+        "datagram_adapter",
+        "udp_packet_path_carrier_descriptor(",
+        "udp_datagram_source(",
+        "udp_packet_path_carrier_snapshot(",
+    ] {
+        assert!(
+            !relay.contains(forbidden),
+            "src/runtime/udp_dispatch/start/relay.rs should ask ProtocolInventory to classify packet-path pairs; found `{forbidden}`"
+        );
+    }
+    assert!(
+        inventory_udp_packet_path.contains("pub(crate) fn udp_packet_path_pair")
+            && inventory_udp_packet_path
+                .contains("udp_packet_path_carrier_descriptor(carrier_leaf)")
+            && inventory_udp_packet_path.contains("udp_datagram_source(datagram_leaf)")
+            && inventory_udp_packet_path.contains("udp_packet_path_carrier_snapshot(carrier_leaf)"),
+        "src/inventory/udp/packet_path.rs should own packet-path pair adapter probing"
+    );
+}
+
+#[test]
+fn packet_path_entry_does_not_resolve_adapter_objects() {
+    let entry = read("src/protocol_runtime/udp/packet_path_chain/entry.rs");
+    let inventory_udp_packet_path = read("src/inventory/udp/packet_path.rs");
+
+    for forbidden in [
+        "find_outbound_leaf",
+        "carrier_adapter",
+        "datagram_adapter",
+        "udp_packet_path_carrier_descriptor(",
+        "udp_datagram_source(",
+        ".build_udp_packet_path(",
+    ] {
+        assert!(
+            !entry.contains(forbidden),
+            "packet_path_chain/entry.rs should ask ProtocolInventory to resolve packet-path adapters; found `{forbidden}`"
+        );
+    }
+    assert!(
+        inventory_udp_packet_path.contains("pub(crate) fn resolve_udp_packet_path_candidate")
+            && inventory_udp_packet_path
+                .contains("pub(crate) async fn build_udp_packet_path_carrier")
+            && inventory_udp_packet_path.contains(".build_udp_packet_path(proxy, carrier_leaf)"),
+        "src/inventory/udp/packet_path.rs should own packet-path carrier adapter resolution"
     );
 }
 
@@ -303,6 +535,60 @@ fn runtime_control_handle_lives_outside_runtime_root() {
 }
 
 #[test]
+fn running_proxy_handle_lives_outside_runtime_root() {
+    let runtime = read("src/runtime.rs");
+    let running = read("src/runtime/running.rs");
+
+    for forbidden in [
+        "pub struct RunningProxy",
+        "impl RunningProxy",
+        "impl Deref for RunningProxy",
+    ] {
+        assert!(
+            !runtime.contains(forbidden),
+            "src/runtime.rs should keep RunningProxy handle details in src/runtime/running.rs; found `{forbidden}`"
+        );
+        assert!(
+            running.contains(forbidden),
+            "src/runtime/running.rs should own RunningProxy handle detail `{forbidden}`"
+        );
+    }
+
+    assert!(
+        runtime.contains("mod running;") && runtime.contains("pub use running::RunningProxy;"),
+        "src/runtime.rs should expose RunningProxy through the runtime/running.rs module"
+    );
+}
+
+#[test]
+fn runtime_reload_bridge_lives_outside_runtime_root() {
+    let runtime = read("src/runtime.rs");
+    let reload = read("src/runtime/reload.rs");
+
+    for forbidden in [
+        "spawn_blocking",
+        "recv_timeout",
+        "unbounded_channel",
+        "RecvTimeoutError",
+    ] {
+        assert!(
+            !runtime.contains(forbidden),
+            "src/runtime.rs should keep reload bridge details in src/runtime/reload.rs; found `{forbidden}`"
+        );
+        assert!(
+            reload.contains(forbidden),
+            "src/runtime/reload.rs should own reload bridge detail `{forbidden}`"
+        );
+    }
+
+    assert!(
+        runtime.contains("mod reload;")
+            && runtime.contains("reload::subscribe_reload_bridge(self.engine.subscribe_reload())"),
+        "src/runtime.rs should subscribe to reloads through runtime/reload.rs"
+    );
+}
+
+#[test]
 fn proxy_does_not_own_protocol_listener_entrypoints() {
     for path in rust_sources_under("src/inbound") {
         let source = relative(&path);
@@ -319,13 +605,79 @@ fn proxy_does_not_own_protocol_listener_entrypoints() {
 }
 
 #[test]
+fn inbound_root_is_facade_only() {
+    let root = read("src/inbound/mod.rs");
+
+    for expected in [
+        "pub(crate) mod direct;",
+        "mod http_connect;",
+        "pub(crate) mod hysteria2;",
+        "pub(crate) mod mieru;",
+        "mod mixed;",
+        "pub(crate) mod shadowsocks;",
+        "mod socks5;",
+        "mod system;",
+        "pub(crate) mod trojan;",
+        "mod tun;",
+        "pub(crate) mod vless;",
+        "pub(crate) mod vmess;",
+        "pub(crate) use direct::run_direct_listener_with_bound;",
+        "pub(crate) use http_connect::run_http_connect_listener_with_bound;",
+        "pub(crate) use hysteria2::run_hysteria2_listener_with_bound;",
+        "pub(crate) use mieru::run_mieru_listener_with_bound;",
+        "pub(crate) use mixed::run_mixed_listener_with_bound;",
+        "pub(crate) use shadowsocks::run_shadowsocks_listener_with_bound;",
+        "pub(crate) use socks5::run_socks5_listener_with_bound;",
+        "pub(crate) use trojan::run_trojan_listener_with_bound;",
+        "pub(crate) use vless::run_vless_listener_with_bound;",
+        "pub(crate) use vmess::run_vmess_listener_with_bound;",
+    ] {
+        assert!(
+            root.contains(expected),
+            "src/inbound/mod.rs should expose inbound facade item `{expected}`"
+        );
+    }
+
+    for line in root.lines().map(str::trim) {
+        let allowed = line.is_empty()
+            || line.starts_with("#[cfg(")
+            || line.starts_with("mod ")
+            || line.starts_with("pub(crate) mod ")
+            || line.starts_with("pub(crate) use ");
+        assert!(
+            allowed,
+            "src/inbound/mod.rs should only declare inbound modules and re-export listener entrypoints; found `{line}`"
+        );
+    }
+
+    for forbidden in [
+        "async fn",
+        "fn ",
+        "impl ",
+        "match ",
+        "InboundProtocolConfig::",
+        "OutboundProtocolConfig::",
+        "ResolvedLeafOutbound::",
+        "ProtocolAdapter",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/inbound/mod.rs should remain a facade over inbound listener modules; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn resolved_outbound_variant_matching_is_confined_to_adapters_and_registry() {
     assert_src_pattern_confined(
         "ResolvedLeafOutbound::",
         &[
             "src/protocol_adapter.rs",
             "src/protocol_adapter/registry.rs",
+            "src/protocol_adapter/registry/outbound.rs",
             "src/protocol_adapter/registry/tests.rs",
+            "src/protocol_adapter/registry/tests/fixtures.rs",
+            "src/protocol_adapter/registry/tests/outbound.rs",
         ],
         &["src/adapters/"],
         "resolved outbound variant matching should stay inside adapters or protocol registry dispatch helpers",
@@ -334,11 +686,11 @@ fn resolved_outbound_variant_matching_is_confined_to_adapters_and_registry() {
 
 #[test]
 fn block_outbound_leaf_is_registry_kernel_exception_not_adapter_protocol() {
-    let registry = read("src/protocol_adapter/registry.rs");
+    let outbound = read("src/protocol_adapter/registry/outbound.rs");
     assert!(
-        registry.contains("ResolvedLeafOutbound::Block")
-            && registry.contains("TcpPathCategory::Block"),
-        "ProtocolRegistry should own the kernel-level Block leaf classification"
+        outbound.contains("ResolvedLeafOutbound::Block")
+            && outbound.contains("TcpPathCategory::Block"),
+        "ProtocolRegistry outbound dispatch should own the kernel-level Block leaf classification"
     );
 
     for path in rust_sources_under("src/adapters") {
@@ -449,6 +801,16 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         "Shadowsocks adapter should extract Shadowsocks config and pass ShadowsocksInboundRequest"
     );
     assert!(
+        inbound.contains("pub(crate) cipher: CipherKind")
+            && inbound.contains("pub(crate) cipher_name: String")
+            && !inbound.contains("CipherKind::from_str"),
+        "Shadowsocks inbound listener should receive an adapter-parsed CipherKind plus display name"
+    );
+    assert!(
+        adapter.contains("CipherKind::from_str"),
+        "Shadowsocks adapter should parse Shadowsocks cipher config before calling the listener"
+    );
+    assert!(
         !inbound.contains("#[allow(clippy::too_many_lines)]"),
         "Shadowsocks inbound listener should stay small enough without a too_many_lines allowance"
     );
@@ -489,7 +851,8 @@ fn trojan_inbound_uses_adapter_request_model() {
 #[test]
 fn vmess_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/vmess/listener.rs");
-    let model = read("src/inbound/vmess/mod.rs");
+    let model = read("src/inbound/vmess/model.rs");
+    let root = read("src/inbound/vmess/mod.rs");
     let adapter = read("src/adapters/vmess/inbound.rs");
 
     assert!(
@@ -498,12 +861,76 @@ fn vmess_inbound_uses_adapter_request_model() {
         "VMess inbound listener should receive an adapter-built request model"
     );
     assert!(
-        !inbound.contains("InboundProtocolConfig::Vmess"),
+        !inbound.contains("InboundProtocolConfig::Vmess")
+            && !root.contains("InboundProtocolConfig::Vmess"),
         "VMess inbound entrypoint should not parse VMess config variants"
     );
     assert!(
         adapter.contains("InboundProtocolConfig::Vmess") && adapter.contains("VmessInboundRequest"),
         "VMess adapter should extract VMess config and pass VmessInboundRequest"
+    );
+    for forbidden in [
+        "parse_uuid",
+        "VmessCipher::from_name",
+        "vmess unknown cipher",
+    ] {
+        assert!(
+            !inbound.contains(forbidden) && !model.contains(forbidden),
+            "VMess inbound listener/model should receive adapter-parsed users; found `{forbidden}`"
+        );
+        assert!(
+            adapter.contains(forbidden),
+            "VMess adapter should own user parsing detail `{forbidden}`"
+        );
+    }
+    assert!(
+        !inbound.contains("VmessUserConfig") && !model.contains("VmessUserConfig"),
+        "VMess inbound listener/model should not carry raw config user records"
+    );
+}
+
+#[test]
+fn vless_inbound_users_are_adapter_parsed() {
+    let listener = read("src/inbound/vless/listener.rs");
+    let model = read("src/inbound/vless/model.rs");
+    let session = read("src/inbound/vless/session.rs");
+    let helpers = read("src/inbound/vless/helpers.rs");
+    let adapter = read("src/adapters/vless/inbound.rs");
+
+    for forbidden in [
+        "VlessUserConfig",
+        "parse_uuid",
+        "parse_flow",
+        "vless_users()",
+    ] {
+        assert!(
+            !listener.contains(forbidden)
+                && !session.contains(forbidden)
+                && !helpers.contains(forbidden),
+            "VLESS inbound listener/session/user store should receive adapter-parsed users; found `{forbidden}`"
+        );
+    }
+    for required in [
+        "parse_inbound_users",
+        "parse_uuid",
+        "parse_flow",
+        "VlessUser {",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "VLESS adapter inbound module should own parsed user construction detail `{required}`"
+        );
+    }
+    assert!(
+        helpers.contains("struct ConfiguredVlessUser")
+            && helpers.contains("user: VlessUser")
+            && helpers.contains("user.user.clone()"),
+        "VLESS user store should look up pre-parsed protocol users"
+    );
+    assert!(
+        model.contains("struct VlessInboundRequest")
+            && listener.contains("request: VlessInboundRequest"),
+        "VLESS inbound request model should live in inbound/vless/model.rs"
     );
 }
 
@@ -526,6 +953,71 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && adapter.contains("Hysteria2InboundRequest"),
         "Hysteria2 adapter should extract Hysteria2 config and pass Hysteria2InboundRequest"
     );
+}
+
+#[test]
+fn inbound_root_does_not_reexport_protocol_request_models() {
+    let root = read("src/inbound/mod.rs");
+
+    for forbidden in [
+        "DirectInboundRequest",
+        "Hysteria2InboundRequest",
+        "MieruInboundRequest",
+        "ShadowsocksInboundRequest",
+        "TrojanInboundRequest",
+        "ConfiguredVlessUser",
+        "VlessInboundRequest",
+        "VmessInboundRequest",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/inbound/mod.rs should expose listener entrypoints, not protocol request model `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_inbound_roots_do_not_define_request_models() {
+    for (root, model, request) in [
+        (
+            "src/inbound/vless/mod.rs",
+            "src/inbound/vless/model.rs",
+            "VlessInboundRequest",
+        ),
+        (
+            "src/inbound/vmess/mod.rs",
+            "src/inbound/vmess/model.rs",
+            "VmessInboundRequest",
+        ),
+    ] {
+        let root_content = read(root);
+        let model_content = read(model);
+        assert!(
+            !root_content.contains(&format!("struct {request}")),
+            "{root} should not define protocol request model `{request}`"
+        );
+        assert!(
+            model_content.contains(&format!("struct {request}")),
+            "{model} should own protocol request model `{request}`"
+        );
+    }
+}
+
+#[test]
+fn vless_inbound_root_does_not_reexport_session_models() {
+    let root = read("src/inbound/vless/mod.rs");
+    let listener = read("src/inbound/vless/listener.rs");
+
+    for forbidden in ["VlessStreamRequest", "VlessStreamTransport"] {
+        assert!(
+            !root.contains(forbidden),
+            "src/inbound/vless/mod.rs should expose listener entrypoints, not session model `{forbidden}`"
+        );
+        assert!(
+            listener.contains("use super::session::{VlessStreamRequest, VlessStreamTransport};"),
+            "VLESS listener should import session models from the session module"
+        );
+    }
 }
 
 #[test]
@@ -652,6 +1144,68 @@ fn adapter_root_does_not_import_protocol_udp_request_types() {
 }
 
 #[test]
+fn adapter_root_is_facade_only() {
+    let adapters = read("src/adapters/mod.rs");
+
+    for expected in [
+        "mod common;",
+        "mod direct;",
+        "mod http_connect;",
+        "mod hysteria2;",
+        "mod mieru;",
+        "mod mixed;",
+        "mod shadowsocks;",
+        "mod socks5;",
+        "mod trojan;",
+        "mod vless;",
+        "mod vmess;",
+        "pub(crate) use direct::DirectAdapter;",
+        "pub(crate) use http_connect::HttpConnectAdapter;",
+        "pub(crate) use hysteria2::Hysteria2Adapter;",
+        "pub(crate) use mieru::MieruAdapter;",
+        "pub(crate) use mixed::MixedAdapter;",
+        "pub(crate) use shadowsocks::ShadowsocksAdapter;",
+        "pub(crate) use socks5::Socks5Adapter;",
+        "pub(crate) use trojan::TrojanAdapter;",
+        "pub(crate) use vless::VlessAdapter;",
+        "pub(crate) use vmess::VmessAdapter;",
+    ] {
+        assert!(
+            adapters.contains(expected),
+            "src/adapters/mod.rs should expose adapter facade item `{expected}`"
+        );
+    }
+
+    for line in adapters.lines().map(str::trim) {
+        let allowed = line.is_empty()
+            || line.starts_with("//!")
+            || line.starts_with("#[cfg(")
+            || line.starts_with("mod ")
+            || line.starts_with("pub(crate) use ");
+        assert!(
+            allowed,
+            "src/adapters/mod.rs should only declare adapter modules and re-export adapter types; found `{line}`"
+        );
+    }
+
+    for forbidden in [
+        "async fn",
+        "fn ",
+        "impl ",
+        "match ",
+        "InboundProtocolConfig::",
+        "OutboundProtocolConfig::",
+        "ResolvedLeafOutbound::",
+        "ProtocolRegistry",
+    ] {
+        assert!(
+            !adapters.contains(forbidden),
+            "src/adapters/mod.rs should remain a facade over concrete adapter modules; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
     let cases: &[(&str, &[&str])] = &[
         (
@@ -745,6 +1299,39 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
 }
 
 #[test]
+fn outbound_tcp_helpers_are_called_only_by_adapter_tcp_modules() {
+    let helpers = [
+        "crate::outbound::hysteria2::connect_tcp",
+        "crate::outbound::mieru::connect_tcp",
+        "crate::outbound::mieru::apply_tcp_hop",
+        "crate::outbound::shadowsocks::connect_tcp",
+        "crate::outbound::shadowsocks::apply_tcp_hop",
+        "crate::outbound::socks5::connect_tcp",
+        "crate::outbound::socks5::apply_tcp_hop",
+        "crate::outbound::trojan::connect_tcp",
+        "crate::outbound::trojan::apply_tcp_hop",
+        "crate::outbound::vless::connect_tcp",
+        "crate::outbound::vless::apply_tcp_hop",
+        "crate::outbound::vmess::connect_tcp",
+        "crate::outbound::vmess::apply_tcp_hop",
+    ];
+
+    for path in rust_sources_under("src") {
+        let source = relative(&path);
+        if source.starts_with("src/adapters/") && source.ends_with("/tcp.rs") {
+            continue;
+        }
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for helper in helpers {
+            assert!(
+                !content.contains(helper),
+                "{source} should not call outbound TCP helper `{helper}` directly; dispatch through the owning ProtocolAdapter"
+            );
+        }
+    }
+}
+
+#[test]
 fn trojan_tcp_connect_uses_request_model() {
     let outbound = read("src/outbound/trojan.rs");
     let adapter = read("src/adapters/trojan/tcp.rs");
@@ -761,6 +1348,34 @@ fn trojan_tcp_connect_uses_request_model() {
     assert!(
         adapter.contains("TrojanTcpConnectRequest {"),
         "Trojan adapter TCP module should pass TrojanTcpConnectRequest"
+    );
+}
+
+#[test]
+fn shadowsocks_tcp_connect_uses_request_model() {
+    let outbound = read("src/outbound/shadowsocks.rs");
+    let adapter = read("src/adapters/shadowsocks/tcp.rs");
+
+    assert!(
+        !outbound.contains("#[allow(clippy::too_many_arguments)]"),
+        "Shadowsocks TCP connect should not need a too_many_arguments allowance"
+    );
+    assert!(
+        outbound.contains("struct ShadowsocksTcpConnectRequest")
+            && outbound.contains("request: ShadowsocksTcpConnectRequest<'_>"),
+        "Shadowsocks TCP connect should use ShadowsocksTcpConnectRequest"
+    );
+    assert!(
+        adapter.contains("ShadowsocksTcpConnectRequest {"),
+        "Shadowsocks adapter TCP module should pass ShadowsocksTcpConnectRequest"
+    );
+    assert!(
+        !outbound.contains("CipherKind::from_str"),
+        "Shadowsocks outbound TCP helper should receive an adapter-parsed cipher"
+    );
+    assert!(
+        adapter.contains("CipherKind::from_str"),
+        "Shadowsocks adapter TCP module should own outbound cipher parsing"
     );
 }
 
@@ -782,6 +1397,20 @@ fn vmess_tcp_connect_uses_request_model() {
         adapter.contains("VmessTcpConnectRequest {"),
         "VMess adapter TCP module should pass VmessTcpConnectRequest"
     );
+    for forbidden in [
+        "parse_uuid",
+        "VmessCipher::from_name",
+        "vmess unknown cipher",
+    ] {
+        assert!(
+            !outbound.contains(forbidden),
+            "VMess outbound TCP helper should receive adapter-parsed identity; found `{forbidden}`"
+        );
+        assert!(
+            adapter.contains(forbidden),
+            "VMess adapter TCP module should own outbound identity parsing detail `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -801,6 +1430,14 @@ fn vless_tcp_connect_uses_request_model() {
     assert!(
         adapter.contains("VlessTcpConnectRequest {"),
         "VLESS adapter TCP module should pass VlessTcpConnectRequest"
+    );
+    assert!(
+        !outbound.contains("parse_uuid"),
+        "VLESS outbound TCP helper should receive adapter-parsed identity"
+    );
+    assert!(
+        adapter.contains("parse_uuid"),
+        "VLESS adapter TCP module should own outbound identity parsing"
     );
 }
 
@@ -916,6 +1553,99 @@ fn protocol_inbound_submodules_do_not_use_wildcard_parent_imports() {
 }
 
 #[test]
+fn protocol_named_inbound_modules_stay_proxy_glue_not_crypto_implementations() {
+    for root in ["src/inbound/vless", "src/inbound/vmess"] {
+        for path in rust_sources_under(root) {
+            let source = relative(&path);
+            let content = fs::read_to_string(&path).expect("read inbound protocol module");
+
+            for forbidden in [
+                "use aes",
+                "use chacha",
+                "use cipher",
+                "use hmac",
+                "use md5",
+                "use ring",
+                "use sha",
+                "use uuid",
+                "Aes128",
+                "Aes256",
+                "ChaCha20",
+                "Hmac",
+                "Md5",
+                "Sha1",
+                "Sha256",
+                "Uuid::",
+            ] {
+                assert!(
+                    !content.contains(forbidden),
+                    "{source} should stay proxy-side inbound glue and delegate protocol crypto/parsing primitives to protocols/*; found `{forbidden}`"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
+    for path in rust_sources_under("src/inbound/mieru") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read mieru inbound module");
+
+        for forbidden in [
+            "build_data_segment",
+            "parse_segment",
+            "DataMetadata",
+            "MieruCipher",
+            "MieruSession",
+            "DATA_SERVER_TO_CLIENT",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should wrap mieru protocol codecs instead of owning crypto/framing primitive `{forbidden}`"
+            );
+        }
+    }
+
+    let stream = read("src/inbound/mieru/model.rs");
+    assert!(
+        stream.contains("MieruInboundDataCodec")
+            && stream.contains("decrypt_client_data_with_consumed")
+            && stream.contains("encrypt_server_data"),
+        "Mieru inbound stream adapter should delegate data-phase protocol logic to protocols/mieru"
+    );
+}
+
+#[test]
+fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
+    for path in rust_sources_under("src/inbound/shadowsocks") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read shadowsocks inbound module");
+
+        for forbidden in [
+            "ShadowsocksDatagramCodec",
+            "decode_udp_datagram_2022_session",
+            "encode_udp_response_2022",
+            "ReplayWindow",
+            "DatagramCodec",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should wrap Shadowsocks inbound UDP codecs instead of owning datagram primitive `{forbidden}`"
+            );
+        }
+    }
+
+    let udp = read("src/inbound/shadowsocks/udp.rs");
+    assert!(
+        udp.contains("ShadowsocksInboundUdpCodec")
+            && udp.contains("decode_request")
+            && udp.contains("encode_response"),
+        "Shadowsocks inbound UDP should delegate protocol datagram logic to protocols/shadowsocks"
+    );
+}
+
+#[test]
 fn protocol_crates_do_not_depend_on_proxy_runtime_layers() {
     let protocols_root = repo_root().join("protocols");
     let forbidden = [
@@ -979,6 +1709,7 @@ fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
 #[test]
 fn protocol_inventory_keeps_protocol_instances_private() {
     let content = read("src/inventory.rs");
+    let protocols = read("src/inventory/protocols.rs");
 
     for forbidden in [
         "InboundProtocolConfig::",
@@ -1016,9 +1747,58 @@ fn protocol_inventory_keeps_protocol_instances_private() {
         "fn vmess_outbound_protocol(&self)",
     ] {
         assert!(
-            content.contains(required),
-            "src/inventory.rs should expose controlled protocol accessors; missing `{required}`"
+            protocols.contains(required),
+            "src/inventory/protocols.rs should expose controlled protocol accessors; missing `{required}`"
         );
+    }
+}
+
+#[test]
+fn inventory_protocol_accessors_live_in_protocols_module() {
+    let root = read("src/inventory.rs");
+    let protocols = read("src/inventory/protocols.rs");
+
+    let protocol_access_patterns = [
+        "use http_connect::",
+        "use shadowsocks::",
+        "use socks5::",
+        "use trojan::",
+        "use vless::",
+        "use vmess::",
+        "fn direct_connector(&self)",
+        "fn socks5_inbound_protocol(&self)",
+        "fn socks5_outbound_protocol(&self)",
+        "fn http_connect_inbound_protocol(&self)",
+        "fn vless_inbound_protocol(&self)",
+        "fn vless_outbound_protocol(&self)",
+        "fn shadowsocks_outbound_protocol(&self)",
+        "fn trojan_outbound_protocol(&self)",
+        "fn vmess_outbound_protocol(&self)",
+    ];
+
+    for forbidden in protocol_access_patterns {
+        assert!(
+            !root.contains(forbidden),
+            "src/inventory.rs should keep protocol accessors and concrete protocol imports in src/inventory/protocols.rs; found `{forbidden}`"
+        );
+        assert!(
+            protocols.contains(forbidden),
+            "src/inventory/protocols.rs should own protocol accessor/import `{forbidden}`"
+        );
+    }
+
+    for path in rust_sources_under("src/inventory") {
+        let source = relative(&path);
+        if source == "src/inventory/protocols.rs" {
+            continue;
+        }
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in protocol_access_patterns {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should not import concrete protocol crates or define protocol accessors; keep `{forbidden}` in src/inventory/protocols.rs"
+            );
+        }
     }
 }
 
@@ -1051,6 +1831,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         "Socks5UdpRelay",
         "ActiveUpstreamSocks5UdpAssociation",
         "UpstreamAssociationCloseReason",
+        "Socks5UdpSend",
         "send_socks5_udp_packet",
         "ensure_socks5_udp_association",
     ] {
@@ -1074,6 +1855,11 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         send_source.contains("async fn send_socks5_udp_packet")
             && send_source.contains("async fn ensure_socks5_udp_association"),
         "SOCKS5 UDP send orchestration should live in protocol_runtime/socks5_udp/send.rs"
+    );
+    assert!(
+        root.contains("Socks5UdpPacketSend")
+            && !root.contains("pub(crate) use send::Socks5UdpSend"),
+        "SOCKS5 UDP facade should expose only the packet-send facade model, not the internal send request"
     );
     assert!(
         send.exists() && runtime.exists() && packet_path.exists(),
@@ -1116,6 +1902,37 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
 }
 
 #[test]
+fn vless_udp_identity_is_adapter_parsed() {
+    let runtime = read("src/protocol_runtime/vless_udp.rs");
+    let model = read("src/protocol_runtime/vless_udp/model.rs");
+    let flows = read("src/protocol_runtime/udp/flows.rs");
+    let adapter = read("src/adapters/vless/udp.rs");
+
+    assert!(
+        !runtime.contains("parse_uuid"),
+        "VLESS UDP runtime should receive adapter-parsed UUIDs"
+    );
+    assert!(
+        !model.contains("id: &'a str") && model.contains("uuid: [u8; 16]"),
+        "VLESS UDP request models should carry parsed UUIDs instead of raw config IDs"
+    );
+    let vless_flow_models = flows
+        .split("pub(crate) struct VmessUdpFlow")
+        .next()
+        .expect("VLESS flow models should appear before VMess flow models");
+    for forbidden in ["pub(crate) id: &'a str", "pub(super) id: &'a str"] {
+        assert!(
+            !vless_flow_models.contains(forbidden) && !model.contains(forbidden),
+            "VLESS UDP request models should not carry raw config IDs; found `{forbidden}`"
+        );
+    }
+    assert!(
+        adapter.contains("parse_uuid"),
+        "VLESS UDP adapter should own UUID parsing before calling protocol runtime"
+    );
+}
+
+#[test]
 fn vmess_udp_state_model_lives_outside_runtime_root() {
     let root = read("src/protocol_runtime/vmess_udp.rs");
     let model = read("src/protocol_runtime/vmess_udp/model.rs");
@@ -1145,6 +1962,52 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
             "VMess UDP state/request model should live in vmess_udp/model.rs; missing `{required}`"
         );
     }
+}
+
+#[test]
+fn vmess_udp_identity_is_adapter_parsed() {
+    let runtime = read("src/protocol_runtime/vmess_udp.rs");
+    let model = read("src/protocol_runtime/vmess_udp/model.rs");
+    let flows = read("src/protocol_runtime/udp/flows.rs");
+    let adapter = read("src/adapters/vmess/udp.rs");
+
+    for forbidden in ["parse_uuid", "VmessCipher::from_name"] {
+        assert!(
+            !runtime.contains(forbidden),
+            "VMess UDP runtime should receive adapter-parsed identity; found `{forbidden}`"
+        );
+        assert!(
+            adapter.contains(forbidden),
+            "VMess UDP adapter should own identity parsing detail `{forbidden}`"
+        );
+    }
+
+    let vmess_flow_models = flows
+        .split("pub(crate) struct VmessUdpFlow")
+        .nth(1)
+        .expect("VMess UDP flow models should exist");
+    for forbidden in [
+        "pub(crate) id: &'a str",
+        "pub(super) id: &'a str",
+        "pub(crate) cipher: &'a str",
+        "pub(super) cipher: &'a str",
+    ] {
+        assert!(
+            !vmess_flow_models.contains(forbidden) && !model.contains(forbidden),
+            "VMess UDP request models should carry parsed identity plus cipher_name only; found `{forbidden}`"
+        );
+    }
+    assert!(
+        model.contains("uuid: [u8; 16]")
+            && model.contains("cipher_name: &'a str")
+            && model.contains("cipher: vmess::VmessCipher"),
+        "VMess UDP request models should carry parsed UUID/cipher plus cipher_name for mux"
+    );
+    assert!(
+        model.contains("struct VmessUdpUpstreamRequest")
+            && model.contains("pub(super) cipher_name: &'a str"),
+        "VMess UDP upstream request should retain cipher_name for mux pool"
+    );
 }
 
 #[test]
@@ -1180,6 +2043,28 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
 }
 
 #[test]
+fn vmess_mux_pool_receives_adapter_parsed_cipher() {
+    let root = read("src/protocol_runtime/vmess_mux_pool.rs");
+    let model = read("src/protocol_runtime/vmess_mux_pool/model.rs");
+    let tcp_adapter = read("src/adapters/vmess/tcp.rs");
+    let udp_adapter = read("src/adapters/vmess/udp.rs");
+
+    assert!(
+        !root.contains("VmessCipher::from_name"),
+        "VMess mux pool should receive parsed cipher values from adapter-owned paths"
+    );
+    assert!(
+        model.contains("cipher_name: String") && model.contains("cipher: vmess::VmessCipher"),
+        "VMess mux pool request should carry cipher_name for keying and parsed VmessCipher for session setup"
+    );
+    assert!(
+        tcp_adapter.contains("VmessCipher::from_name")
+            && udp_adapter.contains("VmessCipher::from_name"),
+        "VMess TCP/UDP adapters should own cipher parsing before mux pool use"
+    );
+}
+
+#[test]
 fn vless_mux_pool_model_lives_outside_runtime_root() {
     let root = read("src/protocol_runtime/vless_mux_pool.rs");
     let model = read("src/protocol_runtime/vless_mux_pool/model.rs");
@@ -1197,6 +2082,50 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
             "VLESS MUX pool model should live in vless_mux_pool/model.rs; missing `{required}`"
         );
     }
+}
+
+#[test]
+fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
+    for (source, forbidden) in [
+        ("src/protocol_runtime/vless_udp.rs", "VlessUdpStartFlow"),
+        (
+            "src/protocol_runtime/vless_udp.rs",
+            "VlessUdpRelayTwoStream",
+        ),
+        ("src/protocol_runtime/vless_udp.rs", "VlessUdpRelayFinalHop"),
+        ("src/protocol_runtime/vless_udp.rs", "VlessUdpTransport"),
+        ("src/protocol_runtime/vmess_udp.rs", "VmessUdpStartFlow"),
+        ("src/protocol_runtime/vmess_udp.rs", "VmessUdpRelayFlow"),
+        ("src/protocol_runtime/vmess_udp.rs", "VmessUdpTransport"),
+        (
+            "src/protocol_runtime/vless_mux_pool.rs",
+            "VlessMuxOpenRequest",
+        ),
+        (
+            "src/protocol_runtime/vmess_mux_pool.rs",
+            "VmessMuxOpenRequest",
+        ),
+    ] {
+        let content = read(source);
+        assert!(
+            !content.lines().any(
+                |line| line.trim_start().starts_with("pub(crate) use model::")
+                    && line.contains(forbidden)
+            ),
+            "{source} should not re-export request model `{forbidden}`"
+        );
+    }
+
+    assert!(
+        read("src/protocol_runtime/vless_mux_pool.rs")
+            .contains("pub(crate) use model::MuxConnectionPool;"),
+        "VLESS mux pool root should expose the pool type facade"
+    );
+    assert!(
+        read("src/protocol_runtime/vmess_mux_pool.rs")
+            .contains("pub(crate) use model::VmessMuxConnectionPool;"),
+        "VMess mux pool root should expose the pool type facade"
+    );
 }
 
 #[test]
@@ -1272,9 +2201,10 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
 #[test]
 fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
     let dispatch = read("src/runtime/udp_dispatch/socks5_flow.rs");
+    let forward = read("src/runtime/udp_dispatch/forward.rs");
+    let socks5_adapter = read("src/adapters/socks5/udp.rs");
 
     for forbidden in [
-        "struct Socks5UdpSend",
         "Socks5UdpAssociation {",
         "send_socks5_udp_packet",
         "UpstreamAssociationCloseReason::Dropped",
@@ -1286,6 +2216,17 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
             "runtime UDP dispatch should delegate SOCKS5 UDP send details to protocol_runtime; found `{forbidden}`"
         );
     }
+    for source in [&forward, &socks5_adapter] {
+        assert!(
+            !source.contains("Socks5UdpSend"),
+            "UDP forward/adapters should call UdpDispatch::send_socks5 without constructing protocol-runtime request models"
+        );
+    }
+    assert!(
+        dispatch.contains("crate::protocol_runtime::socks5_udp::Socks5UdpPacketSend")
+            && dispatch.contains("pub(crate) async fn send_socks5("),
+        "runtime UDP SOCKS5 facade should construct the protocol-runtime facade request"
+    );
 }
 
 #[test]
@@ -1442,8 +2383,17 @@ fn udp_dispatch_poll_refs_does_not_expose_socks5_association_type() {
         );
     }
     assert!(
-        lifecycle.contains("&crate::protocol_runtime::socks5_udp::Socks5UdpRuntime"),
-        "UdpDispatch poll refs should expose the SOCKS5 runtime facade"
+        lifecycle.contains("Socks5UdpRuntime")
+            && lifecycle.contains("Socks5UdpAssociationView")
+            && lifecycle.contains("ClosedSocks5UdpAssociation"),
+        "UdpDispatch lifecycle should expose SOCKS5 facade types through local imports"
+    );
+    assert!(
+        !lifecycle.contains("crate::protocol_runtime::socks5_udp::Socks5UdpRuntime")
+            && !lifecycle.contains("crate::protocol_runtime::socks5_udp::Socks5UdpAssociationView")
+            && !lifecycle
+                .contains("crate::protocol_runtime::socks5_udp::ClosedSocks5UdpAssociation"),
+        "UdpDispatch lifecycle should not scatter fully-qualified SOCKS5 runtime facade type paths"
     );
 }
 
@@ -1526,6 +2476,7 @@ fn udp_flow_outbound_snapshot_is_not_declared_in_session_bookkeeping() {
 #[test]
 fn udp_session_bookkeeping_does_not_match_protocol_outbound_variants() {
     let content = read("src/runtime/udp_flow/sessions.rs");
+    let outbound = read("src/runtime/udp_flow/outbound.rs");
 
     for forbidden in [
         "UdpFlowOutbound::Shadowsocks",
@@ -1538,6 +2489,29 @@ fn udp_session_bookkeeping_does_not_match_protocol_outbound_variants() {
             "src/runtime/udp_flow/sessions.rs should not match protocol UDP outbound variant `{forbidden}`"
         );
     }
+    for forbidden in [
+        ".direct_sender()",
+        ".upstream_response_tag()",
+        ".matches_upstream_tag(",
+        ".upstream_endpoint()",
+        ".success_outcome()",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "src/runtime/udp_flow/sessions.rs should consume outbound index/completion views instead of fine-grained outbound accessors; found `{forbidden}`"
+        );
+    }
+    assert!(
+        content.contains(".index_keys()") && content.contains(".completion()"),
+        "src/runtime/udp_flow/sessions.rs should use UdpFlowOutbound index/completion views"
+    );
+    assert!(
+        outbound.contains("struct UdpFlowIndexKeys")
+            && outbound.contains("struct UdpFlowCompletion")
+            && outbound.contains("pub(super) fn index_keys(")
+            && outbound.contains("pub(super) fn completion("),
+        "src/runtime/udp_flow/outbound.rs should own UDP flow index/completion view derivation"
+    );
 }
 
 #[test]
@@ -1747,9 +2721,103 @@ fn protocol_registry_tests_live_outside_logic_file() {
 }
 
 #[test]
+fn protocol_registry_tests_root_is_facade_only() {
+    let tests = read("src/protocol_adapter/registry/tests.rs");
+    let fixtures = read("src/protocol_adapter/registry/tests/fixtures.rs");
+    let inbound = read("src/protocol_adapter/registry/tests/inbound.rs");
+    let outbound = read("src/protocol_adapter/registry/tests/outbound.rs");
+
+    for expected in ["mod fixtures;", "mod inbound;", "mod outbound;"] {
+        assert!(
+            tests.contains(expected),
+            "src/protocol_adapter/registry/tests.rs should expose test facade item `{expected}`"
+        );
+    }
+
+    for forbidden in [
+        "#[test]",
+        "fn compiled_in_inbound_configs",
+        "fn compiled_in_outbound_leaves",
+        "fn inbound_protocol_name",
+        "fn outbound_leaf_name",
+        "ResolvedLeafOutbound::",
+        "InboundProtocolConfig::",
+        "ProtocolRegistry::build()",
+    ] {
+        assert!(
+            !tests.contains(forbidden),
+            "src/protocol_adapter/registry/tests.rs should remain a facade over fixtures/inbound/outbound test modules; found `{forbidden}`"
+        );
+    }
+
+    assert!(
+        fixtures.contains("fn compiled_in_inbound_configs")
+            && fixtures.contains("fn compiled_in_outbound_leaves")
+            && fixtures.contains("fn inbound_protocol_name")
+            && fixtures.contains("fn outbound_leaf_name"),
+        "src/protocol_adapter/registry/tests/fixtures.rs should own registry test fixtures"
+    );
+    assert!(
+        inbound.contains("compiled_in_inbound_variants_have_exactly_one_registered_adapter"),
+        "src/protocol_adapter/registry/tests/inbound.rs should own inbound registry tests"
+    );
+    assert!(
+        outbound.contains("compiled_in_outbound_leaf_variants_have_expected_adapter_claims")
+            && outbound.contains("block_outbound_leaf_is_kernel_fact_not_adapter_protocol"),
+        "src/protocol_adapter/registry/tests/outbound.rs should own outbound registry tests"
+    );
+}
+
+#[test]
+fn protocol_registry_root_is_facade_only() {
+    let registry = read("src/protocol_adapter/registry.rs");
+
+    for expected in [
+        "mod build;",
+        "mod inbound;",
+        "mod metadata;",
+        "mod outbound;",
+        "mod support;",
+        "mod validation;",
+        "pub(crate) struct ProtocolRegistry",
+        "adapters: Vec<std::sync::Arc<dyn crate::protocol_adapter::ProtocolAdapter>>",
+        "impl fmt::Debug for ProtocolRegistry",
+    ] {
+        assert!(
+            registry.contains(expected),
+            "src/protocol_adapter/registry.rs should expose registry facade item `{expected}`"
+        );
+    }
+
+    for forbidden in [
+        "pub(crate) fn build",
+        "pub(crate) fn register",
+        "pub(crate) fn find_inbound",
+        "pub(crate) fn find_outbound_leaf",
+        "pub(crate) fn bind_inbound",
+        "pub(crate) fn inbound_names",
+        "pub(crate) fn outbound_names",
+        "pub(crate) fn supports_inbound",
+        "pub(crate) fn supports_outbound",
+        "pub(crate) fn validate_inbounds",
+        "pub(crate) fn validate_outbounds",
+        "adapter.",
+        "InboundProtocolConfig::",
+        "OutboundProtocolConfig::",
+        "ResolvedLeafOutbound::",
+    ] {
+        assert!(
+            !registry.contains(forbidden),
+            "src/protocol_adapter/registry.rs should remain a facade over registry submodules; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn protocol_registry_build_lives_outside_adapters_root() {
     let adapters = read("src/adapters/mod.rs");
     let registry = read("src/protocol_adapter/registry.rs");
+    let build = read("src/protocol_adapter/registry/build.rs");
     let inventory = read("src/inventory.rs");
 
     assert!(
@@ -1757,13 +2825,625 @@ fn protocol_registry_build_lives_outside_adapters_root() {
         "src/adapters/mod.rs should not own registry construction"
     );
     assert!(
-        registry.contains("pub(crate) fn build() -> Self"),
-        "src/protocol_adapter/registry.rs should own registry construction"
+        !registry.contains("pub(crate) fn build() -> Self"),
+        "src/protocol_adapter/registry.rs should keep registry construction in src/protocol_adapter/registry/build.rs"
+    );
+    assert!(
+        build.contains("pub(crate) fn build() -> Self"),
+        "src/protocol_adapter/registry/build.rs should own registry construction"
     );
     assert!(
         inventory.contains("ProtocolRegistry::build()"),
         "src/inventory.rs should build the registry through protocol_adapter::registry"
     );
+}
+
+#[test]
+fn protocol_registry_adapter_imports_live_in_build_module() {
+    let registry = read("src/protocol_adapter/registry.rs");
+    let build = read("src/protocol_adapter/registry/build.rs");
+
+    for adapter in [
+        "DirectAdapter",
+        "HttpConnectAdapter",
+        "Hysteria2Adapter",
+        "MieruAdapter",
+        "MixedAdapter",
+        "ShadowsocksAdapter",
+        "Socks5Adapter",
+        "TrojanAdapter",
+        "VlessAdapter",
+        "VmessAdapter",
+    ] {
+        assert!(
+            !registry.contains(adapter),
+            "src/protocol_adapter/registry.rs should keep concrete adapter imports in src/protocol_adapter/registry/build.rs; found `{adapter}`"
+        );
+        assert!(
+            build.contains(adapter),
+            "src/protocol_adapter/registry/build.rs should own concrete adapter import `{adapter}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_registry_register_lives_in_build_module() {
+    let registry = read("src/protocol_adapter/registry.rs");
+    let build = read("src/protocol_adapter/registry/build.rs");
+
+    assert!(
+        !registry.contains("pub(crate) fn register("),
+        "src/protocol_adapter/registry.rs should keep register helper in src/protocol_adapter/registry/build.rs"
+    );
+    assert!(
+        build.contains("pub(crate) fn register("),
+        "src/protocol_adapter/registry/build.rs should own the register helper used by build()"
+    );
+}
+
+#[test]
+fn protocol_registry_metadata_lives_in_metadata_module() {
+    let registry = read("src/protocol_adapter/registry.rs");
+    let metadata = read("src/protocol_adapter/registry/metadata.rs");
+
+    for forbidden in [
+        "pub(crate) fn inbound_names",
+        "pub(crate) fn outbound_names",
+        "pub(crate) fn capabilities",
+    ] {
+        assert!(
+            !registry.contains(forbidden),
+            "src/protocol_adapter/registry.rs should keep metadata methods in src/protocol_adapter/registry/metadata.rs; found `{forbidden}`"
+        );
+        assert!(
+            metadata.contains(forbidden),
+            "src/protocol_adapter/registry/metadata.rs should own registry metadata method `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_registry_support_lives_in_support_module() {
+    let registry = read("src/protocol_adapter/registry.rs");
+    let metadata = read("src/protocol_adapter/registry/metadata.rs");
+    let support = read("src/protocol_adapter/registry/support.rs");
+
+    for forbidden in [
+        "pub(crate) fn supports_inbound",
+        "pub(crate) fn supports_outbound",
+        "pub(crate) fn inbound_protocol_label",
+        "pub(crate) fn inbound_protocol_feature_name",
+        "pub(crate) fn outbound_protocol_label",
+        "pub(crate) fn outbound_protocol_feature_name",
+    ] {
+        assert!(
+            !registry.contains(forbidden),
+            "src/protocol_adapter/registry.rs should keep support methods in src/protocol_adapter/registry/support.rs; found `{forbidden}`"
+        );
+        assert!(
+            !metadata.contains(forbidden),
+            "src/protocol_adapter/registry/metadata.rs should keep support methods in src/protocol_adapter/registry/support.rs; found `{forbidden}`"
+        );
+        assert!(
+            support.contains(forbidden),
+            "src/protocol_adapter/registry/support.rs should own registry support method `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_registry_validation_lives_in_validation_module() {
+    let registry = read("src/protocol_adapter/registry.rs");
+    let metadata = read("src/protocol_adapter/registry/metadata.rs");
+    let validation = read("src/protocol_adapter/registry/validation.rs");
+
+    for forbidden in [
+        "pub(crate) fn validate_inbounds",
+        "pub(crate) fn validate_outbounds",
+    ] {
+        assert!(
+            !registry.contains(forbidden),
+            "src/protocol_adapter/registry.rs should keep validation methods in src/protocol_adapter/registry/validation.rs; found `{forbidden}`"
+        );
+        assert!(
+            !metadata.contains(forbidden),
+            "src/protocol_adapter/registry/metadata.rs should keep validation methods in src/protocol_adapter/registry/validation.rs; found `{forbidden}`"
+        );
+        assert!(
+            validation.contains(forbidden),
+            "src/protocol_adapter/registry/validation.rs should own registry validation method `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_registry_outbound_dispatch_lives_in_outbound_module() {
+    let registry = read("src/protocol_adapter/registry.rs");
+    let outbound = read("src/protocol_adapter/registry/outbound.rs");
+
+    for forbidden in [
+        "pub(crate) fn find_outbound_leaf",
+        "pub(crate) fn outbound_leaf_runtime",
+        "ResolvedLeafOutbound::Block",
+        "TcpPathCategory::Block",
+    ] {
+        assert!(
+            !registry.contains(forbidden),
+            "src/protocol_adapter/registry.rs should keep outbound dispatch in src/protocol_adapter/registry/outbound.rs; found `{forbidden}`"
+        );
+        assert!(
+            outbound.contains(forbidden),
+            "src/protocol_adapter/registry/outbound.rs should own outbound dispatch item `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_registry_inbound_dispatch_lives_in_inbound_module() {
+    let registry = read("src/protocol_adapter/registry.rs");
+    let inbound = read("src/protocol_adapter/registry/inbound.rs");
+
+    for forbidden in [
+        "pub(crate) fn find_inbound",
+        "pub(crate) async fn bind_inbound",
+        "adapter.bind_inbound(inbound, source_dir).await",
+    ] {
+        assert!(
+            !registry.contains(forbidden),
+            "src/protocol_adapter/registry.rs should keep inbound dispatch in src/protocol_adapter/registry/inbound.rs; found `{forbidden}`"
+        );
+        assert!(
+            inbound.contains(forbidden),
+            "src/protocol_adapter/registry/inbound.rs should own inbound dispatch item `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_adapter_dispatch_is_not_public_api() {
+    let root = read("src/protocol_adapter.rs");
+    let registry = read("src/protocol_adapter/registry.rs");
+    let adapter = read("src/protocol_adapter/adapter.rs");
+
+    for forbidden in [
+        "pub use registry::ProtocolRegistry;",
+        "pub trait ProtocolAdapter",
+        "pub struct ProtocolRegistry",
+    ] {
+        assert!(
+            !root.contains(forbidden) && !registry.contains(forbidden),
+            "protocol adapter dispatch internals should stay crate-private; found `{forbidden}`"
+        );
+    }
+
+    assert!(
+        root.contains("pub(crate) use registry::ProtocolRegistry;"),
+        "src/protocol_adapter.rs should keep ProtocolRegistry visible only inside zero-proxy"
+    );
+    assert!(
+        root.contains("pub(crate) use adapter::ProtocolAdapter;"),
+        "src/protocol_adapter.rs should re-export ProtocolAdapter crate-privately"
+    );
+    assert!(
+        adapter.contains("pub(crate) trait ProtocolAdapter"),
+        "src/protocol_adapter/adapter.rs should own the ProtocolAdapter trait definition"
+    );
+    assert!(
+        registry.contains("pub(crate) struct ProtocolRegistry"),
+        "src/protocol_adapter/registry.rs should keep ProtocolRegistry visible only inside zero-proxy"
+    );
+}
+
+#[test]
+fn protocol_adapter_root_is_facade_only() {
+    let root = read("src/protocol_adapter.rs");
+
+    for expected in [
+        "mod adapter;",
+        "mod defaults;",
+        "mod model;",
+        "mod registry;",
+        "pub(crate) use adapter::ProtocolAdapter;",
+        "pub(crate) use model::{BoundInbound, OutboundLeafRuntime};",
+        "pub(crate) use registry::ProtocolRegistry;",
+    ] {
+        assert!(
+            root.contains(expected),
+            "src/protocol_adapter.rs should expose facade item `{expected}`"
+        );
+    }
+
+    for forbidden in [
+        "trait ProtocolAdapter",
+        "struct ProtocolRegistry",
+        "enum BoundInbound",
+        "struct OutboundLeafRuntime",
+        "impl ProtocolAdapter",
+        "impl ProtocolRegistry",
+        "async fn",
+        "fn find_outbound_leaf",
+        "fn find_inbound",
+        "InboundProtocolConfig::",
+        "OutboundProtocolConfig::",
+        "ResolvedLeafOutbound::",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/protocol_adapter.rs should remain a facade over adapter/defaults/model/registry modules; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_adapter_models_live_outside_trait_root() {
+    let root = read("src/protocol_adapter.rs");
+    let model = read("src/protocol_adapter/model.rs");
+    let inbound = read("src/protocol_adapter/model/inbound.rs");
+    let outbound = read("src/protocol_adapter/model/outbound.rs");
+
+    for forbidden in ["pub(crate) enum BoundInbound", "impl BoundInbound"] {
+        assert!(
+            !root.contains(forbidden) && !model.contains(forbidden),
+            "src/protocol_adapter.rs and src/protocol_adapter/model.rs should keep inbound adapter models in src/protocol_adapter/model/inbound.rs; found `{forbidden}`"
+        );
+        assert!(
+            inbound.contains(forbidden),
+            "src/protocol_adapter/model/inbound.rs should own adapter inbound model `{forbidden}`"
+        );
+    }
+
+    for forbidden in [
+        "pub(crate) struct OutboundLeafRuntime",
+        "use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory}",
+    ] {
+        assert!(
+            !root.contains(forbidden) && !model.contains(forbidden),
+            "src/protocol_adapter.rs and src/protocol_adapter/model.rs should keep outbound adapter models in src/protocol_adapter/model/outbound.rs; found `{forbidden}`"
+        );
+        assert!(
+            outbound.contains(forbidden),
+            "src/protocol_adapter/model/outbound.rs should own adapter outbound model `{forbidden}`"
+        );
+    }
+
+    for forbidden in [
+        "pub(crate) enum BoundInbound",
+        "pub(crate) struct OutboundLeafRuntime",
+        "impl BoundInbound",
+        "use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory}",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/protocol_adapter.rs should keep adapter models in src/protocol_adapter/model.rs; found `{forbidden}`"
+        );
+    }
+    assert!(
+        root.contains("pub(crate) use model::{BoundInbound, OutboundLeafRuntime};"),
+        "src/protocol_adapter.rs should re-export adapter models crate-privately"
+    );
+}
+
+#[test]
+fn protocol_adapter_model_root_is_facade_only() {
+    let model = read("src/protocol_adapter/model.rs");
+
+    for expected in [
+        "mod inbound;",
+        "mod outbound;",
+        "pub(crate) use inbound::BoundInbound;",
+        "pub(crate) use outbound::OutboundLeafRuntime;",
+    ] {
+        assert!(
+            model.contains(expected),
+            "src/protocol_adapter/model.rs should expose model facade item `{expected}`"
+        );
+    }
+
+    for forbidden in [
+        "enum BoundInbound",
+        "struct OutboundLeafRuntime",
+        "impl BoundInbound",
+        "TcpPathCategory",
+        "OutboundEndpoint",
+        "TokioListener",
+        "QuicInbound",
+        "into_tcp",
+    ] {
+        assert!(
+            !model.contains(forbidden),
+            "src/protocol_adapter/model.rs should remain a facade over inbound/outbound model modules; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_adapter_default_errors_live_outside_trait_root() {
+    let root = read("src/protocol_adapter.rs");
+    let defaults = read("src/protocol_adapter/defaults.rs");
+    let errors = read("src/protocol_adapter/defaults/errors.rs");
+
+    for forbidden in [
+        "std::io::ErrorKind::Unsupported",
+        "TcpOutboundFailure {",
+        "FlowFailure {",
+        "no_tcp_outbound",
+        "no_udp_outbound",
+        "no_two_stream_relay",
+        "no_udp_relay_final_hop",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/protocol_adapter.rs should keep default unsupported error construction in src/protocol_adapter/defaults/errors.rs; found `{forbidden}`"
+        );
+        assert!(
+            !defaults.contains(forbidden),
+            "src/protocol_adapter/defaults.rs should keep default unsupported error construction in src/protocol_adapter/defaults/errors.rs; found `{forbidden}`"
+        );
+        assert!(
+            errors.contains(forbidden),
+            "src/protocol_adapter/defaults/errors.rs should own default unsupported error construction `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_adapter_default_tcp_bind_lives_outside_trait_root() {
+    let root = read("src/protocol_adapter/adapter.rs");
+    let defaults = read("src/protocol_adapter/defaults.rs");
+    let bind = read("src/protocol_adapter/defaults/bind.rs");
+
+    for forbidden in ["TokioListener::bind", "BoundInbound::Tcp"] {
+        assert!(
+            !root.contains(forbidden),
+            "src/protocol_adapter/adapter.rs should keep default TCP bind construction in src/protocol_adapter/defaults/bind.rs; found `{forbidden}`"
+        );
+        assert!(
+            !defaults.contains(forbidden),
+            "src/protocol_adapter/defaults.rs should keep default TCP bind construction in src/protocol_adapter/defaults/bind.rs; found `{forbidden}`"
+        );
+        assert!(
+            bind.contains(forbidden),
+            "src/protocol_adapter/defaults/bind.rs should own default TCP bind construction `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_adapter_defaults_root_is_facade_only() {
+    let defaults = read("src/protocol_adapter/defaults.rs");
+
+    for expected in [
+        "mod bind;",
+        "mod errors;",
+        "pub(super) use bind::bind_tcp_inbound;",
+        "pub(super) use errors::{",
+    ] {
+        assert!(
+            defaults.contains(expected),
+            "src/protocol_adapter/defaults.rs should expose defaults facade item `{expected}`"
+        );
+    }
+
+    for forbidden in [
+        "async fn",
+        "fn unsupported_io",
+        "fn udp_flow_unsupported",
+        "TcpOutboundFailure {",
+        "FlowFailure {",
+        "TokioListener::bind",
+        "BoundInbound::Tcp",
+        "std::io::ErrorKind::Unsupported",
+    ] {
+        assert!(
+            !defaults.contains(forbidden),
+            "src/protocol_adapter/defaults.rs should remain a facade over bind/errors modules; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn inventory_does_not_expose_adapter_trait_objects() {
+    let inventory = read("src/inventory.rs");
+
+    for forbidden in [
+        "Arc<dyn crate::protocol_adapter::ProtocolAdapter>",
+        "Arc<dyn ProtocolAdapter>",
+        "pub(crate) fn find_outbound_leaf",
+        "pub(crate) fn find_inbound",
+    ] {
+        assert!(
+            !inventory.contains(forbidden),
+            "src/inventory.rs should expose protocol operations, not adapter trait objects; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn inventory_root_is_facade_only() {
+    let root = read("src/inventory.rs");
+
+    for expected in [
+        "mod inbound;",
+        "mod metadata;",
+        "mod protocols;",
+        "mod runtime;",
+        "mod tcp;",
+        "mod udp;",
+        "pub struct ProtocolInventory",
+        "registry: ProtocolRegistry",
+    ] {
+        assert!(
+            root.contains(expected),
+            "src/inventory.rs should expose facade item `{expected}`"
+        );
+    }
+
+    for forbidden in [
+        "find_inbound",
+        "find_outbound_leaf",
+        "adapter.",
+        "async fn",
+        "InboundProtocolConfig::",
+        "OutboundProtocolConfig::",
+        "ResolvedLeafOutbound::",
+        "FlowFailure",
+        "EngineError",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/inventory.rs should remain a facade over inventory submodules; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn inventory_metadata_facade_lives_in_metadata_module() {
+    let root = read("src/inventory.rs");
+    let metadata = read("src/inventory/metadata.rs");
+
+    for forbidden in [
+        "supported_inbounds",
+        "supported_outbounds",
+        "protocol_capabilities",
+        "validate_config",
+        "supports_inbound_protocol",
+        "supports_outbound_protocol",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/inventory.rs should keep metadata facade methods in src/inventory/metadata.rs; found `{forbidden}`"
+        );
+        assert!(
+            metadata.contains(forbidden),
+            "src/inventory/metadata.rs should own metadata facade method `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn inventory_runtime_facts_live_in_runtime_module() {
+    let root = read("src/inventory.rs");
+    let runtime = read("src/inventory/runtime.rs");
+
+    for forbidden in ["OutboundLeafRuntime", "outbound_leaf_runtime"] {
+        assert!(
+            !root.contains(forbidden),
+            "src/inventory.rs should keep runtime fact lookup in src/inventory/runtime.rs; found `{forbidden}`"
+        );
+        assert!(
+            runtime.contains(forbidden),
+            "src/inventory/runtime.rs should own runtime fact lookup `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn inventory_udp_adapter_dispatch_lives_in_udp_module() {
+    let root = read("src/inventory.rs");
+    let udp = read("src/inventory/udp.rs");
+    let leaf = read("src/inventory/udp/leaf.rs");
+    let relay = read("src/inventory/udp/relay.rs");
+    let packet_path = read("src/inventory/udp/packet_path.rs");
+
+    {
+        let forbidden = "start_udp_leaf_flow";
+        assert!(
+            !root.contains(forbidden) && !udp.contains(forbidden),
+            "src/inventory.rs and src/inventory/udp.rs should keep UDP leaf dispatch in src/inventory/udp/leaf.rs; found `{forbidden}`"
+        );
+        assert!(
+            leaf.contains(forbidden),
+            "src/inventory/udp/leaf.rs should own UDP leaf dispatch method `{forbidden}`"
+        );
+    }
+
+    for forbidden in [
+        "udp_relay_needs_two_streams",
+        "start_udp_relay_two_stream",
+        "start_udp_relay_final_hop",
+    ] {
+        assert!(
+            !root.contains(forbidden) && !udp.contains(forbidden),
+            "src/inventory.rs and src/inventory/udp.rs should keep UDP relay dispatch in src/inventory/udp/relay.rs; found `{forbidden}`"
+        );
+        assert!(
+            relay.contains(forbidden),
+            "src/inventory/udp/relay.rs should own UDP relay dispatch method `{forbidden}`"
+        );
+    }
+
+    for forbidden in [
+        "udp_packet_path_pair",
+        "resolve_udp_packet_path_candidate",
+        "build_udp_packet_path_carrier",
+    ] {
+        assert!(
+            !root.contains(forbidden) && !udp.contains(forbidden),
+            "src/inventory.rs and src/inventory/udp.rs should keep UDP packet-path dispatch in src/inventory/udp/packet_path.rs; found `{forbidden}`"
+        );
+        assert!(
+            packet_path.contains(forbidden),
+            "src/inventory/udp/packet_path.rs should own UDP packet-path dispatch method `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn inventory_udp_root_is_facade_only() {
+    let udp = read("src/inventory/udp.rs");
+
+    assert!(
+        udp.contains("mod leaf;") && udp.contains("mod relay;") && udp.contains("mod packet_path;"),
+        "src/inventory/udp.rs should expose the UDP inventory submodules"
+    );
+
+    for forbidden in [
+        "impl ProtocolInventory",
+        "find_outbound_leaf",
+        "adapter.",
+        "FlowFailure",
+        "EngineError",
+        "ResolvedLeafOutbound",
+    ] {
+        assert!(
+            !udp.contains(forbidden),
+            "src/inventory/udp.rs should remain a facade over leaf/relay/packet_path modules; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn inventory_tcp_adapter_dispatch_lives_in_tcp_module() {
+    let root = read("src/inventory.rs");
+    let tcp = read("src/inventory/tcp.rs");
+
+    for forbidden in ["connect_tcp_leaf", "apply_tcp_relay_hop"] {
+        assert!(
+            !root.contains(forbidden),
+            "src/inventory.rs should keep TCP adapter dispatch in src/inventory/tcp.rs; found `{forbidden}`"
+        );
+        assert!(
+            tcp.contains(forbidden),
+            "src/inventory/tcp.rs should own TCP adapter dispatch method `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn inventory_inbound_adapter_dispatch_lives_in_inbound_module() {
+    let root = read("src/inventory.rs");
+    let inbound = read("src/inventory/inbound.rs");
+
+    for forbidden in ["check_inbound_enabled", "bind_inbound", "spawn_inbound"] {
+        assert!(
+            !root.contains(forbidden),
+            "src/inventory.rs should keep inbound adapter dispatch in src/inventory/inbound.rs; found `{forbidden}`"
+        );
+        assert!(
+            inbound.contains(forbidden),
+            "src/inventory/inbound.rs should own inbound adapter dispatch method `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -1816,6 +3496,62 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
         assert!(
             !content.contains(&format!("pub(crate) {field}:")),
             "ProtocolUdpState manager field `{field}` should not be crate-public"
+        );
+    }
+}
+
+#[test]
+fn protocol_udp_root_does_not_reexport_manager_internals() {
+    let root = read("src/protocol_runtime/udp/mod.rs");
+
+    for forbidden in [
+        "H2ChainManager",
+        "H2SendExisting",
+        "MieruChainManager",
+        "MieruSendExisting",
+        "MieruRelayExisting",
+        "SsChainManager",
+        "SsSendExisting",
+        "TrojanChainManager",
+        "TrojanSendExisting",
+        "TrojanRelayExisting",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/protocol_runtime/udp/mod.rs should expose protocol UDP facades, not manager internals; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_udp_manager_roots_do_not_reexport_request_models() {
+    for (source, forbidden) in [
+        ("src/protocol_runtime/udp/h2_manager.rs", "H2SendExisting"),
+        (
+            "src/protocol_runtime/udp/mieru_manager.rs",
+            "MieruSendExisting",
+        ),
+        (
+            "src/protocol_runtime/udp/mieru_manager.rs",
+            "MieruRelayExisting",
+        ),
+        ("src/protocol_runtime/udp/ss_manager.rs", "SsSendExisting"),
+        (
+            "src/protocol_runtime/udp/trojan_manager.rs",
+            "TrojanSendExisting",
+        ),
+        (
+            "src/protocol_runtime/udp/trojan_manager.rs",
+            "TrojanRelayExisting",
+        ),
+    ] {
+        let content = read(source);
+        assert!(
+            !content.lines().any(
+                |line| line.trim_start().starts_with("pub(crate) use model::")
+                    && line.contains(forbidden)
+            ),
+            "{source} should not re-export manager request model `{forbidden}`"
         );
     }
 }
@@ -1874,6 +3610,8 @@ fn udp_forward_stays_protocol_neutral_and_does_not_construct_peer_types() {
         "TrojanUdpPeer",
         "MieruUdpPeer",
         "UdpPeerEndpoint",
+        "Socks5UdpSend",
+        "protocol_runtime::socks5_udp",
         ".packet_path",
         ".shadowsocks",
         ".hysteria2",
@@ -2127,7 +3865,7 @@ fn packet_path_key_model_lives_outside_chain_manager() {
     for forbidden in [
         "struct PathKey",
         "carrier_key: carrier.cache_key().to_owned()",
-        "datagram_password: datagram_password.to_owned()",
+        "datagram_cache_key: datagram_cache_key.to_owned()",
     ] {
         assert!(
             !manager.contains(forbidden),
@@ -2815,6 +4553,84 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
     assert!(
         model.exists(),
         "Shadowsocks UDP state/request models should live in ss_manager/model.rs"
+    );
+}
+
+#[test]
+fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
+    let adapter = read("src/adapters/shadowsocks/udp.rs");
+    let flows = read("src/protocol_runtime/udp/flows.rs");
+    let peer = read("src/protocol_runtime/udp/packet_path_traits/peer.rs");
+    let manager = read("src/protocol_runtime/udp/ss_manager.rs");
+    let model = read("src/protocol_runtime/udp/ss_manager/model.rs");
+
+    assert!(
+        adapter.contains("CipherKind::from_str"),
+        "Shadowsocks UDP adapter should parse ordinary UDP flow cipher config"
+    );
+    assert!(
+        !manager.contains("CipherKind::from_str"),
+        "Shadowsocks UDP manager should receive an adapter-parsed CipherKind"
+    );
+    let shadowsocks_flow_model = flows
+        .split("#[cfg(feature = \"mieru\")]")
+        .next()
+        .expect("Shadowsocks UDP flow model should appear before Mieru");
+    for source in [shadowsocks_flow_model, &peer, &model] {
+        assert!(
+            !source.contains("cipher: &'a str") && source.contains("cipher: shadowsocks::CipherKind"),
+            "ordinary Shadowsocks UDP flow models should carry CipherKind instead of raw cipher strings"
+        );
+    }
+}
+
+#[test]
+fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
+    let adapter = read("src/adapters/shadowsocks/udp.rs");
+    let carrier = read("src/protocol_runtime/udp/packet_path_chain/carriers.rs");
+    let entry = read("src/protocol_runtime/udp/packet_path_chain/entry.rs");
+    let traits = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
+    let key = read("src/protocol_runtime/udp/packet_path_chain/key.rs");
+    let outbound = read("src/runtime/udp_flow/outbound.rs");
+    let carrier_snapshot = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
+    let snapshot = read("src/protocol_runtime/udp/packet_path_chain/snapshot.rs");
+    let forward = read("src/protocol_runtime/udp/state/forward/shadowsocks.rs");
+
+    assert!(
+        adapter.contains("CipherKind::from_str"),
+        "Shadowsocks adapter should parse packet-path carrier/datagram cipher config"
+    );
+    for source in [&carrier, &entry] {
+        assert!(
+            !source.contains("CipherKind::from_str"),
+            "packet-path chain should receive adapter-parsed Shadowsocks cipher values"
+        );
+    }
+    assert!(
+        traits.contains("cipher_kind: shadowsocks::CipherKind"),
+        "UdpDatagramSource should carry parsed Shadowsocks cipher for packet-path datagram codecs"
+    );
+    assert!(
+        traits.contains("datagram_cache_key: String")
+            && adapter.contains("datagram_cache_key: format!("),
+        "Shadowsocks adapter should provide an opaque datagram cache key"
+    );
+    for source in [
+        &traits,
+        &key,
+        &outbound,
+        &carrier_snapshot,
+        &snapshot,
+        &forward,
+    ] {
+        assert!(
+            !source.contains("datagram_cipher") && !source.contains("cipher: &'a str"),
+            "packet-path runtime should not carry raw Shadowsocks cipher strings for cache identity"
+        );
+    }
+    assert!(
+        !carrier_snapshot.contains("cipher: String"),
+        "packet-path carrier snapshots should use adapter-built cache keys instead of raw Shadowsocks cipher strings"
     );
 }
 
