@@ -39,7 +39,8 @@ pub(crate) enum UdpFlowOutbound {
         server: String,
         port: u16,
         password: String,
-        cipher: String,
+        datagram_cache_key: String,
+        cipher_kind: shadowsocks::CipherKind,
         packet_path_carrier: Option<UdpPacketPathCarrier>,
     },
     #[cfg(feature = "hysteria2")]
@@ -82,6 +83,16 @@ pub(crate) struct Socks5UdpRelay<'a> {
     pub(crate) password: Option<&'a str>,
 }
 
+pub(super) struct UdpFlowIndexKeys<'a> {
+    pub(super) direct_sender: Option<SocketAddr>,
+    pub(super) upstream_response_tag: Option<&'a str>,
+}
+
+pub(super) struct UdpFlowCompletion {
+    pub(super) upstream: Option<(String, u16)>,
+    pub(super) success_outcome: SessionOutcome,
+}
+
 impl UdpFlowOutbound {
     pub(crate) fn tag(&self) -> &str {
         match self {
@@ -111,10 +122,6 @@ impl UdpFlowOutbound {
             #[cfg(feature = "mieru")]
             Self::Mieru { .. } => UdpPathCategory::StreamPacket,
         }
-    }
-
-    pub(super) fn direct_sender(&self) -> Option<SocketAddr> {
-        self.direct_target_addr()
     }
 
     pub(crate) fn direct_target_addr(&self) -> Option<SocketAddr> {
@@ -159,7 +166,14 @@ impl UdpFlowOutbound {
         }
     }
 
-    pub(super) fn upstream_response_tag(&self) -> Option<&str> {
+    pub(super) fn index_keys(&self) -> UdpFlowIndexKeys<'_> {
+        UdpFlowIndexKeys {
+            direct_sender: self.direct_target_addr(),
+            upstream_response_tag: self.upstream_response_tag(),
+        }
+    }
+
+    fn upstream_response_tag(&self) -> Option<&str> {
         match self {
             Self::Direct { .. } => None,
             Self::Socks5 { tag, .. } => Some(tag),
@@ -174,14 +188,7 @@ impl UdpFlowOutbound {
         }
     }
 
-    pub(super) fn matches_upstream_tag(&self, outbound_tag: &str) -> bool {
-        let Some(tag) = self.upstream_response_tag() else {
-            return false;
-        };
-        tag == outbound_tag
-    }
-
-    pub(super) fn upstream_endpoint(&self) -> Option<(String, u16)> {
+    fn upstream_endpoint(&self) -> Option<(String, u16)> {
         match self {
             Self::Direct { .. } => None,
             Self::Socks5 { server, port, .. } => Some((server.clone(), *port)),
@@ -196,7 +203,7 @@ impl UdpFlowOutbound {
         }
     }
 
-    pub(super) fn success_outcome(&self) -> SessionOutcome {
+    fn success_outcome(&self) -> SessionOutcome {
         match self {
             Self::Direct { .. } => SessionOutcome::DirectRelayed,
             Self::Socks5 { .. } => SessionOutcome::ChainedRelayed,
@@ -208,6 +215,13 @@ impl UdpFlowOutbound {
             Self::Trojan { .. } => SessionOutcome::ChainedRelayed,
             #[cfg(feature = "mieru")]
             Self::Mieru { .. } => SessionOutcome::ChainedRelayed,
+        }
+    }
+
+    pub(super) fn completion(&self) -> UdpFlowCompletion {
+        UdpFlowCompletion {
+            upstream: self.upstream_endpoint(),
+            success_outcome: self.success_outcome(),
         }
     }
 }

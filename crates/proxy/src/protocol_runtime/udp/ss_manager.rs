@@ -10,11 +10,10 @@ use crate::runtime::Proxy;
 mod bridge;
 mod codec;
 mod entry;
-mod model;
+pub(super) mod model;
 mod socket;
 
-pub(crate) use model::SsSendExisting;
-use model::{SsKey, SsUpstream};
+use model::{SsKey, SsSendExisting, SsUpstream};
 
 pub(crate) struct SsChainManager {
     upstreams: HashMap<SsKey, Arc<SsUpstream>>,
@@ -34,17 +33,6 @@ impl SsChainManager {
         peer: SsUdpPeer<'_>,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        use shadowsocks::CipherKind;
-
-        let cipher_kind = CipherKind::from_str(peer.cipher).ok_or_else(|| FlowFailure {
-            stage: "ss_cipher",
-            error: EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("unknown shadowsocks cipher: {}", peer.cipher),
-            )),
-            upstream: Some(peer.endpoint.upstream()),
-        })?;
-
         let target_addr = proxy
             .protocols
             .direct_connector()
@@ -66,7 +54,7 @@ impl SsChainManager {
             peer.endpoint.server,
             peer.endpoint.port,
             peer.password,
-            cipher_kind,
+            peer.cipher,
             target_addr,
         );
 
@@ -74,7 +62,7 @@ impl SsChainManager {
             packet_ref.target,
             packet_ref.port,
             packet_ref.payload,
-            cipher_kind,
+            peer.cipher,
             peer.password,
         )
         .map_err(|error| FlowFailure {

@@ -41,7 +41,7 @@ pub(crate) struct SsSendExisting<'a> {
     pub(crate) server: &'a str,
     pub(crate) port: u16,
     pub(crate) password: &'a str,
-    pub(crate) cipher: &'a str,
+    pub(crate) cipher: shadowsocks::CipherKind,
     pub(crate) target: &'a Address,
     pub(crate) target_port: u16,
     pub(crate) payload: &'a [u8],

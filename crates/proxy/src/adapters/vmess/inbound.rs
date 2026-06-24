@@ -30,9 +30,34 @@ impl VmessAdapter {
                     )));
                 }
             };
+            let users = users
+                .iter()
+                .map(|user| {
+                    let id = vmess::parse_uuid(&user.id).map_err(|error| {
+                        EngineError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            error,
+                        ))
+                    })?;
+                    let cipher = vmess::VmessCipher::from_name(&user.cipher).ok_or_else(|| {
+                        EngineError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            format!("vmess unknown cipher: {}", user.cipher),
+                        ))
+                    })?;
+                    Ok(vmess::VmessUser {
+                        id,
+                        cipher,
+                        credential_id: user.credential_id.clone(),
+                        principal_key: user.principal_key.clone(),
+                        up_bps: user.up_bps,
+                        down_bps: user.down_bps,
+                    })
+                })
+                .collect::<Result<Vec<_>, EngineError>>()?;
             crate::inbound::run_vmess_listener_with_bound(
                 &p,
-                crate::inbound::VmessInboundRequest {
+                crate::inbound::vmess::model::VmessInboundRequest {
                     inbound,
                     users,
                     tls,

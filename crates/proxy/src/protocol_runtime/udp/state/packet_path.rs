@@ -17,7 +17,8 @@ impl ProtocolUdpState {
             server: datagram.server.to_owned(),
             port: datagram.port,
             password: datagram.password.to_owned(),
-            cipher: datagram.cipher.to_owned(),
+            datagram_cache_key: datagram.datagram_cache_key,
+            cipher_kind: datagram.cipher_kind,
             packet_path_carrier,
         }
     }

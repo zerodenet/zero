@@ -1,7 +1,7 @@
 use super::super::packet_path_traits::{H2UdpPeer, UdpFlowContext, UdpPacketRef, UdpPeerEndpoint};
 use super::super::FlowFailure;
-use super::model::{H2Entry, H2Key};
-use super::{codec, establish, H2ChainManager, H2SendExisting};
+use super::model::{H2Entry, H2Key, H2SendExisting};
+use super::{codec, establish, H2ChainManager};
 
 impl H2ChainManager {
     async fn send(

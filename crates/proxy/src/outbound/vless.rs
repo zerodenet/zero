@@ -36,7 +36,7 @@ pub(crate) async fn connect_tcp(
         session,
         server,
         port,
-        id,
+        uuid,
         flow,
         mux_concurrency,
         mux_idle_timeout_secs,
@@ -50,19 +50,17 @@ pub(crate) async fn connect_tcp(
         split_http,
     } = request;
 
-    let id = vless::parse_uuid(id)?;
-
     // If MUX flow is configured, use connection pool.
     if flow == Some("xtls-rprx-vision") {
         return proxy
             .mux_pool
             .open_stream(
-                crate::protocol_runtime::vless_mux_pool::VlessMuxOpenRequest {
+                crate::protocol_runtime::vless_mux_pool::model::VlessMuxOpenRequest {
                     proxy,
                     session: Some(session),
                     server,
                     port,
-                    id: &id,
+                    id: &uuid,
                     tls,
                     reality,
                     max_concurrency: mux_concurrency.unwrap_or(8),
@@ -110,7 +108,7 @@ pub(crate) async fn connect_tcp(
                 &mut metered,
                 &vless::VlessFlowTcpTunnelTarget {
                     session,
-                    id: &id,
+                    id: &uuid,
                     flow,
                 },
             )
@@ -127,7 +125,7 @@ pub(crate) async fn connect_tcp(
             &mut metered,
             &vless::VlessFlowTcpTunnelTarget {
                 session,
-                id: &id,
+                id: &uuid,
                 flow,
             },
         )
@@ -144,7 +142,7 @@ pub(crate) struct VlessTcpConnectRequest<'a> {
     pub session: &'a Session,
     pub server: &'a str,
     pub port: u16,
-    pub id: &'a str,
+    pub uuid: [u8; 16],
     pub flow: Option<&'a str>,
     pub mux_concurrency: Option<u32>,
     pub mux_idle_timeout_secs: Option<u64>,
@@ -166,10 +164,9 @@ pub(crate) async fn apply_tcp_hop(
     proxy: &Proxy,
     mut stream: TcpRelayStream,
     session: &Session,
-    id: &str,
+    uuid: [u8; 16],
     flow: Option<&str>,
 ) -> Result<TcpRelayStream, EngineError> {
-    let uuid = vless::parse_uuid(id)?;
     use zero_traits::TcpTunnelProtocol;
     if flow.is_some() {
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessFlowTcpTunnelTarget>>::establish_tcp_tunnel(

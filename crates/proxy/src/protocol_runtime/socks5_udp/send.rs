@@ -12,7 +12,7 @@ use crate::logging::{
 };
 use crate::runtime::Proxy;
 
-pub(crate) struct Socks5UdpSend<'a> {
+pub(super) struct Socks5UdpSend<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) tag: &'a str,
     pub(crate) server: &'a str,

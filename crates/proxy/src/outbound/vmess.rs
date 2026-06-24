@@ -21,14 +21,15 @@ use crate::transport::{MeteredStream, TcpRelayStream};
 pub(crate) async fn connect_tcp(
     request: VmessTcpConnectRequest<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
-    use vmess::{parse_uuid, VmessCipher, VmessOutbound};
+    use vmess::VmessOutbound;
 
     let VmessTcpConnectRequest {
         proxy,
         session,
         server,
         port,
-        id,
+        uuid,
+        cipher_name,
         cipher,
         mux_concurrency,
         mux_idle_timeout_secs,
@@ -37,26 +38,18 @@ pub(crate) async fn connect_tcp(
         grpc,
     } = request;
 
-    let uuid = parse_uuid(id)
-        .map_err(|e| EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?;
-    let vmess_cipher = VmessCipher::from_name(cipher).ok_or_else(|| {
-        EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("vmess unknown cipher: {cipher}"),
-        ))
-    })?;
-
     if let Some(max_concurrency) = mux_concurrency {
         return proxy
             .vmess_mux_pool
             .open_stream(
-                crate::protocol_runtime::vmess_mux_pool::VmessMuxOpenRequest {
+                crate::protocol_runtime::vmess_mux_pool::model::VmessMuxOpenRequest {
                     proxy,
                     session,
                     server: server.to_owned(),
                     port,
                     id: uuid,
-                    cipher: cipher.to_owned(),
+                    cipher_name: cipher_name.to_owned(),
+                    cipher,
                     tls,
                     ws,
                     grpc,
@@ -132,7 +125,7 @@ pub(crate) async fn connect_tcp(
             &vmess::VmessTcpSessionTarget {
                 session,
                 uuid: &uuid,
-                cipher: vmess_cipher,
+                cipher,
             },
         )
         .await?;
@@ -148,8 +141,9 @@ pub(crate) struct VmessTcpConnectRequest<'a> {
     pub session: &'a Session,
     pub server: &'a str,
     pub port: u16,
-    pub id: &'a str,
-    pub cipher: &'a str,
+    pub uuid: [u8; 16],
+    pub cipher_name: &'a str,
+    pub cipher: vmess::VmessCipher,
     pub mux_concurrency: Option<u32>,
     pub mux_idle_timeout_secs: Option<u64>,
     pub tls: Option<&'a ClientTlsConfig>,
@@ -162,19 +156,10 @@ pub(crate) struct VmessTcpConnectRequest<'a> {
 pub(crate) async fn apply_tcp_hop(
     mut stream: TcpRelayStream,
     session: &Session,
-    id: &str,
-    cipher: &str,
+    uuid: [u8; 16],
+    cipher: vmess::VmessCipher,
 ) -> Result<TcpRelayStream, EngineError> {
-    use vmess::{parse_uuid, VmessCipher, VmessOutbound};
-
-    let uuid = parse_uuid(id)
-        .map_err(|e| EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?;
-    let vmess_cipher = VmessCipher::from_name(cipher).ok_or_else(|| {
-        EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("vmess unknown cipher: {cipher}"),
-        ))
-    })?;
+    use vmess::VmessOutbound;
     let vmess_session =
         <VmessOutbound as TcpSessionProtocol<vmess::VmessTcpSessionTarget>>::establish_tcp_session(
             &VmessOutbound,
@@ -182,7 +167,7 @@ pub(crate) async fn apply_tcp_hop(
             &vmess::VmessTcpSessionTarget {
                 session,
                 uuid: &uuid,
-                cipher: vmess_cipher,
+                cipher,
             },
         )
         .await

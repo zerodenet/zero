@@ -7,10 +7,9 @@ use crate::transport::{accept_ws, ClientStream, MeteredStream, TcpRelayStream};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
-use zero_config::VlessUserConfig;
 use zero_engine::EngineError;
 
-use super::{ConfiguredVlessUsers, RecordingStream, VlessInboundHandler};
+use super::{ConfiguredVlessUser, ConfiguredVlessUsers, RecordingStream, VlessInboundHandler};
 
 #[derive(Clone, Copy)]
 pub(crate) struct VlessStreamTransport<'a> {
@@ -25,7 +24,7 @@ pub(crate) struct VlessStreamTransport<'a> {
 pub(crate) struct VlessStreamRequest<'a, S> {
     pub(crate) stream: S,
     pub(crate) inbound_tag: &'a str,
-    pub(crate) users: &'a [VlessUserConfig],
+    pub(crate) users: &'a [ConfiguredVlessUser],
     pub(crate) transport: VlessStreamTransport<'a>,
     pub(crate) fallback: Option<&'a zero_config::FallbackConfig>,
     pub(crate) sni: Option<String>,
@@ -38,6 +37,7 @@ impl Proxy {
         quic_inbound: &crate::transport::QuicInbound,
         shutdown: &mut watch::Receiver<bool>,
         connections: &mut JoinSet<Result<(), EngineError>>,
+        vless_users: Arc<[ConfiguredVlessUser]>,
         fallback_config: Option<zero_config::FallbackConfig>,
     ) -> Result<(), EngineError> {
         loop {
@@ -54,8 +54,7 @@ impl Proxy {
                         Ok(quic_stream) => {
                             let engine = self.clone();
                             let inbound_tag = inbound.tag.clone();
-                            let vless_users: Arc<[zero_config::VlessUserConfig]> =
-                                inbound.protocol.vless_users().into();
+                            let vless_users = Arc::clone(&vless_users);
                             let fallback_config = fallback_config.clone();
 
                             connections.spawn(async move {
@@ -175,7 +174,7 @@ impl Proxy {
                 let engine = self.clone();
                 let tag = inbound_tag.to_owned();
                 let service_names = grpc.service_names.clone();
-                let users_arc: Arc<[VlessUserConfig]> = users.into();
+                let users_arc: Arc<[ConfiguredVlessUser]> = users.into();
                 let fb_clone = fallback.cloned();
                 return crate::transport::serve_grpc(stream, &service_names, move |grpc_stream| {
                     let engine = engine.clone();
@@ -210,7 +209,7 @@ impl Proxy {
         &self,
         client: S,
         inbound_tag: &str,
-        users: &[VlessUserConfig],
+        users: &[ConfiguredVlessUser],
         fallback: Option<&zero_config::FallbackConfig>,
         sni: Option<String>,
     ) -> Result<(), EngineError>

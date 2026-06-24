@@ -34,12 +34,14 @@ pub(super) fn spawn_inbound_listener(
         return;
     }
 
-    match proxy.protocols.find_inbound(&inbound.protocol) {
-        Ok(adapter) => adapter.spawn_inbound(proxy, inbound.clone(), bound, shutdown_rx, listeners),
-        Err(_) => {
-            // The feature check above already validated compilation; reaching
-            // here means an unregistered config.
-        }
+    if let Err(e) =
+        proxy
+            .protocols
+            .spawn_inbound(proxy, inbound.clone(), bound, shutdown_rx, listeners)
+    {
+        // The feature check above already validated compilation; reaching here
+        // means an unregistered config or a registry dispatch mismatch.
+        warn!(tag = %inbound.tag, error = %e, "skipping inbound listener: adapter dispatch failed");
     }
 }
 

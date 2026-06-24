@@ -30,7 +30,7 @@ impl MieruAdapter {
             };
             crate::inbound::run_mieru_listener_with_bound(
                 &p,
-                crate::inbound::MieruInboundRequest { inbound, users },
+                crate::inbound::mieru::MieruInboundRequest { inbound, users },
                 bound.into_tcp(),
                 shutdown_rx,
             )

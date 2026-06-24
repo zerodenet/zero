@@ -57,19 +57,7 @@ impl UdpDispatch {
                 let Some(relay) = flow.outbound.socks5_relay() else {
                     unreachable!("Relay category maps to Socks5 variant only");
                 };
-                match self
-                    .send_socks5(crate::protocol_runtime::socks5_udp::Socks5UdpSend {
-                        proxy,
-                        tag: relay.tag,
-                        server: relay.server,
-                        port: relay.port,
-                        username: relay.username,
-                        password: relay.password,
-                        session: &flow.session,
-                        payload,
-                    })
-                    .await
-                {
+                match self.send_socks5(proxy, relay, &flow.session, payload).await {
                     Ok(sent) => {
                         proxy.record_session_outbound_tx(flow.session.id, sent as u64);
                     }

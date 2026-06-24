@@ -8,14 +8,11 @@ mod codec;
 #[cfg(feature = "hysteria2")]
 mod establish;
 #[cfg(feature = "hysteria2")]
-mod model;
+pub(super) mod model;
 #[cfg(feature = "hysteria2")]
 mod send;
 #[cfg(feature = "hysteria2")]
 mod stream;
-
-#[cfg(feature = "hysteria2")]
-pub(crate) use model::H2SendExisting;
 
 #[cfg(feature = "hysteria2")]
 use model::{H2Entry, H2Key};

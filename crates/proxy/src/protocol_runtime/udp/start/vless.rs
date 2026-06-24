@@ -10,7 +10,7 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpFlow<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::protocol_runtime::vless_udp::VlessUdpTransport {
+        let transport = crate::protocol_runtime::vless_udp::model::VlessUdpTransport {
             tls: flow.tls,
             reality: flow.reality,
             ws: flow.ws,
@@ -23,12 +23,12 @@ impl ProtocolUdpState {
         self.vless
             .start_flow(
                 chain_tasks,
-                crate::protocol_runtime::vless_udp::VlessUdpStartFlow {
+                crate::protocol_runtime::vless_udp::model::VlessUdpStartFlow {
                     proxy: flow.proxy,
                     session: flow.session,
                     server: flow.server,
                     port: flow.port,
-                    id: flow.id,
+                    uuid: flow.uuid,
                     flow: flow.flow,
                     transport,
                     payload: flow.payload,
@@ -51,12 +51,12 @@ impl ProtocolUdpState {
         self.vless
             .start_relay_two_stream(
                 chain_tasks,
-                crate::protocol_runtime::vless_udp::VlessUdpRelayTwoStream {
+                crate::protocol_runtime::vless_udp::model::VlessUdpRelayTwoStream {
                     proxy: flow.proxy,
                     session: flow.session,
                     post_carrier: flow.post_carrier,
                     get_carrier: flow.get_carrier,
-                    id: flow.id,
+                    uuid: flow.uuid,
                     split_http: flow.split_http,
                     payload: flow.payload,
                 },
@@ -75,7 +75,7 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpRelayFinalHop<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::protocol_runtime::vless_udp::VlessUdpTransport {
+        let transport = crate::protocol_runtime::vless_udp::model::VlessUdpTransport {
             tls: flow.tls,
             reality: flow.reality,
             ws: flow.ws,
@@ -88,11 +88,11 @@ impl ProtocolUdpState {
         self.vless
             .start_relay_final_hop(
                 chain_tasks,
-                crate::protocol_runtime::vless_udp::VlessUdpRelayFinalHop {
+                crate::protocol_runtime::vless_udp::model::VlessUdpRelayFinalHop {
                     proxy: flow.proxy,
                     session: flow.session,
                     carrier: flow.carrier,
-                    id: flow.id,
+                    uuid: flow.uuid,
                     transport,
                     payload: flow.payload,
                 },

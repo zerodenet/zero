@@ -1,6 +1,5 @@
 //! Shadowsocks inbound: listener lifecycle, TCP pipe entry, and UDP pipe entry.
 
-use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -26,7 +25,8 @@ mod udp;
 pub(crate) struct ShadowsocksInboundRequest {
     pub(crate) inbound: InboundConfig,
     pub(crate) password: String,
-    pub(crate) cipher: String,
+    pub(crate) cipher_name: String,
+    pub(crate) cipher: CipherKind,
 }
 
 #[derive(Clone)]
@@ -95,14 +95,9 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
     let ShadowsocksInboundRequest {
         inbound,
         password,
-        cipher: cipher_str,
+        cipher_name,
+        cipher,
     } = request;
-    let cipher = CipherKind::from_str(&cipher_str).ok_or_else(|| {
-        EngineError::Io(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("unknown shadowsocks cipher: {cipher_str}"),
-        ))
-    })?;
 
     let local_addr = listener.local_addr()?;
 
@@ -131,7 +126,7 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
     info!(
         inbound_tag = %inbound.tag,
         protocol = "shadowsocks",
-        cipher = %cipher_str,
+        cipher = %cipher_name,
         listen = %local_addr,
         udp = udp_socket.is_some(),
         "inbound listener ready"

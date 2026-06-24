@@ -10,7 +10,7 @@ mod connect;
 #[cfg(feature = "mieru")]
 mod establish;
 #[cfg(feature = "mieru")]
-mod model;
+pub(super) mod model;
 #[cfg(feature = "mieru")]
 mod send;
 #[cfg(feature = "mieru")]
@@ -18,8 +18,6 @@ mod stream;
 
 #[cfg(feature = "mieru")]
 use model::{MieruEntry, MieruKey};
-#[cfg(feature = "mieru")]
-pub(crate) use model::{MieruRelayExisting, MieruSendExisting};
 
 #[cfg(feature = "mieru")]
 pub(crate) struct MieruChainManager {

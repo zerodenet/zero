@@ -2,7 +2,8 @@ use tokio::task::JoinSet;
 use zero_core::Session;
 
 use super::super::state::ProtocolUdpState;
-use super::super::{ChainTask, FlowFailure, TrojanRelayExisting, TrojanSendExisting};
+use super::super::trojan_manager::model::{TrojanRelayExisting, TrojanSendExisting};
+use super::super::{ChainTask, FlowFailure};
 use crate::runtime::Proxy;
 
 impl ProtocolUdpState {

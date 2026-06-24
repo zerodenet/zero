@@ -3,13 +3,15 @@ use crate::protocol_runtime::vless_udp::VlessUdpOutboundManager;
 use crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager;
 
 #[cfg(feature = "hysteria2")]
-use super::H2ChainManager;
+use super::h2_manager::H2ChainManager;
 #[cfg(feature = "mieru")]
-use super::MieruChainManager;
-#[cfg(feature = "trojan")]
-use super::TrojanChainManager;
+use super::mieru_manager::MieruChainManager;
 #[cfg(feature = "shadowsocks")]
-use super::{PacketPathManager, SsChainManager};
+use super::ss_manager::SsChainManager;
+#[cfg(feature = "trojan")]
+use super::trojan_manager::TrojanChainManager;
+#[cfg(feature = "shadowsocks")]
+use super::PacketPathManager;
 
 mod cached;
 mod forward;

@@ -7,6 +7,22 @@ use crate::protocol_adapter::ProtocolAdapter;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
+fn parse_vmess_identity(
+    id: &str,
+    cipher: &str,
+) -> Result<([u8; 16], vmess::VmessCipher), EngineError> {
+    let uuid = vmess::parse_uuid(id).map_err(|error| {
+        EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
+    })?;
+    let cipher = vmess::VmessCipher::from_name(cipher).ok_or_else(|| {
+        EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("vmess unknown cipher: {cipher}"),
+        ))
+    })?;
+    Ok((uuid, cipher))
+}
+
 impl VmessAdapter {
     pub(super) async fn connect_tcp_impl(
         &self,
@@ -29,13 +45,20 @@ impl VmessAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
+        let (uuid, vmess_cipher) =
+            parse_vmess_identity(id, cipher).map_err(|error| TcpOutboundFailure {
+                stage: "connect_upstream_vmess",
+                error,
+                upstream_endpoint: Some(((*server).to_string(), *port)),
+            })?;
         match crate::outbound::vmess::connect_tcp(crate::outbound::vmess::VmessTcpConnectRequest {
             proxy,
             session,
             server,
             port: *port,
-            id,
-            cipher,
+            uuid,
+            cipher_name: cipher,
+            cipher: vmess_cipher,
             mux_concurrency: *mux_concurrency,
             mux_idle_timeout_secs: *mux_idle_timeout_secs,
             tls: *tls,
@@ -67,6 +90,7 @@ impl VmessAdapter {
         let ResolvedLeafOutbound::Vmess { id, cipher, .. } = leaf else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        crate::outbound::vmess::apply_tcp_hop(stream, session, id, cipher).await
+        let (uuid, vmess_cipher) = parse_vmess_identity(id, cipher)?;
+        crate::outbound::vmess::apply_tcp_hop(stream, session, uuid, vmess_cipher).await
     }
 }

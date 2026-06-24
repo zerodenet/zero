@@ -2,9 +2,13 @@
 
 #[cfg(feature = "crypto")]
 use alloc::vec::Vec;
+#[cfg(feature = "crypto")]
+use zero_core::Address;
 use zero_core::ProtocolType;
 #[cfg(feature = "crypto")]
 use zero_core::{Error, Network, Session};
+#[cfg(feature = "crypto")]
+use zero_traits::{DatagramCodec, UdpDatagramFraming};
 
 /// Shadowsocks inbound handler.
 #[derive(Debug, Default, Clone, Copy)]
@@ -25,6 +29,130 @@ pub struct ShadowsocksAccept {
     /// For 2022 edition: the client request salt, echoed back in the server
     /// response fixed header. Empty for legacy AEAD.
     pub request_salt: Vec<u8>,
+}
+
+/// Decoded Shadowsocks inbound UDP request.
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksInboundUdpPacket {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+    /// Flow isolation id for SIP022/2022 UDP sessions. `None` for legacy AEAD.
+    pub client_session_id: Option<u64>,
+}
+
+/// Protocol-owned codec/state for Shadowsocks inbound UDP.
+///
+/// Runtime code owns socket I/O and routing, while this type owns
+/// Shadowsocks UDP decoding, SIP022 replay protection, and response encoding.
+#[cfg(feature = "crypto")]
+pub struct ShadowsocksInboundUdpCodec {
+    cipher: super::shared::CipherKind,
+    password: Vec<u8>,
+    #[cfg(feature = "blake3")]
+    replay_windows: std::collections::HashMap<u64, super::shared::ReplayWindow>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksInboundUdpCodec {
+    pub fn new(cipher: super::shared::CipherKind, password: &[u8]) -> Self {
+        Self {
+            cipher,
+            password: password.to_vec(),
+            #[cfg(feature = "blake3")]
+            replay_windows: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn decode_request(
+        &mut self,
+        datagram: &[u8],
+    ) -> Result<ShadowsocksInboundUdpPacket, Error> {
+        if self.cipher.is_blake3() {
+            #[cfg(feature = "blake3")]
+            {
+                let (target, port, payload, client_session_id, packet_id) =
+                    super::shared::decode_udp_datagram_2022_session(
+                        self.cipher,
+                        &self.password,
+                        datagram,
+                    )?;
+                if !self
+                    .replay_windows
+                    .entry(client_session_id)
+                    .or_default()
+                    .check_and_update(packet_id)
+                {
+                    return Err(Error::Protocol("ss: udp replay rejected"));
+                }
+                return Ok(ShadowsocksInboundUdpPacket {
+                    target,
+                    port,
+                    payload,
+                    client_session_id: Some(client_session_id),
+                });
+            }
+            #[cfg(not(feature = "blake3"))]
+            return Err(Error::Protocol(
+                "ss: 2022 udp decode requires `blake3` feature",
+            ));
+        }
+
+        let codec = super::outbound::ShadowsocksDatagramCodec {
+            cipher: self.cipher,
+            password: self.password.clone(),
+        };
+        let (target, port, payload) = codec
+            .decode(datagram)
+            .ok_or(Error::Protocol("ss: udp datagram decode failed"))?;
+        Ok(ShadowsocksInboundUdpPacket {
+            target,
+            port,
+            payload,
+            client_session_id: None,
+        })
+    }
+
+    pub fn encode_response(
+        &self,
+        client_session_id: Option<u64>,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        if self.cipher.is_blake3() {
+            #[cfg(feature = "blake3")]
+            {
+                return super::shared::encode_udp_response_2022(
+                    self.cipher,
+                    &self.password,
+                    client_session_id.unwrap_or(0),
+                    target,
+                    port,
+                    payload,
+                );
+            }
+            #[cfg(not(feature = "blake3"))]
+            return Err(Error::Protocol(
+                "ss: 2022 udp encode requires `blake3` feature",
+            ));
+        }
+
+        <super::outbound::ShadowsocksOutbound as UdpDatagramFraming<
+            super::outbound::ShadowsocksUdpPacketTarget<'_>,
+            super::outbound::ShadowsocksUdpDecodeContext<'_>,
+        >>::encode_udp_datagram(
+            &super::outbound::ShadowsocksOutbound,
+            &super::outbound::ShadowsocksUdpPacketTarget {
+                target,
+                port,
+                payload,
+                cipher: self.cipher,
+                password: &self.password,
+            },
+        )
+    }
 }
 
 impl ShadowsocksInbound {

@@ -75,8 +75,7 @@ impl PacketPathManager {
                 datagram_tag: request.datagram_tag,
                 datagram_server: request.datagram_server,
                 datagram_port: request.datagram_port,
-                datagram_password: request.datagram_password,
-                datagram_cipher: request.datagram_cipher,
+                datagram_cache_key: request.datagram_cache_key,
             },
         )?;
         dispatch_via_entry(entry, request.ctx, request.packet_ref).await
@@ -109,7 +108,6 @@ pub(crate) struct SendWithSnapshotRequest<'a> {
     pub datagram_tag: &'a str,
     pub datagram_server: &'a str,
     pub datagram_port: u16,
-    pub datagram_password: &'a str,
-    pub datagram_cipher: &'a str,
+    pub datagram_cache_key: &'a str,
     pub packet_ref: UdpPacketRef<'a>,
 }

@@ -9,14 +9,17 @@ use tracing::{error, info};
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 
-use super::{upgrade_vless_reality_server, VlessStreamRequest, VlessStreamTransport};
+use super::model::VlessInboundRequest;
+use super::session::{VlessStreamRequest, VlessStreamTransport};
+use super::upgrade_vless_reality_server;
 
 pub(crate) async fn run_vless_listener_with_bound(
     proxy: &Proxy,
-    inbound: zero_config::InboundConfig,
+    request: VlessInboundRequest,
     bound: crate::protocol_adapter::BoundInbound,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
+    let VlessInboundRequest { inbound, users } = request;
     let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
 
     match bound {
@@ -36,6 +39,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                     &quic_inbound,
                     &mut shutdown,
                     &mut connections,
+                    Arc::clone(&users),
                     fallback_config,
                 )
                 .await;
@@ -58,8 +62,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                     .as_ref()
                     .map(|_| crate::transport::SplitHttpRegistry::new());
             let fallback_config = inbound.protocol.vless_fallback().cloned();
-            let vless_users: Arc<[zero_config::VlessUserConfig]> =
-                inbound.protocol.vless_users().into();
+            let vless_users = Arc::clone(&users);
             let mut connections = JoinSet::new();
 
             info!(

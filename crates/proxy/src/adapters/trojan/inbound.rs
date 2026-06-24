@@ -29,7 +29,7 @@ impl TrojanAdapter {
             };
             crate::inbound::run_trojan_listener_with_bound(
                 &p,
-                crate::inbound::TrojanInboundRequest {
+                crate::inbound::trojan::TrojanInboundRequest {
                     inbound,
                     password,
                     tls,

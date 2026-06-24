@@ -32,7 +32,7 @@ pub(crate) struct VlessUdpStartFlow<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) id: &'a str,
+    pub(crate) uuid: [u8; 16],
     pub(crate) flow: Option<&'a str>,
     pub(crate) transport: VlessUdpTransport<'a>,
     pub(crate) payload: &'a [u8],
@@ -43,7 +43,7 @@ pub(crate) struct VlessUdpRelayTwoStream<'a> {
     pub(crate) session: &'a Session,
     pub(crate) post_carrier: crate::transport::RelayCarrier,
     pub(crate) get_carrier: crate::transport::RelayCarrier,
-    pub(crate) id: &'a str,
+    pub(crate) uuid: [u8; 16],
     pub(crate) split_http: &'a SplitHttpConfig,
     pub(crate) payload: &'a [u8],
 }
@@ -52,7 +52,7 @@ pub(crate) struct VlessUdpRelayFinalHop<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) session: &'a Session,
     pub(crate) carrier: crate::transport::RelayCarrier,
-    pub(crate) id: &'a str,
+    pub(crate) uuid: [u8; 16],
     pub(crate) transport: VlessUdpTransport<'a>,
     pub(crate) payload: &'a [u8],
 }
@@ -64,7 +64,7 @@ pub(super) struct VlessUdpUpstreamRequest<'a> {
     pub(super) port: u16,
     pub(super) server: &'a str,
     pub(super) server_port: u16,
-    pub(super) id: &'a str,
+    pub(super) uuid: [u8; 16],
     pub(super) initial_payload: &'a [u8],
     pub(super) transport: Option<&'a VlessUdpTransport<'a>>,
 }

@@ -8,5 +8,4 @@ mod send;
 pub(crate) use model::{ClosedSocks5UdpAssociation, Socks5UdpAssociationView};
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path::build_socks5_packet_path;
-pub(crate) use runtime::{recv_upstream_packet, Socks5UdpRuntime};
-pub(crate) use send::Socks5UdpSend;
+pub(crate) use runtime::{recv_upstream_packet, Socks5UdpPacketSend, Socks5UdpRuntime};

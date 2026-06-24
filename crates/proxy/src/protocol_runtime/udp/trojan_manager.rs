@@ -8,7 +8,7 @@ mod connect;
 #[cfg(feature = "trojan")]
 mod establish;
 #[cfg(feature = "trojan")]
-mod model;
+pub(super) mod model;
 #[cfg(feature = "trojan")]
 mod send;
 #[cfg(feature = "trojan")]
@@ -18,8 +18,6 @@ mod stream;
 
 #[cfg(feature = "trojan")]
 use model::{TrojanEntry, TrojanKey};
-#[cfg(feature = "trojan")]
-pub(crate) use model::{TrojanRelayExisting, TrojanSendExisting};
 
 #[cfg(feature = "trojan")]
 pub(crate) struct TrojanChainManager {

@@ -20,70 +20,54 @@ impl UdpDispatch {
         if chain.len() == 2 {
             let carrier_leaf = &chain[0];
             let datagram_leaf = &chain[1];
-            if let (Some(carrier_adapter), Some(datagram_adapter)) = (
-                proxy.protocols.find_outbound_leaf(carrier_leaf).ok(),
-                proxy.protocols.find_outbound_leaf(datagram_leaf).ok(),
-            ) {
-                if carrier_adapter
-                    .udp_packet_path_carrier_descriptor(carrier_leaf)
-                    .is_some()
-                    && datagram_adapter
-                        .udp_datagram_source(datagram_leaf)
-                        .is_some()
-                {
-                    let sent = self
-                        .protocol_state
-                        .send_packet_path_chain(
-                            UdpFlowContext {
-                                chain_tasks: &mut self.chain_tasks,
-                                session_id: session.id,
-                            },
-                            proxy,
-                            carrier_leaf,
-                            datagram_leaf,
-                            UdpPacketRef {
-                                target: &session.target,
-                                port: session.port,
-                                payload,
-                            },
-                        )
-                        .await?;
+            if let Some((datagram, packet_path_carrier)) = proxy
+                .protocols
+                .udp_packet_path_pair(carrier_leaf, datagram_leaf)
+            {
+                let sent = self
+                    .protocol_state
+                    .send_packet_path_chain(
+                        UdpFlowContext {
+                            chain_tasks: &mut self.chain_tasks,
+                            session_id: session.id,
+                        },
+                        proxy,
+                        carrier_leaf,
+                        datagram_leaf,
+                        UdpPacketRef {
+                            target: &session.target,
+                            port: session.port,
+                            payload,
+                        },
+                    )
+                    .await?;
 
-                    let datagram = datagram_adapter
-                        .udp_datagram_source(datagram_leaf)
-                        .expect("checked above");
-                    let packet_path_carrier =
-                        carrier_adapter.udp_packet_path_carrier_snapshot(carrier_leaf);
-                    return Ok(FlowStartResult::Flow {
-                        outbound: Box::new(
-                            self.protocol_state
-                                .datagram_chain_flow_outbound(datagram, packet_path_carrier),
-                        ),
-                        tx_bytes: sent as u64,
-                    });
-                }
+                return Ok(FlowStartResult::Flow {
+                    outbound: Box::new(
+                        self.protocol_state
+                            .datagram_chain_flow_outbound(datagram, packet_path_carrier),
+                    ),
+                    tx_bytes: sent as u64,
+                });
             }
         }
 
-        // Single dispatch: resolve the final hop's adapter. Adding a protocol
-        // = register an adapter; this function never matches on the protocol
-        // enum for the final hop.
-        let adapter = proxy
+        let final_hop = chain.last().expect("relay chain has at least 2 hops");
+
+        // Two-stream XHTTP path (VLESS legacy split_http packet-up/stream-up):
+        // ProtocolInventory resolves the final hop adapter. stream-one / auto
+        // fall through to the generic single-stream path below.
+        if proxy
             .protocols
-            .find_outbound_leaf(chain.last().expect("relay chain has at least 2 hops"))
+            .udp_relay_needs_two_streams(final_hop)
             .map_err(|error| FlowFailure {
                 stage: "find_outbound_leaf",
                 error,
                 upstream: None,
-            })?;
-
-        // Two-stream XHTTP path (VLESS legacy split_http packet-up/stream-up):
-        // the adapter dials two carrier streams itself. stream-one / auto fall
-        // through to the generic single-stream path below.
-        if adapter
-            .udp_relay_needs_two_streams(chain.last().expect("relay chain has at least 2 hops"))
+            })?
         {
-            return adapter
+            return proxy
+                .protocols
                 .start_udp_relay_two_stream(self, proxy, session, chain, payload)
                 .await;
         }
@@ -100,7 +84,8 @@ impl UdpDispatch {
                     upstream: failure.upstream_endpoint,
                 })?;
 
-        adapter
+        proxy
+            .protocols
             .start_udp_relay_final_hop(self, proxy, session, carrier, &final_hop, payload)
             .await
     }

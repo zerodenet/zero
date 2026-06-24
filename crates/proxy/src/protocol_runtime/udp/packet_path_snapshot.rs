@@ -21,7 +21,6 @@ pub(crate) enum UdpPacketPathCarrier {
         server: String,
         port: u16,
         password: String,
-        cipher: String,
     },
     #[cfg(feature = "hysteria2")]
     Hysteria2 {

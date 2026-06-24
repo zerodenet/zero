@@ -2,10 +2,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use mieru::{
-    build_data_segment, parse_segment, DataMetadata, MieruCipher, MieruSession,
-    DATA_SERVER_TO_CLIENT,
-};
+use mieru::{MieruAccept, MieruInboundDataCodec};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::transport::TcpRelayStream;
@@ -14,15 +11,7 @@ use crate::transport::TcpRelayStream;
 /// for the server-to-client (download) direction.
 pub(crate) struct MieruClientStream {
     inner: TcpRelayStream,
-    /// Cipher for server-to-client traffic (encrypt download).
-    server_cipher: MieruCipher,
-    /// Cipher for client-to-server traffic (decrypt upload).
-    client_cipher: MieruCipher,
-    /// Mieru session tracking.
-    mieru_session: MieruSession,
-    /// Whether the first server-to-client nonce has been sent.
-    s2c_nonce_sent: bool,
-    c2s_nonce_recv: bool,
+    codec: MieruInboundDataCodec,
     /// Buffered decrypted data from a partial segment read.
     read_buf: Vec<u8>,
     read_pos: usize,
@@ -33,20 +22,11 @@ pub(crate) struct MieruClientStream {
 }
 
 impl MieruClientStream {
-    pub(crate) fn new(
-        inner: TcpRelayStream,
-        server_cipher: MieruCipher,
-        client_cipher: MieruCipher,
-        mieru_session: MieruSession,
-        read_buf: Vec<u8>,
-    ) -> Self {
+    pub(crate) fn new(inner: TcpRelayStream, accept: MieruAccept) -> Self {
+        let (codec, read_buf) = MieruInboundDataCodec::new(accept);
         Self {
             inner,
-            server_cipher,
-            client_cipher,
-            mieru_session,
-            s2c_nonce_sent: true,
-            c2s_nonce_recv: true,
+            codec,
             read_buf,
             read_pos: 0,
             raw_read_buf: Vec::new(),
@@ -78,12 +58,11 @@ impl AsyncRead for MieruClientStream {
         }
 
         loop {
-            let include_nonce = !this.c2s_nonce_recv;
-            let mut cipher = this.client_cipher.clone();
-            match parse_segment(&this.raw_read_buf, &mut cipher, include_nonce, false) {
+            match this
+                .codec
+                .decrypt_client_data_with_consumed(&this.raw_read_buf)
+            {
                 Ok((segment, consumed)) => {
-                    this.client_cipher = cipher;
-                    this.c2s_nonce_recv = true;
                     this.raw_read_buf.drain(..consumed);
 
                     let payload = segment.payload;
@@ -138,21 +117,8 @@ impl AsyncWrite for MieruClientStream {
         let this = Pin::into_inner(self);
 
         if this.write_buf.is_empty() {
-            let meta = DataMetadata {
-                protocol_type: DATA_SERVER_TO_CLIENT,
-                timestamp: MieruSession::timestamp_minutes(),
-                session_id: this.mieru_session.session_id,
-                sequence_number: this.mieru_session.next_send_seq(),
-                unack_sequence: 0,
-                window_size: 1024,
-                fragment_number: 0,
-                prefix_length: 0,
-                payload_length: buf.len() as u16,
-                suffix_length: 0,
-            };
-            match build_data_segment(&meta, buf, &mut this.server_cipher, !this.s2c_nonce_sent) {
+            match this.codec.encrypt_server_data(buf) {
                 Ok(segment) => {
-                    this.s2c_nonce_sent = true;
                     this.write_buf = segment;
                     this.write_pos = 0;
                     this.write_plain_len = buf.len();

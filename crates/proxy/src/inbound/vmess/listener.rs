@@ -4,12 +4,13 @@ use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
-use vmess::{VmessCipher, VmessInbound, VmessUser};
+use vmess::VmessInbound;
 use zero_engine::EngineError;
 
+use super::model::VmessInboundRequest;
 use super::{
     handle_vmess_grpc, handle_vmess_raw, handle_vmess_ws, remote_addr_to_socket,
-    VmessInboundHandler, VmessInboundRequest,
+    VmessInboundHandler,
 };
 use crate::runtime::Proxy;
 
@@ -33,28 +34,6 @@ pub(crate) async fn run_vmess_listener_with_bound(
         )));
     }
 
-    let vmess_users: Vec<VmessUser> = users
-        .iter()
-        .map(|u| {
-            let uuid = vmess::parse_uuid(&u.id)
-                .map_err(|e| EngineError::Io(io::Error::new(io::ErrorKind::InvalidInput, e)))?;
-            let cipher = VmessCipher::from_name(&u.cipher).ok_or_else(|| {
-                EngineError::Io(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("vmess unknown cipher: {}", u.cipher),
-                ))
-            })?;
-            Ok(VmessUser {
-                id: uuid,
-                cipher,
-                credential_id: u.credential_id.clone(),
-                principal_key: u.principal_key.clone(),
-                up_bps: u.up_bps,
-                down_bps: u.down_bps,
-            })
-        })
-        .collect::<Result<Vec<_>, EngineError>>()?;
-
     let tls_cfg = tls_cfg.ok_or_else(|| {
         EngineError::Io(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -66,7 +45,7 @@ pub(crate) async fn run_vmess_listener_with_bound(
 
     let handler = VmessInboundHandler {
         vmess_inbound: VmessInbound,
-        users: vmess_users,
+        users,
         tls_acceptor: acceptor,
     };
 

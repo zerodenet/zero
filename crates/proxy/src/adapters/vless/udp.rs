@@ -7,6 +7,21 @@ use crate::protocol_adapter::ProtocolAdapter;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
 
+fn parse_vless_udp_uuid(
+    id: &str,
+    stage: &'static str,
+    upstream: Option<(&str, u16)>,
+) -> Result<[u8; 16], FlowFailure> {
+    ::vless::parse_uuid(id).map_err(|error| FlowFailure {
+        stage,
+        error: EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid VLESS UUID: {error}"),
+        )),
+        upstream: upstream.map(|(server, port)| (server.to_string(), port)),
+    })
+}
+
 impl VlessAdapter {
     pub(super) async fn start_udp_flow_impl(
         &self,
@@ -40,6 +55,7 @@ impl VlessAdapter {
         };
         let session_id = session.id;
         let tag_owned = (*tag).to_string();
+        let uuid = parse_vless_udp_uuid(id, "udp_vless_parse_uuid", Some((server, *port)))?;
 
         let mux_flow_enabled =
             *flow == Some("xtls-rprx-vision") || *flow == Some("xtls-rprx-vision-udp443");
@@ -48,19 +64,12 @@ impl VlessAdapter {
             if let Ok((_mux_sid, up_tx, _down_rx)) = proxy
                 .mux_pool
                 .open_udp_stream(
-                    crate::protocol_runtime::vless_mux_pool::VlessMuxOpenRequest {
+                    crate::protocol_runtime::vless_mux_pool::model::VlessMuxOpenRequest {
                         proxy,
                         session: None,
                         server,
                         port: *port,
-                        id: &::vless::parse_uuid(id).map_err(|e| FlowFailure {
-                            stage: "udp_vless_mux_parse_uuid",
-                            error: EngineError::Io(std::io::Error::new(
-                                std::io::ErrorKind::InvalidInput,
-                                format!("invalid VLESS UUID: {e}"),
-                            )),
-                            upstream: Some(((*server).to_string(), *port)),
-                        })?,
+                        id: &uuid,
                         tls: *tls,
                         reality: *reality,
                         max_concurrency,
@@ -101,7 +110,7 @@ impl VlessAdapter {
                     session,
                     server,
                     port: *port,
-                    id,
+                    uuid,
                     flow: *flow,
                     tls: *tls,
                     reality: *reality,
@@ -179,6 +188,7 @@ impl VlessAdapter {
             return Err(unreachable_udp_leaf(self.name(), &final_hop));
         };
         let session_id = session.id;
+        let uuid = parse_vless_udp_uuid(id, "udp_vless_relay_two_stream_parse_uuid", None)?;
         let split_http_cfg = split_http
             .as_ref()
             .expect("udp_relay_needs_two_streams checked split_http is Some");
@@ -191,7 +201,7 @@ impl VlessAdapter {
                     session,
                     post_carrier,
                     get_carrier,
-                    id,
+                    uuid,
                     split_http: split_http_cfg,
                     payload,
                 },
@@ -246,6 +256,7 @@ impl VlessAdapter {
         }
 
         let tag_owned = (*tag).to_string();
+        let uuid = parse_vless_udp_uuid(id, "udp_vless_relay_final_hop_parse_uuid", None)?;
         let (protocol_state, chain_tasks) = dispatch.protocol_parts();
         protocol_state
             .start_vless_udp_relay_final_hop(
@@ -254,7 +265,7 @@ impl VlessAdapter {
                     proxy,
                     session,
                     carrier,
-                    id,
+                    uuid,
                     tls: *tls,
                     reality: *reality,
                     ws: *ws,

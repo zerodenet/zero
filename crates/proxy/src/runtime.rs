@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use tokio::sync::{oneshot, watch};
-use tokio::task::{JoinHandle, JoinSet};
+use tokio::task::JoinSet;
 use tracing::{info, warn};
 use zero_config::RuntimeConfig;
 use zero_dns::DnsSystem;
@@ -23,12 +23,15 @@ pub(crate) mod inbound_protocol;
 mod listeners;
 pub(crate) mod orchestration;
 pub(crate) mod pipe;
+mod reload;
+mod running;
 mod tcp_dispatch;
 pub(crate) mod udp_dispatch;
 pub(crate) mod udp_flow;
 pub(crate) mod udp_helpers;
 
 pub use handle::ProxyHandle;
+pub use running::RunningProxy;
 
 #[derive(Debug, Clone)]
 pub struct Proxy {
@@ -134,29 +137,7 @@ impl Proxy {
         let mut listener_stops: HashMap<String, watch::Sender<bool>> = HashMap::new();
         let mut urltests: JoinSet<Result<(), EngineError>> = JoinSet::new();
 
-        let reload_rx = self.engine.subscribe_reload();
-        // Bridge std mpsc (blocking) ->?async via a spawn_blocking task.
-        // Uses recv_timeout so the thread can detect when the async
-        // receiver is dropped (e.g. during shutdown) and exit cleanly
-        // instead of blocking tokio runtime teardown.
-        let (reload_tx, mut reload_async_rx) = tokio::sync::mpsc::unbounded_channel();
-        tokio::task::spawn_blocking(move || loop {
-            match reload_rx.recv_timeout(std::time::Duration::from_millis(500)) {
-                Ok(()) => {
-                    if reload_tx.send(()).is_err() {
-                        break; // async receiver dropped
-                    }
-                }
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    if reload_tx.is_closed() {
-                        break; // async receiver dropped during shutdown
-                    }
-                }
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                    break; // engine dropped all senders
-                }
-            }
-        });
+        let mut reload_async_rx = reload::subscribe_reload_bridge(self.engine.subscribe_reload());
 
         // Initial listener / urltest population.
         for inbound in &self.config.inbounds {
@@ -277,35 +258,5 @@ impl Deref for Proxy {
 
     fn deref(&self) -> &Self::Target {
         &self.engine
-    }
-}
-
-pub struct RunningProxy {
-    proxy: Proxy,
-    shutdown: Option<oneshot::Sender<()>>,
-    task: JoinHandle<Result<(), EngineError>>,
-}
-
-impl RunningProxy {
-    pub fn engine(&self) -> &Engine {
-        self.proxy.engine()
-    }
-
-    pub async fn shutdown(mut self) -> Result<(), EngineError> {
-        if let Some(shutdown) = self.shutdown.take() {
-            let _ = shutdown.send(());
-        }
-
-        self.task
-            .await
-            .map_err(|error| EngineError::from(io::Error::other(error)))?
-    }
-}
-
-impl Deref for RunningProxy {
-    type Target = Engine;
-
-    fn deref(&self) -> &Self::Target {
-        self.proxy.engine()
     }
 }

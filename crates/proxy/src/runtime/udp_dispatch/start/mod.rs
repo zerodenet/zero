@@ -2,10 +2,8 @@
 //!
 //! Contains [`UdpDispatch::start_flow`] (single-hop) and
 //! [`UdpDispatch::start_relay_flow`] (multi-hop chain). Packet-path carrier
-//! and datagram roles are resolved via the adapter registry
-//! ([`ProtocolAdapter::udp_packet_path_carrier_descriptor`] /
-//! [`ProtocolAdapter::udp_datagram_source`]); there is no per-protocol match
-//! here.
+//! and datagram roles are resolved via `ProtocolInventory`; there is no
+//! per-protocol match here.
 
 use super::{FlowFailure, FlowStartResult, UdpCandidate, UdpDispatch};
 use crate::runtime::Proxy;
@@ -47,17 +45,9 @@ impl UdpDispatch {
             });
         }
 
-        // Single dispatch: resolve the leaf to its adapter and start the flow.
-        let adapter = proxy
+        proxy
             .protocols
-            .find_outbound_leaf(&candidate)
-            .map_err(|error| FlowFailure {
-                stage: "find_outbound_leaf",
-                error,
-                upstream: None,
-            })?;
-        adapter
-            .start_udp_flow(self, proxy, session, &candidate, payload)
+            .start_udp_leaf_flow(self, proxy, session, &candidate, payload)
             .await
     }
 }

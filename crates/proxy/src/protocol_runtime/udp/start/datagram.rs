@@ -1,6 +1,10 @@
 use tokio::task::JoinSet;
 use zero_core::Session;
 
+#[cfg(feature = "hysteria2")]
+use super::super::h2_manager::model::H2SendExisting;
+#[cfg(feature = "shadowsocks")]
+use super::super::ss_manager::model::SsSendExisting;
 use super::super::state::ProtocolUdpState;
 #[cfg(feature = "shadowsocks")]
 use super::super::ShadowsocksUdpFlow;
@@ -14,7 +18,7 @@ impl ProtocolUdpState {
         flow: ShadowsocksUdpFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         self.shadowsocks
-            .send_existing(super::super::SsSendExisting {
+            .send_existing(SsSendExisting {
                 chain_tasks,
                 session_id: flow.session.id,
                 proxy: flow.proxy,
@@ -51,8 +55,8 @@ pub(crate) struct Hysteria2UdpFlowRequest<'a> {
 
 #[cfg(feature = "hysteria2")]
 impl<'a> Hysteria2UdpFlowRequest<'a> {
-    fn into_existing(self) -> super::super::H2SendExisting<'a> {
-        super::super::H2SendExisting {
+    fn into_existing(self) -> H2SendExisting<'a> {
+        H2SendExisting {
             chain_tasks: self.chain_tasks,
             session_id: self.session.id,
             server: self.server,

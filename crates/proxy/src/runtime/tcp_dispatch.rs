@@ -106,15 +106,9 @@ impl Proxy {
                 tag: runtime.kernel_tag.unwrap_or("block").to_string(),
             })
         } else {
-            let adapter = self
-                .protocols
-                .find_outbound_leaf(&candidate)
-                .map_err(|error| TcpOutboundFailure {
-                    stage: "find_outbound_leaf",
-                    error,
-                    upstream_endpoint: None,
-                })?;
-            adapter.connect_tcp(self, session, &candidate).await
+            self.protocols
+                .connect_tcp_leaf(self, session, &candidate)
+                .await
         };
 
         // Record health after connection attempt.
@@ -246,15 +240,17 @@ fn relay_next_session(endpoint: OutboundEndpoint<'_>) -> Session {
 
 /// Apply a single hop's protocol request to an existing stream.
 ///
-/// Single dispatch point: resolves the hop to its registered adapter and
-/// delegates to [`ProtocolAdapter::apply_relay_hop`]. Adding a protocol =
-/// register an adapter; this function never matches on the protocol enum.
+/// Single dispatch point: delegates to ProtocolInventory, which resolves the
+/// hop to its registered adapter. Adding a protocol = register an adapter;
+/// this function never matches on the protocol enum.
 async fn apply_hop_protocol(
     proxy: &Proxy,
     stream: TcpRelayStream,
     hop: &ResolvedLeafOutbound<'_>,
     session: &Session,
 ) -> Result<TcpRelayStream, EngineError> {
-    let adapter = proxy.protocols.find_outbound_leaf(hop)?;
-    adapter.apply_relay_hop(proxy, stream, session, hop).await
+    proxy
+        .protocols
+        .apply_tcp_relay_hop(proxy, stream, session, hop)
+        .await
 }

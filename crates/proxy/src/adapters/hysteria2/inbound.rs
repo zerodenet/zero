@@ -58,7 +58,7 @@ impl Hysteria2Adapter {
             };
             crate::inbound::run_hysteria2_listener_with_bound(
                 &p,
-                crate::inbound::Hysteria2InboundRequest {
+                crate::inbound::hysteria2::Hysteria2InboundRequest {
                     inbound,
                     password,
                     up_bps,

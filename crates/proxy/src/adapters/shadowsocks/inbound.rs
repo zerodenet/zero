@@ -16,7 +16,7 @@ impl ShadowsocksAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            let (password, cipher) = match &inbound.protocol {
+            let (password, cipher_name) = match &inbound.protocol {
                 InboundProtocolConfig::Shadowsocks {
                     password, cipher, ..
                 } => (password.clone(), cipher.clone()),
@@ -27,11 +27,18 @@ impl ShadowsocksAdapter {
                     )));
                 }
             };
+            let cipher = shadowsocks::CipherKind::from_str(&cipher_name).ok_or_else(|| {
+                EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("unknown shadowsocks cipher: {cipher_name}"),
+                ))
+            })?;
             crate::inbound::run_shadowsocks_listener_with_bound(
                 &p,
-                crate::inbound::ShadowsocksInboundRequest {
+                crate::inbound::shadowsocks::ShadowsocksInboundRequest {
                     inbound,
                     password,
+                    cipher_name,
                     cipher,
                 },
                 bound.into_tcp(),

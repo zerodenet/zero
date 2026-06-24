@@ -18,15 +18,9 @@ pub(crate) async fn build_shadowsocks_packet_path(
     server: &str,
     port: u16,
     password: &str,
-    cipher: &str,
+    cipher: shadowsocks::CipherKind,
 ) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
-    let cipher_kind = shadowsocks::CipherKind::from_str(cipher).ok_or_else(|| {
-        EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("unknown carrier cipher: {cipher}"),
-        ))
-    })?;
-    let path = ShadowsocksPacketPath::establish(proxy, server, port, password, cipher_kind).await?;
+    let path = ShadowsocksPacketPath::establish(proxy, server, port, password, cipher).await?;
     Ok(Arc::new(path))
 }
 

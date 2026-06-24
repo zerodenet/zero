@@ -6,8 +6,11 @@ use zero_core::{Error, ProtocolType};
 use zero_traits::AsyncSocket;
 
 use crate::crypto::{try_derive_keys, MieruCipher};
-use crate::metadata::{SessionMetadata, METADATA_LEN, OPEN_SESSION_REQUEST, OPEN_SESSION_RESPONSE};
-use crate::segment::build_session_segment;
+use crate::metadata::{
+    DataMetadata, SessionMetadata, DATA_SERVER_TO_CLIENT, METADATA_LEN, OPEN_SESSION_REQUEST,
+    OPEN_SESSION_RESPONSE,
+};
+use crate::segment::{build_data_segment, build_session_segment, parse_segment, Segment};
 use crate::session::MieruSession;
 
 /// Mieru inbound handler.
@@ -21,12 +24,93 @@ pub struct MieruInbound;
 /// tunnel after the handshake, so the caller must read that request over the
 /// decrypted stream to obtain the target (mirroring the upstream mieru model).
 pub struct MieruAccept {
-    pub mieru_session: MieruSession,
-    pub client_cipher: MieruCipher,
-    pub server_cipher: MieruCipher,
+    mieru_session: MieruSession,
+    client_cipher: MieruCipher,
+    server_cipher: MieruCipher,
     /// Bytes already decrypted from the first segment beyond its metadata
     /// (usually empty for socks5-in-tunnel clients).
-    pub remaining_payload: Vec<u8>,
+    remaining_payload: Vec<u8>,
+}
+
+fn segment_wire_len(segment: &Segment, has_nonce: bool) -> usize {
+    let nonce_len = if has_nonce { 24 } else { 0 };
+    let meta_len = METADATA_LEN + 16;
+    if let Some(meta) = segment.data_meta.as_ref() {
+        nonce_len
+            + meta_len
+            + meta.prefix_length as usize
+            + meta.payload_length as usize
+            + if meta.payload_length > 0 { 16 } else { 0 }
+            + meta.suffix_length as usize
+    } else if let Some(meta) = segment.session_meta.as_ref() {
+        nonce_len
+            + meta_len
+            + meta.payload_length as usize
+            + if meta.payload_length > 0 { 16 } else { 0 }
+    } else {
+        nonce_len + meta_len
+    }
+}
+
+/// Mieru inbound data-phase codec.
+///
+/// This type owns the protocol state for decrypting client-to-server data and
+/// encrypting server-to-client data after the inbound handshake. Runtime code
+/// should wrap it in an I/O adapter instead of touching ciphers or segment
+/// metadata directly.
+pub struct MieruInboundDataCodec {
+    mieru_session: MieruSession,
+    client_cipher: MieruCipher,
+    server_cipher: MieruCipher,
+    c2s_nonce_recv: bool,
+    s2c_nonce_sent: bool,
+}
+
+impl MieruInboundDataCodec {
+    pub fn new(accept: MieruAccept) -> (Self, Vec<u8>) {
+        (
+            Self {
+                mieru_session: accept.mieru_session,
+                client_cipher: accept.client_cipher,
+                server_cipher: accept.server_cipher,
+                c2s_nonce_recv: true,
+                s2c_nonce_sent: true,
+            },
+            accept.remaining_payload,
+        )
+    }
+
+    pub fn decrypt_client_data_with_consumed(
+        &mut self,
+        data: &[u8],
+    ) -> Result<(Segment, usize), Error> {
+        let include_nonce = !self.c2s_nonce_recv;
+        let mut client_cipher = self.client_cipher.clone();
+        let (segment, consumed) = parse_segment(data, &mut client_cipher, include_nonce, false)?;
+        self.client_cipher = client_cipher;
+        self.c2s_nonce_recv = true;
+        let consumed = consumed.max(segment_wire_len(&segment, include_nonce));
+        Ok((segment, consumed))
+    }
+
+    pub fn encrypt_server_data(&mut self, data: &[u8]) -> Result<Vec<u8>, Error> {
+        let metadata = DataMetadata {
+            protocol_type: DATA_SERVER_TO_CLIENT,
+            timestamp: MieruSession::timestamp_minutes(),
+            session_id: self.mieru_session.session_id,
+            sequence_number: self.mieru_session.next_send_seq(),
+            unack_sequence: 0,
+            window_size: 1024,
+            fragment_number: 0,
+            prefix_length: 0,
+            payload_length: data.len() as u16,
+            suffix_length: 0,
+        };
+        let include_nonce = !self.s2c_nonce_sent;
+        let segment = build_data_segment(&metadata, data, &mut self.server_cipher, include_nonce)?;
+        self.s2c_nonce_sent = true;
+        Ok(segment)
+    }
 }
 
 impl MieruInbound {

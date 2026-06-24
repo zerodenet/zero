@@ -7,6 +7,12 @@ use crate::protocol_adapter::ProtocolAdapter;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
+fn parse_vless_identity(id: &str) -> Result<[u8; 16], EngineError> {
+    vless::parse_uuid(id).map_err(|error| {
+        EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
+    })
+}
+
 impl VlessAdapter {
     pub(super) async fn connect_tcp_impl(
         &self,
@@ -34,12 +40,17 @@ impl VlessAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
+        let uuid = parse_vless_identity(id).map_err(|error| TcpOutboundFailure {
+            stage: "connect_upstream_vless",
+            error,
+            upstream_endpoint: Some(((*server).to_string(), *port)),
+        })?;
         match crate::outbound::vless::connect_tcp(crate::outbound::vless::VlessTcpConnectRequest {
             proxy,
             session,
             server,
             port: *port,
-            id,
+            uuid,
             flow: *flow,
             mux_concurrency: *mux_concurrency,
             mux_idle_timeout_secs: *mux_idle_timeout_secs,
@@ -78,6 +89,7 @@ impl VlessAdapter {
         let ResolvedLeafOutbound::Vless { id, flow, .. } = leaf else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        crate::outbound::vless::apply_tcp_hop(proxy, stream, session, id, *flow).await
+        let uuid = parse_vless_identity(id)?;
+        crate::outbound::vless::apply_tcp_hop(proxy, stream, session, uuid, *flow).await
     }
 }

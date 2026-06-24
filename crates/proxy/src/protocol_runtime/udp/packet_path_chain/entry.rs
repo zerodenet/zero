@@ -15,24 +15,9 @@ pub(super) fn resolve_candidate<'a>(
     carrier_leaf: &ResolvedLeafOutbound<'_>,
     datagram_leaf: &ResolvedLeafOutbound<'a>,
 ) -> Result<EntryCandidate<'a>, EngineError> {
-    let carrier_adapter = proxy.protocols.find_outbound_leaf(carrier_leaf)?;
-    let datagram_adapter = proxy.protocols.find_outbound_leaf(datagram_leaf)?;
-    let carrier_desc = carrier_adapter
-        .udp_packet_path_carrier_descriptor(carrier_leaf)
-        .ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "outbound does not support UDP packet-path carrier role",
-            ))
-        })?;
-    let datagram = datagram_adapter
-        .udp_datagram_source(datagram_leaf)
-        .ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "outbound does not support UDP packet-path datagram role",
-            ))
-        })?;
+    let (carrier_desc, datagram) = proxy
+        .protocols
+        .resolve_udp_packet_path_candidate(carrier_leaf, datagram_leaf)?;
 
     debug!(
         carrier = %carrier_desc.cache_key,
@@ -55,9 +40,9 @@ pub(super) async fn build_entry(
     carrier_leaf: &ResolvedLeafOutbound<'_>,
     candidate: EntryCandidate<'_>,
 ) -> Result<Entry, EngineError> {
-    let carrier_adapter = proxy.protocols.find_outbound_leaf(carrier_leaf)?;
-    let path = carrier_adapter
-        .build_udp_packet_path(proxy, carrier_leaf)
+    let path = proxy
+        .protocols
+        .build_udp_packet_path_carrier(proxy, carrier_leaf)
         .await?;
     let codec = datagram_codec(&candidate.datagram)?;
     let waiters = Arc::new(Mutex::new(VecDeque::new()));
@@ -75,14 +60,8 @@ pub(super) async fn build_entry(
 fn datagram_codec(
     datagram: &UdpDatagramSource<'_>,
 ) -> Result<Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>, EngineError> {
-    let cipher_kind = shadowsocks::CipherKind::from_str(datagram.cipher).ok_or_else(|| {
-        EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("unknown datagram cipher: {}", datagram.cipher),
-        ))
-    })?;
     Ok(Arc::new(shadowsocks::ShadowsocksDatagramCodec {
-        cipher: cipher_kind,
+        cipher: datagram.cipher_kind,
         password: datagram.password.as_bytes().to_vec(),
     }))
 }

@@ -11,15 +11,6 @@ use zero_traits::AsyncSocket;
 use crate::runtime::inbound_protocol::InboundProtocol;
 use crate::transport::TcpRelayStream;
 
-#[derive(Debug)]
-pub(crate) struct VmessInboundRequest {
-    pub(crate) inbound: zero_config::InboundConfig,
-    pub(crate) users: Vec<zero_config::VmessUserConfig>,
-    pub(crate) tls: Option<Box<zero_config::TlsConfig>>,
-    pub(crate) ws: Option<Box<zero_config::WebSocketConfig>>,
-    pub(crate) grpc: Option<Box<zero_config::GrpcConfig>>,
-}
-
 /// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
 struct TlsStream(tokio_rustls::server::TlsStream<TcpRelayStream>);
 
@@ -121,7 +112,7 @@ impl InboundProtocol for VmessTransportHandler {
 
 mod helpers;
 mod listener;
-mod model;
+pub(crate) mod model;
 mod mux;
 mod transport;
 

@@ -12,7 +12,7 @@ pub(super) struct VmessMuxPoolKey {
     pub(super) server: String,
     pub(super) port: u16,
     pub(super) id: [u8; 16],
-    pub(super) cipher: String,
+    pub(super) cipher_name: String,
     pub(super) transport: VmessMuxTransportKey,
 }
 
@@ -45,7 +45,8 @@ pub(crate) struct VmessMuxOpenRequest<'a> {
     pub(crate) server: String,
     pub(crate) port: u16,
     pub(crate) id: [u8; 16],
-    pub(crate) cipher: String,
+    pub(crate) cipher_name: String,
+    pub(crate) cipher: vmess::VmessCipher,
     pub(crate) tls: Option<&'a ClientTlsConfig>,
     pub(crate) ws: Option<&'a WebSocketConfig>,
     pub(crate) grpc: Option<&'a GrpcConfig>,

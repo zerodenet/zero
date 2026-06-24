@@ -8,7 +8,9 @@ use zero_engine::{EngineError, SessionOutcome};
 use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::logging::log_session_finished;
-use crate::protocol_runtime::socks5_udp::Socks5UdpRuntime;
+use crate::protocol_runtime::socks5_udp::{
+    ClosedSocks5UdpAssociation, Socks5UdpAssociationView, Socks5UdpRuntime,
+};
 use crate::protocol_runtime::udp::{ChainTask, ProtocolUdpState};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::sessions::CompletedUdpFlow;
@@ -78,7 +80,7 @@ impl UdpDispatch {
         &mut self,
     ) -> (
         &TokioDatagramSocket,
-        &crate::protocol_runtime::socks5_udp::Socks5UdpRuntime,
+        &Socks5UdpRuntime,
         Option<TokioInstant>,
         &mut JoinSet<ChainTask>,
     ) {
@@ -92,9 +94,7 @@ impl UdpDispatch {
 
     /// View of the SOCKS5 upstream association, if established.
     #[allow(dead_code)]
-    pub(crate) fn socks5_upstream_view(
-        &self,
-    ) -> Option<crate::protocol_runtime::socks5_udp::Socks5UdpAssociationView<'_>> {
+    pub(crate) fn socks5_upstream_view(&self) -> Option<Socks5UdpAssociationView<'_>> {
         self.socks5.upstream_view()
     }
 
@@ -138,9 +138,7 @@ impl UdpDispatch {
     }
 
     /// Drop the SOCKS5 upstream association after a receive error.
-    pub(crate) fn drop_socks5_upstream(
-        &mut self,
-    ) -> Option<crate::protocol_runtime::socks5_udp::ClosedSocks5UdpAssociation> {
+    pub(crate) fn drop_socks5_upstream(&mut self) -> Option<ClosedSocks5UdpAssociation> {
         self.socks5.close_dropped()
     }
 
@@ -159,9 +157,7 @@ impl UdpDispatch {
         }
     }
 
-    pub(crate) fn drop_socks5_idle(
-        &mut self,
-    ) -> Option<crate::protocol_runtime::socks5_udp::ClosedSocks5UdpAssociation> {
+    pub(crate) fn drop_socks5_idle(&mut self) -> Option<ClosedSocks5UdpAssociation> {
         self.socks5.close_idle()
     }
 

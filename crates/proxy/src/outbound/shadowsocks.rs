@@ -4,7 +4,6 @@
 //! so the runtime dispatches via the `ProtocolAdapter` trait. UDP datagram
 //! management lives in `crate::runtime::udp_dispatch::ss_manager`.
 
-use shadowsocks::CipherKind;
 use zero_core::Session;
 use zero_engine::EngineError;
 use zero_traits::TcpSessionProtocol;
@@ -18,25 +17,23 @@ use crate::transport::{MeteredStream, TcpRelayStream};
 /// Moved from `runtime/upstream.rs`. The runtime dispatches via the adapter
 /// trait instead of a per-protocol `connect_via_*` method.
 pub(crate) async fn connect_tcp(
-    proxy: &Proxy,
-    session: &Session,
-    server: &str,
-    port: u16,
-    password: &str,
-    cipher: &str,
+    request: ShadowsocksTcpConnectRequest<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
+    let ShadowsocksTcpConnectRequest {
+        proxy,
+        session,
+        server,
+        port,
+        password,
+        cipher,
+    } = request;
+
     let upstream = proxy
         .protocols
         .direct_connector()
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
     let mut metered = MeteredStream::new(upstream);
-    let cipher_kind = CipherKind::from_str(cipher).ok_or_else(|| {
-        EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("unknown shadowsocks cipher: {cipher}"),
-        ))
-    })?;
     let password_bytes = password.as_bytes().to_vec();
     let ss_session = <shadowsocks::ShadowsocksOutbound as TcpSessionProtocol<
         shadowsocks::ShadowsocksTcpTarget,
@@ -45,7 +42,7 @@ pub(crate) async fn connect_tcp(
         &mut metered,
         &shadowsocks::ShadowsocksTcpTarget {
             session,
-            cipher: cipher_kind,
+            cipher,
             password: &password_bytes,
         },
     )
@@ -56,6 +53,15 @@ pub(crate) async fn connect_tcp(
         ss_session,
         password_bytes,
     ))
+}
+
+pub(crate) struct ShadowsocksTcpConnectRequest<'a> {
+    pub proxy: &'a Proxy,
+    pub session: &'a Session,
+    pub server: &'a str,
+    pub port: u16,
+    pub password: &'a str,
+    pub cipher: shadowsocks::CipherKind,
 }
 
 /// Wrap a relay stream with the Shadowsocks AEAD outbound codec.
@@ -79,14 +85,8 @@ pub(crate) async fn apply_tcp_hop(
     mut stream: TcpRelayStream,
     session: &Session,
     password: &str,
-    cipher: &str,
+    cipher: shadowsocks::CipherKind,
 ) -> Result<TcpRelayStream, EngineError> {
-    let kind = CipherKind::from_str(cipher).ok_or_else(|| {
-        EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("unknown ss cipher: {cipher}"),
-        ))
-    })?;
     let ss_session = <shadowsocks::ShadowsocksOutbound as TcpSessionProtocol<
         shadowsocks::ShadowsocksTcpTarget,
     >>::establish_tcp_session(
@@ -94,7 +94,7 @@ pub(crate) async fn apply_tcp_hop(
         &mut stream,
         &shadowsocks::ShadowsocksTcpTarget {
             session,
-            cipher: kind,
+            cipher,
             password: password.as_bytes(),
         },
     )

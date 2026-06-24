@@ -10,6 +10,21 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
+fn parse_shadowsocks_udp_cipher(
+    cipher: &str,
+    stage: &'static str,
+    upstream: Option<(&str, u16)>,
+) -> Result<shadowsocks::CipherKind, FlowFailure> {
+    shadowsocks::CipherKind::from_str(cipher).ok_or_else(|| FlowFailure {
+        stage,
+        error: EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("unknown shadowsocks cipher: {cipher}"),
+        )),
+        upstream: upstream.map(|(server, port)| (server.to_string(), port)),
+    })
+}
+
 impl ShadowsocksAdapter {
     pub(super) fn udp_packet_path_carrier_descriptor_impl(
         &self,
@@ -56,7 +71,6 @@ impl ShadowsocksAdapter {
             server: (*server).to_string(),
             port: *port,
             password: (*password).to_string(),
-            cipher: (*cipher).to_string(),
         })
     }
 
@@ -75,8 +89,18 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
+        let cipher_kind = parse_shadowsocks_udp_cipher(
+            cipher,
+            "udp_shadowsocks_packet_path_carrier_cipher",
+            Some((server, *port)),
+        )
+        .map_err(|failure| failure.error)?;
         crate::protocol_runtime::udp::build_shadowsocks_packet_path(
-            proxy, server, *port, password, cipher,
+            proxy,
+            server,
+            *port,
+            password,
+            cipher_kind,
         )
         .await
     }
@@ -96,12 +120,16 @@ impl ShadowsocksAdapter {
         else {
             return None;
         };
+        let cipher_kind =
+            parse_shadowsocks_udp_cipher(cipher, "udp_shadowsocks_datagram_source_cipher", None)
+                .ok()?;
         Some(crate::protocol_runtime::udp::UdpDatagramSource {
             tag,
             server,
             port: *port,
             password,
-            cipher,
+            datagram_cache_key: format!("shadowsocks|{tag}|{server}:{port}|{cipher}|{password}"),
+            cipher_kind,
         })
     }
 
@@ -126,6 +154,11 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
+        let cipher_kind = parse_shadowsocks_udp_cipher(
+            cipher,
+            "udp_shadowsocks_parse_cipher",
+            Some((server, *port)),
+        )?;
         let (protocol_state, chain_tasks) = dispatch.protocol_parts();
         let sent = protocol_state
             .start_shadowsocks_udp_flow(
@@ -136,7 +169,7 @@ impl ShadowsocksAdapter {
                     server,
                     port: *port,
                     password,
-                    cipher,
+                    cipher: cipher_kind,
                     payload,
                 },
             )
@@ -152,7 +185,10 @@ impl ShadowsocksAdapter {
                 server: (*server).to_string(),
                 port: *port,
                 password: (*password).to_string(),
-                cipher: (*cipher).to_string(),
+                datagram_cache_key: format!(
+                    "shadowsocks|{tag}|{server}:{port}|{cipher}|{password}"
+                ),
+                cipher_kind,
                 packet_path_carrier: None,
             }),
             tx_bytes: sent as u64,

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use tokio::time::Instant as TokioInstant;
+use zero_core::Session;
 use zero_engine::EngineError;
 
 use super::active::ActiveUpstreamSocks5UdpAssociation;
@@ -37,12 +38,33 @@ impl Socks5UdpRuntime {
             })
     }
 
-    pub(crate) async fn send(
+    async fn send(
         &mut self,
         request: Socks5UdpSend<'_>,
         inbound_tag: &str,
     ) -> Result<usize, EngineError> {
         send::send(request, inbound_tag, self).await
+    }
+
+    pub(crate) async fn send_packet(
+        &mut self,
+        request: Socks5UdpPacketSend<'_>,
+        inbound_tag: &str,
+    ) -> Result<usize, EngineError> {
+        self.send(
+            Socks5UdpSend {
+                proxy: request.proxy,
+                tag: request.tag,
+                server: request.server,
+                port: request.port,
+                username: request.username,
+                password: request.password,
+                session: request.session,
+                payload: request.payload,
+            },
+            inbound_tag,
+        )
+        .await
     }
 
     pub(crate) fn close_idle(&mut self) -> Option<ClosedSocks5UdpAssociation> {
@@ -79,6 +101,17 @@ impl Socks5UdpRuntime {
         }
         self.idle_deadline = None;
     }
+}
+
+pub(crate) struct Socks5UdpPacketSend<'a> {
+    pub(crate) proxy: &'a crate::runtime::Proxy,
+    pub(crate) tag: &'a str,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) username: Option<&'a str>,
+    pub(crate) password: Option<&'a str>,
+    pub(crate) session: &'a Session,
+    pub(crate) payload: &'a [u8],
 }
 
 pub(crate) async fn recv_upstream_packet(

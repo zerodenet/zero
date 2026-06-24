@@ -7,6 +7,15 @@ use crate::protocol_adapter::ProtocolAdapter;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
+fn parse_shadowsocks_cipher(cipher: &str) -> Result<shadowsocks::CipherKind, EngineError> {
+    shadowsocks::CipherKind::from_str(cipher).ok_or_else(|| {
+        EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("unknown shadowsocks cipher: {cipher}"),
+        ))
+    })
+}
+
 impl ShadowsocksAdapter {
     pub(super) async fn connect_tcp_impl(
         &self,
@@ -24,8 +33,20 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
+        let cipher_kind = parse_shadowsocks_cipher(cipher).map_err(|error| TcpOutboundFailure {
+            stage: "connect_upstream_shadowsocks",
+            error,
+            upstream_endpoint: Some(((*server).to_string(), *port)),
+        })?;
         match crate::outbound::shadowsocks::connect_tcp(
-            proxy, session, server, *port, password, cipher,
+            crate::outbound::shadowsocks::ShadowsocksTcpConnectRequest {
+                proxy,
+                session,
+                server,
+                port: *port,
+                password,
+                cipher: cipher_kind,
+            },
         )
         .await
         {
@@ -55,6 +76,7 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
+        let cipher = parse_shadowsocks_cipher(cipher)?;
         crate::outbound::shadowsocks::apply_tcp_hop(stream, session, password, cipher).await
     }
 }

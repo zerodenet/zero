@@ -6,7 +6,7 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use vless::RealityServerOptions;
 use vless::{VlessUser, VlessUserStore};
-use zero_config::{InboundRealityConfig, VlessUserConfig};
+use zero_config::InboundRealityConfig;
 use zero_traits::AsyncSocket;
 
 use crate::transport::ClientStream;
@@ -134,26 +134,21 @@ where
     .await
 }
 
+#[derive(Clone)]
+pub(crate) struct ConfiguredVlessUser {
+    pub(crate) id: [u8; 16],
+    pub(crate) user: VlessUser,
+}
+
 pub(crate) struct ConfiguredVlessUsers<'a> {
-    pub(crate) users: &'a [VlessUserConfig],
+    pub(crate) users: &'a [ConfiguredVlessUser],
 }
 
 impl VlessUserStore for ConfiguredVlessUsers<'_> {
     fn find_user(&self, id: &[u8; 16]) -> Option<VlessUser> {
-        self.users.iter().find_map(|user| {
-            let configured_id = vless::parse_uuid(&user.id).ok()?;
-            if &configured_id == id {
-                let flow = user.flow.as_deref().and_then(|f| vless::parse_flow(f).ok());
-                Some(VlessUser {
-                    credential_id: user.credential_id.clone(),
-                    principal_key: user.principal_key.clone(),
-                    up_bps: user.up_bps,
-                    down_bps: user.down_bps,
-                    flow,
-                })
-            } else {
-                None
-            }
-        })
+        self.users
+            .iter()
+            .find(|user| &user.id == id)
+            .map(|user| user.user.clone())
     }
 }

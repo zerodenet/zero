@@ -27,7 +27,7 @@ impl DirectAdapter {
             };
             crate::inbound::run_direct_listener_with_bound(
                 &p,
-                crate::inbound::DirectInboundRequest {
+                crate::inbound::direct::DirectInboundRequest {
                     inbound,
                     target,
                     port,

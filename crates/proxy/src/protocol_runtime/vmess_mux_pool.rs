@@ -1,4 +1,4 @@
-mod model;
+pub(crate) mod model;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -11,8 +11,8 @@ use zero_engine::EngineError;
 
 use crate::transport::{MeteredStream, TcpRelayStream};
 
-use model::{VmessMuxConn, VmessMuxPoolKey, VmessMuxTransportKey};
-pub(crate) use model::{VmessMuxConnectionPool, VmessMuxOpenRequest};
+pub(crate) use model::VmessMuxConnectionPool;
+use model::{VmessMuxConn, VmessMuxOpenRequest, VmessMuxPoolKey, VmessMuxTransportKey};
 
 impl std::fmt::Debug for VmessMuxConnectionPool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -56,7 +56,7 @@ impl VmessMuxConnectionPool {
             server: request.server.clone(),
             port: request.port,
             id: request.id,
-            cipher: request.cipher.clone(),
+            cipher_name: request.cipher_name.clone(),
             transport: transport_key(request.tls, request.ws, request.grpc)?,
         };
 
@@ -127,17 +127,10 @@ impl VmessMuxConnectionPool {
         )
         .await?;
 
-        let vmess_cipher = vmess::VmessCipher::from_name(&key.cipher).ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("vmess unknown cipher: {}", key.cipher),
-            ))
-        })?;
-
         let mut metered = MeteredStream::new(stream);
         let mux_target = vmess::mux_cool_session();
         let mux_session = vmess::VmessOutbound
-            .establish_tcp_session(&mut metered, &mux_target, &key.id, vmess_cipher)
+            .establish_tcp_session(&mut metered, &mux_target, &key.id, request.cipher)
             .await?;
         let stream = TcpRelayStream::new(vmess::VmessAeadStream::outbound(
             metered.into_inner(),

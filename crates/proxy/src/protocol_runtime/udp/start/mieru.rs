@@ -1,10 +1,9 @@
 use tokio::task::JoinSet;
 use zero_core::Session;
 
+use super::super::mieru_manager::model::{MieruRelayExisting, MieruSendExisting};
 use super::super::state::ProtocolUdpState;
-use super::super::{
-    ChainTask, FlowFailure, MieruRelayExisting, MieruSendExisting, MieruUdpRelayFlow,
-};
+use super::super::{ChainTask, FlowFailure, MieruUdpRelayFlow};
 use crate::runtime::Proxy;
 
 impl ProtocolUdpState {

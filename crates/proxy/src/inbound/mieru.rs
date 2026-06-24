@@ -107,13 +107,7 @@ impl InboundProtocol for MieruInboundHandler {
             .accept_request(&mut metered, &self.users)
             .await?;
 
-        let mut client = MieruClientStream::new(
-            metered.into_inner(),
-            accept.server_cipher,
-            accept.client_cipher,
-            accept.mieru_session,
-            accept.remaining_payload,
-        );
+        let mut client = MieruClientStream::new(metered.into_inner(), accept);
 
         // mieru conveys the proxy target via a socks5 request inside the tunnel.
         let (target, port, is_udp) = socks5_serve(&mut client)

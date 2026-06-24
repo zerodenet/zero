@@ -11,8 +11,7 @@ pub(super) struct PathKey {
     pub(super) datagram_tag: String,
     pub(super) datagram_server: String,
     pub(super) datagram_port: u16,
-    pub(super) datagram_password: String,
-    pub(super) datagram_cipher: String,
+    pub(super) datagram_cache_key: String,
 }
 
 impl PathKey {
@@ -21,16 +20,14 @@ impl PathKey {
         datagram_tag: &str,
         datagram_server: &str,
         datagram_port: u16,
-        datagram_password: &str,
-        datagram_cipher: &str,
+        datagram_cache_key: &str,
     ) -> Self {
         Self {
             carrier_key: carrier.cache_key().to_owned(),
             datagram_tag: datagram_tag.to_owned(),
             datagram_server: datagram_server.to_owned(),
             datagram_port,
-            datagram_password: datagram_password.to_owned(),
-            datagram_cipher: datagram_cipher.to_owned(),
+            datagram_cache_key: datagram_cache_key.to_owned(),
         }
     }
 
@@ -43,8 +40,7 @@ impl PathKey {
             datagram_tag: datagram.tag.to_owned(),
             datagram_server: datagram.server.to_owned(),
             datagram_port: datagram.port,
-            datagram_password: datagram.password.to_owned(),
-            datagram_cipher: datagram.cipher.to_owned(),
+            datagram_cache_key: datagram.datagram_cache_key.clone(),
         }
     }
 }

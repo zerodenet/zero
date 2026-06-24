@@ -4,22 +4,22 @@
 //! dialing transports, caching per-target upstream streams, metering, and
 //! response bridge tasks.
 
-mod model;
+pub(super) mod model;
 
 use std::collections::HashMap;
 
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
-use vmess::{parse_uuid, VmessCipher};
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_traits::{AsyncSocket, UdpPacketFraming};
 
-pub(crate) use model::{VmessUdpRelayFlow, VmessUdpStartFlow, VmessUdpTransport};
-
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
-use model::{VmessUdpUpstream, VmessUdpUpstreamRequest};
+use model::{
+    VmessUdpRelayFlow, VmessUdpStartFlow, VmessUdpTransport, VmessUdpUpstream,
+    VmessUdpUpstreamRequest,
+};
 
 fn spawn_vmess_udp_relay(
     proxy: &Proxy,
@@ -151,18 +151,11 @@ async fn build_vmess_udp_transport_over_stream(
 async fn establish_vmess_udp_upstream_over_stream(
     proxy: &Proxy,
     session: &Session,
-    id: &str,
-    cipher: &str,
+    uuid: [u8; 16],
+    cipher: vmess::VmessCipher,
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<(VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>), EngineError> {
-    let uuid = parse_uuid(id)?;
-    let vmess_cipher = VmessCipher::from_name(cipher).ok_or_else(|| {
-        EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("vmess unknown cipher: {cipher}"),
-        ))
-    })?;
     let initial_packet =
         <vmess::VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::encode_udp_packet(
             &proxy.protocols.vmess_outbound_protocol(),
@@ -178,7 +171,7 @@ async fn establish_vmess_udp_upstream_over_stream(
         &proxy.protocols.vmess_outbound_protocol(),
         session,
         &uuid,
-        vmess_cipher,
+        cipher,
     )
     .await?;
     let mut metered = MeteredStream::new(TcpRelayStream::new(vmess_stream));
@@ -195,13 +188,6 @@ async fn establish_vmess_udp_upstream_over_stream(
 async fn establish_vmess_udp_upstream(
     request: &VmessUdpUpstreamRequest<'_>,
 ) -> Result<(VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>), EngineError> {
-    let uuid = parse_uuid(request.id)?;
-    let vmess_cipher = VmessCipher::from_name(request.cipher).ok_or_else(|| {
-        EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("vmess unknown cipher: {}", request.cipher),
-        ))
-    })?;
     let initial_packet =
         <vmess::VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::encode_udp_packet(
             &request.proxy.protocols.vmess_outbound_protocol(),
@@ -217,13 +203,14 @@ async fn establish_vmess_udp_upstream(
             .proxy
             .vmess_mux_pool
             .open_udp_stream(
-                crate::protocol_runtime::vmess_mux_pool::VmessMuxOpenRequest {
+                crate::protocol_runtime::vmess_mux_pool::model::VmessMuxOpenRequest {
                     proxy: request.proxy,
                     session: request.session,
                     server: request.server.to_owned(),
                     port: request.server_port,
-                    id: uuid,
-                    cipher: request.cipher.to_owned(),
+                    id: request.uuid,
+                    cipher_name: request.cipher_name.to_owned(),
+                    cipher: request.cipher,
                     tls: request.transport.and_then(|transport| transport.tls),
                     ws: request.transport.and_then(|transport| transport.ws),
                     grpc: request.transport.and_then(|transport| transport.grpc),
@@ -339,8 +326,8 @@ async fn establish_vmess_udp_upstream(
         stream,
         &request.proxy.protocols.vmess_outbound_protocol(),
         request.session,
-        &uuid,
-        vmess_cipher,
+        &request.uuid,
+        request.cipher,
     )
     .await?;
     let mut metered = MeteredStream::new(TcpRelayStream::new(vmess_stream));
@@ -380,7 +367,8 @@ impl VmessUdpOutboundManager {
                 port: request.session.port,
                 server: request.server,
                 server_port: request.port,
-                id: request.id,
+                uuid: request.uuid,
+                cipher_name: request.cipher_name,
                 cipher: request.cipher,
                 initial_payload: request.payload,
                 transport: Some(&request.transport),
@@ -406,7 +394,7 @@ impl VmessUdpOutboundManager {
         let (upstream, recv_tx) = establish_vmess_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.id,
+            request.uuid,
             request.cipher,
             request.payload,
             stream,

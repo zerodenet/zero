@@ -11,8 +11,7 @@ pub(super) struct SnapshotLookup<'a> {
     pub(super) datagram_tag: &'a str,
     pub(super) datagram_server: &'a str,
     pub(super) datagram_port: u16,
-    pub(super) datagram_password: &'a str,
-    pub(super) datagram_cipher: &'a str,
+    pub(super) datagram_cache_key: &'a str,
 }
 
 pub(super) fn lookup_entry<'a>(
@@ -24,8 +23,7 @@ pub(super) fn lookup_entry<'a>(
         lookup.datagram_tag,
         lookup.datagram_server,
         lookup.datagram_port,
-        lookup.datagram_password,
-        lookup.datagram_cipher,
+        lookup.datagram_cache_key,
     );
     upstreams.get(&key).ok_or_else(|| FlowFailure {
         stage: "packet_path_carrier_dropped",

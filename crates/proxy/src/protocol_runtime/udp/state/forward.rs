@@ -30,7 +30,8 @@ impl ProtocolUdpState {
                 server,
                 port,
                 password,
-                cipher,
+                datagram_cache_key,
+                cipher_kind,
                 packet_path_carrier,
             } => {
                 shadowsocks::forward(
@@ -43,7 +44,8 @@ impl ProtocolUdpState {
                         server,
                         port: *port,
                         password,
-                        cipher,
+                        datagram_cache_key,
+                        cipher_kind: *cipher_kind,
                         packet_path_carrier: packet_path_carrier.as_ref(),
                         payload,
                     },

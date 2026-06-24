@@ -3,25 +3,23 @@
 //! Moved from outbound/vless.rs so inbound can import them without
 //! depending on the outbound module.
 
-mod model;
+pub(super) mod model;
 
 use std::collections::HashMap;
 
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
-use vless::parse_uuid;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
 
-pub(crate) use model::{
-    VlessUdpRelayFinalHop, VlessUdpRelayTwoStream, VlessUdpStartFlow, VlessUdpTransport,
-};
-
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
-use model::{VlessUdpUpstream, VlessUdpUpstreamRequest};
+use model::{
+    VlessUdpRelayFinalHop, VlessUdpRelayTwoStream, VlessUdpStartFlow, VlessUdpTransport,
+    VlessUdpUpstream, VlessUdpUpstreamRequest,
+};
 
 /// Spawn the bidirectional meter + relay task for a VLESS UDP upstream,
 /// returning the upstream handle and a broadcast sender for decoded responses.
@@ -92,11 +90,10 @@ fn spawn_vless_udp_relay(
 async fn establish_vless_udp_upstream_over_stream(
     proxy: &Proxy,
     session: &Session,
-    id: &str,
+    uuid: [u8; 16],
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<(VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>), EngineError> {
-    let vless_id = parse_uuid(id)?;
     let initial_packet =
         <vless::VlessOutbound as UdpPacketFraming<vless::VlessUdpPacketTarget>>::encode_udp_packet(
             &proxy.protocols.vless_outbound_protocol(),
@@ -114,7 +111,7 @@ async fn establish_vless_udp_upstream_over_stream(
         &mut metered,
         &vless::VlessUdpPacketTunnelTarget {
             session,
-            id: &vless_id,
+            id: &uuid,
         },
     )
     .await?;
@@ -134,11 +131,10 @@ async fn establish_vless_udp_upstream(
     session: &Session,
     server: &str,
     port: u16,
-    id: &str,
+    uuid: [u8; 16],
     initial_payload: &[u8],
     transport: Option<&VlessUdpTransport<'_>>,
 ) -> Result<(VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>), EngineError> {
-    let vless_id = parse_uuid(id)?;
     let initial_packet =
         <vless::VlessOutbound as UdpPacketFraming<vless::VlessUdpPacketTarget>>::encode_udp_packet(
             &proxy.protocols.vless_outbound_protocol(),
@@ -164,7 +160,7 @@ async fn establish_vless_udp_upstream(
                 &mut metered,
                 &vless::VlessUdpPacketTunnelTarget {
                     session,
-                    id: &vless_id,
+                    id: &uuid,
                 },
             )
             .await?;
@@ -204,7 +200,7 @@ async fn establish_vless_udp_upstream(
         None => socket.into(),
     };
 
-    establish_vless_udp_upstream_over_stream(proxy, session, id, initial_payload, stream).await
+    establish_vless_udp_upstream_over_stream(proxy, session, uuid, initial_payload, stream).await
 }
 
 /// VLESS UDP outbound manager — manages per-target upstream connections.
@@ -238,17 +234,12 @@ impl VlessUdpOutboundManager {
                 .proxy
                 .mux_pool
                 .open_udp_stream(
-                    crate::protocol_runtime::vless_mux_pool::VlessMuxOpenRequest {
+                    crate::protocol_runtime::vless_mux_pool::model::VlessMuxOpenRequest {
                         proxy: request.proxy,
                         session: None,
                         server: request.server,
                         port: request.port,
-                        id: &::vless::parse_uuid(request.id).map_err(|error| {
-                            EngineError::Io(std::io::Error::new(
-                                std::io::ErrorKind::InvalidInput,
-                                format!("invalid VLESS UUID: {error}"),
-                            ))
-                        })?,
+                        id: &request.uuid,
                         tls: request.transport.tls,
                         reality: request.transport.reality,
                         max_concurrency,
@@ -283,7 +274,7 @@ impl VlessUdpOutboundManager {
                 port: request.session.port,
                 server: request.server,
                 server_port: request.port,
-                id: request.id,
+                uuid: request.uuid,
                 initial_payload: request.payload,
                 transport: Some(&request.transport),
             },
@@ -305,7 +296,7 @@ impl VlessUdpOutboundManager {
         let (upstream, recv_tx) = establish_vless_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.id,
+            request.uuid,
             request.payload,
             stream,
         )
@@ -348,7 +339,7 @@ impl VlessUdpOutboundManager {
         let (upstream, recv_tx) = establish_vless_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.id,
+            request.uuid,
             request.payload,
             stream,
         )
@@ -471,7 +462,7 @@ impl VlessUdpOutboundManager {
             request.session,
             request.server,
             request.server_port,
-            request.id,
+            request.uuid,
             request.initial_payload,
             request.transport,
         )

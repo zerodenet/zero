@@ -29,10 +29,6 @@ pub(crate) use flows::ShadowsocksUdpFlow;
 pub(crate) use flows::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
 #[cfg(feature = "vmess")]
 pub(crate) use flows::{VmessUdpFlow, VmessUdpRelayFlow};
-#[cfg(feature = "hysteria2")]
-pub(crate) use h2_manager::{H2ChainManager, H2SendExisting};
-#[cfg(feature = "mieru")]
-pub(crate) use mieru_manager::{MieruChainManager, MieruRelayExisting, MieruSendExisting};
 #[cfg(all(feature = "shadowsocks", feature = "hysteria2"))]
 pub(crate) use packet_path_chain::build_hysteria2_packet_path;
 #[cfg(feature = "shadowsocks")]
@@ -45,8 +41,6 @@ pub(crate) use packet_path_traits::ChainTask;
 pub(crate) use packet_path_traits::{
     PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
 };
-#[cfg(feature = "shadowsocks")]
-pub(crate) use ss_manager::{SsChainManager, SsSendExisting};
 #[cfg(feature = "hysteria2")]
 pub(crate) use start::Hysteria2UdpFlowRequest;
 #[cfg(feature = "mieru")]
@@ -54,5 +48,3 @@ pub(crate) use start::MieruUdpFlowRequest;
 #[cfg(feature = "trojan")]
 pub(crate) use start::{TrojanUdpFlowRequest, TrojanUdpRelayFlowRequest};
 pub(crate) use state::ProtocolUdpState;
-#[cfg(feature = "trojan")]
-pub(crate) use trojan_manager::{TrojanChainManager, TrojanRelayExisting, TrojanSendExisting};

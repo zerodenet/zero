@@ -35,12 +35,14 @@ pub(crate) struct PacketPathCarrierDescriptor {
 /// Datagram source params for a relay-chain final hop over a packet path.
 ///
 /// Produced by `ProtocolAdapter::udp_datagram_source`. The manager builds the
-/// inner `DatagramCodec` from `cipher` + `password`; `tag`/`server`/`port`
-/// feed the outbound result + cache key.
+/// inner `DatagramCodec` from parsed protocol fields; `datagram_cache_key`
+/// feeds packet-path cache identity without exposing raw config parsing to the
+/// manager.
 pub(crate) struct UdpDatagramSource<'a> {
     pub(crate) tag: &'a str,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
     pub(crate) password: &'a str,
-    pub(crate) cipher: &'a str,
+    pub(crate) datagram_cache_key: String,
+    pub(crate) cipher_kind: shadowsocks::CipherKind,
 }

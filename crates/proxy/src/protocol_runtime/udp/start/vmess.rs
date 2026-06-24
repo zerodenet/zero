@@ -10,7 +10,7 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VmessUdpFlow<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::protocol_runtime::vmess_udp::VmessUdpTransport {
+        let transport = crate::protocol_runtime::vmess_udp::model::VmessUdpTransport {
             tls: flow.tls,
             ws: flow.ws,
             grpc: flow.grpc,
@@ -18,12 +18,13 @@ impl ProtocolUdpState {
         self.vmess
             .start_flow(
                 chain_tasks,
-                crate::protocol_runtime::vmess_udp::VmessUdpStartFlow {
+                crate::protocol_runtime::vmess_udp::model::VmessUdpStartFlow {
                     proxy: flow.proxy,
                     session: flow.session,
                     server: flow.server,
                     port: flow.port,
-                    id: flow.id,
+                    uuid: flow.uuid,
+                    cipher_name: flow.cipher_name,
                     cipher: flow.cipher,
                     mux_concurrency: flow.mux_concurrency,
                     transport,
@@ -44,7 +45,7 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VmessUdpRelayFlow<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::protocol_runtime::vmess_udp::VmessUdpTransport {
+        let transport = crate::protocol_runtime::vmess_udp::model::VmessUdpTransport {
             tls: flow.tls,
             ws: flow.ws,
             grpc: flow.grpc,
@@ -52,13 +53,13 @@ impl ProtocolUdpState {
         self.vmess
             .start_relay_flow(
                 chain_tasks,
-                crate::protocol_runtime::vmess_udp::VmessUdpRelayFlow {
+                crate::protocol_runtime::vmess_udp::model::VmessUdpRelayFlow {
                     proxy: flow.proxy,
                     session: flow.session,
                     carrier: flow.carrier,
                     server: flow.server,
                     port: flow.port,
-                    id: flow.id,
+                    uuid: flow.uuid,
                     cipher: flow.cipher,
                     transport,
                     payload: flow.payload,
