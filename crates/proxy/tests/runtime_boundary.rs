@@ -107,6 +107,7 @@ fn protocol_identity_parsing_is_confined_to_adapters() {
 fn runtime_protocol_runtime_references_are_confined_to_facades() {
     let allowed_exact = [
         "src/runtime/udp_dispatch/mod.rs",
+        "src/runtime/udp_dispatch/hysteria2_flow.rs",
         "src/runtime/udp_dispatch/lifecycle.rs",
         "src/runtime/udp_dispatch/socks5_flow.rs",
         "src/runtime/udp_dispatch/start/relay.rs",
@@ -1039,7 +1040,7 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
                 "hysteria2_packet_path_carrier_descriptor",
                 "hysteria2_packet_path_carrier_snapshot",
                 "build_hysteria2_packet_path",
-                "Hysteria2UdpFlowRequest",
+                "Hysteria2DatagramSend",
                 "UdpFlowOutbound::Hysteria2",
             ],
         ),
@@ -2721,12 +2722,20 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
     );
     assert!(
         !root.join("start/protocol.rs").exists(),
-        "runtime UDP dispatch should not expose protocol-named start wrappers; adapters should call protocol_runtime::udp state directly"
+        "runtime UDP dispatch should not keep broad protocol start wrappers; use narrow per-flow dispatch facades"
     );
 
     for path in rust_sources_under("src/runtime/udp_dispatch") {
         let source = relative(&path);
         let content = fs::read_to_string(&path).expect("read rust source");
+        if source == "src/runtime/udp_dispatch/hysteria2_flow.rs" {
+            assert!(
+                content.contains("Hysteria2DatagramSend")
+                    && content.contains("start_hysteria2_udp_flow"),
+                "Hysteria2 dispatch facade should own its narrow protocol-state bridge"
+            );
+            continue;
+        }
         for forbidden in [
             "ShadowsocksUdpFlow",
             "MieruUdpRelayFlow",
@@ -4860,6 +4869,30 @@ fn adapters_do_not_reach_into_udp_dispatch_manager_fields() {
                 "{source} should not reach into udp-dispatch manager field `{forbidden}`"
             );
         }
+    }
+}
+
+#[test]
+fn hysteria2_udp_adapter_uses_dispatch_facade_for_protocol_state() {
+    let adapter = read("src/adapters/hysteria2/udp.rs");
+    let facade = read("src/runtime/udp_dispatch/hysteria2_flow.rs");
+
+    for forbidden in ["protocol_parts()", "Hysteria2UdpFlowRequest"] {
+        assert!(
+            !adapter.contains(forbidden),
+            "Hysteria2 UDP adapter should ask UdpDispatch to start protocol state instead of using `{forbidden}`"
+        );
+    }
+    for required in [
+        "Hysteria2DatagramSend",
+        "send_hysteria2_datagram",
+        "start_hysteria2_udp_flow",
+        "chain_tasks: &mut self.chain_tasks",
+    ] {
+        assert!(
+            adapter.contains(required) || facade.contains(required),
+            "Hysteria2 UDP dispatch facade should own `{required}`"
+        );
     }
 }
 

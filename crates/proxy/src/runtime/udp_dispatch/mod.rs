@@ -65,6 +65,8 @@ use zero_platform_tokio::TokioDatagramSocket;
 
 mod dispatch;
 mod forward;
+#[cfg(feature = "hysteria2")]
+mod hysteria2_flow;
 mod lifecycle;
 mod socks5_flow;
 mod start;
@@ -74,6 +76,8 @@ mod types;
 
 use crate::protocol_runtime::udp::ChainTask;
 use crate::protocol_runtime::udp::ProtocolUdpState;
+#[cfg(feature = "hysteria2")]
+pub(crate) use hysteria2_flow::Hysteria2DatagramSend;
 pub(crate) use socks5_flow::Socks5RelaySend;
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 

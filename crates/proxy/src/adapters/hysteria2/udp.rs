@@ -7,7 +7,9 @@ use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_adapter::ProtocolAdapter;
 use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::{
+    FlowFailure, FlowStartResult, Hysteria2DatagramSend, UdpDispatch,
+};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
 impl Hysteria2Adapter {
@@ -109,10 +111,8 @@ impl Hysteria2Adapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        let sent = protocol_state
-            .start_hysteria2_udp_flow(crate::protocol_runtime::udp::Hysteria2UdpFlowRequest {
-                chain_tasks,
+        let sent = dispatch
+            .send_hysteria2_datagram(Hysteria2DatagramSend {
                 session,
                 server,
                 port: *port,
