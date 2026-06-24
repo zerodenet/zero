@@ -36,6 +36,8 @@ impl UdpDispatch {
             session: request.session,
             payload: request.payload,
         };
-        self.socks5.send_packet(packet, &self.inbound_tag).await
+        self.protocol_state
+            .send_socks5_packet(packet, &self.inbound_tag)
+            .await
     }
 }

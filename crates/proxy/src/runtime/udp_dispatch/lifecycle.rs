@@ -24,7 +24,6 @@ impl UdpDispatch {
             inbound_tag: inbound_tag.to_owned(),
             flows: UdpSessionFlows::default(),
             direct_socket,
-            socks5: Socks5UdpRuntime::default(),
             protocol_state: ProtocolUdpState::new(),
             managed_flows: ManagedUdpFlows::default(),
             chain_tasks: JoinSet::new(),
@@ -38,7 +37,6 @@ impl UdpDispatch {
             inbound_tag: inbound_tag.to_owned(),
             flows: UdpSessionFlows::default(),
             direct_socket,
-            socks5: Socks5UdpRuntime::default(),
             protocol_state: ProtocolUdpState::new(),
             managed_flows: ManagedUdpFlows::default(),
             chain_tasks: JoinSet::new(),
@@ -81,8 +79,8 @@ impl UdpDispatch {
     ) {
         (
             &self.direct_socket,
-            &self.socks5,
-            self.socks5.idle_deadline(),
+            self.protocol_state.socks5_runtime(),
+            self.protocol_state.socks5_idle_deadline(),
             &mut self.chain_tasks,
         )
     }
@@ -90,19 +88,19 @@ impl UdpDispatch {
     /// View of the SOCKS5 upstream association, if established.
     #[allow(dead_code)]
     pub(crate) fn socks5_upstream_view(&self) -> Option<Socks5UdpAssociationView<'_>> {
-        self.socks5.upstream_view()
+        self.protocol_state.socks5_upstream_view()
     }
 
     /// The SOCKS5 idle deadline.
     #[allow(dead_code)]
     pub(crate) fn socks5_idle_deadline(&self) -> Option<TokioInstant> {
-        self.socks5.idle_deadline()
+        self.protocol_state.socks5_idle_deadline()
     }
 
     /// Update the SOCKS5 idle deadline (called after each send / recv).
     #[allow(dead_code)]
     pub(crate) fn touch_socks5_idle(&mut self, timeout: std::time::Duration) {
-        self.socks5.touch_idle(timeout);
+        self.protocol_state.touch_socks5_idle(timeout);
     }
 
     /// Look up the session ID for a direct response sender.
@@ -134,14 +132,14 @@ impl UdpDispatch {
 
     /// Drop the SOCKS5 upstream association after a receive error.
     pub(crate) fn drop_socks5_upstream(&mut self) -> Option<ClosedSocks5UdpAssociation> {
-        self.socks5.close_dropped()
+        self.protocol_state.drop_socks5_upstream()
     }
 
     /// Close the SOCKS5 upstream association on idle timeout.
     #[allow(dead_code)]
     pub(crate) fn close_socks5_idle(&mut self) {
         use crate::logging::log_udp_upstream_association_idle_timeout;
-        if let Some(closed) = self.socks5.close_idle() {
+        if let Some(closed) = self.protocol_state.close_socks5_idle() {
             log_udp_upstream_association_idle_timeout(
                 &self.inbound_tag,
                 &closed.outbound_tag,
@@ -153,12 +151,12 @@ impl UdpDispatch {
     }
 
     pub(crate) fn drop_socks5_idle(&mut self) -> Option<ClosedSocks5UdpAssociation> {
-        self.socks5.close_idle()
+        self.protocol_state.close_socks5_idle()
     }
 
     /// Finish all tracked flows and close upstreams.
     pub(crate) fn finish_all(mut self) -> Vec<CompletedUdpFlow> {
-        self.socks5.close_all();
+        self.protocol_state.close_socks5_all();
 
         self.managed_flows.finish_all();
 

@@ -2567,14 +2567,19 @@ fn generic_udp_dispatch_does_not_contain_protocol_manager_modules() {
 #[test]
 fn udp_dispatch_keeps_protocol_managers_in_protocol_runtime_state() {
     let content = read("src/runtime/udp_dispatch/mod.rs");
+    let state = read("src/protocol_runtime/udp/state.rs");
 
     assert!(
         content.contains("protocol_state: ProtocolUdpState"),
         "UdpDispatch should keep protocol-specific managers behind ProtocolUdpState"
     );
     assert!(
-        content.contains("socks5: Socks5UdpRuntime"),
-        "UdpDispatch should keep SOCKS5 UDP association state behind Socks5UdpRuntime"
+        !content.contains("socks5: Socks5UdpRuntime"),
+        "UdpDispatch should keep SOCKS5 UDP association state inside ProtocolUdpState"
+    );
+    assert!(
+        state.contains("socks5: Socks5UdpRuntime"),
+        "ProtocolUdpState should own the SOCKS5 UDP association facade"
     );
 
     for forbidden in [

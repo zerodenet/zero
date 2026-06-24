@@ -72,7 +72,6 @@ mod types;
 
 // Re-exports.
 
-use crate::protocol_runtime::socks5_udp::Socks5UdpRuntime;
 use crate::protocol_runtime::udp::ChainTask;
 use crate::protocol_runtime::udp::ProtocolUdpState;
 pub(crate) use socks5_flow::Socks5RelaySend;
@@ -89,8 +88,6 @@ pub(crate) struct UdpDispatch {
     flows: UdpSessionFlows,
     /// Ephemeral UDP socket for direct outbound (sends to target, receives responses).
     direct_socket: TokioDatagramSocket,
-    /// SOCKS5 upstream association runtime (shared across all flows in this session).
-    socks5: Socks5UdpRuntime,
     /// Protocol-specific UDP managers.
     protocol_state: ProtocolUdpState,
     /// Session handles for protocol-managed flows owned outside
