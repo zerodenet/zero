@@ -1717,7 +1717,7 @@ fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
         }
     }
     assert!(
-        types.contains("ManagedFlow") && dispatch.contains("managed_handles"),
+        types.contains("ManagedFlow") && dispatch.contains("managed_flows"),
         "UDP dispatch should track protocol-managed flows through neutral names"
     );
 }
@@ -2677,6 +2677,29 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     assert!(
         mieru.exists(),
         "Mieru UDP start facade should live in start/mieru.rs"
+    );
+}
+
+#[test]
+fn udp_dispatch_keeps_managed_flow_handles_in_udp_flow_module() {
+    let dispatch = read("src/runtime/udp_dispatch/mod.rs");
+    let lifecycle = read("src/runtime/udp_dispatch/lifecycle.rs");
+    let managed = read("src/runtime/udp_flow/managed.rs");
+
+    for source in [&dispatch, &lifecycle] {
+        for forbidden in ["HashMap<(Address, u16)", "SessionHandle", "managed_handles"] {
+            assert!(
+                !source.contains(forbidden),
+                "UDP dispatch should keep managed-flow handle storage behind runtime::udp_flow::managed; found `{forbidden}`"
+            );
+        }
+    }
+    assert!(
+        dispatch.contains("managed_flows: ManagedUdpFlows")
+            && lifecycle.contains("ManagedUdpFlows::default()")
+            && managed.contains("struct ManagedUdpFlows")
+            && managed.contains("SessionHandle"),
+        "runtime::udp_flow::managed should own protocol-managed flow handles"
     );
 }
 

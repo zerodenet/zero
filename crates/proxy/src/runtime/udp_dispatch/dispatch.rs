@@ -107,10 +107,7 @@ impl UdpDispatch {
                 Ok(FlowStartResult::ManagedFlow { session_id, tag }) => {
                     session.outbound_tag = Some(tag);
                     proxy.set_session_outbound(&session);
-                    self.managed_handles.insert(
-                        (session.target.clone(), session.port),
-                        (session, session_handle),
-                    );
+                    self.managed_flows.insert(session, session_handle);
                     proxy.record_session_outbound_tx(session_id, input.payload.len() as u64);
                     return Ok(session_id);
                 }

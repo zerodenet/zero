@@ -51,15 +51,14 @@
 //! }
 //! ```
 
-use std::collections::HashMap;
 use std::time::Instant;
 
 use tokio::task::JoinSet;
 
 use crate::logging::log_session_failed;
+use crate::runtime::udp_flow::managed::ManagedUdpFlows;
 use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpSessionFlows};
-use zero_core::{Address, Session};
-use zero_engine::{EngineError, SessionHandle, SessionOutcome};
+use zero_engine::{EngineError, SessionOutcome};
 use zero_platform_tokio::TokioDatagramSocket;
 
 // Sub-module declarations.
@@ -95,7 +94,7 @@ pub(crate) struct UdpDispatch {
     protocol_state: ProtocolUdpState,
     /// Session handles for protocol-managed flows owned outside
     /// [`UdpSessionFlows`].
-    managed_handles: HashMap<(Address, u16), (Session, SessionHandle)>,
+    managed_flows: ManagedUdpFlows,
     /// Unified JoinSet for chain-outbound (SS/H2/Trojan/Mieru/VLESS)
     /// response bridge tasks. Polled by [`poll_chain_response`].
     chain_tasks: JoinSet<ChainTask>,
