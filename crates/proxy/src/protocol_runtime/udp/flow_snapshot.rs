@@ -1,3 +1,4 @@
+#[cfg(feature = "shadowsocks")]
 use crate::protocol_runtime::udp::UdpPacketPathCarrier;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

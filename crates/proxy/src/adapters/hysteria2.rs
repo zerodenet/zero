@@ -56,6 +56,7 @@ impl ProtocolAdapter for Hysteria2Adapter {
         proxy_leaf_runtime(leaf, TcpPathCategory::TransportSession)
     }
 
+    #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_descriptor(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
@@ -63,6 +64,7 @@ impl ProtocolAdapter for Hysteria2Adapter {
         self.udp_packet_path_carrier_descriptor_impl(leaf)
     }
 
+    #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_snapshot(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,

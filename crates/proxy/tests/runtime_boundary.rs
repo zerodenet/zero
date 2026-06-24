@@ -1058,7 +1058,7 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
                 "shadowsocks_packet_path_carrier_descriptor",
                 "shadowsocks_packet_path_carrier_snapshot",
                 "build_shadowsocks_packet_path",
-                "UdpDatagramSource {",
+                "shadowsocks_udp_datagram_source",
                 "ShadowsocksUdpFlow",
                 "start_shadowsocks_udp_flow",
                 "UdpFlowOutbound::Shadowsocks",
@@ -4789,6 +4789,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         let content = read(source);
         for forbidden in [
             "PacketPathCarrierDescriptor {",
+            "UdpDatagramSource {",
             "UdpPacketPathCarrier::Socks5",
             "UdpPacketPathCarrier::Shadowsocks",
             "UdpPacketPathCarrier::Hysteria2",
@@ -4806,6 +4807,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         "socks5_packet_path_carrier_snapshot",
         "shadowsocks_packet_path_carrier_descriptor",
         "shadowsocks_packet_path_carrier_snapshot",
+        "shadowsocks_udp_datagram_source",
         "hysteria2_packet_path_carrier_descriptor",
         "hysteria2_packet_path_carrier_snapshot",
     ] {

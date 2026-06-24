@@ -48,6 +48,7 @@ impl UdpPacketPathCarrier {
     }
 }
 
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
 pub(crate) fn socks5_packet_path_carrier_descriptor(
     tag: &str,
     server: &str,
@@ -61,7 +62,7 @@ pub(crate) fn socks5_packet_path_carrier_descriptor(
     }
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
 pub(crate) fn socks5_packet_path_carrier_snapshot(
     tag: &str,
     server: &str,
@@ -79,6 +80,7 @@ pub(crate) fn socks5_packet_path_carrier_snapshot(
     }
 }
 
+#[cfg(feature = "shadowsocks")]
 pub(crate) fn shadowsocks_packet_path_carrier_descriptor(
     tag: &str,
     server: &str,
@@ -114,7 +116,28 @@ pub(crate) fn shadowsocks_packet_path_carrier_snapshot(
     }
 }
 
-#[cfg(feature = "hysteria2")]
+#[cfg(feature = "shadowsocks")]
+pub(crate) fn shadowsocks_udp_datagram_source<'a>(
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    cipher: &str,
+    password: &'a str,
+    cipher_kind: shadowsocks::CipherKind,
+) -> crate::protocol_runtime::udp::UdpDatagramSource<'a> {
+    crate::protocol_runtime::udp::UdpDatagramSource {
+        tag,
+        server,
+        port,
+        password,
+        datagram_cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
+            tag, server, port, cipher, password,
+        ),
+        cipher_kind,
+    }
+}
+
+#[cfg(all(feature = "hysteria2", feature = "shadowsocks"))]
 pub(crate) fn hysteria2_packet_path_carrier_descriptor(
     tag: &str,
     server: &str,
@@ -135,7 +158,7 @@ pub(crate) fn hysteria2_packet_path_carrier_descriptor(
     }
 }
 
-#[cfg(feature = "hysteria2")]
+#[cfg(all(feature = "hysteria2", feature = "shadowsocks"))]
 pub(crate) fn hysteria2_packet_path_carrier_snapshot(
     tag: &str,
     server: &str,

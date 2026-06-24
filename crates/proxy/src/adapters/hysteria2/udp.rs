@@ -11,6 +11,7 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
 impl Hysteria2Adapter {
+    #[cfg(feature = "shadowsocks")]
     pub(super) fn udp_packet_path_carrier_descriptor_impl(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
@@ -38,6 +39,7 @@ impl Hysteria2Adapter {
         )
     }
 
+    #[cfg(feature = "shadowsocks")]
     pub(super) fn udp_packet_path_carrier_snapshot_impl(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,

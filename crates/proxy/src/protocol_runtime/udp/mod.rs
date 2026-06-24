@@ -42,14 +42,18 @@ pub(crate) use packet_path_chain::build_hysteria2_packet_path;
 pub(crate) use packet_path_chain::{
     build_shadowsocks_packet_path, PacketPathManager, SendWithSnapshotRequest,
 };
-#[cfg(feature = "hysteria2")]
+#[cfg(all(feature = "hysteria2", feature = "shadowsocks"))]
 pub(crate) use packet_path_snapshot::{
     hysteria2_packet_path_carrier_descriptor, hysteria2_packet_path_carrier_snapshot,
 };
+#[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_snapshot::{
     shadowsocks_packet_path_carrier_descriptor, shadowsocks_packet_path_carrier_snapshot,
+    shadowsocks_udp_datagram_source, UdpPacketPathCarrier,
+};
+#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
+pub(crate) use packet_path_snapshot::{
     socks5_packet_path_carrier_descriptor, socks5_packet_path_carrier_snapshot,
-    UdpPacketPathCarrier,
 };
 pub(crate) use packet_path_traits::ChainTask;
 #[cfg(feature = "shadowsocks")]

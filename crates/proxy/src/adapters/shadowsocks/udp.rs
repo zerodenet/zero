@@ -120,16 +120,16 @@ impl ShadowsocksAdapter {
         let cipher_kind =
             parse_shadowsocks_udp_cipher(cipher, "udp_shadowsocks_datagram_source_cipher", None)
                 .ok()?;
-        Some(crate::protocol_runtime::udp::UdpDatagramSource {
-            tag,
-            server,
-            port: *port,
-            password,
-            datagram_cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
-                tag, server, *port, cipher, password,
+        Some(
+            crate::protocol_runtime::udp::shadowsocks_udp_datagram_source(
+                tag,
+                server,
+                *port,
+                cipher,
+                password,
+                cipher_kind,
             ),
-            cipher_kind,
-        })
+        )
     }
 
     pub(super) async fn start_udp_flow_impl(
