@@ -244,6 +244,19 @@ impl<'a> UdpPacketTunnelProtocol<VlessUdpPacketTunnelTarget<'a>> for VlessOutbou
     }
 }
 
+pub async fn establish_udp_packet_tunnel<S>(
+    stream: &mut S,
+    session: &Session,
+    id: &[u8; 16],
+) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    VlessOutbound
+        .establish_udp_packet_tunnel(stream, session, id)
+        .await
+}
+
 /// One UDP datagram to encode for a VLESS UDP packet tunnel.
 #[derive(Debug, Clone, Copy)]
 pub struct VlessUdpPacketTarget<'a> {

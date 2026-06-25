@@ -12,7 +12,7 @@ use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
-use zero_traits::{AsyncSocket, UdpPacketTunnelProtocol};
+use zero_traits::AsyncSocket;
 
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
@@ -107,15 +107,7 @@ async fn establish_vless_udp_upstream_over_stream(
 
     let mut metered = MeteredStream::new(stream);
 
-    <vless::VlessOutbound as UdpPacketTunnelProtocol<vless::VlessUdpPacketTunnelTarget>>::establish_udp_packet_tunnel(
-        &vless::VlessOutbound,
-        &mut metered,
-        &vless::VlessUdpPacketTunnelTarget {
-            session,
-            id: &uuid,
-        },
-    )
-    .await?;
+    vless::establish_udp_packet_tunnel(&mut metered, session, &uuid).await?;
     metered.write_all(&initial_packet).await?;
 
     Ok(spawn_vless_udp_relay(
@@ -146,17 +138,7 @@ async fn establish_vless_udp_upstream(
                 crate::transport::connect_quic(server_name, port, quic.insecure).await?;
 
             let mut metered = MeteredStream::new(TcpRelayStream::new(quic_stream));
-            <vless::VlessOutbound as UdpPacketTunnelProtocol<
-                vless::VlessUdpPacketTunnelTarget,
-            >>::establish_udp_packet_tunnel(
-                &vless::VlessOutbound,
-                &mut metered,
-                &vless::VlessUdpPacketTunnelTarget {
-                    session,
-                    id: &uuid,
-                },
-            )
-            .await?;
+            vless::establish_udp_packet_tunnel(&mut metered, session, &uuid).await?;
             metered.write_all(&initial_packet).await?;
 
             return Ok(spawn_vless_udp_relay(

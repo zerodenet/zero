@@ -1980,6 +1980,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     for forbidden in [
         "UdpPacketFraming",
         "VlessUdpPacketTarget",
+        "UdpPacketTunnelProtocol",
+        "VlessUdpPacketTunnelTarget",
         "encode_udp_packet",
         "decode_udp_packet",
     ] {
@@ -1991,6 +1993,10 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     assert!(
         runtime.contains("vless::build_udp_packet") && runtime.contains("vless::parse_udp_packet"),
         "VLESS UDP runtime should call protocols/vless packet helpers"
+    );
+    assert!(
+        runtime.contains("vless::establish_udp_packet_tunnel"),
+        "VLESS UDP runtime should call protocols/vless UDP tunnel helper"
     );
 }
 
