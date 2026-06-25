@@ -390,3 +390,21 @@ fn hex_char(value: u8) -> char {
         _ => unreachable!("nibble value"),
     }
 }
+
+pub fn decode_inbound_udp_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
+    parse_udp_packet(packet)
+}
+
+pub fn encode_udp_response(target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
+    build_udp_packet(target, port, payload)
+}
+
+pub fn encode_mux_udp_response(
+    mux_session_id: u16,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    let udp_packet = encode_udp_response(target, port, payload)?;
+    Ok(crate::mux::encode_data_frame(mux_session_id, &udp_packet))
+}

@@ -2222,6 +2222,44 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
 }
 
 #[test]
+fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
+    let helper = read("src/inbound/vless/helpers.rs");
+    let udp_session = read("src/inbound/vless/udp_session.rs");
+    let mux = read("src/inbound/vless/mux.rs");
+    let protocol_shared = manifest_dir()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root")
+        .join("protocols/vless/src/shared.rs");
+    let protocol_shared =
+        fs::read_to_string(protocol_shared).expect("read vless protocol shared source");
+
+    for (source_name, source) in [
+        ("inbound/vless/helpers.rs", helper.as_str()),
+        ("inbound/vless/udp_session.rs", udp_session.as_str()),
+        ("inbound/vless/mux.rs", mux.as_str()),
+    ] {
+        for forbidden in ["vless::build_udp_packet", "vless::parse_udp_packet"] {
+            assert!(
+                !source.contains(forbidden),
+                "{source_name} should delegate VLESS UDP packet framing to protocols/vless; found `{forbidden}`"
+            );
+        }
+    }
+
+    for required in [
+        "decode_inbound_udp_packet",
+        "encode_udp_response",
+        "encode_mux_udp_response",
+    ] {
+        assert!(
+            protocol_shared.contains(required) && helper.contains(&format!("vless::{required}")),
+            "VLESS inbound UDP packet framing should be owned by protocols/vless `{required}`"
+        );
+    }
+}
+
+#[test]
 fn mieru_client_stream_model_lives_outside_inbound_root() {
     let root = read("src/inbound/mieru.rs");
     let model = read("src/inbound/mieru/model.rs");

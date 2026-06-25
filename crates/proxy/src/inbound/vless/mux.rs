@@ -14,8 +14,8 @@ use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, TcpRelayStream};
 use zero_engine::EngineError;
 
-use super::encode_vless_mux_udp_response;
 use super::model::VlessMuxUdpStreamTask;
+use super::{decode_vless_udp_packet, encode_vless_mux_udp_response};
 
 impl Proxy {
     pub(crate) async fn handle_vless_mux_session<S>(
@@ -281,7 +281,7 @@ impl Proxy {
                         break;
                     }
                     last_activity = TokioInstant::now();
-                    let packet = match vless::parse_udp_packet(&payload) {
+                    let packet = match decode_vless_udp_packet(&payload) {
                         Ok(packet) => packet,
                         Err(error) => {
                             warn!(%error, mux_session_id, "vless mux udp packet parse failed");

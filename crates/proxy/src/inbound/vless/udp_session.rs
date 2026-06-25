@@ -1,7 +1,6 @@
 use tokio::select;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
-use vless::build_udp_packet;
 use zero_traits::AsyncSocket;
 
 use crate::protocol_runtime::socks5_udp::recv_upstream_packet;
@@ -11,6 +10,8 @@ use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstrea
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
+
+use super::{decode_vless_udp_packet, encode_vless_udp_response};
 
 impl Proxy {
     pub(crate) async fn handle_vless_udp_session<S>(
@@ -101,7 +102,7 @@ impl Proxy {
                         self.record_session_outbound_rx(session_id, n as u64);
                     }
 
-                    match build_udp_packet(&target, port, &udp_buffer[..n]) {
+                    match encode_vless_udp_response(&target, port, &udp_buffer[..n]) {
                         Ok(packet) => {
                             match client.write_all(&packet).await {
                                 Ok(_) => {
@@ -129,12 +130,11 @@ impl Proxy {
                 }
                 upstream = recv_upstream_packet(socks5_up, &mut upstream_buffer) => {
                     // SOCKS5 chain upstream response -?re-encode as VLESS.
-                    use socks5::parse_udp_packet;
                     match upstream {
                         Ok(read) => {
                             last_activity = TokioInstant::now();
-                            if let Ok(pkt) = parse_udp_packet(&upstream_buffer[..read]) {
-                                if let Ok(packet) = build_udp_packet(&pkt.target, pkt.port, &pkt.payload) {
+                            if let Ok(pkt) = socks5::parse_udp_packet(&upstream_buffer[..read]) {
+                                if let Ok(packet) = encode_vless_udp_response(&pkt.target, pkt.port, &pkt.payload) {
                                     let _ = client.write_all(&packet).await;
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());
                                 }
@@ -157,7 +157,7 @@ impl Proxy {
                             if let Some(sid) = session_id {
                                 proxy.record_session_outbound_rx(sid, payload.len() as u64);
                             }
-                            if let Ok(packet) = build_udp_packet(&target, port, &payload) {
+                            if let Ok(packet) = encode_vless_udp_response(&target, port, &payload) {
                                 if let Err(error) = client.write_all(&packet).await {
                                     warn!(error = %error, "failed to write chain response");
                                     break;
@@ -199,9 +199,7 @@ impl Proxy {
         packet: &[u8],
         auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError> {
-        use vless::parse_udp_packet;
-
-        let udp_packet = parse_udp_packet(packet)?;
+        let udp_packet = decode_vless_udp_packet(packet)?;
 
         UdpPipe::new(proxy, dispatch)
             .dispatch(UdpPipeInput {

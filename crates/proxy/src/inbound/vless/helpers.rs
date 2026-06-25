@@ -11,16 +11,38 @@ use zero_traits::AsyncSocket;
 
 use crate::transport::ClientStream;
 
-/// Encode a VLESS MUX UDP response: build a VLESS UDP packet and wrap it
-/// as a MUX data frame for the given session ID.
+pub(crate) struct VlessInboundUdpPacket {
+    pub(crate) target: zero_core::Address,
+    pub(crate) port: u16,
+    pub(crate) payload: Vec<u8>,
+}
+
+pub(crate) fn decode_vless_udp_packet(
+    packet: &[u8],
+) -> Result<VlessInboundUdpPacket, zero_core::Error> {
+    let packet = vless::decode_inbound_udp_packet(packet)?;
+    Ok(VlessInboundUdpPacket {
+        target: packet.target,
+        port: packet.port,
+        payload: packet.payload,
+    })
+}
+
+pub(crate) fn encode_vless_udp_response(
+    target: &zero_core::Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, zero_core::Error> {
+    vless::encode_udp_response(target, port, payload)
+}
+
 pub(crate) fn encode_vless_mux_udp_response(
     mux_session_id: u16,
     target: &zero_core::Address,
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
-    let udp_packet = vless::build_udp_packet(target, port, payload)?;
-    Ok(vless::encode_data_frame(mux_session_id, &udp_packet))
+    vless::encode_mux_udp_response(mux_session_id, target, port, payload)
 }
 
 // ── Fallback helpers ──

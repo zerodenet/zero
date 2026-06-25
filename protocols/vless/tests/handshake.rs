@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
 
 use vless::{
-    build_udp_packet, build_udp_packet_v2, format_uuid, parse_udp_packet, parse_udp_packet_v2,
-    parse_uuid, VlessInbound, VlessOutbound, VlessUser, VlessUserStore,
+    build_udp_packet, build_udp_packet_v2, decode_inbound_udp_packet, encode_mux_udp_response,
+    encode_udp_response, format_uuid, parse_udp_packet, parse_udp_packet_v2, parse_uuid,
+    VlessInbound, VlessOutbound, VlessUser, VlessUserStore,
 };
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
@@ -417,4 +418,43 @@ fn build_udp_v2_omit_address() {
     assert_eq!(&packet[..2], &[0x00, 0x00]); // marker
     assert_eq!(packet[2], 0x00); // flags: no address
     assert_eq!(&packet[3..], b"streaming"); // payload starts after flags
+}
+
+#[test]
+fn inbound_udp_decoder_parses_client_packet() {
+    let packet = build_udp_packet(&Address::Domain("dns.example".into()), 5353, b"query")
+        .expect("build packet");
+
+    let parsed = decode_inbound_udp_packet(&packet).expect("decode inbound packet");
+
+    assert_eq!(parsed.target, Address::Domain("dns.example".into()));
+    assert_eq!(parsed.port, 5353);
+    assert_eq!(parsed.payload, b"query");
+}
+
+#[test]
+fn udp_response_encoder_builds_response_packet() {
+    let packet =
+        encode_udp_response(&Address::Ipv4([1, 1, 1, 1]), 53, b"answer").expect("encode response");
+
+    let parsed = parse_udp_packet(&packet).expect("parse response packet");
+    assert_eq!(parsed.target, Address::Ipv4([1, 1, 1, 1]));
+    assert_eq!(parsed.port, 53);
+    assert_eq!(parsed.payload, b"answer");
+}
+
+#[test]
+fn mux_udp_response_encoder_wraps_vless_packet() {
+    let frame = encode_mux_udp_response(7, &Address::Ipv4([8, 8, 8, 8]), 53, b"dns")
+        .expect("encode mux response");
+
+    assert_eq!(u16::from_be_bytes([frame[0], frame[1]]), 4 + 7 + 3);
+    assert_eq!(u16::from_be_bytes([frame[2], frame[3]]), 7);
+    assert_eq!(frame[4], vless::STATUS_KEEP);
+    assert_eq!(frame[5], vless::OPTION_DATA);
+
+    let parsed = parse_udp_packet(&frame[6..]).expect("parse mux payload");
+    assert_eq!(parsed.target, Address::Ipv4([8, 8, 8, 8]));
+    assert_eq!(parsed.port, 53);
+    assert_eq!(parsed.payload, b"dns");
 }
