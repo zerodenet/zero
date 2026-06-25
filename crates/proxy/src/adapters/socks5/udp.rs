@@ -28,7 +28,7 @@ impl Socks5Adapter {
             return None;
         };
         Some(
-            crate::protocol_runtime::udp::socks5_packet_path_carrier_descriptor(
+            crate::protocol_runtime::udp::packet_path_snapshot::socks5_packet_path_carrier_descriptor(
                 tag,
                 server,
                 *port,
@@ -54,7 +54,7 @@ impl Socks5Adapter {
             return None;
         };
         Some(
-            crate::protocol_runtime::udp::socks5_packet_path_carrier_snapshot(
+            crate::protocol_runtime::udp::packet_path_snapshot::socks5_packet_path_carrier_snapshot(
                 tag,
                 server,
                 *port,

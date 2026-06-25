@@ -42,7 +42,7 @@ impl ShadowsocksAdapter {
             return None;
         };
         Some(
-            crate::protocol_runtime::udp::shadowsocks_packet_path_carrier_descriptor(
+            crate::protocol_runtime::udp::packet_path_snapshot::shadowsocks_packet_path_carrier_descriptor(
                 tag, server, *port, cipher, password,
             ),
         )
@@ -64,7 +64,7 @@ impl ShadowsocksAdapter {
             return None;
         };
         Some(
-            crate::protocol_runtime::udp::shadowsocks_packet_path_carrier_snapshot(
+            crate::protocol_runtime::udp::packet_path_snapshot::shadowsocks_packet_path_carrier_snapshot(
                 tag, server, *port, cipher, password,
             ),
         )
@@ -91,7 +91,7 @@ impl ShadowsocksAdapter {
             Some((server, *port)),
         )
         .map_err(|failure| failure.error)?;
-        crate::protocol_runtime::udp::build_shadowsocks_packet_path(
+        crate::protocol_runtime::udp::packet_path_chain::build_shadowsocks_packet_path(
             proxy,
             server,
             *port,
@@ -120,7 +120,7 @@ impl ShadowsocksAdapter {
             parse_shadowsocks_udp_cipher(cipher, "udp_shadowsocks_datagram_source_cipher", None)
                 .ok()?;
         Some(
-            crate::protocol_runtime::udp::shadowsocks_udp_datagram_source(
+            crate::protocol_runtime::udp::packet_path_snapshot::shadowsocks_udp_datagram_source(
                 tag,
                 server,
                 *port,

@@ -13,8 +13,8 @@ mod h2_manager;
 #[cfg(feature = "mieru")]
 mod mieru_manager;
 #[cfg(feature = "shadowsocks")]
-mod packet_path_chain;
-mod packet_path_snapshot;
+pub(crate) mod packet_path_chain;
+pub(crate) mod packet_path_snapshot;
 #[cfg(feature = "shadowsocks")]
 mod ss_manager;
 mod start;
@@ -36,25 +36,10 @@ pub(crate) use flows::ShadowsocksUdpFlow;
 pub(crate) use flows::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
 #[cfg(feature = "vmess")]
 pub(crate) use flows::{VmessUdpFlow, VmessUdpRelayFlow};
-#[cfg(all(feature = "shadowsocks", feature = "hysteria2"))]
-pub(crate) use packet_path_chain::build_hysteria2_packet_path;
 #[cfg(feature = "shadowsocks")]
-pub(crate) use packet_path_chain::{
-    build_shadowsocks_packet_path, PacketPathManager, SendWithSnapshotRequest,
-};
-#[cfg(all(feature = "hysteria2", feature = "shadowsocks"))]
-pub(crate) use packet_path_snapshot::{
-    hysteria2_packet_path_carrier_descriptor, hysteria2_packet_path_carrier_snapshot,
-};
+pub(crate) use packet_path_chain::{PacketPathManager, SendWithSnapshotRequest};
 #[cfg(feature = "shadowsocks")]
-pub(crate) use packet_path_snapshot::{
-    shadowsocks_packet_path_carrier_descriptor, shadowsocks_packet_path_carrier_snapshot,
-    shadowsocks_udp_datagram_source, UdpPacketPathCarrier,
-};
-#[cfg(all(feature = "socks5", feature = "shadowsocks"))]
-pub(crate) use packet_path_snapshot::{
-    socks5_packet_path_carrier_descriptor, socks5_packet_path_carrier_snapshot,
-};
+pub(crate) use packet_path_snapshot::UdpPacketPathCarrier;
 pub(crate) use packet_path_traits::ChainTask;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_traits::{

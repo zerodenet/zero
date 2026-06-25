@@ -28,7 +28,7 @@ impl Hysteria2Adapter {
             return None;
         };
         Some(
-            crate::protocol_runtime::udp::hysteria2_packet_path_carrier_descriptor(
+            crate::protocol_runtime::udp::packet_path_snapshot::hysteria2_packet_path_carrier_descriptor(
                 tag,
                 server,
                 *port,
@@ -56,7 +56,7 @@ impl Hysteria2Adapter {
             return None;
         };
         Some(
-            crate::protocol_runtime::udp::hysteria2_packet_path_carrier_snapshot(
+            crate::protocol_runtime::udp::packet_path_snapshot::hysteria2_packet_path_carrier_snapshot(
                 tag,
                 server,
                 *port,
@@ -81,7 +81,7 @@ impl Hysteria2Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        crate::protocol_runtime::udp::build_hysteria2_packet_path(
+        crate::protocol_runtime::udp::packet_path_chain::build_hysteria2_packet_path(
             server,
             *port,
             password,

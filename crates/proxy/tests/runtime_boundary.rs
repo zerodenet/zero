@@ -5288,6 +5288,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
     }
 
     let snapshot = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
+    let root = read("src/protocol_runtime/udp/mod.rs");
     for required in [
         "socks5_packet_path_carrier_descriptor",
         "socks5_packet_path_carrier_snapshot",
@@ -5300,6 +5301,44 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         assert!(
             snapshot.contains(required),
             "protocol_runtime::udp packet-path snapshot module should own `{required}`"
+        );
+    }
+    for forbidden in [
+        "pub(crate) use packet_path_snapshot::{",
+        "socks5_packet_path_carrier_descriptor",
+        "socks5_packet_path_carrier_snapshot",
+        "shadowsocks_packet_path_carrier_descriptor",
+        "shadowsocks_packet_path_carrier_snapshot",
+        "shadowsocks_udp_datagram_source",
+        "hysteria2_packet_path_carrier_descriptor",
+        "hysteria2_packet_path_carrier_snapshot",
+        "pub(crate) use packet_path_chain::build_shadowsocks_packet_path",
+        "pub(crate) use packet_path_chain::build_hysteria2_packet_path",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "protocol_runtime::udp root should not re-export protocol-named packet-path helper `{forbidden}`"
+        );
+    }
+    for source in [
+        "src/adapters/socks5/udp.rs",
+        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/hysteria2/udp.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("crate::protocol_runtime::udp::packet_path_snapshot::"),
+            "{source} should call packet-path snapshot helpers through the explicit snapshot module"
+        );
+    }
+    for source in [
+        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/hysteria2/udp.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("crate::protocol_runtime::udp::packet_path_chain::"),
+            "{source} should call packet-path carrier builders through the explicit chain module"
         );
     }
 }
