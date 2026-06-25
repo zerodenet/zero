@@ -104,7 +104,7 @@ Packet-path datagram sources expose a datagram key part for cache identity; `pac
 `packet_path_chain.rs` does not re-export protocol carrier builder functions; adapters call `packet_path_chain::carriers::*` explicitly when bridging packet-path carrier capabilities.
 
 Protocol stream/datagram codecs own protocol crypto/framing state. For example, Mieru inbound data-phase encryption/decryption lives in `protocols/mieru::MieruInboundDataCodec`, and Shadowsocks inbound UDP decode/replay/response encoding lives in `protocols/shadowsocks::ShadowsocksInboundUdpCodec`; `zero-proxy` only wraps those codecs as Tokio stream/socket adapters and must not hold their cipher/session primitives or build/parse protocol frames directly.
-VMess inbound UDP response packet encoding lives in `protocols/vmess` (`encode_udp_response`, `encode_mux_udp_response`); proxy inbound glue chooses the observed payload mode and delegates packet wrapping to the protocol crate.
+VMess inbound UDP request payload mode detection/parsing and response packet encoding live in `protocols/vmess` (`decode_inbound_udp_payload`, `encode_udp_response`, `encode_mux_udp_response`); proxy inbound glue delegates packet wrapping/parsing to the protocol crate.
 
 ### 内核管道和入站协议管道
 

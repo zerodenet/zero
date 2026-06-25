@@ -137,6 +137,49 @@ fn udp_response_encoding_wraps_packet_mode_and_preserves_raw_mode() {
     assert_eq!(raw, b"raw");
 }
 
+#[test]
+fn inbound_udp_payload_decoder_detects_packet_mode_then_requires_packets() {
+    let default_target = Address::Domain("fallback.example".to_owned());
+    let packet =
+        vmess::build_udp_packet(&Address::Domain("packet.example".to_owned()), 5353, b"dns")
+            .expect("build packet");
+    let decoded = vmess::decode_inbound_udp_payload(
+        vmess::VmessUdpPayloadState::Unknown,
+        &default_target,
+        53,
+        &packet,
+    )
+    .expect("decode packet payload");
+    assert_eq!(
+        decoded.state,
+        vmess::VmessUdpPayloadState::Mode(vmess::VmessUdpPayloadMode::VmessPacket)
+    );
+    assert_eq!(decoded.target, Address::Domain("packet.example".to_owned()));
+    assert_eq!(decoded.port, 5353);
+    assert_eq!(decoded.payload, b"dns");
+
+    assert!(vmess::decode_inbound_udp_payload(decoded.state, &default_target, 53, b"raw").is_err());
+}
+
+#[test]
+fn inbound_udp_payload_decoder_falls_back_to_raw_mode() {
+    let default_target = Address::Ipv4([10, 0, 0, 1]);
+    let decoded = vmess::decode_inbound_udp_payload(
+        vmess::VmessUdpPayloadState::Unknown,
+        &default_target,
+        9999,
+        b"raw",
+    )
+    .expect("decode raw payload");
+    assert_eq!(
+        decoded.state,
+        vmess::VmessUdpPayloadState::Mode(vmess::VmessUdpPayloadMode::RawDatagram)
+    );
+    assert_eq!(decoded.target, default_target);
+    assert_eq!(decoded.port, 9999);
+    assert_eq!(decoded.payload, b"raw");
+}
+
 #[tokio::test]
 async fn mux_udp_response_encoding_wraps_packet_mode_before_mux_frame() {
     let target = Address::Ipv4([8, 8, 8, 8]);

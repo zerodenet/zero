@@ -5,18 +5,33 @@ use zero_engine::EngineError;
 use crate::transport::TcpRelayStream;
 
 #[derive(Clone, Copy)]
-pub(crate) enum VmessUdpPayloadMode {
-    Unknown,
-    VmessPacket,
-    RawDatagram,
+pub(crate) struct VmessUdpPayloadMode(vmess::VmessUdpPayloadState);
+
+pub(crate) struct VmessInboundUdpPayload {
+    pub(crate) target: Address,
+    pub(crate) port: u16,
+    pub(crate) payload: Vec<u8>,
 }
 
 impl VmessUdpPayloadMode {
-    fn protocol_mode(self) -> vmess::VmessUdpPayloadMode {
-        match self {
-            Self::Unknown | Self::VmessPacket => vmess::VmessUdpPayloadMode::VmessPacket,
-            Self::RawDatagram => vmess::VmessUdpPayloadMode::RawDatagram,
+    pub(crate) fn unknown() -> Self {
+        Self(vmess::VmessUdpPayloadState::Unknown)
+    }
+
+    fn response_mode(self) -> vmess::VmessUdpPayloadMode {
+        match self.0 {
+            vmess::VmessUdpPayloadState::Unknown
+            | vmess::VmessUdpPayloadState::Mode(vmess::VmessUdpPayloadMode::VmessPacket) => {
+                vmess::VmessUdpPayloadMode::VmessPacket
+            }
+            vmess::VmessUdpPayloadState::Mode(vmess::VmessUdpPayloadMode::RawDatagram) => {
+                vmess::VmessUdpPayloadMode::RawDatagram
+            }
         }
+    }
+
+    fn update(&mut self, state: vmess::VmessUdpPayloadState) {
+        self.0 = state;
     }
 }
 
@@ -27,7 +42,7 @@ pub(crate) fn encode_vmess_mux_udp_response(
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
-    vmess::encode_mux_udp_response(mux_session_id, mode.protocol_mode(), target, port, payload)
+    vmess::encode_mux_udp_response(mux_session_id, mode.response_mode(), target, port, payload)
 }
 
 pub(crate) fn encode_vmess_udp_response(
@@ -36,7 +51,22 @@ pub(crate) fn encode_vmess_udp_response(
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
-    vmess::encode_udp_response(mode.protocol_mode(), target, port, payload)
+    vmess::encode_udp_response(mode.response_mode(), target, port, payload)
+}
+
+pub(crate) fn decode_vmess_udp_payload(
+    mode: &mut VmessUdpPayloadMode,
+    default_target: &Address,
+    default_port: u16,
+    payload: &[u8],
+) -> Result<VmessInboundUdpPayload, zero_core::Error> {
+    let decoded = vmess::decode_inbound_udp_payload(mode.0, default_target, default_port, payload)?;
+    mode.update(decoded.state);
+    Ok(VmessInboundUdpPayload {
+        target: decoded.target,
+        port: decoded.port,
+        payload: decoded.payload,
+    })
 }
 
 pub(crate) fn wrap_vmess_client(

@@ -11,6 +11,12 @@ pub enum VmessUdpPayloadMode {
     RawDatagram,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VmessUdpPayloadState {
+    Unknown,
+    Mode(VmessUdpPayloadMode),
+}
+
 /// Target parameters for a VMess UDP packet tunnel over a connected stream.
 #[derive(Debug, Clone, Copy)]
 pub struct VmessUdpPacketTunnelTarget<'a> {
@@ -29,6 +35,13 @@ pub struct VmessUdpPacketTarget<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VmessUdpPacket {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+}
+
+pub struct VmessInboundUdpPayload {
+    pub state: VmessUdpPayloadState,
     pub target: Address,
     pub port: u16,
     pub payload: Vec<u8>,
@@ -142,6 +155,47 @@ pub fn encode_mux_udp_response(
 ) -> Result<Vec<u8>, Error> {
     let payload = encode_udp_response(mode, target, port, payload)?;
     crate::mux::encode_keep_stream(mux_session_id, &payload)
+}
+
+pub fn decode_inbound_udp_payload(
+    state: VmessUdpPayloadState,
+    default_target: &Address,
+    default_port: u16,
+    payload: &[u8],
+) -> Result<VmessInboundUdpPayload, Error> {
+    match state {
+        VmessUdpPayloadState::Unknown => match parse_udp_packet(payload) {
+            Ok(packet) => Ok(VmessInboundUdpPayload {
+                state: VmessUdpPayloadState::Mode(VmessUdpPayloadMode::VmessPacket),
+                target: packet.target,
+                port: packet.port,
+                payload: packet.payload,
+            }),
+            Err(_) => Ok(VmessInboundUdpPayload {
+                state: VmessUdpPayloadState::Mode(VmessUdpPayloadMode::RawDatagram),
+                target: default_target.clone(),
+                port: default_port,
+                payload: payload.to_vec(),
+            }),
+        },
+        VmessUdpPayloadState::Mode(VmessUdpPayloadMode::VmessPacket) => {
+            let packet = parse_udp_packet(payload)?;
+            Ok(VmessInboundUdpPayload {
+                state,
+                target: packet.target,
+                port: packet.port,
+                payload: packet.payload,
+            })
+        }
+        VmessUdpPayloadState::Mode(VmessUdpPayloadMode::RawDatagram) => {
+            Ok(VmessInboundUdpPayload {
+                state,
+                target: default_target.clone(),
+                port: default_port,
+                payload: payload.to_vec(),
+            })
+        }
+    }
 }
 
 pub fn parse_udp_packet(packet: &[u8]) -> Result<VmessUdpPacket, Error> {

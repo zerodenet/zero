@@ -2176,6 +2176,7 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
 #[test]
 fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     let helper = read("src/inbound/vmess/helpers.rs");
+    let mux = read("src/inbound/vmess/mux.rs");
     let protocol_udp = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -2187,12 +2188,21 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
         !helper.contains("vmess::build_udp_packet"),
         "VMess inbound helper should not build protocol UDP response packets directly"
     );
+    assert!(
+        !mux.contains("vmess::parse_udp_packet"),
+        "VMess inbound MUX/session glue should delegate VMess UDP request parsing to protocols/vmess"
+    );
     for required in ["encode_udp_response", "encode_mux_udp_response"] {
         assert!(
             protocol_udp.contains(required) && helper.contains(&format!("vmess::{required}")),
             "VMess UDP response encoding should be owned by protocols/vmess `{required}`"
         );
     }
+    assert!(
+        protocol_udp.contains("decode_inbound_udp_payload")
+            && helper.contains("vmess::decode_inbound_udp_payload"),
+        "VMess UDP request payload mode detection should be owned by protocols/vmess"
+    );
 }
 
 #[test]

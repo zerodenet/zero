@@ -17,7 +17,10 @@ use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 use super::model::{VmessMuxTcpStreamTask, VmessMuxUdpStreamTask};
-use super::{encode_vmess_mux_udp_response, encode_vmess_udp_response, VmessUdpPayloadMode};
+use super::{
+    decode_vmess_udp_payload, encode_vmess_mux_udp_response, encode_vmess_udp_response,
+    VmessUdpPayloadMode,
+};
 
 impl Proxy {
     pub(crate) async fn run_vmess_mux_session(
@@ -220,7 +223,7 @@ impl Proxy {
         let mut up_rx = up_rx;
         let proxy = self.clone();
         tasks.spawn(async move {
-            let mut payload_mode = VmessUdpPayloadMode::Unknown;
+            let mut payload_mode = VmessUdpPayloadMode::unknown();
             let mut dispatch = match UdpDispatch::new(&inbound_tag).await {
                 Ok(dispatch) => dispatch,
                 Err(error) => {
@@ -246,33 +249,23 @@ impl Proxy {
                             break;
                         }
                         last_activity = TokioInstant::now();
-                        let input = match payload_mode {
-                            VmessUdpPayloadMode::Unknown => match vmess::parse_udp_packet(&payload) {
-                                Ok(packet) => {
-                                    payload_mode = VmessUdpPayloadMode::VmessPacket;
-                                    (packet.target, packet.port, packet.payload)
-                                }
-                                Err(_) => {
-                                    payload_mode = VmessUdpPayloadMode::RawDatagram;
-                                    (default_target.clone(), default_port, payload)
-                                }
-                            },
-                            VmessUdpPayloadMode::VmessPacket => match vmess::parse_udp_packet(&payload) {
-                                Ok(packet) => (packet.target, packet.port, packet.payload),
-                                Err(error) => {
-                                    warn!(%error, mux_session_id, "vmess mux udp packet parse failed");
-                                    break;
-                                }
-                            },
-                            VmessUdpPayloadMode::RawDatagram => {
-                                (default_target.clone(), default_port, payload)
+                        let input = match decode_vmess_udp_payload(
+                            &mut payload_mode,
+                            &default_target,
+                            default_port,
+                            &payload,
+                        ) {
+                            Ok(input) => input,
+                            Err(error) => {
+                                warn!(%error, mux_session_id, "vmess mux udp packet parse failed");
+                                break;
                             }
                         };
                         if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
                             .dispatch(UdpPipeInput {
-                                target: input.0,
-                                port: input.1,
-                                payload: &input.2,
+                                target: input.target,
+                                port: input.port,
+                                payload: &input.payload,
                                 protocol: ProtocolType::Vmess,
                                 auth: None,
                                 client_session_id: None,
@@ -412,7 +405,7 @@ impl Proxy {
         let auth = session.auth.clone();
         let default_target = session.target.clone();
         let default_port = session.port;
-        let mut payload_mode = VmessUdpPayloadMode::Unknown;
+        let mut payload_mode = VmessUdpPayloadMode::unknown();
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
 
@@ -443,33 +436,23 @@ impl Proxy {
                         Ok(0) => break,
                         Ok(n) => {
                             last_activity = TokioInstant::now();
-                            let input = match payload_mode {
-                                VmessUdpPayloadMode::Unknown => match vmess::parse_udp_packet(&client_buf[..n]) {
-                                    Ok(packet) => {
-                                        payload_mode = VmessUdpPayloadMode::VmessPacket;
-                                        (packet.target, packet.port, packet.payload)
-                                    }
-                                    Err(_) => {
-                                        payload_mode = VmessUdpPayloadMode::RawDatagram;
-                                        (default_target.clone(), default_port, client_buf[..n].to_vec())
-                                    }
-                                },
-                                VmessUdpPayloadMode::VmessPacket => match vmess::parse_udp_packet(&client_buf[..n]) {
-                                    Ok(packet) => (packet.target, packet.port, packet.payload),
-                                    Err(error) => {
-                                        warn!(error = %error, "vmess udp client packet parse error");
-                                        break;
-                                    }
-                                },
-                                VmessUdpPayloadMode::RawDatagram => {
-                                    (default_target.clone(), default_port, client_buf[..n].to_vec())
+                            let input = match decode_vmess_udp_payload(
+                                &mut payload_mode,
+                                &default_target,
+                                default_port,
+                                &client_buf[..n],
+                            ) {
+                                Ok(input) => input,
+                                Err(error) => {
+                                    warn!(error = %error, "vmess udp client packet parse error");
+                                    break;
                                 }
                             };
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target: input.0,
-                                    port: input.1,
-                                    payload: &input.2,
+                                    target: input.target,
+                                    port: input.port,
+                                    payload: &input.payload,
                                     protocol: ProtocolType::Vmess,
                                     auth: auth.as_ref(),
                                     client_session_id: None,
