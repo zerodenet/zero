@@ -10,7 +10,8 @@ mod peer;
 
 #[cfg(feature = "shadowsocks")]
 pub(crate) use carrier::{
-    DatagramCodec, PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
+    DatagramCodec, PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramKey,
+    UdpDatagramSource,
 };
 pub(crate) use context::{ChainTask, UdpFlowContext, UdpPacketRef};
 #[cfg(feature = "hysteria2")]

@@ -1,5 +1,5 @@
 use crate::protocol_runtime::udp::packet_path_traits::{
-    PacketPathCarrierDescriptor, UdpDatagramSource,
+    PacketPathCarrierDescriptor, UdpDatagramKey,
 };
 use crate::protocol_runtime::udp::UdpPacketPathCarrier;
 
@@ -33,14 +33,14 @@ impl PathKey {
 
     pub(super) fn from_sources(
         carrier: &PacketPathCarrierDescriptor,
-        datagram: &UdpDatagramSource<'_>,
+        datagram: UdpDatagramKey,
     ) -> Self {
         Self {
             carrier_key: carrier.cache_key.clone(),
-            datagram_tag: datagram.tag.to_owned(),
-            datagram_server: datagram.server.to_owned(),
+            datagram_tag: datagram.tag,
+            datagram_server: datagram.server,
             datagram_port: datagram.port,
-            datagram_cache_key: datagram.datagram_cache_key.clone(),
+            datagram_cache_key: datagram.cache_key,
         }
     }
 }

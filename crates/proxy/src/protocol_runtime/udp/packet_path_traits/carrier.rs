@@ -49,3 +49,21 @@ pub(crate) struct UdpDatagramSource<'a> {
     pub(crate) protocol_snapshot: ProtocolUdpFlowSnapshot,
     pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 }
+
+impl UdpDatagramSource<'_> {
+    pub(crate) fn key_part(&self) -> UdpDatagramKey {
+        UdpDatagramKey {
+            tag: self.tag.to_owned(),
+            server: self.server.to_owned(),
+            port: self.port,
+            cache_key: self.datagram_cache_key.clone(),
+        }
+    }
+}
+
+pub(crate) struct UdpDatagramKey {
+    pub(crate) tag: String,
+    pub(crate) server: String,
+    pub(crate) port: u16,
+    pub(crate) cache_key: String,
+}

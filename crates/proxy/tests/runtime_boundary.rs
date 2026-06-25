@@ -4429,6 +4429,9 @@ fn packet_path_response_bridge_lives_outside_chain_manager() {
 fn packet_path_key_model_lives_outside_chain_manager() {
     let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
     let key = manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/key.rs");
+    let key_content = read("src/protocol_runtime/udp/packet_path_chain/key.rs");
+    let model = read("src/protocol_runtime/udp/packet_path_chain/model.rs");
+    let traits = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
 
     for forbidden in [
         "struct PathKey",
@@ -4443,6 +4446,17 @@ fn packet_path_key_model_lives_outside_chain_manager() {
     assert!(
         key.exists(),
         "packet-path key model should live in packet_path_chain/key.rs"
+    );
+    assert!(
+        !key_content.contains("UdpDatagramSource")
+            && !key_content.contains("datagram.datagram_cache_key"),
+        "packet-path key model should use the datagram source key part instead of reading source internals"
+    );
+    assert!(
+        model.contains("self.datagram.key_part()")
+            && traits.contains("struct UdpDatagramKey")
+            && traits.contains("fn key_part(&self) -> UdpDatagramKey"),
+        "UdpDatagramSource should provide the packet-path datagram key part"
     );
 }
 
@@ -5187,13 +5201,13 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     assert!(
         !traits.contains("password: &'a str")
             && !traits.contains("cipher_kind: shadowsocks::CipherKind")
+            && traits.contains("datagram_cache_key: String")
             && traits.contains("protocol_snapshot: ProtocolUdpFlowSnapshot")
             && traits.contains("codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>"),
-        "UdpDatagramSource should carry protocol snapshot and adapter-provided packet-path datagram codec instead of protocol-private fields"
+        "UdpDatagramSource should carry cache identity, protocol snapshot, and adapter-provided packet-path datagram codec instead of protocol-private fields"
     );
     assert!(
-        traits.contains("datagram_cache_key: String")
-            && adapter.contains("shadowsocks_udp_cache_key"),
+        adapter.contains("shadowsocks_udp_cache_key"),
         "Shadowsocks adapter should provide an opaque datagram cache key through protocol_runtime"
     );
     assert!(
