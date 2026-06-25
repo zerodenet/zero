@@ -5077,6 +5077,7 @@ fn trojan_udp_state_model_lives_outside_manager() {
 fn trojan_udp_establish_logic_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
     let establish = read("src/protocol_runtime/udp/trojan_manager/establish.rs");
+    let stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
 
     for forbidden in [
         "fn establish_direct",
@@ -5095,6 +5096,8 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
         "TrojanUdpPacket {",
         "use trojan::TrojanUdpPacket",
         "trojan::TrojanUdpPacket",
+        "TrojanUdpPacketTunnelTarget",
+        "UdpPacketTunnelProtocol",
     ] {
         assert!(
             !manager.contains(forbidden),
@@ -5104,10 +5107,18 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             !establish.contains(forbidden),
             "trojan_manager/establish.rs should use proxy-owned TrojanPacket models instead of protocol packet structs; found `{forbidden}`"
         );
+        assert!(
+            !stream.contains(forbidden),
+            "trojan_manager/stream.rs should delegate Trojan packet tunnel establishment to protocols/trojan helpers; found `{forbidden}`"
+        );
     }
     assert!(
         establish.contains("TrojanPacket"),
         "Trojan UDP establish glue should build proxy-owned TrojanPacket models"
+    );
+    assert!(
+        stream.contains("trojan::establish_udp_packet_tunnel"),
+        "Trojan UDP packet stream should call protocols/trojan tunnel helper"
     );
 }
 

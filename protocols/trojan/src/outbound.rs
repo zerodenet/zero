@@ -131,6 +131,22 @@ where
     .await
 }
 
+pub async fn establish_udp_packet_tunnel<S>(
+    stream: &mut S,
+    session: &Session,
+    password: &str,
+) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    <TrojanOutbound as UdpPacketTunnelProtocol<TrojanUdpPacketTunnelTarget<'_>>>::establish_udp_packet_tunnel(
+        &TrojanOutbound,
+        stream,
+        &TrojanUdpPacketTunnelTarget { session, password },
+    )
+    .await
+}
+
 pub async fn write_udp_response<S>(
     stream: &mut S,
     target: &Address,

@@ -4,10 +4,8 @@ use super::socket::{ReadOnlySocket, WriteOnlySocket};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 use tokio::sync::{broadcast, mpsc};
-use trojan::{TrojanOutbound, TrojanUdpPacketTunnelTarget};
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_traits::UdpPacketTunnelProtocol;
 
 pub(super) struct PacketStream {
     pub(super) send_tx: mpsc::Sender<TrojanPacket>,
@@ -20,17 +18,8 @@ pub(super) async fn spawn_packet_stream(
     stream: TcpRelayStream,
     password: &str,
 ) -> Result<PacketStream, EngineError> {
-    let trojan = trojan::TrojanOutbound;
     let mut metered = MeteredStream::new(stream);
-    <TrojanOutbound as UdpPacketTunnelProtocol<TrojanUdpPacketTunnelTarget>>::establish_udp_packet_tunnel(
-        &trojan,
-        &mut metered,
-        &TrojanUdpPacketTunnelTarget {
-            session,
-            password,
-        },
-    )
-    .await?;
+    trojan::establish_udp_packet_tunnel(&mut metered, session, password).await?;
 
     let (read_half, write_half) = tokio::io::split(metered.into_inner());
     let (send_tx, send_rx) = mpsc::channel::<TrojanPacket>(32);
