@@ -25,31 +25,11 @@ impl Hysteria2PacketPath {
     }
 
     fn encode(target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, EngineError> {
-        use hysteria2::{Hysteria2Outbound, Hysteria2UdpPacketTarget};
-        use zero_traits::UdpDatagramFraming;
-        <Hysteria2Outbound as UdpDatagramFraming<Hysteria2UdpPacketTarget<'_>, ()>>::encode_udp_datagram(
-            &Hysteria2Outbound,
-            &Hysteria2UdpPacketTarget {
-                session_id: 0,
-                packet_id: 0,
-                target,
-                port,
-                payload,
-            },
-        )
-        .map_err(EngineError::from)
+        hysteria2::build_udp_datagram(0, 0, target, port, payload).map_err(EngineError::from)
     }
 
     fn decode(data: &[u8]) -> Result<Vec<u8>, EngineError> {
-        use hysteria2::{Hysteria2Outbound, Hysteria2UdpPacketTarget};
-        use zero_traits::UdpDatagramFraming;
-        let pkt =
-            <Hysteria2Outbound as UdpDatagramFraming<Hysteria2UdpPacketTarget<'_>, ()>>::decode_udp_datagram(
-                &Hysteria2Outbound,
-                &(),
-                data,
-            )
-            .map_err(EngineError::from)?;
+        let pkt = hysteria2::parse_udp_datagram(data).map_err(EngineError::from)?;
         Ok(pkt.payload)
     }
 }
