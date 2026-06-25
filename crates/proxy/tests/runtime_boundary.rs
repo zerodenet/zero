@@ -2149,6 +2149,7 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         "vmess::VmessOutbound",
         "VmessAeadStream::outbound",
         "establish_tcp_session",
+        "read_mux_frame_from_tokio",
     ] {
         assert!(
             !root.contains(forbidden),
@@ -2158,6 +2159,10 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
     assert!(
         root.contains("vmess::establish_mux_outbound_stream"),
         "VMess mux pool runtime should call the protocol mux connection helper"
+    );
+    assert!(
+        root.contains("vmess::read_mux_stream_frame"),
+        "VMess mux pool runtime should call the protocol mux frame reader helper"
     );
 }
 

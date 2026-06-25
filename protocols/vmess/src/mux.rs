@@ -156,6 +156,13 @@ where
     Ok(frame)
 }
 
+pub async fn read_mux_stream_frame<R>(reader: &mut R) -> Result<MuxFrame, Error>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    read_frame_from_tokio(reader).await
+}
+
 pub fn decode_metadata(meta: &[u8]) -> Result<MuxFrame, Error> {
     if meta.len() < 4 {
         return Err(Error::Protocol("vmess mux metadata too short"));

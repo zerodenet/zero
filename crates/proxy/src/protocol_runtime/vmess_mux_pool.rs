@@ -151,7 +151,7 @@ impl VmessMuxConnectionPool {
 
         tokio::spawn(async move {
             loop {
-                let frame = match vmess::read_mux_frame_from_tokio(&mut reader).await {
+                let frame = match vmess::read_mux_stream_frame(&mut reader).await {
                     Ok(frame) => frame,
                     Err(_) => break,
                 };
