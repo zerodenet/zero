@@ -1952,6 +1952,22 @@ fn vless_udp_identity_is_adapter_parsed() {
 }
 
 #[test]
+fn vless_udp_adapter_delegates_packet_framing_to_protocol_helpers() {
+    let adapter = read("src/adapters/vless/udp.rs");
+
+    for forbidden in ["UdpPacketFraming", "VlessUdpPacketTarget"] {
+        assert!(
+            !adapter.contains(forbidden),
+            "VLESS UDP adapter should delegate mux packet framing to protocols/vless helpers; found `{forbidden}`"
+        );
+    }
+    assert!(
+        adapter.contains("vless::build_udp_packet"),
+        "VLESS UDP adapter should use protocols/vless packet helper for mux fast path"
+    );
+}
+
+#[test]
 fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = read("src/protocol_runtime/vless_udp.rs");
 
