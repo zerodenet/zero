@@ -7,7 +7,9 @@ use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_adapter::ProtocolAdapter;
 use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::{
+    FlowFailure, FlowStartResult, ShadowsocksDatagramSend, UdpDispatch,
+};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
@@ -140,8 +142,6 @@ impl ShadowsocksAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::protocol_runtime::udp::ShadowsocksUdpFlow;
-
         let ResolvedLeafOutbound::Shadowsocks {
             tag,
             server,
@@ -158,20 +158,16 @@ impl ShadowsocksAdapter {
             "udp_shadowsocks_parse_cipher",
             Some((server, *port)),
         )?;
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        let sent = protocol_state
-            .start_shadowsocks_udp_flow(
-                chain_tasks,
-                ShadowsocksUdpFlow {
-                    proxy,
-                    session,
-                    server,
-                    port: *port,
-                    password,
-                    cipher: cipher_kind,
-                    payload,
-                },
-            )
+        let sent = dispatch
+            .send_shadowsocks_datagram(ShadowsocksDatagramSend {
+                proxy,
+                session,
+                server,
+                port: *port,
+                password,
+                cipher: cipher_kind,
+                payload,
+            })
             .await
             .map_err(|f: FlowFailure| FlowFailure {
                 stage: f.stage,

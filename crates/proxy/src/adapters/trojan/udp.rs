@@ -5,7 +5,9 @@ use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::trojan::TrojanAdapter;
 use crate::protocol_adapter::ProtocolAdapter;
 use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::{
+    FlowFailure, FlowStartResult, TrojanDatagramSend, TrojanRelaySend, UdpDispatch,
+};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
@@ -30,10 +32,8 @@ impl TrojanAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        let sent = protocol_state
-            .start_trojan_udp_flow(crate::protocol_runtime::udp::TrojanUdpFlowRequest {
-                chain_tasks,
+        let sent = dispatch
+            .send_trojan_datagram(TrojanDatagramSend {
                 proxy,
                 session,
                 server,
@@ -42,7 +42,6 @@ impl TrojanAdapter {
                 sni: *sni,
                 insecure: *insecure,
                 client_fingerprint: *client_fingerprint,
-                relay_chain: false,
                 payload,
             })
             .await
@@ -89,10 +88,8 @@ impl TrojanAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        let sent = protocol_state
-            .start_trojan_udp_relay_flow(crate::protocol_runtime::udp::TrojanUdpRelayFlowRequest {
-                chain_tasks,
+        let sent = dispatch
+            .send_trojan_relay(TrojanRelaySend {
                 proxy,
                 session,
                 carrier,

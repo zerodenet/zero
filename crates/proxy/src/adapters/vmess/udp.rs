@@ -4,7 +4,9 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_adapter::ProtocolAdapter;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::{
+    FlowFailure, FlowStartResult, UdpDispatch, VmessDatagramSend, VmessRelaySend,
+};
 use crate::runtime::Proxy;
 
 fn parse_vmess_udp_identity(
@@ -38,8 +40,6 @@ impl VmessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::protocol_runtime::udp::VmessUdpFlow;
-
         let ResolvedLeafOutbound::Vmess {
             tag,
             server,
@@ -62,25 +62,21 @@ impl VmessAdapter {
             "udp_vmess_parse_identity",
             Some((server, *port)),
         )?;
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        protocol_state
-            .start_vmess_udp_flow(
-                chain_tasks,
-                VmessUdpFlow {
-                    proxy,
-                    session,
-                    server,
-                    port: *port,
-                    uuid,
-                    cipher_name: cipher,
-                    cipher: vmess_cipher,
-                    mux_concurrency: *mux_concurrency,
-                    tls: *tls,
-                    ws: *ws,
-                    grpc: *grpc,
-                    payload,
-                },
-            )
+        dispatch
+            .send_vmess_datagram(VmessDatagramSend {
+                proxy,
+                session,
+                server,
+                port: *port,
+                uuid,
+                cipher_name: cipher,
+                cipher: vmess_cipher,
+                mux_concurrency: *mux_concurrency,
+                tls: *tls,
+                ws: *ws,
+                grpc: *grpc,
+                payload,
+            })
             .await?;
 
         Ok(FlowStartResult::ManagedFlow {
@@ -98,8 +94,6 @@ impl VmessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::protocol_runtime::udp::VmessUdpRelayFlow;
-
         let ResolvedLeafOutbound::Vmess {
             tag,
             server,
@@ -121,24 +115,20 @@ impl VmessAdapter {
             "udp_vmess_relay_final_hop_parse_identity",
             Some((server, *port)),
         )?;
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        protocol_state
-            .start_vmess_udp_relay_flow(
-                chain_tasks,
-                VmessUdpRelayFlow {
-                    proxy,
-                    session,
-                    carrier,
-                    server,
-                    port: *port,
-                    uuid,
-                    cipher: vmess_cipher,
-                    tls: *tls,
-                    ws: *ws,
-                    grpc: *grpc,
-                    payload,
-                },
-            )
+        dispatch
+            .send_vmess_relay(VmessRelaySend {
+                proxy,
+                session,
+                carrier,
+                server,
+                port: *port,
+                uuid,
+                cipher: vmess_cipher,
+                tls: *tls,
+                ws: *ws,
+                grpc: *grpc,
+                payload,
+            })
             .await?;
 
         Ok(FlowStartResult::ManagedFlow {

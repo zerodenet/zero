@@ -5,7 +5,9 @@ use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_adapter::ProtocolAdapter;
 use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::{
+    FlowFailure, FlowStartResult, MieruDatagramSend, MieruRelaySend, UdpDispatch,
+};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
@@ -28,17 +30,14 @@ impl MieruAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        let sent = protocol_state
-            .start_mieru_udp_flow(crate::protocol_runtime::udp::MieruUdpFlowRequest {
-                chain_tasks,
+        let sent = dispatch
+            .send_mieru_datagram(MieruDatagramSend {
                 proxy,
                 session,
                 server,
                 port: *port,
                 username,
                 password,
-                relay_chain: false,
                 payload,
             })
             .await
@@ -70,8 +69,6 @@ impl MieruAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::protocol_runtime::udp::MieruUdpRelayFlow;
-
         let ResolvedLeafOutbound::Mieru {
             tag,
             server,
@@ -82,20 +79,16 @@ impl MieruAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        let sent = protocol_state
-            .start_mieru_udp_relay_flow(
-                chain_tasks,
-                MieruUdpRelayFlow {
-                    session,
-                    carrier,
-                    server,
-                    port: *port,
-                    username,
-                    password,
-                    payload,
-                },
-            )
+        let sent = dispatch
+            .send_mieru_relay(MieruRelaySend {
+                session,
+                carrier,
+                server,
+                port: *port,
+                username,
+                password,
+                payload,
+            })
             .await?;
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::StreamPacket {

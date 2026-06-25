@@ -109,7 +109,12 @@ fn runtime_protocol_runtime_references_are_confined_to_facades() {
         "src/runtime/udp_dispatch/mod.rs",
         "src/runtime/udp_dispatch/hysteria2_flow.rs",
         "src/runtime/udp_dispatch/lifecycle.rs",
+        "src/runtime/udp_dispatch/mieru_flow.rs",
+        "src/runtime/udp_dispatch/shadowsocks_flow.rs",
         "src/runtime/udp_dispatch/socks5_flow.rs",
+        "src/runtime/udp_dispatch/trojan_flow.rs",
+        "src/runtime/udp_dispatch/vless_flow.rs",
+        "src/runtime/udp_dispatch/vmess_flow.rs",
         "src/runtime/udp_dispatch/start/relay.rs",
         "src/runtime/udp_flow/outbound.rs",
     ];
@@ -1047,9 +1052,9 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
         (
             "mieru",
             &[
-                "MieruUdpRelayFlow",
-                "MieruUdpFlowRequest",
-                "start_mieru_udp_relay_flow",
+                "MieruDatagramSend",
+                "MieruRelaySend",
+                "send_mieru_",
                 "UdpFlowOutbound::Mieru",
             ],
         ),
@@ -1060,8 +1065,8 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
                 "shadowsocks_packet_path_carrier_snapshot",
                 "build_shadowsocks_packet_path",
                 "shadowsocks_udp_datagram_source",
-                "ShadowsocksUdpFlow",
-                "start_shadowsocks_udp_flow",
+                "ShadowsocksDatagramSend",
+                "send_shadowsocks_datagram",
                 "UdpFlowOutbound::Shadowsocks",
             ],
         ),
@@ -1078,31 +1083,27 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
         (
             "trojan",
             &[
-                "TrojanUdpFlowRequest",
-                "TrojanUdpRelayFlowRequest",
+                "TrojanDatagramSend",
+                "TrojanRelaySend",
+                "send_trojan_",
                 "UdpFlowOutbound::Trojan",
             ],
         ),
         (
             "vless",
             &[
-                "VlessUdpFlow",
-                "VlessUdpRelayFinalHop",
-                "VlessUdpRelayTwoStream",
+                "VlessDatagramSend",
+                "VlessRelayFinalHopSend",
+                "VlessRelayTwoStreamSend",
                 "open_udp_stream",
                 "encode_udp_packet",
                 "dispatch_tcp_relay_prefix",
-                "start_vless_udp_",
+                "send_vless_",
             ],
         ),
         (
             "vmess",
-            &[
-                "VmessUdpFlow",
-                "VmessUdpRelayFlow",
-                "start_vmess_udp_flow",
-                "start_vmess_udp_relay_flow",
-            ],
+            &["VmessDatagramSend", "VmessRelaySend", "send_vmess_"],
         ),
     ];
 
@@ -2728,11 +2729,31 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
     for path in rust_sources_under("src/runtime/udp_dispatch") {
         let source = relative(&path);
         let content = fs::read_to_string(&path).expect("read rust source");
-        if source == "src/runtime/udp_dispatch/hysteria2_flow.rs" {
+        let allowed_facade = match source.as_str() {
+            "src/runtime/udp_dispatch/hysteria2_flow.rs" => {
+                Some(("Hysteria2DatagramSend", "start_hysteria2_udp_flow"))
+            }
+            "src/runtime/udp_dispatch/mieru_flow.rs" => {
+                Some(("MieruDatagramSend", "start_mieru_udp_flow"))
+            }
+            "src/runtime/udp_dispatch/shadowsocks_flow.rs" => {
+                Some(("ShadowsocksDatagramSend", "start_shadowsocks_udp_flow"))
+            }
+            "src/runtime/udp_dispatch/trojan_flow.rs" => {
+                Some(("TrojanDatagramSend", "start_trojan_udp_flow"))
+            }
+            "src/runtime/udp_dispatch/vless_flow.rs" => {
+                Some(("VlessDatagramSend", "start_vless_udp_flow"))
+            }
+            "src/runtime/udp_dispatch/vmess_flow.rs" => {
+                Some(("VmessDatagramSend", "start_vmess_udp_flow"))
+            }
+            _ => None,
+        };
+        if let Some((request, start)) = allowed_facade {
             assert!(
-                content.contains("Hysteria2DatagramSend")
-                    && content.contains("start_hysteria2_udp_flow"),
-                "Hysteria2 dispatch facade should own its narrow protocol-state bridge"
+                content.contains(request) && content.contains(start),
+                "{source} should own its narrow protocol-state bridge"
             );
             continue;
         }
@@ -4873,26 +4894,55 @@ fn adapters_do_not_reach_into_udp_dispatch_manager_fields() {
 }
 
 #[test]
-fn hysteria2_udp_adapter_uses_dispatch_facade_for_protocol_state() {
-    let adapter = read("src/adapters/hysteria2/udp.rs");
-    let facade = read("src/runtime/udp_dispatch/hysteria2_flow.rs");
-
-    for forbidden in ["protocol_parts()", "Hysteria2UdpFlowRequest"] {
+fn udp_adapters_use_dispatch_facades_for_protocol_state() {
+    for path in rust_sources_under("src/adapters") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
         assert!(
-            !adapter.contains(forbidden),
-            "Hysteria2 UDP adapter should ask UdpDispatch to start protocol state instead of using `{forbidden}`"
+            !content.contains("protocol_parts()"),
+            "{source} should ask UdpDispatch facades to start protocol state instead of borrowing protocol_parts()"
         );
     }
-    for required in [
-        "Hysteria2DatagramSend",
-        "send_hysteria2_datagram",
-        "start_hysteria2_udp_flow",
-        "chain_tasks: &mut self.chain_tasks",
+
+    for (source, request, start) in [
+        (
+            "src/runtime/udp_dispatch/hysteria2_flow.rs",
+            "Hysteria2DatagramSend",
+            "start_hysteria2_udp_flow",
+        ),
+        (
+            "src/runtime/udp_dispatch/mieru_flow.rs",
+            "MieruDatagramSend",
+            "start_mieru_udp_flow",
+        ),
+        (
+            "src/runtime/udp_dispatch/shadowsocks_flow.rs",
+            "ShadowsocksDatagramSend",
+            "start_shadowsocks_udp_flow",
+        ),
+        (
+            "src/runtime/udp_dispatch/trojan_flow.rs",
+            "TrojanDatagramSend",
+            "start_trojan_udp_flow",
+        ),
+        (
+            "src/runtime/udp_dispatch/vless_flow.rs",
+            "VlessDatagramSend",
+            "start_vless_udp_flow",
+        ),
+        (
+            "src/runtime/udp_dispatch/vmess_flow.rs",
+            "VmessDatagramSend",
+            "start_vmess_udp_flow",
+        ),
     ] {
-        assert!(
-            adapter.contains(required) || facade.contains(required),
-            "Hysteria2 UDP dispatch facade should own `{required}`"
-        );
+        let facade = read(source);
+        for required in [request, start, "&mut self.chain_tasks"] {
+            assert!(
+                facade.contains(required),
+                "{source} should own dispatch facade detail `{required}`"
+            );
+        }
     }
 }
 

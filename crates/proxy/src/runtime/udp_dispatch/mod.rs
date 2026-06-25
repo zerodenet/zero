@@ -68,9 +68,19 @@ mod forward;
 #[cfg(feature = "hysteria2")]
 mod hysteria2_flow;
 mod lifecycle;
+#[cfg(feature = "mieru")]
+mod mieru_flow;
+#[cfg(feature = "shadowsocks")]
+mod shadowsocks_flow;
 mod socks5_flow;
 mod start;
+#[cfg(feature = "trojan")]
+mod trojan_flow;
 mod types;
+#[cfg(feature = "vless")]
+mod vless_flow;
+#[cfg(feature = "vmess")]
+mod vmess_flow;
 
 // Re-exports.
 
@@ -78,8 +88,18 @@ use crate::protocol_runtime::udp::ChainTask;
 use crate::protocol_runtime::udp::ProtocolUdpState;
 #[cfg(feature = "hysteria2")]
 pub(crate) use hysteria2_flow::Hysteria2DatagramSend;
+#[cfg(feature = "mieru")]
+pub(crate) use mieru_flow::{MieruDatagramSend, MieruRelaySend};
+#[cfg(feature = "shadowsocks")]
+pub(crate) use shadowsocks_flow::ShadowsocksDatagramSend;
 pub(crate) use socks5_flow::Socks5RelaySend;
+#[cfg(feature = "trojan")]
+pub(crate) use trojan_flow::{TrojanDatagramSend, TrojanRelaySend};
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
+#[cfg(feature = "vless")]
+pub(crate) use vless_flow::{VlessDatagramSend, VlessRelayFinalHopSend, VlessRelayTwoStreamSend};
+#[cfg(feature = "vmess")]
+pub(crate) use vmess_flow::{VmessDatagramSend, VmessRelaySend};
 
 // UdpDispatch.
 

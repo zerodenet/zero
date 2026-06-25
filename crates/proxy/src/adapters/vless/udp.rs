@@ -4,7 +4,10 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_adapter::ProtocolAdapter;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::{
+    FlowFailure, FlowStartResult, UdpDispatch, VlessDatagramSend, VlessRelayFinalHopSend,
+    VlessRelayTwoStreamSend,
+};
 use crate::runtime::Proxy;
 
 fn parse_vless_udp_uuid(
@@ -31,7 +34,6 @@ impl VlessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::protocol_runtime::udp::VlessUdpFlow;
         use zero_traits::UdpPacketFraming;
 
         let ResolvedLeafOutbound::Vless {
@@ -101,28 +103,24 @@ impl VlessAdapter {
             }
         }
 
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        protocol_state
-            .start_vless_udp_flow(
-                chain_tasks,
-                VlessUdpFlow {
-                    proxy,
-                    session,
-                    server,
-                    port: *port,
-                    uuid,
-                    flow: *flow,
-                    tls: *tls,
-                    reality: *reality,
-                    ws: *ws,
-                    grpc: *grpc,
-                    h2: *h2,
-                    http_upgrade: *http_upgrade,
-                    split_http: *split_http,
-                    quic: *quic,
-                    payload,
-                },
-            )
+        dispatch
+            .send_vless_datagram(VlessDatagramSend {
+                proxy,
+                session,
+                server,
+                port: *port,
+                uuid,
+                flow: *flow,
+                tls: *tls,
+                reality: *reality,
+                ws: *ws,
+                grpc: *grpc,
+                h2: *h2,
+                http_upgrade: *http_upgrade,
+                split_http: *split_http,
+                quic: *quic,
+                payload,
+            })
             .await
             .map_err(|error| FlowFailure {
                 stage: error.stage,
@@ -155,8 +153,6 @@ impl VlessAdapter {
         chain: Vec<ResolvedLeafOutbound<'_>>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::protocol_runtime::udp::VlessUdpRelayTwoStream;
-
         let chain_get = chain.clone();
         let (post_carrier, final_hop) =
             proxy
@@ -192,20 +188,16 @@ impl VlessAdapter {
         let split_http_cfg = split_http
             .as_ref()
             .expect("udp_relay_needs_two_streams checked split_http is Some");
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        protocol_state
-            .start_vless_udp_relay_two_stream(
-                chain_tasks,
-                VlessUdpRelayTwoStream {
-                    proxy,
-                    session,
-                    post_carrier,
-                    get_carrier,
-                    uuid,
-                    split_http: split_http_cfg,
-                    payload,
-                },
-            )
+        dispatch
+            .send_vless_relay_two_stream(VlessRelayTwoStreamSend {
+                proxy,
+                session,
+                post_carrier,
+                get_carrier,
+                uuid,
+                split_http: split_http_cfg,
+                payload,
+            })
             .await?;
 
         Ok(FlowStartResult::ManagedFlow {
@@ -223,8 +215,6 @@ impl VlessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        use crate::protocol_runtime::udp::VlessUdpRelayFinalHop;
-
         let ResolvedLeafOutbound::Vless {
             tag,
             server: _,
@@ -257,25 +247,21 @@ impl VlessAdapter {
 
         let tag_owned = (*tag).to_string();
         let uuid = parse_vless_udp_uuid(id, "udp_vless_relay_final_hop_parse_uuid", None)?;
-        let (protocol_state, chain_tasks) = dispatch.protocol_parts();
-        protocol_state
-            .start_vless_udp_relay_final_hop(
-                chain_tasks,
-                VlessUdpRelayFinalHop {
-                    proxy,
-                    session,
-                    carrier,
-                    uuid,
-                    tls: *tls,
-                    reality: *reality,
-                    ws: *ws,
-                    grpc: *grpc,
-                    h2: *h2,
-                    http_upgrade: *http_upgrade,
-                    split_http: *split_http,
-                    payload,
-                },
-            )
+        dispatch
+            .send_vless_relay_final_hop(VlessRelayFinalHopSend {
+                proxy,
+                session,
+                carrier,
+                uuid,
+                tls: *tls,
+                reality: *reality,
+                ws: *ws,
+                grpc: *grpc,
+                h2: *h2,
+                http_upgrade: *http_upgrade,
+                split_http: *split_http,
+                payload,
+            })
             .await?;
 
         Ok(FlowStartResult::ManagedFlow {

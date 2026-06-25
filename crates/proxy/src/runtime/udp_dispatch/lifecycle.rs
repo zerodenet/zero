@@ -64,10 +64,6 @@ impl UdpDispatch {
         (&self.direct_socket, &mut self.chain_tasks)
     }
 
-    pub(crate) fn protocol_parts(&mut self) -> (&mut ProtocolUdpState, &mut JoinSet<ChainTask>) {
-        (&mut self.protocol_state, &mut self.chain_tasks)
-    }
-
     /// Borrow all polling sources simultaneously for `select!` loops.
     pub(crate) fn poll_refs(
         &mut self,
