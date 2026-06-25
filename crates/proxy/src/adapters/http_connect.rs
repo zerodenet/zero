@@ -4,7 +4,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, ProtocolAdapter,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 
 #[cfg(feature = "http_connect")]
@@ -36,6 +36,9 @@ impl TcpOutboundCapability for HttpConnectAdapter {}
 
 #[cfg(feature = "http_connect")]
 impl UdpFlowCapability for HttpConnectAdapter {}
+
+#[cfg(feature = "http_connect")]
+impl UdpPacketPathCapability for HttpConnectAdapter {}
 
 #[cfg(feature = "http_connect")]
 impl ProtocolSupportCapability for HttpConnectAdapter {

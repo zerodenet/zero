@@ -11,7 +11,7 @@ use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
     OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability,
+    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -30,7 +30,11 @@ pub(crate) struct Hysteria2Adapter;
 
 #[cfg(feature = "hysteria2")]
 #[async_trait]
-impl ProtocolAdapter for Hysteria2Adapter {
+impl ProtocolAdapter for Hysteria2Adapter {}
+
+#[cfg(feature = "hysteria2")]
+#[async_trait]
+impl UdpPacketPathCapability for Hysteria2Adapter {
     #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_descriptor(
         &self,

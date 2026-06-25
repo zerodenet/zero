@@ -9,7 +9,7 @@ use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
     OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability,
+    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -57,6 +57,9 @@ impl UdpFlowCapability for MieruAdapter {
             .await
     }
 }
+
+#[cfg(feature = "mieru")]
+impl UdpPacketPathCapability for MieruAdapter {}
 
 #[cfg(feature = "mieru")]
 impl InboundListenerCapability for MieruAdapter {

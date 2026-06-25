@@ -3222,15 +3222,10 @@ fn protocol_adapter_capabilities_are_split_by_responsibility() {
         adapter.contains("pub(crate) trait ProtocolAdapter"),
         "src/protocol_adapter/adapter.rs should keep the compatibility adapter trait"
     );
-    for expected in [
-        "impl<T> RegisteredProtocolCapability for T",
-        "impl<T> UdpPacketPathCapability for T",
-    ] {
-        assert!(
-            capability.contains(expected),
-            "src/protocol_adapter/capability.rs should provide compatibility blanket impl `{expected}`"
-        );
-    }
+    assert!(
+        capability.contains("impl<T> RegisteredProtocolCapability for T"),
+        "src/protocol_adapter/capability.rs should provide the registry collector blanket impl"
+    );
     assert!(
         !capability.contains("impl<T> TcpOutboundCapability for T"),
         "TCP outbound dispatch should use explicit TcpOutboundCapability impls, not a ProtocolAdapter blanket shim"
@@ -3242,6 +3237,10 @@ fn protocol_adapter_capabilities_are_split_by_responsibility() {
     assert!(
         !capability.contains("impl<T> UdpFlowCapability for T"),
         "UDP flow dispatch should use explicit UdpFlowCapability impls, not a ProtocolAdapter blanket shim"
+    );
+    assert!(
+        !capability.contains("impl<T> UdpPacketPathCapability for T"),
+        "UDP packet-path dispatch should use explicit UdpPacketPathCapability impls, not a ProtocolAdapter blanket shim"
     );
 }
 
@@ -3382,6 +3381,36 @@ fn udp_flow_capability_is_not_on_monolithic_adapter() {
 }
 
 #[test]
+fn udp_packet_path_capability_is_not_on_monolithic_adapter() {
+    let adapter = read("src/protocol_adapter/adapter.rs");
+    let capability = read("src/protocol_adapter/capability.rs");
+
+    for forbidden in [
+        "fn udp_packet_path_carrier_descriptor",
+        "fn udp_packet_path_carrier_snapshot",
+        "async fn build_udp_packet_path",
+        "fn udp_datagram_source",
+    ] {
+        assert!(
+            !adapter.contains(forbidden),
+            "UDP packet-path capability should not remain on ProtocolAdapter surface `{forbidden}`"
+        );
+    }
+
+    for forbidden in [
+        "ProtocolAdapter::udp_packet_path_carrier_descriptor",
+        "ProtocolAdapter::udp_packet_path_carrier_snapshot",
+        "ProtocolAdapter::build_udp_packet_path",
+        "ProtocolAdapter::udp_datagram_source",
+    ] {
+        assert!(
+            !capability.contains(forbidden),
+            "UDP packet-path capability should be implemented explicitly, not through ProtocolAdapter surface `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn registered_adapters_implement_inbound_listener_capability_explicitly() {
     for (source, adapter) in [
         ("src/adapters/direct.rs", "DirectAdapter"),
@@ -3421,6 +3450,28 @@ fn registered_adapters_implement_udp_flow_capability_explicitly() {
         assert!(
             content.contains(&format!("impl UdpFlowCapability for {adapter}")),
             "{source} should explicitly implement UdpFlowCapability for {adapter}"
+        );
+    }
+}
+
+#[test]
+fn registered_adapters_implement_udp_packet_path_capability_explicitly() {
+    for (source, adapter) in [
+        ("src/adapters/direct.rs", "DirectAdapter"),
+        ("src/adapters/http_connect.rs", "HttpConnectAdapter"),
+        ("src/adapters/hysteria2.rs", "Hysteria2Adapter"),
+        ("src/adapters/mieru.rs", "MieruAdapter"),
+        ("src/adapters/mixed.rs", "MixedAdapter"),
+        ("src/adapters/shadowsocks.rs", "ShadowsocksAdapter"),
+        ("src/adapters/socks5.rs", "Socks5Adapter"),
+        ("src/adapters/trojan.rs", "TrojanAdapter"),
+        ("src/adapters/vless.rs", "VlessAdapter"),
+        ("src/adapters/vmess.rs", "VmessAdapter"),
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains(&format!("impl UdpPacketPathCapability for {adapter}")),
+            "{source} should explicitly implement UdpPacketPathCapability for {adapter}"
         );
     }
 }
@@ -3482,10 +3533,9 @@ fn protocol_adapter_capabilities_use_contexts_not_proxy() {
         );
     }
 
-    let expected = "UdpAdapterContext<'_>";
     assert!(
-        adapter.contains(expected) && capability.contains(expected),
-        "adapter dispatch traits should use narrow context `{expected}`"
+        !adapter.contains("UdpAdapterContext<'_>") && capability.contains("UdpAdapterContext<'_>"),
+        "UDP adapter context should live on UDP capability traits, not ProtocolAdapter"
     );
     assert!(
         !adapter.contains("InboundAdapterContext<'_>")

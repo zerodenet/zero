@@ -54,14 +54,15 @@
 
 ### Adapter dispatch boundary
 
-`ProtocolAdapter` is the compatibility runtime dispatch boundary for UDP packet-path roles.
+`ProtocolAdapter` is only the registration compatibility marker.
 Inbound bind/spawn dispatch is split out into explicit `InboundListenerCapability` implementations on each registered adapter.
 TCP outbound dispatch is split out into explicit `TcpOutboundCapability` implementations on each registered adapter.
 UDP flow dispatch is split out into explicit `UdpFlowCapability` implementations on each registered adapter.
-Focused capability traits (`ProtocolSupportCapability`, `InboundListenerCapability`, `TcpOutboundCapability`, `UdpFlowCapability`, and `UdpPacketPathCapability`) sit in front of the remaining compatibility trait.
+UDP packet-path carrier/datagram dispatch is split out into explicit `UdpPacketPathCapability` implementations on each registered adapter.
+Focused capability traits (`ProtocolSupportCapability`, `InboundListenerCapability`, `TcpOutboundCapability`, `UdpFlowCapability`, and `UdpPacketPathCapability`) are the runtime-facing adapter surface.
 Metadata and feature/support checks live in explicit `ProtocolSupportCapability` implementations, not on the monolithic adapter trait.
 These capability entrypoints receive narrow adapter context values (`InboundAdapterContext`, `OutboundAdapterContext`, `UdpAdapterContext`) instead of exposing the full `Proxy` parameter in the trait surface; protocol implementations can still use the context as a migration bridge while runtime dependencies are reduced.
-`ProtocolRegistry` stores registered capability objects; the monolithic adapter trait is only the registration compatibility source.
+`ProtocolRegistry` stores registered capability objects; the monolithic adapter trait must not regain runtime methods.
 `zero-proxy` runtime orchestration does not match on `InboundProtocolConfig` or `ResolvedLeafOutbound` to select a protocol path.
 Adding a protocol means registering an adapter and adding protocol-local inbound/outbound code.
 
@@ -91,7 +92,7 @@ UDP runtime flow snapshots use path categories rather than protocol variants. `r
 
 Per-protocol outbound TCP helpers under `src/outbound/<protocol>.rs` are adapter implementation details. Only the owning `src/adapters/<protocol>/tcp.rs` module calls them; generic runtime and protocol-runtime modules dispatch through `ProtocolInventory` and `TcpOutboundCapability`.
 
-UDP packet-path cache identity is also adapter-owned. Packet-path runtime may store carrier `cache_key`, datagram `datagram_cache_key`, and parsed protocol values such as `CipherKind`; it must not reconstruct cache identity from raw protocol-private config strings such as Shadowsocks cipher names.
+`UdpPacketPathCapability` owns packet-path carrier descriptor/snapshot construction, carrier build, and datagram-source classification. UDP packet-path cache identity is also adapter-owned. Packet-path runtime may store carrier `cache_key`, datagram `datagram_cache_key`, and parsed protocol values such as `CipherKind`; it must not reconstruct cache identity from raw protocol-private config strings such as Shadowsocks cipher names.
 
 Protocol stream/datagram codecs own protocol crypto/framing state. For example, Mieru inbound data-phase encryption/decryption lives in `protocols/mieru::MieruInboundDataCodec`, and Shadowsocks inbound UDP decode/replay/response encoding lives in `protocols/shadowsocks::ShadowsocksInboundUdpCodec`; `zero-proxy` only wraps those codecs as Tokio stream/socket adapters and must not hold their cipher/session primitives or build/parse protocol frames directly.
 

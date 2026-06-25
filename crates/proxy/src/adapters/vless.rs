@@ -9,7 +9,7 @@ use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
     OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability,
+    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -71,6 +71,9 @@ impl UdpFlowCapability for VlessAdapter {
             .await
     }
 }
+
+#[cfg(feature = "vless")]
+impl UdpPacketPathCapability for VlessAdapter {}
 
 #[cfg(feature = "vless")]
 #[async_trait]

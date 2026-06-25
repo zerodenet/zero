@@ -7,7 +7,7 @@ use zero_traits::ProtocolMetadata;
 
 use super::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, UdpAdapterContext,
+    UdpAdapterContext,
 };
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
@@ -158,65 +158,34 @@ pub(crate) trait UdpPacketPathCapability {
     #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_descriptor(
         &self,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::PacketPathCarrierDescriptor>;
-
-    #[cfg(feature = "shadowsocks")]
-    fn udp_packet_path_carrier_snapshot(
-        &self,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::UdpPacketPathCarrier>;
-
-    #[cfg(feature = "shadowsocks")]
-    async fn build_udp_packet_path(
-        &self,
-        ctx: UdpAdapterContext<'_>,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<std::sync::Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError>;
-
-    #[cfg(feature = "shadowsocks")]
-    fn udp_datagram_source<'a>(
-        &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<crate::protocol_runtime::udp::UdpDatagramSource<'a>>;
-}
-
-#[async_trait]
-impl<T> UdpPacketPathCapability for T
-where
-    T: ProtocolAdapter + ?Sized,
-{
-    #[cfg(feature = "shadowsocks")]
-    fn udp_packet_path_carrier_descriptor(
-        &self,
-        leaf: &ResolvedLeafOutbound<'_>,
+        _leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<crate::protocol_runtime::udp::PacketPathCarrierDescriptor> {
-        ProtocolAdapter::udp_packet_path_carrier_descriptor(self, leaf)
+        None
     }
 
     #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_snapshot(
         &self,
-        leaf: &ResolvedLeafOutbound<'_>,
+        _leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<crate::protocol_runtime::udp::UdpPacketPathCarrier> {
-        ProtocolAdapter::udp_packet_path_carrier_snapshot(self, leaf)
+        None
     }
 
     #[cfg(feature = "shadowsocks")]
     async fn build_udp_packet_path(
         &self,
-        ctx: UdpAdapterContext<'_>,
-        leaf: &ResolvedLeafOutbound<'_>,
+        _ctx: UdpAdapterContext<'_>,
+        _leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<std::sync::Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError>
     {
-        ProtocolAdapter::build_udp_packet_path(self, ctx, leaf).await
+        Err(super::defaults::packet_path_carrier_unsupported())
     }
 
     #[cfg(feature = "shadowsocks")]
     fn udp_datagram_source<'a>(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
+        _leaf: &ResolvedLeafOutbound<'a>,
     ) -> Option<crate::protocol_runtime::udp::UdpDatagramSource<'a>> {
-        ProtocolAdapter::udp_datagram_source(self, leaf)
+        None
     }
 }

@@ -11,7 +11,7 @@ use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
     OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability,
+    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -30,7 +30,11 @@ pub(crate) struct Socks5Adapter;
 
 #[cfg(feature = "socks5")]
 #[async_trait]
-impl ProtocolAdapter for Socks5Adapter {
+impl ProtocolAdapter for Socks5Adapter {}
+
+#[cfg(feature = "socks5")]
+#[async_trait]
+impl UdpPacketPathCapability for Socks5Adapter {
     #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_descriptor(
         &self,

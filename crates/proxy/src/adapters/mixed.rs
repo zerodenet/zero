@@ -6,7 +6,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, ProtocolAdapter,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::protocol_capability::protocol_descriptor;
 
@@ -40,6 +40,9 @@ impl TcpOutboundCapability for MixedAdapter {}
 
 #[cfg(feature = "mixed")]
 impl UdpFlowCapability for MixedAdapter {}
+
+#[cfg(feature = "mixed")]
+impl UdpPacketPathCapability for MixedAdapter {}
 
 #[cfg(feature = "mixed")]
 impl ProtocolSupportCapability for MixedAdapter {
