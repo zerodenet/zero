@@ -5518,7 +5518,37 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
         let facade = read(source);
         assert!(
             facade.contains("ProtocolUdpFlowSnapshot") && facade.contains("FlowStartResult::Flow"),
-            "{source} should own protocol UDP flow snapshot and tracked-flow result construction"
+            "{source} should own tracked protocol UDP flow result construction"
+        );
+        for forbidden in [
+            "ProtocolUdpFlowSnapshot::Socks5",
+            "ProtocolUdpFlowSnapshot::Shadowsocks",
+            "ProtocolUdpFlowSnapshot::Hysteria2",
+            "ProtocolUdpFlowSnapshot::Trojan",
+            "ProtocolUdpFlowSnapshot::Mieru",
+        ] {
+            assert!(
+                !facade.contains(forbidden),
+                "{source} should ask protocol_runtime::udp to build protocol snapshots instead of constructing `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
+fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
+    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+
+    for required in [
+        "pub(crate) fn socks5(",
+        "pub(crate) fn shadowsocks(",
+        "pub(crate) fn hysteria2(",
+        "pub(crate) fn trojan(",
+        "pub(crate) fn mieru(",
+    ] {
+        assert!(
+            snapshot.contains(required),
+            "protocol_runtime::udp::flow_snapshot should own protocol snapshot constructor `{required}`"
         );
     }
 }

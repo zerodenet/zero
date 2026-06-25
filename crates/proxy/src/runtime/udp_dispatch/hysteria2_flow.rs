@@ -54,10 +54,10 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::Hysteria2 {
-                    password: request.password.to_string(),
-                    client_fingerprint: request.client_fingerprint.map(ToString::to_string),
-                },
+                protocol: ProtocolUdpFlowSnapshot::hysteria2(
+                    request.password,
+                    request.client_fingerprint,
+                ),
             }),
             tx_bytes: sent as u64,
         })

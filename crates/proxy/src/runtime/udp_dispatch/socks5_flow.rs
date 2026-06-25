@@ -43,10 +43,7 @@ impl UdpDispatch {
         &mut self,
         request: Socks5RelaySend<'_>,
     ) -> Result<FlowStartResult, FlowFailure> {
-        let protocol = ProtocolUdpFlowSnapshot::Socks5 {
-            username: request.username.map(ToString::to_string),
-            password: request.password.map(ToString::to_string),
-        };
+        let protocol = ProtocolUdpFlowSnapshot::socks5(request.username, request.password);
         let sent = self
             .send_socks5(Socks5RelaySend {
                 proxy: request.proxy,

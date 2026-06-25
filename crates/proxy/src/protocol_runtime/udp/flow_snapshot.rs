@@ -41,6 +41,61 @@ pub(crate) struct Socks5RelayAuth<'a> {
 }
 
 impl ProtocolUdpFlowSnapshot {
+    pub(crate) fn socks5(username: Option<&str>, password: Option<&str>) -> Self {
+        Self::Socks5 {
+            username: username.map(ToString::to_string),
+            password: password.map(ToString::to_string),
+        }
+    }
+
+    #[cfg(feature = "shadowsocks")]
+    pub(crate) fn shadowsocks(
+        password: &str,
+        datagram_cache_key: String,
+        cipher_kind: shadowsocks::CipherKind,
+    ) -> Self {
+        Self::Shadowsocks {
+            password: password.to_string(),
+            datagram_cache_key,
+            cipher_kind,
+            packet_path_carrier: None,
+        }
+    }
+
+    #[cfg(feature = "hysteria2")]
+    pub(crate) fn hysteria2(password: &str, client_fingerprint: Option<&str>) -> Self {
+        Self::Hysteria2 {
+            password: password.to_string(),
+            client_fingerprint: client_fingerprint.map(ToString::to_string),
+        }
+    }
+
+    #[cfg(feature = "trojan")]
+    pub(crate) fn trojan(
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+        relay_chain: bool,
+    ) -> Self {
+        Self::Trojan {
+            password: password.to_string(),
+            sni: sni.map(ToString::to_string),
+            insecure,
+            client_fingerprint: client_fingerprint.map(ToString::to_string),
+            relay_chain,
+        }
+    }
+
+    #[cfg(feature = "mieru")]
+    pub(crate) fn mieru(username: &str, password: &str, relay_chain: bool) -> Self {
+        Self::Mieru {
+            username: username.to_string(),
+            password: password.to_string(),
+            relay_chain,
+        }
+    }
+
     #[cfg(feature = "shadowsocks")]
     pub(crate) fn with_packet_path_carrier(
         mut self,

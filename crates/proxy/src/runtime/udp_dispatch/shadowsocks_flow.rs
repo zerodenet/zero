@@ -60,12 +60,11 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::Shadowsocks {
-                    password: request.password.to_string(),
-                    datagram_cache_key: request.datagram_cache_key,
-                    cipher_kind: request.cipher,
-                    packet_path_carrier: None,
-                },
+                protocol: ProtocolUdpFlowSnapshot::shadowsocks(
+                    request.password,
+                    request.datagram_cache_key,
+                    request.cipher,
+                ),
             }),
             tx_bytes: sent as u64,
         })

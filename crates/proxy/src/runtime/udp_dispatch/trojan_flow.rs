@@ -77,13 +77,13 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::Trojan {
-                    password: request.password.to_string(),
-                    sni: request.sni.map(ToString::to_string),
-                    insecure: request.insecure,
-                    client_fingerprint: request.client_fingerprint.map(ToString::to_string),
-                    relay_chain: false,
-                },
+                protocol: ProtocolUdpFlowSnapshot::trojan(
+                    request.password,
+                    request.sni,
+                    request.insecure,
+                    request.client_fingerprint,
+                    false,
+                ),
             }),
             tx_bytes: sent as u64,
         })
@@ -134,13 +134,13 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::Trojan {
-                    password: request.password.to_string(),
-                    sni: request.sni.map(ToString::to_string),
-                    insecure: request.insecure,
-                    client_fingerprint: request.client_fingerprint.map(ToString::to_string),
-                    relay_chain: true,
-                },
+                protocol: ProtocolUdpFlowSnapshot::trojan(
+                    request.password,
+                    request.sni,
+                    request.insecure,
+                    request.client_fingerprint,
+                    true,
+                ),
             }),
             tx_bytes: sent as u64,
         })

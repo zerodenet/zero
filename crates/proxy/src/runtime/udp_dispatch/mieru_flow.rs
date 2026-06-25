@@ -68,11 +68,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::Mieru {
-                    username: request.username.to_string(),
-                    password: request.password.to_string(),
-                    relay_chain: false,
-                },
+                protocol: ProtocolUdpFlowSnapshot::mieru(request.username, request.password, false),
             }),
             tx_bytes: sent as u64,
         })
@@ -119,11 +115,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::Mieru {
-                    username: request.username.to_string(),
-                    password: request.password.to_string(),
-                    relay_chain: true,
-                },
+                protocol: ProtocolUdpFlowSnapshot::mieru(request.username, request.password, true),
             }),
             tx_bytes: sent as u64,
         })
