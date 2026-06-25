@@ -6,12 +6,7 @@ use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use super::{
-    defaults, BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    UdpAdapterContext,
-};
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
-
+use super::{defaults, BoundInbound, InboundAdapterContext, UdpAdapterContext};
 /// A protocol adapter registered in the proxy.
 ///
 /// Implementations are behind `#[cfg(feature = "...")]` gates so only
@@ -31,62 +26,6 @@ pub(crate) trait ProtocolAdapter: Send + Sync + fmt::Debug {
         _source_dir: Option<&std::path::Path>,
     ) -> Result<BoundInbound, EngineError> {
         defaults::bind_tcp_inbound(inbound).await
-    }
-
-    /// Whether this adapter owns the given resolved outbound leaf.
-    ///
-    /// Single dispatch probe: the runtime calls this to find the adapter that
-    /// handles a [`ResolvedLeafOutbound`] instead of matching on the protocol
-    /// enum. Each adapter claims exactly its own variant, e.g. the SOCKS5
-    /// adapter returns `true` only for its own resolved leaf variant.
-    fn claims_outbound_leaf(&self, _leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        false
-    }
-
-    /// Return the neutral runtime facts for a leaf this adapter owns.
-    fn outbound_leaf_runtime<'a>(
-        &self,
-        _leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
-        None
-    }
-
-    /// Establish a TCP outbound connection for the resolved leaf.
-    ///
-    /// The adapter extracts its own variant from `leaf`, reads its own
-    /// protocol-private fields (password/cipher/uuid - the runtime never
-    /// touches those), performs the transport + protocol handshake, and
-    /// returns the established outbound. Defaults to "not supported" so
-    /// inbound-only adapters (e.g. HTTP CONNECT) need not override.
-    ///
-    /// This is the outbound mirror of [`crate::runtime::inbound_protocol::InboundProtocol`]:
-    /// the runtime dispatches via [`ProtocolRegistry::find_outbound_leaf`]
-    /// instead of matching on `ResolvedLeafOutbound`.
-    async fn connect_tcp(
-        &self,
-        _ctx: OutboundAdapterContext<'_>,
-        _session: &Session,
-        _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        Err(defaults::tcp_outbound_unsupported())
-    }
-
-    /// Apply this protocol's handshake to an existing stream (relay chain hop).
-    ///
-    /// For relay chains, the first hop uses [`Self::connect_tcp`] (dial +
-    /// handshake); subsequent hops receive an already-connected stream from
-    /// the previous hop and only run their protocol handshake over it.
-    /// Adapters that cannot serve as a relay hop leave the default
-    /// ("not supported") impl.
-    async fn apply_relay_hop(
-        &self,
-        _ctx: OutboundAdapterContext<'_>,
-        stream: TcpRelayStream,
-        _session: &Session,
-        _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<TcpRelayStream, EngineError> {
-        let _ = stream;
-        Err(defaults::relay_hop_unsupported())
     }
 
     /// Start a UDP outbound flow for the resolved leaf.

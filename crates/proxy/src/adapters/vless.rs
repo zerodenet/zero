@@ -8,7 +8,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, ProtocolSupportCapability, UdpAdapterContext,
+    ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -28,39 +28,12 @@ pub(crate) struct VlessAdapter;
 #[cfg(feature = "vless")]
 #[async_trait]
 impl ProtocolAdapter for VlessAdapter {
-    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        matches!(leaf, ResolvedLeafOutbound::Vless { .. })
-    }
-    fn outbound_leaf_runtime<'a>(
-        &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
-        proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
-    }
     async fn bind_inbound(
         &self,
         inbound: &InboundConfig,
         source_dir: Option<&std::path::Path>,
     ) -> Result<BoundInbound, EngineError> {
         self.bind_inbound_impl(inbound, source_dir).await
-    }
-    async fn connect_tcp(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
-    }
-    async fn apply_relay_hop(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        stream: crate::transport::TcpRelayStream,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        self.apply_relay_hop_impl(ctx.proxy(), stream, session, leaf)
-            .await
     }
     async fn start_udp_flow(
         &self,
@@ -107,6 +80,41 @@ impl ProtocolAdapter for VlessAdapter {
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
         self.start_udp_relay_final_hop_impl(dispatch, ctx.proxy(), session, carrier, leaf, payload)
+            .await
+    }
+}
+
+#[cfg(feature = "vless")]
+#[async_trait]
+impl TcpOutboundCapability for VlessAdapter {
+    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
+        matches!(leaf, ResolvedLeafOutbound::Vless { .. })
+    }
+
+    fn outbound_leaf_runtime<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafRuntime<'a>> {
+        proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
+    }
+
+    async fn connect_tcp(
+        &self,
+        ctx: OutboundAdapterContext<'_>,
+        session: &Session,
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
+    }
+
+    async fn apply_relay_hop(
+        &self,
+        ctx: OutboundAdapterContext<'_>,
+        stream: crate::transport::TcpRelayStream,
+        session: &Session,
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<crate::transport::TcpRelayStream, EngineError> {
+        self.apply_relay_hop_impl(ctx.proxy(), stream, session, leaf)
             .await
     }
 }

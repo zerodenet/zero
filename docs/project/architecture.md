@@ -54,8 +54,9 @@
 
 ### Adapter dispatch boundary
 
-`ProtocolAdapter` is the compatibility runtime dispatch boundary for inbound bind/spawn and outbound TCP/UDP establishment.
-Focused capability traits (`ProtocolSupportCapability`, `InboundListenerCapability`, `TcpOutboundCapability`, `UdpFlowCapability`, and `UdpPacketPathCapability`) sit in front of that compatibility trait.
+`ProtocolAdapter` is the compatibility runtime dispatch boundary for inbound bind/spawn and UDP establishment.
+TCP outbound dispatch is split out into explicit `TcpOutboundCapability` implementations on each registered adapter.
+Focused capability traits (`ProtocolSupportCapability`, `InboundListenerCapability`, `TcpOutboundCapability`, `UdpFlowCapability`, and `UdpPacketPathCapability`) sit in front of the remaining compatibility trait.
 Metadata and feature/support checks live in explicit `ProtocolSupportCapability` implementations, not on the monolithic adapter trait.
 These capability entrypoints receive narrow adapter context values (`InboundAdapterContext`, `OutboundAdapterContext`, `UdpAdapterContext`) instead of exposing the full `Proxy` parameter in the trait surface; protocol implementations can still use the context as a migration bridge while runtime dependencies are reduced.
 `ProtocolRegistry` stores registered capability objects; the monolithic adapter trait is only the registration compatibility source.
@@ -86,7 +87,7 @@ UDP runtime flow snapshots use path categories rather than protocol variants. `r
 
 `runtime.rs` owns the `Proxy` shell and run loop. Control-plane handle details live in `runtime/handle.rs`, the spawned runtime handle lives in `runtime/running.rs`, and reload channel bridging lives in `runtime/reload.rs`.
 
-Per-protocol outbound TCP helpers under `src/outbound/<protocol>.rs` are adapter implementation details. Only the owning `src/adapters/<protocol>/tcp.rs` module calls them; generic runtime and protocol-runtime modules dispatch through `ProtocolInventory` and `ProtocolAdapter`.
+Per-protocol outbound TCP helpers under `src/outbound/<protocol>.rs` are adapter implementation details. Only the owning `src/adapters/<protocol>/tcp.rs` module calls them; generic runtime and protocol-runtime modules dispatch through `ProtocolInventory` and `TcpOutboundCapability`.
 
 UDP packet-path cache identity is also adapter-owned. Packet-path runtime may store carrier `cache_key`, datagram `datagram_cache_key`, and parsed protocol values such as `CipherKind`; it must not reconstruct cache identity from raw protocol-private config strings such as Shadowsocks cipher names.
 

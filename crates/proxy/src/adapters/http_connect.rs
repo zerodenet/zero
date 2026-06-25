@@ -4,6 +4,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, ProtocolAdapter, ProtocolSupportCapability,
+    TcpOutboundCapability,
 };
 
 #[cfg(feature = "http_connect")]
@@ -26,6 +27,9 @@ impl ProtocolAdapter for HttpConnectAdapter {
         self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
     }
 }
+
+#[cfg(feature = "http_connect")]
+impl TcpOutboundCapability for HttpConnectAdapter {}
 
 #[cfg(feature = "http_connect")]
 impl ProtocolSupportCapability for HttpConnectAdapter {

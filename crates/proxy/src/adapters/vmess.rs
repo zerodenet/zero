@@ -8,7 +8,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, ProtocolSupportCapability, UdpAdapterContext,
+    ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -28,32 +28,6 @@ pub(crate) struct VmessAdapter;
 #[cfg(feature = "vmess")]
 #[async_trait]
 impl ProtocolAdapter for VmessAdapter {
-    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        matches!(leaf, ResolvedLeafOutbound::Vmess { .. })
-    }
-    fn outbound_leaf_runtime<'a>(
-        &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
-        proxy_leaf_runtime(leaf, TcpPathCategory::Session)
-    }
-    async fn connect_tcp(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
-    }
-    async fn apply_relay_hop(
-        &self,
-        _ctx: OutboundAdapterContext<'_>,
-        stream: crate::transport::TcpRelayStream,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        self.apply_relay_hop_impl(stream, session, leaf).await
-    }
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -86,6 +60,40 @@ impl ProtocolAdapter for VmessAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         self.start_udp_relay_final_hop_impl(dispatch, ctx.proxy(), session, carrier, leaf, payload)
             .await
+    }
+}
+
+#[cfg(feature = "vmess")]
+#[async_trait]
+impl TcpOutboundCapability for VmessAdapter {
+    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
+        matches!(leaf, ResolvedLeafOutbound::Vmess { .. })
+    }
+
+    fn outbound_leaf_runtime<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafRuntime<'a>> {
+        proxy_leaf_runtime(leaf, TcpPathCategory::Session)
+    }
+
+    async fn connect_tcp(
+        &self,
+        ctx: OutboundAdapterContext<'_>,
+        session: &Session,
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
+    }
+
+    async fn apply_relay_hop(
+        &self,
+        _ctx: OutboundAdapterContext<'_>,
+        stream: crate::transport::TcpRelayStream,
+        session: &Session,
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<crate::transport::TcpRelayStream, EngineError> {
+        self.apply_relay_hop_impl(stream, session, leaf).await
     }
 }
 

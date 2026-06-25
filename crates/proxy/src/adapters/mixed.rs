@@ -6,6 +6,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, ProtocolAdapter, ProtocolSupportCapability,
+    TcpOutboundCapability,
 };
 use crate::protocol_capability::protocol_descriptor;
 
@@ -30,6 +31,9 @@ impl ProtocolAdapter for MixedAdapter {
         self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
     }
 }
+
+#[cfg(feature = "mixed")]
+impl TcpOutboundCapability for MixedAdapter {}
 
 #[cfg(feature = "mixed")]
 impl ProtocolSupportCapability for MixedAdapter {

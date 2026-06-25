@@ -64,27 +64,36 @@ pub(crate) trait InboundListenerCapability {
 
 #[async_trait]
 pub(crate) trait TcpOutboundCapability {
-    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool;
+    fn claims_outbound_leaf(&self, _leaf: &ResolvedLeafOutbound<'_>) -> bool {
+        false
+    }
 
     fn outbound_leaf_runtime<'a>(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>>;
+        _leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafRuntime<'a>> {
+        None
+    }
 
     async fn connect_tcp(
         &self,
-        ctx: OutboundAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure>;
+        _ctx: OutboundAdapterContext<'_>,
+        _session: &Session,
+        _leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        Err(super::defaults::tcp_outbound_unsupported())
+    }
 
     async fn apply_relay_hop(
         &self,
-        ctx: OutboundAdapterContext<'_>,
+        _ctx: OutboundAdapterContext<'_>,
         stream: TcpRelayStream,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<TcpRelayStream, EngineError>;
+        _session: &Session,
+        _leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<TcpRelayStream, EngineError> {
+        let _ = stream;
+        Err(super::defaults::relay_hop_unsupported())
+    }
 }
 
 #[async_trait]
@@ -179,42 +188,6 @@ where
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
         ProtocolAdapter::spawn_inbound(self, ctx, inbound, bound, shutdown_rx, listeners);
-    }
-}
-
-#[async_trait]
-impl<T> TcpOutboundCapability for T
-where
-    T: ProtocolAdapter + ?Sized,
-{
-    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        ProtocolAdapter::claims_outbound_leaf(self, leaf)
-    }
-
-    fn outbound_leaf_runtime<'a>(
-        &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
-        ProtocolAdapter::outbound_leaf_runtime(self, leaf)
-    }
-
-    async fn connect_tcp(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        ProtocolAdapter::connect_tcp(self, ctx, session, leaf).await
-    }
-
-    async fn apply_relay_hop(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        stream: TcpRelayStream,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<TcpRelayStream, EngineError> {
-        ProtocolAdapter::apply_relay_hop(self, ctx, stream, session, leaf).await
     }
 }
 

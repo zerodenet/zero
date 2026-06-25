@@ -8,7 +8,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::adapters::common::direct_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, ProtocolSupportCapability, UdpAdapterContext,
+    ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
 };
 use crate::protocol_capability::protocol_descriptor;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -24,23 +24,6 @@ pub(crate) struct DirectAdapter;
 
 #[async_trait]
 impl ProtocolAdapter for DirectAdapter {
-    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        matches!(leaf, ResolvedLeafOutbound::Direct { .. })
-    }
-    fn outbound_leaf_runtime<'a>(
-        &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
-        direct_leaf_runtime(leaf)
-    }
-    async fn connect_tcp(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
-    }
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -61,6 +44,27 @@ impl ProtocolAdapter for DirectAdapter {
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
         self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+    }
+}
+
+#[async_trait]
+impl TcpOutboundCapability for DirectAdapter {
+    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
+        matches!(leaf, ResolvedLeafOutbound::Direct { .. })
+    }
+    fn outbound_leaf_runtime<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafRuntime<'a>> {
+        direct_leaf_runtime(leaf)
+    }
+    async fn connect_tcp(
+        &self,
+        ctx: OutboundAdapterContext<'_>,
+        session: &Session,
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
     }
 }
 
