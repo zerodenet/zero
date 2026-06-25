@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use tokio::net::UdpSocket;
 use zero_core::Address;
 use zero_engine::EngineError;
-use zero_traits::DatagramCodec;
 
 use crate::protocol_runtime::udp::PacketPathCarrier;
 use crate::runtime::Proxy;
@@ -12,7 +11,8 @@ use crate::runtime::Proxy;
 pub(super) struct ShadowsocksPacketPath {
     socket: UdpSocket,
     endpoint: SocketAddr,
-    codec: shadowsocks::ShadowsocksDatagramCodec,
+    cipher: shadowsocks::CipherKind,
+    password: Vec<u8>,
 }
 
 impl ShadowsocksPacketPath {
@@ -43,10 +43,8 @@ impl ShadowsocksPacketPath {
         Ok(Self {
             socket,
             endpoint,
-            codec: shadowsocks::ShadowsocksDatagramCodec {
-                cipher,
-                password: password.as_bytes().to_vec(),
-            },
+            cipher,
+            password: password.as_bytes().to_vec(),
         })
     }
 }
@@ -59,10 +57,9 @@ impl PacketPathCarrier for ShadowsocksPacketPath {
         port: u16,
         payload: &[u8],
     ) -> Result<(), EngineError> {
-        let packet = self
-            .codec
-            .encode(target, port, payload)
-            .map_err(EngineError::from)?;
+        let packet =
+            shadowsocks::encode_udp_datagram(target, port, payload, self.cipher, &self.password)
+                .map_err(EngineError::from)?;
         self.socket
             .send_to(&packet, self.endpoint)
             .await
@@ -76,14 +73,10 @@ impl PacketPathCarrier for ShadowsocksPacketPath {
             .recv_from(buf)
             .await
             .map_err(EngineError::from)?;
-        let decoded = self.codec.decode(&buf[..read]).ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "failed to decode shadowsocks packet path response",
-            ))
-        })?;
-        let len = decoded.2.len();
-        buf[..len].copy_from_slice(&decoded.2);
+        let decoded = shadowsocks::decode_udp_datagram(&buf[..read], self.cipher, &self.password)
+            .map_err(EngineError::from)?;
+        let len = decoded.payload.len();
+        buf[..len].copy_from_slice(&decoded.payload);
         Ok(len)
     }
 }

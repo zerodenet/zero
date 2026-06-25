@@ -5473,6 +5473,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let cache_key = read("src/protocol_runtime/udp/cache_key.rs");
     let carrier = read("src/protocol_runtime/udp/packet_path_chain/carriers.rs");
+    let shadowsocks_carrier =
+        read("src/protocol_runtime/udp/packet_path_chain/carriers/shadowsocks_carrier.rs");
     let entry = read("src/protocol_runtime/udp/packet_path_chain/entry.rs");
     let traits = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
     let key = read("src/protocol_runtime/udp/packet_path_chain/key.rs");
@@ -5484,6 +5486,17 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     assert!(
         adapter.contains("CipherKind::from_str"),
         "Shadowsocks adapter should parse packet-path carrier/datagram cipher config"
+    );
+    for forbidden in ["ShadowsocksDatagramCodec", "DatagramCodec"] {
+        assert!(
+            !shadowsocks_carrier.contains(forbidden),
+            "Shadowsocks packet-path carrier should delegate datagram framing to protocols/shadowsocks helpers; found `{forbidden}`"
+        );
+    }
+    assert!(
+        shadowsocks_carrier.contains("shadowsocks::encode_udp_datagram")
+            && shadowsocks_carrier.contains("shadowsocks::decode_udp_datagram"),
+        "Shadowsocks packet-path carrier should call protocols/shadowsocks datagram helpers"
     );
     for source in [&carrier, &entry] {
         assert!(
