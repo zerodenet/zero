@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use std::sync::Arc;
 use zero_core::Address;
 use zero_engine::EngineError;
 
@@ -45,4 +46,5 @@ pub(crate) struct UdpDatagramSource<'a> {
     pub(crate) password: &'a str,
     pub(crate) datagram_cache_key: String,
     pub(crate) cipher_kind: shadowsocks::CipherKind,
+    pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 }

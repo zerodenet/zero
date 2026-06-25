@@ -134,6 +134,10 @@ pub(crate) fn shadowsocks_udp_datagram_source<'a>(
             tag, server, port, cipher, password,
         ),
         cipher_kind,
+        codec: std::sync::Arc::new(shadowsocks::ShadowsocksDatagramCodec {
+            cipher: cipher_kind,
+            password: password.as_bytes().to_vec(),
+        }),
     }
 }
 

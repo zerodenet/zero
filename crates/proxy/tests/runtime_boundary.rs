@@ -4460,6 +4460,7 @@ fn packet_path_entry_model_lives_outside_chain_manager() {
 #[test]
 fn packet_path_entry_build_lives_outside_chain_manager() {
     let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
+    let entry_content = read("src/protocol_runtime/udp/packet_path_chain/entry.rs");
     let entry = manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/entry.rs");
 
     for forbidden in [
@@ -4476,6 +4477,14 @@ fn packet_path_entry_build_lives_outside_chain_manager() {
     assert!(
         entry.exists(),
         "packet-path entry build logic should live in packet_path_chain/entry.rs"
+    );
+    assert!(
+        !entry_content.contains("ShadowsocksDatagramCodec"),
+        "packet-path entry build should use adapter-provided datagram codecs instead of constructing Shadowsocks codec directly"
+    );
+    assert!(
+        entry_content.contains("candidate.datagram.codec.clone()"),
+        "packet-path entry build should clone the codec supplied by UdpDatagramSource"
     );
 }
 
@@ -5159,8 +5168,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         );
     }
     assert!(
-        traits.contains("cipher_kind: shadowsocks::CipherKind"),
-        "UdpDatagramSource should carry parsed Shadowsocks cipher for packet-path datagram codecs"
+        traits.contains("cipher_kind: shadowsocks::CipherKind")
+            && traits.contains("codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>"),
+        "UdpDatagramSource should carry parsed Shadowsocks cipher and the adapter-provided packet-path datagram codec"
     );
     assert!(
         traits.contains("datagram_cache_key: String")

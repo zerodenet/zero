@@ -2,12 +2,10 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use tracing::debug;
-use zero_core::Address;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::bridge::recv_loop;
 use super::model::{Entry, EntryCandidate};
-use crate::protocol_runtime::udp::packet_path_traits::{DatagramCodec, UdpDatagramSource};
 use crate::runtime::Proxy;
 
 pub(super) fn resolve_candidate<'a>(
@@ -44,7 +42,7 @@ pub(super) async fn build_entry(
         .protocols
         .build_udp_packet_path_carrier(proxy, carrier_leaf)
         .await?;
-    let codec = datagram_codec(&candidate.datagram)?;
+    let codec = candidate.datagram.codec.clone();
     let waiters = Arc::new(Mutex::new(VecDeque::new()));
     tokio::spawn(recv_loop(path.clone(), waiters.clone(), codec.clone()));
 
@@ -55,13 +53,4 @@ pub(super) async fn build_entry(
         datagram_server: candidate.datagram.server.to_owned(),
         datagram_port: candidate.datagram.port,
     })
-}
-
-fn datagram_codec(
-    datagram: &UdpDatagramSource<'_>,
-) -> Result<Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>, EngineError> {
-    Ok(Arc::new(shadowsocks::ShadowsocksDatagramCodec {
-        cipher: datagram.cipher_kind,
-        password: datagram.password.as_bytes().to_vec(),
-    }))
 }
