@@ -2256,6 +2256,11 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
         !mux.contains("vmess::parse_udp_packet"),
         "VMess inbound MUX/session glue should delegate VMess UDP request parsing to protocols/vmess"
     );
+    assert!(
+        !mux.contains("socks5::parse_udp_packet")
+            && mux.contains("socks5::decode_udp_associate_response"),
+        "VMess inbound SOCKS5 upstream response bridge should use semantic SOCKS5 associate helpers"
+    );
     for required in ["encode_udp_response", "encode_mux_udp_response"] {
         assert!(
             protocol_udp.contains(required) && helper.contains(&format!("vmess::{required}")),
@@ -2310,6 +2315,16 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             );
         }
     }
+    for (source_name, source) in [
+        ("inbound/vless/udp_session.rs", udp_session.as_str()),
+        ("inbound/vless/mux.rs", mux.as_str()),
+    ] {
+        assert!(
+            !source.contains("socks5::parse_udp_packet")
+                && source.contains("socks5::decode_udp_associate_response"),
+            "{source_name} should use semantic SOCKS5 associate helpers for upstream response bridging"
+        );
+    }
 
     for required in [
         "decode_inbound_udp_packet",
@@ -2338,12 +2353,17 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         "TrojanUdpPacket {",
         "UdpPacketStreamFraming<TrojanUdpPacket>",
         "TrojanOutbound as UdpPacketStreamFraming",
+        "socks5::parse_udp_packet",
     ] {
         assert!(
             !inbound.contains(forbidden),
             "inbound/trojan.rs should delegate Trojan UDP packet framing to protocols/trojan; found `{forbidden}`"
         );
     }
+    assert!(
+        inbound.contains("socks5::decode_udp_associate_response"),
+        "Trojan inbound SOCKS5 upstream response bridge should use semantic SOCKS5 associate helpers"
+    );
 
     for required in ["read_inbound_udp_packet", "write_udp_response"] {
         assert!(

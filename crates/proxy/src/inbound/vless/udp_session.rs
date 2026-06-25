@@ -133,7 +133,7 @@ impl Proxy {
                     match upstream {
                         Ok(read) => {
                             last_activity = TokioInstant::now();
-                            if let Ok(pkt) = socks5::parse_udp_packet(&upstream_buffer[..read]) {
+                            if let Ok(pkt) = socks5::decode_udp_associate_response(&upstream_buffer[..read]) {
                                 if let Ok(packet) = encode_vless_udp_response(&pkt.target, pkt.port, &pkt.payload) {
                                     let _ = client.write_all(&packet).await;
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());
