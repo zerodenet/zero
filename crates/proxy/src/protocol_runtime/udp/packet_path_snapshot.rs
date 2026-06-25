@@ -125,21 +125,19 @@ pub(crate) fn shadowsocks_udp_datagram_source<'a>(
     password: &'a str,
     cipher_kind: shadowsocks::CipherKind,
 ) -> crate::protocol_runtime::udp::UdpDatagramSource<'a> {
+    let datagram_cache_key = crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
+        tag, server, port, cipher, password,
+    );
     crate::protocol_runtime::udp::UdpDatagramSource {
         tag,
         server,
         port,
-        datagram_cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
-            tag, server, port, cipher, password,
-        ),
-        protocol_snapshot: crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot::Shadowsocks {
-            password: password.to_owned(),
-            datagram_cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
-                tag, server, port, cipher, password,
-            ),
+        protocol_snapshot: crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot::shadowsocks(
+            password,
+            datagram_cache_key.clone(),
             cipher_kind,
-            packet_path_carrier: None,
-        },
+        ),
+        datagram_cache_key,
         codec: std::sync::Arc::new(shadowsocks::ShadowsocksDatagramCodec {
             cipher: cipher_kind,
             password: password.as_bytes().to_vec(),

@@ -5343,6 +5343,14 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
             "protocol_runtime::udp packet-path snapshot module should own `{required}`"
         );
     }
+    assert!(
+        snapshot.contains("ProtocolUdpFlowSnapshot::shadowsocks("),
+        "packet-path datagram source should use the protocol snapshot constructor"
+    );
+    assert!(
+        !snapshot.contains("ProtocolUdpFlowSnapshot::Shadowsocks {"),
+        "packet-path datagram source should not construct Shadowsocks snapshot fields directly"
+    );
     for forbidden in [
         "pub(crate) use packet_path_snapshot::{",
         "socks5_packet_path_carrier_descriptor",

@@ -108,7 +108,7 @@ If you change protocol behavior, config parsing, routing, or runtime wiring, run
 - `UdpPacketPathCapability` owns packet-path carrier descriptor/snapshot construction, carrier build, and datagram-source classification. `ProtocolAdapter` must not grow packet-path methods again.
 - UDP packet-path cache identity is adapter-built. Packet-path runtime may store opaque `cache_key` / `datagram_cache_key` values and parsed protocol values such as `CipherKind`, but it must not rebuild cache identity from raw protocol-private fields such as Shadowsocks cipher names.
 - Packet-path entry build logic consumes datagram codecs supplied by `UdpDatagramSource`; generic packet-path entry code must not construct protocol-specific datagram codecs directly.
-- Packet-path datagram sources carry their protocol flow snapshot. Packet-path state may attach the cached carrier to that snapshot but must not construct protocol-named snapshots directly.
+- Packet-path datagram sources carry their protocol flow snapshot and build it through `ProtocolUdpFlowSnapshot` constructors. Packet-path state may attach the cached carrier to that snapshot but must not construct protocol-named snapshots directly.
 - Packet-path datagram sources expose a datagram key part for cache identity; `packet_path_chain::key` must not read protocol-source internals directly.
 - `protocol_runtime::udp` root must not re-export protocol-named packet-path helper functions. Adapters call explicit packet-path submodules (`packet_path_snapshot`, `packet_path_chain`) when bridging capability methods.
 - `packet_path_chain.rs` must not re-export protocol carrier builder functions; adapters call `packet_path_chain::carriers::*` explicitly when bridging packet-path carrier capabilities.
