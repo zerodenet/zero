@@ -120,6 +120,39 @@ impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {
     }
 }
 
+pub async fn read_inbound_udp_packet<S>(stream: &mut S) -> Result<TrojanUdpPacket, Error>
+where
+    S: AsyncSocket,
+{
+    <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::read_udp_packet(
+        &TrojanOutbound,
+        stream,
+    )
+    .await
+}
+
+pub async fn write_udp_response<S>(
+    stream: &mut S,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    let packet = TrojanUdpPacket {
+        target: target.clone(),
+        port,
+        payload: payload.to_vec(),
+    };
+    <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::write_udp_packet(
+        &TrojanOutbound,
+        stream,
+        &packet,
+    )
+    .await
+}
+
 /// Build a Trojan UDP associate request (CMD_UDP).
 ///
 /// This is a standalone request builder used by the proxy outbound

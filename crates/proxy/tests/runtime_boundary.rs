@@ -2260,6 +2260,37 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
 }
 
 #[test]
+fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
+    let inbound = read("src/inbound/trojan.rs");
+    let protocol_outbound = manifest_dir()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root")
+        .join("protocols/trojan/src/outbound.rs");
+    let protocol_outbound =
+        fs::read_to_string(protocol_outbound).expect("read trojan protocol outbound source");
+
+    for forbidden in [
+        "TrojanUdpPacket {",
+        "UdpPacketStreamFraming<TrojanUdpPacket>",
+        "TrojanOutbound as UdpPacketStreamFraming",
+    ] {
+        assert!(
+            !inbound.contains(forbidden),
+            "inbound/trojan.rs should delegate Trojan UDP packet framing to protocols/trojan; found `{forbidden}`"
+        );
+    }
+
+    for required in ["read_inbound_udp_packet", "write_udp_response"] {
+        assert!(
+            protocol_outbound.contains(required)
+                && inbound.contains(&format!("trojan::{required}")),
+            "Trojan inbound UDP packet framing should be owned by protocols/trojan `{required}`"
+        );
+    }
+}
+
+#[test]
 fn mieru_client_stream_model_lives_outside_inbound_root() {
     let root = read("src/inbound/mieru.rs");
     let model = read("src/inbound/mieru/model.rs");

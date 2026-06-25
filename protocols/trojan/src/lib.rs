@@ -14,8 +14,8 @@ pub mod shared;
 pub use inbound::{TrojanAccept, TrojanInbound};
 pub use metadata::TrojanProtocol;
 pub use outbound::{
-    build_udp_request, TrojanOutbound, TrojanTcpTunnelTarget, TrojanUdpPacket,
-    TrojanUdpPacketTunnelTarget,
+    build_udp_request, read_inbound_udp_packet, write_udp_response, TrojanOutbound,
+    TrojanTcpTunnelTarget, TrojanUdpPacket, TrojanUdpPacketTunnelTarget,
 };
 pub use shared::{
     build_udp_packet, read_password, read_request, read_udp_packet, write_password, write_request,

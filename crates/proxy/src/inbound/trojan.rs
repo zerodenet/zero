@@ -8,11 +8,11 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{error, info, warn};
-use trojan::{TrojanInbound, TrojanOutbound, TrojanUdpPacket};
+use trojan::TrojanInbound;
 use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_traits::{AsyncSocket, UdpPacketStreamFraming};
+use zero_traits::AsyncSocket;
 
 use crate::protocol_runtime::socks5_udp::recv_upstream_packet;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
@@ -180,7 +180,6 @@ impl Proxy {
         let auth = session.auth.clone();
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
-        let protocol = TrojanOutbound;
 
         info!(
             inbound_tag = inbound_tag,
@@ -203,10 +202,7 @@ impl Proxy {
                     );
                     break;
                 }
-                packet = <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::read_udp_packet(
-                    &protocol,
-                    &mut client,
-                ) => {
+                packet = trojan::read_inbound_udp_packet(&mut client) => {
                     match packet {
                         Ok(packet) => {
                             last_activity = TokioInstant::now();
@@ -242,17 +238,7 @@ impl Proxy {
                     if let Some(sid) = session_id {
                         self.record_session_outbound_rx(sid, n as u64);
                     }
-                    let packet = TrojanUdpPacket {
-                        target,
-                        port: sender.port(),
-                        payload: direct_buf[..n].to_vec(),
-                    };
-                    <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::write_udp_packet(
-                        &protocol,
-                        &mut client,
-                        &packet,
-                    )
-                    .await?;
+                    trojan::write_udp_response(&mut client, &target, sender.port(), &direct_buf[..n]).await?;
                     if let Some(sid) = session_id {
                         self.record_session_inbound_tx(sid, n as u64);
                     }
@@ -267,19 +253,12 @@ impl Proxy {
                                 if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                     self.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                 }
-                                let packet = TrojanUdpPacket {
-                                    target: pkt.target,
-                                    port: pkt.port,
-                                    payload: pkt.payload,
-                                };
-                                <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::write_udp_packet(
-                                    &protocol,
-                                    &mut client,
-                                    &packet,
-                                )
-                                .await?;
-                                if let Some(sid) = dispatch.session_id_by_target(&packet.target, packet.port, None) {
-                                    self.record_session_inbound_tx(sid, packet.payload.len() as u64);
+                                let target = pkt.target;
+                                let port = pkt.port;
+                                let payload = pkt.payload;
+                                trojan::write_udp_response(&mut client, &target, port, &payload).await?;
+                                if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
+                                    self.record_session_inbound_tx(sid, payload.len() as u64);
                                 }
                             }
                         }
@@ -296,15 +275,10 @@ impl Proxy {
                             if let Some(sid) = session_id {
                                 self.record_session_outbound_rx(sid, payload.len() as u64);
                             }
-                            let packet = TrojanUdpPacket { target, port, payload };
-                            <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::write_udp_packet(
-                                &protocol,
-                                &mut client,
-                                &packet,
-                            )
-                            .await?;
+                            let payload_len = payload.len() as u64;
+                            trojan::write_udp_response(&mut client, &target, port, &payload).await?;
                             if let Some(sid) = session_id {
-                                self.record_session_inbound_tx(sid, packet.payload.len() as u64);
+                                self.record_session_inbound_tx(sid, payload_len);
                             }
                         }
                         Ok(Err(error)) => warn!(error = %error, "trojan udp chain response error"),
