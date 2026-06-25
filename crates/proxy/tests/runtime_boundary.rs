@@ -5123,21 +5123,22 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
 #[test]
 fn h2_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/h2_manager.rs");
-    let codec = manifest_dir().join("src/protocol_runtime/udp/h2_manager/codec.rs");
+    let codec = read("src/protocol_runtime/udp/h2_manager/codec.rs");
 
-    for forbidden in [
-        "UdpDatagramFraming",
-        "Hysteria2UdpPacketTarget",
-        "fn decode_packet",
-    ] {
+    for forbidden in ["UdpDatagramFraming", "Hysteria2UdpPacketTarget"] {
         assert!(
             !manager.contains(forbidden),
-            "h2_manager.rs should keep datagram codec details in h2_manager/codec.rs; found `{forbidden}`"
+            "h2_manager.rs should not own Hysteria2 datagram codec details; found `{forbidden}`"
+        );
+        assert!(
+            !codec.contains(forbidden),
+            "h2_manager/codec.rs should delegate Hysteria2 datagram framing to protocols/hysteria2 helpers; found `{forbidden}`"
         );
     }
     assert!(
-        codec.exists(),
-        "Hysteria2 UDP datagram codec should live in h2_manager/codec.rs"
+        codec.contains("hysteria2::build_udp_datagram")
+            && codec.contains("hysteria2::parse_udp_datagram"),
+        "Hysteria2 UDP datagram codec should delegate encode/decode to protocols/hysteria2"
     );
 }
 
