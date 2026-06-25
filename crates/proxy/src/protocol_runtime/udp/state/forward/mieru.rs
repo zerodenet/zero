@@ -2,7 +2,7 @@ use tokio::task::JoinSet;
 
 use super::super::ProtocolUdpState;
 use crate::protocol_runtime::udp::mieru_manager::model::MieruSendExisting;
-use crate::protocol_runtime::udp::{ChainTask, FlowFailure};
+use crate::protocol_runtime::udp::{ChainTask, FlowFailure, ProtocolUdpFlowSnapshot};
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
@@ -39,4 +39,45 @@ pub(super) async fn forward(
             payload: existing.payload,
         })
         .await
+}
+
+pub(super) async fn forward_if_matches(
+    state: &mut ProtocolUdpState,
+    chain_tasks: &mut JoinSet<ChainTask>,
+    proxy: &Proxy,
+    flow: &UdpFlowSnapshot,
+    snapshot: &ProtocolUdpFlowSnapshot,
+    payload: &[u8],
+) -> Option<Result<usize, FlowFailure>> {
+    let ProtocolUdpFlowSnapshot::Mieru {
+        username,
+        password,
+        relay_chain,
+    } = snapshot
+    else {
+        return None;
+    };
+
+    let upstream = flow
+        .outbound
+        .upstream()
+        .expect("protocol flow should have upstream");
+
+    Some(
+        forward(
+            state,
+            chain_tasks,
+            proxy,
+            flow,
+            ExistingFlow {
+                server: upstream.server,
+                port: upstream.port,
+                username,
+                password,
+                relay_chain: *relay_chain,
+                payload,
+            },
+        )
+        .await,
+    )
 }

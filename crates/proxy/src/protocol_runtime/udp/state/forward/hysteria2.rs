@@ -2,7 +2,7 @@ use tokio::task::JoinSet;
 
 use super::super::ProtocolUdpState;
 use crate::protocol_runtime::udp::h2_manager::model::H2SendExisting;
-use crate::protocol_runtime::udp::{ChainTask, FlowFailure};
+use crate::protocol_runtime::udp::{ChainTask, FlowFailure, ProtocolUdpFlowSnapshot};
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 
 pub(super) struct ExistingFlow<'a> {
@@ -33,4 +33,41 @@ pub(super) async fn forward(
             payload: existing.payload,
         })
         .await
+}
+
+pub(super) async fn forward_if_matches(
+    state: &mut ProtocolUdpState,
+    chain_tasks: &mut JoinSet<ChainTask>,
+    flow: &UdpFlowSnapshot,
+    snapshot: &ProtocolUdpFlowSnapshot,
+    payload: &[u8],
+) -> Option<Result<usize, FlowFailure>> {
+    let ProtocolUdpFlowSnapshot::Hysteria2 {
+        password,
+        client_fingerprint,
+    } = snapshot
+    else {
+        return None;
+    };
+
+    let upstream = flow
+        .outbound
+        .upstream()
+        .expect("protocol flow should have upstream");
+
+    Some(
+        forward(
+            state,
+            chain_tasks,
+            flow,
+            ExistingFlow {
+                server: upstream.server,
+                port: upstream.port,
+                password,
+                client_fingerprint: client_fingerprint.as_deref(),
+                payload,
+            },
+        )
+        .await,
+    )
 }

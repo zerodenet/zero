@@ -4,7 +4,7 @@ use super::super::ProtocolUdpState;
 use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use crate::protocol_runtime::udp::ss_manager::model::SsSendExisting;
 use crate::protocol_runtime::udp::{
-    ChainTask, FlowFailure, SendWithSnapshotRequest, UdpPacketPathCarrier,
+    ChainTask, FlowFailure, ProtocolUdpFlowSnapshot, SendWithSnapshotRequest, UdpPacketPathCarrier,
 };
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
@@ -64,4 +64,48 @@ pub(super) async fn forward(
             })
             .await
     }
+}
+
+pub(super) async fn forward_if_matches(
+    state: &mut ProtocolUdpState,
+    chain_tasks: &mut JoinSet<ChainTask>,
+    proxy: &Proxy,
+    flow: &UdpFlowSnapshot,
+    snapshot: &ProtocolUdpFlowSnapshot,
+    payload: &[u8],
+) -> Option<Result<usize, FlowFailure>> {
+    let ProtocolUdpFlowSnapshot::Shadowsocks {
+        password,
+        datagram_cache_key,
+        cipher_kind,
+        packet_path_carrier,
+    } = snapshot
+    else {
+        return None;
+    };
+
+    let upstream = flow
+        .outbound
+        .upstream()
+        .expect("protocol flow should have upstream");
+
+    Some(
+        forward(
+            state,
+            chain_tasks,
+            proxy,
+            flow,
+            ExistingFlow {
+                tag: flow.outbound.tag(),
+                server: upstream.server,
+                port: upstream.port,
+                password,
+                datagram_cache_key,
+                cipher_kind: *cipher_kind,
+                packet_path_carrier: packet_path_carrier.as_ref(),
+                payload,
+            },
+        )
+        .await,
+    )
 }

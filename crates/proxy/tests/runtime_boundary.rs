@@ -4210,10 +4210,20 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         "UdpFlowContext",
         "UdpPacketRef",
         ".send_with_snapshot(",
+        "ExistingFlow {",
+        "ProtocolUdpFlowSnapshot::Shadowsocks",
+        "ProtocolUdpFlowSnapshot::Hysteria2",
+        "ProtocolUdpFlowSnapshot::Trojan",
+        "ProtocolUdpFlowSnapshot::Mieru",
+        "datagram_cache_key",
+        "cipher_kind",
+        "client_fingerprint",
+        "relay_chain",
+        ".upstream()",
     ] {
         assert!(
             !forward.contains(forbidden),
-            "state/forward.rs should dispatch existing UDP flows and keep protocol handlers in state/forward/*.rs; found `{forbidden}`"
+            "state/forward.rs should delegate protocol UDP flow field extraction to state/forward/*.rs; found `{forbidden}`"
         );
     }
     for path in ["shadowsocks.rs", "hysteria2.rs", "trojan.rs", "mieru.rs"] {

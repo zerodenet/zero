@@ -88,6 +88,7 @@ Runtime modules depend on `ProtocolInventory` operations, not adapter trait obje
 
 UDP runtime flow snapshots use path categories rather than protocol variants. `runtime::udp_flow` records `Direct`, `Relay`, `Datagram`, and `StreamPacket` flow shape plus endpoint/session metadata. Protocol-specific snapshot data, packet-path carriers, parsed cipher values, and cache keys live under `protocol_runtime::udp`; `runtime::udp_dispatch` tracks externally managed protocol flows through neutral managed-flow state.
 The `runtime::udp_dispatch` root facade re-exports only generic dispatch result types (`FlowFailure`, `FlowStartResult`, `UdpCandidate`). Protocol-named UDP flow request models stay in their protocol flow submodules instead of being collected at the root facade.
+Existing protocol UDP flow forwarding keeps `protocol_runtime::udp::state::forward.rs` as a dispatch facade. Protocol-specific snapshot field extraction, upstream request shaping, and manager send request construction live in `state/forward/<protocol>.rs`, not in the forward facade.
 
 `runtime.rs` owns the `Proxy` shell and run loop. Control-plane handle details live in `runtime/handle.rs`, the spawned runtime handle lives in `runtime/running.rs`, and reload channel bridging lives in `runtime/reload.rs`.
 

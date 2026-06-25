@@ -15,6 +15,14 @@ use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
+fn protocol_forward_unavailable(stage: &'static str, message: &'static str) -> FlowFailure {
+    FlowFailure {
+        stage,
+        error: EngineError::Io(std::io::Error::other(message)),
+        upstream: None,
+    }
+}
+
 impl ProtocolUdpState {
     pub(crate) async fn forward_existing_protocol_flow(
         &mut self,
@@ -24,147 +32,47 @@ impl ProtocolUdpState {
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         let Some(snapshot) = flow.outbound.protocol_snapshot() else {
-            return Err(FlowFailure {
-                stage: "udp_protocol_forward",
-                error: EngineError::Io(std::io::Error::other(
-                    "direct and relay flows are handled by generic UDP dispatch",
-                )),
-                upstream: None,
-            });
+            return Err(protocol_forward_unavailable(
+                "udp_protocol_forward",
+                "direct and relay flows are handled by generic UDP dispatch",
+            ));
         };
 
-        match snapshot {
-            ProtocolUdpFlowSnapshot::Socks5 { .. } => Err(FlowFailure {
-                stage: "udp_protocol_forward",
-                error: EngineError::Io(std::io::Error::other(
-                    "SOCKS5 relay flows are handled by generic UDP dispatch",
-                )),
-                upstream: None,
-            }),
-            #[cfg(feature = "shadowsocks")]
-            ProtocolUdpFlowSnapshot::Shadowsocks {
-                password,
-                datagram_cache_key,
-                cipher_kind,
-                packet_path_carrier,
-            } => {
-                shadowsocks::forward(
-                    self,
-                    chain_tasks,
-                    proxy,
-                    flow,
-                    shadowsocks::ExistingFlow {
-                        tag: flow.outbound.tag(),
-                        server: flow
-                            .outbound
-                            .upstream()
-                            .expect("protocol flow should have upstream")
-                            .server,
-                        port: flow
-                            .outbound
-                            .upstream()
-                            .expect("protocol flow should have upstream")
-                            .port,
-                        password,
-                        datagram_cache_key,
-                        cipher_kind: *cipher_kind,
-                        packet_path_carrier: packet_path_carrier.as_ref(),
-                        payload,
-                    },
-                )
-                .await
-            }
-            #[cfg(feature = "hysteria2")]
-            ProtocolUdpFlowSnapshot::Hysteria2 {
-                password,
-                client_fingerprint,
-            } => {
-                hysteria2::forward(
-                    self,
-                    chain_tasks,
-                    flow,
-                    hysteria2::ExistingFlow {
-                        server: flow
-                            .outbound
-                            .upstream()
-                            .expect("protocol flow should have upstream")
-                            .server,
-                        port: flow
-                            .outbound
-                            .upstream()
-                            .expect("protocol flow should have upstream")
-                            .port,
-                        password,
-                        client_fingerprint: client_fingerprint.as_deref(),
-                        payload,
-                    },
-                )
-                .await
-            }
-            #[cfg(feature = "trojan")]
-            ProtocolUdpFlowSnapshot::Trojan {
-                password,
-                sni,
-                insecure,
-                client_fingerprint,
-                relay_chain,
-            } => {
-                trojan::forward(
-                    self,
-                    chain_tasks,
-                    proxy,
-                    flow,
-                    trojan::ExistingFlow {
-                        server: flow
-                            .outbound
-                            .upstream()
-                            .expect("protocol flow should have upstream")
-                            .server,
-                        port: flow
-                            .outbound
-                            .upstream()
-                            .expect("protocol flow should have upstream")
-                            .port,
-                        password,
-                        sni: sni.as_deref(),
-                        insecure: *insecure,
-                        client_fingerprint: client_fingerprint.as_deref(),
-                        relay_chain: *relay_chain,
-                        payload,
-                    },
-                )
-                .await
-            }
-            #[cfg(feature = "mieru")]
-            ProtocolUdpFlowSnapshot::Mieru {
-                username,
-                password,
-                relay_chain,
-            } => {
-                mieru::forward(
-                    self,
-                    chain_tasks,
-                    proxy,
-                    flow,
-                    mieru::ExistingFlow {
-                        server: flow
-                            .outbound
-                            .upstream()
-                            .expect("protocol flow should have upstream")
-                            .server,
-                        port: flow
-                            .outbound
-                            .upstream()
-                            .expect("protocol flow should have upstream")
-                            .port,
-                        username,
-                        password,
-                        relay_chain: *relay_chain,
-                        payload,
-                    },
-                )
-                .await
-            }
+        if let ProtocolUdpFlowSnapshot::Socks5 { .. } = snapshot {
+            return Err(protocol_forward_unavailable(
+                "udp_protocol_forward",
+                "SOCKS5 relay flows are handled by generic UDP dispatch",
+            ));
         }
+
+        #[cfg(feature = "shadowsocks")]
+        if let Some(result) =
+            shadowsocks::forward_if_matches(self, chain_tasks, proxy, flow, snapshot, payload).await
+        {
+            return result;
+        }
+        #[cfg(feature = "hysteria2")]
+        if let Some(result) =
+            hysteria2::forward_if_matches(self, chain_tasks, flow, snapshot, payload).await
+        {
+            return result;
+        }
+        #[cfg(feature = "trojan")]
+        if let Some(result) =
+            trojan::forward_if_matches(self, chain_tasks, proxy, flow, snapshot, payload).await
+        {
+            return result;
+        }
+        #[cfg(feature = "mieru")]
+        if let Some(result) =
+            mieru::forward_if_matches(self, chain_tasks, proxy, flow, snapshot, payload).await
+        {
+            return result;
+        }
+
+        Err(protocol_forward_unavailable(
+            "udp_protocol_forward",
+            "protocol UDP flow snapshot has no compiled forward handler",
+        ))
     }
 }
