@@ -120,6 +120,10 @@ impl AsyncWrite for MuxStreamRelay {
 
 // ── Crypto helpers ──
 
+pub fn new_mux_crypto(uuid: &[u8; 16]) -> Option<Arc<Mutex<MuxCrypto>>> {
+    Some(Arc::new(Mutex::new(MuxCrypto::new(uuid))))
+}
+
 /// Encrypt a MUX frame payload.
 /// `is_c2s`: true for client→server (upload), false for server→client.
 pub fn encrypt_mux_payload(

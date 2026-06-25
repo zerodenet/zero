@@ -2181,6 +2181,8 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         "vless::encode_new_stream",
         "vless::encode_data_frame",
         "vless::encode_end_frame",
+        "vless::MuxCrypto",
+        "MuxCrypto::new",
     ] {
         assert!(
             !root.contains(forbidden),
@@ -2191,6 +2193,7 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         "encode_mux_new_stream",
         "encode_mux_data_frame",
         "encode_mux_end_frame",
+        "new_mux_crypto",
     ] {
         assert!(
             root.contains(required),

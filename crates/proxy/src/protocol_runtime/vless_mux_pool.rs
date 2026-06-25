@@ -22,7 +22,7 @@ pub(crate) use model::MuxConnectionPool;
 use model::VlessMuxOpenRequest;
 use vless::mux_pool::{
     decrypt_mux_payload, encode_mux_data_frame, encode_mux_end_frame, encode_mux_new_stream,
-    encrypt_mux_payload, MuxPoolConn, MuxStreamRelay, PoolKey, TransportKey,
+    encrypt_mux_payload, new_mux_crypto, MuxPoolConn, MuxStreamRelay, PoolKey, TransportKey,
 };
 
 impl std::fmt::Debug for MuxConnectionPool {
@@ -282,8 +282,7 @@ impl MuxConnectionPool {
 
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
-        let crypto: Option<Arc<Mutex<vless::MuxCrypto>>> =
-            Some(Arc::new(Mutex::new(vless::MuxCrypto::new(&key.uuid))));
+        let crypto = new_mux_crypto(&key.uuid);
 
         // Write relay: frames -?TCP
         tokio::spawn(async move {
