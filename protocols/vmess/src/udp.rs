@@ -5,6 +5,12 @@ use crate::outbound::{VmessOutbound, VmessOutboundSession};
 use crate::shared::{parse_address_from_bytes, write_address, VmessCipher, CMD_UDP};
 use crate::stream::VmessAeadStream;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VmessUdpPayloadMode {
+    VmessPacket,
+    RawDatagram,
+}
+
 /// Target parameters for a VMess UDP packet tunnel over a connected stream.
 #[derive(Debug, Clone, Copy)]
 pub struct VmessUdpPacketTunnelTarget<'a> {
@@ -113,6 +119,29 @@ pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<
     packet.extend_from_slice(&(body.len() as u16).to_be_bytes());
     packet.extend_from_slice(&body);
     Ok(packet)
+}
+
+pub fn encode_udp_response(
+    mode: VmessUdpPayloadMode,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    match mode {
+        VmessUdpPayloadMode::VmessPacket => build_udp_packet(target, port, payload),
+        VmessUdpPayloadMode::RawDatagram => Ok(payload.to_vec()),
+    }
+}
+
+pub fn encode_mux_udp_response(
+    mux_session_id: u16,
+    mode: VmessUdpPayloadMode,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    let payload = encode_udp_response(mode, target, port, payload)?;
+    crate::mux::encode_keep_stream(mux_session_id, &payload)
 }
 
 pub fn parse_udp_packet(packet: &[u8]) -> Result<VmessUdpPacket, Error> {

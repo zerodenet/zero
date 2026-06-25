@@ -2174,6 +2174,28 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
 }
 
 #[test]
+fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
+    let helper = read("src/inbound/vmess/helpers.rs");
+    let protocol_udp = manifest_dir()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root")
+        .join("protocols/vmess/src/udp.rs");
+    let protocol_udp = fs::read_to_string(protocol_udp).expect("read vmess protocol udp source");
+
+    assert!(
+        !helper.contains("vmess::build_udp_packet"),
+        "VMess inbound helper should not build protocol UDP response packets directly"
+    );
+    for required in ["encode_udp_response", "encode_mux_udp_response"] {
+        assert!(
+            protocol_udp.contains(required) && helper.contains(&format!("vmess::{required}")),
+            "VMess UDP response encoding should be owned by protocols/vmess `{required}`"
+        );
+    }
+}
+
+#[test]
 fn inbound_vless_mux_task_model_lives_outside_mux_root() {
     let root = read("src/inbound/vless/mux.rs");
     let model = read("src/inbound/vless/model.rs");

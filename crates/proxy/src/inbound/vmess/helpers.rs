@@ -11,6 +11,15 @@ pub(crate) enum VmessUdpPayloadMode {
     RawDatagram,
 }
 
+impl VmessUdpPayloadMode {
+    fn protocol_mode(self) -> vmess::VmessUdpPayloadMode {
+        match self {
+            Self::Unknown | Self::VmessPacket => vmess::VmessUdpPayloadMode::VmessPacket,
+            Self::RawDatagram => vmess::VmessUdpPayloadMode::RawDatagram,
+        }
+    }
+}
+
 pub(crate) fn encode_vmess_mux_udp_response(
     mux_session_id: u16,
     mode: VmessUdpPayloadMode,
@@ -18,13 +27,7 @@ pub(crate) fn encode_vmess_mux_udp_response(
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
-    match mode {
-        VmessUdpPayloadMode::Unknown | VmessUdpPayloadMode::VmessPacket => {
-            let packet = vmess::build_udp_packet(target, port, payload)?;
-            vmess::encode_mux_keep_stream(mux_session_id, &packet)
-        }
-        VmessUdpPayloadMode::RawDatagram => vmess::encode_mux_keep_stream(mux_session_id, payload),
-    }
+    vmess::encode_mux_udp_response(mux_session_id, mode.protocol_mode(), target, port, payload)
 }
 
 pub(crate) fn encode_vmess_udp_response(
@@ -33,12 +36,7 @@ pub(crate) fn encode_vmess_udp_response(
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
-    match mode {
-        VmessUdpPayloadMode::Unknown | VmessUdpPayloadMode::VmessPacket => {
-            vmess::build_udp_packet(target, port, payload)
-        }
-        VmessUdpPayloadMode::RawDatagram => Ok(payload.to_vec()),
-    }
+    vmess::encode_udp_response(mode.protocol_mode(), target, port, payload)
 }
 
 pub(crate) fn wrap_vmess_client(

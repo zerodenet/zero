@@ -112,6 +112,59 @@ fn udp_packet_framing_roundtrips_domain_target() {
     assert_eq!(decoded.payload, payload);
 }
 
+#[test]
+fn udp_response_encoding_wraps_packet_mode_and_preserves_raw_mode() {
+    let target = Address::Domain("example.com".to_owned());
+    let packet = vmess::encode_udp_response(
+        vmess::VmessUdpPayloadMode::VmessPacket,
+        &target,
+        5353,
+        b"dns",
+    )
+    .expect("encode packet response");
+    let decoded = vmess::parse_udp_packet(&packet).expect("decode packet response");
+    assert_eq!(decoded.target, target);
+    assert_eq!(decoded.port, 5353);
+    assert_eq!(decoded.payload, b"dns");
+
+    let raw = vmess::encode_udp_response(
+        vmess::VmessUdpPayloadMode::RawDatagram,
+        &Address::Ipv4([127, 0, 0, 1]),
+        53,
+        b"raw",
+    )
+    .expect("encode raw response");
+    assert_eq!(raw, b"raw");
+}
+
+#[tokio::test]
+async fn mux_udp_response_encoding_wraps_packet_mode_before_mux_frame() {
+    let target = Address::Ipv4([8, 8, 8, 8]);
+    let frame = vmess::encode_mux_udp_response(
+        7,
+        vmess::VmessUdpPayloadMode::VmessPacket,
+        &target,
+        53,
+        b"query",
+    )
+    .expect("encode mux udp response");
+    let (client, server) = tokio::io::duplex(1024);
+    let write = tokio::spawn(async move {
+        let mut client = client;
+        client.write_all(&frame).await.expect("write mux frame");
+    });
+    let mut server = TestSocket(server);
+    let decoded = vmess::read_mux_frame(&mut server)
+        .await
+        .expect("decode mux frame");
+    assert_eq!(decoded.session_id, 7);
+    write.await.expect("writer task");
+    let packet = vmess::parse_udp_packet(&decoded.payload).expect("decode mux udp payload");
+    assert_eq!(packet.target, target);
+    assert_eq!(packet.port, 53);
+    assert_eq!(packet.payload, b"query");
+}
+
 async fn roundtrip_cipher(cipher: VmessCipher) {
     let uuid = parse_uuid("11111111-2222-3333-4444-555555555555").expect("uuid");
     let (client_io, server_io) = tokio::io::duplex(128 * 1024);
