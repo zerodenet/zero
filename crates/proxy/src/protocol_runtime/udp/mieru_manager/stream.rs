@@ -70,15 +70,12 @@ fn spawn_recv_task(
                     Ok((segment, consumed)) => {
                         raw.drain(..consumed);
                         if !segment.payload.is_empty() {
-                            if let Ok(unwrapped) = codec::decode_associate_packet(&segment.payload)
-                            {
-                                if let Ok(packet) = socks5::parse_udp_packet(&unwrapped.payload) {
-                                    if recv_tx
-                                        .send((packet.target, packet.port, packet.payload))
-                                        .is_err()
-                                    {
-                                        return;
-                                    }
+                            if let Ok(packet) = codec::decode_packet(&segment.payload) {
+                                if recv_tx
+                                    .send((packet.target, packet.port, packet.payload))
+                                    .is_err()
+                                {
+                                    return;
                                 }
                             }
                         }

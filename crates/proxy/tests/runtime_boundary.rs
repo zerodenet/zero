@@ -4847,22 +4847,29 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
 #[test]
 fn mieru_udp_packet_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let codec = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/codec.rs");
+    let codec = read("src/protocol_runtime/udp/mieru_manager/codec.rs");
 
     for forbidden in [
         "UdpPacketFraming",
         "MieruUdpAssociatePacket",
         "fn encode_associate_packet",
         "fn decode_associate_packet",
+        "socks5::build_udp_packet",
+        "socks5::parse_udp_packet",
     ] {
         assert!(
             !manager.contains(forbidden),
-            "mieru_manager.rs should keep associate packet codec details in mieru_manager/codec.rs; found `{forbidden}`"
+            "mieru_manager.rs should not own Mieru associate packet codec details; found `{forbidden}`"
+        );
+        assert!(
+            !codec.contains(forbidden),
+            "mieru_manager/codec.rs should delegate Mieru UDP packet framing to protocols/mieru; found `{forbidden}`"
         );
     }
     assert!(
-        codec.exists(),
-        "Mieru UDP packet codec should live in mieru_manager/codec.rs"
+        codec.contains("mieru::encode_udp_response")
+            && codec.contains("mieru::decode_inbound_udp_packet"),
+        "Mieru UDP packet codec should delegate encode/decode to protocols/mieru"
     );
 }
 
