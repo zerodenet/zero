@@ -9,8 +9,9 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
-    BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
+    BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
+    OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpAdapterContext,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -55,13 +56,6 @@ impl ProtocolAdapter for Hysteria2Adapter {
         self.build_udp_packet_path_impl(leaf).await
     }
 
-    async fn bind_inbound(
-        &self,
-        inbound: &InboundConfig,
-        source_dir: Option<&std::path::Path>,
-    ) -> Result<BoundInbound, EngineError> {
-        self.bind_inbound_impl(inbound, source_dir).await
-    }
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -73,6 +67,19 @@ impl ProtocolAdapter for Hysteria2Adapter {
         self.start_udp_flow_impl(dispatch, session, leaf, payload)
             .await
     }
+}
+
+#[cfg(feature = "hysteria2")]
+#[async_trait]
+impl InboundListenerCapability for Hysteria2Adapter {
+    async fn bind_inbound(
+        &self,
+        inbound: &InboundConfig,
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<BoundInbound, EngineError> {
+        self.bind_inbound_impl(inbound, source_dir).await
+    }
+
     fn spawn_inbound(
         &self,
         ctx: InboundAdapterContext<'_>,

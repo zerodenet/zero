@@ -46,20 +46,26 @@ pub(crate) trait ProtocolSupportCapability: ProtocolMetadata {
 
 #[async_trait]
 pub(crate) trait InboundListenerCapability {
+    /// Bind the listener socket eagerly so port-in-use errors surface before
+    /// the proxy announces "started".
     async fn bind_inbound(
         &self,
         inbound: &InboundConfig,
-        source_dir: Option<&std::path::Path>,
-    ) -> Result<BoundInbound, EngineError>;
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<BoundInbound, EngineError> {
+        super::defaults::bind_tcp_inbound(inbound).await
+    }
 
+    /// Spawn the inbound accept loop for `inbound` into `listeners`.
     fn spawn_inbound(
         &self,
-        ctx: InboundAdapterContext<'_>,
-        inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    );
+        _ctx: InboundAdapterContext<'_>,
+        _inbound: InboundConfig,
+        _bound: BoundInbound,
+        _shutdown_rx: tokio::sync::watch::Receiver<bool>,
+        _listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
+    ) {
+    }
 }
 
 #[async_trait]
@@ -164,31 +170,6 @@ pub(crate) trait UdpPacketPathCapability {
         &self,
         leaf: &ResolvedLeafOutbound<'a>,
     ) -> Option<crate::protocol_runtime::udp::UdpDatagramSource<'a>>;
-}
-
-#[async_trait]
-impl<T> InboundListenerCapability for T
-where
-    T: ProtocolAdapter + ?Sized,
-{
-    async fn bind_inbound(
-        &self,
-        inbound: &InboundConfig,
-        source_dir: Option<&std::path::Path>,
-    ) -> Result<BoundInbound, EngineError> {
-        ProtocolAdapter::bind_inbound(self, inbound, source_dir).await
-    }
-
-    fn spawn_inbound(
-        &self,
-        ctx: InboundAdapterContext<'_>,
-        inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        ProtocolAdapter::spawn_inbound(self, ctx, inbound, bound, shutdown_rx, listeners);
-    }
 }
 
 #[async_trait]

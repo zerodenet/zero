@@ -1,6 +1,6 @@
 /// A pre-bound inbound listener: TCP or QUIC.
 ///
-/// Produced by [`crate::protocol_adapter::ProtocolAdapter::bind_inbound`]
+/// Produced by [`crate::protocol_adapter::InboundListenerCapability::bind_inbound`]
 /// before the accept loop spawns, so port conflicts surface immediately via
 /// `?` rather than surfacing later through `JoinSet::join_next()`. The bind
 /// logic stays owned by the adapter instead of leaking protocol-private fields

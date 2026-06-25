@@ -2,32 +2,17 @@ use std::fmt;
 
 use async_trait::async_trait;
 
-use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use super::{defaults, BoundInbound, InboundAdapterContext, UdpAdapterContext};
+use super::defaults;
+use super::UdpAdapterContext;
 /// A protocol adapter registered in the proxy.
 ///
 /// Implementations are behind `#[cfg(feature = "...")]` gates so only
 /// compiled-in protocols appear in the registry.
 #[async_trait]
 pub(crate) trait ProtocolAdapter: Send + Sync + fmt::Debug {
-    /// Bind the listener socket for `config` eagerly so port-in-use
-    /// errors surface before the proxy announces "started".
-    ///
-    /// Defaults to a plain TCP bind on the listen address. QUIC-based
-    /// protocols (VLESS/QUIC, Hysteria2) override to create a QUIC endpoint,
-    /// reading their own cert/key config - the runtime never touches those
-    /// fields.
-    async fn bind_inbound(
-        &self,
-        inbound: &InboundConfig,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<BoundInbound, EngineError> {
-        defaults::bind_tcp_inbound(inbound).await
-    }
-
     /// Start a UDP outbound flow for the resolved leaf.
     ///
     /// The adapter extracts its own variant from `leaf` and drives its
@@ -47,24 +32,6 @@ pub(crate) trait ProtocolAdapter: Send + Sync + fmt::Debug {
         crate::runtime::udp_dispatch::FlowFailure,
     > {
         Err(defaults::udp_outbound_unsupported())
-    }
-
-    /// Spawn the inbound accept loop for `inbound` into `listeners`.
-    ///
-    /// The adapter owns the full inbound lifecycle from bind to run: it clones
-    /// the proxy, extracts the listener from `bound` (calling `into_tcp()` for
-    /// TCP-only protocols, keeping QUIC for VLESS/Hysteria2), and spawns its
-    /// `run_<protocol>_listener_with_bound` task. The runtime dispatches via
-    /// [`ProtocolRegistry::find_inbound`] instead of matching on the protocol
-    /// enum. Default is a no-op (inbound-only adapters override).
-    fn spawn_inbound(
-        &self,
-        _ctx: InboundAdapterContext<'_>,
-        _inbound: InboundConfig,
-        _bound: BoundInbound,
-        _shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        _listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
     }
 
     /// Whether the UDP relay chain final hop needs the two-stream XHTTP path.

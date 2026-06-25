@@ -7,8 +7,9 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::common::direct_leaf_runtime;
 use crate::protocol_adapter::{
-    BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
+    BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
+    OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpAdapterContext,
 };
 use crate::protocol_capability::protocol_descriptor;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -35,6 +36,9 @@ impl ProtocolAdapter for DirectAdapter {
         self.start_udp_flow_impl(dispatch, ctx.proxy(), session, leaf, payload)
             .await
     }
+}
+
+impl InboundListenerCapability for DirectAdapter {
     fn spawn_inbound(
         &self,
         ctx: InboundAdapterContext<'_>,

@@ -3,8 +3,8 @@ use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::protocol_adapter::{
-    BoundInbound, InboundAdapterContext, ProtocolAdapter, ProtocolSupportCapability,
-    TcpOutboundCapability,
+    BoundInbound, InboundAdapterContext, InboundListenerCapability, ProtocolAdapter,
+    ProtocolSupportCapability, TcpOutboundCapability,
 };
 
 #[cfg(feature = "http_connect")]
@@ -15,7 +15,10 @@ mod inbound;
 pub(crate) struct HttpConnectAdapter;
 
 #[cfg(feature = "http_connect")]
-impl ProtocolAdapter for HttpConnectAdapter {
+impl ProtocolAdapter for HttpConnectAdapter {}
+
+#[cfg(feature = "http_connect")]
+impl InboundListenerCapability for HttpConnectAdapter {
     fn spawn_inbound(
         &self,
         ctx: InboundAdapterContext<'_>,

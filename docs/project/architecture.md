@@ -54,7 +54,8 @@
 
 ### Adapter dispatch boundary
 
-`ProtocolAdapter` is the compatibility runtime dispatch boundary for inbound bind/spawn and UDP establishment.
+`ProtocolAdapter` is the compatibility runtime dispatch boundary for UDP establishment.
+Inbound bind/spawn dispatch is split out into explicit `InboundListenerCapability` implementations on each registered adapter.
 TCP outbound dispatch is split out into explicit `TcpOutboundCapability` implementations on each registered adapter.
 Focused capability traits (`ProtocolSupportCapability`, `InboundListenerCapability`, `TcpOutboundCapability`, `UdpFlowCapability`, and `UdpPacketPathCapability`) sit in front of the remaining compatibility trait.
 Metadata and feature/support checks live in explicit `ProtocolSupportCapability` implementations, not on the monolithic adapter trait.

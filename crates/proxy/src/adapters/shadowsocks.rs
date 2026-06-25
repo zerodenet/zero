@@ -9,8 +9,9 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
-    BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
+    BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
+    OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpAdapterContext,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -70,6 +71,10 @@ impl ProtocolAdapter for ShadowsocksAdapter {
         self.start_udp_flow_impl(dispatch, ctx.proxy(), session, leaf, payload)
             .await
     }
+}
+
+#[cfg(feature = "shadowsocks")]
+impl InboundListenerCapability for ShadowsocksAdapter {
     fn spawn_inbound(
         &self,
         ctx: InboundAdapterContext<'_>,

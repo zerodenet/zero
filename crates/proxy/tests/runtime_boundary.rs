@@ -3224,7 +3224,6 @@ fn protocol_adapter_capabilities_are_split_by_responsibility() {
     );
     for expected in [
         "impl<T> RegisteredProtocolCapability for T",
-        "impl<T> InboundListenerCapability for T",
         "impl<T> UdpFlowCapability for T",
         "impl<T> UdpPacketPathCapability for T",
     ] {
@@ -3236,6 +3235,10 @@ fn protocol_adapter_capabilities_are_split_by_responsibility() {
     assert!(
         !capability.contains("impl<T> TcpOutboundCapability for T"),
         "TCP outbound dispatch should use explicit TcpOutboundCapability impls, not a ProtocolAdapter blanket shim"
+    );
+    assert!(
+        !capability.contains("impl<T> InboundListenerCapability for T"),
+        "inbound listener dispatch should use explicit InboundListenerCapability impls, not a ProtocolAdapter blanket shim"
     );
 }
 
@@ -3323,6 +3326,51 @@ fn tcp_outbound_capability_is_not_on_monolithic_adapter() {
 }
 
 #[test]
+fn inbound_listener_capability_is_not_on_monolithic_adapter() {
+    let adapter = read("src/protocol_adapter/adapter.rs");
+    let capability = read("src/protocol_adapter/capability.rs");
+
+    for forbidden in ["async fn bind_inbound", "fn spawn_inbound"] {
+        assert!(
+            !adapter.contains(forbidden),
+            "inbound listener capability should not remain on ProtocolAdapter surface `{forbidden}`"
+        );
+    }
+
+    for forbidden in [
+        "ProtocolAdapter::bind_inbound",
+        "ProtocolAdapter::spawn_inbound",
+    ] {
+        assert!(
+            !capability.contains(forbidden),
+            "inbound listener capability should be implemented explicitly, not through ProtocolAdapter surface `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn registered_adapters_implement_inbound_listener_capability_explicitly() {
+    for (source, adapter) in [
+        ("src/adapters/direct.rs", "DirectAdapter"),
+        ("src/adapters/http_connect.rs", "HttpConnectAdapter"),
+        ("src/adapters/hysteria2.rs", "Hysteria2Adapter"),
+        ("src/adapters/mieru.rs", "MieruAdapter"),
+        ("src/adapters/mixed.rs", "MixedAdapter"),
+        ("src/adapters/shadowsocks.rs", "ShadowsocksAdapter"),
+        ("src/adapters/socks5.rs", "Socks5Adapter"),
+        ("src/adapters/trojan.rs", "TrojanAdapter"),
+        ("src/adapters/vless.rs", "VlessAdapter"),
+        ("src/adapters/vmess.rs", "VmessAdapter"),
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains(&format!("impl InboundListenerCapability for {adapter}")),
+            "{source} should explicitly implement InboundListenerCapability for {adapter}"
+        );
+    }
+}
+
+#[test]
 fn registered_adapters_implement_tcp_outbound_capability_explicitly() {
     for (source, adapter) in [
         ("src/adapters/direct.rs", "DirectAdapter"),
@@ -3379,12 +3427,17 @@ fn protocol_adapter_capabilities_use_contexts_not_proxy() {
         );
     }
 
-    for expected in ["InboundAdapterContext<'_>", "UdpAdapterContext<'_>"] {
+    for expected in ["UdpAdapterContext<'_>"] {
         assert!(
             adapter.contains(expected) && capability.contains(expected),
             "adapter dispatch traits should use narrow context `{expected}`"
         );
     }
+    assert!(
+        !adapter.contains("InboundAdapterContext<'_>")
+            && capability.contains("InboundAdapterContext<'_>"),
+        "inbound listener context should live on InboundListenerCapability, not ProtocolAdapter"
+    );
     assert!(
         !adapter.contains("OutboundAdapterContext<'_>")
             && capability.contains("OutboundAdapterContext<'_>"),

@@ -5,8 +5,8 @@ use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::protocol_adapter::{
-    BoundInbound, InboundAdapterContext, ProtocolAdapter, ProtocolSupportCapability,
-    TcpOutboundCapability,
+    BoundInbound, InboundAdapterContext, InboundListenerCapability, ProtocolAdapter,
+    ProtocolSupportCapability, TcpOutboundCapability,
 };
 use crate::protocol_capability::protocol_descriptor;
 
@@ -19,7 +19,10 @@ pub(crate) struct MixedAdapter;
 
 #[cfg(feature = "mixed")]
 #[async_trait]
-impl ProtocolAdapter for MixedAdapter {
+impl ProtocolAdapter for MixedAdapter {}
+
+#[cfg(feature = "mixed")]
+impl InboundListenerCapability for MixedAdapter {
     fn spawn_inbound(
         &self,
         ctx: InboundAdapterContext<'_>,

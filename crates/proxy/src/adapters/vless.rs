@@ -7,8 +7,9 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
-    BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
+    BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
+    OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpAdapterContext,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -28,13 +29,6 @@ pub(crate) struct VlessAdapter;
 #[cfg(feature = "vless")]
 #[async_trait]
 impl ProtocolAdapter for VlessAdapter {
-    async fn bind_inbound(
-        &self,
-        inbound: &InboundConfig,
-        source_dir: Option<&std::path::Path>,
-    ) -> Result<BoundInbound, EngineError> {
-        self.bind_inbound_impl(inbound, source_dir).await
-    }
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -45,16 +39,6 @@ impl ProtocolAdapter for VlessAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         self.start_udp_flow_impl(dispatch, ctx.proxy(), session, leaf, payload)
             .await
-    }
-    fn spawn_inbound(
-        &self,
-        ctx: InboundAdapterContext<'_>,
-        inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
     }
     fn udp_relay_needs_two_streams(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         self.udp_relay_needs_two_streams_impl(leaf)
@@ -81,6 +65,28 @@ impl ProtocolAdapter for VlessAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         self.start_udp_relay_final_hop_impl(dispatch, ctx.proxy(), session, carrier, leaf, payload)
             .await
+    }
+}
+
+#[cfg(feature = "vless")]
+#[async_trait]
+impl InboundListenerCapability for VlessAdapter {
+    async fn bind_inbound(
+        &self,
+        inbound: &InboundConfig,
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<BoundInbound, EngineError> {
+        self.bind_inbound_impl(inbound, source_dir).await
+    }
+    fn spawn_inbound(
+        &self,
+        ctx: InboundAdapterContext<'_>,
+        inbound: InboundConfig,
+        bound: BoundInbound,
+        shutdown_rx: tokio::sync::watch::Receiver<bool>,
+        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
+    ) {
+        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
     }
 }
 
