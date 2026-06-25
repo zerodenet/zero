@@ -125,15 +125,10 @@ impl VmessMuxConnectionPool {
         )
         .await?;
 
-        let mut metered = MeteredStream::new(stream);
-        let mux_target = vmess::mux_cool_session();
-        let mux_session = vmess::VmessOutbound
-            .establish_tcp_session(&mut metered, &mux_target, &key.id, request.cipher)
-            .await?;
-        let stream = TcpRelayStream::new(vmess::VmessAeadStream::outbound(
-            metered.into_inner(),
-            mux_session,
-        )?);
+        let metered = MeteredStream::new(stream);
+        let stream = TcpRelayStream::new(
+            vmess::establish_mux_outbound_stream(metered, &key.id, request.cipher).await?,
+        );
 
         let (mut reader, mut writer) = tokio::io::split(stream);
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();

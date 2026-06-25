@@ -8,7 +8,9 @@ use tokio::sync::mpsc;
 use zero_core::{Address, Error, Network, Session};
 use zero_traits::AsyncSocket;
 
+use crate::outbound::VmessOutbound;
 use crate::shared::{parse_address_from_bytes, read_exact, write_address};
+use crate::stream::VmessAeadStream;
 
 pub const MUX_MAX_META_LEN: usize = 512;
 pub const MUX_MAX_DATA_LEN: usize = 16 * 1024;
@@ -335,6 +337,20 @@ pub fn mux_stream_with_network(
     active: Arc<Mutex<usize>>,
 ) -> VmessMuxStream {
     VmessMuxStream::new_with_network(session_id, target, port, network, write_tx, read_rx, active)
+}
+
+pub async fn establish_mux_outbound_stream<S>(
+    mut stream: S,
+    uuid: &[u8; 16],
+    cipher: crate::shared::VmessCipher,
+) -> Result<VmessAeadStream<S>, Error>
+where
+    S: AsyncSocket,
+{
+    let mux_session = VmessOutbound
+        .establish_tcp_session(&mut stream, &mux_cool_session(), uuid, cipher)
+        .await?;
+    VmessAeadStream::outbound(stream, mux_session)
 }
 
 impl Drop for VmessMuxStream {

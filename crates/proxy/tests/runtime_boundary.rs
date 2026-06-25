@@ -2144,6 +2144,21 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         root.contains("vmess::mux_stream_with_network"),
         "VMess mux pool runtime should call the protocol mux stream helper"
     );
+    for forbidden in [
+        "vmess::mux_cool_session",
+        "vmess::VmessOutbound",
+        "VmessAeadStream::outbound",
+        "establish_tcp_session",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "VMess mux pool runtime should use the protocol mux connection helper instead of `{forbidden}`"
+        );
+    }
+    assert!(
+        root.contains("vmess::establish_mux_outbound_stream"),
+        "VMess mux pool runtime should call the protocol mux connection helper"
+    );
 }
 
 #[test]
