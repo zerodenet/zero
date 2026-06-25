@@ -2319,6 +2319,36 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
 }
 
 #[test]
+fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
+    let inbound = read("src/inbound/mieru.rs");
+    let protocol_udp = manifest_dir()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root")
+        .join("protocols/mieru/src/udp.rs");
+    let protocol_udp = fs::read_to_string(protocol_udp).expect("read mieru protocol udp source");
+
+    for forbidden in [
+        "mieru::unwrap_udp_associate",
+        "mieru::wrap_udp_associate",
+        "socks5::parse_udp_packet",
+        "socks5::build_udp_packet",
+    ] {
+        assert!(
+            !inbound.contains(forbidden),
+            "inbound/mieru.rs should delegate Mieru UDP packet framing to protocols/mieru; found `{forbidden}`"
+        );
+    }
+
+    for required in ["decode_inbound_udp_packet", "encode_udp_response"] {
+        assert!(
+            protocol_udp.contains(required) && inbound.contains(&format!("mieru::{required}")),
+            "Mieru inbound UDP packet framing should be owned by protocols/mieru `{required}`"
+        );
+    }
+}
+
+#[test]
 fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
     let dispatch = read("src/runtime/udp_dispatch/socks5_flow.rs");
     let forward = read("src/runtime/udp_dispatch/forward.rs");
