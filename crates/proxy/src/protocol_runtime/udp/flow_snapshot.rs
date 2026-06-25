@@ -41,6 +41,21 @@ pub(crate) struct Socks5RelayAuth<'a> {
 }
 
 impl ProtocolUdpFlowSnapshot {
+    #[cfg(feature = "shadowsocks")]
+    pub(crate) fn with_packet_path_carrier(
+        mut self,
+        carrier: Option<UdpPacketPathCarrier>,
+    ) -> Self {
+        if let Self::Shadowsocks {
+            packet_path_carrier,
+            ..
+        } = &mut self
+        {
+            *packet_path_carrier = carrier;
+        }
+        self
+    }
+
     pub(crate) fn socks5_relay_auth(&self) -> Option<Socks5RelayAuth<'_>> {
         match self {
             Self::Socks5 { username, password } => Some(Socks5RelayAuth {

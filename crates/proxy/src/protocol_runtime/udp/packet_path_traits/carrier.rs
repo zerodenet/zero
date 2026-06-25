@@ -3,6 +3,8 @@ use std::sync::Arc;
 use zero_core::Address;
 use zero_engine::EngineError;
 
+use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
+
 /// Datagram codec for encoding/decoding inner protocol datagrams.
 pub(crate) use zero_traits::DatagramCodec;
 
@@ -43,8 +45,7 @@ pub(crate) struct UdpDatagramSource<'a> {
     pub(crate) tag: &'a str,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) password: &'a str,
     pub(crate) datagram_cache_key: String,
-    pub(crate) cipher_kind: shadowsocks::CipherKind,
+    pub(crate) protocol_snapshot: ProtocolUdpFlowSnapshot,
     pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 }

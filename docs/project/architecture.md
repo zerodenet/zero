@@ -96,6 +96,7 @@ TCP runtime code does not unpack protocol-named `EstablishedTcpOutbound` variant
 
 `UdpPacketPathCapability` owns packet-path carrier descriptor/snapshot construction, carrier build, and datagram-source classification. UDP packet-path cache identity is also adapter-owned. Packet-path runtime may store carrier `cache_key`, datagram `datagram_cache_key`, and parsed protocol values such as `CipherKind`; it must not reconstruct cache identity from raw protocol-private config strings such as Shadowsocks cipher names.
 Packet-path entry build logic consumes datagram codecs supplied by `UdpDatagramSource`; generic packet-path entry code must not construct protocol-specific datagram codecs directly.
+Packet-path datagram sources carry their protocol flow snapshot. Packet-path state may attach the cached carrier to that snapshot but must not construct protocol-named snapshots directly.
 
 Protocol stream/datagram codecs own protocol crypto/framing state. For example, Mieru inbound data-phase encryption/decryption lives in `protocols/mieru::MieruInboundDataCodec`, and Shadowsocks inbound UDP decode/replay/response encoding lives in `protocols/shadowsocks::ShadowsocksInboundUdpCodec`; `zero-proxy` only wraps those codecs as Tokio stream/socket adapters and must not hold their cipher/session primitives or build/parse protocol frames directly.
 

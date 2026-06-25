@@ -4248,6 +4248,7 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
 #[test]
 fn protocol_udp_packet_path_facade_lives_outside_state_root() {
     let state = read("src/protocol_runtime/udp/state.rs");
+    let packet_path_content = read("src/protocol_runtime/udp/state/packet_path.rs");
     let packet_path = manifest_dir().join("src/protocol_runtime/udp/state/packet_path.rs");
 
     for forbidden in [
@@ -4264,6 +4265,22 @@ fn protocol_udp_packet_path_facade_lives_outside_state_root() {
     assert!(
         packet_path.exists(),
         "UDP packet-path facade should live in protocol_runtime/udp/state/packet_path.rs"
+    );
+    for forbidden in [
+        "ProtocolUdpFlowSnapshot::Shadowsocks",
+        "password: datagram.password",
+        "cipher_kind: datagram.cipher_kind",
+        "datagram_cache_key: datagram.datagram_cache_key",
+    ] {
+        assert!(
+            !packet_path_content.contains(forbidden),
+            "packet-path state should consume the datagram source protocol snapshot instead of constructing Shadowsocks snapshots directly; found `{forbidden}`"
+        );
+    }
+    assert!(
+        packet_path_content.contains("protocol_snapshot")
+            && packet_path_content.contains(".with_packet_path_carrier(packet_path_carrier)"),
+        "packet-path state should attach the carrier through the datagram source protocol snapshot"
     );
 }
 
@@ -5168,9 +5185,11 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         );
     }
     assert!(
-        traits.contains("cipher_kind: shadowsocks::CipherKind")
+        !traits.contains("password: &'a str")
+            && !traits.contains("cipher_kind: shadowsocks::CipherKind")
+            && traits.contains("protocol_snapshot: ProtocolUdpFlowSnapshot")
             && traits.contains("codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>"),
-        "UdpDatagramSource should carry parsed Shadowsocks cipher and the adapter-provided packet-path datagram codec"
+        "UdpDatagramSource should carry protocol snapshot and adapter-provided packet-path datagram codec instead of protocol-private fields"
     );
     assert!(
         traits.contains("datagram_cache_key: String")
