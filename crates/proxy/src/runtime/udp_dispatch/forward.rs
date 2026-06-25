@@ -16,7 +16,8 @@ use std::time::Instant;
 
 use zero_engine::EngineError;
 
-use super::{Socks5RelaySend, UdpDispatch};
+use super::socks5_flow::Socks5RelaySend;
+use super::UdpDispatch;
 use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpPathCategory};
 use crate::runtime::udp_helpers::send_direct_udp_packet;
 use crate::runtime::Proxy;

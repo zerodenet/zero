@@ -6,7 +6,8 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::socks5::Socks5Adapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, Socks5RelaySend, UdpDispatch};
+use crate::runtime::udp_dispatch::socks5_flow::Socks5RelaySend;
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
 
 impl Socks5Adapter {

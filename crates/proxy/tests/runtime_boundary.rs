@@ -3985,6 +3985,43 @@ fn udp_dispatch_does_not_reexport_protocol_runtime_udp_types() {
 }
 
 #[test]
+fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
+    let content = read("src/runtime/udp_dispatch/mod.rs");
+
+    for forbidden in [
+        "pub(crate) use hysteria2_flow::",
+        "pub(crate) use mieru_flow::",
+        "pub(crate) use shadowsocks_flow::",
+        "pub(crate) use socks5_flow::",
+        "pub(crate) use trojan_flow::",
+        "pub(crate) use vless_flow::",
+        "pub(crate) use vmess_flow::",
+        "Hysteria2DatagramSend",
+        "MieruDatagramSend",
+        "MieruRelaySend",
+        "ShadowsocksDatagramSend",
+        "Socks5RelaySend",
+        "TrojanDatagramSend",
+        "TrojanRelaySend",
+        "VlessDatagramSend",
+        "VlessRelayFinalHopSend",
+        "VlessRelayTwoStreamSend",
+        "VmessDatagramSend",
+        "VmessRelaySend",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "src/runtime/udp_dispatch/mod.rs should not re-export protocol flow request `{forbidden}`"
+        );
+    }
+
+    assert!(
+        content.contains("pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};"),
+        "src/runtime/udp_dispatch/mod.rs should keep only generic UDP dispatch result types in the root facade"
+    );
+}
+
+#[test]
 fn protocol_udp_state_manager_fields_are_not_crate_public() {
     let content = read("src/protocol_runtime/udp/state.rs");
 

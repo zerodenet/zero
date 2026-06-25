@@ -6,9 +6,8 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::runtime::udp_dispatch::{
-    FlowFailure, FlowStartResult, Hysteria2DatagramSend, UdpDispatch,
-};
+use crate::runtime::udp_dispatch::hysteria2_flow::Hysteria2DatagramSend;
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 
 impl Hysteria2Adapter {
     #[cfg(feature = "shadowsocks")]

@@ -4,10 +4,10 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::runtime::udp_dispatch::{
-    FlowFailure, FlowStartResult, UdpDispatch, VlessDatagramSend, VlessRelayFinalHopSend,
-    VlessRelayTwoStreamSend,
+use crate::runtime::udp_dispatch::vless_flow::{
+    VlessDatagramSend, VlessRelayFinalHopSend, VlessRelayTwoStreamSend,
 };
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
 
 fn parse_vless_udp_uuid(
