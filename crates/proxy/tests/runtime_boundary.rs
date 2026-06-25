@@ -4307,6 +4307,7 @@ fn packet_path_chain_does_not_own_socks5_runtime_state() {
 #[test]
 fn packet_path_traits_are_grouped_by_responsibility() {
     let facade = read("src/protocol_runtime/udp/packet_path_traits.rs");
+    let carrier = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
     let root = manifest_dir().join("src/protocol_runtime/udp/packet_path_traits");
 
     for forbidden in [
@@ -4332,6 +4333,15 @@ fn packet_path_traits_are_grouped_by_responsibility() {
             "packet-path trait/helper definitions should keep grouped module packet_path_traits/{path}"
         );
     }
+    assert!(
+        !carrier.contains("ProtocolAdapter::"),
+        "packet-path trait docs should not describe packet-path products as monolithic ProtocolAdapter outputs"
+    );
+    assert!(
+        carrier.contains("UdpPacketPathCapability::udp_packet_path_carrier_descriptor")
+            && carrier.contains("UdpPacketPathCapability::udp_datagram_source"),
+        "packet-path trait docs should point carrier/datagram products at UdpPacketPathCapability"
+    );
 }
 
 #[test]

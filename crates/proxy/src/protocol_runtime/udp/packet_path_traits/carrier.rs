@@ -23,7 +23,7 @@ pub(crate) trait PacketPathCarrier: Send + Sync {
 
 /// Carrier identity for cache lookup (cheap, computed before dialing).
 ///
-/// Produced by `ProtocolAdapter::udp_packet_path_carrier_descriptor`. The
+/// Produced by `UdpPacketPathCapability::udp_packet_path_carrier_descriptor`. The
 /// `cache_key` uniquely identifies one carrier connection so the manager can
 /// reuse it across packets; `server`/`port` are the endpoint for diagnostics.
 pub(crate) struct PacketPathCarrierDescriptor {
@@ -34,7 +34,7 @@ pub(crate) struct PacketPathCarrierDescriptor {
 
 /// Datagram source params for a relay-chain final hop over a packet path.
 ///
-/// Produced by `ProtocolAdapter::udp_datagram_source`. The manager builds the
+/// Produced by `UdpPacketPathCapability::udp_datagram_source`. The manager builds the
 /// inner `DatagramCodec` from parsed protocol fields; `datagram_cache_key`
 /// feeds packet-path cache identity without exposing raw config parsing to the
 /// manager.
