@@ -8,7 +8,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, UdpAdapterContext,
+    ProtocolAdapter, ProtocolSupportCapability, UdpAdapterContext,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -28,24 +28,6 @@ pub(crate) struct MieruAdapter;
 #[cfg(feature = "mieru")]
 #[async_trait]
 impl ProtocolAdapter for MieruAdapter {
-    fn name(&self) -> &'static str {
-        "mieru"
-    }
-    fn feature_name(&self) -> &'static str {
-        "mieru"
-    }
-    fn has_inbound(&self) -> bool {
-        true
-    }
-    fn has_outbound(&self) -> bool {
-        true
-    }
-    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        matches!(c, InboundProtocolConfig::Mieru { .. })
-    }
-    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        matches!(c, OutboundProtocolConfig::Mieru { .. })
-    }
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         matches!(leaf, ResolvedLeafOutbound::Mieru { .. })
     }
@@ -104,6 +86,28 @@ impl ProtocolAdapter for MieruAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         self.start_udp_relay_final_hop_impl(dispatch, session, carrier, leaf, payload)
             .await
+    }
+}
+
+#[cfg(feature = "mieru")]
+impl ProtocolSupportCapability for MieruAdapter {
+    fn name(&self) -> &'static str {
+        "mieru"
+    }
+    fn feature_name(&self) -> &'static str {
+        "mieru"
+    }
+    fn has_inbound(&self) -> bool {
+        true
+    }
+    fn has_outbound(&self) -> bool {
+        true
+    }
+    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
+        matches!(c, InboundProtocolConfig::Mieru { .. })
+    }
+    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
+        matches!(c, OutboundProtocolConfig::Mieru { .. })
     }
 }
 

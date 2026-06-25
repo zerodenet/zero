@@ -3,7 +3,7 @@ use zero_engine::ResolvedLeafOutbound;
 
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::mieru::MieruAdapter;
-use crate::protocol_adapter::ProtocolAdapter;
+use crate::protocol_adapter::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{
     FlowFailure, FlowStartResult, MieruDatagramSend, MieruRelaySend, UdpDispatch,
 };

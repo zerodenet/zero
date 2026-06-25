@@ -2971,7 +2971,7 @@ fn protocol_registry_register_helper_stays_in_build_module() {
         "src/protocol_adapter/registry/build.rs should own the register helper used by src/register.rs"
     );
     assert!(
-        build.contains("T: ProtocolAdapter + 'static")
+        build.contains("T: ProtocolAdapter + RegisteredProtocolCapability + 'static")
             && build.contains("std::sync::Arc<dyn RegisteredProtocolCapability>"),
         "src/protocol_adapter/registry/build.rs should adapt registered ProtocolAdapter values into capability objects"
     );
@@ -3224,7 +3224,6 @@ fn protocol_adapter_capabilities_are_split_by_responsibility() {
     );
     for expected in [
         "impl<T> RegisteredProtocolCapability for T",
-        "impl<T> ProtocolSupportCapability for T",
         "impl<T> InboundListenerCapability for T",
         "impl<T> TcpOutboundCapability for T",
         "impl<T> UdpFlowCapability for T",
@@ -3233,6 +3232,59 @@ fn protocol_adapter_capabilities_are_split_by_responsibility() {
         assert!(
             capability.contains(expected),
             "src/protocol_adapter/capability.rs should provide compatibility blanket impl `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_support_capability_is_not_on_monolithic_adapter() {
+    let adapter = read("src/protocol_adapter/adapter.rs");
+    let capability = read("src/protocol_adapter/capability.rs");
+
+    for forbidden in [
+        "fn name(&self)",
+        "fn feature_name(&self)",
+        "fn supports_inbound(&self",
+        "fn supports_outbound(&self",
+        "fn has_inbound(&self)",
+        "fn has_outbound(&self)",
+        "impl<T> ProtocolSupportCapability for T",
+    ] {
+        assert!(
+            !adapter.contains(forbidden)
+                && (forbidden != "fn name(&self)" || !capability.contains("ProtocolAdapter::name"))
+                && (forbidden != "fn feature_name(&self)"
+                    || !capability.contains("ProtocolAdapter::feature_name"))
+                && (forbidden != "fn supports_inbound(&self"
+                    || !capability.contains("ProtocolAdapter::supports_inbound"))
+                && (forbidden != "fn supports_outbound(&self"
+                    || !capability.contains("ProtocolAdapter::supports_outbound"))
+                && (forbidden != "fn has_inbound(&self)"
+                    || !capability.contains("ProtocolAdapter::has_inbound"))
+                && (forbidden != "fn has_outbound(&self)"
+                    || !capability.contains("ProtocolAdapter::has_outbound"))
+                && (forbidden != "impl<T> ProtocolSupportCapability for T"
+                    || !capability.contains(forbidden)),
+            "protocol metadata/support should live in explicit ProtocolSupportCapability impls, not `{forbidden}`"
+        );
+    }
+
+    for source in [
+        "src/adapters/direct.rs",
+        "src/adapters/http_connect.rs",
+        "src/adapters/hysteria2.rs",
+        "src/adapters/mieru.rs",
+        "src/adapters/mixed.rs",
+        "src/adapters/shadowsocks.rs",
+        "src/adapters/socks5.rs",
+        "src/adapters/trojan.rs",
+        "src/adapters/vless.rs",
+        "src/adapters/vmess.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("impl ProtocolSupportCapability for"),
+            "{source} should explicitly implement ProtocolSupportCapability"
         );
     }
 }

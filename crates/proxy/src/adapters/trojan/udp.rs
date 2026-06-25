@@ -3,7 +3,7 @@ use zero_engine::ResolvedLeafOutbound;
 
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::trojan::TrojanAdapter;
-use crate::protocol_adapter::ProtocolAdapter;
+use crate::protocol_adapter::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{
     FlowFailure, FlowStartResult, TrojanDatagramSend, TrojanRelaySend, UdpDispatch,
 };

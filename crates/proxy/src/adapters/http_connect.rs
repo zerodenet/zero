@@ -2,7 +2,9 @@ use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::protocol_adapter::{BoundInbound, InboundAdapterContext, ProtocolAdapter};
+use crate::protocol_adapter::{
+    BoundInbound, InboundAdapterContext, ProtocolAdapter, ProtocolSupportCapability,
+};
 
 #[cfg(feature = "http_connect")]
 mod inbound;
@@ -13,6 +15,20 @@ pub(crate) struct HttpConnectAdapter;
 
 #[cfg(feature = "http_connect")]
 impl ProtocolAdapter for HttpConnectAdapter {
+    fn spawn_inbound(
+        &self,
+        ctx: InboundAdapterContext<'_>,
+        inbound: InboundConfig,
+        bound: BoundInbound,
+        shutdown_rx: tokio::sync::watch::Receiver<bool>,
+        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
+    ) {
+        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+    }
+}
+
+#[cfg(feature = "http_connect")]
+impl ProtocolSupportCapability for HttpConnectAdapter {
     fn name(&self) -> &'static str {
         "http_connect"
     }
@@ -35,17 +51,6 @@ impl ProtocolAdapter for HttpConnectAdapter {
 
     fn has_outbound(&self) -> bool {
         false
-    }
-
-    fn spawn_inbound(
-        &self,
-        ctx: InboundAdapterContext<'_>,
-        inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
     }
 }
 

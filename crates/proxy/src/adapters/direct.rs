@@ -8,7 +8,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::adapters::common::direct_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, UdpAdapterContext,
+    ProtocolAdapter, ProtocolSupportCapability, UdpAdapterContext,
 };
 use crate::protocol_capability::protocol_descriptor;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -24,24 +24,6 @@ pub(crate) struct DirectAdapter;
 
 #[async_trait]
 impl ProtocolAdapter for DirectAdapter {
-    fn name(&self) -> &'static str {
-        "direct"
-    }
-    fn feature_name(&self) -> &'static str {
-        "core"
-    }
-    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        matches!(c, InboundProtocolConfig::Direct { .. })
-    }
-    fn supports_outbound(&self, _: &OutboundProtocolConfig) -> bool {
-        false
-    }
-    fn has_inbound(&self) -> bool {
-        true
-    }
-    fn has_outbound(&self) -> bool {
-        false
-    }
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         matches!(leaf, ResolvedLeafOutbound::Direct { .. })
     }
@@ -79,6 +61,27 @@ impl ProtocolAdapter for DirectAdapter {
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
         self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+    }
+}
+
+impl ProtocolSupportCapability for DirectAdapter {
+    fn name(&self) -> &'static str {
+        "direct"
+    }
+    fn feature_name(&self) -> &'static str {
+        "core"
+    }
+    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
+        matches!(c, InboundProtocolConfig::Direct { .. })
+    }
+    fn supports_outbound(&self, _: &OutboundProtocolConfig) -> bool {
+        false
+    }
+    fn has_inbound(&self) -> bool {
+        true
+    }
+    fn has_outbound(&self) -> bool {
+        false
     }
 }
 

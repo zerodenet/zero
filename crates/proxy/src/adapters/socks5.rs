@@ -10,7 +10,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, UdpAdapterContext,
+    ProtocolAdapter, ProtocolSupportCapability, UdpAdapterContext,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -30,30 +30,6 @@ pub(crate) struct Socks5Adapter;
 #[cfg(feature = "socks5")]
 #[async_trait]
 impl ProtocolAdapter for Socks5Adapter {
-    fn name(&self) -> &'static str {
-        "socks5"
-    }
-
-    fn feature_name(&self) -> &'static str {
-        "socks5"
-    }
-
-    fn has_inbound(&self) -> bool {
-        true
-    }
-
-    fn has_outbound(&self) -> bool {
-        true
-    }
-
-    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        matches!(c, InboundProtocolConfig::Socks5 { .. })
-    }
-
-    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        matches!(c, OutboundProtocolConfig::Socks5 { .. })
-    }
-
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         matches!(leaf, ResolvedLeafOutbound::Socks5 { .. })
     }
@@ -127,6 +103,33 @@ impl ProtocolAdapter for Socks5Adapter {
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
         self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+    }
+}
+
+#[cfg(feature = "socks5")]
+impl ProtocolSupportCapability for Socks5Adapter {
+    fn name(&self) -> &'static str {
+        "socks5"
+    }
+
+    fn feature_name(&self) -> &'static str {
+        "socks5"
+    }
+
+    fn has_inbound(&self) -> bool {
+        true
+    }
+
+    fn has_outbound(&self) -> bool {
+        true
+    }
+
+    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
+        matches!(c, InboundProtocolConfig::Socks5 { .. })
+    }
+
+    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
+        matches!(c, OutboundProtocolConfig::Socks5 { .. })
     }
 }
 

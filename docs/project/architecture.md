@@ -56,6 +56,7 @@
 
 `ProtocolAdapter` is the compatibility runtime dispatch boundary for inbound bind/spawn and outbound TCP/UDP establishment.
 Focused capability traits (`ProtocolSupportCapability`, `InboundListenerCapability`, `TcpOutboundCapability`, `UdpFlowCapability`, and `UdpPacketPathCapability`) sit in front of that compatibility trait.
+Metadata and feature/support checks live in explicit `ProtocolSupportCapability` implementations, not on the monolithic adapter trait.
 These capability entrypoints receive narrow adapter context values (`InboundAdapterContext`, `OutboundAdapterContext`, `UdpAdapterContext`) instead of exposing the full `Proxy` parameter in the trait surface; protocol implementations can still use the context as a migration bridge while runtime dependencies are reduced.
 `ProtocolRegistry` stores registered capability objects; the monolithic adapter trait is only the registration compatibility source.
 `zero-proxy` runtime orchestration does not match on `InboundProtocolConfig` or `ResolvedLeafOutbound` to select a protocol path.

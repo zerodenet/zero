@@ -4,7 +4,9 @@ use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::protocol_adapter::{BoundInbound, InboundAdapterContext, ProtocolAdapter};
+use crate::protocol_adapter::{
+    BoundInbound, InboundAdapterContext, ProtocolAdapter, ProtocolSupportCapability,
+};
 use crate::protocol_capability::protocol_descriptor;
 
 #[cfg(feature = "mixed")]
@@ -17,6 +19,20 @@ pub(crate) struct MixedAdapter;
 #[cfg(feature = "mixed")]
 #[async_trait]
 impl ProtocolAdapter for MixedAdapter {
+    fn spawn_inbound(
+        &self,
+        ctx: InboundAdapterContext<'_>,
+        inbound: InboundConfig,
+        bound: BoundInbound,
+        shutdown_rx: tokio::sync::watch::Receiver<bool>,
+        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
+    ) {
+        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+    }
+}
+
+#[cfg(feature = "mixed")]
+impl ProtocolSupportCapability for MixedAdapter {
     fn name(&self) -> &'static str {
         "mixed"
     }
@@ -39,17 +55,6 @@ impl ProtocolAdapter for MixedAdapter {
 
     fn has_outbound(&self) -> bool {
         false
-    }
-
-    fn spawn_inbound(
-        &self,
-        ctx: InboundAdapterContext<'_>,
-        inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
     }
 }
 

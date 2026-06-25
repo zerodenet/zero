@@ -10,7 +10,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, UdpAdapterContext,
+    ProtocolAdapter, ProtocolSupportCapability, UdpAdapterContext,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -30,24 +30,6 @@ pub(crate) struct ShadowsocksAdapter;
 #[cfg(feature = "shadowsocks")]
 #[async_trait]
 impl ProtocolAdapter for ShadowsocksAdapter {
-    fn name(&self) -> &'static str {
-        "shadowsocks"
-    }
-    fn feature_name(&self) -> &'static str {
-        "shadowsocks"
-    }
-    fn has_inbound(&self) -> bool {
-        true
-    }
-    fn has_outbound(&self) -> bool {
-        true
-    }
-    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        matches!(c, InboundProtocolConfig::Shadowsocks { .. })
-    }
-    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        matches!(c, OutboundProtocolConfig::Shadowsocks { .. })
-    }
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         matches!(leaf, ResolvedLeafOutbound::Shadowsocks { .. })
     }
@@ -124,6 +106,28 @@ impl ProtocolAdapter for ShadowsocksAdapter {
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
         self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+    }
+}
+
+#[cfg(feature = "shadowsocks")]
+impl ProtocolSupportCapability for ShadowsocksAdapter {
+    fn name(&self) -> &'static str {
+        "shadowsocks"
+    }
+    fn feature_name(&self) -> &'static str {
+        "shadowsocks"
+    }
+    fn has_inbound(&self) -> bool {
+        true
+    }
+    fn has_outbound(&self) -> bool {
+        true
+    }
+    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
+        matches!(c, InboundProtocolConfig::Shadowsocks { .. })
+    }
+    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
+        matches!(c, OutboundProtocolConfig::Shadowsocks { .. })
     }
 }
 

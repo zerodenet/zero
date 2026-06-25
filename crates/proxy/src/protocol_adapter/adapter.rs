@@ -3,10 +3,8 @@ use std::fmt;
 use async_trait::async_trait;
 
 use zero_config::InboundConfig;
-use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_traits::ProtocolMetadata;
 
 use super::{
     defaults, BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
@@ -19,7 +17,7 @@ use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStrea
 /// Implementations are behind `#[cfg(feature = "...")]` gates so only
 /// compiled-in protocols appear in the registry.
 #[async_trait]
-pub(crate) trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
+pub(crate) trait ProtocolAdapter: Send + Sync + fmt::Debug {
     /// Bind the listener socket for `config` eagerly so port-in-use
     /// errors surface before the proxy announces "started".
     ///
@@ -34,24 +32,6 @@ pub(crate) trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     ) -> Result<BoundInbound, EngineError> {
         defaults::bind_tcp_inbound(inbound).await
     }
-
-    /// Protocol name used in config `"type"` field and exported status.
-    fn name(&self) -> &'static str;
-
-    /// Cargo feature that gates this protocol (e.g. `"socks5"`).
-    fn feature_name(&self) -> &'static str;
-
-    /// Whether this adapter can handle the given inbound config.
-    fn supports_inbound(&self, config: &InboundProtocolConfig) -> bool;
-
-    /// Whether this adapter can handle the given outbound config.
-    fn supports_outbound(&self, config: &OutboundProtocolConfig) -> bool;
-
-    /// Whether this adapter provides an inbound listener.
-    fn has_inbound(&self) -> bool;
-
-    /// Whether this adapter provides an outbound connector.
-    fn has_outbound(&self) -> bool;
 
     /// Whether this adapter owns the given resolved outbound leaf.
     ///

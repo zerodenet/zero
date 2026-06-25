@@ -157,35 +157,6 @@ pub(crate) trait UdpPacketPathCapability {
     ) -> Option<crate::protocol_runtime::udp::UdpDatagramSource<'a>>;
 }
 
-impl<T> ProtocolSupportCapability for T
-where
-    T: ProtocolAdapter + ?Sized,
-{
-    fn name(&self) -> &'static str {
-        ProtocolAdapter::name(self)
-    }
-
-    fn feature_name(&self) -> &'static str {
-        ProtocolAdapter::feature_name(self)
-    }
-
-    fn supports_inbound(&self, config: &InboundProtocolConfig) -> bool {
-        ProtocolAdapter::supports_inbound(self, config)
-    }
-
-    fn supports_outbound(&self, config: &OutboundProtocolConfig) -> bool {
-        ProtocolAdapter::supports_outbound(self, config)
-    }
-
-    fn has_inbound(&self) -> bool {
-        ProtocolAdapter::has_inbound(self)
-    }
-
-    fn has_outbound(&self) -> bool {
-        ProtocolAdapter::has_outbound(self)
-    }
-}
-
 #[async_trait]
 impl<T> InboundListenerCapability for T
 where

@@ -8,7 +8,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolAdapter, UdpAdapterContext,
+    ProtocolAdapter, ProtocolSupportCapability, UdpAdapterContext,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -28,24 +28,6 @@ pub(crate) struct TrojanAdapter;
 #[cfg(feature = "trojan")]
 #[async_trait]
 impl ProtocolAdapter for TrojanAdapter {
-    fn name(&self) -> &'static str {
-        "trojan"
-    }
-    fn feature_name(&self) -> &'static str {
-        "trojan"
-    }
-    fn has_inbound(&self) -> bool {
-        true
-    }
-    fn has_outbound(&self) -> bool {
-        true
-    }
-    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        matches!(c, InboundProtocolConfig::Trojan { .. })
-    }
-    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        matches!(c, OutboundProtocolConfig::Trojan { .. })
-    }
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         matches!(leaf, ResolvedLeafOutbound::Trojan { .. })
     }
@@ -105,6 +87,28 @@ impl ProtocolAdapter for TrojanAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         self.start_udp_relay_final_hop_impl(dispatch, ctx.proxy(), session, carrier, leaf, payload)
             .await
+    }
+}
+
+#[cfg(feature = "trojan")]
+impl ProtocolSupportCapability for TrojanAdapter {
+    fn name(&self) -> &'static str {
+        "trojan"
+    }
+    fn feature_name(&self) -> &'static str {
+        "trojan"
+    }
+    fn has_inbound(&self) -> bool {
+        true
+    }
+    fn has_outbound(&self) -> bool {
+        true
+    }
+    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
+        matches!(c, InboundProtocolConfig::Trojan { .. })
+    }
+    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
+        matches!(c, OutboundProtocolConfig::Trojan { .. })
     }
 }
 
