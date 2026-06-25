@@ -158,27 +158,13 @@ impl Proxy {
         let outbound = self
             .dispatch_tcp_candidate(&session_for_next, first)
             .await?;
-        let mut stream = match outbound {
-            EstablishedTcpOutbound::Direct { upstream, .. }
-            | EstablishedTcpOutbound::Socks5 { upstream, .. }
-            | EstablishedTcpOutbound::Vless { upstream, .. }
-            | EstablishedTcpOutbound::Hysteria2 { upstream, .. }
-            | EstablishedTcpOutbound::Shadowsocks { upstream, .. }
-            | EstablishedTcpOutbound::Trojan { upstream, .. }
-            | EstablishedTcpOutbound::Vmess { upstream, .. }
-            | EstablishedTcpOutbound::Mieru { upstream, .. }
-            | EstablishedTcpOutbound::Relay { upstream } => upstream,
-            EstablishedTcpOutbound::Block { .. } => {
-                return Err(TcpOutboundFailure {
-                    stage: "relay_first_hop",
-                    error: EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "first relay hop resolved to block",
-                    )),
-                    upstream_endpoint: None,
-                })
-            }
-        };
+        let mut stream = outbound
+            .into_relay_stream()
+            .map_err(|error| TcpOutboundFailure {
+                stage: "relay_first_hop",
+                error,
+                upstream_endpoint: None,
+            })?;
 
         let mut current_hop = second;
         for next_hop in hops {

@@ -74,6 +74,26 @@ pub(crate) enum EstablishedTcpOutbound {
     },
 }
 
+impl EstablishedTcpOutbound {
+    pub(crate) fn into_relay_stream(self) -> Result<TcpRelayStream, EngineError> {
+        match self {
+            Self::Direct { upstream, .. }
+            | Self::Socks5 { upstream, .. }
+            | Self::Vless { upstream, .. }
+            | Self::Hysteria2 { upstream, .. }
+            | Self::Shadowsocks { upstream, .. }
+            | Self::Trojan { upstream, .. }
+            | Self::Vmess { upstream, .. }
+            | Self::Mieru { upstream, .. }
+            | Self::Relay { upstream } => Ok(upstream),
+            Self::Block { .. } => Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "first relay hop resolved to block",
+            ))),
+        }
+    }
+}
+
 pub(crate) struct TcpOutboundFailure {
     #[allow(dead_code)]
     pub stage: &'static str,

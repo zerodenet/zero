@@ -387,6 +387,36 @@ fn tcp_runtime_does_not_resolve_outbound_adapter_objects() {
 }
 
 #[test]
+fn tcp_runtime_does_not_match_protocol_outbound_results() {
+    let tcp_dispatch = read("src/runtime/tcp_dispatch.rs");
+    let tcp_outbound = read("src/transport/tcp_outbound.rs");
+
+    for forbidden in [
+        "EstablishedTcpOutbound::Socks5",
+        "EstablishedTcpOutbound::Vless",
+        "EstablishedTcpOutbound::Hysteria2",
+        "EstablishedTcpOutbound::Shadowsocks",
+        "EstablishedTcpOutbound::Trojan",
+        "EstablishedTcpOutbound::Vmess",
+        "EstablishedTcpOutbound::Mieru",
+    ] {
+        assert!(
+            !tcp_dispatch.contains(forbidden),
+            "src/runtime/tcp_dispatch.rs should not unpack protocol TCP outbound variants; found `{forbidden}`"
+        );
+        assert!(
+            tcp_outbound.contains(forbidden),
+            "src/transport/tcp_outbound.rs should own TCP outbound result normalization for `{forbidden}`"
+        );
+    }
+
+    assert!(
+        tcp_dispatch.contains(".into_relay_stream()"),
+        "src/runtime/tcp_dispatch.rs should ask EstablishedTcpOutbound for a neutral relay stream"
+    );
+}
+
+#[test]
 fn udp_single_hop_runtime_does_not_resolve_outbound_adapter_objects() {
     let udp_start = read("src/runtime/udp_dispatch/start/mod.rs");
     let inventory_udp_leaf = read("src/inventory/udp/leaf.rs");
