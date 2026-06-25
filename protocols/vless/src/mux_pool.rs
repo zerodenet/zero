@@ -12,6 +12,7 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::mpsc;
+use zero_core::{Address, Error};
 
 use crate::MuxCrypto;
 
@@ -165,4 +166,16 @@ pub fn decrypt_mux_payload(
     } else {
         Some(payload.to_vec())
     }
+}
+
+pub fn encode_mux_new_stream(network: u8, port: u16, address: &Address) -> Result<Vec<u8>, Error> {
+    crate::encode_new_stream(network, port, address)
+}
+
+pub fn encode_mux_data_frame(session_id: u16, payload: &[u8]) -> Vec<u8> {
+    crate::encode_data_frame(session_id, payload)
+}
+
+pub fn encode_mux_end_frame(session_id: u16) -> Vec<u8> {
+    crate::encode_end_frame(session_id)
 }

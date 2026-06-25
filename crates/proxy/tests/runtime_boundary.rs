@@ -2177,6 +2177,26 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
             "VLESS MUX pool model should live in vless_mux_pool/model.rs; missing `{required}`"
         );
     }
+    for forbidden in [
+        "vless::encode_new_stream",
+        "vless::encode_data_frame",
+        "vless::encode_end_frame",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "VLESS mux pool runtime should use protocol mux_pool frame helpers instead of `{forbidden}`"
+        );
+    }
+    for required in [
+        "encode_mux_new_stream",
+        "encode_mux_data_frame",
+        "encode_mux_end_frame",
+    ] {
+        assert!(
+            root.contains(required),
+            "VLESS mux pool runtime should call protocol mux_pool helper `{required}`"
+        );
+    }
 }
 
 #[test]
