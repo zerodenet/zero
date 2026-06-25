@@ -337,6 +337,17 @@ pub struct ShadowsocksDatagramCodec {
 }
 
 #[cfg(feature = "crypto")]
+pub fn udp_datagram_codec(
+    cipher: super::shared::CipherKind,
+    password: &[u8],
+) -> impl DatagramCodec<Address, Error = Error> {
+    ShadowsocksDatagramCodec {
+        cipher,
+        password: password.to_vec(),
+    }
+}
+
+#[cfg(feature = "crypto")]
 impl DatagramCodec<Address> for ShadowsocksDatagramCodec {
     type Error = Error;
 

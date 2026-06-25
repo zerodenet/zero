@@ -5494,6 +5494,11 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         );
     }
     assert!(
+        !carrier_snapshot.contains("ShadowsocksDatagramCodec")
+            && carrier_snapshot.contains("shadowsocks::udp_datagram_codec"),
+        "Shadowsocks packet-path datagram source should request a protocol-built codec without naming its concrete type"
+    );
+    assert!(
         shadowsocks_carrier.contains("shadowsocks::encode_udp_datagram")
             && shadowsocks_carrier.contains("shadowsocks::decode_udp_datagram"),
         "Shadowsocks packet-path carrier should call protocols/shadowsocks datagram helpers"
