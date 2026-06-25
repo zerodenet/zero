@@ -325,6 +325,18 @@ impl VmessMuxStream {
     }
 }
 
+pub fn mux_stream_with_network(
+    session_id: u16,
+    target: Address,
+    port: u16,
+    network: Network,
+    write_tx: mpsc::UnboundedSender<Vec<u8>>,
+    read_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    active: Arc<Mutex<usize>>,
+) -> VmessMuxStream {
+    VmessMuxStream::new_with_network(session_id, target, port, network, write_tx, read_rx, active)
+}
+
 impl Drop for VmessMuxStream {
     fn drop(&mut self) {
         if !self.ended {

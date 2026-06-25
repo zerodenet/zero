@@ -2135,6 +2135,15 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
             "VMess MUX pool model should live in vmess_mux_pool/model.rs; missing `{required}`"
         );
     }
+
+    assert!(
+        !root.contains("VmessMuxStream::new_with_network"),
+        "VMess mux pool runtime should use the protocol mux stream helper instead of constructing VmessMuxStream directly"
+    );
+    assert!(
+        root.contains("vmess::mux_stream_with_network"),
+        "VMess mux pool runtime should call the protocol mux stream helper"
+    );
 }
 
 #[test]

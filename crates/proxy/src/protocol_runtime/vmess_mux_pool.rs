@@ -75,17 +75,15 @@ impl VmessMuxConnectionPool {
         let (down_tx, down_rx) = mpsc::unbounded_channel();
         conn.streams.lock().unwrap().insert(session_id, down_tx);
 
-        Ok(TcpRelayStream::new(
-            vmess::VmessMuxStream::new_with_network(
-                session_id,
-                request.session.target.clone(),
-                request.session.port,
-                network,
-                conn.write_tx.clone(),
-                down_rx,
-                conn.active.clone(),
-            ),
-        ))
+        Ok(TcpRelayStream::new(vmess::mux_stream_with_network(
+            session_id,
+            request.session.target.clone(),
+            request.session.port,
+            network,
+            conn.write_tx.clone(),
+            down_rx,
+            conn.active.clone(),
+        )))
     }
 
     async fn get_or_create_conn(
