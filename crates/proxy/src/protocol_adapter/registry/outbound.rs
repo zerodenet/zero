@@ -3,7 +3,9 @@ use std::sync::Arc;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::ProtocolRegistry;
-use crate::protocol_adapter::{OutboundLeafRuntime, ProtocolAdapter, TcpOutboundCapability};
+use crate::protocol_adapter::{
+    OutboundLeafRuntime, RegisteredProtocolCapability, TcpOutboundCapability,
+};
 use crate::runtime::orchestration::TcpPathCategory;
 
 impl ProtocolRegistry {
@@ -12,11 +14,11 @@ impl ProtocolRegistry {
     /// Single dispatch point: the TCP/UDP runtime resolves a
     /// [`ResolvedLeafOutbound`] to its adapter here instead of matching on
     /// the protocol enum. Each adapter claims exactly its own variant via
-    /// [`ProtocolAdapter::claims_outbound_leaf`].
+    /// [`TcpOutboundCapability::claims_outbound_leaf`].
     pub(crate) fn find_outbound_leaf(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn ProtocolAdapter>, EngineError> {
+    ) -> Result<Arc<dyn RegisteredProtocolCapability>, EngineError> {
         for adapter in &self.adapters {
             if TcpOutboundCapability::claims_outbound_leaf(adapter.as_ref(), leaf) {
                 return Ok(adapter.clone());

@@ -2865,7 +2865,7 @@ fn protocol_registry_root_is_facade_only() {
         "mod support;",
         "mod validation;",
         "pub(crate) struct ProtocolRegistry",
-        "adapters: Vec<std::sync::Arc<dyn crate::protocol_adapter::ProtocolAdapter>>",
+        "adapters: Vec<std::sync::Arc<dyn crate::protocol_adapter::RegisteredProtocolCapability>>",
         "impl fmt::Debug for ProtocolRegistry",
     ] {
         assert!(
@@ -2967,8 +2967,13 @@ fn protocol_registry_register_helper_stays_in_build_module() {
         "src/protocol_adapter/registry.rs should keep register helper in src/protocol_adapter/registry/build.rs"
     );
     assert!(
-        build.contains("pub(crate) fn register("),
+        build.contains("pub(crate) fn register<T>(&mut self, adapter: std::sync::Arc<T>)"),
         "src/protocol_adapter/registry/build.rs should own the register helper used by src/register.rs"
+    );
+    assert!(
+        build.contains("T: ProtocolAdapter + 'static")
+            && build.contains("std::sync::Arc<dyn RegisteredProtocolCapability>"),
+        "src/protocol_adapter/registry/build.rs should adapt registered ProtocolAdapter values into capability objects"
     );
 }
 
@@ -3137,11 +3142,13 @@ fn protocol_adapter_root_is_facade_only() {
     for expected in [
         "mod adapter;",
         "mod capability;",
+        "mod context;",
         "mod defaults;",
         "mod model;",
         "mod registry;",
         "pub(crate) use adapter::ProtocolAdapter;",
         "pub(crate) use capability::",
+        "pub(crate) use context::{InboundAdapterContext, OutboundAdapterContext, UdpAdapterContext};",
         "pub(crate) use model::{BoundInbound, OutboundLeafRuntime};",
         "pub(crate) use registry::ProtocolRegistry;",
     ] {
@@ -3177,8 +3184,10 @@ fn protocol_adapter_capabilities_are_split_by_responsibility() {
     let root = read("src/protocol_adapter.rs");
     let adapter = read("src/protocol_adapter/adapter.rs");
     let capability = read("src/protocol_adapter/capability.rs");
+    let context = read("src/protocol_adapter/context.rs");
 
     for expected in [
+        "pub(crate) trait RegisteredProtocolCapability",
         "pub(crate) trait ProtocolSupportCapability",
         "pub(crate) trait InboundListenerCapability",
         "pub(crate) trait TcpOutboundCapability",
@@ -3196,10 +3205,25 @@ fn protocol_adapter_capabilities_are_split_by_responsibility() {
         "src/protocol_adapter.rs should wire the capability trait module"
     );
     assert!(
+        root.contains("mod context;"),
+        "src/protocol_adapter.rs should wire the adapter context module"
+    );
+    for expected in [
+        "pub(crate) struct InboundAdapterContext",
+        "pub(crate) struct OutboundAdapterContext",
+        "pub(crate) struct UdpAdapterContext",
+    ] {
+        assert!(
+            context.contains(expected),
+            "src/protocol_adapter/context.rs should expose narrow adapter context `{expected}`"
+        );
+    }
+    assert!(
         adapter.contains("pub(crate) trait ProtocolAdapter"),
         "src/protocol_adapter/adapter.rs should keep the compatibility adapter trait"
     );
     for expected in [
+        "impl<T> RegisteredProtocolCapability for T",
         "impl<T> ProtocolSupportCapability for T",
         "impl<T> InboundListenerCapability for T",
         "impl<T> TcpOutboundCapability for T",
@@ -3209,6 +3233,53 @@ fn protocol_adapter_capabilities_are_split_by_responsibility() {
         assert!(
             capability.contains(expected),
             "src/protocol_adapter/capability.rs should provide compatibility blanket impl `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_registry_stores_capability_objects() {
+    let registry = read("src/protocol_adapter/registry.rs");
+    let inbound = read("src/protocol_adapter/registry/inbound.rs");
+    let outbound = read("src/protocol_adapter/registry/outbound.rs");
+
+    assert!(
+        registry.contains("RegisteredProtocolCapability"),
+        "ProtocolRegistry should store registered capability objects"
+    );
+    for forbidden in [
+        "Vec<std::sync::Arc<dyn crate::protocol_adapter::ProtocolAdapter>>",
+        "Result<Arc<dyn ProtocolAdapter>",
+    ] {
+        assert!(
+            !registry.contains(forbidden)
+                && !inbound.contains(forbidden)
+                && !outbound.contains(forbidden),
+            "ProtocolRegistry dispatch should not expose monolithic adapter object `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_adapter_capabilities_use_contexts_not_proxy() {
+    let adapter = read("src/protocol_adapter/adapter.rs");
+    let capability = read("src/protocol_adapter/capability.rs");
+
+    for forbidden in ["proxy: &Proxy", "_proxy: &Proxy"] {
+        assert!(
+            !adapter.contains(forbidden) && !capability.contains(forbidden),
+            "adapter dispatch traits should receive narrow adapter contexts, not expose `{forbidden}`"
+        );
+    }
+
+    for expected in [
+        "InboundAdapterContext<'_>",
+        "OutboundAdapterContext<'_>",
+        "UdpAdapterContext<'_>",
+    ] {
+        assert!(
+            adapter.contains(expected) && capability.contains(expected),
+            "adapter dispatch traits should use narrow context `{expected}`"
         );
     }
 }

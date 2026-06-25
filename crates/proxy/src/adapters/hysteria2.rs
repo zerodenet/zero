@@ -8,10 +8,12 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::common::proxy_leaf_runtime;
-use crate::protocol_adapter::{BoundInbound, OutboundLeafRuntime, ProtocolAdapter};
+use crate::protocol_adapter::{
+    BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
+    ProtocolAdapter, UdpAdapterContext,
+};
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 #[cfg(feature = "hysteria2")]
@@ -75,7 +77,7 @@ impl ProtocolAdapter for Hysteria2Adapter {
     #[cfg(feature = "shadowsocks")]
     async fn build_udp_packet_path(
         &self,
-        _proxy: &Proxy,
+        _ctx: UdpAdapterContext<'_>,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError> {
         self.build_udp_packet_path_impl(leaf).await
@@ -90,16 +92,16 @@ impl ProtocolAdapter for Hysteria2Adapter {
     }
     async fn connect_tcp(
         &self,
-        proxy: &Proxy,
+        ctx: OutboundAdapterContext<'_>,
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        self.connect_tcp_impl(proxy, session, leaf).await
+        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
     }
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
-        _proxy: &Proxy,
+        _ctx: UdpAdapterContext<'_>,
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
@@ -109,13 +111,13 @@ impl ProtocolAdapter for Hysteria2Adapter {
     }
     fn spawn_inbound(
         &self,
-        proxy: &Proxy,
+        ctx: InboundAdapterContext<'_>,
         inbound: InboundConfig,
         bound: BoundInbound,
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        self.spawn_inbound_impl(proxy, inbound, bound, shutdown_rx, listeners);
+        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
     }
 }
 

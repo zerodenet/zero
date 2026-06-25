@@ -1,7 +1,7 @@
 use zero_engine::EngineError;
 
 use super::super::ProtocolInventory;
-use crate::protocol_adapter::UdpPacketPathCapability;
+use crate::protocol_adapter::{UdpAdapterContext, UdpPacketPathCapability};
 use crate::runtime::Proxy;
 
 impl ProtocolInventory {
@@ -85,7 +85,7 @@ impl ProtocolInventory {
         let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf)?;
         UdpPacketPathCapability::build_udp_packet_path(
             carrier_adapter.as_ref(),
-            proxy,
+            UdpAdapterContext::new(proxy),
             carrier_leaf,
         )
         .await

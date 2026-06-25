@@ -1,7 +1,7 @@
 use zero_engine::EngineError;
 
 use super::super::ProtocolInventory;
-use crate::protocol_adapter::UdpFlowCapability;
+use crate::protocol_adapter::{UdpAdapterContext, UdpFlowCapability};
 use crate::runtime::Proxy;
 
 impl ProtocolInventory {
@@ -41,7 +41,7 @@ impl ProtocolInventory {
         UdpFlowCapability::start_udp_relay_two_stream(
             adapter.as_ref(),
             dispatch,
-            proxy,
+            UdpAdapterContext::new(proxy),
             session,
             chain,
             payload,
@@ -72,7 +72,7 @@ impl ProtocolInventory {
         UdpFlowCapability::start_udp_relay_final_hop(
             adapter.as_ref(),
             dispatch,
-            proxy,
+            UdpAdapterContext::new(proxy),
             session,
             carrier,
             leaf,

@@ -1,7 +1,7 @@
 use zero_engine::EngineError;
 
 use super::ProtocolInventory;
-use crate::protocol_adapter::TcpOutboundCapability;
+use crate::protocol_adapter::{OutboundAdapterContext, TcpOutboundCapability};
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
@@ -21,7 +21,13 @@ impl ProtocolInventory {
                     error,
                     upstream_endpoint: None,
                 })?;
-        TcpOutboundCapability::connect_tcp(adapter.as_ref(), proxy, session, leaf).await
+        TcpOutboundCapability::connect_tcp(
+            adapter.as_ref(),
+            OutboundAdapterContext::new(proxy),
+            session,
+            leaf,
+        )
+        .await
     }
 
     /// Apply one relay-chain TCP hop through the adapter that owns `leaf`.
@@ -33,6 +39,13 @@ impl ProtocolInventory {
         leaf: &zero_engine::ResolvedLeafOutbound<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         let adapter = self.registry.find_outbound_leaf(leaf)?;
-        TcpOutboundCapability::apply_relay_hop(adapter.as_ref(), proxy, stream, session, leaf).await
+        TcpOutboundCapability::apply_relay_hop(
+            adapter.as_ref(),
+            OutboundAdapterContext::new(proxy),
+            stream,
+            session,
+            leaf,
+        )
+        .await
     }
 }

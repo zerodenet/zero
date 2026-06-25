@@ -8,10 +8,12 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::common::proxy_leaf_runtime;
-use crate::protocol_adapter::{BoundInbound, OutboundLeafRuntime, ProtocolAdapter};
+use crate::protocol_adapter::{
+    BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
+    ProtocolAdapter, UdpAdapterContext,
+};
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 #[cfg(feature = "shadowsocks")]
@@ -72,10 +74,10 @@ impl ProtocolAdapter for ShadowsocksAdapter {
 
     async fn build_udp_packet_path(
         &self,
-        proxy: &Proxy,
+        ctx: UdpAdapterContext<'_>,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError> {
-        self.build_udp_packet_path_impl(proxy, leaf).await
+        self.build_udp_packet_path_impl(ctx.proxy(), leaf).await
     }
 
     fn udp_datagram_source<'a>(
@@ -87,15 +89,15 @@ impl ProtocolAdapter for ShadowsocksAdapter {
 
     async fn connect_tcp(
         &self,
-        proxy: &Proxy,
+        ctx: OutboundAdapterContext<'_>,
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        self.connect_tcp_impl(proxy, session, leaf).await
+        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
     }
     async fn apply_relay_hop(
         &self,
-        _proxy: &Proxy,
+        _ctx: OutboundAdapterContext<'_>,
         stream: crate::transport::TcpRelayStream,
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
@@ -105,23 +107,23 @@ impl ProtocolAdapter for ShadowsocksAdapter {
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
-        proxy: &Proxy,
+        ctx: UdpAdapterContext<'_>,
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        self.start_udp_flow_impl(dispatch, proxy, session, leaf, payload)
+        self.start_udp_flow_impl(dispatch, ctx.proxy(), session, leaf, payload)
             .await
     }
     fn spawn_inbound(
         &self,
-        proxy: &Proxy,
+        ctx: InboundAdapterContext<'_>,
         inbound: InboundConfig,
         bound: BoundInbound,
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        self.spawn_inbound_impl(proxy, inbound, bound, shutdown_rx, listeners);
+        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
     }
 }
 

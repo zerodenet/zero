@@ -1,5 +1,5 @@
 use super::super::ProtocolInventory;
-use crate::protocol_adapter::UdpFlowCapability;
+use crate::protocol_adapter::{UdpAdapterContext, UdpFlowCapability};
 use crate::runtime::Proxy;
 
 impl ProtocolInventory {
@@ -22,7 +22,14 @@ impl ProtocolInventory {
                 upstream: None,
             }
         })?;
-        UdpFlowCapability::start_udp_flow(adapter.as_ref(), dispatch, proxy, session, leaf, payload)
-            .await
+        UdpFlowCapability::start_udp_flow(
+            adapter.as_ref(),
+            dispatch,
+            UdpAdapterContext::new(proxy),
+            session,
+            leaf,
+            payload,
+        )
+        .await
     }
 }

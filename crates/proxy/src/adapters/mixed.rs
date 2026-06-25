@@ -4,9 +4,8 @@ use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::protocol_adapter::{BoundInbound, ProtocolAdapter};
+use crate::protocol_adapter::{BoundInbound, InboundAdapterContext, ProtocolAdapter};
 use crate::protocol_capability::protocol_descriptor;
-use crate::runtime::Proxy;
 
 #[cfg(feature = "mixed")]
 mod inbound;
@@ -44,13 +43,13 @@ impl ProtocolAdapter for MixedAdapter {
 
     fn spawn_inbound(
         &self,
-        proxy: &Proxy,
+        ctx: InboundAdapterContext<'_>,
         inbound: InboundConfig,
         bound: BoundInbound,
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        self.spawn_inbound_impl(proxy, inbound, bound, shutdown_rx, listeners);
+        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
     }
 }
 

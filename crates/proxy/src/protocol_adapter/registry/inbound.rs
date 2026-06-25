@@ -5,7 +5,8 @@ use zero_engine::EngineError;
 
 use super::ProtocolRegistry;
 use crate::protocol_adapter::{
-    BoundInbound, InboundListenerCapability, ProtocolAdapter, ProtocolSupportCapability,
+    BoundInbound, InboundListenerCapability, ProtocolSupportCapability,
+    RegisteredProtocolCapability,
 };
 
 impl ProtocolRegistry {
@@ -16,7 +17,7 @@ impl ProtocolRegistry {
     pub(crate) fn find_inbound(
         &self,
         config: &InboundProtocolConfig,
-    ) -> Result<Arc<dyn ProtocolAdapter>, EngineError> {
+    ) -> Result<Arc<dyn RegisteredProtocolCapability>, EngineError> {
         for adapter in &self.adapters {
             if ProtocolSupportCapability::supports_inbound(adapter.as_ref(), config) {
                 return Ok(adapter.clone());

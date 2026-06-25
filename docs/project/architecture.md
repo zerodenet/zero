@@ -54,7 +54,10 @@
 
 ### Adapter dispatch boundary
 
-`ProtocolAdapter` is the single runtime dispatch boundary for inbound bind/spawn and outbound TCP/UDP establishment.
+`ProtocolAdapter` is the compatibility runtime dispatch boundary for inbound bind/spawn and outbound TCP/UDP establishment.
+Focused capability traits (`ProtocolSupportCapability`, `InboundListenerCapability`, `TcpOutboundCapability`, `UdpFlowCapability`, and `UdpPacketPathCapability`) sit in front of that compatibility trait.
+These capability entrypoints receive narrow adapter context values (`InboundAdapterContext`, `OutboundAdapterContext`, `UdpAdapterContext`) instead of exposing the full `Proxy` parameter in the trait surface; protocol implementations can still use the context as a migration bridge while runtime dependencies are reduced.
+`ProtocolRegistry` stores registered capability objects; the monolithic adapter trait is only the registration compatibility source.
 `zero-proxy` runtime orchestration does not match on `InboundProtocolConfig` or `ResolvedLeafOutbound` to select a protocol path.
 Adding a protocol means registering an adapter and adding protocol-local inbound/outbound code.
 
@@ -67,7 +70,7 @@ Adapters call `crate::inbound::run_<protocol>_listener_with_bound`; `Proxy` does
 - `adapters/mod.rs` only declares concrete adapter modules and re-exports adapter types. Registry construction and protocol dispatch stay outside this facade.
 - `inbound/mod.rs` only declares inbound listener modules and re-exports `run_<protocol>_listener_with_bound` entrypoints. Request models and listener/session logic stay in protocol-local inbound modules.
 - `outbound/mod.rs` only declares crate-private per-protocol outbound helper modules. Helper logic lives in `outbound/<protocol>.rs` and is called only by adapter TCP modules.
-- `protocol_adapter.rs` only re-exports the crate-private adapter trait, adapter models, and registry.
+- `protocol_adapter.rs` only re-exports the crate-private adapter trait, focused capability traits, adapter contexts, adapter models, and registry.
 - `protocol_adapter/defaults.rs` only wires adapter default helper modules. TCP bind defaults live in `defaults/bind.rs`; unsupported error construction lives in `defaults/errors.rs`.
 - `protocol_adapter/model.rs` only wires adapter model modules. Inbound bind/spawn models live in `model/inbound.rs`; outbound runtime facts live in `model/outbound.rs`.
 - `protocol_adapter/registry.rs` only owns the registry struct and submodule wiring. The low-level register helper lives in `registry/build.rs`; compiled protocol collection lives in `src/register.rs`; inbound dispatch, outbound dispatch, metadata, support lookup, and validation live in `registry/{inbound,outbound,metadata,support,validation}.rs`.

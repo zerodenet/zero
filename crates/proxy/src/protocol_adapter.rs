@@ -7,14 +7,16 @@
 
 mod adapter;
 mod capability;
+mod context;
 mod defaults;
 mod model;
 mod registry;
 
 pub(crate) use adapter::ProtocolAdapter;
 pub(crate) use capability::{
-    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-    UdpPacketPathCapability,
+    InboundListenerCapability, ProtocolSupportCapability, RegisteredProtocolCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
+pub(crate) use context::{InboundAdapterContext, OutboundAdapterContext, UdpAdapterContext};
 pub(crate) use model::{BoundInbound, OutboundLeafRuntime};
 pub(crate) use registry::ProtocolRegistry;

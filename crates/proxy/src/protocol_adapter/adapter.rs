@@ -8,8 +8,10 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::ProtocolMetadata;
 
-use super::{defaults, BoundInbound, OutboundLeafRuntime};
-use crate::runtime::Proxy;
+use super::{
+    defaults, BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
+    UdpAdapterContext,
+};
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
 /// A protocol adapter registered in the proxy.
@@ -82,7 +84,7 @@ pub(crate) trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     /// instead of matching on `ResolvedLeafOutbound`.
     async fn connect_tcp(
         &self,
-        _proxy: &Proxy,
+        _ctx: OutboundAdapterContext<'_>,
         _session: &Session,
         _leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
@@ -98,7 +100,7 @@ pub(crate) trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     /// ("not supported") impl.
     async fn apply_relay_hop(
         &self,
-        _proxy: &Proxy,
+        _ctx: OutboundAdapterContext<'_>,
         stream: TcpRelayStream,
         _session: &Session,
         _leaf: &ResolvedLeafOutbound<'_>,
@@ -117,7 +119,7 @@ pub(crate) trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     async fn start_udp_flow(
         &self,
         _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        _proxy: &Proxy,
+        _ctx: UdpAdapterContext<'_>,
         _session: &Session,
         _leaf: &ResolvedLeafOutbound<'_>,
         _payload: &[u8],
@@ -138,7 +140,7 @@ pub(crate) trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     /// enum. Default is a no-op (inbound-only adapters override).
     fn spawn_inbound(
         &self,
-        _proxy: &Proxy,
+        _ctx: InboundAdapterContext<'_>,
         _inbound: InboundConfig,
         _bound: BoundInbound,
         _shutdown_rx: tokio::sync::watch::Receiver<bool>,
@@ -163,7 +165,7 @@ pub(crate) trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     async fn start_udp_relay_two_stream(
         &self,
         _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        _proxy: &Proxy,
+        _ctx: UdpAdapterContext<'_>,
         _session: &Session,
         _chain: Vec<ResolvedLeafOutbound<'_>>,
         _payload: &[u8],
@@ -184,7 +186,7 @@ pub(crate) trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     async fn start_udp_relay_final_hop(
         &self,
         _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        _proxy: &Proxy,
+        _ctx: UdpAdapterContext<'_>,
         _session: &Session,
         carrier: crate::transport::RelayCarrier,
         _leaf: &ResolvedLeafOutbound<'_>,
@@ -227,7 +229,7 @@ pub(crate) trait ProtocolAdapter: ProtocolMetadata + Send + Sync + fmt::Debug {
     #[cfg(feature = "shadowsocks")]
     async fn build_udp_packet_path(
         &self,
-        _proxy: &Proxy,
+        _ctx: UdpAdapterContext<'_>,
         _leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<std::sync::Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError>
     {
