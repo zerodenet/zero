@@ -12,7 +12,7 @@ use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
-use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
+use zero_traits::{AsyncSocket, UdpPacketTunnelProtocol};
 
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
@@ -20,6 +20,18 @@ use model::{
     VlessUdpRelayFinalHop, VlessUdpRelayTwoStream, VlessUdpStartFlow, VlessUdpTransport,
     VlessUdpUpstream, VlessUdpUpstreamRequest,
 };
+
+fn encode_vless_udp_packet(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, EngineError> {
+    vless::build_udp_packet(target, port, payload).map_err(EngineError::from)
+}
+
+fn decode_vless_udp_packet(packet: &[u8]) -> Result<vless::VlessUdpPacket, EngineError> {
+    vless::parse_udp_packet(packet).map_err(EngineError::from)
+}
 
 /// Spawn the bidirectional meter + relay task for a VLESS UDP upstream,
 /// returning the upstream handle and a broadcast sender for decoded responses.
@@ -32,7 +44,6 @@ fn spawn_vless_udp_relay(
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
     let (recv_tx, _) = broadcast::channel::<vless::VlessUdpPacket>(32);
     let recv_tx_bg = recv_tx.clone();
-    let vless_outbound = vless::VlessOutbound;
 
     proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
 
@@ -56,9 +67,7 @@ fn spawn_vless_udp_relay(
                     match read {
                         Ok(0) => break,
                         Ok(n) => {
-                            match <vless::VlessOutbound as UdpPacketFraming<
-                                vless::VlessUdpPacketTarget,
-                            >>::decode_udp_packet(&vless_outbound, &buffer[..n]) {
+                            match decode_vless_udp_packet(&buffer[..n]) {
                                 Ok(packet) => {
                                     if recv_tx_bg.send(packet).is_err() {
                                         break;
@@ -94,15 +103,7 @@ async fn establish_vless_udp_upstream_over_stream(
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<(VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>), EngineError> {
-    let initial_packet =
-        <vless::VlessOutbound as UdpPacketFraming<vless::VlessUdpPacketTarget>>::encode_udp_packet(
-            &vless::VlessOutbound,
-            &vless::VlessUdpPacketTarget {
-                address: &session.target,
-                port: session.port,
-                payload: initial_payload,
-            },
-        )?;
+    let initial_packet = encode_vless_udp_packet(&session.target, session.port, initial_payload)?;
 
     let mut metered = MeteredStream::new(stream);
 
@@ -135,15 +136,7 @@ async fn establish_vless_udp_upstream(
     initial_payload: &[u8],
     transport: Option<&VlessUdpTransport<'_>>,
 ) -> Result<(VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>), EngineError> {
-    let initial_packet =
-        <vless::VlessOutbound as UdpPacketFraming<vless::VlessUdpPacketTarget>>::encode_udp_packet(
-            &vless::VlessOutbound,
-            &vless::VlessUdpPacketTarget {
-                address: &session.target,
-                port: session.port,
-                payload: initial_payload,
-            },
-        )?;
+    let initial_packet = encode_vless_udp_packet(&session.target, session.port, initial_payload)?;
 
     // QUIC uses UDP -?handle before TCP connect entirely
     if let Some(t) = transport {
@@ -224,8 +217,6 @@ impl VlessUdpOutboundManager {
         chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         request: VlessUdpStartFlow<'_>,
     ) -> Result<(), EngineError> {
-        use zero_traits::UdpPacketFraming;
-
         let mux_flow_enabled = request.flow == Some("xtls-rprx-vision")
             || request.flow == Some("xtls-rprx-vision-udp443");
         if mux_flow_enabled {
@@ -247,15 +238,10 @@ impl VlessUdpOutboundManager {
                 )
                 .await
             {
-                let packet = <::vless::VlessOutbound as UdpPacketFraming<
-                    ::vless::VlessUdpPacketTarget,
-                >>::encode_udp_packet(
-                    &vless::VlessOutbound,
-                    &::vless::VlessUdpPacketTarget {
-                        address: &request.session.target,
-                        port: request.session.port,
-                        payload: request.payload,
-                    },
+                let packet = encode_vless_udp_packet(
+                    &request.session.target,
+                    request.session.port,
+                    request.payload,
                 )?;
                 let _ = up_tx.send(packet);
                 request
@@ -372,16 +358,7 @@ impl VlessUdpOutboundManager {
         };
 
         proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
-        let packet = <vless::VlessOutbound as UdpPacketFraming<
-            vless::VlessUdpPacketTarget,
-        >>::encode_udp_packet(
-            &vless::VlessOutbound,
-            &vless::VlessUdpPacketTarget {
-                address: target,
-                port,
-                payload,
-            },
-        )?;
+        let packet = encode_vless_udp_packet(target, port, payload)?;
         let packet_len = packet.len() as u64;
         let _ = upstream.send_tx.send(packet).await;
         proxy.record_session_outbound_tx(upstream.session_id, packet_len);
@@ -432,16 +409,8 @@ impl VlessUdpOutboundManager {
                 upstream.session_id,
                 request.initial_payload.len() as u64,
             );
-            let packet = <vless::VlessOutbound as UdpPacketFraming<
-                vless::VlessUdpPacketTarget,
-            >>::encode_udp_packet(
-                &vless::VlessOutbound,
-                &vless::VlessUdpPacketTarget {
-                    address: &request.target,
-                    port: request.port,
-                    payload: request.initial_payload,
-                },
-            )?;
+            let packet =
+                encode_vless_udp_packet(&request.target, request.port, request.initial_payload)?;
             let packet_len = packet.len() as u64;
             let _ = upstream.send_tx.send(packet).await;
             request

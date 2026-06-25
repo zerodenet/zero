@@ -12,7 +12,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
-use zero_traits::{AsyncSocket, UdpPacketFraming};
+use zero_traits::AsyncSocket;
 
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
@@ -20,6 +20,18 @@ use model::{
     VmessUdpRelayFlow, VmessUdpStartFlow, VmessUdpTransport, VmessUdpUpstream,
     VmessUdpUpstreamRequest,
 };
+
+fn encode_vmess_udp_packet(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, EngineError> {
+    vmess::build_udp_packet(target, port, payload).map_err(EngineError::from)
+}
+
+fn decode_vmess_udp_packet(packet: &[u8]) -> Result<vmess::VmessUdpPacket, EngineError> {
+    vmess::parse_udp_packet(packet).map_err(EngineError::from)
+}
 
 fn spawn_vmess_udp_relay(
     proxy: &Proxy,
@@ -30,7 +42,6 @@ fn spawn_vmess_udp_relay(
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
     let (recv_tx, _) = broadcast::channel::<vmess::VmessUdpPacket>(32);
     let recv_tx_bg = recv_tx.clone();
-    let vmess_outbound = vmess::VmessOutbound;
 
     proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
 
@@ -54,9 +65,7 @@ fn spawn_vmess_udp_relay(
                     match read {
                         Ok(0) => break,
                         Ok(n) => {
-                            match <vmess::VmessOutbound as UdpPacketFraming<
-                                vmess::VmessUdpPacketTarget,
-                            >>::decode_udp_packet(&vmess_outbound, &buffer[..n]) {
+                            match decode_vmess_udp_packet(&buffer[..n]) {
                                 Ok(packet) => {
                                     if recv_tx_bg.send(packet).is_err() {
                                         break;
@@ -156,15 +165,7 @@ async fn establish_vmess_udp_upstream_over_stream(
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<(VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>), EngineError> {
-    let initial_packet =
-        <vmess::VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::encode_udp_packet(
-            &vmess::VmessOutbound,
-            &vmess::VmessUdpPacketTarget {
-                address: &session.target,
-                port: session.port,
-                payload: initial_payload,
-            },
-        )?;
+    let initial_packet = encode_vmess_udp_packet(&session.target, session.port, initial_payload)?;
 
     let vmess_stream = vmess::VmessAeadStream::establish_udp_outbound(
         stream,
@@ -188,15 +189,11 @@ async fn establish_vmess_udp_upstream_over_stream(
 async fn establish_vmess_udp_upstream(
     request: &VmessUdpUpstreamRequest<'_>,
 ) -> Result<(VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>), EngineError> {
-    let initial_packet =
-        <vmess::VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::encode_udp_packet(
-            &vmess::VmessOutbound,
-            &vmess::VmessUdpPacketTarget {
-                address: &request.session.target,
-                port: request.session.port,
-                payload: request.initial_payload,
-            },
-        )?;
+    let initial_packet = encode_vmess_udp_packet(
+        &request.session.target,
+        request.session.port,
+        request.initial_payload,
+    )?;
 
     if let Some(max_concurrency) = request.mux_concurrency {
         let mut mux_stream = request
@@ -427,16 +424,7 @@ impl VmessUdpOutboundManager {
         };
 
         proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
-        let packet = <vmess::VmessOutbound as UdpPacketFraming<
-            vmess::VmessUdpPacketTarget,
-        >>::encode_udp_packet(
-            &vmess::VmessOutbound,
-            &vmess::VmessUdpPacketTarget {
-                address: target,
-                port,
-                payload,
-            },
-        )?;
+        let packet = encode_vmess_udp_packet(target, port, payload)?;
         let packet_len = packet.len() as u64;
         let _ = upstream.send_tx.send(packet).await;
         proxy.record_session_outbound_tx(upstream.session_id, packet_len);
@@ -483,16 +471,8 @@ impl VmessUdpOutboundManager {
                 upstream.session_id,
                 request.initial_payload.len() as u64,
             );
-            let packet = <vmess::VmessOutbound as UdpPacketFraming<
-                vmess::VmessUdpPacketTarget,
-            >>::encode_udp_packet(
-                &vmess::VmessOutbound,
-                &vmess::VmessUdpPacketTarget {
-                    address: &request.target,
-                    port: request.port,
-                    payload: request.initial_payload,
-                },
-            )?;
+            let packet =
+                encode_vmess_udp_packet(&request.target, request.port, request.initial_payload)?;
             let packet_len = packet.len() as u64;
             let _ = upstream.send_tx.send(packet).await;
             request

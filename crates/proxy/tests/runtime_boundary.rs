@@ -1952,6 +1952,27 @@ fn vless_udp_identity_is_adapter_parsed() {
 }
 
 #[test]
+fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
+    let runtime = read("src/protocol_runtime/vless_udp.rs");
+
+    for forbidden in [
+        "UdpPacketFraming",
+        "VlessUdpPacketTarget",
+        "encode_udp_packet",
+        "decode_udp_packet",
+    ] {
+        assert!(
+            !runtime.contains(forbidden),
+            "VLESS UDP runtime should delegate packet framing to protocols/vless helpers; found `{forbidden}`"
+        );
+    }
+    assert!(
+        runtime.contains("vless::build_udp_packet") && runtime.contains("vless::parse_udp_packet"),
+        "VLESS UDP runtime should call protocols/vless packet helpers"
+    );
+}
+
+#[test]
 fn vmess_udp_state_model_lives_outside_runtime_root() {
     let root = read("src/protocol_runtime/vmess_udp.rs");
     let model = read("src/protocol_runtime/vmess_udp/model.rs");
@@ -2026,6 +2047,27 @@ fn vmess_udp_identity_is_adapter_parsed() {
         model.contains("struct VmessUdpUpstreamRequest")
             && model.contains("pub(super) cipher_name: &'a str"),
         "VMess UDP upstream request should retain cipher_name for mux pool"
+    );
+}
+
+#[test]
+fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
+    let runtime = read("src/protocol_runtime/vmess_udp.rs");
+
+    for forbidden in [
+        "UdpPacketFraming",
+        "VmessUdpPacketTarget",
+        "encode_udp_packet",
+        "decode_udp_packet",
+    ] {
+        assert!(
+            !runtime.contains(forbidden),
+            "VMess UDP runtime should delegate packet framing to protocols/vmess helpers; found `{forbidden}`"
+        );
+    }
+    assert!(
+        runtime.contains("vmess::build_udp_packet") && runtime.contains("vmess::parse_udp_packet"),
+        "VMess UDP runtime should call protocols/vmess packet helpers"
     );
 }
 
