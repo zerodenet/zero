@@ -25,7 +25,7 @@ impl crate::protocol_runtime::udp::PacketPathCarrier for Socks5PacketPath {
 
     async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
         let read = self.association.recv_packet(buf).await?;
-        let packet = socks5::parse_udp_packet(&buf[..read])
+        let packet = socks5::decode_udp_associate_response(&buf[..read])
             .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
         let len = packet.payload.len();
         buf[..len].copy_from_slice(&packet.payload);

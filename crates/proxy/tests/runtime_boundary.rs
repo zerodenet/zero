@@ -1827,6 +1827,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let root = read("src/protocol_runtime/socks5_udp.rs");
     let active = read("src/protocol_runtime/socks5_udp/active.rs");
     let model = read("src/protocol_runtime/socks5_udp/model.rs");
+    let packet_path_source = read("src/protocol_runtime/socks5_udp/packet_path.rs");
     let send_source = read("src/protocol_runtime/socks5_udp/send.rs");
     let send = manifest_dir().join("src/protocol_runtime/socks5_udp/send.rs");
     let runtime = manifest_dir().join("src/protocol_runtime/socks5_udp/runtime.rs");
@@ -1874,6 +1875,11 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         send_source.contains("async fn send_socks5_udp_packet")
             && send_source.contains("async fn ensure_socks5_udp_association"),
         "SOCKS5 UDP send orchestration should live in protocol_runtime/socks5_udp/send.rs"
+    );
+    assert!(
+        !packet_path_source.contains("socks5::parse_udp_packet")
+            && packet_path_source.contains("socks5::decode_udp_associate_response"),
+        "SOCKS5 packet-path carrier should decode responses through semantic SOCKS5 associate helpers"
     );
     assert!(
         root.contains("Socks5UdpPacketSend")
