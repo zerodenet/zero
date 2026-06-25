@@ -2476,12 +2476,12 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         "async fn dispatch_packet",
         "async fn forward_direct_udp_response",
         "async fn forward_chain_response",
-        "socks5::build_udp_packet(&address_from_socket_addr",
+        "socks5::encode_udp_associate_response(&address_from_socket_addr",
         "direct_response_session_id",
         "record_session_outbound_rx",
         "record_session_inbound_tx",
         "failed to forward direct UDP response",
-        "socks5::build_udp_packet(target",
+        "socks5::encode_udp_associate_response(target",
         "failed to send UDP chain response to client",
         "failed to build SOCKS5 UDP chain response",
         "chain upstream read error",
@@ -2526,17 +2526,35 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("async fn forward_relay_socket_response")
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("direct_response_session_id")
-            && direct_response.contains("socks5::build_udp_packet"),
+            && direct_response.contains("socks5::encode_udp_associate_response"),
         "SOCKS5 UDP direct response metering and framing should live in socks5_udp_associate/direct_response.rs"
     );
     assert!(
         chain_response.contains("async fn handle_chain_result")
             && chain_response.contains("pub(super) struct ChainResponseRequest")
             && chain_response.contains("struct ForwardChainResponseRequest")
-            && chain_response.contains("socks5::build_udp_packet(request.target")
+            && chain_response.contains("socks5::encode_udp_associate_response(request.target")
             && chain_response.contains("failed to send UDP chain response to client")
             && chain_response.contains("chain response task panicked"),
         "SOCKS5 UDP chain response result handling and framing should live in socks5_udp_associate/chain_response.rs"
+    );
+    for (path, source) in [
+        ("dispatch.rs", &dispatch),
+        ("direct_response.rs", &direct_response),
+        ("chain_response.rs", &chain_response),
+        ("upstream_response.rs", &upstream_response),
+    ] {
+        for forbidden in ["socks5::parse_udp_packet", "socks5::build_udp_packet"] {
+            assert!(
+                !source.contains(forbidden),
+                "SOCKS5 UDP associate {path} should use semantic associate packet helpers instead of `{forbidden}`"
+            );
+        }
+    }
+    assert!(
+        dispatch.contains("socks5::decode_udp_associate_request")
+            && upstream_response.contains("socks5::decode_udp_associate_response"),
+        "SOCKS5 UDP associate dispatch/attribution should use semantic decode helpers"
     );
     assert!(
         upstream_response.contains("async fn handle_upstream_response")

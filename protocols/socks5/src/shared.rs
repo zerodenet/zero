@@ -243,3 +243,19 @@ pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<
     packet.extend_from_slice(payload);
     Ok(packet)
 }
+
+pub fn decode_udp_associate_request(packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+    parse_udp_packet(packet)
+}
+
+pub fn decode_udp_associate_response(packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+    parse_udp_packet(packet)
+}
+
+pub fn encode_udp_associate_response(
+    address: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    build_udp_packet(address, port, payload)
+}

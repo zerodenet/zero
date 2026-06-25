@@ -78,7 +78,7 @@ fn upstream_response_session_id(
     payload: &[u8],
 ) -> Option<u64> {
     let association = dispatch.socks5_upstream_view()?;
-    match socks5::parse_udp_packet(payload) {
+    match socks5::decode_udp_associate_response(payload) {
         Ok(packet) => dispatch.upstream_response_session_id(
             association.outbound_tag,
             &packet.target,
