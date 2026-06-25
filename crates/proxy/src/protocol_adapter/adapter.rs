@@ -2,7 +2,6 @@ use std::fmt;
 
 use async_trait::async_trait;
 
-use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::defaults;
@@ -13,78 +12,6 @@ use super::UdpAdapterContext;
 /// compiled-in protocols appear in the registry.
 #[async_trait]
 pub(crate) trait ProtocolAdapter: Send + Sync + fmt::Debug {
-    /// Start a UDP outbound flow for the resolved leaf.
-    ///
-    /// The adapter extracts its own variant from `leaf` and drives its
-    /// per-protocol UDP manager on `dispatch` (each protocol owns a manager
-    /// field on [`crate::runtime::udp_dispatch::UdpDispatch`]). The runtime
-    /// dispatches via [`ProtocolRegistry::find_outbound_leaf`] instead of
-    /// matching on the protocol enum. Defaults to "not supported".
-    async fn start_udp_flow(
-        &self,
-        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        _ctx: UdpAdapterContext<'_>,
-        _session: &Session,
-        _leaf: &ResolvedLeafOutbound<'_>,
-        _payload: &[u8],
-    ) -> Result<
-        crate::runtime::udp_dispatch::FlowStartResult,
-        crate::runtime::udp_dispatch::FlowFailure,
-    > {
-        Err(defaults::udp_outbound_unsupported())
-    }
-
-    /// Whether the UDP relay chain final hop needs the two-stream XHTTP path.
-    ///
-    /// Only the VLESS adapter overrides this (returns `true` for legacy
-    /// split_http packet-up / stream-up modes). The runtime checks this
-    /// *before* running the relay prefix so it can dial two carrier streams.
-    fn udp_relay_needs_two_streams(&self, _leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        false
-    }
-
-    /// Drive the two-stream XHTTP UDP relay path (VLESS legacy split_http).
-    ///
-    /// The adapter owns the full path: it runs the relay prefix twice (POST +
-    /// GET carrier), builds the split-HTTP pair, and establishes the VLESS UDP
-    /// upstream. Only the VLESS adapter overrides this.
-    async fn start_udp_relay_two_stream(
-        &self,
-        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        _ctx: UdpAdapterContext<'_>,
-        _session: &Session,
-        _chain: Vec<ResolvedLeafOutbound<'_>>,
-        _payload: &[u8],
-    ) -> Result<
-        crate::runtime::udp_dispatch::FlowStartResult,
-        crate::runtime::udp_dispatch::FlowFailure,
-    > {
-        Err(defaults::udp_two_stream_relay_unsupported())
-    }
-
-    /// Establish the UDP final hop over a carrier stream from the relay prefix.
-    ///
-    /// The adapter receives the carrier produced by `dispatch_tcp_relay_prefix`
-    /// and runs its protocol's UDP-over-relay logic (build transport over the
-    /// stream, or pass the stream to its chain manager). The runtime dispatches
-    /// via [`ProtocolRegistry::find_outbound_leaf`] instead of matching on the
-    /// protocol enum. Defaults to "not supported".
-    async fn start_udp_relay_final_hop(
-        &self,
-        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        _ctx: UdpAdapterContext<'_>,
-        _session: &Session,
-        carrier: crate::transport::RelayCarrier,
-        _leaf: &ResolvedLeafOutbound<'_>,
-        _payload: &[u8],
-    ) -> Result<
-        crate::runtime::udp_dispatch::FlowStartResult,
-        crate::runtime::udp_dispatch::FlowFailure,
-    > {
-        let _ = carrier;
-        Err(defaults::udp_relay_final_hop_unsupported())
-    }
-
     /// If this leaf can serve as a UDP packet-path carrier (relay-chain first
     /// hop that provides a raw send/recv channel), return its identity
     /// descriptor (cache key + endpoint). Cheap; used for cache lookup before

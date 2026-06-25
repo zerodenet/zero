@@ -9,7 +9,7 @@ use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
     OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext,
+    UdpAdapterContext, UdpFlowCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -28,7 +28,11 @@ pub(crate) struct VmessAdapter;
 
 #[cfg(feature = "vmess")]
 #[async_trait]
-impl ProtocolAdapter for VmessAdapter {
+impl ProtocolAdapter for VmessAdapter {}
+
+#[cfg(feature = "vmess")]
+#[async_trait]
+impl UdpFlowCapability for VmessAdapter {
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,

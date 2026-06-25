@@ -9,7 +9,7 @@ use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
     OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext,
+    UdpAdapterContext, UdpFlowCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -28,7 +28,11 @@ pub(crate) struct MieruAdapter;
 
 #[cfg(feature = "mieru")]
 #[async_trait]
-impl ProtocolAdapter for MieruAdapter {
+impl ProtocolAdapter for MieruAdapter {}
+
+#[cfg(feature = "mieru")]
+#[async_trait]
+impl UdpFlowCapability for MieruAdapter {
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,

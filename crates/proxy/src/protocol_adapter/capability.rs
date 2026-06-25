@@ -106,42 +106,51 @@ pub(crate) trait TcpOutboundCapability {
 pub(crate) trait UdpFlowCapability {
     async fn start_udp_flow(
         &self,
-        dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
+        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
+        _ctx: UdpAdapterContext<'_>,
+        _session: &Session,
+        _leaf: &ResolvedLeafOutbound<'_>,
+        _payload: &[u8],
     ) -> Result<
         crate::runtime::udp_dispatch::FlowStartResult,
         crate::runtime::udp_dispatch::FlowFailure,
-    >;
+    > {
+        Err(super::defaults::udp_outbound_unsupported())
+    }
 
-    fn udp_relay_needs_two_streams(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool;
+    fn udp_relay_needs_two_streams(&self, _leaf: &ResolvedLeafOutbound<'_>) -> bool {
+        false
+    }
 
     async fn start_udp_relay_two_stream(
         &self,
-        dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        chain: Vec<ResolvedLeafOutbound<'_>>,
-        payload: &[u8],
+        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
+        _ctx: UdpAdapterContext<'_>,
+        _session: &Session,
+        _chain: Vec<ResolvedLeafOutbound<'_>>,
+        _payload: &[u8],
     ) -> Result<
         crate::runtime::udp_dispatch::FlowStartResult,
         crate::runtime::udp_dispatch::FlowFailure,
-    >;
+    > {
+        Err(super::defaults::udp_two_stream_relay_unsupported())
+    }
 
     async fn start_udp_relay_final_hop(
         &self,
-        dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
+        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
+        _ctx: UdpAdapterContext<'_>,
+        _session: &Session,
         carrier: crate::transport::RelayCarrier,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
+        _leaf: &ResolvedLeafOutbound<'_>,
+        _payload: &[u8],
     ) -> Result<
         crate::runtime::udp_dispatch::FlowStartResult,
         crate::runtime::udp_dispatch::FlowFailure,
-    >;
+    > {
+        let _ = carrier;
+        Err(super::defaults::udp_relay_final_hop_unsupported())
+    }
 }
 
 #[async_trait]
@@ -170,63 +179,6 @@ pub(crate) trait UdpPacketPathCapability {
         &self,
         leaf: &ResolvedLeafOutbound<'a>,
     ) -> Option<crate::protocol_runtime::udp::UdpDatagramSource<'a>>;
-}
-
-#[async_trait]
-impl<T> UdpFlowCapability for T
-where
-    T: ProtocolAdapter + ?Sized,
-{
-    async fn start_udp_flow(
-        &self,
-        dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<
-        crate::runtime::udp_dispatch::FlowStartResult,
-        crate::runtime::udp_dispatch::FlowFailure,
-    > {
-        ProtocolAdapter::start_udp_flow(self, dispatch, ctx, session, leaf, payload).await
-    }
-
-    fn udp_relay_needs_two_streams(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        ProtocolAdapter::udp_relay_needs_two_streams(self, leaf)
-    }
-
-    async fn start_udp_relay_two_stream(
-        &self,
-        dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        chain: Vec<ResolvedLeafOutbound<'_>>,
-        payload: &[u8],
-    ) -> Result<
-        crate::runtime::udp_dispatch::FlowStartResult,
-        crate::runtime::udp_dispatch::FlowFailure,
-    > {
-        ProtocolAdapter::start_udp_relay_two_stream(self, dispatch, ctx, session, chain, payload)
-            .await
-    }
-
-    async fn start_udp_relay_final_hop(
-        &self,
-        dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        carrier: crate::transport::RelayCarrier,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<
-        crate::runtime::udp_dispatch::FlowStartResult,
-        crate::runtime::udp_dispatch::FlowFailure,
-    > {
-        ProtocolAdapter::start_udp_relay_final_hop(
-            self, dispatch, ctx, session, carrier, leaf, payload,
-        )
-        .await
-    }
 }
 
 #[async_trait]

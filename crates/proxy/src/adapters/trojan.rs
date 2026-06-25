@@ -9,7 +9,7 @@ use crate::adapters::common::proxy_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
     OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext,
+    UdpAdapterContext, UdpFlowCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -28,7 +28,11 @@ pub(crate) struct TrojanAdapter;
 
 #[cfg(feature = "trojan")]
 #[async_trait]
-impl ProtocolAdapter for TrojanAdapter {
+impl ProtocolAdapter for TrojanAdapter {}
+
+#[cfg(feature = "trojan")]
+#[async_trait]
+impl UdpFlowCapability for TrojanAdapter {
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,

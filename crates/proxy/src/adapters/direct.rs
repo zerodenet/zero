@@ -9,7 +9,7 @@ use crate::adapters::common::direct_leaf_runtime;
 use crate::protocol_adapter::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
     OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext,
+    UdpAdapterContext, UdpFlowCapability,
 };
 use crate::protocol_capability::protocol_descriptor;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -24,7 +24,10 @@ mod udp;
 pub(crate) struct DirectAdapter;
 
 #[async_trait]
-impl ProtocolAdapter for DirectAdapter {
+impl ProtocolAdapter for DirectAdapter {}
+
+#[async_trait]
+impl UdpFlowCapability for DirectAdapter {
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
