@@ -1,8 +1,11 @@
 use zero_core::Session;
 
-use crate::runtime::udp_dispatch::{FlowFailure, UdpDispatch};
+use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
 pub(crate) struct Hysteria2DatagramSend<'a> {
+    pub(crate) tag: &'a str,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
@@ -28,5 +31,35 @@ impl UdpDispatch {
                 payload: request.payload,
             })
             .await
+    }
+
+    #[cfg(feature = "hysteria2")]
+    pub(crate) async fn start_hysteria2_datagram_flow(
+        &mut self,
+        request: Hysteria2DatagramSend<'_>,
+    ) -> Result<FlowStartResult, FlowFailure> {
+        let sent = self
+            .send_hysteria2_datagram(Hysteria2DatagramSend {
+                tag: request.tag,
+                session: request.session,
+                server: request.server,
+                port: request.port,
+                password: request.password,
+                client_fingerprint: request.client_fingerprint,
+                payload: request.payload,
+            })
+            .await?;
+        Ok(FlowStartResult::Flow {
+            outbound: Box::new(UdpFlowOutbound::Datagram {
+                tag: request.tag.to_string(),
+                server: request.server.to_string(),
+                port: request.port,
+                protocol: ProtocolUdpFlowSnapshot::Hysteria2 {
+                    password: request.password.to_string(),
+                    client_fingerprint: request.client_fingerprint.map(ToString::to_string),
+                },
+            }),
+            tx_bytes: sent as u64,
+        })
     }
 }

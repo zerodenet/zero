@@ -4,11 +4,9 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_adapter::ProtocolAdapter;
-use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_dispatch::{
     FlowFailure, FlowStartResult, MieruDatagramSend, MieruRelaySend, UdpDispatch,
 };
-use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
 impl MieruAdapter {
@@ -30,9 +28,10 @@ impl MieruAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let sent = dispatch
-            .send_mieru_datagram(MieruDatagramSend {
+        dispatch
+            .start_mieru_datagram_flow(MieruDatagramSend {
                 proxy,
+                tag,
                 session,
                 server,
                 port: *port,
@@ -41,24 +40,6 @@ impl MieruAdapter {
                 payload,
             })
             .await
-            .map_err(|f: FlowFailure| FlowFailure {
-                stage: f.stage,
-                error: f.error,
-                upstream: f.upstream,
-            })?;
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::StreamPacket {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                protocol: ProtocolUdpFlowSnapshot::Mieru {
-                    username: (*username).to_string(),
-                    password: (*password).to_string(),
-                    relay_chain: false,
-                },
-            }),
-            tx_bytes: sent as u64,
-        })
     }
 
     pub(super) async fn start_udp_relay_final_hop_impl(
@@ -79,8 +60,9 @@ impl MieruAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let sent = dispatch
-            .send_mieru_relay(MieruRelaySend {
+        dispatch
+            .start_mieru_relay_flow(MieruRelaySend {
+                tag,
                 session,
                 carrier,
                 server,
@@ -89,19 +71,6 @@ impl MieruAdapter {
                 password,
                 payload,
             })
-            .await?;
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::StreamPacket {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                protocol: ProtocolUdpFlowSnapshot::Mieru {
-                    username: (*username).to_string(),
-                    password: (*password).to_string(),
-                    relay_chain: true,
-                },
-            }),
-            tx_bytes: sent as u64,
-        })
+            .await
     }
 }

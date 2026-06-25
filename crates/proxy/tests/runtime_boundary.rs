@@ -4902,47 +4902,89 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
             !content.contains("protocol_parts()"),
             "{source} should ask UdpDispatch facades to start protocol state instead of borrowing protocol_parts()"
         );
+        assert!(
+            !content.contains("ProtocolUdpFlowSnapshot"),
+            "{source} should ask UdpDispatch facades to describe protocol UDP flow snapshots"
+        );
+        if source != "src/adapters/direct/udp.rs" {
+            assert!(
+                !content.contains("FlowStartResult::Flow"),
+                "{source} should let UdpDispatch facades build tracked protocol UDP flow results"
+            );
+        }
     }
 
-    for (source, request, start) in [
+    for (source, request, start, flow_start) in [
         (
             "src/runtime/udp_dispatch/hysteria2_flow.rs",
             "Hysteria2DatagramSend",
             "start_hysteria2_udp_flow",
+            "start_hysteria2_datagram_flow",
         ),
         (
             "src/runtime/udp_dispatch/mieru_flow.rs",
             "MieruDatagramSend",
             "start_mieru_udp_flow",
+            "start_mieru_datagram_flow",
         ),
         (
             "src/runtime/udp_dispatch/shadowsocks_flow.rs",
             "ShadowsocksDatagramSend",
             "start_shadowsocks_udp_flow",
+            "start_shadowsocks_datagram_flow",
+        ),
+        (
+            "src/runtime/udp_dispatch/socks5_flow.rs",
+            "Socks5RelaySend",
+            "send_socks5_packet",
+            "start_socks5_relay_flow",
         ),
         (
             "src/runtime/udp_dispatch/trojan_flow.rs",
             "TrojanDatagramSend",
             "start_trojan_udp_flow",
+            "start_trojan_datagram_flow",
         ),
         (
             "src/runtime/udp_dispatch/vless_flow.rs",
             "VlessDatagramSend",
             "start_vless_udp_flow",
+            "send_vless_datagram",
         ),
         (
             "src/runtime/udp_dispatch/vmess_flow.rs",
             "VmessDatagramSend",
             "start_vmess_udp_flow",
+            "send_vmess_datagram",
         ),
     ] {
         let facade = read(source);
-        for required in [request, start, "&mut self.chain_tasks"] {
+        for required in [request, start, flow_start] {
             assert!(
                 facade.contains(required),
                 "{source} should own dispatch facade detail `{required}`"
             );
         }
+        if source != "src/runtime/udp_dispatch/socks5_flow.rs" {
+            assert!(
+                facade.contains("&mut self.chain_tasks"),
+                "{source} should own chain task bridging for packet/stream UDP flows"
+            );
+        }
+    }
+
+    for source in [
+        "src/runtime/udp_dispatch/hysteria2_flow.rs",
+        "src/runtime/udp_dispatch/mieru_flow.rs",
+        "src/runtime/udp_dispatch/shadowsocks_flow.rs",
+        "src/runtime/udp_dispatch/socks5_flow.rs",
+        "src/runtime/udp_dispatch/trojan_flow.rs",
+    ] {
+        let facade = read(source);
+        assert!(
+            facade.contains("ProtocolUdpFlowSnapshot") && facade.contains("FlowStartResult::Flow"),
+            "{source} should own protocol UDP flow snapshot and tracked-flow result construction"
+        );
     }
 }
 

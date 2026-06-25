@@ -6,11 +6,9 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_adapter::ProtocolAdapter;
-use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_dispatch::{
     FlowFailure, FlowStartResult, ShadowsocksDatagramSend, UdpDispatch,
 };
-use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
 fn parse_shadowsocks_udp_cipher(
@@ -158,37 +156,20 @@ impl ShadowsocksAdapter {
             "udp_shadowsocks_parse_cipher",
             Some((server, *port)),
         )?;
-        let sent = dispatch
-            .send_shadowsocks_datagram(ShadowsocksDatagramSend {
+        dispatch
+            .start_shadowsocks_datagram_flow(ShadowsocksDatagramSend {
                 proxy,
+                tag,
                 session,
                 server,
                 port: *port,
                 password,
+                datagram_cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
+                    tag, server, *port, cipher, password,
+                ),
                 cipher: cipher_kind,
                 payload,
             })
             .await
-            .map_err(|f: FlowFailure| FlowFailure {
-                stage: f.stage,
-                error: f.error,
-                upstream: f.upstream,
-            })?;
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Datagram {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                protocol: ProtocolUdpFlowSnapshot::Shadowsocks {
-                    password: (*password).to_string(),
-                    datagram_cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
-                        tag, server, *port, cipher, password,
-                    ),
-                    cipher_kind,
-                    packet_path_carrier: None,
-                },
-            }),
-            tx_bytes: sent as u64,
-        })
     }
 }

@@ -6,11 +6,9 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_adapter::ProtocolAdapter;
-use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_dispatch::{
     FlowFailure, FlowStartResult, Hysteria2DatagramSend, UdpDispatch,
 };
-use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
 impl Hysteria2Adapter {
     #[cfg(feature = "shadowsocks")]
@@ -111,8 +109,9 @@ impl Hysteria2Adapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let sent = dispatch
-            .send_hysteria2_datagram(Hysteria2DatagramSend {
+        dispatch
+            .start_hysteria2_datagram_flow(Hysteria2DatagramSend {
+                tag,
                 session,
                 server,
                 port: *port,
@@ -121,22 +120,5 @@ impl Hysteria2Adapter {
                 payload,
             })
             .await
-            .map_err(|f: FlowFailure| FlowFailure {
-                stage: f.stage,
-                error: f.error,
-                upstream: f.upstream,
-            })?;
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Datagram {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                protocol: ProtocolUdpFlowSnapshot::Hysteria2 {
-                    password: (*password).to_string(),
-                    client_fingerprint: (*client_fingerprint).map(|s| s.to_string()),
-                },
-            }),
-            tx_bytes: sent as u64,
-        })
     }
 }

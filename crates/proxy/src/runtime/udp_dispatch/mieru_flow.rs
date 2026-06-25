@@ -1,10 +1,13 @@
 use zero_core::Session;
 
-use crate::runtime::udp_dispatch::{FlowFailure, UdpDispatch};
+use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
 pub(crate) struct MieruDatagramSend<'a> {
     pub(crate) proxy: &'a Proxy,
+    pub(crate) tag: &'a str,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
@@ -14,6 +17,7 @@ pub(crate) struct MieruDatagramSend<'a> {
 }
 
 pub(crate) struct MieruRelaySend<'a> {
+    pub(crate) tag: &'a str,
     pub(crate) session: &'a Session,
     pub(crate) carrier: crate::transport::RelayCarrier,
     pub(crate) server: &'a str,
@@ -43,6 +47,37 @@ impl UdpDispatch {
             .await
     }
 
+    pub(crate) async fn start_mieru_datagram_flow(
+        &mut self,
+        request: MieruDatagramSend<'_>,
+    ) -> Result<FlowStartResult, FlowFailure> {
+        let sent = self
+            .send_mieru_datagram(MieruDatagramSend {
+                proxy: request.proxy,
+                tag: request.tag,
+                session: request.session,
+                server: request.server,
+                port: request.port,
+                username: request.username,
+                password: request.password,
+                payload: request.payload,
+            })
+            .await?;
+        Ok(FlowStartResult::Flow {
+            outbound: Box::new(UdpFlowOutbound::StreamPacket {
+                tag: request.tag.to_string(),
+                server: request.server.to_string(),
+                port: request.port,
+                protocol: ProtocolUdpFlowSnapshot::Mieru {
+                    username: request.username.to_string(),
+                    password: request.password.to_string(),
+                    relay_chain: false,
+                },
+            }),
+            tx_bytes: sent as u64,
+        })
+    }
+
     pub(crate) async fn send_mieru_relay(
         &mut self,
         request: MieruRelaySend<'_>,
@@ -61,5 +96,36 @@ impl UdpDispatch {
                 },
             )
             .await
+    }
+
+    pub(crate) async fn start_mieru_relay_flow(
+        &mut self,
+        request: MieruRelaySend<'_>,
+    ) -> Result<FlowStartResult, FlowFailure> {
+        let sent = self
+            .send_mieru_relay(MieruRelaySend {
+                tag: request.tag,
+                session: request.session,
+                carrier: request.carrier,
+                server: request.server,
+                port: request.port,
+                username: request.username,
+                password: request.password,
+                payload: request.payload,
+            })
+            .await?;
+        Ok(FlowStartResult::Flow {
+            outbound: Box::new(UdpFlowOutbound::StreamPacket {
+                tag: request.tag.to_string(),
+                server: request.server.to_string(),
+                port: request.port,
+                protocol: ProtocolUdpFlowSnapshot::Mieru {
+                    username: request.username.to_string(),
+                    password: request.password.to_string(),
+                    relay_chain: true,
+                },
+            }),
+            tx_bytes: sent as u64,
+        })
     }
 }
