@@ -284,6 +284,45 @@ impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecode
     }
 }
 
+#[cfg(feature = "crypto")]
+pub fn encode_udp_datagram(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+    cipher: super::shared::CipherKind,
+    password: &[u8],
+) -> Result<Vec<u8>, Error> {
+    <ShadowsocksOutbound as UdpDatagramFraming<
+        ShadowsocksUdpPacketTarget<'_>,
+        ShadowsocksUdpDecodeContext<'_>,
+    >>::encode_udp_datagram(
+        &ShadowsocksOutbound,
+        &ShadowsocksUdpPacketTarget {
+            target,
+            port,
+            payload,
+            cipher,
+            password,
+        },
+    )
+}
+
+#[cfg(feature = "crypto")]
+pub fn decode_udp_datagram(
+    datagram: &[u8],
+    cipher: super::shared::CipherKind,
+    password: &[u8],
+) -> Result<ShadowsocksUdpPacket, Error> {
+    <ShadowsocksOutbound as UdpDatagramFraming<
+        ShadowsocksUdpPacketTarget<'_>,
+        ShadowsocksUdpDecodeContext<'_>,
+    >>::decode_udp_datagram(
+        &ShadowsocksOutbound,
+        &ShadowsocksUdpDecodeContext { cipher, password },
+        datagram,
+    )
+}
+
 /// Codec state for a Shadowsocks UDP datagram chain hop.
 ///
 /// Captures the cipher and password needed to encode/decode Shadowsocks

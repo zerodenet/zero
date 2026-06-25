@@ -5271,7 +5271,7 @@ fn h2_udp_establish_logic_lives_outside_manager() {
 #[test]
 fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
-    let codec = manifest_dir().join("src/protocol_runtime/udp/ss_manager/codec.rs");
+    let codec = read("src/protocol_runtime/udp/ss_manager/codec.rs");
 
     for forbidden in [
         "UdpDatagramFraming",
@@ -5280,12 +5280,17 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     ] {
         assert!(
             !manager.contains(forbidden),
-            "ss_manager.rs should keep datagram codec details in ss_manager/codec.rs; found `{forbidden}`"
+            "ss_manager.rs should not own Shadowsocks datagram codec details; found `{forbidden}`"
+        );
+        assert!(
+            !codec.contains(forbidden),
+            "ss_manager/codec.rs should delegate Shadowsocks datagram framing to protocols/shadowsocks helpers; found `{forbidden}`"
         );
     }
     assert!(
-        codec.exists(),
-        "Shadowsocks UDP datagram codec should live in ss_manager/codec.rs"
+        codec.contains("shadowsocks::encode_udp_datagram")
+            && codec.contains("shadowsocks::decode_udp_datagram"),
+        "Shadowsocks UDP datagram codec should delegate encode/decode to protocols/shadowsocks"
     );
 }
 

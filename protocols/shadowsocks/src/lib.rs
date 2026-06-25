@@ -17,8 +17,9 @@ pub use metadata::ShadowsocksProtocol;
 pub use outbound::ShadowsocksOutbound;
 #[cfg(feature = "crypto")]
 pub use outbound::{
-    ShadowsocksDatagramCodec, ShadowsocksOutboundSession, ShadowsocksTcpTarget,
-    ShadowsocksUdpDecodeContext, ShadowsocksUdpPacket, ShadowsocksUdpPacketTarget,
+    decode_udp_datagram, encode_udp_datagram, ShadowsocksDatagramCodec, ShadowsocksOutboundSession,
+    ShadowsocksTcpTarget, ShadowsocksUdpDecodeContext, ShadowsocksUdpPacket,
+    ShadowsocksUdpPacketTarget,
 };
 #[cfg(feature = "crypto")]
 pub use shared::{

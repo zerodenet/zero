@@ -1,6 +1,5 @@
 use zero_core::Address;
 use zero_engine::EngineError;
-use zero_traits::UdpDatagramFraming;
 
 pub(super) fn encode_packet(
     target: &Address,
@@ -9,20 +8,8 @@ pub(super) fn encode_packet(
     cipher: shadowsocks::CipherKind,
     password: &str,
 ) -> Result<Vec<u8>, EngineError> {
-    <shadowsocks::ShadowsocksOutbound as UdpDatagramFraming<
-        shadowsocks::ShadowsocksUdpPacketTarget,
-        shadowsocks::ShadowsocksUdpDecodeContext,
-    >>::encode_udp_datagram(
-        &shadowsocks::ShadowsocksOutbound,
-        &shadowsocks::ShadowsocksUdpPacketTarget {
-            target,
-            port,
-            payload,
-            cipher,
-            password: password.as_bytes(),
-        },
-    )
-    .map_err(|error| EngineError::Io(std::io::Error::other(error)))
+    shadowsocks::encode_udp_datagram(target, port, payload, cipher, password.as_bytes())
+        .map_err(|error| EngineError::Io(std::io::Error::other(error)))
 }
 
 pub(super) fn decode_packet(
@@ -30,16 +17,6 @@ pub(super) fn decode_packet(
     cipher: shadowsocks::CipherKind,
     password: &str,
 ) -> Result<shadowsocks::ShadowsocksUdpPacket, EngineError> {
-    <shadowsocks::ShadowsocksOutbound as UdpDatagramFraming<
-        shadowsocks::ShadowsocksUdpPacketTarget,
-        shadowsocks::ShadowsocksUdpDecodeContext,
-    >>::decode_udp_datagram(
-        &shadowsocks::ShadowsocksOutbound,
-        &shadowsocks::ShadowsocksUdpDecodeContext {
-            cipher,
-            password: password.as_bytes(),
-        },
-        payload,
-    )
-    .map_err(|error| EngineError::Io(std::io::Error::other(error)))
+    shadowsocks::decode_udp_datagram(payload, cipher, password.as_bytes())
+        .map_err(|error| EngineError::Io(std::io::Error::other(error)))
 }
