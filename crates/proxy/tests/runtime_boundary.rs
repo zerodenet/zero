@@ -4824,23 +4824,40 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
 #[test]
 fn trojan_udp_packet_stream_tasks_live_outside_manager() {
     let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let stream = manifest_dir().join("src/protocol_runtime/udp/trojan_manager/stream.rs");
+    let stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
+    let model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
 
-    for forbidden in [
-        "MeteredStream",
-        "UdpPacketStreamFraming",
-        "write_udp_packet",
-        "read_udp_packet",
-        "tokio::io::split",
-    ] {
+    for forbidden in ["MeteredStream", "tokio::io::split"] {
         assert!(
             !manager.contains(forbidden),
             "trojan_manager.rs should keep packet stream task details in trojan_manager/stream.rs; found `{forbidden}`"
         );
     }
+    for forbidden in [
+        "UdpPacketStreamFraming",
+        "write_udp_packet",
+        "read_udp_packet",
+        "TrojanUdpPacket {",
+        "trojan::TrojanUdpPacket",
+        "use trojan::TrojanUdpPacket",
+    ] {
+        assert!(
+            !manager.contains(forbidden),
+            "trojan_manager.rs should not own Trojan packet framing details; found `{forbidden}`"
+        );
+        assert!(
+            !stream.contains(forbidden),
+            "trojan_manager/stream.rs should delegate Trojan packet framing to protocols/trojan helpers; found `{forbidden}`"
+        );
+        assert!(
+            !model.contains(forbidden),
+            "trojan_manager/model.rs should keep proxy-owned packet models, not protocol packet structs; found `{forbidden}`"
+        );
+    }
     assert!(
-        stream.exists(),
-        "Trojan UDP packet stream tasks should live in trojan_manager/stream.rs"
+        stream.contains("trojan::write_udp_response")
+            && stream.contains("trojan::read_inbound_udp_packet"),
+        "Trojan UDP packet stream tasks should delegate packet framing to protocols/trojan helpers"
     );
 }
 
@@ -4994,7 +5011,7 @@ fn mieru_udp_send_orchestration_lives_outside_manager() {
 #[test]
 fn trojan_udp_state_model_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let model = manifest_dir().join("src/protocol_runtime/udp/trojan_manager/model.rs");
+    let model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
 
     for forbidden in [
         "enum TrojanKey",
@@ -5009,15 +5026,15 @@ fn trojan_udp_state_model_lives_outside_manager() {
         );
     }
     assert!(
-        model.exists(),
-        "Trojan UDP state/request models should live in trojan_manager/model.rs"
+        model.contains("struct TrojanPacket") && !model.contains("TrojanUdpPacket"),
+        "Trojan UDP state/request models should use proxy-owned TrojanPacket rather than protocol packet structs"
     );
 }
 
 #[test]
 fn trojan_udp_establish_logic_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let establish = manifest_dir().join("src/protocol_runtime/udp/trojan_manager/establish.rs");
+    let establish = read("src/protocol_runtime/udp/trojan_manager/establish.rs");
 
     for forbidden in [
         "fn establish_direct",
@@ -5026,16 +5043,29 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
         "connect::direct_tls_stream",
         "connect::relay_tls_stream",
         "spawn_packet_stream",
-        "TrojanUdpPacket {",
     ] {
         assert!(
             !manager.contains(forbidden),
             "trojan_manager.rs should keep UDP establish glue in trojan_manager/establish.rs; found `{forbidden}`"
         );
     }
+    for forbidden in [
+        "TrojanUdpPacket {",
+        "use trojan::TrojanUdpPacket",
+        "trojan::TrojanUdpPacket",
+    ] {
+        assert!(
+            !manager.contains(forbidden),
+            "trojan_manager.rs should not use protocol packet structs; found `{forbidden}`"
+        );
+        assert!(
+            !establish.contains(forbidden),
+            "trojan_manager/establish.rs should use proxy-owned TrojanPacket models instead of protocol packet structs; found `{forbidden}`"
+        );
+    }
     assert!(
-        establish.exists(),
-        "Trojan UDP establish glue should live in trojan_manager/establish.rs"
+        establish.contains("TrojanPacket"),
+        "Trojan UDP establish glue should build proxy-owned TrojanPacket models"
     );
 }
 

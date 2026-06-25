@@ -1,10 +1,9 @@
 use super::super::packet_path_traits::TrojanUdpPeer;
 use super::connect;
-use super::model::TrojanEntry;
+use super::model::{TrojanEntry, TrojanPacket};
 use super::stream;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
-use trojan::TrojanUdpPacket;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 
@@ -64,8 +63,8 @@ async fn packet_stream(
     Ok(TrojanEntry { send_tx, recv_tx })
 }
 
-pub(super) fn packet(target: &Address, port: u16, payload: &[u8]) -> TrojanUdpPacket {
-    TrojanUdpPacket {
+pub(super) fn packet(target: &Address, port: u16, payload: &[u8]) -> TrojanPacket {
+    TrojanPacket {
         target: target.clone(),
         port,
         payload: payload.to_vec(),

@@ -1,16 +1,17 @@
 use super::bridge;
+use super::model::TrojanPacket;
 use super::socket::{ReadOnlySocket, WriteOnlySocket};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 use tokio::sync::{broadcast, mpsc};
-use trojan::{TrojanOutbound, TrojanUdpPacket, TrojanUdpPacketTunnelTarget};
+use trojan::{TrojanOutbound, TrojanUdpPacketTunnelTarget};
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_traits::{UdpPacketStreamFraming, UdpPacketTunnelProtocol};
+use zero_traits::UdpPacketTunnelProtocol;
 
 pub(super) struct PacketStream {
-    pub(super) send_tx: mpsc::Sender<TrojanUdpPacket>,
-    pub(super) recv_tx: broadcast::Sender<TrojanUdpPacket>,
+    pub(super) send_tx: mpsc::Sender<TrojanPacket>,
+    pub(super) recv_tx: broadcast::Sender<TrojanPacket>,
 }
 
 pub(super) async fn spawn_packet_stream(
@@ -32,26 +33,23 @@ pub(super) async fn spawn_packet_stream(
     .await?;
 
     let (read_half, write_half) = tokio::io::split(metered.into_inner());
-    let (send_tx, send_rx) = mpsc::channel::<TrojanUdpPacket>(32);
+    let (send_tx, send_rx) = mpsc::channel::<TrojanPacket>(32);
     let recv_tx = bridge::response_channel();
 
-    spawn_send_task(trojan, send_rx, WriteOnlySocket(write_half));
-    spawn_recv_task(trojan, ReadOnlySocket(read_half), recv_tx.clone());
+    spawn_send_task(send_rx, WriteOnlySocket(write_half));
+    spawn_recv_task(ReadOnlySocket(read_half), recv_tx.clone());
 
     Ok(PacketStream { send_tx, recv_tx })
 }
 
-fn spawn_send_task(
-    trojan: TrojanOutbound,
-    mut send_rx: mpsc::Receiver<TrojanUdpPacket>,
-    mut send_stream: WriteOnlySocket,
-) {
+fn spawn_send_task(mut send_rx: mpsc::Receiver<TrojanPacket>, mut send_stream: WriteOnlySocket) {
     tokio::spawn(async move {
         while let Some(packet) = send_rx.recv().await {
-            if <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::write_udp_packet(
-                &trojan,
+            if trojan::write_udp_response(
                 &mut send_stream,
-                &packet,
+                &packet.target,
+                packet.port,
+                &packet.payload,
             )
             .await
             .is_err()
@@ -62,19 +60,14 @@ fn spawn_send_task(
     });
 }
 
-fn spawn_recv_task(
-    trojan: TrojanOutbound,
-    mut recv_stream: ReadOnlySocket,
-    recv_tx: broadcast::Sender<TrojanUdpPacket>,
-) {
+fn spawn_recv_task(mut recv_stream: ReadOnlySocket, recv_tx: broadcast::Sender<TrojanPacket>) {
     tokio::spawn(async move {
-        while let Ok(packet) =
-            <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::read_udp_packet(
-                &trojan,
-                &mut recv_stream,
-            )
-            .await
-        {
+        while let Ok(packet) = trojan::read_inbound_udp_packet(&mut recv_stream).await {
+            let packet = TrojanPacket {
+                target: packet.target,
+                port: packet.port,
+                payload: packet.payload,
+            };
             if recv_tx.send(packet).is_err() {
                 break;
             }

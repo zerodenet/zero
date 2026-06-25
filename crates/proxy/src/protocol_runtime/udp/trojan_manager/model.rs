@@ -4,8 +4,14 @@ use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
-use trojan::TrojanUdpPacket;
 use zero_core::{Address, Session};
+
+#[derive(Debug, Clone)]
+pub(super) struct TrojanPacket {
+    pub(super) target: Address,
+    pub(super) port: u16,
+    pub(super) payload: Vec<u8>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) enum TrojanKey {
@@ -20,8 +26,8 @@ pub(super) enum TrojanKey {
 }
 
 pub(super) struct TrojanEntry {
-    pub(super) send_tx: mpsc::Sender<TrojanUdpPacket>,
-    pub(super) recv_tx: broadcast::Sender<TrojanUdpPacket>,
+    pub(super) send_tx: mpsc::Sender<TrojanPacket>,
+    pub(super) recv_tx: broadcast::Sender<TrojanPacket>,
 }
 
 pub(crate) struct TrojanSendExisting<'a> {
