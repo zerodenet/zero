@@ -4409,6 +4409,36 @@ fn packet_path_protocol_carriers_live_outside_carrier_facade() {
 }
 
 #[test]
+fn packet_path_chain_root_does_not_reexport_protocol_carrier_builders() {
+    let root = read("src/protocol_runtime/udp/packet_path_chain.rs");
+
+    for forbidden in [
+        "pub(crate) use carriers::build_shadowsocks_packet_path",
+        "pub(crate) use carriers::build_hysteria2_packet_path",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "packet_path_chain.rs should not re-export protocol carrier builder `{forbidden}`"
+        );
+    }
+    assert!(
+        root.contains("pub(crate) mod carriers;"),
+        "packet_path_chain.rs should expose the explicit carriers module for adapter capability bridges"
+    );
+
+    for source in [
+        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/hysteria2/udp.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("packet_path_chain::carriers::"),
+            "{source} should call packet-path carrier builders through the explicit carriers module"
+        );
+    }
+}
+
+#[test]
 fn packet_path_response_bridge_lives_outside_chain_manager() {
     let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
     let bridge = manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/bridge.rs");

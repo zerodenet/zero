@@ -15,7 +15,7 @@ use crate::runtime::Proxy;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 mod bridge;
-mod carriers;
+pub(crate) mod carriers;
 mod diagnostics;
 mod entry;
 mod key;
@@ -23,9 +23,6 @@ mod model;
 mod snapshot;
 
 use bridge::dispatch_via_entry;
-#[cfg(feature = "hysteria2")]
-pub(crate) use carriers::build_hysteria2_packet_path;
-pub(crate) use carriers::build_shadowsocks_packet_path;
 use entry::build_entry;
 use key::PathKey;
 use model::Entry;

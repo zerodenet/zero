@@ -91,7 +91,7 @@ impl ShadowsocksAdapter {
             Some((server, *port)),
         )
         .map_err(|failure| failure.error)?;
-        crate::protocol_runtime::udp::packet_path_chain::build_shadowsocks_packet_path(
+        crate::protocol_runtime::udp::packet_path_chain::carriers::build_shadowsocks_packet_path(
             proxy,
             server,
             *port,

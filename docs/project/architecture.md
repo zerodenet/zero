@@ -99,6 +99,7 @@ Packet-path entry build logic consumes datagram codecs supplied by `UdpDatagramS
 Packet-path datagram sources carry their protocol flow snapshot. Packet-path state may attach the cached carrier to that snapshot but must not construct protocol-named snapshots directly.
 Packet-path datagram sources expose a datagram key part for cache identity; `packet_path_chain::key` must not read protocol-source internals directly.
 `protocol_runtime::udp` root does not re-export protocol-named packet-path helper functions. Adapters call explicit packet-path submodules (`packet_path_snapshot`, `packet_path_chain`) when bridging capability methods.
+`packet_path_chain.rs` does not re-export protocol carrier builder functions; adapters call `packet_path_chain::carriers::*` explicitly when bridging packet-path carrier capabilities.
 
 Protocol stream/datagram codecs own protocol crypto/framing state. For example, Mieru inbound data-phase encryption/decryption lives in `protocols/mieru::MieruInboundDataCodec`, and Shadowsocks inbound UDP decode/replay/response encoding lives in `protocols/shadowsocks::ShadowsocksInboundUdpCodec`; `zero-proxy` only wraps those codecs as Tokio stream/socket adapters and must not hold their cipher/session primitives or build/parse protocol frames directly.
 
