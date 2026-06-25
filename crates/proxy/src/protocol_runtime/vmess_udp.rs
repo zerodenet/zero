@@ -167,14 +167,7 @@ async fn establish_vmess_udp_upstream_over_stream(
 ) -> Result<(VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>), EngineError> {
     let initial_packet = encode_vmess_udp_packet(&session.target, session.port, initial_payload)?;
 
-    let vmess_stream = vmess::VmessAeadStream::establish_udp_outbound(
-        stream,
-        &vmess::VmessOutbound,
-        session,
-        &uuid,
-        cipher,
-    )
-    .await?;
+    let vmess_stream = vmess::establish_udp_outbound_stream(stream, session, &uuid, cipher).await?;
     let mut metered = MeteredStream::new(TcpRelayStream::new(vmess_stream));
     metered.write_all(&initial_packet).await?;
 
@@ -319,9 +312,8 @@ async fn establish_vmess_udp_upstream(
         }
     };
 
-    let vmess_stream = vmess::VmessAeadStream::establish_udp_outbound(
+    let vmess_stream = vmess::establish_udp_outbound_stream(
         stream,
-        &vmess::VmessOutbound,
         request.session,
         &request.uuid,
         request.cipher,

@@ -26,6 +26,6 @@ pub use shared::{
 pub use stream::VmessAeadStream;
 pub use udp::{
     build_udp_packet, decode_inbound_udp_payload, encode_mux_udp_response, encode_udp_response,
-    parse_udp_packet, VmessInboundUdpPayload, VmessUdpPacket, VmessUdpPacketTarget,
-    VmessUdpPacketTunnelTarget, VmessUdpPayloadMode, VmessUdpPayloadState,
+    establish_udp_outbound_stream, parse_udp_packet, VmessInboundUdpPayload, VmessUdpPacket,
+    VmessUdpPacketTarget, VmessUdpPacketTunnelTarget, VmessUdpPayloadMode, VmessUdpPayloadState,
 };

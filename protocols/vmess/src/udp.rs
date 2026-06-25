@@ -118,6 +118,18 @@ impl<S> VmessAeadStream<S> {
     }
 }
 
+pub async fn establish_udp_outbound_stream<S>(
+    stream: S,
+    session: &Session,
+    uuid: &[u8; 16],
+    cipher: VmessCipher,
+) -> Result<VmessAeadStream<S>, Error>
+where
+    S: AsyncSocket,
+{
+    VmessAeadStream::establish_udp_outbound(stream, &VmessOutbound, session, uuid, cipher).await
+}
+
 pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
     let mut body = Vec::with_capacity(8 + payload.len());
     write_address(&mut body, address)?;

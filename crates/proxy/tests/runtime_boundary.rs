@@ -2085,6 +2085,8 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     for forbidden in [
         "UdpPacketFraming",
         "VmessUdpPacketTarget",
+        "VmessAeadStream::establish_udp_outbound",
+        "VmessOutbound",
         "encode_udp_packet",
         "decode_udp_packet",
     ] {
@@ -2096,6 +2098,10 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     assert!(
         runtime.contains("vmess::build_udp_packet") && runtime.contains("vmess::parse_udp_packet"),
         "VMess UDP runtime should call protocols/vmess packet helpers"
+    );
+    assert!(
+        runtime.contains("vmess::establish_udp_outbound_stream"),
+        "VMess UDP runtime should call protocols/vmess UDP stream helper"
     );
 }
 
