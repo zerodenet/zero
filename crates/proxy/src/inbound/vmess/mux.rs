@@ -57,7 +57,7 @@ impl Proxy {
 
         loop {
             select! {
-                frame = vmess::read_mux_frame_from_tokio(&mut reader) => {
+                frame = vmess::read_mux_stream_frame(&mut reader) => {
                     let frame = match frame {
                         Ok(frame) => frame,
                         Err(error) => {

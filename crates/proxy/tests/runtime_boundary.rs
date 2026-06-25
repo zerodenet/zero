@@ -2299,6 +2299,14 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
             "VMess inbound MUX task model should live in inbound/vmess/model.rs; missing `{required}`"
         );
     }
+    assert!(
+        !root.contains("read_mux_frame_from_tokio"),
+        "VMess inbound MUX runtime should use the protocol mux frame reader helper"
+    );
+    assert!(
+        root.contains("vmess::read_mux_stream_frame"),
+        "VMess inbound MUX runtime should call the protocol mux frame reader helper"
+    );
 }
 
 #[test]
