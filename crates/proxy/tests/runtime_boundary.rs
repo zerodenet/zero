@@ -1433,16 +1433,29 @@ fn vmess_tcp_connect_uses_request_model() {
         "parse_uuid",
         "VmessCipher::from_name",
         "vmess unknown cipher",
+        "VmessAeadStream::outbound",
+        "TcpSessionProtocol",
+        "VmessTcpSessionTarget",
     ] {
         assert!(
             !outbound.contains(forbidden),
             "VMess outbound TCP helper should receive adapter-parsed identity; found `{forbidden}`"
         );
+    }
+    for adapter_owned in [
+        "parse_uuid",
+        "VmessCipher::from_name",
+        "vmess unknown cipher",
+    ] {
         assert!(
-            adapter.contains(forbidden),
-            "VMess adapter TCP module should own outbound identity parsing detail `{forbidden}`"
+            adapter.contains(adapter_owned),
+            "VMess adapter TCP module should own outbound identity parsing detail `{adapter_owned}`"
         );
     }
+    assert!(
+        outbound.contains("vmess::establish_tcp_outbound_stream"),
+        "VMess outbound TCP helper should delegate VMess session and AEAD setup to protocols/vmess"
+    );
 }
 
 #[test]

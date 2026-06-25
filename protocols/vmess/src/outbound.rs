@@ -6,6 +6,7 @@ use crate::crypto::{
     create_xray_auth_id, current_timestamp, derive_xray_cmd_key, seal_xray_aead_header,
 };
 use crate::shared::{VmessCipher, CMD_TCP, VERSION};
+use crate::stream::VmessAeadStream;
 
 #[derive(Debug, Clone, Copy)]
 pub struct VmessOutbound;
@@ -120,6 +121,42 @@ impl<'a> TcpSessionProtocol<VmessTcpSessionTarget<'a>> for VmessOutbound {
         self.establish_tcp_session(stream, target.session, target.uuid, target.cipher)
             .await
     }
+}
+
+pub async fn establish_tcp_outbound_stream<S>(
+    mut stream: S,
+    session: &Session,
+    uuid: &[u8; 16],
+    cipher: VmessCipher,
+) -> Result<VmessAeadStream<S>, Error>
+where
+    S: AsyncSocket,
+{
+    let vmess_session = VmessOutbound
+        .establish_tcp_session(&mut stream, session, uuid, cipher)
+        .await?;
+    VmessAeadStream::outbound(stream, vmess_session)
+}
+
+pub async fn establish_tcp_outbound_session<S>(
+    stream: &mut S,
+    session: &Session,
+    uuid: &[u8; 16],
+    cipher: VmessCipher,
+) -> Result<VmessOutboundSession, Error>
+where
+    S: AsyncSocket,
+{
+    VmessOutbound
+        .establish_tcp_session(stream, session, uuid, cipher)
+        .await
+}
+
+pub fn wrap_tcp_outbound_stream<S>(
+    stream: S,
+    session: VmessOutboundSession,
+) -> Result<VmessAeadStream<S>, Error> {
+    VmessAeadStream::outbound(stream, session)
 }
 
 async fn send_request<S: AsyncSocket>(

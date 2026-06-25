@@ -7,7 +7,6 @@
 use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_traits::TcpSessionProtocol;
 
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
@@ -21,8 +20,6 @@ use crate::transport::{MeteredStream, TcpRelayStream};
 pub(crate) async fn connect_tcp(
     request: VmessTcpConnectRequest<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
-    use vmess::VmessOutbound;
-
     let VmessTcpConnectRequest {
         proxy,
         session,
@@ -119,18 +116,9 @@ pub(crate) async fn connect_tcp(
 
     let mut sock = MeteredStream::new(stream);
     let vmess_session =
-        <VmessOutbound as TcpSessionProtocol<vmess::VmessTcpSessionTarget>>::establish_tcp_session(
-            &VmessOutbound,
-            &mut sock,
-            &vmess::VmessTcpSessionTarget {
-                session,
-                uuid: &uuid,
-                cipher,
-            },
-        )
-        .await?;
+        vmess::establish_tcp_outbound_session(&mut sock, session, &uuid, cipher).await?;
     proxy.record_session_outbound_traffic(session.id, sock.drain_traffic());
-    Ok(TcpRelayStream::new(vmess::VmessAeadStream::outbound(
+    Ok(TcpRelayStream::new(vmess::wrap_tcp_outbound_stream(
         sock.into_inner(),
         vmess_session,
     )?))
@@ -154,26 +142,14 @@ pub(crate) struct VmessTcpConnectRequest<'a> {
 /// Apply a VMess AEAD session handshake over an existing stream (relay hop).
 /// Unlike [`connect_tcp`] this does not dial.
 pub(crate) async fn apply_tcp_hop(
-    mut stream: TcpRelayStream,
+    stream: TcpRelayStream,
     session: &Session,
     uuid: [u8; 16],
     cipher: vmess::VmessCipher,
 ) -> Result<TcpRelayStream, EngineError> {
-    use vmess::VmessOutbound;
-    let vmess_session =
-        <VmessOutbound as TcpSessionProtocol<vmess::VmessTcpSessionTarget>>::establish_tcp_session(
-            &VmessOutbound,
-            &mut stream,
-            &vmess::VmessTcpSessionTarget {
-                session,
-                uuid: &uuid,
-                cipher,
-            },
-        )
-        .await
-        .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
-    Ok(TcpRelayStream::new(vmess::VmessAeadStream::outbound(
-        stream,
-        vmess_session,
-    )?))
+    Ok(TcpRelayStream::new(
+        vmess::establish_tcp_outbound_stream(stream, session, &uuid, cipher)
+            .await
+            .map_err(|e| EngineError::Io(std::io::Error::other(e)))?,
+    ))
 }

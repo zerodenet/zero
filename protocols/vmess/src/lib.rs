@@ -19,7 +19,10 @@ pub use mux::{
     MUX_OPTION_DATA, MUX_OPTION_ERROR, MUX_STATUS_END, MUX_STATUS_KEEP, MUX_STATUS_KEEP_ALIVE,
     MUX_STATUS_NEW,
 };
-pub use outbound::{VmessOutbound, VmessOutboundSession, VmessTcpSessionTarget};
+pub use outbound::{
+    establish_tcp_outbound_session, establish_tcp_outbound_stream, wrap_tcp_outbound_stream,
+    VmessOutbound, VmessOutboundSession, VmessTcpSessionTarget,
+};
 pub use shared::{
     parse_uuid, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP, GCM_TAG_LEN, MUX_COOL_DOMAIN,
     MUX_COOL_PORT, VERSION,
