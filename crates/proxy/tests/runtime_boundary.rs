@@ -3427,12 +3427,11 @@ fn protocol_adapter_capabilities_use_contexts_not_proxy() {
         );
     }
 
-    for expected in ["UdpAdapterContext<'_>"] {
-        assert!(
-            adapter.contains(expected) && capability.contains(expected),
-            "adapter dispatch traits should use narrow context `{expected}`"
-        );
-    }
+    let expected = "UdpAdapterContext<'_>";
+    assert!(
+        adapter.contains(expected) && capability.contains(expected),
+        "adapter dispatch traits should use narrow context `{expected}`"
+    );
     assert!(
         !adapter.contains("InboundAdapterContext<'_>")
             && capability.contains("InboundAdapterContext<'_>"),
