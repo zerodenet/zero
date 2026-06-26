@@ -103,3 +103,15 @@ pub fn parse_udp_datagram(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
         payload,
     })
 }
+
+pub fn encode_udp_flow_packet(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    build_udp_datagram(0, 0, target, port, payload)
+}
+
+pub fn decode_udp_flow_packet(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
+    parse_udp_datagram(data)
+}

@@ -5344,9 +5344,14 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         );
     }
     assert!(
-        codec.contains("hysteria2::build_udp_datagram")
-            && codec.contains("hysteria2::parse_udp_datagram"),
-        "Hysteria2 UDP datagram codec should delegate encode/decode to protocols/hysteria2"
+        !codec.contains("hysteria2::build_udp_datagram")
+            && !codec.contains("hysteria2::parse_udp_datagram"),
+        "Hysteria2 UDP manager codec should use flow-specific protocol helpers instead of generic datagram primitives"
+    );
+    assert!(
+        codec.contains("hysteria2::encode_udp_flow_packet")
+            && codec.contains("hysteria2::decode_udp_flow_packet"),
+        "Hysteria2 UDP datagram codec should delegate encode/decode to flow-specific protocols/hysteria2 helpers"
     );
     assert!(
         carrier.contains("hysteria2::build_udp_datagram")
