@@ -3,6 +3,8 @@ use std::sync::Arc;
 use zero_core::Address;
 use zero_engine::EngineError;
 
+use crate::protocol_runtime::udp::PacketPathFlowSnapshot;
+
 /// Datagram codec for encoding/decoding inner protocol datagrams.
 pub(crate) use zero_traits::DatagramCodec;
 
@@ -93,4 +95,34 @@ pub(crate) struct UdpDatagramKey {
     pub(crate) server: String,
     pub(crate) port: u16,
     pub(crate) cache_key: String,
+}
+
+pub(crate) struct PacketPathFlowBinding<'a> {
+    datagram: UdpDatagramSource<'a>,
+    flow_snapshot: PacketPathFlowSnapshot,
+    carrier_snapshot: Option<PacketPathCarrierSnapshot>,
+}
+
+impl<'a> PacketPathFlowBinding<'a> {
+    pub(crate) fn new(
+        datagram: UdpDatagramSource<'a>,
+        flow_snapshot: PacketPathFlowSnapshot,
+        carrier_desc: &PacketPathCarrierDescriptor,
+    ) -> Self {
+        Self {
+            datagram,
+            flow_snapshot,
+            carrier_snapshot: Some(PacketPathCarrierSnapshot::from_descriptor(carrier_desc)),
+        }
+    }
+
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        UdpDatagramSource<'a>,
+        PacketPathFlowSnapshot,
+        Option<PacketPathCarrierSnapshot>,
+    ) {
+        (self.datagram, self.flow_snapshot, self.carrier_snapshot)
+    }
 }

@@ -481,8 +481,14 @@ fn udp_relay_runtime_does_not_resolve_packet_path_pair_adapters() {
             && inventory_udp_packet_path.contains("UdpPacketPathCapability::udp_datagram_source")
             && inventory_udp_packet_path
                 .contains("UdpPacketPathCapability::udp_packet_path_flow_snapshot")
-            && inventory_udp_packet_path.contains("PacketPathCarrierSnapshot::from_descriptor"),
+            && inventory_udp_packet_path.contains("PacketPathFlowBinding::new"),
         "src/inventory/udp/packet_path.rs should own packet-path pair adapter probing"
+    );
+    assert!(
+        relay.contains("flow_binding")
+            && !relay.contains("flow_snapshot")
+            && !relay.contains("packet_path_carrier"),
+        "UDP relay start should treat packet-path pair output as one neutral binding"
     );
 }
 
@@ -4672,6 +4678,7 @@ fn protocol_udp_packet_path_facade_lives_outside_state_root() {
     }
     assert!(
         packet_path_content.contains(".into_protocol_snapshot()")
+            && packet_path_content.contains("flow_binding.into_parts()")
             && packet_path_content.contains(".with_packet_path_carrier(packet_path_carrier)"),
         "packet-path state should attach the carrier through the packet-path flow snapshot"
     );

@@ -20,7 +20,7 @@ impl UdpDispatch {
         if chain.len() == 2 {
             let carrier_leaf = &chain[0];
             let datagram_leaf = &chain[1];
-            if let Some((datagram, flow_snapshot, packet_path_carrier)) = proxy
+            if let Some(flow_binding) = proxy
                 .protocols
                 .udp_packet_path_pair(carrier_leaf, datagram_leaf)
             {
@@ -43,11 +43,10 @@ impl UdpDispatch {
                     .await?;
 
                 return Ok(FlowStartResult::Flow {
-                    outbound: Box::new(self.protocol_state.datagram_chain_flow_outbound(
-                        datagram,
-                        flow_snapshot,
-                        packet_path_carrier,
-                    )),
+                    outbound: Box::new(
+                        self.protocol_state
+                            .datagram_chain_flow_outbound(flow_binding),
+                    ),
                     tx_bytes: sent as u64,
                 });
             }

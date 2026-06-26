@@ -39,7 +39,7 @@ pub(crate) use packet_path_traits::ChainTask;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_traits::{
     PacketPathCarrier, PacketPathCarrierDescriptor, PacketPathCarrierSnapshot,
-    UdpDatagramDescriptor, UdpDatagramSource,
+    PacketPathFlowBinding, UdpDatagramDescriptor, UdpDatagramSource,
 };
 #[cfg(feature = "hysteria2")]
 pub(crate) use start::Hysteria2UdpFlowRequest;
