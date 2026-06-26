@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
@@ -11,7 +9,6 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 
 impl Hysteria2Adapter {
-    #[cfg(feature = "shadowsocks")]
     pub(super) fn udp_packet_path_carrier_descriptor_impl(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
@@ -44,12 +41,13 @@ impl Hysteria2Adapter {
         )
     }
 
-    #[cfg(feature = "shadowsocks")]
     pub(super) async fn build_udp_packet_path_impl(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
-    {
+    ) -> Result<
+        std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>,
+        EngineError,
+    > {
         let ResolvedLeafOutbound::Hysteria2 {
             server,
             port,
@@ -67,8 +65,8 @@ impl Hysteria2Adapter {
             password,
             client_fingerprint: *client_fingerprint,
         };
-        let codec = Arc::new(packet_path.codec());
-        let conn = Arc::new(
+        let codec = std::sync::Arc::new(packet_path.codec());
+        let conn = std::sync::Arc::new(
             crate::outbound::hysteria2::Hysteria2Connector::new(server, *port, password)
                 .with_fingerprint(*client_fingerprint)
                 .connect_raw()

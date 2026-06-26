@@ -268,6 +268,10 @@ impl Hysteria2UdpFlowResume {
         Hysteria2UdpFlowKey::Leaf(self.leaf_cache_key(server, port))
     }
 
+    pub fn cache_key(&self, server: &str, port: u16) -> Hysteria2UdpCacheKey {
+        Hysteria2UdpCacheKey::from_flow_key(self.flow_key(server, port))
+    }
+
     pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
         Hysteria2UdpConnectorProfile {
             password: self.password.clone(),
@@ -311,6 +315,17 @@ impl Hysteria2UdpFlowResume {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Hysteria2UdpFlowKey {
     Leaf(Hysteria2UdpLeafKey),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Hysteria2UdpCacheKey(Hysteria2UdpLeafKey);
+
+impl Hysteria2UdpCacheKey {
+    pub fn from_flow_key(flow_key: Hysteria2UdpFlowKey) -> Self {
+        match flow_key {
+            Hysteria2UdpFlowKey::Leaf(leaf_key) => Self(leaf_key),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

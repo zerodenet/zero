@@ -6791,7 +6791,9 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
             && protocol_udp.contains("pub fn peer_config(&self)")
             && protocol_udp.contains("pub fn flow_key(&self")
+            && protocol_udp.contains("pub fn cache_key(&self")
             && protocol_udp.contains("enum Hysteria2UdpFlowKey")
+            && protocol_udp.contains("struct Hysteria2UdpCacheKey")
             && protocol_udp.contains("struct Hysteria2UdpConnectorProfile")
             && protocol_udp.contains("pub fn connector_profile(&self)")
             && protocol_udp.contains("struct Hysteria2UdpLeafKey")
@@ -6799,6 +6801,16 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn client_fingerprint(&self) -> Option<&str>"),
         "Hysteria2 adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
+    for forbidden in [
+        "Hysteria2UdpFlowKey",
+        "Hysteria2UdpLeafKey",
+        "fn from_flow_key(",
+    ] {
+        assert!(
+            !manager_send.contains(forbidden) && !manager_model.contains(forbidden),
+            "Hysteria2 UDP manager should not match or store protocol-private cache-key internals `{forbidden}`"
+        );
+    }
     let resume_enum = snapshot
         .split("pub(crate) enum ProtocolUdpFlowResume")
         .nth(1)
@@ -6844,12 +6856,11 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         );
     }
     assert!(
-        manager_send.contains("request.resume.flow_key(request.server, request.port)")
-            && manager_model.contains("fn from_flow_key(")
+        manager_model.contains("resume.cache_key(server, port)")
             && stream.contains("resume.connector_profile()")
             && stream.contains("Hysteria2Connector::new")
             && !transport.contains("request.resume.connector_profile()"),
-        "Hysteria2 UDP manager should consume protocol-owned flow keys and keep UDP connector profile use in proxy stream glue"
+        "Hysteria2 UDP manager should consume protocol-owned opaque cache keys and keep UDP connector profile use in proxy stream glue"
     );
 }
 

@@ -23,7 +23,7 @@ impl H2ChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
-        let key = H2Key::from_flow_key(peer.flow_key.clone());
+        let key = H2Key::from_resume(&resume, peer.endpoint.server, peer.endpoint.port);
 
         if let Some(entry) = self.upstreams.get(&key) {
             let packet =
@@ -76,7 +76,6 @@ impl H2ChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                flow_key: request.resume.flow_key(request.server, request.port),
             },
             resume,
             UdpPacketRef {

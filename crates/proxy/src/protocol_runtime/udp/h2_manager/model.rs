@@ -5,15 +5,15 @@ use tokio::task::JoinSet;
 use zero_core::{Address, UdpFlowPacket};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) enum H2Key {
-    Leaf(hysteria2::Hysteria2UdpLeafKey),
-}
+pub(super) struct H2Key(hysteria2::Hysteria2UdpCacheKey);
 
 impl H2Key {
-    pub(super) fn from_flow_key(flow_key: hysteria2::Hysteria2UdpFlowKey) -> Self {
-        match flow_key {
-            hysteria2::Hysteria2UdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
-        }
+    pub(super) fn from_resume(
+        resume: &hysteria2::Hysteria2UdpFlowResume,
+        server: &str,
+        port: u16,
+    ) -> Self {
+        Self(resume.cache_key(server, port))
     }
 }
 
@@ -23,7 +23,6 @@ pub(super) struct H2Entry {
 
 pub(super) struct H2UdpPeer<'a> {
     pub(super) endpoint: OutboundEndpoint<'a>,
-    pub(super) flow_key: hysteria2::Hysteria2UdpFlowKey,
 }
 
 pub(super) struct H2SendExisting<'a> {
