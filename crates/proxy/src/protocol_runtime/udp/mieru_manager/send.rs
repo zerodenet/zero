@@ -80,9 +80,9 @@ impl MieruChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                username: request.username,
-                password: request.password,
-                relay_chain: request.relay_chain,
+                username: request.resume.username(),
+                password: request.resume.password(),
+                relay_chain: request.resume.relay_chain(),
             },
             UdpPacketRef {
                 target: request.target,
@@ -134,8 +134,8 @@ impl MieruChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                username: request.username,
-                password: request.password,
+                username: request.resume.username(),
+                password: request.resume.password(),
                 relay_chain: true,
             },
             UdpPacketRef {

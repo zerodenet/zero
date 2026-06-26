@@ -5325,23 +5325,25 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         "Mieru protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("existing.resume.username()")
-            && forward.contains("existing.resume.password()")
-            && forward.contains("existing.resume.relay_chain()")
+        forward.contains("resume: existing.resume.clone()")
+            && !forward.contains("existing.resume.username()")
+            && !forward.contains("existing.resume.password()")
+            && !forward.contains("existing.resume.relay_chain()")
             && !forward.contains("existing.resume.codec()")
             && !forward.contains("mieru::udp_flow_codec")
             && !forward.contains("username: &'a str")
             && !forward.contains("relay_chain: bool"),
-        "existing Mieru UDP flow forwarding should recover account and relay state from the opaque resume descriptor while codec details stay in protocols/mieru"
+        "existing Mieru UDP flow forwarding should pass the opaque resume descriptor without unpacking account or relay state"
     );
     let start = read("src/protocol_runtime/udp/start/mieru.rs");
     assert!(
         start.contains("ProtocolUdpFlowResume::Mieru(resume)")
-            && start.contains("resume.username()")
-            && start.contains("resume.password()")
-            && start.contains("resume.relay_chain()")
+            && start.contains("resume: resume.clone()")
+            && !start.contains("resume.username()")
+            && !start.contains("resume.password()")
+            && !start.contains("resume.relay_chain()")
             && !start.contains("resume.codec()"),
-        "new Mieru UDP flow start should unpack account and relay state only; packet codec stays in protocols/mieru"
+        "new Mieru UDP flow start should pass the opaque resume descriptor without unpacking account or relay state"
     );
 }
 
