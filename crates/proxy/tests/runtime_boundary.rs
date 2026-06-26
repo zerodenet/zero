@@ -3388,7 +3388,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         .split("pub(crate) enum ProtocolUdpFlowSnapshot")
         .nth(1)
         .expect("ProtocolUdpFlowSnapshot enum should exist")
-        .split("#[derive(Debug, Clone, PartialEq, Eq)]")
+        .split("trait ProtocolUdpFlowResumeObject")
         .next()
         .expect("ProtocolUdpFlowResume should follow ProtocolUdpFlowSnapshot");
     assert!(
@@ -3401,26 +3401,32 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && !snapshot_enum.contains("Mieru"),
         "protocol UDP flow snapshot should expose only the unified managed resume wrapper"
     );
-    let resume_enum = snapshot
-        .split("pub(crate) enum ProtocolUdpFlowResume")
+    let resume_model = snapshot
+        .split("pub(crate) struct ProtocolUdpFlowResume")
         .nth(1)
-        .expect("ProtocolUdpFlowResume enum should exist")
+        .expect("ProtocolUdpFlowResume struct should exist")
         .split("impl ProtocolUdpFlowSnapshot")
         .next()
         .expect("ProtocolUdpFlowSnapshot impl should follow ProtocolUdpFlowResume");
     assert!(
-        resume_enum.contains("Socks5(socks5::Socks5UdpFlowResume)")
-            && resume_enum.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
-            && resume_enum.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
-            && resume_enum.contains("Trojan(trojan::TrojanUdpFlowResume)")
-            && resume_enum.contains("Mieru(mieru::MieruUdpFlowResume)")
-            && !resume_enum.contains("username: Option<String>")
-            && !resume_enum.contains("password: String")
-            && !resume_enum.contains("password: Option<String>")
-            && !resume_enum.contains("client_fingerprint: Option<String>")
-            && !resume_enum.contains("relay_chain: bool")
-            && !resume_enum.contains("cipher_kind: shadowsocks::CipherKind"),
-        "ProtocolUdpFlowResume should wrap protocol-owned resume objects without exposing protocol-private fields"
+        snapshot.contains("trait ProtocolUdpFlowResumeObject")
+            && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+            && snapshot.contains("downcast_ref::<T>()")
+            && resume_model.contains("pub(crate) fn socks5(")
+            && resume_model.contains("pub(crate) fn as_socks5(")
+            && !snapshot.contains("pub(crate) enum ProtocolUdpFlowResume")
+            && !resume_model.contains("Socks5(socks5::Socks5UdpFlowResume)")
+            && !resume_model.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
+            && !resume_model.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
+            && !resume_model.contains("Trojan(trojan::TrojanUdpFlowResume)")
+            && !resume_model.contains("Mieru(mieru::MieruUdpFlowResume)")
+            && !resume_model.contains("username: Option<String>")
+            && !resume_model.contains("password: String")
+            && !resume_model.contains("password: Option<String>")
+            && !resume_model.contains("client_fingerprint: Option<String>")
+            && !resume_model.contains("relay_chain: bool")
+            && !resume_model.contains("cipher_kind: shadowsocks::CipherKind"),
+        "ProtocolUdpFlowResume should be an opaque type-erased wrapper around protocol-owned resume objects"
     );
     assert!(
         !snapshot.contains("PacketPathCarrierSnapshot")
@@ -6107,7 +6113,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     }
     assert!(
         snapshot.contains("resume: ProtocolUdpFlowResume")
-            && snapshot.contains("Trojan(trojan::TrojanUdpFlowResume)")
+            && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+            && !snapshot.contains("Trojan(trojan::TrojanUdpFlowResume)")
             && !snapshot.contains("password: String")
             && !snapshot.contains("client_fingerprint: Option<String>")
             && !snapshot.contains("relay_chain: bool"),
@@ -6355,7 +6362,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     }
     assert!(
         snapshot.contains("resume: ProtocolUdpFlowResume")
-            && snapshot.contains("Mieru(mieru::MieruUdpFlowResume)")
+            && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+            && !snapshot.contains("Mieru(mieru::MieruUdpFlowResume)")
             && !snapshot.contains("username: String")
             && !snapshot.contains("relay_chain: bool"),
         "Mieru protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
@@ -6857,18 +6865,19 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             "Hysteria2 UDP manager should not match or store protocol-private cache-key internals `{forbidden}`"
         );
     }
-    let resume_enum = snapshot
-        .split("pub(crate) enum ProtocolUdpFlowResume")
+    let resume_model = snapshot
+        .split("pub(crate) struct ProtocolUdpFlowResume")
         .nth(1)
-        .expect("ProtocolUdpFlowResume enum should exist")
+        .expect("ProtocolUdpFlowResume struct should exist")
         .split("impl ProtocolUdpFlowSnapshot")
         .next()
         .expect("ProtocolUdpFlowSnapshot impl should follow ProtocolUdpFlowResume");
     assert!(
         snapshot.contains("resume: ProtocolUdpFlowResume")
-            && snapshot.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
-            && !resume_enum.contains("password: String")
-            && !resume_enum.contains("client_fingerprint: Option<String>"),
+            && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+            && !snapshot.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
+            && !resume_model.contains("password: String")
+            && !resume_model.contains("client_fingerprint: Option<String>"),
         "Hysteria2 protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
@@ -7398,7 +7407,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     );
     assert!(
         snapshot.contains("resume: ProtocolUdpFlowResume")
-            && snapshot.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
+            && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+            && !snapshot.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
             && !snapshot.contains("cipher_kind: shadowsocks::CipherKind")
             && !snapshot.contains("datagram_cache_key: String"),
         "Shadowsocks protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
@@ -7865,7 +7875,9 @@ fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
         );
     }
     assert!(
-        snapshot.contains("Socks5(socks5::Socks5UdpFlowResume)")
+        snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+            && snapshot.contains("pub(crate) fn socks5(")
+            && !snapshot.contains("Socks5(socks5::Socks5UdpFlowResume)")
             && snapshot.contains("Self::Managed {"),
         "SOCKS5 UDP snapshot state should use the unified ProtocolUdpFlowResume wrapper"
     );
