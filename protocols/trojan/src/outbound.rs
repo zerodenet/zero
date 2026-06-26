@@ -253,6 +253,10 @@ impl TrojanUdpFlowResume {
         self.relay_chain
     }
 
+    pub fn flow_requires_relay_upstream(&self) -> bool {
+        self.relay_chain
+    }
+
     pub fn peer_config(&self) -> TrojanUdpPeerConfig<'_> {
         TrojanUdpPeerConfig {
             password: &self.password,
@@ -273,6 +277,10 @@ impl TrojanUdpFlowResume {
         } else {
             TrojanUdpFlowKey::Leaf(self.leaf_cache_key(server, port))
         }
+    }
+
+    pub fn cache_key(&self, server: &str, port: u16, session_id: u64) -> TrojanUdpCacheKey {
+        TrojanUdpCacheKey::from_flow_key(self.flow_key(server, port), session_id)
     }
 
     pub fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
@@ -309,6 +317,25 @@ pub enum TrojanUdpFlowKey {
 impl TrojanUdpFlowKey {
     pub fn is_relay(&self) -> bool {
         matches!(self, Self::Relay)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TrojanUdpCacheKey {
+    Leaf(TrojanUdpLeafKey),
+    Relay { session_id: u64 },
+}
+
+impl TrojanUdpCacheKey {
+    pub fn from_flow_key(flow_key: TrojanUdpFlowKey, session_id: u64) -> Self {
+        match flow_key {
+            TrojanUdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
+            TrojanUdpFlowKey::Relay => Self::Relay { session_id },
+        }
+    }
+
+    pub fn relay(session_id: u64) -> Self {
+        Self::Relay { session_id }
     }
 }
 

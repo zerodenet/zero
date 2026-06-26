@@ -6055,14 +6055,27 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && protocol_outbound.contains("struct TrojanUdpFlowResume")
             && protocol_outbound.contains("pub fn peer_config(&self)")
             && protocol_outbound.contains("pub fn flow_key(&self")
+            && protocol_outbound.contains("pub fn cache_key(&self")
+            && protocol_outbound.contains("enum TrojanUdpCacheKey")
             && protocol_outbound.contains("struct TrojanUdpTlsProfile")
             && protocol_outbound.contains("pub fn tls_profile(&self")
             && protocol_outbound.contains("pub async fn establish_udp_tunnel")
             && protocol_outbound.contains("struct TrojanUdpLeafKey")
             && protocol_outbound.contains("pub fn client_fingerprint(&self) -> Option<&str>")
+            && protocol_outbound.contains("pub fn flow_requires_relay_upstream(&self) -> bool")
             && protocol_outbound.contains("pub fn relay_chain(&self) -> bool"),
         "Trojan adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
+    for forbidden in ["TrojanUdpFlowKey", "TrojanUdpLeafKey", "fn from_flow_key("] {
+        assert!(
+            !manager_send.contains(forbidden)
+                && !manager_connect.contains(forbidden)
+                && !manager_establish.contains(forbidden)
+                && !manager_stream.contains(forbidden)
+                && !manager_model.contains(forbidden),
+            "Trojan UDP manager should not match or store protocol-private cache-key internals `{forbidden}`"
+        );
+    }
     assert!(
         snapshot.contains("resume: ProtocolUdpFlowResume")
             && snapshot.contains("Trojan(trojan::TrojanUdpFlowResume)")
@@ -6118,14 +6131,15 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         );
     }
     assert!(
-        manager_send.contains("request.resume.flow_key(request.server, request.port)")
+        manager_model.contains("resume.cache_key(server, port, session_id)")
+            && manager_send.contains("request.resume.flow_requires_relay_upstream()")
             && manager_connect.contains("peer.resume.tls_profile(")
             && manager_connect.contains("TrojanUdpTlsOptions")
             && manager_stream.contains("trojan::TrojanUdpFlowIo")
             && manager_stream.contains(".establish_with_resume(")
             && protocol_outbound.contains("pub async fn establish_with_resume")
             && !transport.contains("trojan::"),
-        "Trojan UDP manager should consume protocol-owned flow key, TLS profile, and protocol-owned tunnel establishment helpers without putting protocol calls in zero-transport"
+        "Trojan UDP manager should consume protocol-owned cache key, TLS profile, and protocol-owned tunnel establishment helpers without putting protocol calls in zero-transport"
     );
 }
 

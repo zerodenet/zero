@@ -8,17 +8,20 @@ use tokio::task::JoinSet;
 use zero_core::{Address, Session, UdpFlowPacket};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) enum TrojanKey {
-    Leaf(trojan::TrojanUdpLeafKey),
-    Relay { session_id: u64 },
-}
+pub(super) struct TrojanKey(trojan::TrojanUdpCacheKey);
 
 impl TrojanKey {
-    pub(super) fn from_flow_key(flow_key: trojan::TrojanUdpFlowKey, session_id: u64) -> Self {
-        match flow_key {
-            trojan::TrojanUdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
-            trojan::TrojanUdpFlowKey::Relay => Self::Relay { session_id },
-        }
+    pub(super) fn from_resume(
+        resume: &trojan::TrojanUdpFlowResume,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> Self {
+        Self(resume.cache_key(server, port, session_id))
+    }
+
+    pub(super) fn relay(session_id: u64) -> Self {
+        Self(trojan::TrojanUdpCacheKey::relay(session_id))
     }
 }
 
@@ -30,7 +33,7 @@ pub(super) struct TrojanEntry {
 pub(super) struct TrojanUdpPeer<'a> {
     pub(super) endpoint: OutboundEndpoint<'a>,
     pub(super) resume: &'a trojan::TrojanUdpFlowResume,
-    pub(super) flow_key: trojan::TrojanUdpFlowKey,
+    pub(super) relay: bool,
 }
 
 pub(super) struct TrojanSendExisting<'a> {

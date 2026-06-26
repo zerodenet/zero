@@ -37,7 +37,12 @@ impl TrojanChainManager {
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
-        let key = TrojanKey::from_flow_key(peer.flow_key.clone(), session_id);
+        let key = TrojanKey::from_resume(
+            peer.resume,
+            peer.endpoint.server,
+            peer.endpoint.port,
+            session_id,
+        );
 
         if let Some(entry) = self.upstreams.get(&key) {
             bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
@@ -52,7 +57,7 @@ impl TrojanChainManager {
             return Ok(sent);
         }
 
-        if peer.flow_key.is_relay() {
+        if peer.relay {
             return Err(FlowFailure {
                 stage: "trojan_relay_upstream",
                 error: EngineError::Io(std::io::Error::new(
@@ -103,7 +108,7 @@ impl TrojanChainManager {
                     port: request.port,
                 },
                 resume: &request.resume,
-                flow_key: request.resume.flow_key(request.server, request.port),
+                relay: request.resume.flow_requires_relay_upstream(),
             },
             UdpPacketRef {
                 target: request.target,
@@ -119,7 +124,7 @@ impl TrojanChainManager {
         let packet_ref = request.packet;
         let peer = request.peer;
         let session_id = ctx.session_id;
-        let key = TrojanKey::Relay { session_id };
+        let key = TrojanKey::relay(session_id);
         let entry = establish::over_relay_stream(
             request.stream,
             request.tls_server_name,
@@ -169,7 +174,7 @@ impl TrojanChainManager {
                     port: request.port,
                 },
                 resume: &request.resume,
-                flow_key: trojan::TrojanUdpFlowKey::Relay,
+                relay: true,
             },
             packet: UdpPacketRef {
                 target: request.target,
