@@ -71,12 +71,12 @@ impl ShadowsocksAdapter {
             Some((server, *port)),
         )
         .map_err(|failure| failure.error)?;
-        crate::protocol_runtime::udp::packet_path_chain::carriers::shadowsocks_carrier::build(
-            proxy,
-            server,
-            *port,
-            password,
+        let codec = Arc::new(shadowsocks::udp_flow_codec(
             cipher_kind,
+            password.as_bytes(),
+        ));
+        crate::protocol_runtime::udp::packet_path_chain::carriers::shadowsocks_carrier::build(
+            proxy, server, *port, codec,
         )
         .await
     }

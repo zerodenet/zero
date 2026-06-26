@@ -373,6 +373,14 @@ pub fn udp_datagram_codec(
 }
 
 #[cfg(feature = "crypto")]
+pub fn udp_flow_codec(
+    cipher: super::shared::CipherKind,
+    password: &[u8],
+) -> impl DatagramCodec<Address, Error = Error> {
+    udp_datagram_codec(cipher, password)
+}
+
+#[cfg(feature = "crypto")]
 impl DatagramCodec<Address> for ShadowsocksDatagramCodec {
     type Error = Error;
 

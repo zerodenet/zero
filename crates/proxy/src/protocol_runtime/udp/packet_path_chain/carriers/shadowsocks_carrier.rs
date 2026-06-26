@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use tokio::net::UdpSocket;
 use zero_core::Address;
 use zero_engine::EngineError;
+use zero_traits::DatagramCodec;
 
 use crate::protocol_runtime::udp::PacketPathCarrier;
 use crate::runtime::Proxy;
@@ -13,27 +14,24 @@ pub(crate) async fn build(
     proxy: &Proxy,
     server: &str,
     port: u16,
-    password: &str,
-    cipher: shadowsocks::CipherKind,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 ) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
-    let path = ShadowsocksPacketPath::establish(proxy, server, port, password, cipher).await?;
+    let path = UdpSocketPacketPath::establish(proxy, server, port, codec).await?;
     Ok(Arc::new(path))
 }
 
-pub(super) struct ShadowsocksPacketPath {
+pub(super) struct UdpSocketPacketPath {
     socket: UdpSocket,
     endpoint: SocketAddr,
-    cipher: shadowsocks::CipherKind,
-    password: Vec<u8>,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 }
 
-impl ShadowsocksPacketPath {
+impl UdpSocketPacketPath {
     pub(super) async fn establish(
         proxy: &Proxy,
         server: &str,
         port: u16,
-        password: &str,
-        cipher: shadowsocks::CipherKind,
+        codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
     ) -> Result<Self, EngineError> {
         let endpoint = proxy
             .protocols
@@ -55,23 +53,23 @@ impl ShadowsocksPacketPath {
         Ok(Self {
             socket,
             endpoint,
-            cipher,
-            password: password.as_bytes().to_vec(),
+            codec,
         })
     }
 }
 
 #[async_trait]
-impl PacketPathCarrier for ShadowsocksPacketPath {
+impl PacketPathCarrier for UdpSocketPacketPath {
     async fn send_to(
         &self,
         target: &Address,
         port: u16,
         payload: &[u8],
     ) -> Result<(), EngineError> {
-        let packet =
-            shadowsocks::encode_udp_flow_packet(target, port, payload, self.cipher, &self.password)
-                .map_err(EngineError::from)?;
+        let packet = self
+            .codec
+            .encode(target, port, payload)
+            .map_err(EngineError::from)?;
         self.socket
             .send_to(&packet, self.endpoint)
             .await
@@ -85,11 +83,23 @@ impl PacketPathCarrier for ShadowsocksPacketPath {
             .recv_from(buf)
             .await
             .map_err(EngineError::from)?;
-        let decoded =
-            shadowsocks::decode_udp_flow_packet(&buf[..read], self.cipher, &self.password)
-                .map_err(EngineError::from)?;
-        let len = decoded.payload.len();
-        buf[..len].copy_from_slice(&decoded.payload);
+        let (_, _, payload) = self.codec.decode(&buf[..read]).ok_or_else(|| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "failed to decode UDP packet-path datagram",
+            ))
+        })?;
+        let len = payload.len();
+        if len > buf.len() {
+            return Err(EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "UDP socket carrier datagram ({len}B) exceeds recv buffer ({}B)",
+                    buf.len()
+                ),
+            )));
+        }
+        buf[..len].copy_from_slice(&payload);
         Ok(len)
     }
 }

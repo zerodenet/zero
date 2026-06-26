@@ -5731,10 +5731,10 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         adapter.contains("CipherKind::from_str"),
         "Shadowsocks adapter should parse packet-path carrier/datagram cipher config"
     );
-    for forbidden in ["ShadowsocksDatagramCodec", "DatagramCodec"] {
+    for forbidden in ["ShadowsocksDatagramCodec", "shadowsocks::"] {
         assert!(
             !shadowsocks_carrier.contains(forbidden),
-            "Shadowsocks packet-path carrier should delegate datagram framing to protocols/shadowsocks helpers; found `{forbidden}`"
+            "Shadowsocks packet-path carrier should consume an adapter-provided codec instead of naming protocol framing; found `{forbidden}`"
         );
     }
     assert!(
@@ -5744,14 +5744,14 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         "Shadowsocks adapter should request the protocol-built datagram codec and pass it through neutral packet-path constructors"
     );
     assert!(
-        !shadowsocks_carrier.contains("shadowsocks::encode_udp_datagram")
-            && !shadowsocks_carrier.contains("shadowsocks::decode_udp_datagram"),
-        "Shadowsocks packet-path carrier should use flow-specific helpers instead of generic datagram primitives"
+        adapter.contains("shadowsocks::udp_flow_codec")
+            && protocol_outbound.contains("fn udp_flow_codec("),
+        "Shadowsocks adapter should request a protocol-built packet-path flow codec"
     );
     assert!(
-        shadowsocks_carrier.contains("shadowsocks::encode_udp_flow_packet")
-            && shadowsocks_carrier.contains("shadowsocks::decode_udp_flow_packet"),
-        "Shadowsocks packet-path carrier should call flow-specific protocols/shadowsocks helpers"
+        !shadowsocks_carrier.contains("shadowsocks::encode_udp_flow_packet")
+            && !shadowsocks_carrier.contains("shadowsocks::decode_udp_flow_packet"),
+        "Shadowsocks packet-path carrier should not call flow-specific protocols/shadowsocks helpers directly"
     );
     for source in [&carrier, &entry] {
         assert!(
