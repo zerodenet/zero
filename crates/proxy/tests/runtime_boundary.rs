@@ -989,6 +989,22 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && adapter.contains("Hysteria2InboundRequest"),
         "Hysteria2 adapter should extract Hysteria2 config and pass Hysteria2InboundRequest"
     );
+    for forbidden in [
+        "build_udp_datagram",
+        "parse_udp_datagram",
+        "hysteria2::build_udp_datagram",
+        "hysteria2::parse_udp_datagram",
+    ] {
+        assert!(
+            !inbound.contains(forbidden),
+            "Hysteria2 inbound should use inbound-specific protocol datagram helpers instead of `{forbidden}`"
+        );
+    }
+    assert!(
+        inbound.contains("hysteria2::decode_inbound_udp_datagram")
+            && inbound.contains("hysteria2::encode_inbound_udp_datagram"),
+        "Hysteria2 inbound should delegate UDP datagram framing to inbound-specific protocol helpers"
+    );
 }
 
 #[test]
