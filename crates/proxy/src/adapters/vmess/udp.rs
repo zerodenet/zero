@@ -1,5 +1,5 @@
 use zero_core::Session;
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::ResolvedLeafOutbound;
 
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vmess::VmessAdapter;
@@ -13,21 +13,15 @@ fn parse_vmess_udp_identity(
     cipher: &str,
     stage: &'static str,
     upstream: Option<(&str, u16)>,
-) -> Result<([u8; 16], vmess::VmessCipher), FlowFailure> {
-    let uuid = vmess::parse_uuid(id).map_err(|error| FlowFailure {
+) -> Result<vmess::VmessUdpIdentity, FlowFailure> {
+    vmess::parse_udp_identity(id, cipher).map_err(|error| FlowFailure {
         stage,
-        error: EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error)),
-        upstream: upstream.map(|(server, port)| (server.to_string(), port)),
-    })?;
-    let cipher = vmess::VmessCipher::from_name(cipher).ok_or_else(|| FlowFailure {
-        stage,
-        error: EngineError::Io(std::io::Error::new(
+        error: zero_engine::EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("vmess unknown cipher: {cipher}"),
+            format!("invalid VMess UDP identity: {error}"),
         )),
         upstream: upstream.map(|(server, port)| (server.to_string(), port)),
-    })?;
-    Ok((uuid, cipher))
+    })
 }
 
 impl VmessAdapter {
@@ -55,7 +49,7 @@ impl VmessAdapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         let tag_owned = (*tag).to_string();
-        let (uuid, vmess_cipher) = parse_vmess_udp_identity(
+        let identity = parse_vmess_udp_identity(
             id,
             cipher,
             "udp_vmess_parse_identity",
@@ -67,9 +61,9 @@ impl VmessAdapter {
                 session,
                 server,
                 port: *port,
-                uuid,
+                uuid: identity.uuid,
                 cipher_name: cipher,
-                cipher: vmess_cipher,
+                cipher: identity.cipher,
                 mux_concurrency: *mux_concurrency,
                 tls: *tls,
                 ws: *ws,
@@ -108,7 +102,7 @@ impl VmessAdapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         let tag_owned = (*tag).to_string();
-        let (uuid, vmess_cipher) = parse_vmess_udp_identity(
+        let identity = parse_vmess_udp_identity(
             id,
             cipher,
             "udp_vmess_relay_final_hop_parse_identity",
@@ -121,8 +115,8 @@ impl VmessAdapter {
                 carrier,
                 server,
                 port: *port,
-                uuid,
-                cipher: vmess_cipher,
+                uuid: identity.uuid,
+                cipher: identity.cipher,
                 tls: *tls,
                 ws: *ws,
                 grpc: *grpc,

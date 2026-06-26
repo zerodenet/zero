@@ -25,6 +25,18 @@ pub struct VmessUdpPacketTunnelTarget<'a> {
     pub cipher: VmessCipher,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VmessUdpIdentity {
+    pub uuid: [u8; 16],
+    pub cipher: VmessCipher,
+}
+
+pub fn parse_udp_identity(id: &str, cipher: &str) -> Result<VmessUdpIdentity, Error> {
+    let uuid = crate::shared::parse_uuid(id)?;
+    let cipher = VmessCipher::from_name(cipher).ok_or(Error::Protocol("vmess unknown cipher"))?;
+    Ok(VmessUdpIdentity { uuid, cipher })
+}
+
 /// One UDP datagram to encode for a VMess UDP packet tunnel.
 #[derive(Debug, Clone, Copy)]
 pub struct VmessUdpPacketTarget<'a> {

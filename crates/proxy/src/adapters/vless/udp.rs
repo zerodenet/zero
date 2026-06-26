@@ -1,5 +1,5 @@
 use zero_core::Session;
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::ResolvedLeafOutbound;
 
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
@@ -10,16 +10,16 @@ use crate::runtime::udp_dispatch::vless_flow::{
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
 
-fn parse_vless_udp_uuid(
+fn parse_vless_udp_identity(
     id: &str,
     stage: &'static str,
     upstream: Option<(&str, u16)>,
-) -> Result<[u8; 16], FlowFailure> {
-    ::vless::parse_uuid(id).map_err(|error| FlowFailure {
+) -> Result<vless::VlessUdpIdentity, FlowFailure> {
+    vless::parse_udp_identity(id).map_err(|error| FlowFailure {
         stage,
-        error: EngineError::Io(std::io::Error::new(
+        error: zero_engine::EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("invalid VLESS UUID: {error}"),
+            format!("invalid VLESS UDP identity: {error}"),
         )),
         upstream: upstream.map(|(server, port)| (server.to_string(), port)),
     })
@@ -55,7 +55,8 @@ impl VlessAdapter {
         };
         let session_id = session.id;
         let tag_owned = (*tag).to_string();
-        let uuid = parse_vless_udp_uuid(id, "udp_vless_parse_uuid", Some((server, *port)))?;
+        let identity =
+            parse_vless_udp_identity(id, "udp_vless_parse_identity", Some((server, *port)))?;
 
         dispatch
             .send_vless_datagram(VlessDatagramSend {
@@ -63,7 +64,7 @@ impl VlessAdapter {
                 session,
                 server,
                 port: *port,
-                uuid,
+                uuid: identity.uuid,
                 flow: *flow,
                 tls: *tls,
                 reality: *reality,
@@ -138,7 +139,8 @@ impl VlessAdapter {
             return Err(unreachable_udp_leaf(self.name(), &final_hop));
         };
         let session_id = session.id;
-        let uuid = parse_vless_udp_uuid(id, "udp_vless_relay_two_stream_parse_uuid", None)?;
+        let identity =
+            parse_vless_udp_identity(id, "udp_vless_relay_two_stream_parse_identity", None)?;
         let split_http_cfg = split_http
             .as_ref()
             .expect("udp_relay_needs_two_streams checked split_http is Some");
@@ -148,7 +150,7 @@ impl VlessAdapter {
                 session,
                 post_carrier,
                 get_carrier,
-                uuid,
+                uuid: identity.uuid,
                 split_http: split_http_cfg,
                 payload,
             })
@@ -200,13 +202,14 @@ impl VlessAdapter {
         }
 
         let tag_owned = (*tag).to_string();
-        let uuid = parse_vless_udp_uuid(id, "udp_vless_relay_final_hop_parse_uuid", None)?;
+        let identity =
+            parse_vless_udp_identity(id, "udp_vless_relay_final_hop_parse_identity", None)?;
         dispatch
             .send_vless_relay_final_hop(VlessRelayFinalHopSend {
                 proxy,
                 session,
                 carrier,
-                uuid,
+                uuid: identity.uuid,
                 tls: *tls,
                 reality: *reality,
                 ws: *ws,

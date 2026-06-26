@@ -41,8 +41,8 @@ pub use mux_crypto::MuxCrypto;
 #[cfg(feature = "reality")]
 pub use outbound::VlessFlowTcpTunnelTarget;
 pub use outbound::{
-    establish_udp_packet_tunnel, VlessOutbound, VlessTcpTunnelTarget, VlessUdpPacketTarget,
-    VlessUdpPacketTunnelTarget,
+    establish_udp_packet_tunnel, parse_udp_identity, VlessOutbound, VlessTcpTunnelTarget,
+    VlessUdpIdentity, VlessUdpPacketTarget, VlessUdpPacketTunnelTarget,
 };
 #[cfg(feature = "reality")]
 pub use reality::{

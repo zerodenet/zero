@@ -228,6 +228,15 @@ pub struct VlessUdpPacketTunnelTarget<'a> {
     pub id: &'a [u8; 16],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VlessUdpIdentity {
+    pub uuid: [u8; 16],
+}
+
+pub fn parse_udp_identity(id: &str) -> Result<VlessUdpIdentity, Error> {
+    crate::shared::parse_uuid(id).map(|uuid| VlessUdpIdentity { uuid })
+}
+
 impl<'a> UdpPacketTunnelProtocol<VlessUdpPacketTunnelTarget<'a>> for VlessOutbound {
     type Error = Error;
 

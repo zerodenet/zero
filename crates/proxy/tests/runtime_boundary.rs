@@ -1979,15 +1979,17 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
 }
 
 #[test]
-fn vless_udp_identity_is_adapter_parsed() {
+fn vless_udp_identity_is_protocol_parsed() {
     let runtime = read("src/protocol_runtime/vless_udp.rs");
     let model = read("src/protocol_runtime/vless_udp/model.rs");
     let flows = read("src/protocol_runtime/udp/flows.rs");
     let adapter = read("src/adapters/vless/udp.rs");
+    let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
+        .expect("read protocols/vless/src/outbound.rs");
 
     assert!(
         !runtime.contains("parse_uuid"),
-        "VLESS UDP runtime should receive adapter-parsed UUIDs"
+        "VLESS UDP runtime should receive protocol-parsed UUIDs"
     );
     assert!(
         !model.contains("id: &'a str") && model.contains("uuid: [u8; 16]"),
@@ -2004,8 +2006,13 @@ fn vless_udp_identity_is_adapter_parsed() {
         );
     }
     assert!(
-        adapter.contains("parse_uuid"),
-        "VLESS UDP adapter should own UUID parsing before calling protocol runtime"
+        !adapter.contains("parse_uuid") && adapter.contains("vless::parse_udp_identity"),
+        "VLESS UDP adapter should delegate UUID parsing to protocols/vless"
+    );
+    assert!(
+        protocol.contains("struct VlessUdpIdentity")
+            && protocol.contains("pub fn parse_udp_identity"),
+        "protocols/vless should own VLESS UDP identity parsing"
     );
 }
 
@@ -2094,22 +2101,34 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
 }
 
 #[test]
-fn vmess_udp_identity_is_adapter_parsed() {
+fn vmess_udp_identity_is_protocol_parsed() {
     let runtime = read("src/protocol_runtime/vmess_udp.rs");
     let model = read("src/protocol_runtime/vmess_udp/model.rs");
     let flows = read("src/protocol_runtime/udp/flows.rs");
     let adapter = read("src/adapters/vmess/udp.rs");
+    let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
+        .expect("read protocols/vmess/src/udp.rs");
 
     for forbidden in ["parse_uuid", "VmessCipher::from_name"] {
         assert!(
             !runtime.contains(forbidden),
-            "VMess UDP runtime should receive adapter-parsed identity; found `{forbidden}`"
+            "VMess UDP runtime should receive protocol-parsed identity; found `{forbidden}`"
         );
         assert!(
-            adapter.contains(forbidden),
-            "VMess UDP adapter should own identity parsing detail `{forbidden}`"
+            !adapter.contains(forbidden),
+            "VMess UDP adapter should delegate identity parsing detail `{forbidden}` to protocols/vmess"
         );
     }
+    assert!(
+        adapter.contains("vmess::parse_udp_identity"),
+        "VMess UDP adapter should call protocols/vmess UDP identity parser"
+    );
+    assert!(
+        protocol.contains("struct VmessUdpIdentity")
+            && protocol.contains("pub fn parse_udp_identity")
+            && protocol.contains("VmessCipher::from_name"),
+        "protocols/vmess should own VMess UDP identity and cipher parsing"
+    );
 
     let vmess_flow_models = flows
         .split("pub(crate) struct VmessUdpFlow")
@@ -2248,8 +2267,9 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
     );
     assert!(
         tcp_adapter.contains("VmessCipher::from_name")
-            && udp_adapter.contains("VmessCipher::from_name"),
-        "VMess TCP/UDP adapters should own cipher parsing before mux pool use"
+            && udp_adapter.contains("vmess::parse_udp_identity")
+            && !udp_adapter.contains("VmessCipher::from_name"),
+        "VMess TCP adapter still parses cipher locally, while UDP adapter delegates cipher parsing to protocols/vmess"
     );
 }
 
