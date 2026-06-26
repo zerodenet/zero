@@ -1,6 +1,7 @@
 mod datagram;
 #[cfg(feature = "mieru")]
 mod mieru;
+mod socks5;
 mod stream;
 #[cfg(feature = "trojan")]
 mod trojan;

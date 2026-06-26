@@ -12,7 +12,7 @@ use zero_engine::EngineError;
 
 use super::{
     FlowFailure, ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
-    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume,
+    ManagedUdpFlowKind, ManagedUdpFlowRequest,
 };
 
 #[cfg(feature = "hysteria2")]
@@ -101,35 +101,8 @@ impl ProtocolUdpState {
         inbound_tag: &str,
         request: ManagedUdpFlowRequest<'_>,
     ) -> Result<usize, FlowFailure> {
-        match (&request.resume, request.kind) {
-            (ProtocolUdpFlowResume::Socks5(resume), ManagedUdpFlowKind::RelayStream) => {
-                let Some(proxy) = request.proxy else {
-                    return Err(managed_flow_mismatch(
-                        "udp_socks5_proxy",
-                        request.server,
-                        request.port,
-                        "expected proxy context for SOCKS5 UDP flow",
-                    ));
-                };
-                let packet = crate::protocol_runtime::socks5_udp::Socks5UdpPacketSend {
-                    proxy,
-                    tag: inbound_tag,
-                    server: request.server,
-                    port: request.port,
-                    resume: ProtocolUdpFlowResume::Socks5(resume.clone()),
-                    session: request.session,
-                    payload: request.payload,
-                };
-                self.socks5
-                    .send_packet(packet, inbound_tag)
-                    .await
-                    .map_err(|error| FlowFailure {
-                        stage: "udp_upstream_send",
-                        error,
-                        upstream: Some((request.server.to_string(), request.port)),
-                    })
-            }
-            (_, ManagedUdpFlowKind::Datagram) => {
+        match request.kind {
+            ManagedUdpFlowKind::Datagram => {
                 self.start_managed_datagram_flow(
                     request.chain_tasks,
                     ManagedDatagramFlow {
@@ -143,7 +116,7 @@ impl ProtocolUdpState {
                 )
                 .await
             }
-            (_, ManagedUdpFlowKind::StreamPacket) => {
+            ManagedUdpFlowKind::StreamPacket => {
                 let Some(proxy) = request.proxy else {
                     return Err(managed_flow_mismatch(
                         "udp_stream_packet_proxy",
@@ -163,27 +136,23 @@ impl ProtocolUdpState {
                 })
                 .await
             }
-            (_, ManagedUdpFlowKind::RelayStream) => {
-                let Some(carrier) = request.carrier else {
-                    return Err(managed_flow_mismatch(
-                        "udp_relay_stream_carrier",
-                        request.server,
-                        request.port,
-                        "expected relay carrier for relay-stream UDP flow",
-                    ));
-                };
-                self.start_managed_relay_stream_flow(ManagedRelayStreamFlow {
-                    chain_tasks: request.chain_tasks,
-                    proxy: request.proxy,
-                    session: request.session,
-                    carrier,
-                    tls_server_name: request.tls_server_name,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume,
-                    payload: request.payload,
-                })
-                .await
+            ManagedUdpFlowKind::RelayStream => {
+                if let Some(carrier) = request.carrier {
+                    return self
+                        .start_managed_relay_stream_flow(ManagedRelayStreamFlow {
+                            chain_tasks: request.chain_tasks,
+                            proxy: request.proxy,
+                            session: request.session,
+                            carrier,
+                            tls_server_name: request.tls_server_name,
+                            server: request.server,
+                            port: request.port,
+                            resume: request.resume,
+                            payload: request.payload,
+                        })
+                        .await;
+                }
+                self.start_socks5_relay_flow(inbound_tag, request).await
             }
         }
     }

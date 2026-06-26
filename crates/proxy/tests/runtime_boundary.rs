@@ -3400,6 +3400,7 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
         "start/mod.rs",
         "start/datagram.rs",
         "start/mieru.rs",
+        "start/socks5.rs",
         "start/stream.rs",
         "start/trojan.rs",
         "start/vless.rs",
@@ -3450,10 +3451,32 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
         );
     }
     assert!(
-        state.contains("(_, ManagedUdpFlowKind::Datagram)")
+        state.contains("ManagedUdpFlowKind::Datagram")
+            && state.contains("start_managed_datagram_flow")
             && datagram.contains("ProtocolUdpFlowResume::Shadowsocks(resume)")
             && datagram.contains("ProtocolUdpFlowResume::Hysteria2(resume)"),
         "managed datagram UDP flow kind should leave protocol-specific resume matching in start/datagram.rs"
+    );
+}
+
+#[test]
+fn protocol_udp_socks5_start_dispatch_lives_outside_state_root() {
+    let state = read("src/protocol_runtime/udp/state.rs");
+    let socks5 = read("src/protocol_runtime/udp/start/socks5.rs");
+
+    for forbidden in ["ProtocolUdpFlowResume::Socks5", "Socks5UdpPacketSend"] {
+        assert!(
+            !state.contains(forbidden),
+            "state.rs should delegate SOCKS5 relay start to start/socks5.rs; found `{forbidden}`"
+        );
+    }
+    assert!(
+        state.contains("ManagedUdpFlowKind::RelayStream")
+            && state.contains("start_socks5_relay_flow")
+            && socks5.contains("Socks5UdpPacketSend")
+            && socks5.contains("send_packet(packet, inbound_tag)")
+            && !socks5.contains("ProtocolUdpFlowResume::Socks5"),
+        "SOCKS5 relay construction should live in start/socks5.rs without unpacking protocol resume in state.rs"
     );
 }
 
@@ -3478,8 +3501,8 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
         );
     }
     assert!(
-        state.contains("(_, ManagedUdpFlowKind::StreamPacket)")
-            && state.contains("(_, ManagedUdpFlowKind::RelayStream)")
+        state.contains("ManagedUdpFlowKind::StreamPacket")
+            && state.contains("ManagedUdpFlowKind::RelayStream")
             && state.contains("start_managed_stream_packet_flow")
             && state.contains("start_managed_relay_stream_flow")
             && stream.contains("ProtocolUdpFlowResume::Trojan(_)")
