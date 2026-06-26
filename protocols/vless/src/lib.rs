@@ -49,15 +49,12 @@ pub use reality::{
     generate_reality_key_pair, upgrade_reality_client, upgrade_reality_server,
     RealityClientOptions, RealityServerOptions, RealityTlsStream,
 };
+#[cfg(feature = "reality")]
+pub use shared::encode_udp_flow_initial_packet;
 pub use shared::{
     build_udp_packet, build_udp_packet_v2, decode_inbound_udp_datagram, decode_inbound_udp_packet,
     decode_udp_flow_packet, encode_inbound_mux_udp_response, encode_inbound_udp_response,
     encode_mux_udp_response, encode_udp_flow_packet, encode_udp_response, format_uuid,
     parse_udp_packet, parse_udp_packet_v2, parse_uuid, VlessInboundUdpCodec, VlessUdpFlowCodec,
     VlessUdpFlowIo, VlessUdpFlowPacket, VlessUdpPacket, VLESS_VERSION,
-};
-#[cfg(feature = "reality")]
-pub use shared::{
-    encode_udp_flow_initial_packet, open_mux_udp_flow, open_udp_flow, VlessUdpFlowHandle,
-    VlessUdpFlowResponse, VlessUdpFlowSender,
 };

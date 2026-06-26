@@ -1,11 +1,12 @@
 use zero_core::{Address, Session};
 
+use super::VmessFlowSender;
 use crate::runtime::Proxy;
 
 #[derive(Clone)]
 pub(super) struct VmessUdpUpstream {
     pub(super) session_id: u64,
-    pub(super) sender: vmess::VmessUdpFlowSender,
+    pub(super) sender: VmessFlowSender,
 }
 
 pub(crate) struct VmessUdpStartFlow<'a> {

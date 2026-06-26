@@ -8,7 +8,8 @@ pub(crate) mod model;
 
 use std::collections::HashMap;
 
-use tokio::sync::broadcast;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
@@ -18,11 +19,39 @@ use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use model::{VmessUdpRelayFlowStart, VmessUdpStartFlow, VmessUdpUpstream, VmessUdpUpstreamRequest};
 
-type VmessResponseSender = broadcast::Sender<vmess::VmessUdpFlowResponse>;
+type VmessFlowResponse = (Address, u16, Vec<u8>);
+type VmessResponseSender = broadcast::Sender<VmessFlowResponse>;
+
+#[derive(Clone)]
+pub(super) struct VmessFlowSender {
+    send_tx: mpsc::Sender<vmess::VmessUdpFlowPacket>,
+}
+
+impl VmessFlowSender {
+    async fn send(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        let packet = vmess::VmessUdpFlowPacket::new(target.clone(), port, payload.to_vec());
+        let packet_len = packet.encode()?.len();
+        self.send_tx
+            .send(packet)
+            .await
+            .map_err(|_| EngineError::Io(std::io::Error::other("vmess udp flow closed")))?;
+        Ok(packet_len)
+    }
+}
+
+struct VmessFlowHandle {
+    sender: VmessFlowSender,
+    responses: VmessResponseSender,
+}
 
 fn upstream_from_stream(
     session_id: u64,
-    flow: vmess::VmessUdpFlowHandle,
+    flow: VmessFlowHandle,
 ) -> (VmessUdpUpstream, VmessResponseSender) {
     (
         VmessUdpUpstream {
@@ -40,8 +69,20 @@ async fn establish_vmess_udp_upstream_over_stream(
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<(VmessUdpUpstream, VmessResponseSender), EngineError> {
-    let (flow, initial_packet_len) =
-        vmess::open_udp_flow(stream, session, identity, initial_payload).await?;
+    let stream = vmess::establish_udp_flow_stream(stream, session, identity).await?;
+    let mut stream = stream;
+    let initial_packet =
+        vmess::encode_udp_flow_initial_packet(&session.target, session.port, initial_payload)?;
+    let initial_packet_len = initial_packet.len();
+    stream
+        .write_all(&initial_packet)
+        .await
+        .map_err(|_| EngineError::Core(zero_core::Error::Io("vmess udp flow write")))?;
+    stream
+        .flush()
+        .await
+        .map_err(|_| EngineError::Core(zero_core::Error::Io("vmess udp flow flush")))?;
+    let flow = spawn_udp_flow(stream, Vec::new());
     proxy.record_session_outbound_tx(session.id, initial_packet_len as u64);
     Ok(upstream_from_stream(session.id, flow))
 }
@@ -76,7 +117,7 @@ async fn establish_vmess_udp_upstream(
             )
             .await?;
         let initial_packet_len = initial_packet.len();
-        let flow = vmess::open_mux_udp_flow(mux_stream, initial_packet);
+        let flow = spawn_udp_flow(mux_stream, initial_packet);
         request
             .proxy
             .record_session_outbound_tx(request.session.id, initial_packet_len as u64);
@@ -263,4 +304,75 @@ impl VmessUdpOutboundManager {
         self.spawn_bridge(chain_tasks, request.target, request.port, session_id);
         Ok(())
     }
+}
+
+fn spawn_udp_flow<S>(stream: S, initial_packet: Vec<u8>) -> VmessFlowHandle
+where
+    S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    let (send_tx, send_rx) = mpsc::channel::<vmess::VmessUdpFlowPacket>(32);
+    let (responses, _) = broadcast::channel::<VmessFlowResponse>(32);
+    spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone());
+    VmessFlowHandle {
+        sender: VmessFlowSender { send_tx },
+        responses,
+    }
+}
+
+fn spawn_udp_flow_task<S>(
+    mut stream: S,
+    initial_packet: Vec<u8>,
+    mut send_rx: mpsc::Receiver<vmess::VmessUdpFlowPacket>,
+    responses: VmessResponseSender,
+) where
+    S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    tokio::spawn(async move {
+        if !initial_packet.is_empty() {
+            if stream.write_all(&initial_packet).await.is_err() {
+                return;
+            }
+            if stream.flush().await.is_err() {
+                return;
+            }
+        }
+
+        let flow_io = vmess::VmessUdpFlowIo;
+        let mut buffer = vec![0_u8; 64 * 1024];
+        loop {
+            tokio::select! {
+                to_send = send_rx.recv() => {
+                    match to_send {
+                        Some(packet) => {
+                            let (target, port, payload) = packet.into_parts();
+                            let encoded = match flow_io.encode_packet(&target, port, &payload) {
+                                Ok(encoded) => encoded,
+                                Err(_) => break,
+                            };
+                            if stream.write_all(&encoded).await.is_err() {
+                                break;
+                            }
+                            if stream.flush().await.is_err() {
+                                break;
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                read = stream.read(&mut buffer) => {
+                    match read {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if let Ok(packet) = flow_io.decode_packet(&buffer[..n]) {
+                                let _ = responses.send(packet.into_parts());
+                            } else {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+    });
 }

@@ -1,5 +1,3 @@
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::sync::{broadcast, mpsc};
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
 
@@ -79,136 +77,12 @@ impl VmessUdpFlowPacket {
     }
 }
 
-pub type VmessUdpFlowResponse = (Address, u16, Vec<u8>);
-
-#[derive(Clone)]
-pub struct VmessUdpFlowSender {
-    send_tx: mpsc::Sender<VmessUdpFlowPacket>,
-}
-
-impl VmessUdpFlowSender {
-    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
-        let packet = VmessUdpFlowPacket::new(target.clone(), port, payload.to_vec());
-        let packet_len = packet.encode()?.len();
-        self.send_tx
-            .send(packet)
-            .await
-            .map_err(|_| Error::Io("vmess udp flow closed"))?;
-        Ok(packet_len)
-    }
-}
-
-pub struct VmessUdpFlowHandle {
-    pub sender: VmessUdpFlowSender,
-    pub responses: broadcast::Sender<VmessUdpFlowResponse>,
-}
-
-pub async fn open_udp_flow<S>(
-    stream: S,
-    session: &Session,
-    identity: VmessUdpIdentity,
-    initial_payload: &[u8],
-) -> Result<(VmessUdpFlowHandle, usize), Error>
-where
-    S: AsyncSocket + AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
-{
-    let mut stream = establish_udp_flow_stream(stream, session, identity).await?;
-    let initial_packet =
-        encode_udp_flow_initial_packet(&session.target, session.port, initial_payload)?;
-    let initial_packet_len = initial_packet.len();
-    AsyncWriteExt::write_all(&mut stream, &initial_packet)
-        .await
-        .map_err(|_| Error::Io("vmess udp flow write"))?;
-    AsyncWriteExt::flush(&mut stream)
-        .await
-        .map_err(|_| Error::Io("vmess udp flow flush"))?;
-    Ok((spawn_udp_flow(stream, Vec::new()), initial_packet_len))
-}
-
-pub fn open_mux_udp_flow<S>(stream: S, initial_packet: Vec<u8>) -> VmessUdpFlowHandle
-where
-    S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
-{
-    spawn_udp_flow(stream, initial_packet)
-}
-
 pub fn encode_udp_flow_initial_packet(
     target: &Address,
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, Error> {
     VmessUdpFlowIo.encode_packet(target, port, payload)
-}
-
-fn spawn_udp_flow<S>(stream: S, initial_packet: Vec<u8>) -> VmessUdpFlowHandle
-where
-    S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
-{
-    let (send_tx, send_rx) = mpsc::channel::<VmessUdpFlowPacket>(32);
-    let (responses, _) = broadcast::channel::<VmessUdpFlowResponse>(32);
-    spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone());
-    VmessUdpFlowHandle {
-        sender: VmessUdpFlowSender { send_tx },
-        responses,
-    }
-}
-
-fn spawn_udp_flow_task<S>(
-    mut stream: S,
-    initial_packet: Vec<u8>,
-    mut send_rx: mpsc::Receiver<VmessUdpFlowPacket>,
-    responses: broadcast::Sender<VmessUdpFlowResponse>,
-) where
-    S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
-{
-    tokio::spawn(async move {
-        if !initial_packet.is_empty() {
-            if stream.write_all(&initial_packet).await.is_err() {
-                return;
-            }
-            if stream.flush().await.is_err() {
-                return;
-            }
-        }
-
-        let flow_io = VmessUdpFlowIo;
-        let mut buffer = vec![0_u8; 64 * 1024];
-        loop {
-            tokio::select! {
-                to_send = send_rx.recv() => {
-                    match to_send {
-                        Some(packet) => {
-                            let (target, port, payload) = packet.into_parts();
-                            let encoded = match flow_io.encode_packet(&target, port, &payload) {
-                                Ok(encoded) => encoded,
-                                Err(_) => break,
-                            };
-                            if stream.write_all(&encoded).await.is_err() {
-                                break;
-                            }
-                            if stream.flush().await.is_err() {
-                                break;
-                            }
-                        }
-                        None => break,
-                    }
-                }
-                read = stream.read(&mut buffer) => {
-                    match read {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            if let Ok(packet) = flow_io.decode_packet(&buffer[..n]) {
-                                let _ = responses.send(packet.into_parts());
-                            } else {
-                                break;
-                            }
-                        }
-                        Err(_) => break,
-                    }
-                }
-            }
-        }
-    });
 }
 
 #[derive(Debug, Clone, Copy, Default)]

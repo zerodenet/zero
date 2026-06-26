@@ -1,13 +1,14 @@
 use zero_config::SplitHttpConfig;
 use zero_core::{Address, Session};
 
+use super::VlessFlowSender;
 use crate::runtime::Proxy;
 
 /// Handle to an established VLESS UDP upstream connection.
 #[derive(Clone)]
 pub(super) struct VlessUdpUpstream {
     pub(super) session_id: u64,
-    pub(super) sender: vless::VlessUdpFlowSender,
+    pub(super) sender: VlessFlowSender,
 }
 
 pub(crate) struct VlessUdpStartFlow<'a> {

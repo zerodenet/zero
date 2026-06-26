@@ -7,7 +7,8 @@ pub(crate) mod model;
 
 use std::collections::HashMap;
 
-use tokio::sync::broadcast;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
@@ -20,11 +21,39 @@ use model::{
     VlessUdpUpstreamRequest,
 };
 
-type VlessResponseSender = broadcast::Sender<vless::VlessUdpFlowResponse>;
+type VlessFlowResponse = (Address, u16, Vec<u8>);
+type VlessResponseSender = broadcast::Sender<VlessFlowResponse>;
+
+#[derive(Clone)]
+pub(super) struct VlessFlowSender {
+    send_tx: mpsc::Sender<vless::VlessUdpFlowPacket>,
+}
+
+impl VlessFlowSender {
+    async fn send(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        let packet = vless::VlessUdpFlowPacket::new(target.clone(), port, payload.to_vec());
+        let packet_len = packet.encode()?.len();
+        self.send_tx
+            .send(packet)
+            .await
+            .map_err(|_| EngineError::Io(std::io::Error::other("vless udp flow closed")))?;
+        Ok(packet_len)
+    }
+}
+
+struct VlessFlowHandle {
+    sender: VlessFlowSender,
+    responses: VlessResponseSender,
+}
 
 fn upstream_from_stream(
     session_id: u64,
-    flow: vless::VlessUdpFlowHandle,
+    flow: VlessFlowHandle,
 ) -> (VlessUdpUpstream, VlessResponseSender) {
     (
         VlessUdpUpstream {
@@ -41,10 +70,21 @@ async fn establish_vless_udp_upstream_over_stream(
     session: &Session,
     identity: vless::VlessUdpIdentity,
     initial_payload: &[u8],
-    stream: TcpRelayStream,
+    mut stream: TcpRelayStream,
 ) -> Result<(VlessUdpUpstream, VlessResponseSender), EngineError> {
-    let (flow, initial_packet_len) =
-        vless::open_udp_flow(stream, session, identity, initial_payload).await?;
+    vless::establish_udp_flow_stream(&mut stream, session, identity).await?;
+    let initial_packet =
+        vless::encode_udp_flow_initial_packet(&session.target, session.port, initial_payload)?;
+    let initial_packet_len = initial_packet.len();
+    stream
+        .write_all(&initial_packet)
+        .await
+        .map_err(|_| EngineError::Core(zero_core::Error::Io("vless udp flow write")))?;
+    stream
+        .flush()
+        .await
+        .map_err(|_| EngineError::Core(zero_core::Error::Io("vless udp flow flush")))?;
+    let flow = spawn_udp_flow(stream, Vec::new());
     proxy.record_session_outbound_tx(session.id, initial_packet_len as u64);
     Ok(upstream_from_stream(session.id, flow))
 }
@@ -326,4 +366,75 @@ impl VlessUdpOutboundManager {
             Err(error) => Err(error),
         }
     }
+}
+
+fn spawn_udp_flow<S>(stream: S, initial_packet: Vec<u8>) -> VlessFlowHandle
+where
+    S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    let (send_tx, send_rx) = mpsc::channel::<vless::VlessUdpFlowPacket>(32);
+    let (responses, _) = broadcast::channel::<VlessFlowResponse>(32);
+    spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone());
+    VlessFlowHandle {
+        sender: VlessFlowSender { send_tx },
+        responses,
+    }
+}
+
+fn spawn_udp_flow_task<S>(
+    mut stream: S,
+    initial_packet: Vec<u8>,
+    mut send_rx: mpsc::Receiver<vless::VlessUdpFlowPacket>,
+    responses: VlessResponseSender,
+) where
+    S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    tokio::spawn(async move {
+        if !initial_packet.is_empty() {
+            if stream.write_all(&initial_packet).await.is_err() {
+                return;
+            }
+            if stream.flush().await.is_err() {
+                return;
+            }
+        }
+
+        let flow_io = vless::VlessUdpFlowIo;
+        let mut buffer = vec![0_u8; 64 * 1024];
+        loop {
+            tokio::select! {
+                to_send = send_rx.recv() => {
+                    match to_send {
+                        Some(packet) => {
+                            let (target, port, payload) = packet.into_parts();
+                            let encoded = match flow_io.encode_packet(&target, port, &payload) {
+                                Ok(encoded) => encoded,
+                                Err(_) => break,
+                            };
+                            if stream.write_all(&encoded).await.is_err() {
+                                break;
+                            }
+                            if stream.flush().await.is_err() {
+                                break;
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                read = stream.read(&mut buffer) => {
+                    match read {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if let Ok(packet) = flow_io.decode_packet(&buffer[..n]) {
+                                let _ = responses.send(packet.into_parts());
+                            } else {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+    });
 }

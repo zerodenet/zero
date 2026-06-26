@@ -2112,27 +2112,26 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "vless::build_udp_packet",
         "vless::parse_udp_packet",
         "vless::establish_udp_packet_tunnel",
-        "vless::establish_udp_flow_stream",
-        "vless::VlessUdpFlowIo",
         "vless::encode_udp_flow_packet",
         "vless::decode_udp_flow_packet",
-        ".encode_packet(",
-        ".decode_packet(",
-        "tokio::spawn",
-        "mpsc::channel",
-        "broadcast::channel",
     ] {
         assert!(
             !runtime.contains(forbidden) && !model.contains(forbidden),
-            "VLESS UDP runtime should delegate flow IO and packet framing to protocols/vless helpers; found `{forbidden}`"
+            "VLESS UDP runtime should avoid raw packet framing and use protocols/vless flow helpers; found `{forbidden}`"
         );
     }
     assert!(
-        runtime.contains("vless::open_udp_flow")
+        !runtime.contains("vless::open_udp_flow")
+            && !runtime.contains("vless::open_mux_udp_flow")
+            && runtime.contains("vless::establish_udp_flow_stream")
             && runtime.contains("vless::encode_udp_flow_initial_packet")
-            && runtime.contains("vless::VlessUdpFlowResponse")
-            && model.contains("vless::VlessUdpFlowSender"),
-        "VLESS UDP runtime should use opaque protocol-owned flow handles"
+            && runtime.contains("vless::VlessUdpFlowIo")
+            && runtime.contains("mpsc::channel::<vless::VlessUdpFlowPacket>")
+            && runtime.contains("broadcast::channel::<VlessFlowResponse>")
+            && runtime.contains("tokio::spawn")
+            && model.contains("VlessFlowSender")
+            && !model.contains("vless::VlessUdpFlowSender"),
+        "VLESS UDP runtime should own task/channel glue while protocols/vless owns packet helpers"
     );
     for forbidden in [
         "VlessUdpFlowStream",
@@ -2152,20 +2151,20 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         );
     }
     assert!(
-        protocol.contains("pub struct VlessUdpFlowHandle")
-            && protocol.contains("pub struct VlessUdpFlowSender")
-            && protocol.contains("pub type VlessUdpFlowResponse")
-            && protocol.contains("pub async fn open_udp_flow")
-            && protocol.contains("pub fn open_mux_udp_flow")
+        !protocol.contains("pub struct VlessUdpFlowHandle")
+            && !protocol.contains("pub struct VlessUdpFlowSender")
+            && !protocol.contains("pub type VlessUdpFlowResponse")
+            && !protocol.contains("pub async fn open_udp_flow")
+            && !protocol.contains("pub fn open_mux_udp_flow")
+            && !protocol.contains("mpsc::channel::<VlessUdpFlowPacket>")
+            && !protocol.contains("broadcast::channel")
+            && !protocol.contains("tokio::spawn")
             && protocol.contains("pub fn encode_udp_flow_initial_packet")
-            && protocol.contains("mpsc::channel::<VlessUdpFlowPacket>")
-            && protocol.contains("broadcast::channel::<VlessUdpFlowResponse>")
-            && protocol.contains("tokio::spawn")
             && protocol.contains("pub struct VlessUdpFlowIo")
             && protocol.contains("pub struct VlessUdpFlowPacket")
             && protocol.contains("pub fn encode_udp_flow_packet")
             && protocol.contains("pub fn decode_udp_flow_packet"),
-        "protocols/vless should own VLESS UDP flow state, task loop, and packet IO"
+        "protocols/vless should own VLESS UDP packet IO helpers without owning runtime task/channel glue"
     );
 }
 
@@ -2326,28 +2325,26 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "vmess::build_udp_packet",
         "vmess::parse_udp_packet",
         "vmess::establish_udp_outbound_stream",
-        "vmess::establish_udp_flow_stream",
-        "vmess::VmessUdpFlowIo",
         "vmess::encode_udp_flow_packet",
         "vmess::decode_udp_flow_packet",
-        ".encode_packet(",
-        ".decode_packet(",
-        "tokio::spawn",
-        "mpsc::channel",
-        "broadcast::channel",
     ] {
         assert!(
             !runtime.contains(forbidden) && !model.contains(forbidden),
-            "VMess UDP runtime should delegate flow IO and packet framing to protocols/vmess helpers; found `{forbidden}`"
+            "VMess UDP runtime should avoid raw packet framing and use protocols/vmess flow helpers; found `{forbidden}`"
         );
     }
     assert!(
-        runtime.contains("vmess::open_udp_flow")
-            && runtime.contains("vmess::open_mux_udp_flow")
+        !runtime.contains("vmess::open_udp_flow")
+            && !runtime.contains("vmess::open_mux_udp_flow")
+            && runtime.contains("vmess::establish_udp_flow_stream")
             && runtime.contains("vmess::encode_udp_flow_initial_packet")
-            && runtime.contains("vmess::VmessUdpFlowResponse")
-            && model.contains("vmess::VmessUdpFlowSender"),
-        "VMess UDP runtime should use opaque protocol-owned flow handles"
+            && runtime.contains("vmess::VmessUdpFlowIo")
+            && runtime.contains("mpsc::channel::<vmess::VmessUdpFlowPacket>")
+            && runtime.contains("broadcast::channel::<VmessFlowResponse>")
+            && runtime.contains("tokio::spawn")
+            && model.contains("VmessFlowSender")
+            && !model.contains("vmess::VmessUdpFlowSender"),
+        "VMess UDP runtime should own task/channel glue while protocols/vmess owns packet helpers"
     );
     for forbidden in [
         "VmessUdpFlowStream",
@@ -2367,20 +2364,20 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         );
     }
     assert!(
-        protocol.contains("pub struct VmessUdpFlowHandle")
-            && protocol.contains("pub struct VmessUdpFlowSender")
-            && protocol.contains("pub type VmessUdpFlowResponse")
-            && protocol.contains("pub async fn open_udp_flow")
-            && protocol.contains("pub fn open_mux_udp_flow")
+        !protocol.contains("pub struct VmessUdpFlowHandle")
+            && !protocol.contains("pub struct VmessUdpFlowSender")
+            && !protocol.contains("pub type VmessUdpFlowResponse")
+            && !protocol.contains("pub async fn open_udp_flow")
+            && !protocol.contains("pub fn open_mux_udp_flow")
+            && !protocol.contains("mpsc::channel::<VmessUdpFlowPacket>")
+            && !protocol.contains("broadcast::channel")
+            && !protocol.contains("tokio::spawn")
             && protocol.contains("pub fn encode_udp_flow_initial_packet")
-            && protocol.contains("mpsc::channel::<VmessUdpFlowPacket>")
-            && protocol.contains("broadcast::channel::<VmessUdpFlowResponse>")
-            && protocol.contains("tokio::spawn")
             && protocol.contains("pub struct VmessUdpFlowIo")
             && protocol.contains("pub struct VmessUdpFlowPacket")
             && protocol.contains("pub fn encode_udp_flow_packet")
             && protocol.contains("pub fn decode_udp_flow_packet"),
-        "protocols/vmess should own VMess UDP flow state, task loop, and packet IO"
+        "protocols/vmess should own VMess UDP packet IO helpers without owning runtime task/channel glue"
     );
 }
 
