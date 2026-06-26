@@ -6387,6 +6387,39 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
 }
 
 #[test]
+fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
+    let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
+        .expect("read zero-transport hysteria2_quic source");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/hysteria2/src/outbound.rs"))
+            .expect("read hysteria2 protocol outbound source");
+
+    for forbidden in [
+        "build_auth_frame",
+        "build_tcp_connect_header",
+        "parse_auth_response",
+        "sign_hmac",
+        "parse_tcp_connect_header",
+    ] {
+        assert!(
+            !transport.contains(forbidden),
+            "zero-transport Hysteria2 connector should delegate protocol handshake/framing to protocols/hysteria2; found `{forbidden}`"
+        );
+    }
+    assert!(
+        transport.contains("Hysteria2Outbound")
+            && transport.contains(".authenticate_with_salt(")
+            && transport.contains(".send_tcp_connect(")
+            && transport.contains(".read_connect_response(")
+            && protocol_outbound.contains("pub async fn authenticate_with_salt")
+            && protocol_outbound.contains("crate::shared::sign_hmac")
+            && protocol_outbound.contains("crate::shared::build_auth_frame")
+            && protocol_outbound.contains("build_tcp_connect_header"),
+        "Hysteria2 transport should own QUIC stream lifecycle while protocols/hysteria2 owns auth and TCP connect framing"
+    );
+}
+
+#[test]
 fn h2_udp_state_model_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/h2_manager.rs");
     let model = manifest_dir().join("src/protocol_runtime/udp/h2_manager/model.rs");

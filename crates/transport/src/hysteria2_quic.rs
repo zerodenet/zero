@@ -79,7 +79,7 @@ impl AsyncSocket for Hysteria2Stream {
 
 // ── Hysteria2Connector ──
 
-use hysteria2::{build_auth_frame, build_tcp_connect_header, parse_auth_response, sign_hmac};
+use hysteria2::Hysteria2Outbound;
 use std::sync::Arc;
 use zero_core::Session;
 use zero_engine::EngineError;
@@ -186,31 +186,15 @@ impl Hysteria2Connector {
         let mut salt = [0u8; 32];
         conn.export_keying_material(&mut salt, b"hysteria2 auth", &[])
             .map_err(|_| EngineError::Io(std::io::Error::other("hysteria2 key export failed")))?;
-        let hmac_bytes = sign_hmac(&self.password, &salt);
-
-        let (mut send, mut recv) = conn.open_bi().await.map_err(|e| {
+        let (send, recv) = conn.open_bi().await.map_err(|e| {
             EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}")))
         })?;
+        let mut stream = Hysteria2Stream::new(send, recv);
 
-        let auth_frame = build_auth_frame(&hmac_bytes);
-        send.write_all(&auth_frame)
+        Hysteria2Outbound
+            .authenticate_with_salt(&mut stream, &self.password, &salt)
             .await
-            .map_err(|e| EngineError::Io(e.into()))?;
-
-        let mut resp_buf = [0u8; 32];
-        let n = recv
-            .read(&mut resp_buf)
-            .await
-            .map_err(|e| {
-                EngineError::Io(std::io::Error::other(format!("hysteria2 auth read: {e}")))
-            })?
-            .unwrap_or(0);
-        parse_auth_response(&resp_buf[..n]).map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!("hysteria2 auth failed: {e}")))
-        })?;
-
-        drop(send);
-        drop(recv);
+            .map_err(EngineError::Core)?;
 
         Ok(conn)
     }
@@ -219,36 +203,21 @@ impl Hysteria2Connector {
     pub async fn connect(&self, session: &Session) -> Result<Hysteria2Stream, EngineError> {
         let conn = self.connect_raw().await?;
 
-        let (mut send, mut recv) = conn.open_bi().await.map_err(|e| {
+        let (send, recv) = conn.open_bi().await.map_err(|e| {
             EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}")))
         })?;
 
-        // TCP connect
-        let connect_header =
-            build_tcp_connect_header(&session.target, session.port).map_err(|e| {
-                EngineError::Io(std::io::Error::other(format!(
-                    "hysteria2 connect header: {e}"
-                )))
-            })?;
-        send.write_all(&connect_header)
+        let mut stream = Hysteria2Stream::new(send, recv);
+        Hysteria2Outbound
+            .send_tcp_connect(&mut stream, session)
             .await
-            .map_err(|e| EngineError::Io(e.into()))?;
-        send.flush().await.map_err(EngineError::Io)?;
+            .map_err(EngineError::Core)?;
+        Hysteria2Outbound
+            .read_connect_response(&mut stream)
+            .await
+            .map_err(EngineError::Core)?;
 
-        let mut ok_buf = [0u8; 1];
-        recv.read_exact(&mut ok_buf).await.map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!(
-                "hysteria2 connect read: {e}"
-            )))
-        })?;
-        if ok_buf[0] != 0x01 {
-            return Err(EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionRefused,
-                "hysteria2: connect rejected",
-            )));
-        }
-
-        Ok(Hysteria2Stream::new(send, recv))
+        Ok(stream)
     }
 }
 

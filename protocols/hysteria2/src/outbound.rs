@@ -29,6 +29,19 @@ impl Hysteria2Outbound {
             .map_err(|_| Error::Io("hysteria2: failed to write auth"))
     }
 
+    /// Compute and send the QUIC-bound authentication frame.
+    #[cfg(feature = "crypto")]
+    pub async fn authenticate_with_salt<S: AsyncSocket>(
+        &self,
+        stream: &mut S,
+        password: &str,
+        salt: &[u8; 32],
+    ) -> Result<(), Error> {
+        let hmac = crate::shared::sign_hmac(password, salt);
+        self.send_auth(stream, &hmac).await?;
+        self.read_auth_response(stream).await
+    }
+
     /// Read the authentication response from the server.
     pub async fn read_auth_response<S: AsyncSocket>(&self, stream: &mut S) -> Result<(), Error> {
         let mut buf = [0u8; 64];
