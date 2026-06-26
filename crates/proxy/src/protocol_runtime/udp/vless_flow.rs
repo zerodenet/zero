@@ -1,4 +1,4 @@
-use crate::protocol_runtime::vless_udp::model::{
+pub(crate) use crate::protocol_runtime::vless_udp::model::{
     VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream,
 };
 use crate::runtime::udp_dispatch::{FlowFailure, UdpDispatch};
@@ -8,8 +8,9 @@ impl UdpDispatch {
         &mut self,
         request: VlessUdpFlow<'_>,
     ) -> Result<(), FlowFailure> {
-        self.protocol_state
-            .start_vless_udp_flow(&mut self.chain_tasks, request)
+        let (protocol_state, chain_tasks) = self.protocol_udp_state_and_chain_tasks();
+        protocol_state
+            .start_vless_udp_flow(chain_tasks, request)
             .await
     }
 
@@ -17,8 +18,9 @@ impl UdpDispatch {
         &mut self,
         request: VlessUdpRelayTwoStream<'_>,
     ) -> Result<(), FlowFailure> {
-        self.protocol_state
-            .start_vless_udp_relay_two_stream(&mut self.chain_tasks, request)
+        let (protocol_state, chain_tasks) = self.protocol_udp_state_and_chain_tasks();
+        protocol_state
+            .start_vless_udp_relay_two_stream(chain_tasks, request)
             .await
     }
 
@@ -26,8 +28,9 @@ impl UdpDispatch {
         &mut self,
         request: VlessUdpRelayFinalHop<'_>,
     ) -> Result<(), FlowFailure> {
-        self.protocol_state
-            .start_vless_udp_relay_final_hop(&mut self.chain_tasks, request)
+        let (protocol_state, chain_tasks) = self.protocol_udp_state_and_chain_tasks();
+        protocol_state
+            .start_vless_udp_relay_final_hop(chain_tasks, request)
             .await
     }
 }

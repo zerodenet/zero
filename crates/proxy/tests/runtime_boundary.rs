@@ -109,8 +109,6 @@ fn runtime_protocol_runtime_references_are_confined_to_facades() {
         "src/runtime/udp_dispatch/mod.rs",
         "src/runtime/udp_dispatch/lifecycle.rs",
         "src/runtime/udp_dispatch/managed.rs",
-        "src/runtime/udp_dispatch/vless_flow.rs",
-        "src/runtime/udp_dispatch/vmess_flow.rs",
         "src/runtime/udp_dispatch/start/relay.rs",
     ];
 
@@ -3614,6 +3612,8 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
         "shadowsocks_flow.rs",
         "socks5_flow.rs",
         "trojan_flow.rs",
+        "vless_flow.rs",
+        "vmess_flow.rs",
     ] {
         assert!(
             !root.join(file_name).exists(),
@@ -3624,26 +3624,13 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
     for path in rust_sources_under("src/runtime/udp_dispatch") {
         let source = relative(&path);
         let content = fs::read_to_string(&path).expect("read rust source");
-        let allowed_facade = match source.as_str() {
-            "src/runtime/udp_dispatch/vless_flow.rs" => {
-                Some(("VlessUdpFlow", "start_vless_udp_flow"))
-            }
-            "src/runtime/udp_dispatch/vmess_flow.rs" => {
-                Some(("VmessUdpFlow", "start_vmess_udp_flow"))
-            }
-            _ => None,
-        };
-        if let Some((request, start)) = allowed_facade {
-            assert!(
-                content.contains(request) && content.contains(start),
-                "{source} should own its narrow protocol-state bridge"
-            );
-        }
         for forbidden in [
             "ShadowsocksUdpFlow",
             "MieruUdpRelayFlow",
             "start_hysteria2_udp_flow",
             "start_shadowsocks_udp_flow",
+            "VlessUdpFlow",
+            "VmessUdpFlow",
             "Hysteria2UdpFlowRequest",
             "TrojanUdpFlowRequest",
             "TrojanUdpRelayFlowRequest",
@@ -4842,6 +4829,8 @@ fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
         "pub(crate) use trojan_flow::",
         "pub(crate) use vless_flow::",
         "pub(crate) use vmess_flow::",
+        "pub(crate) mod vless_flow",
+        "pub(crate) mod vmess_flow",
         "Hysteria2DatagramSend",
         "MieruDatagramSend",
         "MieruRelaySend",
@@ -4881,6 +4870,8 @@ fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
         "Socks5RelaySend",
         "TrojanDatagramSend",
         "TrojanRelaySend",
+        "VlessUdpFlow",
+        "VmessUdpFlow",
     ] {
         assert!(
             !managed.contains(forbidden),
@@ -7362,13 +7353,13 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
             "start_trojan_datagram_flow",
         ),
         (
-            "src/runtime/udp_dispatch/vless_flow.rs",
+            "src/protocol_runtime/udp/vless_flow.rs",
             "VlessUdpFlow",
             "start_vless_udp_flow",
             "send_vless_datagram",
         ),
         (
-            "src/runtime/udp_dispatch/vmess_flow.rs",
+            "src/protocol_runtime/udp/vmess_flow.rs",
             "VmessUdpFlow",
             "start_vmess_udp_flow",
             "send_vmess_datagram",
@@ -7383,16 +7374,16 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
         }
         if matches!(
             source,
-            "src/runtime/udp_dispatch/vless_flow.rs" | "src/runtime/udp_dispatch/vmess_flow.rs"
+            "src/protocol_runtime/udp/vless_flow.rs" | "src/protocol_runtime/udp/vmess_flow.rs"
         ) {
             assert!(
-                facade.contains("&mut self.chain_tasks"),
-                "{source} should own chain task bridging for packet/stream UDP flows"
+                facade.contains("protocol_udp_state_and_chain_tasks"),
+                "{source} should use the narrow runtime UDP state bridge"
             );
         }
         if matches!(
             source,
-            "src/runtime/udp_dispatch/vless_flow.rs" | "src/runtime/udp_dispatch/vmess_flow.rs"
+            "src/protocol_runtime/udp/vless_flow.rs" | "src/protocol_runtime/udp/vmess_flow.rs"
         ) {
             for forbidden in [
                 "VlessDatagramSend",
