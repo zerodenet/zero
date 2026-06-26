@@ -87,7 +87,7 @@ fn spawn_vless_udp_relay(
 async fn establish_vless_udp_upstream_over_stream(
     proxy: &Proxy,
     session: &Session,
-    uuid: [u8; 16],
+    identity: vless::VlessUdpIdentity,
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<(VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>), EngineError> {
@@ -96,8 +96,7 @@ async fn establish_vless_udp_upstream_over_stream(
 
     let mut metered = MeteredStream::new(stream);
 
-    vless::establish_udp_flow_stream(&mut metered, session, vless::VlessUdpIdentity { uuid })
-        .await?;
+    vless::establish_udp_flow_stream(&mut metered, session, identity).await?;
     metered.write_all(&initial_packet).await?;
 
     Ok(spawn_vless_udp_relay(
@@ -114,7 +113,7 @@ async fn establish_vless_udp_upstream(
     session: &Session,
     server: &str,
     port: u16,
-    uuid: [u8; 16],
+    identity: vless::VlessUdpIdentity,
     initial_payload: &[u8],
     transport: Option<&VlessUdpTransport<'_>>,
 ) -> Result<(VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>), EngineError> {
@@ -129,12 +128,7 @@ async fn establish_vless_udp_upstream(
                 crate::transport::connect_quic(server_name, port, quic.insecure).await?;
 
             let mut metered = MeteredStream::new(TcpRelayStream::new(quic_stream));
-            vless::establish_udp_flow_stream(
-                &mut metered,
-                session,
-                vless::VlessUdpIdentity { uuid },
-            )
-            .await?;
+            vless::establish_udp_flow_stream(&mut metered, session, identity).await?;
             metered.write_all(&initial_packet).await?;
 
             return Ok(spawn_vless_udp_relay(
@@ -171,7 +165,8 @@ async fn establish_vless_udp_upstream(
         None => socket.into(),
     };
 
-    establish_vless_udp_upstream_over_stream(proxy, session, uuid, initial_payload, stream).await
+    establish_vless_udp_upstream_over_stream(proxy, session, identity, initial_payload, stream)
+        .await
 }
 
 /// VLESS UDP outbound manager -?manages per-target upstream connections.
@@ -208,7 +203,7 @@ impl VlessUdpOutboundManager {
                         session: None,
                         server: request.server,
                         port: request.port,
-                        id: &request.uuid,
+                        id: &request.identity.uuid,
                         tls: request.transport.tls,
                         reality: request.transport.reality,
                         max_concurrency,
@@ -238,7 +233,7 @@ impl VlessUdpOutboundManager {
                 port: request.session.port,
                 server: request.server,
                 server_port: request.port,
-                uuid: request.uuid,
+                identity: request.identity,
                 initial_payload: request.payload,
                 transport: Some(&request.transport),
             },
@@ -260,7 +255,7 @@ impl VlessUdpOutboundManager {
         let (upstream, recv_tx) = establish_vless_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.uuid,
+            request.identity,
             request.payload,
             stream,
         )
@@ -303,7 +298,7 @@ impl VlessUdpOutboundManager {
         let (upstream, recv_tx) = establish_vless_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.uuid,
+            request.identity,
             request.payload,
             stream,
         )
@@ -412,7 +407,7 @@ impl VlessUdpOutboundManager {
             request.session,
             request.server,
             request.server_port,
-            request.uuid,
+            request.identity,
             request.initial_payload,
             request.transport,
         )

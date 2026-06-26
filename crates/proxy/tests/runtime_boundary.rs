@@ -1992,17 +1992,22 @@ fn vless_udp_identity_is_protocol_parsed() {
         "VLESS UDP runtime should receive protocol-parsed UUIDs"
     );
     assert!(
-        !model.contains("id: &'a str") && model.contains("uuid: [u8; 16]"),
-        "VLESS UDP request models should carry parsed UUIDs instead of raw config IDs"
+        !model.contains("id: &'a str") && model.contains("vless::VlessUdpIdentity"),
+        "VLESS UDP request models should carry protocol-owned identities instead of raw config IDs"
     );
     let vless_flow_models = flows
         .split("pub(crate) struct VmessUdpFlow")
         .next()
         .expect("VLESS flow models should appear before VMess flow models");
-    for forbidden in ["pub(crate) id: &'a str", "pub(super) id: &'a str"] {
+    for forbidden in [
+        "pub(crate) id: &'a str",
+        "pub(super) id: &'a str",
+        "pub(crate) uuid: [u8; 16]",
+        "pub(super) uuid: [u8; 16]",
+    ] {
         assert!(
             !vless_flow_models.contains(forbidden) && !model.contains(forbidden),
-            "VLESS UDP request models should not carry raw config IDs; found `{forbidden}`"
+            "VLESS UDP request models should not carry raw config IDs or UUID fields; found `{forbidden}`"
         );
     }
     assert!(
@@ -2137,17 +2142,19 @@ fn vmess_udp_identity_is_protocol_parsed() {
         "pub(super) id: &'a str",
         "pub(crate) cipher: &'a str",
         "pub(super) cipher: &'a str",
+        "pub(crate) uuid: [u8; 16]",
+        "pub(super) uuid: [u8; 16]",
+        "pub(crate) cipher: vmess::VmessCipher",
+        "pub(super) cipher: vmess::VmessCipher",
     ] {
         assert!(
             !vmess_flow_models.contains(forbidden) && !model.contains(forbidden),
-            "VMess UDP request models should carry parsed identity plus cipher_name only; found `{forbidden}`"
+            "VMess UDP request models should carry protocol-owned identity plus cipher_name only; found `{forbidden}`"
         );
     }
     assert!(
-        model.contains("uuid: [u8; 16]")
-            && model.contains("cipher_name: &'a str")
-            && model.contains("cipher: vmess::VmessCipher"),
-        "VMess UDP request models should carry parsed UUID/cipher plus cipher_name for mux"
+        model.contains("vmess::VmessUdpIdentity") && model.contains("cipher_name: &'a str"),
+        "VMess UDP request models should carry protocol-owned identity plus cipher_name for mux"
     );
     assert!(
         model.contains("struct VmessUdpUpstreamRequest")
