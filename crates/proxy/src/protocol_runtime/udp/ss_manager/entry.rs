@@ -19,7 +19,11 @@ pub(super) async fn ensure(
     }
 
     let flow = Arc::new(
-        shadowsocks_transport::establish_shadowsocks_udp_socket_flow(target_addr, resume).await?,
+        shadowsocks_transport::establish_shadowsocks_udp_socket_flow(
+            target_addr,
+            Arc::new(resume.codec()),
+        )
+        .await?,
     );
     let waiters = BridgeWaiters::new();
     let entry = Arc::new(SsUpstream {

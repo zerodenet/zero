@@ -7,28 +7,29 @@ use tokio::sync::broadcast;
 use tracing::{debug, warn};
 use zero_core::{Address, UdpFlowPacket};
 use zero_engine::EngineError;
+use zero_traits::DatagramCodec;
 
 pub type ShadowsocksUdpResponse = (Address, u16, Vec<u8>);
 
 pub struct ShadowsocksUdpSocketFlow {
     socket: Arc<tokio::net::UdpSocket>,
     endpoint: SocketAddr,
-    resume: shadowsocks::ShadowsocksUdpFlowResume,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
     recv_tx: broadcast::Sender<ShadowsocksUdpResponse>,
 }
 
 pub async fn establish_shadowsocks_udp_socket_flow(
     endpoint: SocketAddr,
-    resume: shadowsocks::ShadowsocksUdpFlowResume,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 ) -> Result<ShadowsocksUdpSocketFlow, EngineError> {
     let socket = Arc::new(bind_for_endpoint(endpoint).await?);
     let (recv_tx, _) = broadcast::channel::<ShadowsocksUdpResponse>(32);
-    spawn_recv_loop(socket.clone(), resume.clone(), recv_tx.clone());
+    spawn_recv_loop(socket.clone(), codec.clone(), recv_tx.clone());
 
     Ok(ShadowsocksUdpSocketFlow {
         socket,
         endpoint,
-        resume,
+        codec,
         recv_tx,
     })
 }
@@ -39,8 +40,9 @@ impl ShadowsocksUdpSocketFlow {
     }
 
     pub async fn send_packet(&self, packet: UdpFlowPacket) -> Result<(), EngineError> {
-        let packet = shadowsocks::udp_flow_packet(&packet.target, packet.port, &packet.payload);
-        let datagram = packet.encode_with(&self.resume)?;
+        let datagram = self
+            .codec
+            .encode(&packet.target, packet.port, &packet.payload)?;
         self.socket.send_to(&datagram, self.endpoint).await?;
         Ok(())
     }
@@ -56,15 +58,15 @@ async fn bind_for_endpoint(endpoint: SocketAddr) -> Result<tokio::net::UdpSocket
 
 fn spawn_recv_loop(
     socket: Arc<tokio::net::UdpSocket>,
-    resume: shadowsocks::ShadowsocksUdpFlowResume,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
     recv_tx: broadcast::Sender<ShadowsocksUdpResponse>,
 ) {
-    tokio::spawn(recv_loop(socket, resume, recv_tx));
+    tokio::spawn(recv_loop(socket, codec, recv_tx));
 }
 
 async fn recv_loop(
     socket: Arc<tokio::net::UdpSocket>,
-    resume: shadowsocks::ShadowsocksUdpFlowResume,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
     recv_tx: broadcast::Sender<ShadowsocksUdpResponse>,
 ) {
     let mut buf = vec![0u8; 4096];
@@ -77,7 +79,7 @@ async fn recv_loop(
             }
         };
         let datagram = &buf[..n];
-        let Some(packet) = resume.decode_flow_packet(datagram) else {
+        let Some((target, port, payload)) = codec.decode(datagram) else {
             warn!(
                 upstream = %sender,
                 bytes = n,
@@ -85,7 +87,6 @@ async fn recv_loop(
             );
             continue;
         };
-        let (target, port, payload) = packet.into_parts();
         debug!(
             upstream = %sender,
             target = ?target,

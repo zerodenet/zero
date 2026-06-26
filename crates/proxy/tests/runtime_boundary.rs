@@ -6485,6 +6485,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/shadowsocks_transport.rs"))
             .expect("read shadowsocks transport source");
+    let transport_manifest = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
+        .expect("read zero-transport manifest");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
@@ -6522,11 +6524,14 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && !manager.contains("shadowsocks::udp_flow_packet")
             && manager.contains("UdpFlowPacket::from_parts")
             && transport.contains("send_packet(&self, packet: UdpFlowPacket)")
-            && transport.contains("shadowsocks::udp_flow_packet")
+            && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
+            && !transport.contains("shadowsocks::")
+            && !transport_manifest.contains("dep:shadowsocks")
+            && !transport_manifest.contains("shadowsocks = { path = \"../../protocols/shadowsocks\"")
             && !manager.contains("ShadowsocksUdpFlowPacket::from_parts")
             && protocol_outbound.contains("pub fn encode_with(")
             && protocol_outbound.contains("pub fn decode_flow_packet(&self"),
-        "Shadowsocks UDP manager should carry neutral UDP packets while transport glue converts them through protocols/shadowsocks"
+        "Shadowsocks UDP manager should carry neutral UDP packets while transport consumes a protocol-built codec"
     );
     for forbidden in [".encode_packet(", ".decode_packet("] {
         assert!(
@@ -6535,13 +6540,13 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
         );
     }
     assert!(
-        transport.contains("packet.encode_with(&self.resume)")
-            && transport.contains("resume.decode_flow_packet(datagram)")
+        transport.contains(".codec\n            .encode")
+            && transport.contains("codec.decode(datagram)")
             && !manager.contains(".encode_with(")
             && !entry.contains(".encode_with(")
             && !manager.contains(".decode_flow_packet(")
             && !entry.contains(".decode_flow_packet("),
-        "Shadowsocks UDP flow encode/decode should be owned by zero-transport, not ss_manager glue"
+        "Shadowsocks UDP flow encode/decode should be delegated through an adapter-provided datagram codec"
     );
 }
 
