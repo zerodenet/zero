@@ -1,7 +1,7 @@
 use zero_core::{Address, Error, Session};
 use zero_traits::DatagramCodec;
 
-use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
+use crate::protocol_runtime::udp::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
@@ -10,7 +10,7 @@ pub(crate) struct Hysteria2DatagramSend<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: hysteria2::Hysteria2UdpFlowResume,
+    pub(crate) resume: ProtocolUdpFlowResume,
     pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) payload: &'a [u8],
 }
@@ -21,14 +21,23 @@ impl UdpDispatch {
         &mut self,
         request: Hysteria2DatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
+        let Some(resume) = request.resume.hysteria2() else {
+            return Err(FlowFailure {
+                stage: "udp_hysteria2_resume",
+                error: zero_engine::EngineError::Io(std::io::Error::other(
+                    "expected Hysteria2 UDP flow resume",
+                )),
+                upstream: Some((request.server.to_string(), request.port)),
+            });
+        };
         self.protocol_state
             .start_hysteria2_udp_flow(crate::protocol_runtime::udp::Hysteria2UdpFlowRequest {
                 chain_tasks: &mut self.chain_tasks,
                 session: request.session,
                 server: request.server,
                 port: request.port,
-                password: request.resume.password(),
-                client_fingerprint: request.resume.client_fingerprint(),
+                password: resume.password(),
+                client_fingerprint: resume.client_fingerprint(),
                 codec: request.codec.clone(),
                 payload: request.payload,
             })
@@ -56,7 +65,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::hysteria2(request.resume),
+                protocol: ProtocolUdpFlowSnapshot::managed(request.resume),
             }),
             tx_bytes: sent as u64,
         })

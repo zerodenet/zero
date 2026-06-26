@@ -4,6 +4,7 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::trojan::TrojanAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
+use crate::protocol_runtime::udp::ProtocolUdpFlowResume;
 use crate::runtime::udp_dispatch::trojan_flow::{TrojanDatagramSend, TrojanRelaySend};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
@@ -36,13 +37,13 @@ impl TrojanAdapter {
                 session,
                 server,
                 port: *port,
-                resume: trojan::TrojanUdpFlowResume::new(
+                resume: ProtocolUdpFlowResume::Trojan(trojan::TrojanUdpFlowResume::new(
                     password,
                     *sni,
                     *insecure,
                     *client_fingerprint,
                     false,
-                ),
+                )),
                 payload,
             })
             .await
@@ -77,13 +78,13 @@ impl TrojanAdapter {
                 carrier,
                 server,
                 port: *port,
-                resume: trojan::TrojanUdpFlowResume::new(
+                resume: ProtocolUdpFlowResume::Trojan(trojan::TrojanUdpFlowResume::new(
                     password,
                     *sni,
                     *insecure,
                     *client_fingerprint,
                     true,
-                ),
+                )),
                 payload,
             })
             .await

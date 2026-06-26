@@ -1,6 +1,6 @@
 use zero_core::Session;
 
-use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
+use crate::protocol_runtime::udp::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
@@ -11,7 +11,7 @@ pub(crate) struct TrojanDatagramSend<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: trojan::TrojanUdpFlowResume,
+    pub(crate) resume: ProtocolUdpFlowResume,
     pub(crate) payload: &'a [u8],
 }
 
@@ -22,7 +22,7 @@ pub(crate) struct TrojanRelaySend<'a> {
     pub(crate) carrier: crate::transport::RelayCarrier,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: trojan::TrojanUdpFlowResume,
+    pub(crate) resume: ProtocolUdpFlowResume,
     pub(crate) payload: &'a [u8],
 }
 
@@ -31,6 +31,15 @@ impl UdpDispatch {
         &mut self,
         request: TrojanDatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
+        let Some(resume) = request.resume.trojan() else {
+            return Err(FlowFailure {
+                stage: "udp_trojan_resume",
+                error: zero_engine::EngineError::Io(std::io::Error::other(
+                    "expected Trojan UDP flow resume",
+                )),
+                upstream: Some((request.server.to_string(), request.port)),
+            });
+        };
         self.protocol_state
             .start_trojan_udp_flow(crate::protocol_runtime::udp::TrojanUdpFlowRequest {
                 chain_tasks: &mut self.chain_tasks,
@@ -38,10 +47,10 @@ impl UdpDispatch {
                 session: request.session,
                 server: request.server,
                 port: request.port,
-                password: request.resume.password(),
-                sni: request.resume.sni(),
-                insecure: request.resume.insecure(),
-                client_fingerprint: request.resume.client_fingerprint(),
+                password: resume.password(),
+                sni: resume.sni(),
+                insecure: resume.insecure(),
+                client_fingerprint: resume.client_fingerprint(),
                 relay_chain: false,
                 payload: request.payload,
             })
@@ -68,7 +77,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::trojan(request.resume),
+                protocol: ProtocolUdpFlowSnapshot::managed(request.resume),
             }),
             tx_bytes: sent as u64,
         })
@@ -78,6 +87,15 @@ impl UdpDispatch {
         &mut self,
         request: TrojanRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
+        let Some(resume) = request.resume.trojan() else {
+            return Err(FlowFailure {
+                stage: "udp_trojan_resume",
+                error: zero_engine::EngineError::Io(std::io::Error::other(
+                    "expected Trojan UDP flow resume",
+                )),
+                upstream: Some((request.server.to_string(), request.port)),
+            });
+        };
         self.protocol_state
             .start_trojan_udp_relay_flow(crate::protocol_runtime::udp::TrojanUdpRelayFlowRequest {
                 chain_tasks: &mut self.chain_tasks,
@@ -86,10 +104,10 @@ impl UdpDispatch {
                 carrier: request.carrier,
                 server: request.server,
                 port: request.port,
-                password: request.resume.password(),
-                sni: request.resume.sni(),
-                insecure: request.resume.insecure(),
-                client_fingerprint: request.resume.client_fingerprint(),
+                password: resume.password(),
+                sni: resume.sni(),
+                insecure: resume.insecure(),
+                client_fingerprint: resume.client_fingerprint(),
                 payload: request.payload,
             })
             .await
@@ -116,7 +134,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::trojan(request.resume),
+                protocol: ProtocolUdpFlowSnapshot::managed(request.resume),
             }),
             tx_bytes: sent as u64,
         })

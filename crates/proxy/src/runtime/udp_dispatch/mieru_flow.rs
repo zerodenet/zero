@@ -1,7 +1,7 @@
 use zero_core::{Address, Error, Session};
 use zero_traits::DatagramCodec;
 
-use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
+use crate::protocol_runtime::udp::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
@@ -12,7 +12,7 @@ pub(crate) struct MieruDatagramSend<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: mieru::MieruUdpFlowResume,
+    pub(crate) resume: ProtocolUdpFlowResume,
     pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) payload: &'a [u8],
 }
@@ -23,7 +23,7 @@ pub(crate) struct MieruRelaySend<'a> {
     pub(crate) carrier: crate::transport::RelayCarrier,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: mieru::MieruUdpFlowResume,
+    pub(crate) resume: ProtocolUdpFlowResume,
     pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) payload: &'a [u8],
 }
@@ -33,6 +33,15 @@ impl UdpDispatch {
         &mut self,
         request: MieruDatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
+        let Some(resume) = request.resume.mieru() else {
+            return Err(FlowFailure {
+                stage: "udp_mieru_resume",
+                error: zero_engine::EngineError::Io(std::io::Error::other(
+                    "expected Mieru UDP flow resume",
+                )),
+                upstream: Some((request.server.to_string(), request.port)),
+            });
+        };
         self.protocol_state
             .start_mieru_udp_flow(crate::protocol_runtime::udp::MieruUdpFlowRequest {
                 chain_tasks: &mut self.chain_tasks,
@@ -40,8 +49,8 @@ impl UdpDispatch {
                 session: request.session,
                 server: request.server,
                 port: request.port,
-                username: request.resume.username(),
-                password: request.resume.password(),
+                username: resume.username(),
+                password: resume.password(),
                 relay_chain: false,
                 codec: request.codec.clone(),
                 payload: request.payload,
@@ -70,7 +79,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::mieru(request.resume),
+                protocol: ProtocolUdpFlowSnapshot::managed(request.resume),
             }),
             tx_bytes: sent as u64,
         })
@@ -80,6 +89,15 @@ impl UdpDispatch {
         &mut self,
         request: MieruRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
+        let Some(resume) = request.resume.mieru() else {
+            return Err(FlowFailure {
+                stage: "udp_mieru_resume",
+                error: zero_engine::EngineError::Io(std::io::Error::other(
+                    "expected Mieru UDP flow resume",
+                )),
+                upstream: Some((request.server.to_string(), request.port)),
+            });
+        };
         self.protocol_state
             .start_mieru_udp_relay_flow(
                 &mut self.chain_tasks,
@@ -88,8 +106,8 @@ impl UdpDispatch {
                     carrier: request.carrier,
                     server: request.server,
                     port: request.port,
-                    username: request.resume.username(),
-                    password: request.resume.password(),
+                    username: resume.username(),
+                    password: resume.password(),
                     codec: request.codec.clone(),
                     payload: request.payload,
                 },
@@ -118,7 +136,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::mieru(request.resume),
+                protocol: ProtocolUdpFlowSnapshot::managed(request.resume),
             }),
             tx_bytes: sent as u64,
         })

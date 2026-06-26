@@ -6,6 +6,7 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
+use crate::protocol_runtime::udp::ProtocolUdpFlowResume;
 use crate::runtime::udp_dispatch::mieru_flow::{MieruDatagramSend, MieruRelaySend};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
@@ -36,7 +37,9 @@ impl MieruAdapter {
                 session,
                 server,
                 port: *port,
-                resume: mieru::MieruUdpFlowResume::new(username, password, false),
+                resume: ProtocolUdpFlowResume::Mieru(mieru::MieruUdpFlowResume::new(
+                    username, password, false,
+                )),
                 codec: Arc::new(mieru::udp_flow_codec()),
                 payload,
             })
@@ -68,7 +71,9 @@ impl MieruAdapter {
                 carrier,
                 server,
                 port: *port,
-                resume: mieru::MieruUdpFlowResume::new(username, password, true),
+                resume: ProtocolUdpFlowResume::Mieru(mieru::MieruUdpFlowResume::new(
+                    username, password, true,
+                )),
                 codec: Arc::new(mieru::udp_flow_codec()),
                 payload,
             })

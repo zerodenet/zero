@@ -6347,17 +6347,26 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
 #[test]
 fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let snapshot_impl = snapshot
+        .split("impl ProtocolUdpFlowSnapshot")
+        .nth(1)
+        .expect("ProtocolUdpFlowSnapshot impl should exist");
 
-    for required in [
-        "pub(crate) fn socks5(",
+    for required in ["pub(crate) fn managed(", "pub(crate) fn socks5("] {
+        assert!(
+            snapshot_impl.contains(required),
+            "protocol_runtime::udp::flow_snapshot should own protocol snapshot constructor `{required}`"
+        );
+    }
+    for forbidden in [
         "pub(crate) fn shadowsocks(",
         "pub(crate) fn hysteria2(",
         "pub(crate) fn trojan(",
         "pub(crate) fn mieru(",
     ] {
         assert!(
-            snapshot.contains(required),
-            "protocol_runtime::udp::flow_snapshot should own protocol snapshot constructor `{required}`"
+            !snapshot_impl.contains(forbidden),
+            "protocol_runtime::udp::flow_snapshot should not keep protocol-specific snapshot constructor `{forbidden}`"
         );
     }
     assert!(

@@ -16,45 +16,55 @@ pub(crate) enum ProtocolUdpFlowResume {
     Mieru(mieru::MieruUdpFlowResume),
 }
 
+impl ProtocolUdpFlowResume {
+    #[cfg(feature = "shadowsocks")]
+    pub(crate) fn shadowsocks(&self) -> Option<&shadowsocks::ShadowsocksUdpFlowResume> {
+        match self {
+            Self::Shadowsocks(resume) => Some(resume),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "hysteria2")]
+    pub(crate) fn hysteria2(&self) -> Option<&hysteria2::Hysteria2UdpFlowResume> {
+        match self {
+            Self::Hysteria2(resume) => Some(resume),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "trojan")]
+    pub(crate) fn trojan(&self) -> Option<&trojan::TrojanUdpFlowResume> {
+        match self {
+            Self::Trojan(resume) => Some(resume),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "mieru")]
+    pub(crate) fn mieru(&self) -> Option<&mieru::MieruUdpFlowResume> {
+        match self {
+            Self::Mieru(resume) => Some(resume),
+            _ => None,
+        }
+    }
+}
+
 pub(crate) struct Socks5RelayAuth<'a> {
     pub(crate) username: Option<&'a str>,
     pub(crate) password: Option<&'a str>,
 }
 
 impl ProtocolUdpFlowSnapshot {
+    pub(crate) fn managed(resume: ProtocolUdpFlowResume) -> Self {
+        Self::Managed { resume }
+    }
+
     pub(crate) fn socks5(username: Option<&str>, password: Option<&str>) -> Self {
         Self::Managed {
             resume: ProtocolUdpFlowResume::Socks5(socks5::Socks5UdpFlowResume::new(
                 username, password,
             )),
-        }
-    }
-
-    #[cfg(feature = "shadowsocks")]
-    pub(crate) fn shadowsocks(resume: shadowsocks::ShadowsocksUdpFlowResume) -> Self {
-        Self::Managed {
-            resume: ProtocolUdpFlowResume::Shadowsocks(resume),
-        }
-    }
-
-    #[cfg(feature = "hysteria2")]
-    pub(crate) fn hysteria2(resume: hysteria2::Hysteria2UdpFlowResume) -> Self {
-        Self::Managed {
-            resume: ProtocolUdpFlowResume::Hysteria2(resume),
-        }
-    }
-
-    #[cfg(feature = "trojan")]
-    pub(crate) fn trojan(resume: trojan::TrojanUdpFlowResume) -> Self {
-        Self::Managed {
-            resume: ProtocolUdpFlowResume::Trojan(resume),
-        }
-    }
-
-    #[cfg(feature = "mieru")]
-    pub(crate) fn mieru(resume: mieru::MieruUdpFlowResume) -> Self {
-        Self::Managed {
-            resume: ProtocolUdpFlowResume::Mieru(resume),
         }
     }
 
