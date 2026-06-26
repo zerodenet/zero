@@ -4,7 +4,7 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::runtime::udp_dispatch::vmess_flow::{VmessDatagramSend, VmessRelaySend};
+use crate::protocol_runtime::udp::{VmessUdpFlow, VmessUdpRelayFlow};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
 
@@ -56,7 +56,7 @@ impl VmessAdapter {
             Some((server, *port)),
         )?;
         dispatch
-            .send_vmess_datagram(VmessDatagramSend {
+            .send_vmess_datagram(VmessUdpFlow {
                 proxy,
                 session,
                 server,
@@ -108,7 +108,7 @@ impl VmessAdapter {
             Some((server, *port)),
         )?;
         dispatch
-            .send_vmess_relay(VmessRelaySend {
+            .send_vmess_relay(VmessUdpRelayFlow {
                 proxy,
                 session,
                 carrier,

@@ -4,9 +4,7 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::runtime::udp_dispatch::vless_flow::{
-    VlessDatagramSend, VlessRelayFinalHopSend, VlessRelayTwoStreamSend,
-};
+use crate::protocol_runtime::udp::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
 
@@ -59,7 +57,7 @@ impl VlessAdapter {
             parse_vless_udp_identity(id, "udp_vless_parse_identity", Some((server, *port)))?;
 
         dispatch
-            .send_vless_datagram(VlessDatagramSend {
+            .send_vless_datagram(VlessUdpFlow {
                 proxy,
                 session,
                 server,
@@ -145,7 +143,7 @@ impl VlessAdapter {
             .as_ref()
             .expect("udp_relay_needs_two_streams checked split_http is Some");
         dispatch
-            .send_vless_relay_two_stream(VlessRelayTwoStreamSend {
+            .send_vless_relay_two_stream(VlessUdpRelayTwoStream {
                 proxy,
                 session,
                 post_carrier,
@@ -205,7 +203,7 @@ impl VlessAdapter {
         let identity =
             parse_vless_udp_identity(id, "udp_vless_relay_final_hop_parse_identity", None)?;
         dispatch
-            .send_vless_relay_final_hop(VlessRelayFinalHopSend {
+            .send_vless_relay_final_hop(VlessUdpRelayFinalHop {
                 proxy,
                 session,
                 carrier,

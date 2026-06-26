@@ -3493,10 +3493,10 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
                 Some(("TrojanDatagramSend", "start_managed_udp_flow"))
             }
             "src/runtime/udp_dispatch/vless_flow.rs" => {
-                Some(("VlessDatagramSend", "start_vless_udp_flow"))
+                Some(("VlessUdpFlow", "start_vless_udp_flow"))
             }
             "src/runtime/udp_dispatch/vmess_flow.rs" => {
-                Some(("VmessDatagramSend", "start_vmess_udp_flow"))
+                Some(("VmessUdpFlow", "start_vmess_udp_flow"))
             }
             _ => None,
         };
@@ -7148,13 +7148,13 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
         ),
         (
             "src/runtime/udp_dispatch/vless_flow.rs",
-            "VlessDatagramSend",
+            "VlessUdpFlow",
             "start_vless_udp_flow",
             "send_vless_datagram",
         ),
         (
             "src/runtime/udp_dispatch/vmess_flow.rs",
-            "VmessDatagramSend",
+            "VmessUdpFlow",
             "start_vmess_udp_flow",
             "send_vmess_datagram",
         ),
@@ -7171,6 +7171,25 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
                 facade.contains("&mut self.chain_tasks"),
                 "{source} should own chain task bridging for packet/stream UDP flows"
             );
+        }
+        if matches!(
+            source,
+            "src/runtime/udp_dispatch/vless_flow.rs" | "src/runtime/udp_dispatch/vmess_flow.rs"
+        ) {
+            for forbidden in [
+                "VlessDatagramSend",
+                "VlessRelayFinalHopSend",
+                "VlessRelayTwoStreamSend",
+                "VmessDatagramSend",
+                "VmessRelaySend",
+                "VlessUdpIdentity",
+                "VmessUdpIdentity",
+            ] {
+                assert!(
+                    !facade.contains(forbidden),
+                    "{source} should not own protocol-specific UDP request models; found `{forbidden}`"
+                );
+            }
         }
     }
 
