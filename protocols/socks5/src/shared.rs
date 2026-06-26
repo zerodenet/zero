@@ -267,3 +267,23 @@ pub fn udp_cache_key(tag: &str, server: &str, port: u16, username: Option<&str>)
         .unwrap_or_default();
     alloc::format!("socks5|{tag}|{server}:{port}{auth}")
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Socks5UdpPacketPathConfig<'a> {
+    pub tag: &'a str,
+    pub server: &'a str,
+    pub port: u16,
+    pub username: Option<&'a str>,
+    pub password: Option<&'a str>,
+}
+
+impl Socks5UdpPacketPathConfig<'_> {
+    pub fn cache_key(&self) -> String {
+        udp_cache_key(
+            self.tag,
+            self.server,
+            self.port,
+            self.username.zip(self.password).map(|(user, _)| user),
+        )
+    }
+}
