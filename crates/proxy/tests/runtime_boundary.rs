@@ -5780,15 +5780,18 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     }
 
     let cache_key = read("src/protocol_runtime/udp/cache_key.rs");
-    for required in ["fn socks5(", "fn hysteria2(", "socks5|", "hysteria2|"] {
+    for required in ["fn socks5(", "socks5|"] {
         assert!(
             cache_key.contains(required),
             "protocol_runtime::udp cache_key module should own `{required}`"
         );
     }
     assert!(
-        !cache_key.contains("fn shadowsocks(") && !cache_key.contains("shadowsocks|"),
-        "Shadowsocks cache identity should live in protocols/shadowsocks"
+        !cache_key.contains("fn shadowsocks(")
+            && !cache_key.contains("shadowsocks|")
+            && !cache_key.contains("fn hysteria2(")
+            && !cache_key.contains("hysteria2|"),
+        "Shadowsocks and Hysteria2 cache identity should live in their owning protocol crates"
     );
 }
 

@@ -148,13 +148,7 @@ pub(crate) fn hysteria2_packet_path_carrier_descriptor(
     client_fingerprint: Option<&str>,
 ) -> crate::protocol_runtime::udp::PacketPathCarrierDescriptor {
     crate::protocol_runtime::udp::PacketPathCarrierDescriptor {
-        cache_key: crate::protocol_runtime::udp::hysteria2_udp_cache_key(
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-        ),
+        cache_key: hysteria2::udp_cache_key(tag, server, port, password, client_fingerprint),
         server: server.to_owned(),
         port,
     }
@@ -169,13 +163,7 @@ pub(crate) fn hysteria2_packet_path_carrier_snapshot(
     client_fingerprint: Option<&str>,
 ) -> UdpPacketPathCarrier {
     UdpPacketPathCarrier::Hysteria2 {
-        cache_key: crate::protocol_runtime::udp::hysteria2_udp_cache_key(
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-        ),
+        cache_key: hysteria2::udp_cache_key(tag, server, port, password, client_fingerprint),
         tag: tag.to_owned(),
         server: server.to_owned(),
         port,

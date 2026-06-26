@@ -128,3 +128,16 @@ pub fn encode_inbound_udp_datagram(
 ) -> Result<Vec<u8>, Error> {
     build_udp_datagram(session_id, 0, target, port, payload)
 }
+
+pub fn udp_cache_key(
+    tag: &str,
+    server: &str,
+    port: u16,
+    password: &str,
+    client_fingerprint: Option<&str>,
+) -> String {
+    let fingerprint = client_fingerprint
+        .map(|value| alloc::format!("|fp:{value}"))
+        .unwrap_or_default();
+    alloc::format!("hysteria2|{tag}|{server}:{port}|{password}{fingerprint}")
+}
