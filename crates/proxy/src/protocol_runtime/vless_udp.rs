@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
-use zero_core::{Address, Session};
+use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
@@ -26,7 +26,7 @@ type VlessResponseSender = broadcast::Sender<VlessFlowResponse>;
 
 #[derive(Clone)]
 pub(super) struct VlessFlowSender {
-    send_tx: mpsc::Sender<vless::VlessUdpFlowPacket>,
+    send_tx: mpsc::Sender<UdpFlowPacket>,
 }
 
 impl VlessFlowSender {
@@ -36,8 +36,10 @@ impl VlessFlowSender {
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        let packet = vless::VlessUdpFlowPacket::new(target.clone(), port, payload.to_vec());
-        let packet_len = packet.encode()?.len();
+        let packet = UdpFlowPacket::from_parts(target, port, payload);
+        let packet_len = vless::VlessUdpFlowIo
+            .encode_packet(target, port, payload)?
+            .len();
         self.send_tx
             .send(packet)
             .await
@@ -372,7 +374,7 @@ fn spawn_udp_flow<S>(stream: S, initial_packet: Vec<u8>) -> VlessFlowHandle
 where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
 {
-    let (send_tx, send_rx) = mpsc::channel::<vless::VlessUdpFlowPacket>(32);
+    let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
     let (responses, _) = broadcast::channel::<VlessFlowResponse>(32);
     spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone());
     VlessFlowHandle {
@@ -384,7 +386,7 @@ where
 fn spawn_udp_flow_task<S>(
     mut stream: S,
     initial_packet: Vec<u8>,
-    mut send_rx: mpsc::Receiver<vless::VlessUdpFlowPacket>,
+    mut send_rx: mpsc::Receiver<UdpFlowPacket>,
     responses: VlessResponseSender,
 ) where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
@@ -406,8 +408,7 @@ fn spawn_udp_flow_task<S>(
                 to_send = send_rx.recv() => {
                     match to_send {
                         Some(packet) => {
-                            let (target, port, payload) = packet.into_parts();
-                            let encoded = match flow_io.encode_packet(&target, port, &payload) {
+                            let encoded = match flow_io.encode_packet(&packet.target, packet.port, &packet.payload) {
                                 Ok(encoded) => encoded,
                                 Err(_) => break,
                             };

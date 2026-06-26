@@ -4,10 +4,11 @@ use crate::outbound::hysteria2::Hysteria2Connector;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use zero_core::UdpFlowPacket;
 use zero_engine::EngineError;
 
 pub(super) struct PacketStream {
-    pub(super) send_tx: mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>,
+    pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
     pub(super) recv_tx: bridge::ResponseSender,
 }
 
@@ -32,7 +33,7 @@ pub(super) async fn establish(
         initial_packet.port,
         initial_packet.payload,
     );
-    let (send_tx, send_rx) = mpsc::channel::<hysteria2::Hysteria2UdpFlowPacket>(32);
+    let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
     let (recv_tx, _) = tokio::sync::broadcast::channel::<bridge::RecvItem>(32);
 
     spawn_send_task(conn.clone(), initial_packet, resume.clone(), send_rx);
@@ -45,7 +46,7 @@ fn spawn_send_task(
     conn: Arc<quinn::Connection>,
     initial_packet: hysteria2::Hysteria2UdpFlowPacket,
     resume: hysteria2::Hysteria2UdpFlowResume,
-    mut send_rx: mpsc::Receiver<hysteria2::Hysteria2UdpFlowPacket>,
+    mut send_rx: mpsc::Receiver<UdpFlowPacket>,
 ) {
     tokio::spawn(async move {
         if let Ok(datagram) = initial_packet.encode_with(&resume) {
@@ -54,6 +55,7 @@ fn spawn_send_task(
             }
         }
         while let Some(packet) = send_rx.recv().await {
+            let packet = hysteria2::udp_flow_packet(&packet.target, packet.port, &packet.payload);
             let Ok(datagram) = packet.encode_with(&resume) else {
                 break;
             };

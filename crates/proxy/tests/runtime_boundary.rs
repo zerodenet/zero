@@ -2119,7 +2119,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && runtime.contains("vless::establish_udp_flow_stream")
             && runtime.contains("vless::encode_udp_flow_initial_packet")
             && runtime.contains("vless::VlessUdpFlowIo")
-            && runtime.contains("mpsc::channel::<vless::VlessUdpFlowPacket>")
+            && runtime.contains("mpsc::channel::<UdpFlowPacket>")
             && runtime.contains("broadcast::channel::<VlessFlowResponse>")
             && runtime.contains("tokio::spawn")
             && model.contains("VlessFlowSender")
@@ -2132,6 +2132,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "VlessUdpFlowIo",
         "establish_udp_flow_stream",
         "mpsc::channel::<vless::VlessUdpFlowPacket>",
+        "mpsc::channel::<UdpFlowPacket>",
         "broadcast::channel::<VlessUdpResponse>",
         "tokio::spawn",
         "encode_vless_udp_flow_packet",
@@ -2332,7 +2333,7 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && runtime.contains("vmess::establish_udp_flow_stream")
             && runtime.contains("vmess::encode_udp_flow_initial_packet")
             && runtime.contains("vmess::VmessUdpFlowIo")
-            && runtime.contains("mpsc::channel::<vmess::VmessUdpFlowPacket>")
+            && runtime.contains("mpsc::channel::<UdpFlowPacket>")
             && runtime.contains("broadcast::channel::<VmessFlowResponse>")
             && runtime.contains("tokio::spawn")
             && model.contains("VmessFlowSender")
@@ -2345,6 +2346,7 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "VmessUdpFlowIo",
         "establish_udp_flow_stream",
         "mpsc::channel::<vmess::VmessUdpFlowPacket>",
+        "mpsc::channel::<UdpFlowPacket>",
         "broadcast::channel::<VmessUdpResponse>",
         "tokio::spawn",
         "encode_vmess_udp_flow_packet",
@@ -3438,6 +3440,33 @@ fn protocol_udp_flow_requests_do_not_extend_udp_dispatch() {
             !content.contains(forbidden),
             "protocol_runtime::udp::flows should define request types, not extend runtime dispatcher; found `{forbidden}`"
         );
+    }
+}
+
+#[test]
+fn protocol_udp_runtime_channels_store_neutral_packets() {
+    for path in rust_sources_under("src/protocol_runtime") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in [
+            "mpsc::Sender<vless::VlessUdpFlowPacket>",
+            "mpsc::Receiver<vless::VlessUdpFlowPacket>",
+            "mpsc::channel::<vless::VlessUdpFlowPacket>",
+            "mpsc::Sender<vmess::VmessUdpFlowPacket>",
+            "mpsc::Receiver<vmess::VmessUdpFlowPacket>",
+            "mpsc::channel::<vmess::VmessUdpFlowPacket>",
+            "mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>",
+            "mpsc::Receiver<hysteria2::Hysteria2UdpFlowPacket>",
+            "mpsc::channel::<hysteria2::Hysteria2UdpFlowPacket>",
+            "mpsc::Sender<mieru::MieruUdpFlowPacket>",
+            "mpsc::Receiver<mieru::MieruUdpFlowPacket>",
+            "mpsc::channel::<mieru::MieruUdpFlowPacket>",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should store neutral UdpFlowPacket in proxy runtime channels, not protocol packet channel `{forbidden}`"
+            );
+        }
     }
 }
 
@@ -6330,7 +6359,7 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             && !protocol_outbound.contains("mpsc::channel::<MieruUdpFlowPacket>")
             && !protocol_outbound.contains("broadcast::channel")
             && !protocol_outbound.contains("tokio::spawn")
-            && stream.contains("mpsc::channel::<mieru::MieruUdpFlowPacket>")
+            && stream.contains("mpsc::channel::<UdpFlowPacket>")
             && stream.contains("tokio::sync::broadcast::channel::<bridge::ResponseItem>")
             && stream.contains("tokio::spawn")
             && stream.contains("mieru::MieruUdpFlowIo::establish_with_resume")
@@ -6398,14 +6427,14 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .next()
         .expect("H2SendExisting should follow H2Entry");
     assert!(
-        h2_entry_model.contains("mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>")
+        h2_entry_model.contains("mpsc::Sender<UdpFlowPacket>")
             && !h2_entry_model.contains("resume: hysteria2::Hysteria2UdpFlowResume")
-            && manager_send.contains("hysteria2::udp_flow_packet")
+            && !manager_send.contains("hysteria2::udp_flow_packet")
             && !manager_send.contains("Hysteria2UdpFlowPacket::from_parts")
             && !stream.contains("Hysteria2UdpFlowPacket::from_parts")
-            && !manager_send.contains("UdpFlowPacket::from_parts")
+            && manager_send.contains("UdpFlowPacket::from_parts")
             && !stream.contains("UdpFlowPacket::from_parts")
-            && !stream.contains("mpsc::Sender<UdpFlowPacket>")
+            && stream.contains("mpsc::Sender<UdpFlowPacket>")
             && stream.contains("packet.encode_with(&resume)")
             && stream.contains("resume.decode_flow_packet(&data)")
             && stream.contains("hysteria2::udp_flow_packet")
@@ -6416,7 +6445,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !transport.contains("resume.decode_flow_packet(&data)")
             && !manager_send.contains(".encode_packet(")
             && !stream.contains("mpsc::Sender<Vec<u8>>"),
-        "Hysteria2 UDP manager should store a protocol-owned packet sender while proxy runtime glue schedules packet encode/decode tasks"
+        "Hysteria2 UDP manager should store neutral packet senders while protocol helpers own packet encode/decode"
     );
     assert!(
         adapter.contains("Hysteria2UdpFlowResume::new")
@@ -6597,7 +6626,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && stream.contains("send_datagram")
             && stream.contains("read_datagram")
             && stream.contains("tokio::spawn")
-            && stream.contains("mpsc::channel::<hysteria2::Hysteria2UdpFlowPacket>")
+            && stream.contains("mpsc::channel::<UdpFlowPacket>")
             && stream.contains("tokio::sync::broadcast::channel::<bridge::RecvItem>")
             && stream.contains("hysteria2::udp_flow_packet")
             && stream.contains("packet.encode_with(&resume)")

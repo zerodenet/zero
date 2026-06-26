@@ -3,6 +3,7 @@ use super::super::{H2UdpPeer, UdpPeerEndpoint};
 use super::model::{H2Entry, H2Key, H2SendExisting};
 use super::{establish, H2ChainManager};
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
+use zero_core::UdpFlowPacket;
 
 impl H2ChainManager {
     async fn send(
@@ -17,7 +18,7 @@ impl H2ChainManager {
 
         if let Some(entry) = self.upstreams.get(&key) {
             let packet =
-                hysteria2::udp_flow_packet(packet_ref.target, packet_ref.port, packet_ref.payload);
+                UdpFlowPacket::from_parts(packet_ref.target, packet_ref.port, packet_ref.payload);
             return entry
                 .send_tx
                 .send(packet)

@@ -2,7 +2,7 @@ use super::bridge;
 use crate::transport::TcpRelayStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
-use zero_core::Address;
+use zero_core::{Address, UdpFlowPacket};
 use zero_engine::EngineError;
 
 pub(super) struct PacketStream {
@@ -12,7 +12,7 @@ pub(super) struct PacketStream {
 
 #[derive(Clone)]
 pub(super) struct MieruFlowSender {
-    send_tx: mpsc::Sender<mieru::MieruUdpFlowPacket>,
+    send_tx: mpsc::Sender<UdpFlowPacket>,
 }
 
 impl MieruFlowSender {
@@ -22,7 +22,7 @@ impl MieruFlowSender {
         port: u16,
         payload: &[u8],
     ) -> Result<usize, zero_core::Error> {
-        let packet = mieru::udp_flow_packet(target, port, payload);
+        let packet = UdpFlowPacket::from_parts(target, port, payload);
         let packet_len = packet.payload.len();
         self.send_tx
             .send(packet)
@@ -47,7 +47,7 @@ pub(super) async fn spawn_packet_stream(
 }
 
 fn spawn_udp_flow(stream: TcpRelayStream, flow_io: mieru::MieruUdpFlowIo) -> PacketStream {
-    let (send_tx, send_rx) = mpsc::channel::<mieru::MieruUdpFlowPacket>(32);
+    let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
     let (recv_tx, _) = tokio::sync::broadcast::channel::<bridge::ResponseItem>(32);
     spawn_udp_flow_task(stream, flow_io, send_rx, recv_tx.clone());
     PacketStream {
@@ -59,7 +59,7 @@ fn spawn_udp_flow(stream: TcpRelayStream, flow_io: mieru::MieruUdpFlowIo) -> Pac
 fn spawn_udp_flow_task(
     mut stream: TcpRelayStream,
     mut flow_io: mieru::MieruUdpFlowIo,
-    mut send_rx: mpsc::Receiver<mieru::MieruUdpFlowPacket>,
+    mut send_rx: mpsc::Receiver<UdpFlowPacket>,
     responses: bridge::ResponseSender,
 ) {
     tokio::spawn(async move {
@@ -69,6 +69,7 @@ fn spawn_udp_flow_task(
                 to_send = send_rx.recv() => {
                     match to_send {
                         Some(packet) => {
+                            let packet = mieru::udp_flow_packet(&packet.target, packet.port, &packet.payload);
                             let encrypted = match packet.encode_with(&mut flow_io) {
                                 Ok(encrypted) => encrypted,
                                 Err(_) => break,

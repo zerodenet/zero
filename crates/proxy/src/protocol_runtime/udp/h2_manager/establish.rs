@@ -4,6 +4,7 @@ use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
+use zero_core::UdpFlowPacket;
 use zero_engine::EngineError;
 
 pub(super) async fn upstream(
@@ -12,7 +13,7 @@ pub(super) async fn upstream(
     peer: &H2UdpPeer<'_>,
     resume: hysteria2::Hysteria2UdpFlowResume,
     initial_packet: UdpPacketRef<'_>,
-) -> Result<mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>, EngineError> {
+) -> Result<mpsc::Sender<UdpFlowPacket>, EngineError> {
     let stream::PacketStream { send_tx, recv_tx } =
         stream::establish(peer, initial_packet, resume).await?;
 
