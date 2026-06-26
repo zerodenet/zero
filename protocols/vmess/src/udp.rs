@@ -294,6 +294,78 @@ where
     establish_udp_outbound_stream(stream, session, &identity.uuid, identity.cipher).await
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VmessEstablishedUdpFlow {
+    io: VmessUdpFlowIo,
+}
+
+impl VmessEstablishedUdpFlow {
+    pub fn encode_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.io.encode_packet(target, port, payload)
+    }
+
+    pub fn encoded_packet_len(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.io.encoded_packet_len(target, port, payload)
+    }
+
+    pub fn initial_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.io.encode_packet(target, port, payload)
+    }
+
+    pub async fn write_packet_tokio<S>(
+        &self,
+        stream: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        S: tokio::io::AsyncWrite + Unpin,
+    {
+        self.io
+            .write_packet_tokio(stream, target, port, payload)
+            .await
+    }
+
+    pub async fn read_packet_tokio<S>(
+        &self,
+        stream: &mut S,
+        buffer: &mut [u8],
+    ) -> Result<Option<VmessUdpFlowPacket>, Error>
+    where
+        S: tokio::io::AsyncRead + Unpin,
+    {
+        self.io.read_packet_tokio(stream, buffer).await
+    }
+}
+
+pub async fn establish_udp_flow<S>(
+    stream: S,
+    session: &Session,
+    identity: VmessUdpIdentity,
+) -> Result<(VmessAeadStream<S>, VmessEstablishedUdpFlow), Error>
+where
+    S: AsyncSocket,
+{
+    let stream = establish_udp_flow_stream(stream, session, identity).await?;
+    Ok((stream, VmessEstablishedUdpFlow { io: VmessUdpFlowIo }))
+}
+
 pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
     let mut body = Vec::with_capacity(8 + payload.len());
     write_address(&mut body, address)?;

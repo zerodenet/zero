@@ -7,7 +7,7 @@ pub(crate) mod model;
 
 use std::collections::HashMap;
 
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use zero_core::{Address, Session, UdpFlowPacket};
@@ -27,6 +27,7 @@ type VlessResponseSender = broadcast::Sender<VlessFlowResponse>;
 #[derive(Clone)]
 pub(super) struct VlessFlowSender {
     send_tx: mpsc::Sender<UdpFlowPacket>,
+    io: vless::VlessEstablishedUdpFlow,
 }
 
 impl VlessFlowSender {
@@ -37,7 +38,7 @@ impl VlessFlowSender {
         payload: &[u8],
     ) -> Result<usize, EngineError> {
         let packet = UdpFlowPacket::from_parts(target, port, payload);
-        let packet_len = vless::VlessUdpFlowIo.encoded_packet_len(target, port, payload)?;
+        let packet_len = self.io.encoded_packet_len(target, port, payload)?;
         self.send_tx
             .send(packet)
             .await
@@ -72,19 +73,12 @@ async fn establish_vless_udp_upstream_over_stream(
     initial_payload: &[u8],
     mut stream: TcpRelayStream,
 ) -> Result<(VlessUdpUpstream, VlessResponseSender), EngineError> {
-    vless::establish_udp_flow_stream(&mut stream, session, identity).await?;
-    let initial_packet =
-        vless::encode_udp_flow_initial_packet(&session.target, session.port, initial_payload)?;
-    let initial_packet_len = initial_packet.len();
-    stream
-        .write_all(&initial_packet)
+    let flow_io = vless::establish_udp_flow(&mut stream, session, identity).await?;
+    let initial_packet_len = flow_io
+        .write_packet_tokio(&mut stream, &session.target, session.port, initial_payload)
         .await
-        .map_err(|_| EngineError::Core(zero_core::Error::Io("vless udp flow write")))?;
-    stream
-        .flush()
-        .await
-        .map_err(|_| EngineError::Core(zero_core::Error::Io("vless udp flow flush")))?;
-    let flow = spawn_udp_flow(stream, Vec::new());
+        .map_err(EngineError::from)?;
+    let flow = spawn_udp_flow(stream, None, flow_io);
     proxy.record_session_outbound_tx(session.id, initial_packet_len as u64);
     Ok(upstream_from_stream(session.id, flow))
 }
@@ -158,12 +152,22 @@ impl VlessUdpOutboundManager {
                 )
                 .await
             {
-                let packet = vless::encode_udp_flow_initial_packet(
+                let initial_packet = UdpFlowPacket::from_parts(
+                    &request.session.target,
+                    request.session.port,
+                    request.payload,
+                );
+                let flow_io = vless::VlessEstablishedUdpFlow::default();
+                let sent = flow_io.encoded_packet_len(
                     &request.session.target,
                     request.session.port,
                     request.payload,
                 )?;
-                let sent = packet.len();
+                let packet = flow_io.initial_packet(
+                    &initial_packet.target,
+                    initial_packet.port,
+                    &initial_packet.payload,
+                )?;
                 let _ = up_tx.send(packet);
                 request
                     .proxy
@@ -368,38 +372,46 @@ impl VlessUdpOutboundManager {
     }
 }
 
-fn spawn_udp_flow<S>(stream: S, initial_packet: Vec<u8>) -> VlessFlowHandle
+fn spawn_udp_flow<S>(
+    stream: S,
+    initial_packet: Option<UdpFlowPacket>,
+    flow_io: vless::VlessEstablishedUdpFlow,
+) -> VlessFlowHandle
 where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
 {
     let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
     let (responses, _) = broadcast::channel::<VlessFlowResponse>(32);
-    spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone());
+    spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone(), flow_io);
     VlessFlowHandle {
-        sender: VlessFlowSender { send_tx },
+        sender: VlessFlowSender {
+            send_tx,
+            io: flow_io,
+        },
         responses,
     }
 }
 
 fn spawn_udp_flow_task<S>(
     mut stream: S,
-    initial_packet: Vec<u8>,
+    initial_packet: Option<UdpFlowPacket>,
     mut send_rx: mpsc::Receiver<UdpFlowPacket>,
     responses: VlessResponseSender,
+    flow_io: vless::VlessEstablishedUdpFlow,
 ) where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
 {
     tokio::spawn(async move {
-        if !initial_packet.is_empty() {
-            if stream.write_all(&initial_packet).await.is_err() {
-                return;
-            }
-            if stream.flush().await.is_err() {
+        if let Some(packet) = initial_packet {
+            if flow_io
+                .write_packet_tokio(&mut stream, &packet.target, packet.port, &packet.payload)
+                .await
+                .is_err()
+            {
                 return;
             }
         }
 
-        let flow_io = vless::VlessUdpFlowIo;
         let mut buffer = vec![0_u8; 64 * 1024];
         loop {
             tokio::select! {

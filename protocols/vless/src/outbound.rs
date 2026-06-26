@@ -12,6 +12,8 @@ use crate::shared::{
     build_udp_packet, parse_udp_packet, read_addon, read_exact, write_address, CMD_MUX,
     VLESS_VERSION,
 };
+#[cfg(feature = "reality")]
+use crate::VlessUdpFlowIo;
 use crate::VlessUdpPacket;
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -246,6 +248,81 @@ where
     S: AsyncSocket,
 {
     establish_udp_packet_tunnel(stream, session, &identity.uuid).await
+}
+
+#[cfg(feature = "reality")]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VlessEstablishedUdpFlow {
+    io: VlessUdpFlowIo,
+}
+
+#[cfg(feature = "reality")]
+impl VlessEstablishedUdpFlow {
+    pub fn encode_packet(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.io.encode_packet(target, port, payload)
+    }
+
+    pub fn encoded_packet_len(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.io.encoded_packet_len(target, port, payload)
+    }
+
+    pub fn initial_packet(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.io.encode_packet(target, port, payload)
+    }
+
+    pub async fn write_packet_tokio<S>(
+        &self,
+        stream: &mut S,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        S: tokio::io::AsyncWrite + Unpin,
+    {
+        self.io
+            .write_packet_tokio(stream, target, port, payload)
+            .await
+    }
+
+    pub async fn read_packet_tokio<S>(
+        &self,
+        stream: &mut S,
+        buffer: &mut [u8],
+    ) -> Result<Option<crate::VlessUdpFlowPacket>, Error>
+    where
+        S: tokio::io::AsyncRead + Unpin,
+    {
+        self.io.read_packet_tokio(stream, buffer).await
+    }
+}
+
+#[cfg(feature = "reality")]
+pub async fn establish_udp_flow<S>(
+    stream: &mut S,
+    session: &Session,
+    identity: VlessUdpIdentity,
+) -> Result<VlessEstablishedUdpFlow, Error>
+where
+    S: AsyncSocket,
+{
+    establish_udp_flow_stream(stream, session, identity).await?;
+    Ok(VlessEstablishedUdpFlow { io: VlessUdpFlowIo })
 }
 
 impl<'a> UdpPacketTunnelProtocol<VlessUdpPacketTunnelTarget<'a>> for VlessOutbound {
