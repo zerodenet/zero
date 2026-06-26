@@ -11,7 +11,7 @@ use crate::runtime::Proxy;
 #[derive(Clone)]
 pub(super) struct VlessUdpUpstream {
     pub(super) session_id: u64,
-    pub(super) send_tx: mpsc::Sender<Vec<u8>>,
+    pub(super) send_tx: mpsc::Sender<vless::VlessUdpFlowPacket>,
 }
 
 /// Transport options for VLESS UDP upstream connections.

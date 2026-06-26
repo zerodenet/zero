@@ -2045,9 +2045,13 @@ fn vless_udp_adapter_delegates_packet_framing_to_protocol_helpers() {
 #[test]
 fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = read("src/protocol_runtime/vless_udp.rs");
+    let model = read("src/protocol_runtime/vless_udp/model.rs");
+    let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
+        .expect("read protocols/vless/src/shared.rs");
 
     for forbidden in [
         "broadcast::Sender<vless::VlessUdpPacket>",
+        "mpsc::Sender<Vec<u8>>",
         "UdpPacketFraming",
         "VlessUdpFlowCodec",
         "VlessUdpPacket)",
@@ -2059,18 +2063,28 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "vless::build_udp_packet",
         "vless::parse_udp_packet",
         "vless::establish_udp_packet_tunnel",
+        "vless::encode_udp_flow_packet",
+        "vless::decode_udp_flow_packet",
     ] {
         assert!(
-            !runtime.contains(forbidden),
+            !runtime.contains(forbidden) && !model.contains(forbidden),
             "VLESS UDP runtime should delegate packet framing to protocols/vless helpers; found `{forbidden}`"
         );
     }
     assert!(
-        runtime.contains("vless::encode_udp_flow_packet")
-            && runtime.contains("vless::decode_udp_flow_packet")
+        runtime.contains("vless::VlessUdpFlowIo")
+            && runtime.contains("vless::VlessUdpFlowPacket")
             && runtime.contains("vless::establish_udp_flow_stream")
             && runtime.contains("UdpResponsePacket"),
-        "VLESS UDP runtime should call protocols/vless flow helpers and store neutral responses"
+        "VLESS UDP runtime should call protocols/vless flow IO helpers and store neutral responses"
+    );
+    assert!(
+        model.contains("mpsc::Sender<vless::VlessUdpFlowPacket>")
+            && protocol.contains("pub struct VlessUdpFlowIo")
+            && protocol.contains("pub struct VlessUdpFlowPacket")
+            && protocol.contains("pub fn encode_udp_flow_packet")
+            && protocol.contains("pub fn decode_udp_flow_packet"),
+        "protocols/vless should own VLESS UDP flow packet IO while proxy stores only protocol-owned packets"
     );
 }
 
