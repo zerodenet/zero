@@ -4,7 +4,7 @@ use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error};
+use zero_core::{Address, Error, UdpFlowPacket};
 use zero_traits::DatagramCodec;
 
 /// One plaintext UDP payload to encode into a Hysteria2 UDP datagram.
@@ -231,6 +231,33 @@ pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> Hysteria2
     Hysteria2UdpFlowPacket::from_parts(target, port, payload)
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Hysteria2UdpFlowIo;
+
+impl Hysteria2UdpFlowIo {
+    pub fn encode_packet(&self, packet: &UdpFlowPacket) -> Result<Vec<u8>, Error> {
+        encode_udp_flow_packet(&packet.target, packet.port, &packet.payload)
+    }
+
+    pub fn encode_initial_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_udp_flow_packet(target, port, payload)
+    }
+
+    pub fn decode_packet(&self, data: &[u8]) -> Option<UdpFlowPacket> {
+        let decoded = decode_udp_flow_packet(data).ok()?;
+        Some(UdpFlowPacket::new(
+            decoded.target,
+            decoded.port,
+            decoded.payload,
+        ))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hysteria2UdpFlowResume {
     password: String,
@@ -281,6 +308,10 @@ impl Hysteria2UdpFlowResume {
 
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec()
+    }
+
+    pub fn flow_io(&self) -> Hysteria2UdpFlowIo {
+        Hysteria2UdpFlowIo
     }
 
     pub fn encode_packet(

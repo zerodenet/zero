@@ -2666,19 +2666,26 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         .join("protocols/hysteria2/src/udp.rs");
     let protocol = std::fs::read_to_string(protocol).expect("read hysteria2 udp protocol source");
 
-    for forbidden in ["hysteria2::udp_flow_packet", ".encode_with(&resume)"] {
+    for forbidden in [
+        "hysteria2::udp_flow_packet",
+        ".encode_with(&resume)",
+        "resume.encode_flow_packet",
+        "resume.decode_flow_packet",
+    ] {
         assert!(
             !stream.contains(forbidden),
-            "Hysteria2 UDP stream pump should delegate packet construction/encoding to protocol resume API; found `{forbidden}`"
+            "Hysteria2 UDP stream pump should delegate packet construction/encoding to protocol flow I/O; found `{forbidden}`"
         );
     }
     assert!(
-        stream.contains("resume.encode_flow_packet"),
-        "Hysteria2 UDP stream pump should call the protocol resume encode boundary"
+        stream.contains("flow_io.encode_packet") && stream.contains("flow_io.decode_packet"),
+        "Hysteria2 UDP stream pump should call the protocol flow I/O boundary"
     );
     assert!(
-        protocol.contains("pub fn encode_flow_packet"),
-        "Hysteria2 protocol crate should own flow packet encoding"
+        protocol.contains("struct Hysteria2UdpFlowIo")
+            && protocol.contains("pub fn encode_packet(&self")
+            && protocol.contains("pub fn decode_packet(&self"),
+        "Hysteria2 protocol crate should own flow packet I/O"
     );
 }
 
@@ -6768,6 +6775,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn udp_flow_packet")
             && protocol_udp.contains("pub fn encode_packet(")
             && protocol_udp.contains("pub fn encode_flow_packet(")
+            && protocol_udp.contains("struct Hysteria2UdpFlowIo")
+            && protocol_udp.contains("pub fn flow_io(&self)")
             && protocol_udp.contains("pub fn decode_packet(&self"),
         "Hysteria2 adapter and UDP manager should consume protocol-owned UDP flow packet helpers"
     );
@@ -6786,10 +6795,12 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !stream.contains("Hysteria2UdpFlowPacket::from_parts")
             && manager_send.contains("UdpFlowPacket::from_parts")
             && stream.contains("mpsc::Sender<UdpFlowPacket>")
-            && stream.contains("resume.encode_flow_packet")
+            && stream.contains("flow_io.encode_packet")
             && !stream.contains("packet.encode_with(&resume)")
             && !stream.contains("hysteria2::udp_flow_packet")
-            && stream.contains("resume.decode_flow_packet(&data)")
+            && stream.contains("flow_io.decode_packet(&data)")
+            && !stream.contains("resume.encode_flow_packet")
+            && !stream.contains("resume.decode_flow_packet")
             && !stream.contains("establish_hysteria2_udp_flow_stream")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("hysteria2::udp_flow_packet")
@@ -6978,6 +6989,8 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         "Hysteria2UdpFlowStreamRequest",
         "hysteria2::udp_flow_packet",
         "packet.encode_with(&resume)",
+        "resume.encode_flow_packet",
+        "resume.decode_flow_packet",
         "resume.decode_packet",
     ] {
         assert!(
@@ -6993,8 +7006,8 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && stream.contains("tokio::spawn")
             && stream.contains("mpsc::channel::<UdpFlowPacket>")
             && stream.contains("tokio::sync::broadcast::channel::<bridge::RecvItem>")
-            && stream.contains("resume.encode_flow_packet")
-            && stream.contains("resume.decode_flow_packet(&data)")
+            && stream.contains("flow_io.encode_packet")
+            && stream.contains("flow_io.decode_packet(&data)")
             && !protocol_udp.contains("pub fn open_udp_flow")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
             && !protocol_udp.contains("tokio::sync::mpsc::channel")

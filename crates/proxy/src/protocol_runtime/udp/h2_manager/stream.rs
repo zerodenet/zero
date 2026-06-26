@@ -18,6 +18,7 @@ pub(super) async fn establish(
     resume: hysteria2::Hysteria2UdpFlowResume,
 ) -> Result<PacketStream, EngineError> {
     let connector_profile = resume.connector_profile();
+    let flow_io = resume.flow_io();
     let conn = Arc::new(
         Hysteria2Connector::new(
             peer.endpoint.server,
@@ -38,10 +39,10 @@ pub(super) async fn establish(
             initial_packet.port,
             initial_packet.payload,
         ),
-        resume.clone(),
+        flow_io,
         send_rx,
     );
-    spawn_recv_task(conn, resume, recv_tx.clone());
+    spawn_recv_task(conn, flow_io, recv_tx.clone());
 
     Ok(PacketStream { send_tx, recv_tx })
 }
@@ -49,23 +50,17 @@ pub(super) async fn establish(
 fn spawn_send_task(
     conn: Arc<quinn::Connection>,
     initial_packet: UdpFlowPacket,
-    resume: hysteria2::Hysteria2UdpFlowResume,
+    flow_io: hysteria2::Hysteria2UdpFlowIo,
     mut send_rx: mpsc::Receiver<UdpFlowPacket>,
 ) {
     tokio::spawn(async move {
-        if let Ok(datagram) = resume.encode_flow_packet(
-            &initial_packet.target,
-            initial_packet.port,
-            &initial_packet.payload,
-        ) {
+        if let Ok(datagram) = flow_io.encode_packet(&initial_packet) {
             if conn.send_datagram(datagram.into()).is_err() {
                 return;
             }
         }
         while let Some(packet) = send_rx.recv().await {
-            let Ok(datagram) =
-                resume.encode_flow_packet(&packet.target, packet.port, &packet.payload)
-            else {
+            let Ok(datagram) = flow_io.encode_packet(&packet) else {
                 break;
             };
             if conn.send_datagram(datagram.into()).is_err() {
@@ -77,15 +72,18 @@ fn spawn_send_task(
 
 fn spawn_recv_task(
     conn: Arc<quinn::Connection>,
-    resume: hysteria2::Hysteria2UdpFlowResume,
+    flow_io: hysteria2::Hysteria2UdpFlowIo,
     recv_tx: bridge::ResponseSender,
 ) {
     tokio::spawn(async move {
         while let Ok(data) = conn.read_datagram().await {
-            let Some(packet) = resume.decode_flow_packet(&data) else {
+            let Some(packet) = flow_io.decode_packet(&data) else {
                 continue;
             };
-            if recv_tx.send(packet.into_parts()).is_err() {
+            if recv_tx
+                .send((packet.target, packet.port, packet.payload))
+                .is_err()
+            {
                 break;
             }
         }
