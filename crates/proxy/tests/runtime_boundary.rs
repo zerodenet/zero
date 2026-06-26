@@ -479,6 +479,8 @@ fn udp_relay_runtime_does_not_resolve_packet_path_pair_adapters() {
             && inventory_udp_packet_path
                 .contains("UdpPacketPathCapability::udp_packet_path_carrier_descriptor")
             && inventory_udp_packet_path.contains("UdpPacketPathCapability::udp_datagram_source")
+            && inventory_udp_packet_path
+                .contains("UdpPacketPathCapability::udp_packet_path_flow_snapshot")
             && inventory_udp_packet_path.contains("PacketPathCarrierSnapshot::from_descriptor"),
         "src/inventory/udp/packet_path.rs should own packet-path pair adapter probing"
     );
@@ -3800,6 +3802,7 @@ fn udp_packet_path_capability_is_not_on_monolithic_adapter() {
         "fn udp_packet_path_carrier_descriptor",
         "async fn build_udp_packet_path",
         "fn udp_datagram_source",
+        "fn udp_packet_path_flow_snapshot",
     ] {
         assert!(
             !adapter.contains(forbidden),
@@ -3811,6 +3814,7 @@ fn udp_packet_path_capability_is_not_on_monolithic_adapter() {
         "ProtocolAdapter::udp_packet_path_carrier_descriptor",
         "ProtocolAdapter::build_udp_packet_path",
         "ProtocolAdapter::udp_datagram_source",
+        "ProtocolAdapter::udp_packet_path_flow_snapshot",
     ] {
         assert!(
             !capability.contains(forbidden),
@@ -4669,7 +4673,7 @@ fn protocol_udp_packet_path_facade_lives_outside_state_root() {
     assert!(
         packet_path_content.contains(".into_protocol_snapshot()")
             && packet_path_content.contains(".with_packet_path_carrier(packet_path_carrier)"),
-        "packet-path state should attach the carrier through the datagram source protocol snapshot"
+        "packet-path state should attach the carrier through the packet-path flow snapshot"
     );
 }
 
@@ -5750,9 +5754,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && traits.contains("struct UdpDatagramDescriptor")
             && traits.contains("cache_key: String")
             && traits.contains("descriptor: UdpDatagramDescriptor<'a>")
-            && traits.contains("protocol_snapshot: ProtocolUdpFlowSnapshot")
+            && !traits.contains("ProtocolUdpFlowSnapshot")
             && traits.contains("codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>"),
-        "UdpDatagramSource should separate neutral descriptor identity from protocol snapshot and adapter-provided packet-path datagram codec"
+        "UdpDatagramSource should contain only neutral descriptor identity and adapter-provided packet-path datagram codec"
     );
     assert!(
         adapter.contains("shadowsocks::udp_cache_key"),
@@ -5846,6 +5850,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         "socks5_packet_path_carrier_descriptor",
         "shadowsocks_packet_path_carrier_descriptor",
         "shadowsocks_udp_datagram_source",
+        "shadowsocks_packet_path_flow_snapshot",
         "hysteria2_packet_path_carrier_descriptor",
     ] {
         assert!(
@@ -5867,18 +5872,24 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         );
     }
     assert!(
-        snapshot.contains("ProtocolUdpFlowSnapshot::shadowsocks("),
-        "packet-path datagram source should use the protocol snapshot constructor"
+        snapshot.contains("ProtocolUdpFlowSnapshot::shadowsocks(")
+            && snapshot.contains("PacketPathFlowSnapshot::from_protocol"),
+        "packet-path flow snapshot helper should use the protocol snapshot constructor"
+    );
+    assert!(
+        !snapshot.contains("protocol_snapshot:"),
+        "packet-path datagram source should not carry the protocol flow snapshot"
     );
     assert!(
         !snapshot.contains("ProtocolUdpFlowSnapshot::Shadowsocks {"),
-        "packet-path datagram source should not construct Shadowsocks snapshot fields directly"
+        "packet-path flow snapshot helper should not construct Shadowsocks snapshot fields directly"
     );
     for forbidden in [
         "pub(crate) use packet_path_snapshot::{",
         "socks5_packet_path_carrier_descriptor",
         "shadowsocks_packet_path_carrier_descriptor",
         "shadowsocks_udp_datagram_source",
+        "shadowsocks_packet_path_flow_snapshot",
         "hysteria2_packet_path_carrier_descriptor",
         "pub(crate) use packet_path_chain::build_shadowsocks_packet_path",
         "pub(crate) use packet_path_chain::build_hysteria2_packet_path",

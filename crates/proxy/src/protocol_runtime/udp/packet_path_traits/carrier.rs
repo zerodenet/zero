@@ -3,8 +3,6 @@ use std::sync::Arc;
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
-
 /// Datagram codec for encoding/decoding inner protocol datagrams.
 pub(crate) use zero_traits::DatagramCodec;
 
@@ -77,22 +75,16 @@ impl UdpDatagramDescriptor<'_> {
 
 /// Adapter-provided datagram role output for packet-path relay chains.
 ///
-/// The descriptor is the generic chain-management surface. The protocol
-/// snapshot and codec are consumed only when tracking the flow or framing
-/// datagrams for the already selected path.
+/// The descriptor is the generic chain-management surface. The codec is the
+/// protocol-provided packet framing object for the selected datagram hop.
 pub(crate) struct UdpDatagramSource<'a> {
     pub(crate) descriptor: UdpDatagramDescriptor<'a>,
-    pub(crate) protocol_snapshot: ProtocolUdpFlowSnapshot,
     pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 }
 
 impl UdpDatagramSource<'_> {
     pub(crate) fn descriptor(&self) -> &UdpDatagramDescriptor<'_> {
         &self.descriptor
-    }
-
-    pub(crate) fn into_protocol_snapshot(self) -> ProtocolUdpFlowSnapshot {
-        self.protocol_snapshot
     }
 }
 

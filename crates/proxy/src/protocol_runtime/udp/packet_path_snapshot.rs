@@ -44,16 +44,30 @@ pub(crate) fn shadowsocks_udp_datagram_source<'a>(
             port,
             cache_key: datagram_cache_key.clone(),
         },
-        protocol_snapshot: crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot::shadowsocks(
-            password,
-            datagram_cache_key.clone(),
-            cipher_kind,
-        ),
         codec: std::sync::Arc::new(shadowsocks::udp_datagram_codec(
             cipher_kind,
             password.as_bytes(),
         )),
     }
+}
+
+#[cfg(feature = "shadowsocks")]
+pub(crate) fn shadowsocks_packet_path_flow_snapshot(
+    tag: &str,
+    server: &str,
+    port: u16,
+    cipher: &str,
+    password: &str,
+    cipher_kind: shadowsocks::CipherKind,
+) -> crate::protocol_runtime::udp::PacketPathFlowSnapshot {
+    let datagram_cache_key = shadowsocks::udp_cache_key(tag, server, port, cipher, password);
+    crate::protocol_runtime::udp::PacketPathFlowSnapshot::from_protocol(
+        crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot::shadowsocks(
+            password,
+            datagram_cache_key,
+            cipher_kind,
+        ),
+    )
 }
 
 #[cfg(all(feature = "hysteria2", feature = "shadowsocks"))]

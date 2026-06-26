@@ -22,6 +22,8 @@ mod state;
 mod trojan_manager;
 
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
+#[cfg(feature = "shadowsocks")]
+pub(crate) use flow_snapshot::PacketPathFlowSnapshot;
 pub(crate) use flow_snapshot::ProtocolUdpFlowSnapshot;
 #[cfg(feature = "mieru")]
 pub(crate) use flows::MieruUdpRelayFlow;

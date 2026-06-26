@@ -1,6 +1,31 @@
 #[cfg(feature = "shadowsocks")]
 use crate::protocol_runtime::udp::PacketPathCarrierSnapshot;
 
+#[cfg(feature = "shadowsocks")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PacketPathFlowSnapshot {
+    protocol: ProtocolUdpFlowSnapshot,
+}
+
+#[cfg(feature = "shadowsocks")]
+impl PacketPathFlowSnapshot {
+    pub(crate) fn from_protocol(protocol: ProtocolUdpFlowSnapshot) -> Self {
+        Self { protocol }
+    }
+
+    pub(crate) fn with_packet_path_carrier(
+        mut self,
+        carrier: Option<PacketPathCarrierSnapshot>,
+    ) -> Self {
+        self.protocol = self.protocol.with_packet_path_carrier(carrier);
+        self
+    }
+
+    pub(crate) fn into_protocol_snapshot(self) -> ProtocolUdpFlowSnapshot {
+        self.protocol
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProtocolUdpFlowSnapshot {
     Socks5 {
