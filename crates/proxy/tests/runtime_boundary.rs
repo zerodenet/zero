@@ -5620,8 +5620,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         "Hysteria2 UDP manager should not keep a proxy-owned codec module"
     );
     assert!(
-        adapter.contains("hysteria2::udp_flow_codec")
+        !adapter.contains("hysteria2::udp_flow_codec")
+            && adapter.contains("Hysteria2UdpPacketPathConfig")
             && protocol_udp.contains("pub fn udp_flow_codec(")
+            && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
             && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec")
             && protocol_udp.contains("pub fn encode_packet(")
             && protocol_udp.contains("pub fn decode_packet(&self"),
@@ -5669,11 +5671,14 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
         .expect("read hysteria2 protocol udp source");
 
     assert!(
-        adapter.contains("hysteria2::udp_flow_codec"),
-        "Hysteria2 adapter should request the protocol-built packet-path flow codec"
+        !adapter.contains("hysteria2::udp_flow_codec")
+            && !adapter.contains("hysteria2::udp_cache_key")
+            && adapter.contains("Hysteria2UdpPacketPathConfig"),
+        "Hysteria2 adapter should request protocol-built packet-path cache identity and codec through a protocol config helper"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
+            && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
             && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec"),
         "protocols/hysteria2 should own Hysteria2 UDP flow codec construction"
     );
@@ -5860,8 +5865,10 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
         "Shadowsocks UDP manager should not keep a proxy-owned codec module"
     );
     assert!(
-        adapter.contains("shadowsocks::udp_flow_codec")
+        !adapter.contains("shadowsocks::udp_flow_codec")
+            && adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && protocol_outbound.contains("pub fn udp_flow_codec(")
+            && protocol_outbound.contains("pub fn from_config(")
             && protocol_outbound
                 .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec")
             && protocol_outbound.contains("pub fn encode_packet(")
@@ -5951,8 +5958,10 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             .expect("read shadowsocks protocol outbound source");
 
     assert!(
-        adapter.contains("CipherKind::from_str"),
-        "Shadowsocks UDP adapter should parse ordinary UDP flow cipher config"
+        !adapter.contains("CipherKind::from_str")
+            && adapter.contains("ShadowsocksUdpFlowResume::from_config")
+            && protocol_outbound.contains("pub fn parse_udp_cipher("),
+        "Shadowsocks UDP adapter should ask protocols/shadowsocks to parse ordinary UDP flow cipher config"
     );
     for source in [&manager, &model] {
         assert!(
@@ -5985,8 +5994,10 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "ordinary Shadowsocks UDP peer model should carry only opaque cache identity"
     );
     assert!(
-        adapter.contains("ShadowsocksUdpFlowResume::new")
+        adapter.contains("ShadowsocksUdpFlowResume::from_config")
+            && !adapter.contains("ShadowsocksUdpFlowResume::new")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowResume")
+            && protocol_outbound.contains("pub fn from_config(")
             && protocol_outbound.contains("pub fn codec(&self)")
             && protocol_outbound.contains("pub fn cache_key(&self) -> &str"),
         "Shadowsocks adapter should build an opaque protocol-owned UDP flow resume descriptor"
@@ -6040,8 +6051,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let forward = read("src/protocol_runtime/udp/state/forward/shadowsocks.rs");
 
     assert!(
-        adapter.contains("CipherKind::from_str"),
-        "Shadowsocks adapter should parse packet-path carrier/datagram cipher config"
+        !adapter.contains("CipherKind::from_str") && adapter.contains("ShadowsocksUdpFlowResume::from_config"),
+        "Shadowsocks adapter should ask protocols/shadowsocks to parse packet-path carrier/datagram cipher config"
     );
     for forbidden in ["ShadowsocksDatagramCodec", "shadowsocks::"] {
         assert!(
@@ -6052,13 +6063,15 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     assert!(
         !carrier_snapshot.contains("ShadowsocksDatagramCodec")
             && !carrier_snapshot.contains("shadowsocks::udp_datagram_codec")
-            && adapter.contains("shadowsocks::udp_datagram_codec"),
-        "Shadowsocks adapter should request the protocol-built datagram codec and pass it through neutral packet-path constructors"
+            && !adapter.contains("shadowsocks::udp_datagram_codec")
+            && adapter.contains("resume.codec()"),
+        "Shadowsocks adapter should request protocol-built resume codecs and pass them through neutral packet-path constructors"
     );
     assert!(
-        adapter.contains("shadowsocks::udp_flow_codec")
-            && protocol_outbound.contains("fn udp_flow_codec("),
-        "Shadowsocks adapter should request a protocol-built packet-path flow codec"
+        !adapter.contains("shadowsocks::udp_flow_codec")
+            && protocol_outbound.contains("fn udp_flow_codec(")
+            && protocol_outbound.contains("pub fn from_config("),
+        "Shadowsocks adapter should request protocol-built packet-path codecs through opaque resume config"
     );
     assert!(
         !udp_socket_carrier.contains("shadowsocks::encode_udp_flow_packet")
@@ -6082,8 +6095,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         "UdpDatagramSource should contain only neutral descriptor identity and adapter-provided packet-path datagram codec"
     );
     assert!(
-        adapter.contains("shadowsocks::udp_cache_key"),
-        "Shadowsocks adapter should provide an opaque datagram cache key through protocols/shadowsocks"
+        !adapter.contains("shadowsocks::udp_cache_key")
+            && adapter.contains("resume.cache_key().to_owned()"),
+        "Shadowsocks adapter should receive opaque datagram cache keys from protocols/shadowsocks resume config"
     );
     assert!(
         protocol_outbound.contains("fn udp_cache_key("),

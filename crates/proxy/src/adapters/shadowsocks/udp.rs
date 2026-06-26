@@ -11,21 +11,6 @@ use crate::runtime::udp_dispatch::shadowsocks_flow::ShadowsocksDatagramSend;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
 
-fn parse_shadowsocks_udp_cipher(
-    cipher: &str,
-    stage: &'static str,
-    upstream: Option<(&str, u16)>,
-) -> Result<shadowsocks::CipherKind, FlowFailure> {
-    shadowsocks::CipherKind::from_str(cipher).ok_or_else(|| FlowFailure {
-        stage,
-        error: EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("unknown shadowsocks cipher: {cipher}"),
-        )),
-        upstream: upstream.map(|(server, port)| (server.to_string(), port)),
-    })
-}
-
 impl ShadowsocksAdapter {
     pub(super) fn udp_packet_path_carrier_descriptor_impl(
         &self,
@@ -42,9 +27,13 @@ impl ShadowsocksAdapter {
         else {
             return None;
         };
+        let resume = shadowsocks::ShadowsocksUdpFlowResume::from_config(
+            tag, server, *port, cipher, password,
+        )
+        .ok()?;
         Some(
             crate::protocol_runtime::udp::packet_path_snapshot::packet_path_carrier_descriptor(
-                shadowsocks::udp_cache_key(tag, server, *port, cipher, password),
+                resume.cache_key().to_owned(),
                 server,
                 *port,
             ),
@@ -66,16 +55,10 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let cipher_kind = parse_shadowsocks_udp_cipher(
-            cipher,
-            "udp_shadowsocks_packet_path_carrier_cipher",
-            Some((server, *port)),
-        )
-        .map_err(|failure| failure.error)?;
-        let codec = Arc::new(shadowsocks::udp_flow_codec(
-            cipher_kind,
-            password.as_bytes(),
-        ));
+        let resume =
+            shadowsocks::ShadowsocksUdpFlowResume::from_config("", server, *port, cipher, password)
+                .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
+        let codec = Arc::new(resume.codec());
         crate::protocol_runtime::udp::packet_path_chain::carriers::udp_socket_carrier::build(
             proxy, server, *port, codec,
         )
@@ -97,17 +80,18 @@ impl ShadowsocksAdapter {
         else {
             return None;
         };
-        let cipher_kind =
-            parse_shadowsocks_udp_cipher(cipher, "udp_shadowsocks_datagram_source_cipher", None)
-                .ok()?;
-        let cache_key = shadowsocks::udp_cache_key(tag, server, *port, cipher, password);
-        let codec = Arc::new(shadowsocks::udp_datagram_codec(
-            cipher_kind,
-            password.as_bytes(),
-        ));
+        let resume = shadowsocks::ShadowsocksUdpFlowResume::from_config(
+            tag, server, *port, cipher, password,
+        )
+        .ok()?;
+        let codec = Arc::new(resume.codec());
         Some(
             crate::protocol_runtime::udp::packet_path_snapshot::udp_datagram_source(
-                tag, server, *port, cache_key, codec,
+                tag,
+                server,
+                *port,
+                resume.cache_key().to_owned(),
+                codec,
             ),
         )
     }
@@ -131,12 +115,14 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let cipher_kind = parse_shadowsocks_udp_cipher(
-            cipher,
-            "udp_shadowsocks_parse_cipher",
-            Some((server, *port)),
-        )?;
-        let cache_key = shadowsocks::udp_cache_key(tag, server, *port, cipher, password);
+        let resume = shadowsocks::ShadowsocksUdpFlowResume::from_config(
+            tag, server, *port, cipher, password,
+        )
+        .map_err(|error| FlowFailure {
+            stage: "udp_shadowsocks_resume",
+            error: zero_engine::EngineError::Io(std::io::Error::other(error.to_string())),
+            upstream: Some((server.to_string(), *port)),
+        })?;
         dispatch
             .start_shadowsocks_datagram_flow(ShadowsocksDatagramSend {
                 proxy,
@@ -144,13 +130,7 @@ impl ShadowsocksAdapter {
                 session,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::Shadowsocks(
-                    shadowsocks::ShadowsocksUdpFlowResume::new(
-                        cache_key,
-                        cipher_kind,
-                        password.as_bytes(),
-                    ),
-                ),
+                resume: ProtocolUdpFlowResume::Shadowsocks(resume),
                 payload,
             })
             .await

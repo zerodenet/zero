@@ -143,6 +143,30 @@ pub fn udp_cache_key(
     alloc::format!("hysteria2|{tag}|{server}:{port}|{password}{fingerprint}")
 }
 
+pub struct Hysteria2UdpPacketPathConfig<'a> {
+    pub tag: &'a str,
+    pub server: &'a str,
+    pub port: u16,
+    pub password: &'a str,
+    pub client_fingerprint: Option<&'a str>,
+}
+
+impl Hysteria2UdpPacketPathConfig<'_> {
+    pub fn cache_key(&self) -> String {
+        udp_cache_key(
+            self.tag,
+            self.server,
+            self.port,
+            self.password,
+            self.client_fingerprint,
+        )
+    }
+
+    pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        udp_flow_codec()
+    }
+}
+
 /// Codec state for a Hysteria2 UDP datagram chain hop.
 ///
 /// Hysteria2 UDP flow framing has no negotiated per-flow crypto state once the

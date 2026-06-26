@@ -28,9 +28,16 @@ impl Hysteria2Adapter {
         else {
             return None;
         };
+        let packet_path = hysteria2::Hysteria2UdpPacketPathConfig {
+            tag,
+            server,
+            port: *port,
+            password,
+            client_fingerprint: *client_fingerprint,
+        };
         Some(
             crate::protocol_runtime::udp::packet_path_snapshot::packet_path_carrier_descriptor(
-                hysteria2::udp_cache_key(tag, server, *port, password, *client_fingerprint),
+                packet_path.cache_key(),
                 server,
                 *port,
             ),
@@ -52,7 +59,14 @@ impl Hysteria2Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let codec = Arc::new(hysteria2::udp_flow_codec());
+        let packet_path = hysteria2::Hysteria2UdpPacketPathConfig {
+            tag: "",
+            server,
+            port: *port,
+            password,
+            client_fingerprint: *client_fingerprint,
+        };
+        let codec = Arc::new(packet_path.codec());
         let conn = Arc::new(
             crate::transport::Hysteria2Connector::new(server, *port, password)
                 .with_fingerprint(*client_fingerprint)

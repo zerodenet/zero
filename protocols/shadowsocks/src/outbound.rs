@@ -348,6 +348,11 @@ pub fn udp_cache_key(tag: &str, server: &str, port: u16, cipher: &str, password:
     alloc::format!("shadowsocks|{tag}|{server}:{port}|{cipher}|{password}")
 }
 
+#[cfg(feature = "crypto")]
+pub fn parse_udp_cipher(cipher: &str) -> Result<super::shared::CipherKind, Error> {
+    super::shared::CipherKind::from_str(cipher).ok_or(Error::Protocol("ss: unknown udp cipher"))
+}
+
 /// Codec state for a Shadowsocks UDP datagram chain hop.
 ///
 /// Captures the cipher and password needed to encode/decode Shadowsocks
@@ -400,6 +405,21 @@ impl ShadowsocksUdpFlowResume {
             cipher,
             password: password.to_vec(),
         }
+    }
+
+    pub fn from_config(
+        tag: &str,
+        server: &str,
+        port: u16,
+        cipher: &str,
+        password: &str,
+    ) -> Result<Self, Error> {
+        let cipher_kind = parse_udp_cipher(cipher)?;
+        Ok(Self::new(
+            udp_cache_key(tag, server, port, cipher, password),
+            cipher_kind,
+            password.as_bytes(),
+        ))
     }
 
     pub fn cache_key(&self) -> &str {
