@@ -4,32 +4,19 @@ use async_trait::async_trait;
 use zero_core::Address;
 use zero_engine::EngineError;
 use zero_traits::DatagramCodec;
-use zero_transport::udp_packet_path::UdpSocketPacketPath;
+use zero_transport::udp_packet_path::QuicDatagramPacketPath;
 
-use crate::protocol_runtime::udp::PacketPathCarrier;
-use crate::runtime::Proxy;
+use crate::runtime::udp_flow::packet_path::PacketPathCarrier;
 
 pub(crate) async fn build(
-    proxy: &Proxy,
-    server: &str,
-    port: u16,
+    conn: Arc<quinn::Connection>,
     codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 ) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
-    let endpoint = proxy
-        .protocols
-        .direct_connector()
-        .resolve_address(
-            &Address::Domain(server.to_owned()),
-            port,
-            proxy.resolver.as_ref(),
-            "failed to resolve UDP socket packet-path carrier",
-        )
-        .await?;
-    let path = UdpSocketPacketPath::establish(endpoint, codec).await?;
+    let path = QuicDatagramPacketPath::new(conn, codec);
     Ok(Arc::new(PacketPathCarrierAdapter(path)))
 }
 
-struct PacketPathCarrierAdapter(UdpSocketPacketPath);
+struct PacketPathCarrierAdapter(QuicDatagramPacketPath);
 
 #[async_trait]
 impl PacketPathCarrier for PacketPathCarrierAdapter {

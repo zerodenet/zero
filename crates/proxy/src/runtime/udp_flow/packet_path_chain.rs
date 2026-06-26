@@ -9,8 +9,8 @@
 
 use std::collections::HashMap;
 
-use super::packet_path_traits::{PacketPathLookupKey, UdpFlowContext, UdpPacketRef};
-use super::FlowFailure;
+use crate::runtime::udp_dispatch::FlowFailure;
+use crate::runtime::udp_flow::packet_path::{PacketPathLookupKey, UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 

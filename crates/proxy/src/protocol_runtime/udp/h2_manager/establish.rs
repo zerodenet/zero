@@ -1,7 +1,7 @@
-use super::super::packet_path_traits::UdpPacketRef;
-use super::super::ChainTask;
 use super::super::H2UdpPeer;
 use super::{bridge, stream};
+use crate::runtime::udp_flow::packet_path::ChainTask;
+use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use zero_engine::EngineError;

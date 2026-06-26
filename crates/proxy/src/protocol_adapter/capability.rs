@@ -158,7 +158,7 @@ pub(crate) trait UdpPacketPathCapability {
     fn udp_packet_path_carrier_descriptor(
         &self,
         _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::PacketPathCarrierDescriptor> {
+    ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
         None
     }
 
@@ -166,15 +166,17 @@ pub(crate) trait UdpPacketPathCapability {
         &self,
         _ctx: UdpAdapterContext<'_>,
         _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<std::sync::Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError>
-    {
+    ) -> Result<
+        std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>,
+        EngineError,
+    > {
         Err(super::defaults::packet_path_carrier_unsupported())
     }
 
     fn udp_datagram_source<'a>(
         &self,
         _leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<crate::protocol_runtime::udp::UdpDatagramSource<'a>> {
+    ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource<'a>> {
         None
     }
 }

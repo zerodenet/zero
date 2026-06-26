@@ -1,7 +1,7 @@
-use super::super::packet_path_traits::UdpPacketRef;
 use super::super::H2UdpPeer;
 use super::bridge;
 use crate::outbound::hysteria2::Hysteria2Connector;
+use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use zero_engine::EngineError;

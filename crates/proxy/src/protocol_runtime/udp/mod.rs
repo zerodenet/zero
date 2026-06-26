@@ -3,17 +3,12 @@
 //! Generic UDP dispatch owns flow lifecycle and adapter dispatch. Concrete
 //! protocol managers live here and are called through request structs.
 
-pub(crate) mod packet_path_traits;
-
 mod flow_snapshot;
 mod flows;
 #[cfg(feature = "hysteria2")]
 mod h2_manager;
 #[cfg(feature = "mieru")]
 mod mieru_manager;
-#[cfg(feature = "shadowsocks")]
-pub(crate) mod packet_path_chain;
-pub(crate) mod packet_path_snapshot;
 mod peer;
 #[cfg(feature = "shadowsocks")]
 mod ss_manager;
@@ -27,14 +22,6 @@ pub(crate) use flow_snapshot::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
 pub(crate) use flows::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowKind,
     ManagedUdpFlowRequest,
-};
-#[cfg(feature = "shadowsocks")]
-pub(crate) use packet_path_chain::{PacketPathManager, SendWithSnapshotRequest};
-pub(crate) use packet_path_traits::ChainTask;
-#[cfg(feature = "shadowsocks")]
-pub(crate) use packet_path_traits::{
-    PacketPathCarrier, PacketPathCarrierDescriptor, PacketPathFlowBinding, PacketPathFlowSnapshot,
-    PacketPathLookupKey, UdpDatagramDescriptor, UdpDatagramSource,
 };
 #[cfg(feature = "hysteria2")]
 pub(crate) use peer::H2UdpPeer;

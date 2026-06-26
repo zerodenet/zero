@@ -12,7 +12,7 @@ pub(crate) struct Socks5PacketPath {
 }
 
 #[async_trait]
-impl crate::protocol_runtime::udp::PacketPathCarrier for Socks5PacketPath {
+impl crate::runtime::udp_flow::packet_path::PacketPathCarrier for Socks5PacketPath {
     async fn send_to(
         &self,
         target: &Address,
@@ -34,7 +34,7 @@ pub(crate) async fn build_socks5_packet_path(
     server: &str,
     port: u16,
     auth: Option<(&str, &str)>,
-) -> Result<Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError> {
+) -> Result<Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError> {
     let association = Arc::new(
         ActiveUpstreamSocks5UdpAssociation::establish(proxy, tag, server, port, auth, 0).await?,
     );

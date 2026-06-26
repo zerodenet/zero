@@ -1,10 +1,12 @@
 use zero_engine::ResolvedLeafOutbound;
 
 use super::ProtocolUdpState;
-use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
-use crate::protocol_runtime::udp::SendWithSnapshotRequest;
-use crate::protocol_runtime::udp::{ChainTask, FlowFailure, PacketPathFlowBinding};
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
+use crate::runtime::udp_flow::packet_path::{
+    ChainTask, PacketPathFlowBinding, UdpFlowContext, UdpPacketRef,
+};
+use crate::runtime::udp_flow::packet_path_chain::SendWithSnapshotRequest;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 

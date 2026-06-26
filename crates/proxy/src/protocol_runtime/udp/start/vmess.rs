@@ -1,8 +1,9 @@
 use tokio::task::JoinSet;
 
 use super::super::state::ProtocolUdpState;
-use super::super::{ChainTask, FlowFailure};
+use super::super::FlowFailure;
 use crate::protocol_runtime::vmess_udp::model::{VmessUdpFlow, VmessUdpRelayFlow};
+use crate::runtime::udp_flow::packet_path::ChainTask;
 
 impl ProtocolUdpState {
     pub(crate) async fn start_vmess_udp_flow(

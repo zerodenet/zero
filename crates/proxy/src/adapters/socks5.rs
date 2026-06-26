@@ -38,7 +38,7 @@ impl UdpPacketPathCapability for Socks5Adapter {
     fn udp_packet_path_carrier_descriptor(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::PacketPathCarrierDescriptor> {
+    ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
         self.udp_packet_path_carrier_descriptor_impl(leaf)
     }
 
@@ -46,7 +46,8 @@ impl UdpPacketPathCapability for Socks5Adapter {
         &self,
         ctx: UdpAdapterContext<'_>,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError> {
+    ) -> Result<Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
+    {
         self.build_udp_packet_path_impl(ctx.proxy(), leaf).await
     }
 }

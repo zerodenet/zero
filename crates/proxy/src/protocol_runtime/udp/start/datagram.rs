@@ -5,7 +5,8 @@ use super::super::h2_manager::model::H2SendExisting;
 #[cfg(feature = "shadowsocks")]
 use super::super::ss_manager::model::SsSendExisting;
 use super::super::state::ProtocolUdpState;
-use super::super::{ChainTask, FlowFailure, ManagedDatagramFlow, ProtocolUdpFlowResume};
+use super::super::{FlowFailure, ManagedDatagramFlow, ProtocolUdpFlowResume};
+use crate::runtime::udp_flow::packet_path::ChainTask;
 
 impl ProtocolUdpState {
     pub(crate) async fn start_managed_datagram_flow(

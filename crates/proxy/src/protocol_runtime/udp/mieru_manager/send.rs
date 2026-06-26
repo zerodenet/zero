@@ -3,9 +3,9 @@ use zero_engine::EngineError;
 
 use super::model::{MieruKey, MieruRelayExisting, MieruSendExisting};
 use super::{bridge, establish, MieruChainManager};
-use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use crate::protocol_runtime::udp::FlowFailure;
 use crate::protocol_runtime::udp::{MieruUdpPeer, UdpPeerEndpoint};
+use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 

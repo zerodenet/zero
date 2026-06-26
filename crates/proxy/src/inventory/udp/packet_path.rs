@@ -11,7 +11,7 @@ impl ProtocolInventory {
         &self,
         carrier_leaf: &zero_engine::ResolvedLeafOutbound<'a>,
         datagram_leaf: &zero_engine::ResolvedLeafOutbound<'a>,
-    ) -> Option<crate::protocol_runtime::udp::PacketPathFlowBinding<'a>> {
+    ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathFlowBinding<'a>> {
         let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf).ok()?;
         let datagram_adapter = self.registry.find_outbound_leaf(datagram_leaf).ok()?;
 
@@ -21,10 +21,12 @@ impl ProtocolInventory {
         )?;
         let datagram =
             UdpPacketPathCapability::udp_datagram_source(datagram_adapter.as_ref(), datagram_leaf)?;
-        Some(crate::protocol_runtime::udp::PacketPathFlowBinding::new(
-            datagram,
-            &carrier_desc,
-        ))
+        Some(
+            crate::runtime::udp_flow::packet_path::PacketPathFlowBinding::new(
+                datagram,
+                &carrier_desc,
+            ),
+        )
     }
 
     /// Resolve packet-path entry construction params through the carrier and
@@ -35,8 +37,8 @@ impl ProtocolInventory {
         datagram_leaf: &zero_engine::ResolvedLeafOutbound<'a>,
     ) -> Result<
         (
-            crate::protocol_runtime::udp::PacketPathCarrierDescriptor,
-            crate::protocol_runtime::udp::UdpDatagramSource<'a>,
+            crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor,
+            crate::runtime::udp_flow::packet_path::UdpDatagramSource<'a>,
         ),
         EngineError,
     > {
@@ -68,8 +70,10 @@ impl ProtocolInventory {
         &self,
         proxy: &Proxy,
         carrier_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
-    ) -> Result<std::sync::Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError>
-    {
+    ) -> Result<
+        std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>,
+        EngineError,
+    > {
         let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf)?;
         UdpPacketPathCapability::build_udp_packet_path(
             carrier_adapter.as_ref(),

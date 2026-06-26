@@ -2,7 +2,8 @@ use tokio::task::JoinSet;
 use zero_engine::EngineError;
 
 use super::ProtocolUdpState;
-use crate::protocol_runtime::udp::{ChainTask, FlowFailure, ProtocolUdpFlowResume};
+use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowResume};
+use crate::runtime::udp_flow::packet_path::ChainTask;
 #[cfg(feature = "hysteria2")]
 mod hysteria2;
 #[cfg(feature = "mieru")]

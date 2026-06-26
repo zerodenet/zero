@@ -1,7 +1,37 @@
+//! Generic UDP packet-path flow abstractions.
+//!
+//! These types describe proxy-owned UDP relay-chain orchestration: response
+//! tasks, flow context, packet references, packet-path carriers, datagram
+//! sources, and neutral packet-path flow snapshots. Protocol crates and
+//! adapters provide concrete codecs/carriers; the runtime schedules and tracks
+//! the resulting flows.
+
 use async_trait::async_trait;
 use std::sync::Arc;
+use std::vec::Vec;
+
+use tokio::task::JoinSet;
 use zero_core::Address;
 use zero_engine::EngineError;
+
+/// A response item produced by a chain-outbound recv bridge task.
+///
+/// Stored in a unified [`JoinSet`] so all chain outbound responses are
+/// polled from a single `select!` branch via UDP dispatch chain polling.
+pub(crate) type ChainTask = Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>;
+
+/// Runtime context shared by UDP outbound managers for one send operation.
+pub(crate) struct UdpFlowContext<'a> {
+    pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub(crate) session_id: u64,
+}
+
+/// Borrowed target payload for one UDP send operation.
+pub(crate) struct UdpPacketRef<'a> {
+    pub(crate) target: &'a Address,
+    pub(crate) port: u16,
+    pub(crate) payload: &'a [u8],
+}
 
 /// Datagram codec for encoding/decoding inner protocol datagrams.
 pub(crate) use zero_traits::DatagramCodec;
@@ -31,6 +61,18 @@ pub(crate) struct PacketPathCarrierDescriptor {
     pub(crate) cache_key: String,
     pub(crate) server: String,
     pub(crate) port: u16,
+}
+
+pub(crate) fn packet_path_carrier_descriptor(
+    cache_key: String,
+    server: &str,
+    port: u16,
+) -> PacketPathCarrierDescriptor {
+    PacketPathCarrierDescriptor {
+        cache_key,
+        server: server.to_owned(),
+        port,
+    }
 }
 
 /// Datagram source params for a relay-chain final hop over a packet path.
@@ -63,6 +105,24 @@ impl UdpDatagramDescriptor<'_> {
 pub(crate) struct UdpDatagramSource<'a> {
     pub(crate) descriptor: UdpDatagramDescriptor<'a>,
     pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
+}
+
+pub(crate) fn udp_datagram_source<'a>(
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    cache_key: String,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
+) -> UdpDatagramSource<'a> {
+    UdpDatagramSource {
+        descriptor: UdpDatagramDescriptor {
+            tag,
+            server,
+            port,
+            cache_key,
+        },
+        codec,
+    }
 }
 
 impl UdpDatagramSource<'_> {

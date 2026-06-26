@@ -84,8 +84,8 @@ pub(crate) mod vmess_flow;
 
 // Re-exports.
 
-use crate::protocol_runtime::udp::ChainTask;
 use crate::protocol_runtime::udp::ProtocolUdpState;
+use crate::runtime::udp_flow::packet_path::ChainTask;
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
 // UdpDispatch.

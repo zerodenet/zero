@@ -1,6 +1,6 @@
-use super::super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
-use super::super::ChainTask;
 use super::super::TrojanUdpPeer;
+use crate::runtime::udp_flow::packet_path::ChainTask;
+use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use tokio::sync::{broadcast, mpsc};

@@ -6,9 +6,11 @@ use tracing::{debug, warn};
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use super::super::packet_path_traits::{DatagramCodec, UdpFlowContext, UdpPacketRef};
-use super::super::{FlowFailure, PacketPathCarrier};
 use super::Entry;
+use crate::runtime::udp_dispatch::FlowFailure;
+use crate::runtime::udp_flow::packet_path::{
+    DatagramCodec, PacketPathCarrier, UdpFlowContext, UdpPacketRef,
+};
 
 type RecvItem = (Address, u16, Vec<u8>);
 

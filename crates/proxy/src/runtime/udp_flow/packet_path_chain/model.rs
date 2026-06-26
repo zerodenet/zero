@@ -5,10 +5,10 @@ use zero_core::Address;
 
 use super::bridge::Waiter;
 use super::key::PathKey;
-use crate::protocol_runtime::udp::packet_path_traits::{
+use crate::runtime::udp_flow::packet_path::PacketPathCarrier;
+use crate::runtime::udp_flow::packet_path::{
     DatagramCodec, PacketPathCarrierDescriptor, UdpDatagramSource,
 };
-use crate::protocol_runtime::udp::PacketPathCarrier;
 
 pub(super) struct Entry {
     pub(super) path: Arc<dyn PacketPathCarrier>,

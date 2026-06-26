@@ -1,4 +1,4 @@
-use crate::protocol_runtime::udp::packet_path_traits::{
+use crate::runtime::udp_flow::packet_path::{
     PacketPathCarrierDescriptor, PacketPathLookupKey, UdpDatagramKey,
 };
 

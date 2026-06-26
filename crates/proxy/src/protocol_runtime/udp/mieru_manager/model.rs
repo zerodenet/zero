@@ -1,6 +1,6 @@
-use super::super::ChainTask;
 use super::bridge;
 use super::stream::MieruFlowSender;
+use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use tokio::task::JoinSet;

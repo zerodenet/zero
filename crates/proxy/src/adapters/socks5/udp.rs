@@ -12,11 +12,10 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
 
 impl Socks5Adapter {
-    #[cfg(feature = "shadowsocks")]
     pub(super) fn udp_packet_path_carrier_descriptor_impl(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::PacketPathCarrierDescriptor> {
+    ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
         let _ = self;
         let ResolvedLeafOutbound::Socks5 {
             tag,
@@ -36,7 +35,7 @@ impl Socks5Adapter {
             password: *password,
         };
         Some(
-            crate::protocol_runtime::udp::packet_path_snapshot::packet_path_carrier_descriptor(
+            crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
                 packet_path.cache_key(),
                 server,
                 *port,
@@ -44,12 +43,12 @@ impl Socks5Adapter {
         )
     }
 
-    #[cfg(feature = "shadowsocks")]
     pub(super) async fn build_udp_packet_path_impl(
         &self,
         proxy: &Proxy,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError> {
+    ) -> Result<Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
+    {
         let ResolvedLeafOutbound::Socks5 {
             tag,
             server,

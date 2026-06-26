@@ -3,9 +3,9 @@ use zero_engine::EngineError;
 
 use super::model::{TrojanKey, TrojanRelayExisting, TrojanRelaySend, TrojanSendExisting};
 use super::{bridge, establish, TrojanChainManager};
-use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use crate::protocol_runtime::udp::FlowFailure;
 use crate::protocol_runtime::udp::{TrojanUdpPeer, UdpPeerEndpoint};
+use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use zero_core::UdpFlowPacket;
 

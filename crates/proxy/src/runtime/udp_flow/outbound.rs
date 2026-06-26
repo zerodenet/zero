@@ -33,7 +33,7 @@ pub(crate) enum UdpFlowOutbound {
         tag: String,
         server: String,
         port: u16,
-        snapshot: crate::protocol_runtime::udp::PacketPathFlowSnapshot,
+        snapshot: crate::runtime::udp_flow::packet_path::PacketPathFlowSnapshot,
     },
 }
 
@@ -107,7 +107,7 @@ impl UdpFlowOutbound {
 
     pub(crate) fn packet_path_snapshot(
         &self,
-    ) -> Option<&crate::protocol_runtime::udp::PacketPathFlowSnapshot> {
+    ) -> Option<&crate::runtime::udp_flow::packet_path::PacketPathFlowSnapshot> {
         match self {
             Self::PacketPathDatagram { snapshot, .. } => Some(snapshot),
             Self::Direct { .. }

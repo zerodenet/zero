@@ -2,9 +2,8 @@ use tokio::task::JoinSet;
 
 use super::super::ProtocolUdpState;
 use crate::protocol_runtime::udp::trojan_manager::model::TrojanSendExisting;
-use crate::protocol_runtime::udp::{
-    ChainTask, FlowFailure, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
-};
+use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
+use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 

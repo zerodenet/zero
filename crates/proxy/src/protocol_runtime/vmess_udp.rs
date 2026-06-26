@@ -168,7 +168,7 @@ impl VmessUdpOutboundManager {
 
     pub(crate) async fn start_flow(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VmessUdpStartFlow<'_>,
     ) -> Result<(), EngineError> {
         self.get_or_create_upstream(
@@ -192,7 +192,7 @@ impl VmessUdpOutboundManager {
 
     pub(crate) async fn start_relay_flow(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VmessUdpRelayFlowStart<'_>,
     ) -> Result<(), EngineError> {
         let stream = crate::transport::build_vmess_outbound_transport_over_stream(
@@ -226,7 +226,7 @@ impl VmessUdpOutboundManager {
 
     pub(crate) async fn send_existing(
         &self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         proxy: &Proxy,
         target: &Address,
         port: u16,
@@ -254,7 +254,7 @@ impl VmessUdpOutboundManager {
 
     pub(super) fn spawn_bridge(
         &self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         target: Address,
         port: u16,
         session_id: u64,
@@ -273,7 +273,7 @@ impl VmessUdpOutboundManager {
 
     async fn get_or_create_upstream(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VmessUdpUpstreamRequest<'_>,
     ) -> Result<(), EngineError> {
         let key = (request.target.clone(), request.port);

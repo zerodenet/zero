@@ -507,7 +507,7 @@ fn packet_path_dispatch_is_not_feature_gated_by_datagram_protocol() {
 
 #[test]
 fn packet_path_entry_does_not_resolve_adapter_objects() {
-    let entry = read("src/protocol_runtime/udp/packet_path_chain/entry.rs");
+    let entry = read("src/runtime/udp_flow/packet_path_chain/entry.rs");
     let inventory_udp_packet_path = read("src/inventory/udp/packet_path.rs");
 
     for forbidden in [
@@ -3153,8 +3153,8 @@ fn udp_flow_helpers_do_not_depend_on_protocol_runtime() {
 #[test]
 fn udp_packet_path_carrier_snapshot_is_protocol_neutral() {
     let runtime = read("src/runtime/udp_flow/sessions.rs");
-    let protocol_runtime = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
-    let traits = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
+    let protocol_runtime = read("src/runtime/udp_flow/packet_path.rs");
+    let traits = read("src/runtime/udp_flow/packet_path.rs");
 
     assert!(
         !runtime.contains("enum UdpPacketPathCarrier"),
@@ -3271,7 +3271,8 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         "protocol UDP flow snapshot should not own packet-path carrier identity"
     );
     assert!(
-        outbound.contains("snapshot: crate::protocol_runtime::udp::PacketPathFlowSnapshot"),
+        outbound.contains("snapshot:")
+            && outbound.contains("crate::runtime::udp_flow::packet_path::PacketPathFlowSnapshot"),
         "runtime UDP outbound snapshot should keep packet-path flow identity in a neutral packet-path snapshot"
     );
 }
@@ -5145,7 +5146,7 @@ fn adapters_do_not_construct_udp_dispatch_peer_helpers() {
 
 #[test]
 fn packet_path_chain_does_not_own_socks5_runtime_state() {
-    let content = read("src/protocol_runtime/udp/packet_path_chain.rs");
+    let content = read("src/runtime/udp_flow/packet_path_chain.rs");
 
     for forbidden in [
         "ActiveUpstreamSocks5UdpAssociation",
@@ -5154,62 +5155,64 @@ fn packet_path_chain_does_not_own_socks5_runtime_state() {
     ] {
         assert!(
             !content.contains(forbidden),
-            "src/protocol_runtime/udp/packet_path_chain.rs should stay generic; found `{forbidden}`"
+            "src/runtime/udp_flow/packet_path_chain.rs should stay generic; found `{forbidden}`"
         );
     }
 }
 
 #[test]
 fn packet_path_traits_are_grouped_by_responsibility() {
-    let facade = read("src/protocol_runtime/udp/packet_path_traits.rs");
-    let carrier = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
-    let root = manifest_dir().join("src/protocol_runtime/udp/packet_path_traits");
+    let packet_path = read("src/runtime/udp_flow/packet_path.rs");
+    let protocol_udp_root = read("src/protocol_runtime/udp/mod.rs");
+    let runtime_root = manifest_dir().join("src/runtime/udp_flow");
     let peer = manifest_dir().join("src/protocol_runtime/udp/peer.rs");
 
-    for forbidden in [
+    for required in [
         "trait PacketPathCarrier",
         "struct PacketPathCarrierDescriptor",
         "struct UdpDatagramSource",
         "type ChainTask =",
         "struct UdpFlowContext",
         "struct UdpPacketRef",
-        "struct SsUdpPeer",
-        "struct H2UdpPeer",
-        "struct TrojanUdpPeer",
-        "struct MieruUdpPeer",
-        "mod peer",
-        "peer::",
     ] {
         assert!(
-            !facade.contains(forbidden),
-            "packet_path_traits.rs should stay a facade and keep grouped definitions in packet_path_traits/*.rs; found `{forbidden}`"
+            packet_path.contains(required),
+            "runtime udp_flow packet_path.rs should own neutral packet-path definition `{required}`"
         );
     }
-    for path in ["carrier.rs", "context.rs"] {
+    for forbidden in [
+        "PacketPathCarrierDescriptor",
+        "UdpDatagramSource",
+        "PacketPathFlowSnapshot",
+        "PacketPathFlowBinding",
+        "ChainTask",
+        "UdpFlowContext",
+        "UdpPacketRef",
+    ] {
         assert!(
-            root.join(path).exists(),
-            "packet-path trait/helper definitions should keep grouped module packet_path_traits/{path}"
+            !protocol_udp_root.contains(forbidden),
+            "protocol_runtime::udp root should not re-export generic packet-path runtime type `{forbidden}`"
         );
     }
     assert!(
-        peer.exists() && !root.join("peer.rs").exists(),
-        "protocol UDP peer models should live outside packet_path_traits"
+        peer.exists() && !runtime_root.join("peer.rs").exists(),
+        "protocol UDP peer models should live outside runtime packet-path helpers"
     );
     assert!(
-        !carrier.contains("ProtocolAdapter::"),
+        !packet_path.contains("ProtocolAdapter::"),
         "packet-path trait docs should not describe packet-path products as monolithic ProtocolAdapter outputs"
     );
     assert!(
-        carrier.contains("UdpPacketPathCapability::udp_packet_path_carrier_descriptor")
-            && carrier.contains("UdpPacketPathCapability::udp_datagram_source"),
+        packet_path.contains("UdpPacketPathCapability::udp_packet_path_carrier_descriptor")
+            && packet_path.contains("UdpPacketPathCapability::udp_datagram_source"),
         "packet-path trait docs should point carrier/datagram products at UdpPacketPathCapability"
     );
 }
 
 #[test]
 fn packet_path_carriers_live_outside_chain_manager() {
-    let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
-    let carriers = manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/carriers.rs");
+    let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
+    let carriers = manifest_dir().join("src/runtime/udp_flow/packet_path_chain/carriers.rs");
 
     for forbidden in ["struct ShadowsocksPacketPath", "struct Hysteria2PacketPath"] {
         assert!(
@@ -5225,11 +5228,11 @@ fn packet_path_carriers_live_outside_chain_manager() {
 
 #[test]
 fn packet_path_protocol_carriers_live_outside_carrier_facade() {
-    let facade = read("src/protocol_runtime/udp/packet_path_chain/carriers.rs");
+    let facade = read("src/runtime/udp_flow/packet_path_chain/carriers.rs");
     let udp_socket = manifest_dir()
-        .join("src/protocol_runtime/udp/packet_path_chain/carriers/udp_socket_carrier.rs");
+        .join("src/runtime/udp_flow/packet_path_chain/carriers/udp_socket_carrier.rs");
     let quic_datagram = manifest_dir()
-        .join("src/protocol_runtime/udp/packet_path_chain/carriers/quic_datagram_carrier.rs");
+        .join("src/runtime/udp_flow/packet_path_chain/carriers/quic_datagram_carrier.rs");
 
     for forbidden in [
         "struct ShadowsocksPacketPath",
@@ -5260,10 +5263,9 @@ fn packet_path_protocol_carriers_live_outside_carrier_facade() {
 
 #[test]
 fn packet_path_carrier_transport_runtime_lives_in_zero_transport() {
-    let udp_socket =
-        read("src/protocol_runtime/udp/packet_path_chain/carriers/udp_socket_carrier.rs");
+    let udp_socket = read("src/runtime/udp_flow/packet_path_chain/carriers/udp_socket_carrier.rs");
     let quic_datagram =
-        read("src/protocol_runtime/udp/packet_path_chain/carriers/quic_datagram_carrier.rs");
+        read("src/runtime/udp_flow/packet_path_chain/carriers/quic_datagram_carrier.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/udp_packet_path.rs"))
         .expect("read zero-transport udp packet path source");
 
@@ -5306,7 +5308,7 @@ fn packet_path_carrier_transport_runtime_lives_in_zero_transport() {
 
 #[test]
 fn packet_path_chain_root_does_not_reexport_protocol_carrier_builders() {
-    let root = read("src/protocol_runtime/udp/packet_path_chain.rs");
+    let root = read("src/runtime/udp_flow/packet_path_chain.rs");
 
     for forbidden in [
         "pub(crate) use carriers::build_shadowsocks_packet_path",
@@ -5337,8 +5339,8 @@ fn packet_path_chain_root_does_not_reexport_protocol_carrier_builders() {
 
 #[test]
 fn packet_path_response_bridge_lives_outside_chain_manager() {
-    let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
-    let bridge = manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/bridge.rs");
+    let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
+    let bridge = manifest_dir().join("src/runtime/udp_flow/packet_path_chain/bridge.rs");
 
     for forbidden in ["async fn recv_loop", "fn remove_waiter"] {
         assert!(
@@ -5354,11 +5356,11 @@ fn packet_path_response_bridge_lives_outside_chain_manager() {
 
 #[test]
 fn packet_path_key_model_lives_outside_chain_manager() {
-    let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
-    let key = manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/key.rs");
-    let key_content = read("src/protocol_runtime/udp/packet_path_chain/key.rs");
-    let model = read("src/protocol_runtime/udp/packet_path_chain/model.rs");
-    let traits = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
+    let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
+    let key = manifest_dir().join("src/runtime/udp_flow/packet_path_chain/key.rs");
+    let key_content = read("src/runtime/udp_flow/packet_path_chain/key.rs");
+    let model = read("src/runtime/udp_flow/packet_path_chain/model.rs");
+    let traits = read("src/runtime/udp_flow/packet_path.rs");
 
     for forbidden in [
         "struct PathKey",
@@ -5390,8 +5392,8 @@ fn packet_path_key_model_lives_outside_chain_manager() {
 
 #[test]
 fn packet_path_entry_model_lives_outside_chain_manager() {
-    let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
-    let model = read("src/protocol_runtime/udp/packet_path_chain/model.rs");
+    let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
+    let model = read("src/runtime/udp_flow/packet_path_chain/model.rs");
 
     for forbidden in [
         "struct Entry",
@@ -5418,9 +5420,9 @@ fn packet_path_entry_model_lives_outside_chain_manager() {
 
 #[test]
 fn packet_path_entry_build_lives_outside_chain_manager() {
-    let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
-    let entry_content = read("src/protocol_runtime/udp/packet_path_chain/entry.rs");
-    let entry = manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/entry.rs");
+    let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
+    let entry_content = read("src/runtime/udp_flow/packet_path_chain/entry.rs");
+    let entry = manifest_dir().join("src/runtime/udp_flow/packet_path_chain/entry.rs");
 
     for forbidden in [
         "udp_packet_path_carrier_descriptor",
@@ -5449,9 +5451,8 @@ fn packet_path_entry_build_lives_outside_chain_manager() {
 
 #[test]
 fn packet_path_diagnostics_live_outside_chain_manager() {
-    let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
-    let diagnostics =
-        manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/diagnostics.rs");
+    let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
+    let diagnostics = manifest_dir().join("src/runtime/udp_flow/packet_path_chain/diagnostics.rs");
 
     for forbidden in ["fn carrier_upstream", "orchestration::endpoint"] {
         assert!(
@@ -5467,9 +5468,9 @@ fn packet_path_diagnostics_live_outside_chain_manager() {
 
 #[test]
 fn packet_path_snapshot_lookup_lives_outside_chain_manager() {
-    let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
-    let snapshot_content = read("src/protocol_runtime/udp/packet_path_chain/snapshot.rs");
-    let snapshot = manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/snapshot.rs");
+    let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
+    let snapshot_content = read("src/runtime/udp_flow/packet_path_chain/snapshot.rs");
+    let snapshot = manifest_dir().join("src/runtime/udp_flow/packet_path_chain/snapshot.rs");
 
     for forbidden in [
         "PathKey::from_lookup",
@@ -5495,7 +5496,7 @@ fn packet_path_snapshot_lookup_lives_outside_chain_manager() {
 
 #[test]
 fn packet_path_snapshot_send_uses_request_model() {
-    let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
+    let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
     let packet_path = read("src/protocol_runtime/udp/state/packet_path.rs");
 
     assert!(
@@ -6437,8 +6438,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
 #[test]
 fn h2_packet_path_carrier_uses_protocol_built_codec() {
     let adapter = read("src/adapters/hysteria2/udp.rs");
-    let carrier =
-        read("src/protocol_runtime/udp/packet_path_chain/carriers/quic_datagram_carrier.rs");
+    let carrier = read("src/runtime/udp_flow/packet_path_chain/carriers/quic_datagram_carrier.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/udp_packet_path.rs"))
         .expect("read zero-transport udp packet path source");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
@@ -6964,17 +6964,17 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         .join("protocols/shadowsocks/src/outbound.rs");
     let protocol_outbound =
         fs::read_to_string(protocol_outbound).expect("read shadowsocks protocol outbound source");
-    let carrier = read("src/protocol_runtime/udp/packet_path_chain/carriers.rs");
+    let carrier = read("src/runtime/udp_flow/packet_path_chain/carriers.rs");
     let udp_socket_carrier =
-        read("src/protocol_runtime/udp/packet_path_chain/carriers/udp_socket_carrier.rs");
+        read("src/runtime/udp_flow/packet_path_chain/carriers/udp_socket_carrier.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/udp_packet_path.rs"))
         .expect("read zero-transport udp packet path source");
-    let entry = read("src/protocol_runtime/udp/packet_path_chain/entry.rs");
-    let traits = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
-    let key = read("src/protocol_runtime/udp/packet_path_chain/key.rs");
+    let entry = read("src/runtime/udp_flow/packet_path_chain/entry.rs");
+    let traits = read("src/runtime/udp_flow/packet_path.rs");
+    let key = read("src/runtime/udp_flow/packet_path_chain/key.rs");
     let outbound = read("src/runtime/udp_flow/outbound.rs");
-    let carrier_snapshot = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
-    let snapshot = read("src/protocol_runtime/udp/packet_path_chain/snapshot.rs");
+    let carrier_snapshot = read("src/runtime/udp_flow/packet_path.rs");
+    let snapshot = read("src/runtime/udp_flow/packet_path_chain/snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/forward/shadowsocks.rs");
 
     assert!(
@@ -7079,7 +7079,7 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     }
 
     let udp_root = read("src/protocol_runtime/udp/mod.rs");
-    let packet_path_snapshot = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
+    let packet_path_snapshot = read("src/runtime/udp_flow/packet_path.rs");
     let socks5_shared = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -7126,7 +7126,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         }
     }
 
-    let snapshot = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
+    let snapshot = read("src/runtime/udp_flow/packet_path.rs");
     let root = read("src/protocol_runtime/udp/mod.rs");
     for required in ["packet_path_carrier_descriptor", "udp_datagram_source"] {
         assert!(
@@ -7169,7 +7169,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         "packet-path flow snapshot helper should not construct Shadowsocks snapshot fields directly"
     );
     for forbidden in [
-        "pub(crate) use packet_path_snapshot::{",
+        "pub(crate) use packet_path::{",
         "socks5_packet_path_carrier_descriptor",
         "shadowsocks_packet_path_carrier_descriptor",
         "shadowsocks_udp_datagram_source",
@@ -7190,7 +7190,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("crate::protocol_runtime::udp::packet_path_snapshot::"),
+            content.contains("crate::runtime::udp_flow::packet_path::"),
             "{source} should call packet-path snapshot helpers through the explicit snapshot module"
         );
     }
@@ -7200,7 +7200,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("crate::protocol_runtime::udp::packet_path_chain::"),
+            content.contains("crate::runtime::udp_flow::packet_path_chain::"),
             "{source} should call packet-path carrier builders through the explicit chain module"
         );
     }

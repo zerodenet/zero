@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use super::FlowFailure;
 use super::{SsUdpPeer, UdpPeerEndpoint};
+use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use zero_core::UdpFlowPacket;
 

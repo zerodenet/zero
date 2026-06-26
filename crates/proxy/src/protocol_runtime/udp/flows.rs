@@ -13,7 +13,8 @@ pub(crate) struct ManagedDatagramFlow<'a> {
 }
 
 pub(crate) struct ManagedStreamPacketFlow<'a> {
-    pub(crate) chain_tasks: &'a mut tokio::task::JoinSet<super::ChainTask>,
+    pub(crate) chain_tasks:
+        &'a mut tokio::task::JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
     pub(crate) proxy: &'a Proxy,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
@@ -23,7 +24,8 @@ pub(crate) struct ManagedStreamPacketFlow<'a> {
 }
 
 pub(crate) struct ManagedRelayStreamFlow<'a> {
-    pub(crate) chain_tasks: &'a mut tokio::task::JoinSet<super::ChainTask>,
+    pub(crate) chain_tasks:
+        &'a mut tokio::task::JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
     pub(crate) proxy: Option<&'a Proxy>,
     pub(crate) session: &'a Session,
     pub(crate) carrier: crate::transport::RelayCarrier,
@@ -35,7 +37,8 @@ pub(crate) struct ManagedRelayStreamFlow<'a> {
 }
 
 pub(crate) struct ManagedUdpFlowRequest<'a> {
-    pub(crate) chain_tasks: &'a mut tokio::task::JoinSet<super::ChainTask>,
+    pub(crate) chain_tasks:
+        &'a mut tokio::task::JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
     pub(crate) proxy: Option<&'a Proxy>,
     pub(crate) kind: ManagedUdpFlowKind,
     pub(crate) outbound_tag: Option<&'a str>,

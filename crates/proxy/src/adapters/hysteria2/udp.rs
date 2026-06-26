@@ -15,7 +15,7 @@ impl Hysteria2Adapter {
     pub(super) fn udp_packet_path_carrier_descriptor_impl(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::PacketPathCarrierDescriptor> {
+    ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
         let _ = self;
         let ResolvedLeafOutbound::Hysteria2 {
             tag,
@@ -36,7 +36,7 @@ impl Hysteria2Adapter {
             client_fingerprint: *client_fingerprint,
         };
         Some(
-            crate::protocol_runtime::udp::packet_path_snapshot::packet_path_carrier_descriptor(
+            crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
                 packet_path.cache_key(),
                 server,
                 *port,
@@ -48,7 +48,8 @@ impl Hysteria2Adapter {
     pub(super) async fn build_udp_packet_path_impl(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn crate::protocol_runtime::udp::PacketPathCarrier>, EngineError> {
+    ) -> Result<Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
+    {
         let ResolvedLeafOutbound::Hysteria2 {
             server,
             port,
@@ -73,7 +74,7 @@ impl Hysteria2Adapter {
                 .connect_raw()
                 .await?,
         );
-        crate::protocol_runtime::udp::packet_path_chain::carriers::quic_datagram_carrier::build(
+        crate::runtime::udp_flow::packet_path_chain::carriers::quic_datagram_carrier::build(
             conn, codec,
         )
         .await

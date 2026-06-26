@@ -9,9 +9,10 @@ use zero_platform_tokio::TokioDatagramSocket;
 use crate::protocol_runtime::socks5_udp::{
     ClosedSocks5UdpAssociation, Socks5UdpAssociationView, Socks5UdpRuntime,
 };
-use crate::protocol_runtime::udp::{ChainTask, ProtocolUdpState};
+use crate::protocol_runtime::udp::ProtocolUdpState;
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::managed::ManagedUdpFlows;
+use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::CompletedUdpFlow;
 use crate::runtime::udp_flow::sessions::UdpSessionFlows;
 use crate::runtime::udp_helpers::send_direct_udp_packet;

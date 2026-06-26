@@ -21,7 +21,8 @@ pub(super) struct SsUpstream {
 }
 
 pub(crate) struct SsSendExisting<'a> {
-    pub(crate) chain_tasks: &'a mut tokio::task::JoinSet<super::super::ChainTask>,
+    pub(crate) chain_tasks:
+        &'a mut tokio::task::JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
     pub(crate) session_id: u64,
     pub(crate) proxy: &'a Proxy,
     pub(crate) server: &'a str,

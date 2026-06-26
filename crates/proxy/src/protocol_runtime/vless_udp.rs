@@ -134,7 +134,7 @@ impl VlessUdpOutboundManager {
 
     pub(crate) async fn start_flow(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VlessUdpStartFlow<'_>,
     ) -> Result<(), EngineError> {
         let mux_flow_enabled = request.flow == Some("xtls-rprx-vision")
@@ -191,7 +191,7 @@ impl VlessUdpOutboundManager {
 
     pub(crate) async fn start_relay_two_stream(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VlessUdpRelayTwoStream<'_>,
     ) -> Result<(), EngineError> {
         let stream = crate::transport::build_vless_split_http_over_relay(
@@ -224,7 +224,7 @@ impl VlessUdpOutboundManager {
 
     pub(crate) async fn start_relay_final_hop(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VlessUdpRelayFinalHopStart<'_>,
     ) -> Result<(), EngineError> {
         let stream = crate::transport::build_vless_outbound_transport_over_stream(
@@ -268,7 +268,7 @@ impl VlessUdpOutboundManager {
     /// Send a packet through an existing upstream, if one is cached.
     pub(crate) async fn send_existing(
         &self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         proxy: &Proxy,
         target: &Address,
         port: u16,
@@ -297,7 +297,7 @@ impl VlessUdpOutboundManager {
     /// Spawn a one-shot bridge task for a cached upstream.
     pub(super) fn spawn_bridge(
         &self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         target: Address,
         port: u16,
         session_id: u64,
@@ -318,7 +318,7 @@ impl VlessUdpOutboundManager {
     /// Spawns a bridge task into `chain_tasks` for response polling.
     async fn get_or_create_upstream(
         &mut self,
-        chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
+        chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VlessUdpUpstreamRequest<'_>,
     ) -> Result<(), EngineError> {
         let key = (request.target.clone(), request.port);
