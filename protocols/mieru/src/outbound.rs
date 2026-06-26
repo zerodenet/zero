@@ -107,6 +107,47 @@ impl MieruUdpFlowIo {
             Err(error) => Err(error),
         }
     }
+
+    pub async fn write_packet<S>(
+        &mut self,
+        stream: &mut S,
+        packet: &MieruUdpFlowPacket,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let encrypted = packet.encode_with(self)?;
+        stream
+            .write_all(&encrypted)
+            .await
+            .map_err(|_| Error::Io("mieru udp flow write"))
+    }
+
+    pub async fn read_packets<S>(
+        &mut self,
+        stream: &mut S,
+        scratch: &mut [u8],
+    ) -> Result<Option<Vec<MieruUdpFlowPacket>>, Error>
+    where
+        S: AsyncSocket,
+    {
+        let n = stream
+            .read(scratch)
+            .await
+            .map_err(|_| Error::Io("mieru udp flow read"))?;
+        if n == 0 {
+            return Ok(None);
+        }
+
+        self.push_encrypted_response(&scratch[..n]);
+
+        let mut packets = Vec::new();
+        while let Some(packet) = self.next_packet()? {
+            packets.push(packet);
+        }
+
+        Ok(Some(packets))
+    }
 }
 
 impl MieruOutbound {

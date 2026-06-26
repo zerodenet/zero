@@ -1,8 +1,8 @@
 use super::bridge;
+use super::socket::{ReadOnlySocket, WriteOnlySocket};
 use crate::transport::TcpRelayStream;
 use mieru::{MieruUdpFlowIo, MieruUdpFlowPacket};
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, Mutex};
 
 pub(super) struct PacketStream {
@@ -17,8 +17,8 @@ pub(super) fn spawn_packet_stream(stream: TcpRelayStream, flow_io: MieruUdpFlowI
     let shared_flow_io = Arc::new(Mutex::new(flow_io));
     let (read_half, write_half) = tokio::io::split(stream);
 
-    spawn_send_task(shared_flow_io.clone(), send_rx, write_half);
-    spawn_recv_task(shared_flow_io, read_half, recv_tx.clone());
+    spawn_send_task(shared_flow_io.clone(), send_rx, WriteOnlySocket(write_half));
+    spawn_recv_task(shared_flow_io, ReadOnlySocket(read_half), recv_tx.clone());
 
     PacketStream { send_tx, recv_tx }
 }
@@ -26,21 +26,12 @@ pub(super) fn spawn_packet_stream(stream: TcpRelayStream, flow_io: MieruUdpFlowI
 fn spawn_send_task(
     flow_io: Arc<Mutex<MieruUdpFlowIo>>,
     mut send_rx: mpsc::Receiver<MieruUdpFlowPacket>,
-    mut write_half: tokio::io::WriteHalf<TcpRelayStream>,
+    mut write_stream: WriteOnlySocket,
 ) {
     tokio::spawn(async move {
         while let Some(packet) = send_rx.recv().await {
-            let encrypted = {
-                let mut io = flow_io.lock().await;
-                match packet.encode_with(&mut io) {
-                    Ok(encrypted) => encrypted,
-                    Err(_) => break,
-                }
-            };
-            if write_half.write_all(&encrypted).await.is_err() {
-                break;
-            }
-            if write_half.flush().await.is_err() {
+            let mut io = flow_io.lock().await;
+            if io.write_packet(&mut write_stream, &packet).await.is_err() {
                 break;
             }
         }
@@ -49,33 +40,24 @@ fn spawn_send_task(
 
 fn spawn_recv_task(
     flow_io: Arc<Mutex<MieruUdpFlowIo>>,
-    mut read_half: tokio::io::ReadHalf<TcpRelayStream>,
+    mut read_stream: ReadOnlySocket,
     recv_tx: bridge::ResponseSender,
 ) {
     tokio::spawn(async move {
+        let mut scratch = [0u8; 4096];
         loop {
-            let mut scratch = [0u8; 4096];
-            match read_half.read(&mut scratch).await {
-                Ok(0) => break,
-                Ok(n) => {
-                    let mut io = flow_io.lock().await;
-                    io.push_encrypted_response(&scratch[..n]);
-                }
-                Err(_) => break,
-            }
-            loop {
-                let packet = {
-                    let mut io = flow_io.lock().await;
-                    io.next_packet()
-                };
-                match packet {
-                    Ok(Some(packet)) => {
-                        if recv_tx.send(packet.into_parts()).is_err() {
-                            return;
-                        }
-                    }
+            let packets = {
+                let mut io = flow_io.lock().await;
+                match io.read_packets(&mut read_stream, &mut scratch).await {
+                    Ok(Some(packets)) => packets,
                     Ok(None) => break,
-                    Err(_) => return,
+                    Err(_) => break,
+                }
+            };
+
+            for packet in packets {
+                if recv_tx.send(packet.into_parts()).is_err() {
+                    return;
                 }
             }
         }

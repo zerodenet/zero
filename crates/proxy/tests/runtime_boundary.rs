@@ -5346,11 +5346,12 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && manager_model.contains("mieru::MieruUdpFlowPacket")
             && manager_send.contains("MieruUdpFlowPacket::new")
             && stream.contains("MieruUdpFlowPacket")
-            && stream.contains("packet.encode_with(&mut io)")
+            && stream.contains("io.write_packet(&mut write_stream, &packet)")
+            && stream.contains("io.read_packets(&mut read_stream, &mut scratch)")
             && stream.contains("packet.into_parts()")
             && !stream.contains("packet.target")
             && !stream.contains("packet.payload"),
-        "Mieru UDP manager should use protocol-owned UDP flow packet operations instead of unpacking packet fields in proxy"
+        "Mieru UDP manager should use protocol-owned UDP flow stream operations instead of unpacking packet fields in proxy"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
@@ -5639,6 +5640,9 @@ fn trojan_udp_send_orchestration_lives_outside_manager() {
 fn mieru_udp_packet_stream_tasks_live_outside_manager() {
     let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
     let stream = read("src/protocol_runtime/udp/mieru_manager/stream.rs");
+    let socket = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/socket.rs");
+    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
+        .expect("read mieru protocol outbound source");
 
     for forbidden in [
         "tokio::io::split",
@@ -5655,15 +5659,32 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             "mieru_manager.rs should keep packet stream task details in mieru_manager/stream.rs; found `{forbidden}`"
         );
     }
+    for forbidden in [
+        "packet.encode_with",
+        "push_encrypted_response",
+        "next_packet",
+        "AsyncReadExt",
+        "AsyncWriteExt",
+    ] {
+        assert!(
+            !stream.contains(forbidden),
+            "mieru_manager/stream.rs should keep only runtime pump glue and delegate protocol I/O to protocols/mieru; found `{forbidden}`"
+        );
+    }
+    assert!(
+        socket.exists(),
+        "Mieru UDP stream half AsyncSocket adapters should live in mieru_manager/socket.rs"
+    );
     assert!(
         stream.contains("MieruUdpFlowIo")
-            && stream.contains("packet.encode_with(&mut io)")
-            && stream.contains("push_encrypted_response")
-            && stream.contains("next_packet")
+            && stream.contains("io.write_packet(&mut write_stream, &packet)")
+            && stream.contains("io.read_packets(&mut read_stream, &mut scratch)")
             && stream.contains("packet.into_parts()")
             && !stream.contains("encrypt_packet(")
-            && !stream.contains("MieruOutbound"),
-        "Mieru UDP packet stream tasks should delegate packet encode/decode operations to protocols/mieru"
+            && !stream.contains("MieruOutbound")
+            && protocol_outbound.contains("pub async fn write_packet")
+            && protocol_outbound.contains("pub async fn read_packets"),
+        "Mieru UDP packet stream tasks should delegate packet stream I/O operations to protocols/mieru"
     );
 }
 
