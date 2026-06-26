@@ -4792,6 +4792,8 @@ fn packet_path_protocol_carriers_live_outside_carrier_facade() {
         "ShadowsocksDatagramCodec",
         "Hysteria2UdpPacketTarget",
         "connect_raw",
+        "build_shadowsocks_packet_path",
+        "build_hysteria2_packet_path",
     ] {
         assert!(
             !facade.contains(forbidden),
@@ -4832,8 +4834,9 @@ fn packet_path_chain_root_does_not_reexport_protocol_carrier_builders() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("packet_path_chain::carriers::"),
-            "{source} should call packet-path carrier builders through the explicit carriers module"
+            content.contains("packet_path_chain::carriers::")
+                && content.contains("_carrier::build("),
+            "{source} should call packet-path carrier builders through the explicit carrier submodule"
         );
     }
 }

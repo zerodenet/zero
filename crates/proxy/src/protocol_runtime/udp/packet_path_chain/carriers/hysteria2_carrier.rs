@@ -6,6 +6,16 @@ use zero_engine::EngineError;
 
 use crate::protocol_runtime::udp::PacketPathCarrier;
 
+pub(crate) async fn build(
+    server: &str,
+    port: u16,
+    password: &str,
+    client_fingerprint: Option<&str>,
+) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
+    let path = Hysteria2PacketPath::establish(server, port, password, client_fingerprint).await?;
+    Ok(Arc::new(path))
+}
+
 /// QUIC-backed packet path carrier for Hysteria2.
 pub(super) struct Hysteria2PacketPath {
     conn: Arc<quinn::Connection>,

@@ -51,7 +51,7 @@ impl Hysteria2Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        crate::protocol_runtime::udp::packet_path_chain::carriers::build_hysteria2_packet_path(
+        crate::protocol_runtime::udp::packet_path_chain::carriers::hysteria2_carrier::build(
             server,
             *port,
             password,

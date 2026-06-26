@@ -1,4 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio::net::UdpSocket;
@@ -7,6 +8,17 @@ use zero_engine::EngineError;
 
 use crate::protocol_runtime::udp::PacketPathCarrier;
 use crate::runtime::Proxy;
+
+pub(crate) async fn build(
+    proxy: &Proxy,
+    server: &str,
+    port: u16,
+    password: &str,
+    cipher: shadowsocks::CipherKind,
+) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
+    let path = ShadowsocksPacketPath::establish(proxy, server, port, password, cipher).await?;
+    Ok(Arc::new(path))
+}
 
 pub(super) struct ShadowsocksPacketPath {
     socket: UdpSocket,
