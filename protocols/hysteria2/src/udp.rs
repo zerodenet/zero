@@ -198,6 +198,35 @@ pub fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2UdpFlowPacket {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+}
+
+impl Hysteria2UdpFlowPacket {
+    pub fn new(target: Address, port: u16, payload: Vec<u8>) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn from_parts(target: &Address, port: u16, payload: &[u8]) -> Self {
+        Self::new(target.clone(), port, payload.to_vec())
+    }
+
+    pub fn encode_with(&self, resume: &Hysteria2UdpFlowResume) -> Result<Vec<u8>, Error> {
+        resume.encode_packet(&self.target, self.port, &self.payload)
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hysteria2UdpFlowResume {
     password: String,
     client_fingerprint: Option<String>,
@@ -242,6 +271,11 @@ impl Hysteria2UdpFlowResume {
     pub fn decode_packet(&self, data: &[u8]) -> Option<(Address, u16, Vec<u8>)> {
         let decoded = decode_udp_flow_packet(data).ok()?;
         Some((decoded.target, decoded.port, decoded.payload))
+    }
+
+    pub fn decode_flow_packet(&self, data: &[u8]) -> Option<Hysteria2UdpFlowPacket> {
+        let (target, port, payload) = self.decode_packet(data)?;
+        Some(Hysteria2UdpFlowPacket::new(target, port, payload))
     }
 }
 

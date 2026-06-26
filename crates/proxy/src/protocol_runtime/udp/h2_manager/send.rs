@@ -3,7 +3,6 @@ use super::super::FlowFailure;
 use super::super::{H2UdpPeer, UdpPeerEndpoint};
 use super::model::{H2Entry, H2Key, H2SendExisting};
 use super::{establish, H2ChainManager};
-use zero_engine::EngineError;
 
 impl H2ChainManager {
     async fn send(
@@ -17,15 +16,12 @@ impl H2ChainManager {
         let key = H2Key::from_peer(&peer);
 
         if let Some(entry) = self.upstreams.get(&key) {
-            let dg = entry
-                .resume
-                .encode_packet(packet_ref.target, packet_ref.port, packet_ref.payload)
-                .map_err(|error| FlowFailure {
-                    stage: "h2_udp_packet",
-                    error: EngineError::from(error),
-                    upstream: Some(peer.endpoint.upstream()),
-                })?;
-            let _ = entry.send_tx.send(dg).await;
+            let packet = hysteria2::Hysteria2UdpFlowPacket::from_parts(
+                packet_ref.target,
+                packet_ref.port,
+                packet_ref.payload,
+            );
+            let _ = entry.send_tx.send(packet).await;
             return Ok(sent);
         }
 
@@ -47,7 +43,6 @@ impl H2ChainManager {
             key,
             H2Entry {
                 send_tx: send_tx.clone(),
-                resume,
             },
         );
 

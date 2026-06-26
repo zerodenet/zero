@@ -5734,6 +5734,27 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn decode_packet(&self"),
         "Hysteria2 adapter and UDP manager should consume protocol-owned UDP flow packet helpers"
     );
+    let h2_entry_model = manager_model
+        .split("pub(super) struct H2Entry")
+        .nth(1)
+        .expect("H2Entry model should exist")
+        .split("pub(crate) struct H2SendExisting")
+        .next()
+        .expect("H2SendExisting should follow H2Entry");
+    assert!(
+        h2_entry_model.contains("mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>")
+            && !h2_entry_model.contains("resume: hysteria2::Hysteria2UdpFlowResume")
+            && manager_send.contains("Hysteria2UdpFlowPacket::from_parts")
+            && stream.contains("Hysteria2UdpFlowPacket::from_parts")
+            && stream.contains("initial_packet.encode_with(&resume)")
+            && stream.contains("packet.encode_with(&resume)")
+            && stream.contains("resume.decode_flow_packet(&data)")
+            && !manager_send.contains(".encode_packet(")
+            && !stream.contains(".encode_packet(")
+            && !stream.contains(".decode_packet(")
+            && !stream.contains("mpsc::Sender<Vec<u8>>"),
+        "Hysteria2 UDP manager should carry protocol-owned flow packet models and keep encode/decode operations behind protocol helpers"
+    );
     assert!(
         adapter.contains("Hysteria2UdpFlowResume::new")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")

@@ -12,7 +12,7 @@ pub(super) async fn upstream(
     peer: &H2UdpPeer<'_>,
     resume: hysteria2::Hysteria2UdpFlowResume,
     initial_packet: UdpPacketRef<'_>,
-) -> Result<mpsc::Sender<Vec<u8>>, EngineError> {
+) -> Result<mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>, EngineError> {
     let stream::PacketStream { send_tx, recv_tx } =
         stream::establish(peer, initial_packet, resume).await?;
 
