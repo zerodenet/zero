@@ -2401,25 +2401,22 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
         "vmess::encode_udp_response",
         "vmess::encode_mux_udp_response",
         "vmess::decode_inbound_udp_payload",
+        "vmess::encode_inbound_udp_response",
+        "vmess::encode_inbound_mux_udp_response",
+        "vmess::decode_inbound_udp_datagram",
     ] {
         assert!(
             !helper.contains(forbidden),
             "VMess inbound helper should use inbound-specific protocol helpers; found `{forbidden}`"
         );
     }
-    for required in [
-        "encode_inbound_udp_response",
-        "encode_inbound_mux_udp_response",
-    ] {
-        assert!(
-            protocol_udp.contains(required) && helper.contains(&format!("vmess::{required}")),
-            "VMess UDP response encoding should be owned by protocols/vmess `{required}`"
-        );
-    }
     assert!(
-        protocol_udp.contains("decode_inbound_udp_datagram")
-            && helper.contains("vmess::decode_inbound_udp_datagram"),
-        "VMess UDP request payload mode detection should be owned by protocols/vmess"
+        helper.contains("vmess::VmessInboundUdpCodec")
+            && protocol_udp.contains("struct VmessInboundUdpCodec")
+            && protocol_udp.contains("fn encode_response")
+            && protocol_udp.contains("fn encode_mux_response")
+            && protocol_udp.contains("fn decode_datagram"),
+        "VMess inbound UDP packet framing should go through the protocols/vmess inbound codec wrapper"
     );
 }
 
@@ -2479,22 +2476,23 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         "vless::decode_inbound_udp_packet",
         "vless::encode_udp_response",
         "vless::encode_mux_udp_response",
+        "vless::decode_inbound_udp_datagram",
+        "vless::encode_inbound_udp_response",
+        "vless::encode_inbound_mux_udp_response",
     ] {
         assert!(
             !helper.contains(forbidden),
             "VLESS inbound helper should use inbound-specific protocol helpers; found `{forbidden}`"
         );
     }
-    for required in [
-        "decode_inbound_udp_datagram",
-        "encode_inbound_udp_response",
-        "encode_inbound_mux_udp_response",
-    ] {
-        assert!(
-            protocol_shared.contains(required) && helper.contains(&format!("vless::{required}")),
-            "VLESS inbound UDP packet framing should be owned by protocols/vless `{required}`"
-        );
-    }
+    assert!(
+        helper.contains("vless::VlessInboundUdpCodec")
+            && protocol_shared.contains("struct VlessInboundUdpCodec")
+            && protocol_shared.contains("fn decode_datagram")
+            && protocol_shared.contains("fn encode_response")
+            && protocol_shared.contains("fn encode_mux_response"),
+        "VLESS inbound UDP packet framing should go through the protocols/vless inbound codec wrapper"
+    );
 }
 
 #[test]

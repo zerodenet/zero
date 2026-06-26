@@ -20,7 +20,7 @@ pub(crate) struct VlessInboundUdpPacket {
 pub(crate) fn decode_vless_udp_packet(
     packet: &[u8],
 ) -> Result<VlessInboundUdpPacket, zero_core::Error> {
-    let packet = vless::decode_inbound_udp_datagram(packet)?;
+    let packet = vless::VlessInboundUdpCodec.decode_datagram(packet)?;
     Ok(VlessInboundUdpPacket {
         target: packet.target,
         port: packet.port,
@@ -33,7 +33,7 @@ pub(crate) fn encode_vless_udp_response(
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
-    vless::encode_inbound_udp_response(target, port, payload)
+    vless::VlessInboundUdpCodec.encode_response(target, port, payload)
 }
 
 pub(crate) fn encode_vless_mux_udp_response(
@@ -42,7 +42,7 @@ pub(crate) fn encode_vless_mux_udp_response(
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
-    vless::encode_inbound_mux_udp_response(mux_session_id, target, port, payload)
+    vless::VlessInboundUdpCodec.encode_mux_response(mux_session_id, target, port, payload)
 }
 
 // ── Fallback helpers ──

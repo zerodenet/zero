@@ -268,6 +268,42 @@ pub fn decode_inbound_udp_datagram(
     decode_inbound_udp_payload(state, default_target, default_port, payload)
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct VmessInboundUdpCodec;
+
+impl VmessInboundUdpCodec {
+    pub fn encode_response(
+        &self,
+        mode: VmessUdpPayloadMode,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_inbound_udp_response(mode, target, port, payload)
+    }
+
+    pub fn encode_mux_response(
+        &self,
+        mux_session_id: u16,
+        mode: VmessUdpPayloadMode,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_inbound_mux_udp_response(mux_session_id, mode, target, port, payload)
+    }
+
+    pub fn decode_datagram(
+        &self,
+        state: VmessUdpPayloadState,
+        default_target: &Address,
+        default_port: u16,
+        payload: &[u8],
+    ) -> Result<VmessInboundUdpPayload, Error> {
+        decode_inbound_udp_datagram(state, default_target, default_port, payload)
+    }
+}
+
 pub fn parse_udp_packet(packet: &[u8]) -> Result<VmessUdpPacket, Error> {
     if packet.len() < 2 {
         return Err(Error::Protocol("vmess udp packet too short"));

@@ -438,6 +438,34 @@ pub fn encode_inbound_mux_udp_response(
     encode_mux_udp_response(mux_session_id, target, port, payload)
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct VlessInboundUdpCodec;
+
+impl VlessInboundUdpCodec {
+    pub fn decode_datagram(&self, packet: &[u8]) -> Result<VlessUdpPacket, Error> {
+        decode_inbound_udp_datagram(packet)
+    }
+
+    pub fn encode_response(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_inbound_udp_response(target, port, payload)
+    }
+
+    pub fn encode_mux_response(
+        &self,
+        mux_session_id: u16,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_inbound_mux_udp_response(mux_session_id, target, port, payload)
+    }
+}
+
 pub fn decode_udp_flow_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
     parse_udp_packet(packet)
 }
