@@ -6,7 +6,7 @@ use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
-use crate::protocol_runtime::udp::{ProtocolUdpState, ProtocolUpstreamUdpPoll};
+use crate::protocol_runtime::udp::ProtocolUdpState;
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::managed::ManagedUdpFlows;
 use crate::runtime::udp_flow::packet_path::ChainTask;
@@ -16,12 +16,12 @@ use crate::runtime::udp_flow::sessions::UdpSessionFlows;
 use crate::runtime::udp_helpers::send_direct_udp_packet;
 
 pub(crate) struct UpstreamUdpPoll<'a> {
-    protocol: ProtocolUpstreamUdpPoll<'a>,
+    protocol_state: &'a ProtocolUdpState,
 }
 
 impl UpstreamUdpPoll<'_> {
     pub(crate) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.protocol.recv_packet(buf).await
+        self.protocol_state.recv_upstream_packet(buf).await
     }
 }
 
@@ -97,7 +97,7 @@ impl UdpDispatch {
         (
             &self.direct_socket,
             UpstreamUdpPoll {
-                protocol: self.protocol_state.upstream_poll(),
+                protocol_state: &self.protocol_state,
             },
             self.protocol_state.upstream_idle_deadline(),
             &mut self.chain_tasks,

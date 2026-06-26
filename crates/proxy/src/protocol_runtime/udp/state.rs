@@ -19,16 +19,6 @@ mod cached;
 mod forward;
 pub(in crate::protocol_runtime::udp) mod managed;
 
-pub(crate) struct ProtocolUpstreamUdpPoll<'a> {
-    socks5: &'a Socks5UdpRuntime,
-}
-
-impl ProtocolUpstreamUdpPoll<'_> {
-    pub(crate) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.socks5.recv_upstream_packet(buf).await
-    }
-}
-
 pub(crate) struct ProtocolUpstreamAssociationView<'a> {
     pub(crate) outbound_tag: &'a str,
 }
@@ -82,10 +72,8 @@ impl ProtocolUdpState {
             .map(|snapshot| snapshot.resume().clone())
     }
 
-    pub(crate) fn upstream_poll(&self) -> ProtocolUpstreamUdpPoll<'_> {
-        ProtocolUpstreamUdpPoll {
-            socks5: &self.socks5,
-        }
+    pub(crate) async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        self.socks5.recv_upstream_packet(buf).await
     }
 
     pub(crate) fn upstream_association_view(&self) -> Option<ProtocolUpstreamAssociationView<'_>> {

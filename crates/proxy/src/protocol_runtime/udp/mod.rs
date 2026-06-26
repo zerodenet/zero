@@ -26,4 +26,4 @@ pub(crate) use flows::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowKind,
     ManagedUdpFlowRequest,
 };
-pub(crate) use state::{ProtocolUdpState, ProtocolUpstreamUdpPoll};
+pub(crate) use state::ProtocolUdpState;

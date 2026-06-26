@@ -2581,6 +2581,22 @@ fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
 }
 
 #[test]
+fn protocol_runtime_udp_root_does_not_reexport_upstream_poll_details() {
+    let root = read("src/protocol_runtime/udp/mod.rs");
+
+    for forbidden in [
+        "ProtocolUpstreamUdpPoll",
+        "ProtocolUpstreamAssociationView",
+        "ClosedProtocolUpstreamAssociation",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "protocol_runtime::udp root should not re-export upstream lifecycle detail `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     let root = read("src/inbound/vmess/mux.rs");
     let model = read("src/inbound/vmess/model.rs");
@@ -3411,7 +3427,7 @@ fn udp_dispatch_keeps_protocol_managers_in_protocol_runtime_state() {
         );
     }
     assert!(
-        state.contains("pub(crate) fn upstream_poll")
+        state.contains("pub(crate) async fn recv_upstream_packet")
             && state.contains("pub(crate) fn upstream_association_view")
             && state.contains("pub(crate) fn upstream_idle_deadline")
             && state.contains("pub(crate) fn touch_upstream_idle")
