@@ -10,6 +10,7 @@ use crate::logging::{
     log_udp_upstream_association_created, log_udp_upstream_association_dropped,
     log_udp_upstream_association_reused,
 };
+use crate::protocol_runtime::udp::ProtocolUdpFlowResume;
 use crate::runtime::Proxy;
 
 pub(super) struct Socks5UdpSend<'a> {
@@ -17,8 +18,7 @@ pub(super) struct Socks5UdpSend<'a> {
     pub(crate) tag: &'a str,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) username: Option<&'a str>,
-    pub(crate) password: Option<&'a str>,
+    pub(crate) resume: ProtocolUdpFlowResume,
     pub(crate) session: &'a Session,
     pub(crate) payload: &'a [u8],
 }
@@ -28,13 +28,18 @@ pub(crate) async fn send(
     inbound_tag: &str,
     runtime: &mut Socks5UdpRuntime,
 ) -> Result<usize, EngineError> {
+    let ProtocolUdpFlowResume::Socks5(resume) = &request.resume else {
+        return Err(EngineError::Io(std::io::Error::other(
+            "expected SOCKS5 UDP flow resume",
+        )));
+    };
     let association = Socks5UdpAssociation {
         tag: request.tag.to_owned(),
         server: request.server.to_owned(),
         port: request.port,
-        auth: request
-            .username
-            .zip(request.password)
+        auth: resume
+            .username()
+            .zip(resume.password())
             .map(|(u, p)| (u.to_owned(), p.to_owned())),
     };
 

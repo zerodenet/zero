@@ -9,6 +9,7 @@ use super::model::{
     ClosedSocks5UdpAssociation, Socks5UdpAssociationView, UpstreamAssociationCloseReason,
 };
 use super::send::{self, Socks5UdpSend};
+use crate::protocol_runtime::udp::ProtocolUdpFlowResume;
 
 #[derive(Default)]
 pub(crate) struct Socks5UdpRuntime {
@@ -57,8 +58,7 @@ impl Socks5UdpRuntime {
                 tag: request.tag,
                 server: request.server,
                 port: request.port,
-                username: request.username,
-                password: request.password,
+                resume: request.resume,
                 session: request.session,
                 payload: request.payload,
             },
@@ -108,8 +108,7 @@ pub(crate) struct Socks5UdpPacketSend<'a> {
     pub(crate) tag: &'a str,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) username: Option<&'a str>,
-    pub(crate) password: Option<&'a str>,
+    pub(crate) resume: ProtocolUdpFlowResume,
     pub(crate) session: &'a Session,
     pub(crate) payload: &'a [u8],
 }

@@ -2613,7 +2613,13 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
     }
     assert!(
         dispatch.contains("crate::protocol_runtime::socks5_udp::Socks5UdpPacketSend")
-            && dispatch.contains("pub(crate) async fn send_socks5("),
+            && dispatch.contains("pub(crate) async fn send_socks5(")
+            && dispatch.contains("resume: ProtocolUdpFlowResume")
+            && !dispatch.contains("username: Option<&'a str>")
+            && !dispatch.contains("password: Option<&'a str>")
+            && !forward.contains("socks5_relay_auth")
+            && !forward.contains("username: auth.username")
+            && !forward.contains("password: auth.password"),
         "runtime UDP SOCKS5 facade should construct the protocol-runtime facade request"
     );
 }
@@ -2948,9 +2954,9 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         .split("pub(crate) enum ProtocolUdpFlowResume")
         .nth(1)
         .expect("ProtocolUdpFlowResume enum should exist")
-        .split("pub(crate) struct Socks5RelayAuth")
+        .split("impl ProtocolUdpFlowSnapshot")
         .next()
-        .expect("Socks5RelayAuth should follow ProtocolUdpFlowResume");
+        .expect("ProtocolUdpFlowSnapshot impl should follow ProtocolUdpFlowResume");
     assert!(
         resume_enum.contains("Socks5(socks5::Socks5UdpFlowResume)")
             && resume_enum.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
@@ -5603,9 +5609,9 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .split("pub(crate) enum ProtocolUdpFlowResume")
         .nth(1)
         .expect("ProtocolUdpFlowResume enum should exist")
-        .split("pub(crate) struct Socks5RelayAuth")
+        .split("impl ProtocolUdpFlowSnapshot")
         .next()
-        .expect("Socks5RelayAuth should follow ProtocolUdpFlowResume");
+        .expect("ProtocolUdpFlowSnapshot impl should follow ProtocolUdpFlowResume");
     assert!(
         snapshot.contains("resume: ProtocolUdpFlowResume")
             && snapshot.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
@@ -6368,7 +6374,7 @@ fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
         .nth(1)
         .expect("ProtocolUdpFlowSnapshot impl should exist");
 
-    for required in ["pub(crate) fn managed(", "pub(crate) fn socks5("] {
+    for required in ["pub(crate) fn managed(", "pub(crate) fn resume("] {
         assert!(
             snapshot_impl.contains(required),
             "protocol_runtime::udp::flow_snapshot should own protocol snapshot constructor `{required}`"
@@ -6379,6 +6385,7 @@ fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
         "pub(crate) fn hysteria2(",
         "pub(crate) fn trojan(",
         "pub(crate) fn mieru(",
+        "pub(crate) fn socks5(",
     ] {
         assert!(
             !snapshot_impl.contains(forbidden),
@@ -6386,9 +6393,9 @@ fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
         );
     }
     assert!(
-        snapshot.contains("ProtocolUdpFlowResume::Socks5(socks5::Socks5UdpFlowResume::new(")
+        snapshot.contains("Socks5(socks5::Socks5UdpFlowResume)")
             && snapshot.contains("Self::Managed {"),
-        "SOCKS5 UDP snapshot constructor should use the unified ProtocolUdpFlowResume wrapper"
+        "SOCKS5 UDP snapshot state should use the unified ProtocolUdpFlowResume wrapper"
     );
 }
 

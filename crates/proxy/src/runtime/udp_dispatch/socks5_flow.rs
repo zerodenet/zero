@@ -1,6 +1,6 @@
 use zero_engine::EngineError;
 
-use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
+use crate::protocol_runtime::udp::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
@@ -11,8 +11,7 @@ pub(crate) struct Socks5RelaySend<'a> {
     pub(crate) tag: &'a str,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) username: Option<&'a str>,
-    pub(crate) password: Option<&'a str>,
+    pub(crate) resume: ProtocolUdpFlowResume,
     pub(crate) session: &'a Session,
     pub(crate) payload: &'a [u8],
 }
@@ -28,8 +27,7 @@ impl UdpDispatch {
             tag: request.tag,
             server: request.server,
             port: request.port,
-            username: request.username,
-            password: request.password,
+            resume: request.resume,
             session: request.session,
             payload: request.payload,
         };
@@ -43,15 +41,14 @@ impl UdpDispatch {
         &mut self,
         request: Socks5RelaySend<'_>,
     ) -> Result<FlowStartResult, FlowFailure> {
-        let protocol = ProtocolUdpFlowSnapshot::socks5(request.username, request.password);
+        let protocol = ProtocolUdpFlowSnapshot::managed(request.resume.clone());
         let sent = self
             .send_socks5(Socks5RelaySend {
                 proxy: request.proxy,
                 tag: request.tag,
                 server: request.server,
                 port: request.port,
-                username: request.username,
-                password: request.password,
+                resume: request.resume,
                 session: request.session,
                 payload: request.payload,
             })

@@ -2,7 +2,7 @@ use tokio::task::JoinSet;
 use zero_engine::EngineError;
 
 use super::ProtocolUdpState;
-use crate::protocol_runtime::udp::{ChainTask, FlowFailure};
+use crate::protocol_runtime::udp::{ChainTask, FlowFailure, ProtocolUdpFlowResume};
 #[cfg(feature = "hysteria2")]
 mod hysteria2;
 #[cfg(feature = "mieru")]
@@ -37,7 +37,7 @@ impl ProtocolUdpState {
             ));
         };
 
-        if snapshot.socks5_relay_auth().is_some() {
+        if matches!(snapshot.resume(), ProtocolUdpFlowResume::Socks5(_)) {
             return Err(protocol_forward_unavailable(
                 "udp_protocol_forward",
                 "SOCKS5 relay flows are handled by generic UDP dispatch",

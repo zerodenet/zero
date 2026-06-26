@@ -62,17 +62,13 @@ impl UdpDispatch {
                 let Some(protocol) = flow.outbound.relay_protocol_snapshot() else {
                     unreachable!("Relay category maps to a relay protocol snapshot");
                 };
-                let Some(auth) = protocol.socks5_relay_auth() else {
-                    unreachable!("Relay category maps to a SOCKS5 relay protocol snapshot");
-                };
                 match self
                     .send_socks5(Socks5RelaySend {
                         proxy,
                         tag: flow.outbound.tag(),
                         server: upstream.server,
                         port: upstream.port,
-                        username: auth.username,
-                        password: auth.password,
+                        resume: protocol.resume().clone(),
                         session: &flow.session,
                         payload,
                     })
