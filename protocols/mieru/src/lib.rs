@@ -38,7 +38,9 @@ pub use metadata::{
     METADATA_LEN, OPEN_SESSION_REQUEST, OPEN_SESSION_RESPONSE,
 };
 #[cfg(feature = "crypto")]
-pub use outbound::{MieruOutbound, MieruTcpTarget, MieruUdpFlowIo, MieruUdpFlowPacket};
+pub use outbound::{
+    udp_flow_packet, MieruOutbound, MieruTcpTarget, MieruUdpFlowIo, MieruUdpFlowPacket,
+};
 pub use protocol::MieruProtocol;
 #[cfg(feature = "crypto")]
 pub use segment::{

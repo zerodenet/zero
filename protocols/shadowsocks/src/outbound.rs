@@ -236,6 +236,11 @@ impl ShadowsocksUdpFlowPacket {
 }
 
 #[cfg(feature = "crypto")]
+pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> ShadowsocksUdpFlowPacket {
+    ShadowsocksUdpFlowPacket::from_parts(target, port, payload)
+}
+
+#[cfg(feature = "crypto")]
 impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecodeContext<'a>>
     for ShadowsocksOutbound
 {

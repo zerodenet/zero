@@ -226,6 +226,10 @@ impl Hysteria2UdpFlowPacket {
     }
 }
 
+pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> Hysteria2UdpFlowPacket {
+    Hysteria2UdpFlowPacket::from_parts(target, port, payload)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hysteria2UdpFlowResume {
     password: String,

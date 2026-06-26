@@ -48,6 +48,10 @@ impl MieruUdpFlowPacket {
     }
 }
 
+pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> MieruUdpFlowPacket {
+    MieruUdpFlowPacket::new(target.clone(), port, payload.to_vec())
+}
+
 pub struct MieruUdpFlowIo {
     outbound: MieruOutbound,
     recv_raw: Vec<u8>,

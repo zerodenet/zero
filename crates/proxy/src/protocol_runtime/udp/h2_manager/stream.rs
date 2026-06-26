@@ -16,7 +16,7 @@ pub(super) async fn establish(
     initial_packet: UdpPacketRef<'_>,
     resume: hysteria2::Hysteria2UdpFlowResume,
 ) -> Result<PacketStream, EngineError> {
-    let initial_packet = hysteria2::Hysteria2UdpFlowPacket::from_parts(
+    let initial_packet = hysteria2::udp_flow_packet(
         initial_packet.target,
         initial_packet.port,
         initial_packet.payload,

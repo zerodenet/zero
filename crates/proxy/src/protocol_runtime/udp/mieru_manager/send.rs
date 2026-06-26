@@ -138,9 +138,5 @@ impl MieruChainManager {
 }
 
 fn packet(packet_ref: UdpPacketRef<'_>) -> mieru::MieruUdpFlowPacket {
-    mieru::MieruUdpFlowPacket::new(
-        packet_ref.target.clone(),
-        packet_ref.port,
-        packet_ref.payload.to_vec(),
-    )
+    mieru::udp_flow_packet(packet_ref.target, packet_ref.port, packet_ref.payload)
 }

@@ -5725,6 +5725,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     assert!(
         protocol_outbound.contains("struct MieruUdpFlowIo")
             && protocol_outbound.contains("struct MieruUdpFlowPacket")
+            && protocol_outbound.contains("pub fn udp_flow_packet")
             && protocol_outbound.contains("encode_udp_flow_packet")
             && protocol_outbound.contains("decode_udp_flow_packet")
             && protocol_outbound.contains("encrypt_payload")
@@ -5735,7 +5736,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     assert!(
         !manager_model.contains("struct MieruPacket")
             && manager_model.contains("mieru::MieruUdpFlowPacket")
-            && manager_send.contains("MieruUdpFlowPacket::new")
+            && manager_send.contains("mieru::udp_flow_packet")
+            && !manager_send.contains("MieruUdpFlowPacket::new")
             && stream.contains("MieruUdpFlowPacket")
             && stream.contains("establish_mieru_udp_flow_stream")
             && transport.contains("io.write_packet(&mut write_stream, &packet)")
@@ -6011,9 +6013,14 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             "trojan_manager/stream.rs should delegate Trojan packet tunnel establishment to protocols/trojan helpers; found `{forbidden}`"
         );
     }
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
+            .expect("read trojan protocol outbound source");
     assert!(
-        establish.contains("trojan::TrojanUdpPacket::new"),
-        "Trojan UDP establish glue should build protocol-owned UDP flow packet models"
+        protocol_outbound.contains("pub fn udp_flow_packet")
+            && establish.contains("trojan::udp_flow_packet")
+            && !establish.contains("trojan::TrojanUdpPacket::new"),
+        "Trojan UDP establish glue should ask protocols/trojan to build UDP flow packet models"
     );
     assert!(
         stream.contains("establish_trojan_udp_flow_stream")
@@ -6151,6 +6158,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn udp_flow_codec(")
             && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
             && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec")
+            && protocol_udp.contains("pub fn udp_flow_packet")
             && protocol_udp.contains("pub fn encode_packet(")
             && protocol_udp.contains("pub fn decode_packet(&self"),
         "Hysteria2 adapter and UDP manager should consume protocol-owned UDP flow packet helpers"
@@ -6165,8 +6173,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     assert!(
         h2_entry_model.contains("mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>")
             && !h2_entry_model.contains("resume: hysteria2::Hysteria2UdpFlowResume")
-            && manager_send.contains("Hysteria2UdpFlowPacket::from_parts")
-            && stream.contains("Hysteria2UdpFlowPacket::from_parts")
+            && manager_send.contains("hysteria2::udp_flow_packet")
+            && stream.contains("hysteria2::udp_flow_packet")
+            && !manager_send.contains("Hysteria2UdpFlowPacket::from_parts")
+            && !stream.contains("Hysteria2UdpFlowPacket::from_parts")
             && stream.contains("establish_hysteria2_udp_flow_stream")
             && transport.contains("initial_packet.encode_with(&resume)")
             && transport.contains("packet.encode_with(&resume)")
@@ -6498,6 +6508,9 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && protocol_outbound
                 .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowPacket")
+            && protocol_outbound.contains("pub fn udp_flow_packet")
+            && manager.contains("shadowsocks::udp_flow_packet")
+            && !manager.contains("ShadowsocksUdpFlowPacket::from_parts")
             && protocol_outbound.contains("pub fn encode_with(")
             && protocol_outbound.contains("pub fn decode_flow_packet(&self"),
         "Shadowsocks adapter and UDP manager should consume protocol-owned UDP flow packet helpers"

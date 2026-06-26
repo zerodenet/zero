@@ -48,5 +48,5 @@ async fn packet_stream(
 }
 
 pub(super) fn packet(target: &Address, port: u16, payload: &[u8]) -> trojan::TrojanUdpPacket {
-    trojan::TrojanUdpPacket::new(target.clone(), port, payload.to_vec())
+    trojan::udp_flow_packet(target, port, payload)
 }

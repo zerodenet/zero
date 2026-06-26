@@ -115,6 +115,10 @@ impl TrojanUdpPacket {
     }
 }
 
+pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> TrojanUdpPacket {
+    TrojanUdpPacket::new(target.clone(), port, payload.to_vec())
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrojanUdpFlowIo;
 

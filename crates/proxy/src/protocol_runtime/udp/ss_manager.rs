@@ -55,11 +55,8 @@ impl SsChainManager {
                 upstream: Some(peer.endpoint.upstream()),
             })?;
 
-        let packet = shadowsocks::ShadowsocksUdpFlowPacket::from_parts(
-            packet_ref.target,
-            packet_ref.port,
-            packet_ref.payload,
-        );
+        let packet =
+            shadowsocks::udp_flow_packet(packet_ref.target, packet_ref.port, packet_ref.payload);
 
         let response_rx = entry.waiters.register(packet_ref.target, packet_ref.port);
         if let Err(e) = entry.flow.send_packet(packet).await {
