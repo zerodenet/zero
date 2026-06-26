@@ -2873,6 +2873,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
         !dispatch.contains("Socks5UdpPacketSend")
             && dispatch.contains("start_managed_udp_flow")
             && dispatch.contains("ManagedUdpFlowKind::RelayStream")
+            && dispatch.contains("outbound_tag: Some(request.tag)")
             && dispatch.contains("pub(crate) async fn send_socks5(")
             && dispatch.contains("resume: ProtocolUdpFlowResume")
             && !dispatch.contains("username: Option<&'a str>")
@@ -2881,6 +2882,42 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
             && !forward.contains("username: auth.username")
             && !forward.contains("password: auth.password"),
         "runtime UDP SOCKS5 facade should use the neutral managed UDP flow facade"
+    );
+}
+
+#[test]
+fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
+    let model = read("src/protocol_runtime/socks5_udp/model.rs");
+    let send = read("src/protocol_runtime/socks5_udp/send.rs");
+    let start = read("src/protocol_runtime/udp/start/socks5.rs");
+    let response = read("src/protocol_runtime/socks5_udp_associate/upstream_response.rs");
+
+    assert!(
+        model
+            .lines()
+            .any(|line| line.contains("outbound_tag: String"))
+            && !model
+                .lines()
+                .any(|line| line.trim() == "pub(super) tag: String,"),
+        "SOCKS5 UDP association identity should be named outbound_tag, not a generic tag"
+    );
+    assert!(
+        start.contains("let Some(outbound_tag) = request.outbound_tag")
+            && start.contains("tag: outbound_tag")
+            && !start.contains("tag: inbound_tag"),
+        "SOCKS5 managed UDP start must pass the outbound tag into the upstream association"
+    );
+    assert!(
+        send.contains("outbound_tag: request.tag.to_owned()")
+            && send.contains("association.outbound_tag")
+            && !send.contains("association.tag"),
+        "SOCKS5 UDP send state should store and match the relay outbound tag"
+    );
+    assert!(
+        response.contains("association.outbound_tag")
+            && response.contains("dispatch.upstream_response_session_id")
+            && !response.contains("inbound_tag, &packet.target"),
+        "SOCKS5 upstream responses should look up sessions by outbound tag"
     );
 }
 

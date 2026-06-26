@@ -38,6 +38,7 @@ pub(crate) struct ManagedUdpFlowRequest<'a> {
     pub(crate) chain_tasks: &'a mut tokio::task::JoinSet<super::ChainTask>,
     pub(crate) proxy: Option<&'a Proxy>,
     pub(crate) kind: ManagedUdpFlowKind,
+    pub(crate) outbound_tag: Option<&'a str>,
     pub(crate) session: &'a Session,
     pub(crate) carrier: Option<crate::transport::RelayCarrier>,
     pub(crate) tls_server_name: Option<&'a str>,

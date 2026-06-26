@@ -12,7 +12,7 @@ use crate::transport::MeteredStream;
 
 /// Active SOCKS5 UDP upstream association.
 pub(super) struct ActiveUpstreamSocks5UdpAssociation {
-    tag: String,
+    outbound_tag: String,
     server: String,
     port: u16,
     proxy: Proxy,
@@ -23,7 +23,7 @@ pub(super) struct ActiveUpstreamSocks5UdpAssociation {
 impl ActiveUpstreamSocks5UdpAssociation {
     pub(super) async fn establish(
         proxy: &Proxy,
-        tag: &str,
+        outbound_tag: &str,
         server: &str,
         port: u16,
         auth: Option<(&str, &str)>,
@@ -56,7 +56,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
         let relay = TokioDatagramSocket::bind_addr(bind_addr).await?;
 
         Ok(Self {
-            tag: tag.to_owned(),
+            outbound_tag: outbound_tag.to_owned(),
             server: server.to_owned(),
             port,
             proxy: proxy.clone(),
@@ -74,12 +74,12 @@ impl ActiveUpstreamSocks5UdpAssociation {
         })
     }
 
-    pub(super) fn matches(&self, tag: &str, server: &str, port: u16) -> bool {
-        self.tag == tag && self.server == server && self.port == port
+    pub(super) fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool {
+        self.outbound_tag == outbound_tag && self.server == server && self.port == port
     }
 
     pub(super) fn outbound_tag(&self) -> &str {
-        &self.tag
+        &self.outbound_tag
     }
 
     pub(super) fn upstream_endpoint(&self) -> (&str, u16) {

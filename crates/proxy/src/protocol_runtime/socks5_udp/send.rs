@@ -34,7 +34,7 @@ pub(crate) async fn send(
         )));
     };
     let association = Socks5UdpAssociation {
-        tag: request.tag.to_owned(),
+        outbound_tag: request.tag.to_owned(),
         server: request.server.to_owned(),
         port: request.port,
         auth: resume
@@ -86,14 +86,20 @@ async fn ensure_socks5_udp_association(
 ) -> Result<(), EngineError> {
     let needs_new_association = upstream_association
         .as_ref()
-        .map(|a| !a.matches(&association.tag, &association.server, association.port))
+        .map(|a| {
+            !a.matches(
+                &association.outbound_tag,
+                &association.server,
+                association.port,
+            )
+        })
         .unwrap_or(true);
 
     if !needs_new_association {
         proxy.record_udp_upstream_association_reused();
         log_udp_upstream_association_reused(
             inbound_tag,
-            &association.tag,
+            &association.outbound_tag,
             &association.server,
             association.port,
         );
@@ -107,7 +113,7 @@ async fn ensure_socks5_udp_association(
 
     match ActiveUpstreamSocks5UdpAssociation::establish(
         proxy,
-        &association.tag,
+        &association.outbound_tag,
         &association.server,
         association.port,
         association
@@ -123,7 +129,7 @@ async fn ensure_socks5_udp_association(
             *upstream_idle_deadline = Some(TokioInstant::now() + proxy.udp_upstream_idle_timeout());
             log_udp_upstream_association_created(
                 inbound_tag,
-                &association.tag,
+                &association.outbound_tag,
                 &association.server,
                 association.port,
                 proxy.udp_upstream_idle_timeout(),

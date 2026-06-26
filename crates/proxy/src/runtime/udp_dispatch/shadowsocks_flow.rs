@@ -28,6 +28,7 @@ impl UdpDispatch {
                     chain_tasks: &mut self.chain_tasks,
                     proxy: Some(request.proxy),
                     kind: ManagedUdpFlowKind::Datagram,
+                    outbound_tag: Some(request.tag),
                     session: request.session,
                     carrier: None,
                     tls_server_name: None,

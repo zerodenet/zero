@@ -15,9 +15,17 @@ impl ProtocolUdpState {
                 "expected proxy context for SOCKS5 UDP flow",
             ));
         };
+        let Some(outbound_tag) = request.outbound_tag else {
+            return Err(socks5_flow_mismatch(
+                "udp_socks5_outbound_tag",
+                request.server,
+                request.port,
+                "expected outbound tag for SOCKS5 UDP flow",
+            ));
+        };
         let packet = crate::protocol_runtime::socks5_udp::Socks5UdpPacketSend {
             proxy,
-            tag: inbound_tag,
+            tag: outbound_tag,
             server: request.server,
             port: request.port,
             resume: request.resume,
