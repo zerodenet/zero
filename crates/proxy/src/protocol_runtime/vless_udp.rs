@@ -20,18 +20,18 @@ use model::{
     VlessUdpUpstreamRequest,
 };
 
-type VlessResponseSender = broadcast::Sender<crate::transport::VlessUdpResponse>;
+type VlessResponseSender = broadcast::Sender<vless::VlessUdpFlowResponse>;
 
 fn upstream_from_stream(
     session_id: u64,
-    stream: crate::transport::VlessUdpFlowStream,
+    flow: vless::VlessUdpFlowHandle,
 ) -> (VlessUdpUpstream, VlessResponseSender) {
     (
         VlessUdpUpstream {
             session_id,
-            send_tx: stream.send_tx,
+            sender: flow.sender,
         },
-        stream.recv_tx,
+        flow.responses,
     )
 }
 
@@ -43,13 +43,8 @@ async fn establish_vless_udp_upstream_over_stream(
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<(VlessUdpUpstream, VlessResponseSender), EngineError> {
-    let (flow, initial_packet_len) = crate::transport::establish_vless_udp_flow_stream(
-        stream,
-        session,
-        identity,
-        initial_payload,
-    )
-    .await?;
+    let (flow, initial_packet_len) =
+        vless::open_udp_flow(stream, session, identity, initial_payload).await?;
     proxy.record_session_outbound_tx(session.id, initial_packet_len as u64);
     Ok(upstream_from_stream(session.id, flow))
 }
@@ -123,7 +118,7 @@ impl VlessUdpOutboundManager {
                 )
                 .await
             {
-                let packet = crate::transport::encode_vless_udp_flow_packet(
+                let packet = vless::encode_udp_flow_initial_packet(
                     &request.session.target,
                     request.session.port,
                     request.payload,
@@ -244,9 +239,7 @@ impl VlessUdpOutboundManager {
         };
 
         proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
-        let packet_len =
-            crate::transport::send_vless_udp_flow_packet(&upstream.send_tx, target, port, payload)
-                .await? as u64;
+        let packet_len = upstream.sender.send(target, port, payload).await? as u64;
         proxy.record_session_outbound_tx(upstream.session_id, packet_len);
         self.spawn_bridge(chain_tasks, target.clone(), port, upstream.session_id);
         Ok(Some(upstream.session_id))
@@ -295,13 +288,10 @@ impl VlessUdpOutboundManager {
                 upstream.session_id,
                 request.initial_payload.len() as u64,
             );
-            let packet_len = crate::transport::send_vless_udp_flow_packet(
-                &upstream.send_tx,
-                &request.target,
-                request.port,
-                request.initial_payload,
-            )
-            .await? as u64;
+            let packet_len = upstream
+                .sender
+                .send(&request.target, request.port, request.initial_payload)
+                .await? as u64;
             request
                 .proxy
                 .record_session_outbound_tx(upstream.session_id, packet_len);

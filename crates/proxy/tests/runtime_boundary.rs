@@ -2120,33 +2120,48 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     ] {
         assert!(
             !runtime.contains(forbidden) && !model.contains(forbidden),
-            "VLESS UDP runtime should delegate packet framing to protocols/vless helpers; found `{forbidden}`"
+            "VLESS UDP runtime should delegate flow IO and packet framing to protocols/vless helpers; found `{forbidden}`"
         );
     }
     assert!(
-        runtime.contains("establish_vless_udp_flow_stream")
-            && runtime.contains("send_vless_udp_flow_packet")
-            && runtime.contains("encode_vless_udp_flow_packet")
-            && runtime.contains("VlessUdpResponse")
-            && proxy_transport.contains("establish_vless_udp_flow_stream")
-            && proxy_transport.contains("send_vless_udp_flow_packet")
-            && proxy_transport.contains("encode_vless_udp_flow_packet"),
-        "VLESS UDP runtime should delegate flow IO and packet encoding to zero-transport"
+        runtime.contains("vless::open_udp_flow")
+            && runtime.contains("vless::encode_udp_flow_initial_packet")
+            && runtime.contains("vless::VlessUdpFlowResponse")
+            && model.contains("vless::VlessUdpFlowSender"),
+        "VLESS UDP runtime should use opaque protocol-owned flow handles"
     );
+    for forbidden in [
+        "VlessUdpFlowStream",
+        "VlessUdpResponse",
+        "VlessUdpFlowIo",
+        "establish_udp_flow_stream",
+        "mpsc::channel::<vless::VlessUdpFlowPacket>",
+        "broadcast::channel::<VlessUdpResponse>",
+        "tokio::spawn",
+        "encode_vless_udp_flow_packet",
+        "send_vless_udp_flow_packet",
+        "spawn_vless_udp_packet_flow",
+    ] {
+        assert!(
+            !transport.contains(forbidden) && !proxy_transport.contains(forbidden),
+            "zero-transport/proxy transport facade must not own VLESS UDP flow runtime; found `{forbidden}`"
+        );
+    }
     assert!(
-        model.contains("tokio::sync::mpsc::Sender<vless::VlessUdpFlowPacket>")
-            && transport.contains("pub struct VlessUdpFlowStream")
-            && transport.contains("pub type VlessUdpResponse")
-            && transport.contains("vless::VlessUdpFlowIo")
-            && transport.contains("vless::establish_udp_flow_stream")
-            && transport.contains("mpsc::channel::<vless::VlessUdpFlowPacket>")
-            && transport.contains("broadcast::channel::<VlessUdpResponse>")
-            && transport.contains("tokio::spawn")
+        protocol.contains("pub struct VlessUdpFlowHandle")
+            && protocol.contains("pub struct VlessUdpFlowSender")
+            && protocol.contains("pub type VlessUdpFlowResponse")
+            && protocol.contains("pub async fn open_udp_flow")
+            && protocol.contains("pub fn open_mux_udp_flow")
+            && protocol.contains("pub fn encode_udp_flow_initial_packet")
+            && protocol.contains("mpsc::channel::<VlessUdpFlowPacket>")
+            && protocol.contains("broadcast::channel::<VlessUdpFlowResponse>")
+            && protocol.contains("tokio::spawn")
             && protocol.contains("pub struct VlessUdpFlowIo")
             && protocol.contains("pub struct VlessUdpFlowPacket")
             && protocol.contains("pub fn encode_udp_flow_packet")
             && protocol.contains("pub fn decode_udp_flow_packet"),
-        "zero-transport should own VLESS UDP flow stream tasks while protocols/vless owns packet IO"
+        "protocols/vless should own VLESS UDP flow state, task loop, and packet IO"
     );
 }
 

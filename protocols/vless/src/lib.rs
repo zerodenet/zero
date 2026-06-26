@@ -56,3 +56,8 @@ pub use shared::{
     parse_udp_packet, parse_udp_packet_v2, parse_uuid, VlessInboundUdpCodec, VlessUdpFlowCodec,
     VlessUdpFlowIo, VlessUdpFlowPacket, VlessUdpPacket, VLESS_VERSION,
 };
+#[cfg(feature = "reality")]
+pub use shared::{
+    encode_udp_flow_initial_packet, open_mux_udp_flow, open_udp_flow, VlessUdpFlowHandle,
+    VlessUdpFlowResponse, VlessUdpFlowSender,
+};
