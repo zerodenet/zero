@@ -237,6 +237,17 @@ pub fn parse_udp_identity(id: &str) -> Result<VlessUdpIdentity, Error> {
     crate::shared::parse_uuid(id).map(|uuid| VlessUdpIdentity { uuid })
 }
 
+pub async fn establish_udp_flow_stream<S>(
+    stream: &mut S,
+    session: &Session,
+    identity: VlessUdpIdentity,
+) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    establish_udp_packet_tunnel(stream, session, &identity.uuid).await
+}
+
 impl<'a> UdpPacketTunnelProtocol<VlessUdpPacketTunnelTarget<'a>> for VlessOutbound {
     type Error = Error;
 

@@ -2043,6 +2043,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
 
     for forbidden in [
         "UdpPacketFraming",
+        "VlessUdpFlowCodec",
         "VlessUdpPacketTarget",
         "UdpPacketTunnelProtocol",
         "VlessUdpPacketTunnelTarget",
@@ -2050,8 +2051,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "decode_udp_packet",
         "vless::build_udp_packet",
         "vless::parse_udp_packet",
-        "vless::encode_udp_flow_packet",
-        "vless::decode_udp_flow_packet",
+        "vless::establish_udp_packet_tunnel",
     ] {
         assert!(
             !runtime.contains(forbidden),
@@ -2059,12 +2059,10 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         );
     }
     assert!(
-        runtime.contains("vless::VlessUdpFlowCodec"),
-        "VLESS UDP runtime should use the protocols/vless flow codec wrapper"
-    );
-    assert!(
-        runtime.contains("vless::establish_udp_packet_tunnel"),
-        "VLESS UDP runtime should call protocols/vless UDP tunnel helper"
+        runtime.contains("vless::encode_udp_flow_packet")
+            && runtime.contains("vless::decode_udp_flow_packet")
+            && runtime.contains("vless::establish_udp_flow_stream"),
+        "VLESS UDP runtime should call protocols/vless flow packet and tunnel helpers"
     );
 }
 
@@ -2164,6 +2162,7 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
 
     for forbidden in [
         "UdpPacketFraming",
+        "VmessUdpFlowCodec",
         "VmessUdpPacketTarget",
         "VmessAeadStream::establish_udp_outbound",
         "VmessOutbound",
@@ -2171,8 +2170,7 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "decode_udp_packet",
         "vmess::build_udp_packet",
         "vmess::parse_udp_packet",
-        "vmess::encode_udp_flow_packet",
-        "vmess::decode_udp_flow_packet",
+        "vmess::establish_udp_outbound_stream",
     ] {
         assert!(
             !runtime.contains(forbidden),
@@ -2180,12 +2178,10 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         );
     }
     assert!(
-        runtime.contains("vmess::VmessUdpFlowCodec"),
-        "VMess UDP runtime should use the protocols/vmess flow codec wrapper"
-    );
-    assert!(
-        runtime.contains("vmess::establish_udp_outbound_stream"),
-        "VMess UDP runtime should call protocols/vmess UDP stream helper"
+        runtime.contains("vmess::encode_udp_flow_packet")
+            && runtime.contains("vmess::decode_udp_flow_packet")
+            && runtime.contains("vmess::establish_udp_flow_stream"),
+        "VMess UDP runtime should call protocols/vmess flow packet and tunnel helpers"
     );
 }
 
