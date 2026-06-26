@@ -2018,8 +2018,8 @@ fn vless_udp_adapter_delegates_packet_framing_to_protocol_helpers() {
         "VLESS UDP adapter should not call low-level packet helpers directly"
     );
     assert!(
-        adapter.contains("vless::encode_udp_flow_packet"),
-        "VLESS UDP adapter should use flow-specific protocols/vless packet helper for mux fast path"
+        !adapter.contains("vless::encode_udp_flow_packet"),
+        "VLESS UDP adapter should leave mux fast-path packet framing to protocol_runtime/vless_udp"
     );
 }
 

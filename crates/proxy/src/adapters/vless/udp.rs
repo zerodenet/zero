@@ -57,42 +57,6 @@ impl VlessAdapter {
         let tag_owned = (*tag).to_string();
         let uuid = parse_vless_udp_uuid(id, "udp_vless_parse_uuid", Some((server, *port)))?;
 
-        let mux_flow_enabled =
-            *flow == Some("xtls-rprx-vision") || *flow == Some("xtls-rprx-vision-udp443");
-        if mux_flow_enabled {
-            let max_concurrency = 8u32;
-            if let Ok((_mux_sid, up_tx, _down_rx)) = proxy
-                .mux_pool
-                .open_udp_stream(
-                    crate::protocol_runtime::vless_mux_pool::model::VlessMuxOpenRequest {
-                        proxy,
-                        session: None,
-                        server,
-                        port: *port,
-                        id: &uuid,
-                        tls: *tls,
-                        reality: *reality,
-                        max_concurrency,
-                    },
-                )
-                .await
-            {
-                let packet =
-                    ::vless::encode_udp_flow_packet(&session.target, session.port, payload)
-                        .map_err(|error| FlowFailure {
-                            stage: "udp_vless_mux_encode",
-                            error: error.into(),
-                            upstream: Some(((*server).to_string(), *port)),
-                        })?;
-                let _ = up_tx.send(packet);
-                proxy.record_session_outbound_tx(session_id, payload.len() as u64);
-                return Ok(FlowStartResult::ManagedFlow {
-                    session_id,
-                    tag: tag_owned,
-                });
-            }
-        }
-
         dispatch
             .send_vless_datagram(VlessDatagramSend {
                 proxy,
