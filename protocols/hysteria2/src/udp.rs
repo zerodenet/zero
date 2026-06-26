@@ -4,6 +4,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use zero_core::{Address, Error};
+use zero_traits::DatagramCodec;
 
 /// One plaintext UDP payload to encode into a Hysteria2 UDP datagram.
 #[derive(Debug, Clone, Copy)]
@@ -140,4 +141,28 @@ pub fn udp_cache_key(
         .map(|value| alloc::format!("|fp:{value}"))
         .unwrap_or_default();
     alloc::format!("hysteria2|{tag}|{server}:{port}|{password}{fingerprint}")
+}
+
+/// Codec state for a Hysteria2 UDP datagram chain hop.
+///
+/// Hysteria2 UDP flow framing has no negotiated per-flow crypto state once the
+/// QUIC connection is established, so this codec is stateless.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Hysteria2DatagramCodec;
+
+pub fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
+    Hysteria2DatagramCodec
+}
+
+impl DatagramCodec<Address> for Hysteria2DatagramCodec {
+    type Error = Error;
+
+    fn encode(&self, target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Self::Error> {
+        encode_udp_flow_packet(target, port, payload)
+    }
+
+    fn decode(&self, data: &[u8]) -> Option<(Address, u16, Vec<u8>)> {
+        let decoded = decode_udp_flow_packet(data).ok()?;
+        Some((decoded.target, decoded.port, decoded.payload))
+    }
 }

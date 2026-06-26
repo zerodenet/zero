@@ -4,10 +4,11 @@
 //! `protocols/hysteria2/src/udp.rs`.
 
 use hysteria2::{
-    build_udp_datagram, parse_udp_datagram, Hysteria2Outbound, Hysteria2UdpPacketTarget,
+    build_udp_datagram, parse_udp_datagram, udp_flow_codec, Hysteria2Outbound,
+    Hysteria2UdpPacketTarget,
 };
 use zero_core::Address;
-use zero_traits::UdpDatagramFraming;
+use zero_traits::{DatagramCodec, UdpDatagramFraming};
 
 #[test]
 fn test_udp_datagram_roundtrip() {
@@ -58,4 +59,18 @@ fn udp_datagram_framing_trait_roundtrips_packet() {
     assert_eq!(decoded.target, target);
     assert_eq!(decoded.port, 8443);
     assert_eq!(decoded.payload, b"h2");
+}
+
+#[test]
+fn udp_flow_codec_roundtrips_payload() {
+    let codec = udp_flow_codec();
+    let target = Address::Domain("example.com".into());
+    let encoded = codec
+        .encode(&target, 443, b"packet-path")
+        .expect("encode hysteria2 udp flow packet");
+    let decoded = codec.decode(&encoded).expect("decode udp flow packet");
+
+    assert_eq!(decoded.0, target);
+    assert_eq!(decoded.1, 443);
+    assert_eq!(decoded.2, b"packet-path");
 }

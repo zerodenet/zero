@@ -3,6 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use zero_core::Address;
 use zero_engine::EngineError;
+use zero_traits::DatagramCodec;
 
 use crate::protocol_runtime::udp::PacketPathCarrier;
 
@@ -11,48 +12,45 @@ pub(crate) async fn build(
     port: u16,
     password: &str,
     client_fingerprint: Option<&str>,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 ) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
-    let path = Hysteria2PacketPath::establish(server, port, password, client_fingerprint).await?;
+    let path = QuicDatagramPacketPath::establish(server, port, password, client_fingerprint, codec)
+        .await?;
     Ok(Arc::new(path))
 }
 
-/// QUIC-backed packet path carrier for Hysteria2.
-pub(super) struct Hysteria2PacketPath {
+pub(super) struct QuicDatagramPacketPath {
     conn: Arc<quinn::Connection>,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 }
 
-impl Hysteria2PacketPath {
+impl QuicDatagramPacketPath {
     pub(super) async fn establish(
         server: &str,
         port: u16,
         password: &str,
         client_fingerprint: Option<&str>,
+        codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
     ) -> Result<Self, EngineError> {
         let connector = crate::transport::Hysteria2Connector::new(server, port, password)
             .with_fingerprint(client_fingerprint);
         let conn = Arc::new(connector.connect_raw().await?);
-        Ok(Self { conn })
-    }
-
-    fn encode(target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, EngineError> {
-        hysteria2::encode_udp_flow_packet(target, port, payload).map_err(EngineError::from)
-    }
-
-    fn decode(data: &[u8]) -> Result<Vec<u8>, EngineError> {
-        let pkt = hysteria2::decode_udp_flow_packet(data).map_err(EngineError::from)?;
-        Ok(pkt.payload)
+        Ok(Self { conn, codec })
     }
 }
 
 #[async_trait]
-impl PacketPathCarrier for Hysteria2PacketPath {
+impl PacketPathCarrier for QuicDatagramPacketPath {
     async fn send_to(
         &self,
         target: &Address,
         port: u16,
         payload: &[u8],
     ) -> Result<(), EngineError> {
-        let datagram = Self::encode(target, port, payload)?;
+        let datagram = self
+            .codec
+            .encode(target, port, payload)
+            .map_err(EngineError::from)?;
         self.conn.send_datagram(datagram.into()).map_err(|e| {
             EngineError::Io(std::io::Error::other(format!(
                 "hysteria2 carrier send: {e}"
@@ -67,7 +65,12 @@ impl PacketPathCarrier for Hysteria2PacketPath {
                 "hysteria2 carrier recv: {e}"
             )))
         })?;
-        let payload = Self::decode(&data)?;
+        let (_, _, payload) = self.codec.decode(&data).ok_or_else(|| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "failed to decode QUIC packet-path datagram",
+            ))
+        })?;
         let len = payload.len();
         if len > buf.len() {
             return Err(EngineError::Io(std::io::Error::new(

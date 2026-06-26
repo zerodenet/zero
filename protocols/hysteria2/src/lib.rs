@@ -23,5 +23,5 @@ pub use shared::{derive_salt, sign_hmac, verify_hmac};
 pub use udp::{
     build_udp_datagram, decode_inbound_udp_datagram, decode_udp_flow_packet,
     encode_inbound_udp_datagram, encode_udp_flow_packet, parse_udp_datagram, udp_cache_key,
-    Hysteria2UdpPacket, Hysteria2UdpPacketTarget,
+    udp_flow_codec, Hysteria2DatagramCodec, Hysteria2UdpPacket, Hysteria2UdpPacketTarget,
 };

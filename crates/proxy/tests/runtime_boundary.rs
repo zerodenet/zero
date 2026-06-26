@@ -5416,7 +5416,6 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
 fn h2_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/h2_manager.rs");
     let codec = read("src/protocol_runtime/udp/h2_manager/codec.rs");
-    let carrier = read("src/protocol_runtime/udp/packet_path_chain/carriers/hysteria2_carrier.rs");
 
     for forbidden in ["UdpDatagramFraming", "Hysteria2UdpPacketTarget"] {
         assert!(
@@ -5426,10 +5425,6 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         assert!(
             !codec.contains(forbidden),
             "h2_manager/codec.rs should delegate Hysteria2 datagram framing to protocols/hysteria2 helpers; found `{forbidden}`"
-        );
-        assert!(
-            !carrier.contains(forbidden),
-            "Hysteria2 packet-path carrier should delegate datagram framing to protocols/hysteria2 helpers; found `{forbidden}`"
         );
     }
     assert!(
@@ -5442,15 +5437,41 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && codec.contains("hysteria2::decode_udp_flow_packet"),
         "Hysteria2 UDP datagram codec should delegate encode/decode to flow-specific protocols/hysteria2 helpers"
     );
+}
+
+#[test]
+fn h2_packet_path_carrier_uses_protocol_built_codec() {
+    let adapter = read("src/adapters/hysteria2/udp.rs");
+    let carrier = read("src/protocol_runtime/udp/packet_path_chain/carriers/hysteria2_carrier.rs");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
+        .expect("read hysteria2 protocol udp source");
+
     assert!(
-        !carrier.contains("hysteria2::build_udp_datagram")
-            && !carrier.contains("hysteria2::parse_udp_datagram"),
-        "Hysteria2 packet-path carrier should use flow-specific helpers instead of generic datagram primitives"
+        adapter.contains("hysteria2::udp_flow_codec"),
+        "Hysteria2 adapter should request the protocol-built packet-path flow codec"
     );
     assert!(
-        carrier.contains("hysteria2::encode_udp_flow_packet")
-            && carrier.contains("hysteria2::decode_udp_flow_packet"),
-        "Hysteria2 packet-path carrier should delegate encode/decode to flow-specific protocols/hysteria2 helpers"
+        protocol_udp.contains("pub fn udp_flow_codec(")
+            && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec"),
+        "protocols/hysteria2 should own Hysteria2 UDP flow codec construction"
+    );
+    for forbidden in [
+        "hysteria2::build_udp_datagram",
+        "hysteria2::parse_udp_datagram",
+        "hysteria2::encode_udp_flow_packet",
+        "hysteria2::decode_udp_flow_packet",
+        "Hysteria2UdpPacketTarget",
+    ] {
+        assert!(
+            !carrier.contains(forbidden),
+            "Hysteria2 packet-path carrier should consume an adapter-provided codec instead of naming protocol framing; found `{forbidden}`"
+        );
+    }
+    assert!(
+        carrier.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
+            && carrier.contains(".codec")
+            && carrier.contains("connect_raw"),
+        "Hysteria2 packet-path carrier should keep QUIC carrier lifecycle while delegating datagram framing to the codec"
     );
 }
 
