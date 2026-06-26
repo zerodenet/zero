@@ -399,6 +399,27 @@ pub fn encode_udp_response(target: &Address, port: u16, payload: &[u8]) -> Resul
     build_udp_packet(target, port, payload)
 }
 
+pub fn decode_inbound_udp_datagram(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
+    decode_inbound_udp_packet(packet)
+}
+
+pub fn encode_inbound_udp_response(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    encode_udp_response(target, port, payload)
+}
+
+pub fn encode_inbound_mux_udp_response(
+    mux_session_id: u16,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    encode_mux_udp_response(mux_session_id, target, port, payload)
+}
+
 pub fn decode_udp_flow_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
     parse_udp_packet(packet)
 }

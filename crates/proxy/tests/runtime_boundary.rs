@@ -2438,10 +2438,20 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         );
     }
 
+    for forbidden in [
+        "vless::decode_inbound_udp_packet",
+        "vless::encode_udp_response",
+        "vless::encode_mux_udp_response",
+    ] {
+        assert!(
+            !helper.contains(forbidden),
+            "VLESS inbound helper should use inbound-specific protocol helpers; found `{forbidden}`"
+        );
+    }
     for required in [
-        "decode_inbound_udp_packet",
-        "encode_udp_response",
-        "encode_mux_udp_response",
+        "decode_inbound_udp_datagram",
+        "encode_inbound_udp_response",
+        "encode_inbound_mux_udp_response",
     ] {
         assert!(
             protocol_shared.contains(required) && helper.contains(&format!("vless::{required}")),
