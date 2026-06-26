@@ -9,6 +9,7 @@ mod context;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use carrier::{
     DatagramCodec, PacketPathCarrier, PacketPathCarrierDescriptor, PacketPathFlowBinding,
-    PacketPathFlowSnapshot, UdpDatagramDescriptor, UdpDatagramKey, UdpDatagramSource,
+    PacketPathFlowSnapshot, PacketPathLookupKey, UdpDatagramDescriptor, UdpDatagramKey,
+    UdpDatagramSource,
 };
 pub(crate) use context::{ChainTask, UdpFlowContext, UdpPacketRef};

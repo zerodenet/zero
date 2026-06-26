@@ -1,5 +1,5 @@
 use crate::protocol_runtime::udp::packet_path_traits::{
-    PacketPathCarrierDescriptor, UdpDatagramKey,
+    PacketPathCarrierDescriptor, PacketPathLookupKey, UdpDatagramKey,
 };
 
 /// Owned, hashable identity of one carrier+datagram packet-path connection.
@@ -14,19 +14,13 @@ pub(super) struct PathKey {
 }
 
 impl PathKey {
-    pub(super) fn from_snapshot(
-        carrier_cache_key: &str,
-        datagram_tag: &str,
-        datagram_server: &str,
-        datagram_port: u16,
-        datagram_cache_key: &str,
-    ) -> Self {
+    pub(super) fn from_lookup(lookup: PacketPathLookupKey) -> Self {
         Self {
-            carrier_key: carrier_cache_key.to_owned(),
-            datagram_tag: datagram_tag.to_owned(),
-            datagram_server: datagram_server.to_owned(),
-            datagram_port,
-            datagram_cache_key: datagram_cache_key.to_owned(),
+            carrier_key: lookup.carrier_cache_key,
+            datagram_tag: lookup.datagram.tag,
+            datagram_server: lookup.datagram.server,
+            datagram_port: lookup.datagram.port,
+            datagram_cache_key: lookup.datagram.cache_key,
         }
     }
 
@@ -34,12 +28,6 @@ impl PathKey {
         carrier: &PacketPathCarrierDescriptor,
         datagram: UdpDatagramKey,
     ) -> Self {
-        Self {
-            carrier_key: carrier.cache_key.clone(),
-            datagram_tag: datagram.tag,
-            datagram_server: datagram.server,
-            datagram_port: datagram.port,
-            datagram_cache_key: datagram.cache_key,
-        }
+        Self::from_lookup(PacketPathLookupKey::from_parts(carrier, datagram))
     }
 }

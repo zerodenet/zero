@@ -38,7 +38,7 @@ pub(crate) use packet_path_traits::ChainTask;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_traits::{
     PacketPathCarrier, PacketPathCarrierDescriptor, PacketPathFlowBinding, PacketPathFlowSnapshot,
-    UdpDatagramDescriptor, UdpDatagramSource,
+    PacketPathLookupKey, UdpDatagramDescriptor, UdpDatagramSource,
 };
 #[cfg(feature = "hysteria2")]
 pub(crate) use peer::H2UdpPeer;

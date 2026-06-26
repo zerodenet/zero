@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
+use super::packet_path_traits::{PacketPathLookupKey, UdpFlowContext, UdpPacketRef};
 use super::FlowFailure;
 use crate::runtime::Proxy;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
@@ -68,11 +68,7 @@ impl PacketPathManager {
         let entry = snapshot::lookup_entry(
             &self.upstreams,
             snapshot::SnapshotLookup {
-                carrier_cache_key: request.carrier_cache_key,
-                datagram_tag: request.datagram_tag,
-                datagram_server: request.datagram_server,
-                datagram_port: request.datagram_port,
-                datagram_cache_key: request.datagram_cache_key,
+                lookup_key: request.lookup_key,
             },
         )?;
         dispatch_via_entry(entry, request.ctx, request.packet_ref).await
@@ -101,10 +97,6 @@ impl PacketPathManager {
 
 pub(crate) struct SendWithSnapshotRequest<'a> {
     pub ctx: UdpFlowContext<'a>,
-    pub carrier_cache_key: &'a str,
-    pub datagram_tag: &'a str,
-    pub datagram_server: &'a str,
-    pub datagram_port: u16,
-    pub datagram_cache_key: &'a str,
+    pub lookup_key: PacketPathLookupKey,
     pub packet_ref: UdpPacketRef<'a>,
 }

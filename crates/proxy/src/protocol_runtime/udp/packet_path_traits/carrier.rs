@@ -71,11 +71,34 @@ impl UdpDatagramSource<'_> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct UdpDatagramKey {
     pub(crate) tag: String,
     pub(crate) server: String,
     pub(crate) port: u16,
     pub(crate) cache_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PacketPathLookupKey {
+    pub(crate) carrier_cache_key: String,
+    pub(crate) datagram: UdpDatagramKey,
+}
+
+impl PacketPathLookupKey {
+    pub(crate) fn from_parts(
+        carrier: &PacketPathCarrierDescriptor,
+        datagram: UdpDatagramKey,
+    ) -> Self {
+        Self {
+            carrier_cache_key: carrier.cache_key.clone(),
+            datagram,
+        }
+    }
+
+    pub(crate) fn datagram_endpoint(&self) -> (String, u16) {
+        (self.datagram.server.clone(), self.datagram.port)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +121,18 @@ impl PacketPathFlowSnapshot {
             datagram_server: datagram.server.to_owned(),
             datagram_port: datagram.port,
             datagram_cache_key: datagram.cache_key.clone(),
+        }
+    }
+
+    pub(crate) fn lookup_key(&self) -> PacketPathLookupKey {
+        PacketPathLookupKey {
+            carrier_cache_key: self.carrier_cache_key.clone(),
+            datagram: UdpDatagramKey {
+                tag: self.datagram_tag.clone(),
+                server: self.datagram_server.clone(),
+                port: self.datagram_port,
+                cache_key: self.datagram_cache_key.clone(),
+            },
         }
     }
 }

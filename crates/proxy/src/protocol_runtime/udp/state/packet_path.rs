@@ -56,11 +56,7 @@ impl ProtocolUdpState {
                     chain_tasks,
                     session_id: flow.session.id,
                 },
-                carrier_cache_key: &snapshot.carrier_cache_key,
-                datagram_tag: &snapshot.datagram_tag,
-                datagram_server: &snapshot.datagram_server,
-                datagram_port: snapshot.datagram_port,
-                datagram_cache_key: &snapshot.datagram_cache_key,
+                lookup_key: snapshot.lookup_key(),
                 packet_ref: UdpPacketRef {
                     target: &flow.session.target,
                     port: flow.session.port,

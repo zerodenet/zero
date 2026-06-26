@@ -5056,7 +5056,7 @@ fn packet_path_snapshot_lookup_lives_outside_chain_manager() {
     let snapshot = manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/snapshot.rs");
 
     for forbidden in [
-        "PathKey::from_snapshot",
+        "PathKey::from_lookup",
         "packet_path_carrier_dropped",
         "cached packet-path carrier not found",
     ] {
@@ -5070,9 +5070,10 @@ fn packet_path_snapshot_lookup_lives_outside_chain_manager() {
         "packet-path snapshot lookup should live in packet_path_chain/snapshot.rs"
     );
     assert!(
-        snapshot_content.contains("carrier_cache_key: &'a str")
+        snapshot_content.contains("lookup_key: PacketPathLookupKey")
+            && !snapshot_content.contains("PacketPathFlowSnapshot")
             && !snapshot_content.contains("UdpPacketPathCarrier"),
-        "packet-path snapshot lookup should use opaque carrier cache identity"
+        "packet-path snapshot lookup should receive a neutral packet-path lookup key"
     );
 }
 
@@ -5084,14 +5085,16 @@ fn packet_path_snapshot_send_uses_request_model() {
     assert!(
         manager.contains("struct SendWithSnapshotRequest")
             && manager.contains("request: SendWithSnapshotRequest<'_>")
-            && manager.contains("carrier_cache_key: &'a str"),
+            && manager.contains("lookup_key: PacketPathLookupKey"),
         "packet-path snapshot send should use a request model"
     );
     assert!(
         packet_path.contains("SendWithSnapshotRequest {")
-            && packet_path.contains("carrier_cache_key: &snapshot.carrier_cache_key")
+            && packet_path.contains("lookup_key: snapshot.lookup_key()")
+            && !packet_path.contains("carrier_cache_key: &snapshot.carrier_cache_key")
+            && !packet_path.contains("datagram_cache_key: &snapshot.datagram_cache_key")
             && packet_path.contains("pub(crate) async fn forward_existing_packet_path_flow"),
-        "packet-path snapshot forward path should pass SendWithSnapshotRequest with opaque carrier cache identity"
+        "packet-path snapshot forward path should convert snapshots into neutral lookup keys without unpacking cache fields"
     );
 }
 
