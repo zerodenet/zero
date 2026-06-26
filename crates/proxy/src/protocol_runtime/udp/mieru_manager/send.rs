@@ -15,14 +15,14 @@ impl MieruChainManager {
         &self,
         resume: &ProtocolUdpFlowResume,
     ) -> bool {
-        matches!(resume, ProtocolUdpFlowResume::Mieru(_))
+        resume.as_mieru().is_some()
     }
 
     pub(in crate::protocol_runtime::udp) fn supports_managed_relay_existing(
         &self,
         resume: &ProtocolUdpFlowResume,
     ) -> bool {
-        matches!(resume, ProtocolUdpFlowResume::Mieru(_))
+        resume.as_mieru().is_some()
     }
 
     async fn send(
@@ -179,7 +179,7 @@ impl MieruChainManager {
         &mut self,
         request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let ProtocolUdpFlowResume::Mieru(resume) = request.resume else {
+        let Some(resume) = request.resume.into_mieru() else {
             return Err(managed_mismatch(
                 "udp_mieru_resume",
                 request.server,
@@ -214,7 +214,7 @@ impl MieruChainManager {
         &mut self,
         request: ManagedRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let ProtocolUdpFlowResume::Mieru(resume) = request.resume else {
+        let Some(resume) = request.resume.into_mieru() else {
             return Err(managed_mismatch(
                 "udp_mieru_resume",
                 request.server,

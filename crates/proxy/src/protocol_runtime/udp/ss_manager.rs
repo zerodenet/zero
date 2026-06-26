@@ -29,7 +29,7 @@ impl SsChainManager {
         &self,
         resume: &ProtocolUdpFlowResume,
     ) -> bool {
-        matches!(resume, ProtocolUdpFlowResume::Shadowsocks(_))
+        resume.as_shadowsocks().is_some()
     }
 
     async fn send(
@@ -114,7 +114,7 @@ impl SsChainManager {
         &mut self,
         request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let ProtocolUdpFlowResume::Shadowsocks(resume) = request.resume else {
+        let Some(resume) = request.resume.into_shadowsocks() else {
             return Err(managed_mismatch(
                 "udp_shadowsocks_resume",
                 request.server,

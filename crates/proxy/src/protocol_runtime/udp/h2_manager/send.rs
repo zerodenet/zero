@@ -12,7 +12,7 @@ impl H2ChainManager {
         &self,
         resume: &ProtocolUdpFlowResume,
     ) -> bool {
-        matches!(resume, ProtocolUdpFlowResume::Hysteria2(_))
+        resume.as_hysteria2().is_some()
     }
 
     async fn send(
@@ -95,7 +95,7 @@ impl H2ChainManager {
         &mut self,
         request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let ProtocolUdpFlowResume::Hysteria2(resume) = request.resume else {
+        let Some(resume) = request.resume.into_hysteria2() else {
             return Err(managed_mismatch(
                 "udp_hysteria2_resume",
                 request.server,

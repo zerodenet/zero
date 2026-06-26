@@ -5160,7 +5160,7 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         normalized_forward.contains("self\n            .managed\n            .forward_existing_flow")
             && forward.contains("self.socks5.handles_resume(snapshot.resume())")
             && socks5_runtime.contains("fn handles_resume(&self, resume: &ProtocolUdpFlowResume)")
-            && socks5_runtime.contains("ProtocolUdpFlowResume::Socks5(_)")
+            && socks5_runtime.contains("resume.as_socks5().is_some()")
             && managed.contains("fn forward_existing_flow")
             && managed.contains("ManagedExistingSend")
             && managed.contains("send_managed_existing")
@@ -7627,6 +7627,29 @@ fn adapters_do_not_import_protocol_udp_types_through_runtime_dispatch() {
             assert!(
                 !content.contains(forbidden),
                 "{source} should import protocol UDP type directly from protocol_runtime, not `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
+fn protocol_udp_resume_variants_are_confined_to_flow_snapshot_model() {
+    for path in rust_sources_under("src") {
+        let source = relative(&path);
+        if source == "src/protocol_runtime/udp/flow_snapshot.rs" {
+            continue;
+        }
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in [
+            "ProtocolUdpFlowResume::Socks5",
+            "ProtocolUdpFlowResume::Shadowsocks",
+            "ProtocolUdpFlowResume::Hysteria2",
+            "ProtocolUdpFlowResume::Trojan",
+            "ProtocolUdpFlowResume::Mieru",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should use ProtocolUdpFlowResume constructors/accessors instead of matching variant `{forbidden}`"
             );
         }
     }

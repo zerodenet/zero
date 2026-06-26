@@ -17,14 +17,14 @@ impl TrojanChainManager {
         &self,
         resume: &ProtocolUdpFlowResume,
     ) -> bool {
-        matches!(resume, ProtocolUdpFlowResume::Trojan(_))
+        resume.as_trojan().is_some()
     }
 
     pub(in crate::protocol_runtime::udp) fn supports_managed_relay_existing(
         &self,
         resume: &ProtocolUdpFlowResume,
     ) -> bool {
-        matches!(resume, ProtocolUdpFlowResume::Trojan(_))
+        resume.as_trojan().is_some()
     }
 
     async fn send(
@@ -184,7 +184,7 @@ impl TrojanChainManager {
         &mut self,
         request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let ProtocolUdpFlowResume::Trojan(resume) = request.resume else {
+        let Some(resume) = request.resume.into_trojan() else {
             return Err(managed_mismatch(
                 "udp_trojan_resume",
                 request.server,
@@ -219,7 +219,7 @@ impl TrojanChainManager {
         &mut self,
         request: ManagedRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let ProtocolUdpFlowResume::Trojan(resume) = request.resume else {
+        let Some(resume) = request.resume.into_trojan() else {
             return Err(managed_mismatch(
                 "udp_trojan_resume",
                 request.server,
