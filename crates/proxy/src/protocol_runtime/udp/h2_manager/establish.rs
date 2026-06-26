@@ -1,5 +1,6 @@
-use super::super::packet_path_traits::{H2UdpPeer, UdpPacketRef};
+use super::super::packet_path_traits::UdpPacketRef;
 use super::super::ChainTask;
+use super::super::H2UdpPeer;
 use super::{bridge, stream};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;

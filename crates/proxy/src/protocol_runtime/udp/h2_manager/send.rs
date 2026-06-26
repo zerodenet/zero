@@ -1,5 +1,6 @@
-use super::super::packet_path_traits::{H2UdpPeer, UdpFlowContext, UdpPacketRef, UdpPeerEndpoint};
+use super::super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use super::super::FlowFailure;
+use super::super::{H2UdpPeer, UdpPeerEndpoint};
 use super::model::{H2Entry, H2Key, H2SendExisting};
 use super::{codec, establish, H2ChainManager};
 

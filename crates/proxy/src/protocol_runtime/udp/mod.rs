@@ -14,6 +14,7 @@ mod mieru_manager;
 #[cfg(feature = "shadowsocks")]
 pub(crate) mod packet_path_chain;
 pub(crate) mod packet_path_snapshot;
+mod peer;
 #[cfg(feature = "shadowsocks")]
 mod ss_manager;
 mod start;
@@ -39,6 +40,15 @@ pub(crate) use packet_path_traits::{
     PacketPathCarrier, PacketPathCarrierDescriptor, PacketPathFlowBinding, PacketPathFlowSnapshot,
     UdpDatagramDescriptor, UdpDatagramSource,
 };
+#[cfg(feature = "hysteria2")]
+pub(crate) use peer::H2UdpPeer;
+#[cfg(feature = "mieru")]
+pub(crate) use peer::MieruUdpPeer;
+#[cfg(feature = "shadowsocks")]
+pub(crate) use peer::SsUdpPeer;
+#[cfg(feature = "trojan")]
+pub(crate) use peer::TrojanUdpPeer;
+pub(crate) use peer::UdpPeerEndpoint;
 #[cfg(feature = "hysteria2")]
 pub(crate) use start::Hysteria2UdpFlowRequest;
 #[cfg(feature = "mieru")]

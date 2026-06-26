@@ -4,7 +4,8 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use zero_engine::EngineError;
 
-use super::super::packet_path_traits::{H2UdpPeer, UdpPacketRef};
+use super::super::packet_path_traits::UdpPacketRef;
+use super::super::H2UdpPeer;
 
 pub(super) struct PacketStream {
     pub(super) send_tx: mpsc::Sender<Vec<u8>>,

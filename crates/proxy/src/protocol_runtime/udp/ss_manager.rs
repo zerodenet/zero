@@ -3,8 +3,9 @@ use std::sync::Arc;
 
 use zero_engine::EngineError;
 
-use super::packet_path_traits::{SsUdpPeer, UdpFlowContext, UdpPacketRef, UdpPeerEndpoint};
+use super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use super::FlowFailure;
+use super::{SsUdpPeer, UdpPeerEndpoint};
 use crate::runtime::Proxy;
 
 mod bridge;

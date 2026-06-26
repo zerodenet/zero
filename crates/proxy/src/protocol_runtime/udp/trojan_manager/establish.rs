@@ -1,4 +1,4 @@
-use super::super::packet_path_traits::TrojanUdpPeer;
+use super::super::TrojanUdpPeer;
 use super::connect;
 use super::model::{TrojanEntry, TrojanPacket};
 use super::stream;

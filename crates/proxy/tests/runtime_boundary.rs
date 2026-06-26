@@ -4733,6 +4733,7 @@ fn packet_path_traits_are_grouped_by_responsibility() {
     let facade = read("src/protocol_runtime/udp/packet_path_traits.rs");
     let carrier = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
     let root = manifest_dir().join("src/protocol_runtime/udp/packet_path_traits");
+    let peer = manifest_dir().join("src/protocol_runtime/udp/peer.rs");
 
     for forbidden in [
         "trait PacketPathCarrier",
@@ -4745,18 +4746,24 @@ fn packet_path_traits_are_grouped_by_responsibility() {
         "struct H2UdpPeer",
         "struct TrojanUdpPeer",
         "struct MieruUdpPeer",
+        "mod peer",
+        "peer::",
     ] {
         assert!(
             !facade.contains(forbidden),
             "packet_path_traits.rs should stay a facade and keep grouped definitions in packet_path_traits/*.rs; found `{forbidden}`"
         );
     }
-    for path in ["carrier.rs", "context.rs", "peer.rs"] {
+    for path in ["carrier.rs", "context.rs"] {
         assert!(
             root.join(path).exists(),
             "packet-path trait/helper definitions should keep grouped module packet_path_traits/{path}"
         );
     }
+    assert!(
+        peer.exists() && !root.join("peer.rs").exists(),
+        "protocol UDP peer models should live outside packet_path_traits"
+    );
     assert!(
         !carrier.contains("ProtocolAdapter::"),
         "packet-path trait docs should not describe packet-path products as monolithic ProtocolAdapter outputs"
@@ -5714,7 +5721,7 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
 fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let flows = read("src/protocol_runtime/udp/flows.rs");
-    let peer = read("src/protocol_runtime/udp/packet_path_traits/peer.rs");
+    let peer = read("src/protocol_runtime/udp/peer.rs");
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
     let model = read("src/protocol_runtime/udp/ss_manager/model.rs");
 

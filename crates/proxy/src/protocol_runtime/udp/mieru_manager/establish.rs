@@ -1,4 +1,4 @@
-use super::super::packet_path_traits::MieruUdpPeer;
+use super::super::MieruUdpPeer;
 use super::connect;
 use super::model::MieruEntry;
 use super::stream;

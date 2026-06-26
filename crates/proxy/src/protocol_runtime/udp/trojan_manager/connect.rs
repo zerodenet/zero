@@ -1,4 +1,4 @@
-use super::super::packet_path_traits::TrojanUdpPeer;
+use super::super::TrojanUdpPeer;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use zero_config::ClientTlsConfig;

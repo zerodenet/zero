@@ -1,5 +1,5 @@
-use super::super::packet_path_traits::H2UdpPeer;
 use super::super::ChainTask;
+use super::super::H2UdpPeer;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use zero_core::Address;
