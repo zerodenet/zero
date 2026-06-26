@@ -158,6 +158,18 @@ pub fn encode_udp_response(
     }
 }
 
+pub fn encode_udp_flow_packet(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    build_udp_packet(target, port, payload)
+}
+
+pub fn decode_udp_flow_packet(packet: &[u8]) -> Result<VmessUdpPacket, Error> {
+    parse_udp_packet(packet)
+}
+
 pub fn encode_mux_udp_response(
     mux_session_id: u16,
     mode: VmessUdpPayloadMode,
