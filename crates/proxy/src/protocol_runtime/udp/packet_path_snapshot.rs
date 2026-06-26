@@ -89,9 +89,7 @@ pub(crate) fn shadowsocks_packet_path_carrier_descriptor(
     password: &str,
 ) -> crate::protocol_runtime::udp::PacketPathCarrierDescriptor {
     crate::protocol_runtime::udp::PacketPathCarrierDescriptor {
-        cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
-            tag, server, port, cipher, password,
-        ),
+        cache_key: shadowsocks::udp_cache_key(tag, server, port, cipher, password),
         server: server.to_owned(),
         port,
     }
@@ -106,9 +104,7 @@ pub(crate) fn shadowsocks_packet_path_carrier_snapshot(
     password: &str,
 ) -> UdpPacketPathCarrier {
     UdpPacketPathCarrier::Shadowsocks {
-        cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
-            tag, server, port, cipher, password,
-        ),
+        cache_key: shadowsocks::udp_cache_key(tag, server, port, cipher, password),
         tag: tag.to_owned(),
         server: server.to_owned(),
         port,
@@ -125,9 +121,7 @@ pub(crate) fn shadowsocks_udp_datagram_source<'a>(
     password: &'a str,
     cipher_kind: shadowsocks::CipherKind,
 ) -> crate::protocol_runtime::udp::UdpDatagramSource<'a> {
-    let datagram_cache_key = crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
-        tag, server, port, cipher, password,
-    );
+    let datagram_cache_key = shadowsocks::udp_cache_key(tag, server, port, cipher, password);
     crate::protocol_runtime::udp::UdpDatagramSource {
         tag,
         server,

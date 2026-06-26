@@ -5679,7 +5679,13 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
 #[test]
 fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
-    let cache_key = read("src/protocol_runtime/udp/cache_key.rs");
+    let protocol_outbound = manifest_dir()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root")
+        .join("protocols/shadowsocks/src/outbound.rs");
+    let protocol_outbound =
+        fs::read_to_string(protocol_outbound).expect("read shadowsocks protocol outbound source");
     let carrier = read("src/protocol_runtime/udp/packet_path_chain/carriers.rs");
     let shadowsocks_carrier =
         read("src/protocol_runtime/udp/packet_path_chain/carriers/shadowsocks_carrier.rs");
@@ -5731,12 +5737,12 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         "UdpDatagramSource should carry cache identity, protocol snapshot, and adapter-provided packet-path datagram codec instead of protocol-private fields"
     );
     assert!(
-        adapter.contains("shadowsocks_udp_cache_key"),
-        "Shadowsocks adapter should provide an opaque datagram cache key through protocol_runtime"
+        adapter.contains("shadowsocks::udp_cache_key"),
+        "Shadowsocks adapter should provide an opaque datagram cache key through protocols/shadowsocks"
     );
     assert!(
-        cache_key.contains("fn shadowsocks("),
-        "protocol_runtime::udp cache_key module should own Shadowsocks cache identity construction"
+        protocol_outbound.contains("fn udp_cache_key("),
+        "protocols/shadowsocks should own Shadowsocks cache identity construction"
     );
     for source in [
         &traits,
@@ -5768,25 +5774,22 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         for forbidden in ["socks5|", "shadowsocks|", "hysteria2|", "|auth:", "|fp:"] {
             assert!(
                 !content.contains(forbidden),
-                "{source} should ask protocol_runtime::udp for packet-path cache identity instead of formatting `{forbidden}`"
+                "{source} should ask the owning protocol/runtime helper for packet-path cache identity instead of formatting `{forbidden}`"
             );
         }
     }
 
     let cache_key = read("src/protocol_runtime/udp/cache_key.rs");
-    for required in [
-        "fn socks5(",
-        "fn shadowsocks(",
-        "fn hysteria2(",
-        "socks5|",
-        "shadowsocks|",
-        "hysteria2|",
-    ] {
+    for required in ["fn socks5(", "fn hysteria2(", "socks5|", "hysteria2|"] {
         assert!(
             cache_key.contains(required),
             "protocol_runtime::udp cache_key module should own `{required}`"
         );
     }
+    assert!(
+        !cache_key.contains("fn shadowsocks(") && !cache_key.contains("shadowsocks|"),
+        "Shadowsocks cache identity should live in protocols/shadowsocks"
+    );
 }
 
 #[test]

@@ -163,7 +163,7 @@ impl ShadowsocksAdapter {
                 server,
                 port: *port,
                 password,
-                datagram_cache_key: crate::protocol_runtime::udp::shadowsocks_udp_cache_key(
+                datagram_cache_key: shadowsocks::udp_cache_key(
                     tag, server, *port, cipher, password,
                 ),
                 cipher: cipher_kind,

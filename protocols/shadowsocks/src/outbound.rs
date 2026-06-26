@@ -343,6 +343,11 @@ pub fn decode_udp_flow_packet(
     decode_udp_datagram(datagram, cipher, password)
 }
 
+#[cfg(feature = "crypto")]
+pub fn udp_cache_key(tag: &str, server: &str, port: u16, cipher: &str, password: &str) -> String {
+    alloc::format!("shadowsocks|{tag}|{server}:{port}|{cipher}|{password}")
+}
+
 /// Codec state for a Shadowsocks UDP datagram chain hop.
 ///
 /// Captures the cipher and password needed to encode/decode Shadowsocks

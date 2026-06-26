@@ -5,16 +5,6 @@ pub(crate) fn socks5(tag: &str, server: &str, port: u16, username: Option<&str>)
     format!("socks5|{tag}|{server}:{port}{auth}")
 }
 
-pub(crate) fn shadowsocks(
-    tag: &str,
-    server: &str,
-    port: u16,
-    cipher: &str,
-    password: &str,
-) -> String {
-    format!("shadowsocks|{tag}|{server}:{port}|{cipher}|{password}")
-}
-
 pub(crate) fn hysteria2(
     tag: &str,
     server: &str,
