@@ -1,4 +1,3 @@
-use tokio::sync::mpsc;
 use zero_config::SplitHttpConfig;
 use zero_core::{Address, Session};
 
@@ -8,7 +7,7 @@ use crate::runtime::Proxy;
 #[derive(Clone)]
 pub(super) struct VlessUdpUpstream {
     pub(super) session_id: u64,
-    pub(super) send_tx: mpsc::Sender<vless::VlessUdpFlowPacket>,
+    pub(super) send_tx: tokio::sync::mpsc::Sender<vless::VlessUdpFlowPacket>,
 }
 
 pub(crate) struct VlessUdpStartFlow<'a> {

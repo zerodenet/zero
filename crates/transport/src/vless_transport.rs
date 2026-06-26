@@ -6,10 +6,13 @@
 
 use std::path::Path;
 
+use tokio::io::AsyncReadExt;
+use tokio::sync::{broadcast, mpsc};
 use zero_config::{
     ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, QuicConfig, RealityConfig,
     SplitHttpConfig, WebSocketConfig,
 };
+use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::{RelayCarrier, TcpRelayStream, TokioSocket};
 
@@ -77,6 +80,133 @@ pub struct VlessUdpOutboundTransportRequest<'a> {
     pub options: VlessUdpTransportOptions<'a>,
     pub server: &'a str,
     pub port: u16,
+}
+
+pub type VlessUdpResponse = (Address, u16, Vec<u8>);
+
+pub struct VlessUdpFlowStream {
+    pub send_tx: mpsc::Sender<vless::VlessUdpFlowPacket>,
+    pub recv_tx: broadcast::Sender<VlessUdpResponse>,
+}
+
+pub async fn establish_vless_udp_flow_stream(
+    mut stream: TcpRelayStream,
+    session: &Session,
+    identity: vless::VlessUdpIdentity,
+    initial_payload: &[u8],
+) -> Result<(VlessUdpFlowStream, usize), EngineError> {
+    let flow_io = vless::VlessUdpFlowIo;
+    vless::establish_udp_flow_stream(&mut stream, session, identity).await?;
+    let initial_packet_len = flow_io
+        .write_packet(&mut stream, &session.target, session.port, initial_payload)
+        .await?;
+
+    let (send_tx, send_rx) = mpsc::channel::<vless::VlessUdpFlowPacket>(32);
+    let (recv_tx, _) = broadcast::channel::<VlessUdpResponse>(32);
+    spawn_vless_udp_flow_task(stream, send_rx, recv_tx.clone());
+
+    Ok((VlessUdpFlowStream { send_tx, recv_tx }, initial_packet_len))
+}
+
+pub fn spawn_vless_udp_packet_flow(
+    stream: TcpRelayStream,
+    initial_packet: Vec<u8>,
+) -> VlessUdpFlowStream {
+    let (send_tx, send_rx) = mpsc::channel::<vless::VlessUdpFlowPacket>(32);
+    let (recv_tx, _) = broadcast::channel::<VlessUdpResponse>(32);
+    spawn_vless_udp_mux_flow_task(stream, initial_packet, send_rx, recv_tx.clone());
+    VlessUdpFlowStream { send_tx, recv_tx }
+}
+
+pub fn vless_udp_flow_packet_len(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<usize, EngineError> {
+    Ok(encode_vless_udp_flow_packet(target, port, payload)?.len())
+}
+
+pub fn encode_vless_udp_flow_packet(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, EngineError> {
+    Ok(vless::VlessUdpFlowIo.encode_packet(target, port, payload)?)
+}
+
+pub async fn send_vless_udp_flow_packet(
+    send_tx: &mpsc::Sender<vless::VlessUdpFlowPacket>,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<usize, EngineError> {
+    let packet = vless::VlessUdpFlowPacket::new(target.clone(), port, payload.to_vec());
+    let packet_len = packet.encode()?.len();
+    let _ = send_tx.send(packet).await;
+    Ok(packet_len)
+}
+
+fn spawn_vless_udp_flow_task(
+    mut stream: TcpRelayStream,
+    mut send_rx: mpsc::Receiver<vless::VlessUdpFlowPacket>,
+    recv_tx: broadcast::Sender<VlessUdpResponse>,
+) {
+    tokio::spawn(async move {
+        let flow_io = vless::VlessUdpFlowIo;
+        let mut buffer = vec![0_u8; 64 * 1024];
+        loop {
+            tokio::select! {
+                to_send = send_rx.recv() => {
+                    match to_send {
+                        Some(packet) => {
+                            let (target, port, payload) = packet.into_parts();
+                            if flow_io.write_packet(&mut stream, &target, port, &payload).await.is_err() {
+                                break;
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                read = stream.read(&mut buffer) => {
+                    match read {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            match flow_io.decode_packet(&buffer[..n]) {
+                                Ok(packet) => {
+                                    if recv_tx.send(packet.into_parts()).is_err() {
+                                        break;
+                                    }
+                                }
+                                Err(error) => {
+                                    tracing::debug!(error = %error, "failed to decode VLESS UDP packet");
+                                    break;
+                                }
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+    });
+}
+
+fn spawn_vless_udp_mux_flow_task(
+    mut stream: TcpRelayStream,
+    initial_packet: Vec<u8>,
+    send_rx: mpsc::Receiver<vless::VlessUdpFlowPacket>,
+    recv_tx: broadcast::Sender<VlessUdpResponse>,
+) {
+    tokio::spawn(async move {
+        use tokio::io::AsyncWriteExt;
+        if stream.write_all(&initial_packet).await.is_err() {
+            return;
+        }
+        if stream.flush().await.is_err() {
+            return;
+        }
+        spawn_vless_udp_flow_task(stream, send_rx, recv_tx);
+    });
 }
 
 /// Wrap a raw TCP socket with the configured VLESS transport layer.

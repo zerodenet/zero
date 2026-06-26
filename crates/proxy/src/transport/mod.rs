@@ -55,9 +55,10 @@ pub(crate) use zero_transport::trojan_transport::{
 pub(crate) use zero_transport::vless_transport::build_vless_split_http_over_relay;
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::vless_transport::{
-    build_vless_outbound_transport_over_stream, VlessFinalHopTransportRequest,
-    VlessTransportConnector, VlessTransportOptions, VlessUdpTransportConnector,
-    VlessUdpTransportOptions,
+    build_vless_outbound_transport_over_stream, encode_vless_udp_flow_packet,
+    establish_vless_udp_flow_stream, send_vless_udp_flow_packet, VlessFinalHopTransportRequest,
+    VlessTransportConnector, VlessTransportOptions, VlessUdpFlowStream, VlessUdpResponse,
+    VlessUdpTransportConnector, VlessUdpTransportOptions,
 };
 #[cfg(feature = "vmess")]
 pub(crate) use zero_transport::vmess_transport::{
