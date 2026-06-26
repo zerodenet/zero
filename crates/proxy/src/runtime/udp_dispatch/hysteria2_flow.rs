@@ -19,14 +19,17 @@ impl UdpDispatch {
         request: Hysteria2DatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
         self.protocol_state
-            .start_hysteria2_udp_flow(crate::protocol_runtime::udp::Hysteria2UdpFlowRequest {
-                chain_tasks: &mut self.chain_tasks,
-                session: request.session,
-                server: request.server,
-                port: request.port,
-                resume: request.resume,
-                payload: request.payload,
-            })
+            .start_managed_datagram_flow(
+                &mut self.chain_tasks,
+                crate::protocol_runtime::udp::ManagedDatagramFlow {
+                    proxy: None,
+                    session: request.session,
+                    server: request.server,
+                    port: request.port,
+                    resume: request.resume,
+                    payload: request.payload,
+                },
+            )
             .await
     }
 

@@ -3220,13 +3220,13 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
         let content = fs::read_to_string(&path).expect("read rust source");
         let allowed_facade = match source.as_str() {
             "src/runtime/udp_dispatch/hysteria2_flow.rs" => {
-                Some(("Hysteria2DatagramSend", "start_hysteria2_udp_flow"))
+                Some(("Hysteria2DatagramSend", "start_managed_datagram_flow"))
             }
             "src/runtime/udp_dispatch/mieru_flow.rs" => {
                 Some(("MieruDatagramSend", "start_mieru_udp_flow"))
             }
             "src/runtime/udp_dispatch/shadowsocks_flow.rs" => {
-                Some(("ShadowsocksDatagramSend", "start_shadowsocks_udp_flow"))
+                Some(("ShadowsocksDatagramSend", "start_managed_datagram_flow"))
             }
             "src/runtime/udp_dispatch/trojan_flow.rs" => {
                 Some(("TrojanDatagramSend", "start_trojan_udp_flow"))
@@ -3254,6 +3254,7 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
             "VlessUdpRelayTwoStream",
             "VmessUdpFlow",
             "VmessUdpRelayFlow",
+            "start_hysteria2_udp_flow",
             "start_shadowsocks_udp_flow",
             "Hysteria2UdpFlowRequest",
             "TrojanUdpFlowRequest",
@@ -6571,7 +6572,7 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
         (
             "src/runtime/udp_dispatch/hysteria2_flow.rs",
             "Hysteria2DatagramSend",
-            "start_hysteria2_udp_flow",
+            "start_managed_datagram_flow",
             "start_hysteria2_datagram_flow",
         ),
         (
@@ -6583,7 +6584,7 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
         (
             "src/runtime/udp_dispatch/shadowsocks_flow.rs",
             "ShadowsocksDatagramSend",
-            "start_shadowsocks_udp_flow",
+            "start_managed_datagram_flow",
             "start_shadowsocks_datagram_flow",
         ),
         (

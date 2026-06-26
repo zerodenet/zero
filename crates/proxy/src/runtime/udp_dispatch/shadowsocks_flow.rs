@@ -20,10 +20,10 @@ impl UdpDispatch {
         request: ShadowsocksDatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
         self.protocol_state
-            .start_shadowsocks_udp_flow(
+            .start_managed_datagram_flow(
                 &mut self.chain_tasks,
-                crate::protocol_runtime::udp::ShadowsocksUdpFlow {
-                    proxy: request.proxy,
+                crate::protocol_runtime::udp::ManagedDatagramFlow {
+                    proxy: Some(request.proxy),
                     session: request.session,
                     server: request.server,
                     port: request.port,

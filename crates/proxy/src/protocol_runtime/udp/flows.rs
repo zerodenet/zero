@@ -3,9 +3,8 @@ use zero_core::Session;
 
 use super::ProtocolUdpFlowResume;
 
-#[cfg(feature = "shadowsocks")]
-pub(crate) struct ShadowsocksUdpFlow<'a> {
-    pub(crate) proxy: &'a Proxy,
+pub(crate) struct ManagedDatagramFlow<'a> {
+    pub(crate) proxy: Option<&'a Proxy>,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
