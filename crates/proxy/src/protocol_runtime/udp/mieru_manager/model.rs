@@ -2,9 +2,8 @@ use super::super::ChainTask;
 use super::bridge;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
-use tokio::sync::mpsc;
 use tokio::task::JoinSet;
-use zero_core::{Address, Session, UdpFlowPacket};
+use zero_core::{Address, Session};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) enum MieruKey {
@@ -22,7 +21,7 @@ impl MieruKey {
 }
 
 pub(super) struct MieruEntry {
-    pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
+    pub(super) sender: mieru::MieruUdpFlowSender,
     pub(super) recv_tx: bridge::ResponseSender,
 }
 

@@ -11,8 +11,6 @@ mod establish;
 pub(super) mod model;
 #[cfg(feature = "mieru")]
 mod send;
-#[cfg(feature = "mieru")]
-mod stream;
 
 #[cfg(feature = "mieru")]
 use model::{MieruEntry, MieruKey};

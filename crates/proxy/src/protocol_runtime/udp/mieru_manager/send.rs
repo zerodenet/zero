@@ -8,7 +8,6 @@ use crate::protocol_runtime::udp::FlowFailure;
 use crate::protocol_runtime::udp::{MieruUdpPeer, UdpPeerEndpoint};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
-use zero_core::UdpFlowPacket;
 
 impl MieruChainManager {
     async fn send(
@@ -25,7 +24,17 @@ impl MieruChainManager {
 
         if let Some(entry) = self.upstreams.get(&key) {
             bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
-            let _ = entry.send_tx.send(packet(packet_ref)).await;
+            entry
+                .sender
+                .send(packet_ref.target, packet_ref.port, packet_ref.payload)
+                .await
+                .map_err(|error| FlowFailure {
+                    stage: "mieru_send",
+                    error: EngineError::Io(std::io::Error::other(format!(
+                        "mieru udp send: {error}"
+                    ))),
+                    upstream: Some(peer.endpoint.upstream()),
+                })?;
             return Ok(sent);
         }
 
@@ -49,10 +58,17 @@ impl MieruChainManager {
             })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
-        let send_tx = entry.send_tx.clone();
+        let sender = entry.sender.clone();
         self.upstreams.insert(key, entry);
 
-        let _ = send_tx.send(packet(packet_ref)).await;
+        sender
+            .send(packet_ref.target, packet_ref.port, packet_ref.payload)
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "mieru_send",
+                error: EngineError::Io(std::io::Error::other(format!("mieru udp send: {error}"))),
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
         Ok(sent)
     }
 
@@ -102,11 +118,18 @@ impl MieruChainManager {
             })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
-        let send_tx = entry.send_tx.clone();
+        let sender = entry.sender.clone();
         self.upstreams.insert(key, entry);
 
         let sent = packet_ref.payload.len();
-        let _ = send_tx.send(packet(packet_ref)).await;
+        sender
+            .send(packet_ref.target, packet_ref.port, packet_ref.payload)
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "mieru_relay_send",
+                error: EngineError::Io(std::io::Error::other(format!("mieru udp send: {error}"))),
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
         Ok(sent)
     }
 
@@ -136,8 +159,4 @@ impl MieruChainManager {
         )
         .await
     }
-}
-
-fn packet(packet_ref: UdpPacketRef<'_>) -> UdpFlowPacket {
-    UdpFlowPacket::from_parts(packet_ref.target, packet_ref.port, packet_ref.payload)
 }

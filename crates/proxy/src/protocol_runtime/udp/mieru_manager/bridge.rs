@@ -1,13 +1,10 @@
 use tokio::sync::broadcast;
 use tokio::task::JoinSet;
-use zero_core::Address;
 use zero_engine::EngineError;
 
 use super::super::ChainTask;
 
-type RecvItem = (Address, u16, Vec<u8>);
-
-pub(super) type ResponseSender = broadcast::Sender<RecvItem>;
+pub(super) type ResponseSender = broadcast::Sender<mieru::MieruUdpFlowResponse>;
 
 pub(super) fn spawn_response_bridge(
     chain_tasks: &mut JoinSet<ChainTask>,
