@@ -381,6 +381,37 @@ pub fn udp_flow_codec(
 }
 
 #[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksUdpFlowResume {
+    cache_key: alloc::string::String,
+    cipher: super::shared::CipherKind,
+    password: alloc::vec::Vec<u8>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpFlowResume {
+    pub fn new(
+        cache_key: alloc::string::String,
+        cipher: super::shared::CipherKind,
+        password: &[u8],
+    ) -> Self {
+        Self {
+            cache_key,
+            cipher,
+            password: password.to_vec(),
+        }
+    }
+
+    pub fn cache_key(&self) -> &str {
+        &self.cache_key
+    }
+
+    pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        udp_flow_codec(self.cipher, &self.password)
+    }
+}
+
+#[cfg(feature = "crypto")]
 impl DatagramCodec<Address> for ShadowsocksDatagramCodec {
     type Error = Error;
 

@@ -135,6 +135,7 @@ impl ShadowsocksAdapter {
             "udp_shadowsocks_parse_cipher",
             Some((server, *port)),
         )?;
+        let cache_key = shadowsocks::udp_cache_key(tag, server, *port, cipher, password);
         dispatch
             .start_shadowsocks_datagram_flow(ShadowsocksDatagramSend {
                 proxy,
@@ -142,11 +143,11 @@ impl ShadowsocksAdapter {
                 session,
                 server,
                 port: *port,
-                password,
-                datagram_cache_key: shadowsocks::udp_cache_key(
-                    tag, server, *port, cipher, password,
+                resume: shadowsocks::ShadowsocksUdpFlowResume::new(
+                    cache_key,
+                    cipher_kind,
+                    password.as_bytes(),
                 ),
-                cipher: cipher_kind,
                 codec: Arc::new(shadowsocks::udp_flow_codec(
                     cipher_kind,
                     password.as_bytes(),

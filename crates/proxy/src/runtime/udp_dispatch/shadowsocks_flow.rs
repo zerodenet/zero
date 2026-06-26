@@ -12,9 +12,7 @@ pub(crate) struct ShadowsocksDatagramSend<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) password: &'a str,
-    pub(crate) datagram_cache_key: String,
-    pub(crate) cipher: shadowsocks::CipherKind,
+    pub(crate) resume: shadowsocks::ShadowsocksUdpFlowResume,
     pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) payload: &'a [u8],
 }
@@ -32,7 +30,7 @@ impl UdpDispatch {
                     session: request.session,
                     server: request.server,
                     port: request.port,
-                    cache_key: request.datagram_cache_key,
+                    cache_key: request.resume.cache_key().to_owned(),
                     codec: request.codec.clone(),
                     payload: request.payload,
                 },
@@ -51,9 +49,7 @@ impl UdpDispatch {
                 session: request.session,
                 server: request.server,
                 port: request.port,
-                password: request.password,
-                datagram_cache_key: request.datagram_cache_key.clone(),
-                cipher: request.cipher,
+                resume: request.resume.clone(),
                 codec: request.codec.clone(),
                 payload: request.payload,
             })
@@ -63,11 +59,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::shadowsocks(
-                    request.password,
-                    request.datagram_cache_key,
-                    request.cipher,
-                ),
+                protocol: ProtocolUdpFlowSnapshot::shadowsocks(request.resume),
             }),
             tx_bytes: sent as u64,
         })

@@ -2920,7 +2920,6 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         "Mieru {",
         "username: Option<String>",
         "password: Option<String>",
-        "shadowsocks::CipherKind",
         "UdpPacketPathCarrier::",
     ] {
         assert!(
@@ -2934,6 +2933,11 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             );
         }
     }
+    assert!(
+        snapshot.contains("resume: shadowsocks::ShadowsocksUdpFlowResume")
+            && !snapshot.contains("cipher_kind: shadowsocks::CipherKind"),
+        "protocol UDP flow snapshot should keep Shadowsocks resume data opaque instead of exposing parsed cipher state"
+    );
     assert!(
         !snapshot.contains("PacketPathCarrierSnapshot")
             && !snapshot.contains("UdpPacketPathCarrier::"),
@@ -5772,6 +5776,11 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let peer = read("src/protocol_runtime/udp/peer.rs");
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
     let model = read("src/protocol_runtime/udp/ss_manager/model.rs");
+    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let forward = read("src/protocol_runtime/udp/state/forward/shadowsocks.rs");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
+            .expect("read shadowsocks protocol outbound source");
 
     assert!(
         adapter.contains("CipherKind::from_str"),
@@ -5806,6 +5815,28 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !shadowsocks_peer_model.contains("password: &'a str")
             && shadowsocks_peer_model.contains("cache_key: &'a str"),
         "ordinary Shadowsocks UDP peer model should carry only opaque cache identity"
+    );
+    assert!(
+        adapter.contains("ShadowsocksUdpFlowResume::new")
+            && protocol_outbound.contains("struct ShadowsocksUdpFlowResume")
+            && protocol_outbound.contains("pub fn codec(&self)")
+            && protocol_outbound.contains("pub fn cache_key(&self) -> &str"),
+        "Shadowsocks adapter should build an opaque protocol-owned UDP flow resume descriptor"
+    );
+    assert!(
+        snapshot.contains("resume: shadowsocks::ShadowsocksUdpFlowResume")
+            && !snapshot.contains("cipher_kind: shadowsocks::CipherKind")
+            && !snapshot.contains("datagram_cache_key: String"),
+        "Shadowsocks protocol UDP flow snapshot should carry only opaque resume data"
+    );
+    assert!(
+        forward.contains("existing.resume.cache_key()")
+            && forward.contains("existing.resume.codec()")
+            && !forward.contains("shadowsocks::udp_flow_codec")
+            && !forward.contains("password: &'a str")
+            && !forward.contains("cipher_kind: shadowsocks::CipherKind")
+            && !forward.contains("datagram_cache_key: &'a str"),
+        "existing Shadowsocks UDP flow forwarding should recover cache identity and codec from the opaque resume descriptor"
     );
 }
 

@@ -9,9 +9,7 @@ use crate::runtime::Proxy;
 pub(super) struct ExistingFlow<'a> {
     pub(super) server: &'a str,
     pub(super) port: u16,
-    pub(super) password: &'a str,
-    pub(super) datagram_cache_key: &'a str,
-    pub(super) cipher_kind: shadowsocks::CipherKind,
+    pub(super) resume: &'a shadowsocks::ShadowsocksUdpFlowResume,
     pub(super) payload: &'a [u8],
 }
 
@@ -30,11 +28,8 @@ pub(super) async fn forward(
             proxy,
             server: existing.server,
             port: existing.port,
-            cache_key: existing.datagram_cache_key.to_owned(),
-            codec: std::sync::Arc::new(shadowsocks::udp_flow_codec(
-                existing.cipher_kind,
-                existing.password.as_bytes(),
-            )),
+            cache_key: existing.resume.cache_key().to_owned(),
+            codec: std::sync::Arc::new(existing.resume.codec()),
             target: &flow.session.target,
             target_port: flow.session.port,
             payload: existing.payload,
@@ -50,12 +45,7 @@ pub(super) async fn forward_if_matches(
     snapshot: &ProtocolUdpFlowSnapshot,
     payload: &[u8],
 ) -> Option<Result<usize, FlowFailure>> {
-    let ProtocolUdpFlowSnapshot::Shadowsocks {
-        password,
-        datagram_cache_key,
-        cipher_kind,
-    } = snapshot
-    else {
+    let ProtocolUdpFlowSnapshot::Shadowsocks { resume } = snapshot else {
         return None;
     };
 
@@ -73,9 +63,7 @@ pub(super) async fn forward_if_matches(
             ExistingFlow {
                 server: upstream.server,
                 port: upstream.port,
-                password,
-                datagram_cache_key,
-                cipher_kind: *cipher_kind,
+                resume,
                 payload,
             },
         )

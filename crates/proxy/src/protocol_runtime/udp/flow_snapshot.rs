@@ -6,9 +6,7 @@ pub(crate) enum ProtocolUdpFlowSnapshot {
     },
     #[cfg(feature = "shadowsocks")]
     Shadowsocks {
-        password: String,
-        datagram_cache_key: String,
-        cipher_kind: shadowsocks::CipherKind,
+        resume: shadowsocks::ShadowsocksUdpFlowResume,
     },
     #[cfg(feature = "hysteria2")]
     Hysteria2 {
@@ -45,16 +43,8 @@ impl ProtocolUdpFlowSnapshot {
     }
 
     #[cfg(feature = "shadowsocks")]
-    pub(crate) fn shadowsocks(
-        password: &str,
-        datagram_cache_key: String,
-        cipher_kind: shadowsocks::CipherKind,
-    ) -> Self {
-        Self::Shadowsocks {
-            password: password.to_string(),
-            datagram_cache_key,
-            cipher_kind,
-        }
+    pub(crate) fn shadowsocks(resume: shadowsocks::ShadowsocksUdpFlowResume) -> Self {
+        Self::Shadowsocks { resume }
     }
 
     #[cfg(feature = "hysteria2")]
