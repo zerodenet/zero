@@ -36,10 +36,13 @@ impl TrojanAdapter {
                 session,
                 server,
                 port: *port,
-                password,
-                sni: *sni,
-                insecure: *insecure,
-                client_fingerprint: *client_fingerprint,
+                resume: trojan::TrojanUdpFlowResume::new(
+                    password,
+                    *sni,
+                    *insecure,
+                    *client_fingerprint,
+                    false,
+                ),
                 payload,
             })
             .await
@@ -74,10 +77,13 @@ impl TrojanAdapter {
                 carrier,
                 server,
                 port: *port,
-                password,
-                sni: *sni,
-                insecure: *insecure,
-                client_fingerprint: *client_fingerprint,
+                resume: trojan::TrojanUdpFlowResume::new(
+                    password,
+                    *sni,
+                    *insecure,
+                    *client_fingerprint,
+                    true,
+                ),
                 payload,
             })
             .await

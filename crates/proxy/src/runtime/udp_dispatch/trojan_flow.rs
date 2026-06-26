@@ -11,10 +11,7 @@ pub(crate) struct TrojanDatagramSend<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) password: &'a str,
-    pub(crate) sni: Option<&'a str>,
-    pub(crate) insecure: bool,
-    pub(crate) client_fingerprint: Option<&'a str>,
+    pub(crate) resume: trojan::TrojanUdpFlowResume,
     pub(crate) payload: &'a [u8],
 }
 
@@ -25,10 +22,7 @@ pub(crate) struct TrojanRelaySend<'a> {
     pub(crate) carrier: crate::transport::RelayCarrier,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) password: &'a str,
-    pub(crate) sni: Option<&'a str>,
-    pub(crate) insecure: bool,
-    pub(crate) client_fingerprint: Option<&'a str>,
+    pub(crate) resume: trojan::TrojanUdpFlowResume,
     pub(crate) payload: &'a [u8],
 }
 
@@ -44,10 +38,10 @@ impl UdpDispatch {
                 session: request.session,
                 server: request.server,
                 port: request.port,
-                password: request.password,
-                sni: request.sni,
-                insecure: request.insecure,
-                client_fingerprint: request.client_fingerprint,
+                password: request.resume.password(),
+                sni: request.resume.sni(),
+                insecure: request.resume.insecure(),
+                client_fingerprint: request.resume.client_fingerprint(),
                 relay_chain: false,
                 payload: request.payload,
             })
@@ -65,10 +59,7 @@ impl UdpDispatch {
                 session: request.session,
                 server: request.server,
                 port: request.port,
-                password: request.password,
-                sni: request.sni,
-                insecure: request.insecure,
-                client_fingerprint: request.client_fingerprint,
+                resume: request.resume.clone(),
                 payload: request.payload,
             })
             .await?;
@@ -77,13 +68,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::trojan(
-                    request.password,
-                    request.sni,
-                    request.insecure,
-                    request.client_fingerprint,
-                    false,
-                ),
+                protocol: ProtocolUdpFlowSnapshot::trojan(request.resume),
             }),
             tx_bytes: sent as u64,
         })
@@ -101,10 +86,10 @@ impl UdpDispatch {
                 carrier: request.carrier,
                 server: request.server,
                 port: request.port,
-                password: request.password,
-                sni: request.sni,
-                insecure: request.insecure,
-                client_fingerprint: request.client_fingerprint,
+                password: request.resume.password(),
+                sni: request.resume.sni(),
+                insecure: request.resume.insecure(),
+                client_fingerprint: request.resume.client_fingerprint(),
                 payload: request.payload,
             })
             .await
@@ -122,10 +107,7 @@ impl UdpDispatch {
                 carrier: request.carrier,
                 server: request.server,
                 port: request.port,
-                password: request.password,
-                sni: request.sni,
-                insecure: request.insecure,
-                client_fingerprint: request.client_fingerprint,
+                resume: request.resume.clone(),
                 payload: request.payload,
             })
             .await?;
@@ -134,13 +116,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::trojan(
-                    request.password,
-                    request.sni,
-                    request.insecure,
-                    request.client_fingerprint,
-                    true,
-                ),
+                protocol: ProtocolUdpFlowSnapshot::trojan(request.resume),
             }),
             tx_bytes: sent as u64,
         })

@@ -9,11 +9,7 @@ use crate::runtime::Proxy;
 pub(super) struct ExistingFlow<'a> {
     pub(super) server: &'a str,
     pub(super) port: u16,
-    pub(super) password: &'a str,
-    pub(super) sni: Option<&'a str>,
-    pub(super) insecure: bool,
-    pub(super) client_fingerprint: Option<&'a str>,
-    pub(super) relay_chain: bool,
+    pub(super) resume: &'a trojan::TrojanUdpFlowResume,
     pub(super) payload: &'a [u8],
 }
 
@@ -33,11 +29,11 @@ pub(super) async fn forward(
             session: &flow.session,
             server: existing.server,
             port: existing.port,
-            password: existing.password,
-            sni: existing.sni,
-            insecure: existing.insecure,
-            client_fingerprint: existing.client_fingerprint,
-            relay_chain: existing.relay_chain,
+            password: existing.resume.password(),
+            sni: existing.resume.sni(),
+            insecure: existing.resume.insecure(),
+            client_fingerprint: existing.resume.client_fingerprint(),
+            relay_chain: existing.resume.relay_chain(),
             target: &flow.session.target,
             target_port: flow.session.port,
             payload: existing.payload,
@@ -53,14 +49,7 @@ pub(super) async fn forward_if_matches(
     snapshot: &ProtocolUdpFlowSnapshot,
     payload: &[u8],
 ) -> Option<Result<usize, FlowFailure>> {
-    let ProtocolUdpFlowSnapshot::Trojan {
-        password,
-        sni,
-        insecure,
-        client_fingerprint,
-        relay_chain,
-    } = snapshot
-    else {
+    let ProtocolUdpFlowSnapshot::Trojan { resume } = snapshot else {
         return None;
     };
 
@@ -78,11 +67,7 @@ pub(super) async fn forward_if_matches(
             ExistingFlow {
                 server: upstream.server,
                 port: upstream.port,
-                password,
-                sni: sni.as_deref(),
-                insecure: *insecure,
-                client_fingerprint: client_fingerprint.as_deref(),
-                relay_chain: *relay_chain,
+                resume,
                 payload,
             },
         )

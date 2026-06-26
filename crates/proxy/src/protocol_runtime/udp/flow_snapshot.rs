@@ -13,13 +13,7 @@ pub(crate) enum ProtocolUdpFlowSnapshot {
         resume: hysteria2::Hysteria2UdpFlowResume,
     },
     #[cfg(feature = "trojan")]
-    Trojan {
-        password: String,
-        sni: Option<String>,
-        insecure: bool,
-        client_fingerprint: Option<String>,
-        relay_chain: bool,
-    },
+    Trojan { resume: trojan::TrojanUdpFlowResume },
     #[cfg(feature = "mieru")]
     Mieru { resume: mieru::MieruUdpFlowResume },
 }
@@ -48,20 +42,8 @@ impl ProtocolUdpFlowSnapshot {
     }
 
     #[cfg(feature = "trojan")]
-    pub(crate) fn trojan(
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
-        relay_chain: bool,
-    ) -> Self {
-        Self::Trojan {
-            password: password.to_string(),
-            sni: sni.map(ToString::to_string),
-            insecure,
-            client_fingerprint: client_fingerprint.map(ToString::to_string),
-            relay_chain,
-        }
+    pub(crate) fn trojan(resume: trojan::TrojanUdpFlowResume) -> Self {
+        Self::Trojan { resume }
     }
 
     #[cfg(feature = "mieru")]

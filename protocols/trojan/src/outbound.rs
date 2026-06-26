@@ -92,6 +92,53 @@ pub struct TrojanUdpPacket {
     pub payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanUdpFlowResume {
+    password: String,
+    sni: Option<String>,
+    insecure: bool,
+    client_fingerprint: Option<String>,
+    relay_chain: bool,
+}
+
+impl TrojanUdpFlowResume {
+    pub fn new(
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+        relay_chain: bool,
+    ) -> Self {
+        Self {
+            password: password.to_owned(),
+            sni: sni.map(ToOwned::to_owned),
+            insecure,
+            client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
+            relay_chain,
+        }
+    }
+
+    pub fn password(&self) -> &str {
+        &self.password
+    }
+
+    pub fn sni(&self) -> Option<&str> {
+        self.sni.as_deref()
+    }
+
+    pub fn insecure(&self) -> bool {
+        self.insecure
+    }
+
+    pub fn client_fingerprint(&self) -> Option<&str> {
+        self.client_fingerprint.as_deref()
+    }
+
+    pub fn relay_chain(&self) -> bool {
+        self.relay_chain
+    }
+}
+
 impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {
     type Error = Error;
     type Decoded = TrojanUdpPacket;

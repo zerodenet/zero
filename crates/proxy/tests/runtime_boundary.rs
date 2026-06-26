@@ -2951,6 +2951,20 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && !h2_snapshot_variant.contains("client_fingerprint: Option<String>"),
         "protocol UDP flow snapshot should keep Hysteria2 resume data opaque instead of exposing auth or fingerprint state"
     );
+    let trojan_snapshot_variant = snapshot
+        .split("#[cfg(feature = \"trojan\")]")
+        .nth(1)
+        .expect("Trojan UDP snapshot variant should be feature-gated")
+        .split("#[cfg(feature = \"mieru\")]")
+        .next()
+        .expect("Trojan UDP snapshot variant should precede Mieru");
+    assert!(
+        snapshot.contains("resume: trojan::TrojanUdpFlowResume")
+            && !trojan_snapshot_variant.contains("password: String")
+            && !trojan_snapshot_variant.contains("client_fingerprint: Option<String>")
+            && !trojan_snapshot_variant.contains("relay_chain: bool"),
+        "protocol UDP flow snapshot should keep Trojan resume data opaque instead of exposing auth, TLS, or relay state"
+    );
     let mieru_snapshot_variant = snapshot
         .split("#[cfg(feature = \"mieru\")]")
         .nth(1)
@@ -5152,6 +5166,49 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
     assert!(
         connect.exists(),
         "Trojan UDP TLS connect helpers should live in trojan_manager/connect.rs"
+    );
+}
+
+#[test]
+fn trojan_udp_flow_resume_is_protocol_owned() {
+    let adapter = read("src/adapters/trojan/udp.rs");
+    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let forward = read("src/protocol_runtime/udp/state/forward/trojan.rs");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
+            .expect("read trojan protocol outbound source");
+
+    assert!(
+        adapter.contains("TrojanUdpFlowResume::new")
+            && protocol_outbound.contains("struct TrojanUdpFlowResume")
+            && protocol_outbound.contains("pub fn client_fingerprint(&self) -> Option<&str>")
+            && protocol_outbound.contains("pub fn relay_chain(&self) -> bool"),
+        "Trojan adapter should build an opaque protocol-owned UDP flow resume descriptor"
+    );
+    let trojan_snapshot_variant = snapshot
+        .split("#[cfg(feature = \"trojan\")]")
+        .nth(1)
+        .expect("Trojan UDP snapshot variant should be feature-gated")
+        .split("#[cfg(feature = \"mieru\")]")
+        .next()
+        .expect("Trojan UDP snapshot variant should precede Mieru");
+    assert!(
+        snapshot.contains("resume: trojan::TrojanUdpFlowResume")
+            && !trojan_snapshot_variant.contains("password: String")
+            && !trojan_snapshot_variant.contains("client_fingerprint: Option<String>")
+            && !trojan_snapshot_variant.contains("relay_chain: bool"),
+        "Trojan protocol UDP flow snapshot should carry only opaque resume data"
+    );
+    assert!(
+        forward.contains("existing.resume.password()")
+            && forward.contains("existing.resume.sni()")
+            && forward.contains("existing.resume.insecure()")
+            && forward.contains("existing.resume.client_fingerprint()")
+            && forward.contains("existing.resume.relay_chain()")
+            && !forward.contains("password: &'a str")
+            && !forward.contains("client_fingerprint: Option<&'a str>")
+            && !forward.contains("relay_chain: bool"),
+        "existing Trojan UDP flow forwarding should recover auth, TLS, and relay state from the opaque resume descriptor"
     );
 }
 
