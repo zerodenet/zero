@@ -1,7 +1,8 @@
 use tokio::task::JoinSet;
 
+use super::super::flows::ManagedDatagramFlow;
 use super::super::state::ProtocolUdpState;
-use super::super::{FlowFailure, ManagedDatagramFlow};
+use super::super::FlowFailure;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 
 impl ProtocolUdpState {

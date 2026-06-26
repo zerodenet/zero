@@ -7,9 +7,10 @@ use crate::protocol_runtime::socks5_udp::model::ClosedSocks5UdpAssociation;
 use crate::protocol_runtime::socks5_udp::Socks5UdpRuntime;
 use zero_engine::EngineError;
 
+use super::flows::{ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow};
 use super::{
-    FlowFailure, ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
-    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
+    FlowFailure, ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume,
+    ProtocolUdpFlowSnapshot,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 

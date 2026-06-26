@@ -2597,6 +2597,26 @@ fn protocol_runtime_udp_root_does_not_reexport_upstream_poll_details() {
 }
 
 #[test]
+fn protocol_runtime_udp_root_does_not_reexport_internal_managed_flow_models() {
+    let root = read("src/protocol_runtime/udp/mod.rs");
+
+    for forbidden in [
+        "ManagedDatagramFlow",
+        "ManagedStreamPacketFlow",
+        "ManagedRelayStreamFlow",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "protocol_runtime::udp root should not re-export internal managed flow model `{forbidden}`"
+        );
+    }
+    assert!(
+        root.contains("pub(crate) use flows::{ManagedUdpFlowKind, ManagedUdpFlowRequest};"),
+        "protocol_runtime::udp root should expose only the neutral managed flow request facade"
+    );
+}
+
+#[test]
 fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     let root = read("src/inbound/vmess/mux.rs");
     let model = read("src/inbound/vmess/model.rs");

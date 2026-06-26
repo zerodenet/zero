@@ -22,8 +22,5 @@ pub(crate) mod vmess_flow;
 
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
 pub(crate) use flow_snapshot::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
-pub(crate) use flows::{
-    ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowKind,
-    ManagedUdpFlowRequest,
-};
+pub(crate) use flows::{ManagedUdpFlowKind, ManagedUdpFlowRequest};
 pub(crate) use state::ProtocolUdpState;

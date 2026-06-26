@@ -1,5 +1,6 @@
+use super::super::flows::{ManagedRelayStreamFlow, ManagedStreamPacketFlow};
 use super::super::state::ProtocolUdpState;
-use super::super::{FlowFailure, ManagedRelayStreamFlow, ManagedStreamPacketFlow};
+use super::super::FlowFailure;
 
 impl ProtocolUdpState {
     pub(crate) async fn start_managed_stream_packet_flow(
