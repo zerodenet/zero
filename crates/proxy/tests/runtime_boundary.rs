@@ -2292,6 +2292,9 @@ fn vmess_udp_identity_is_protocol_parsed() {
 fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = read("src/protocol_runtime/vmess_udp.rs");
     let model = read("src/protocol_runtime/vmess_udp/model.rs");
+    let proxy_transport = read("src/transport/mod.rs");
+    let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
+        .expect("read zero-transport vmess_transport source");
     let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read protocols/vmess/src/udp.rs");
 
@@ -2309,28 +2312,61 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "vmess::build_udp_packet",
         "vmess::parse_udp_packet",
         "vmess::establish_udp_outbound_stream",
+        "vmess::establish_udp_flow_stream",
+        "vmess::VmessUdpFlowIo",
         "vmess::encode_udp_flow_packet",
         "vmess::decode_udp_flow_packet",
+        ".encode_packet(",
+        ".decode_packet(",
+        "tokio::spawn",
+        "mpsc::channel",
+        "broadcast::channel",
     ] {
         assert!(
             !runtime.contains(forbidden) && !model.contains(forbidden),
-            "VMess UDP runtime should delegate packet framing to protocols/vmess helpers; found `{forbidden}`"
+            "VMess UDP runtime should delegate flow IO and packet framing to protocols/vmess helpers; found `{forbidden}`"
         );
     }
     assert!(
-        runtime.contains("vmess::VmessUdpFlowIo")
-            && runtime.contains("vmess::VmessUdpFlowPacket")
-            && runtime.contains("vmess::establish_udp_flow_stream")
-            && runtime.contains("UdpResponsePacket"),
-        "VMess UDP runtime should call protocols/vmess flow IO helpers and store neutral responses"
+        runtime.contains("vmess::open_udp_flow")
+            && runtime.contains("vmess::open_mux_udp_flow")
+            && runtime.contains("vmess::encode_udp_flow_initial_packet")
+            && runtime.contains("vmess::VmessUdpFlowResponse")
+            && model.contains("vmess::VmessUdpFlowSender"),
+        "VMess UDP runtime should use opaque protocol-owned flow handles"
     );
+    for forbidden in [
+        "VmessUdpFlowStream",
+        "VmessUdpResponse",
+        "VmessUdpFlowIo",
+        "establish_udp_flow_stream",
+        "mpsc::channel::<vmess::VmessUdpFlowPacket>",
+        "broadcast::channel::<VmessUdpResponse>",
+        "tokio::spawn",
+        "encode_vmess_udp_flow_packet",
+        "send_vmess_udp_flow_packet",
+        "spawn_vmess_udp_packet_flow",
+    ] {
+        assert!(
+            !transport.contains(forbidden) && !proxy_transport.contains(forbidden),
+            "zero-transport/proxy transport facade must not own VMess UDP flow runtime; found `{forbidden}`"
+        );
+    }
     assert!(
-        model.contains("mpsc::Sender<vmess::VmessUdpFlowPacket>")
+        protocol.contains("pub struct VmessUdpFlowHandle")
+            && protocol.contains("pub struct VmessUdpFlowSender")
+            && protocol.contains("pub type VmessUdpFlowResponse")
+            && protocol.contains("pub async fn open_udp_flow")
+            && protocol.contains("pub fn open_mux_udp_flow")
+            && protocol.contains("pub fn encode_udp_flow_initial_packet")
+            && protocol.contains("mpsc::channel::<VmessUdpFlowPacket>")
+            && protocol.contains("broadcast::channel::<VmessUdpFlowResponse>")
+            && protocol.contains("tokio::spawn")
             && protocol.contains("pub struct VmessUdpFlowIo")
             && protocol.contains("pub struct VmessUdpFlowPacket")
             && protocol.contains("pub fn encode_udp_flow_packet")
             && protocol.contains("pub fn decode_udp_flow_packet"),
-        "protocols/vmess should own VMess UDP flow packet IO while proxy stores only protocol-owned packets"
+        "protocols/vmess should own VMess UDP flow state, task loop, and packet IO"
     );
 }
 

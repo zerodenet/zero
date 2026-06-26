@@ -8,87 +8,28 @@ pub(super) mod model;
 
 use std::collections::HashMap;
 
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
-use zero_traits::AsyncSocket;
 
-use crate::protocol_runtime::udp::packet_path_traits::UdpResponsePacket;
 use crate::runtime::Proxy;
-use crate::transport::{MeteredStream, TcpRelayStream};
+use crate::transport::TcpRelayStream;
 use model::{VmessUdpRelayFlow, VmessUdpStartFlow, VmessUdpUpstream, VmessUdpUpstreamRequest};
 
-fn spawn_vmess_udp_relay(
-    proxy: &Proxy,
+type VmessResponseSender = broadcast::Sender<vmess::VmessUdpFlowResponse>;
+
+fn upstream_from_stream(
     session_id: u64,
-    mut metered: MeteredStream<TcpRelayStream>,
-    initial_payload_len: usize,
-) -> (VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>) {
-    let flow_io = vmess::VmessUdpFlowIo;
-    let (send_tx, mut send_rx) = mpsc::channel::<vmess::VmessUdpFlowPacket>(32);
-    let (recv_tx, _) = broadcast::channel::<UdpResponsePacket>(32);
-    let recv_tx_bg = recv_tx.clone();
-
-    proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
-
-    let proxy_clone = proxy.clone();
-    tokio::spawn(async move {
-        let mut buffer = vec![0_u8; 64 * 1024];
-        loop {
-            tokio::select! {
-                to_send = send_rx.recv() => {
-                    match to_send {
-                        Some(packet) => {
-                            let (target, port, payload) = packet.into_parts();
-                            match flow_io.write_packet(&mut metered, &target, port, &payload).await {
-                                Ok(packet_len) => {
-                                    proxy_clone.record_session_outbound_tx(session_id, packet_len as u64);
-                                }
-                                Err(_) => {
-                                    break;
-                                }
-                            }
-                        }
-                        None => break,
-                    }
-                }
-                read = metered.read(&mut buffer) => {
-                    match read {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            match flow_io.decode_packet(&buffer[..n]) {
-                                Ok(packet) => {
-                                    let (target, port, payload) = packet.into_parts();
-                                    let response = UdpResponsePacket {
-                                        target,
-                                        port,
-                                        payload,
-                                    };
-                                    if recv_tx_bg.send(response).is_err() {
-                                        break;
-                                    }
-                                }
-                                Err(error) => {
-                                    tracing::debug!(error = %error, "failed to decode VMess UDP packet");
-                                    break;
-                                }
-                            }
-                        }
-                        Err(_) => break,
-                    }
-                }
-            }
-        }
-    });
-
+    flow: vmess::VmessUdpFlowHandle,
+) -> (VmessUdpUpstream, VmessResponseSender) {
     (
         VmessUdpUpstream {
             session_id,
-            send_tx,
+            sender: flow.sender,
         },
-        recv_tx,
+        flow.responses,
     )
 }
 
@@ -98,35 +39,24 @@ async fn establish_vmess_udp_upstream_over_stream(
     identity: vmess::VmessUdpIdentity,
     initial_payload: &[u8],
     stream: TcpRelayStream,
-) -> Result<(VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>), EngineError> {
-    let flow_io = vmess::VmessUdpFlowIo;
-
-    let vmess_stream = vmess::establish_udp_flow_stream(stream, session, identity).await?;
-    let mut metered = MeteredStream::new(TcpRelayStream::new(vmess_stream));
-    let initial_packet_len = flow_io
-        .write_packet(&mut metered, &session.target, session.port, initial_payload)
-        .await?;
-
-    Ok(spawn_vmess_udp_relay(
-        proxy,
-        session.id,
-        metered,
-        initial_packet_len,
-    ))
+) -> Result<(VmessUdpUpstream, VmessResponseSender), EngineError> {
+    let (flow, initial_packet_len) =
+        vmess::open_udp_flow(stream, session, identity, initial_payload).await?;
+    proxy.record_session_outbound_tx(session.id, initial_packet_len as u64);
+    Ok(upstream_from_stream(session.id, flow))
 }
 
 async fn establish_vmess_udp_upstream(
     request: &VmessUdpUpstreamRequest<'_>,
-) -> Result<(VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>), EngineError> {
-    let flow_io = vmess::VmessUdpFlowIo;
-    let initial_packet = flow_io.encode_packet(
+) -> Result<(VmessUdpUpstream, VmessResponseSender), EngineError> {
+    let initial_packet = vmess::encode_udp_flow_initial_packet(
         &request.session.target,
         request.session.port,
         request.initial_payload,
     )?;
 
     if let Some(max_concurrency) = request.mux_concurrency {
-        let mut mux_stream = request
+        let mux_stream = request
             .proxy
             .vmess_mux_pool
             .open_udp_stream(
@@ -145,15 +75,12 @@ async fn establish_vmess_udp_upstream(
                 },
             )
             .await?;
-        mux_stream.write_all(&initial_packet).await?;
-        tokio::io::AsyncWriteExt::flush(&mut mux_stream).await?;
-        let metered = MeteredStream::new(mux_stream);
-        return Ok(spawn_vmess_udp_relay(
-            request.proxy,
-            request.session.id,
-            metered,
-            initial_packet.len(),
-        ));
+        let initial_packet_len = initial_packet.len();
+        let flow = vmess::open_mux_udp_flow(mux_stream, initial_packet);
+        request
+            .proxy
+            .record_session_outbound_tx(request.session.id, initial_packet_len as u64);
+        return Ok(upstream_from_stream(request.session.id, flow));
     }
 
     let socket = request
@@ -177,28 +104,18 @@ async fn establish_vmess_udp_upstream(
         None => socket.into(),
     };
 
-    let vmess_stream =
-        vmess::establish_udp_flow_stream(stream, request.session, request.identity).await?;
-    let mut metered = MeteredStream::new(TcpRelayStream::new(vmess_stream));
-    let initial_packet_len = flow_io
-        .write_packet(
-            &mut metered,
-            &request.session.target,
-            request.session.port,
-            request.initial_payload,
-        )
-        .await?;
-
-    Ok(spawn_vmess_udp_relay(
+    establish_vmess_udp_upstream_over_stream(
         request.proxy,
-        request.session.id,
-        metered,
-        initial_packet_len,
-    ))
+        request.session,
+        request.identity,
+        request.initial_payload,
+        stream,
+    )
+    .await
 }
 
 pub(crate) struct VmessUdpOutboundManager {
-    upstreams: HashMap<(Address, u16), (VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>)>,
+    upstreams: HashMap<(Address, u16), (VmessUdpUpstream, VmessResponseSender)>,
 }
 
 impl VmessUdpOutboundManager {
@@ -279,9 +196,7 @@ impl VmessUdpOutboundManager {
         };
 
         proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
-        let packet = vmess::VmessUdpFlowPacket::new(target.clone(), port, payload.to_vec());
-        let packet_len = packet.encode()?.len() as u64;
-        let _ = upstream.send_tx.send(packet).await;
+        let packet_len = upstream.sender.send(target, port, payload).await? as u64;
         proxy.record_session_outbound_tx(upstream.session_id, packet_len);
         self.spawn_bridge(chain_tasks, target.clone(), port, upstream.session_id);
         Ok(Some(upstream.session_id))
@@ -291,7 +206,7 @@ impl VmessUdpOutboundManager {
         &mut self,
         key: (Address, u16),
         upstream: VmessUdpUpstream,
-        recv_tx: broadcast::Sender<UdpResponsePacket>,
+        recv_tx: VmessResponseSender,
     ) {
         self.upstreams.insert(key, (upstream, recv_tx));
     }
@@ -310,7 +225,7 @@ impl VmessUdpOutboundManager {
                     .recv()
                     .await
                     .map_err(|_| EngineError::Io(std::io::Error::other("vmess upstream closed")))?;
-                Ok((packet.target, packet.port, packet.payload, Some(session_id)))
+                Ok((packet.0, packet.1, packet.2, Some(session_id)))
             });
         }
     }
@@ -326,13 +241,10 @@ impl VmessUdpOutboundManager {
                 upstream.session_id,
                 request.initial_payload.len() as u64,
             );
-            let packet = vmess::VmessUdpFlowPacket::new(
-                request.target.clone(),
-                request.port,
-                request.initial_payload.to_vec(),
-            );
-            let packet_len = packet.encode()?.len() as u64;
-            let _ = upstream.send_tx.send(packet).await;
+            let packet_len = upstream
+                .sender
+                .send(&request.target, request.port, request.initial_payload)
+                .await? as u64;
             request
                 .proxy
                 .record_session_outbound_tx(upstream.session_id, packet_len);

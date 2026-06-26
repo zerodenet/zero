@@ -21,6 +21,7 @@ mieru = ["dep:mieru", "mieru/crypto"]
 shadowsocks = ["dep:shadowsocks", "shadowsocks/crypto", "shadowsocks/blake3"]
 trojan = ["tls", "dep:trojan"]
 vless = ["grpc", "h2", "http_upgrade", "split_http", "quic", "tls", "ws"]
+vmess = ["grpc", "tls", "ws"]
 
 [dependencies]
 bytes = "1"

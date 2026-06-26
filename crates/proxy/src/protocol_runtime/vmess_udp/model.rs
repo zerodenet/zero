@@ -1,4 +1,3 @@
-use tokio::sync::mpsc;
 use zero_core::{Address, Session};
 
 use crate::runtime::Proxy;
@@ -6,7 +5,7 @@ use crate::runtime::Proxy;
 #[derive(Clone)]
 pub(super) struct VmessUdpUpstream {
     pub(super) session_id: u64,
-    pub(super) send_tx: mpsc::Sender<vmess::VmessUdpFlowPacket>,
+    pub(super) sender: vmess::VmessUdpFlowSender,
 }
 
 pub(crate) struct VmessUdpStartFlow<'a> {
