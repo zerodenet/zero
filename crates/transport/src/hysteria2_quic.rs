@@ -81,8 +81,7 @@ impl AsyncSocket for Hysteria2Stream {
 
 use hysteria2::{build_auth_frame, build_tcp_connect_header, parse_auth_response, sign_hmac};
 use std::sync::Arc;
-use tokio::sync::{broadcast, mpsc};
-use zero_core::{Address, Error, Session, UdpFlowPacket};
+use zero_core::Session;
 use zero_engine::EngineError;
 
 /// Establishes a Hysteria2 outbound connection.
@@ -251,91 +250,6 @@ impl Hysteria2Connector {
 
         Ok(Hysteria2Stream::new(send, recv))
     }
-}
-
-pub type Hysteria2UdpResponse = (Address, u16, Vec<u8>);
-
-pub struct Hysteria2UdpFlowStream {
-    pub send_tx: mpsc::Sender<UdpFlowPacket>,
-    pub recv_tx: broadcast::Sender<Hysteria2UdpResponse>,
-}
-
-pub struct Hysteria2UdpFlowStreamRequest {
-    pub server: String,
-    pub port: u16,
-    pub resume: hysteria2::Hysteria2UdpFlowResume,
-    pub initial_packet: UdpFlowPacket,
-}
-
-pub async fn establish_hysteria2_udp_flow_stream(
-    request: Hysteria2UdpFlowStreamRequest,
-) -> Result<Hysteria2UdpFlowStream, EngineError> {
-    let connector_profile = request.resume.connector_profile();
-    let connector =
-        Hysteria2Connector::new(&request.server, request.port, connector_profile.password())
-            .with_fingerprint(connector_profile.client_fingerprint());
-    let conn = Arc::new(connector.connect_raw().await?);
-
-    let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
-    let (recv_tx, _) = broadcast::channel::<Hysteria2UdpResponse>(32);
-
-    spawn_hysteria2_udp_send_task(
-        conn.clone(),
-        send_rx,
-        request.initial_packet,
-        request.resume.clone(),
-    );
-    spawn_hysteria2_udp_recv_task(conn, recv_tx.clone(), request.resume);
-
-    Ok(Hysteria2UdpFlowStream { send_tx, recv_tx })
-}
-
-fn spawn_hysteria2_udp_send_task(
-    conn: Arc<quinn::Connection>,
-    mut send_rx: mpsc::Receiver<UdpFlowPacket>,
-    initial_packet: UdpFlowPacket,
-    resume: hysteria2::Hysteria2UdpFlowResume,
-) {
-    tokio::spawn(async move {
-        if let Ok(datagram) = encode_hysteria2_udp_flow_packet(initial_packet, &resume) {
-            if conn.send_datagram(datagram.into()).is_err() {
-                return;
-            }
-        }
-        while let Some(packet) = send_rx.recv().await {
-            let Ok(datagram) = encode_hysteria2_udp_flow_packet(packet, &resume) else {
-                break;
-            };
-            if conn.send_datagram(datagram.into()).is_err() {
-                break;
-            }
-        }
-    });
-}
-
-fn encode_hysteria2_udp_flow_packet(
-    packet: UdpFlowPacket,
-    resume: &hysteria2::Hysteria2UdpFlowResume,
-) -> Result<Vec<u8>, Error> {
-    let packet = hysteria2::udp_flow_packet(&packet.target, packet.port, &packet.payload);
-    packet.encode_with(resume)
-}
-
-fn spawn_hysteria2_udp_recv_task(
-    conn: Arc<quinn::Connection>,
-    recv_tx: broadcast::Sender<Hysteria2UdpResponse>,
-    resume: hysteria2::Hysteria2UdpFlowResume,
-) {
-    tokio::spawn(async move {
-        while let Ok(data) = conn.read_datagram().await {
-            if let Some(packet) = resume.decode_flow_packet(&data) {
-                let (target, port, payload) = packet.into_parts();
-                if recv_tx.send((target, port, payload)).is_err() {
-                    break;
-                }
-            }
-        }
-    });
 }
 
 #[derive(Debug)]
