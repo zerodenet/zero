@@ -16,6 +16,8 @@ pub mod quic;
 pub mod split_http;
 #[cfg(feature = "tls")]
 pub mod tls;
+#[cfg(feature = "trojan")]
+pub mod trojan_transport;
 #[cfg(feature = "vless")]
 pub mod vless_transport;
 #[cfg(all(feature = "tls", feature = "ws", feature = "grpc"))]

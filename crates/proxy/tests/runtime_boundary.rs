@@ -5325,7 +5325,11 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
 #[test]
 fn trojan_udp_tls_connect_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let connect = manifest_dir().join("src/protocol_runtime/udp/trojan_manager/connect.rs");
+    let connect = read("src/protocol_runtime/udp/trojan_manager/connect.rs");
+    let connect_path = manifest_dir().join("src/protocol_runtime/udp/trojan_manager/connect.rs");
+    let transport =
+        fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
+            .expect("read zero-transport trojan_transport source");
 
     for forbidden in [
         "ClientTlsConfig",
@@ -5339,8 +5343,38 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
         );
     }
     assert!(
-        connect.exists(),
+        connect_path.exists(),
         "Trojan UDP TLS connect helpers should live in trojan_manager/connect.rs"
+    );
+    for forbidden in [
+        "ClientTlsConfig",
+        "ClientTlsConfig {",
+        "zero_transport::tls::connect_tls_upstream",
+        "zero_transport::tls::connect_tls_stream",
+        "connect_tls_upstream",
+        "connect_tls_stream",
+        "tls_profile.server_name()",
+        "tls_profile.client_fingerprint()",
+        "tls_profile.insecure()",
+        "alpn: Vec::new()",
+    ] {
+        assert!(
+            !connect.contains(forbidden),
+            "trojan_manager/connect.rs should delegate Trojan TLS profile conversion/opening to zero-transport; found `{forbidden}`"
+        );
+    }
+    assert!(
+        connect.contains("open_trojan_udp_tls_stream")
+            && connect.contains("open_trojan_udp_tls_relay_stream")
+            && connect.contains("TrojanUdpTlsOptions")
+            && transport.contains("pub struct TrojanUdpTlsOptions")
+            && transport.contains("ClientTlsConfig")
+            && transport.contains("tls_profile.server_name()")
+            && transport.contains("tls_profile.insecure()")
+            && transport.contains("tls_profile.client_fingerprint()")
+            && transport.contains("crate::tls::connect_tls_upstream")
+            && transport.contains("crate::tls::connect_tls_stream"),
+        "zero-transport should own Trojan UDP TLS profile conversion and TLS stream opening"
     );
 }
 
@@ -5427,6 +5461,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     assert!(
         manager_send.contains("request.resume.flow_key(request.server, request.port)")
             && manager_connect.contains("peer.resume.tls_profile(")
+            && manager_connect.contains("TrojanUdpTlsOptions")
             && manager_stream.contains(".establish_with_resume("),
         "Trojan UDP manager should consume protocol-owned flow key, TLS profile, and tunnel establishment helpers"
     );

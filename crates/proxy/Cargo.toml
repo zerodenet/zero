@@ -45,7 +45,7 @@ shadowsocks = [
     "shadowsocks/blake3",
 ]
 trojan = [
-    "zero-transport/tls",
+    "zero-transport/trojan",
     "dep:ring",
     "dep:trojan",
     "trojan/crypto",

@@ -1,7 +1,9 @@
 use super::super::TrojanUdpPeer;
 use crate::runtime::Proxy;
-use crate::transport::TcpRelayStream;
-use zero_config::ClientTlsConfig;
+use crate::transport::{
+    open_trojan_udp_tls_relay_stream, open_trojan_udp_tls_stream, TcpRelayStream,
+    TrojanUdpTlsOptions,
+};
 use zero_engine::EngineError;
 
 pub(super) async fn direct_tls_stream(
@@ -19,15 +21,17 @@ pub(super) async fn direct_tls_stream(
         )
         .await?;
 
-    let tls_stream = zero_transport::tls::connect_tls_upstream(
+    let tls_stream = open_trojan_udp_tls_stream(
         upstream,
-        &tls_config(tls_profile),
-        proxy.config.source_dir(),
-        peer.endpoint.server,
+        TrojanUdpTlsOptions {
+            profile: tls_profile,
+            source_dir: proxy.config.source_dir(),
+            server: peer.endpoint.server,
+        },
     )
     .await?;
 
-    Ok(TcpRelayStream::new(tls_stream))
+    Ok(tls_stream)
 }
 
 pub(super) async fn relay_tls_stream(
@@ -37,22 +41,13 @@ pub(super) async fn relay_tls_stream(
     peer: &TrojanUdpPeer<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
     let tls_profile = peer.resume.tls_profile(tls_server_name);
-    zero_transport::tls::connect_tls_stream(
+    open_trojan_udp_tls_relay_stream(
         stream,
-        &tls_config(tls_profile),
-        proxy.config.source_dir(),
-        peer.endpoint.server,
+        TrojanUdpTlsOptions {
+            profile: tls_profile,
+            source_dir: proxy.config.source_dir(),
+            server: peer.endpoint.server,
+        },
     )
     .await
-}
-
-fn tls_config(tls_profile: trojan::TrojanUdpTlsProfile) -> ClientTlsConfig {
-    ClientTlsConfig {
-        server_name: tls_profile.server_name().map(|s| s.to_owned()),
-        disable_sni: false,
-        ca_cert_path: None,
-        insecure: tls_profile.insecure(),
-        alpn: Vec::new(),
-        client_fingerprint: tls_profile.client_fingerprint().map(|s| s.to_owned()),
-    }
 }
