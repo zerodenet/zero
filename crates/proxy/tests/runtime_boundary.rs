@@ -3531,13 +3531,22 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
             "state.rs should delegate datagram resume dispatch to start/datagram.rs; found `{forbidden}`"
         );
     }
+    for forbidden in [
+        "ProtocolUdpFlowResume::Shadowsocks",
+        "ProtocolUdpFlowResume::Hysteria2",
+    ] {
+        assert!(
+            !managed.contains(forbidden),
+            "ManagedProtocolUdpState should delegate datagram resume recognition to protocol managers; found `{forbidden}`"
+        );
+    }
     assert!(
         state.contains("ManagedUdpFlowKind::Datagram")
             && state.contains("start_managed_datagram_flow")
             && datagram.contains("self.managed.start_datagram_flow")
-            && managed.contains("ProtocolUdpFlowResume::Shadowsocks(_)")
-            && managed.contains("ProtocolUdpFlowResume::Hysteria2(_)"),
-        "managed datagram UDP flow kind should leave protocol-specific resume matching in ManagedProtocolUdpState"
+            && managed.contains("supports_managed_existing(&flow.resume)")
+            && managed.contains("ManagedExistingSend::datagram"),
+        "managed datagram UDP flow kind should delegate resume recognition to protocol managers"
     );
 }
 
@@ -3581,6 +3590,15 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
             "state.rs should delegate stream/relay resume dispatch to protocol start modules; found `{forbidden}`"
         );
     }
+    for forbidden in [
+        "ProtocolUdpFlowResume::Trojan",
+        "ProtocolUdpFlowResume::Mieru",
+    ] {
+        assert!(
+            !managed.contains(forbidden),
+            "ManagedProtocolUdpState should delegate stream resume recognition to protocol managers; found `{forbidden}`"
+        );
+    }
     assert!(
         state.contains("ManagedUdpFlowKind::StreamPacket")
             && state.contains("ManagedUdpFlowKind::RelayStream")
@@ -3588,9 +3606,11 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
             && state.contains("start_managed_relay_stream_flow")
             && stream.contains("self.managed.start_stream_packet_flow")
             && stream.contains("self.managed.start_relay_stream_flow")
-            && managed.contains("ProtocolUdpFlowResume::Trojan(_)")
-            && managed.contains("ProtocolUdpFlowResume::Mieru(_)"),
-        "stream-packet and relay-stream UDP flow kinds should leave protocol-specific resume matching in ManagedProtocolUdpState"
+            && managed.contains("supports_managed_existing(&request.resume)")
+            && managed.contains("supports_managed_relay_existing(&request.resume)")
+            && managed.contains("ManagedExistingSend::stream_packet")
+            && managed.contains("ManagedRelaySend::relay_stream"),
+        "stream-packet and relay-stream UDP flow kinds should delegate resume recognition to protocol managers"
     );
 }
 
@@ -5137,7 +5157,8 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         normalized_forward.contains("self\n            .managed\n            .forward_existing_flow")
             && managed.contains("fn forward_existing_flow")
             && managed.contains("ManagedExistingSend")
-            && managed.contains("send_managed_existing"),
+            && managed.contains("send_managed_existing")
+            && managed.contains("supports_managed_existing(resume)"),
         "existing UDP protocol-flow handling should delegate neutral send requests to ManagedProtocolUdpState"
     );
     for forbidden in [
@@ -5147,6 +5168,10 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         "MieruSendExisting",
         "TrojanRelayExisting",
         "MieruRelayExisting",
+        "ProtocolUdpFlowResume::Shadowsocks",
+        "ProtocolUdpFlowResume::Hysteria2",
+        "ProtocolUdpFlowResume::Trojan",
+        "ProtocolUdpFlowResume::Mieru",
     ] {
         assert!(
             !managed.contains(forbidden),
@@ -5832,7 +5857,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     );
     assert!(
         forward.contains("ManagedExistingSend")
-            && forward.contains("resume: ProtocolUdpFlowResume::Trojan(resume.clone())")
+            && forward.contains("ManagedExistingSend::forwarded")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.sni()")
             && !forward.contains("existing.resume.insecure()")
@@ -5844,8 +5869,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         "existing Trojan UDP flow forwarding should pass the opaque resume descriptor without unpacking auth, TLS, or relay state"
     );
     assert!(
-        start.contains("ProtocolUdpFlowResume::Trojan(_)")
-            && start.contains("resume: request.resume.clone()")
+        !start.contains("ProtocolUdpFlowResume::Trojan")
+            && start.contains("ManagedExistingSend::stream_packet")
+            && start.contains("ManagedRelaySend::relay_stream")
             && !start.contains("resume.password()")
             && !start.contains("resume.sni()")
             && !start.contains("resume.insecure()")
@@ -6064,7 +6090,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     );
     assert!(
         forward.contains("ManagedExistingSend")
-            && forward.contains("resume: ProtocolUdpFlowResume::Mieru(resume.clone())")
+            && forward.contains("ManagedExistingSend::forwarded")
             && !forward.contains("existing.resume.username()")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.relay_chain()")
@@ -6076,8 +6102,9 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     );
     let start = read("src/protocol_runtime/udp/state/managed.rs");
     assert!(
-        start.contains("ProtocolUdpFlowResume::Mieru(_)")
-            && start.contains("resume: request.resume.clone()")
+        !start.contains("ProtocolUdpFlowResume::Mieru")
+            && start.contains("ManagedExistingSend::stream_packet")
+            && start.contains("ManagedRelaySend::relay_stream")
             && !start.contains("resume.username()")
             && !start.contains("resume.password()")
             && !start.contains("resume.relay_chain()")
@@ -6551,7 +6578,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     );
     assert!(
         forward.contains("ManagedExistingSend")
-            && forward.contains("resume: ProtocolUdpFlowResume::Hysteria2(resume.clone())")
+            && forward.contains("ManagedExistingSend::forwarded")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.client_fingerprint()")
             && !forward.contains("existing.resume.codec()")
@@ -7075,7 +7102,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     );
     assert!(
         forward.contains("ManagedExistingSend")
-            && forward.contains("resume: ProtocolUdpFlowResume::Shadowsocks(resume.clone())")
+            && forward.contains("ManagedExistingSend::forwarded")
             && !forward.contains("existing.resume.cache_key()")
             && !forward.contains("existing.resume.codec()")
             && !forward.contains("shadowsocks::udp_flow_codec")
@@ -7086,8 +7113,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     );
     let start = read("src/protocol_runtime/udp/state/managed.rs");
     assert!(
-        start.contains("ProtocolUdpFlowResume::Shadowsocks(_)")
-            && start.contains("resume: flow.resume.clone()")
+        !start.contains("ProtocolUdpFlowResume::Shadowsocks")
+            && start.contains("ManagedExistingSend::datagram")
             && !start.contains("resume.cache_key()")
             && !start.contains("resume.codec()"),
         "new Shadowsocks UDP flow start should pass the unified resume descriptor without unpacking cache identity or codec state"

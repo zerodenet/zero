@@ -11,6 +11,20 @@ use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 impl MieruChainManager {
+    pub(in crate::protocol_runtime::udp) fn supports_managed_existing(
+        &self,
+        resume: &ProtocolUdpFlowResume,
+    ) -> bool {
+        matches!(resume, ProtocolUdpFlowResume::Mieru(_))
+    }
+
+    pub(in crate::protocol_runtime::udp) fn supports_managed_relay_existing(
+        &self,
+        resume: &ProtocolUdpFlowResume,
+    ) -> bool {
+        matches!(resume, ProtocolUdpFlowResume::Mieru(_))
+    }
+
     async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,

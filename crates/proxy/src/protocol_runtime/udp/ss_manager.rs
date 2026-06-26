@@ -25,6 +25,13 @@ impl SsChainManager {
         }
     }
 
+    pub(in crate::protocol_runtime::udp) fn supports_managed_existing(
+        &self,
+        resume: &ProtocolUdpFlowResume,
+    ) -> bool {
+        matches!(resume, ProtocolUdpFlowResume::Shadowsocks(_))
+    }
+
     async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,

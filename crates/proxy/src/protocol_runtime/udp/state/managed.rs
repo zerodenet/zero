@@ -8,7 +8,7 @@ use crate::protocol_runtime::udp::ss_manager::SsChainManager;
 use crate::protocol_runtime::udp::trojan_manager::TrojanChainManager;
 use crate::protocol_runtime::udp::{
     FlowFailure, ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
-    ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
+    ProtocolUdpFlowSnapshot,
 };
 use crate::protocol_runtime::vless_udp::model::{
     VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow,
@@ -183,142 +183,72 @@ impl ManagedProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: ManagedDatagramFlow<'_>,
     ) -> Result<usize, FlowFailure> {
-        match &flow.resume {
-            #[cfg(feature = "shadowsocks")]
-            ProtocolUdpFlowResume::Shadowsocks(_) => {
-                self.send_shadowsocks_existing(ManagedExistingSend {
-                    chain_tasks,
-                    session_id: flow.session.id,
-                    proxy: flow.proxy,
-                    session: flow.session,
-                    server: flow.server,
-                    port: flow.port,
-                    resume: flow.resume.clone(),
-                    target: &flow.session.target,
-                    target_port: flow.session.port,
-                    payload: flow.payload,
-                })
-                .await
-            }
-            #[cfg(feature = "hysteria2")]
-            ProtocolUdpFlowResume::Hysteria2(_) => {
-                self.send_hysteria2_existing(ManagedExistingSend {
-                    chain_tasks,
-                    session_id: flow.session.id,
-                    proxy: flow.proxy,
-                    session: flow.session,
-                    server: flow.server,
-                    port: flow.port,
-                    resume: flow.resume.clone(),
-                    target: &flow.session.target,
-                    target_port: flow.session.port,
-                    payload: flow.payload,
-                })
-                .await
-            }
-            _ => Err(flow_mismatch(
-                "udp_managed_datagram_resume",
-                flow.server,
-                flow.port,
-                "expected managed datagram UDP flow resume",
-            )),
+        #[cfg(feature = "shadowsocks")]
+        if self.shadowsocks.supports_managed_existing(&flow.resume) {
+            return self
+                .send_shadowsocks_existing(ManagedExistingSend::datagram(chain_tasks, &flow))
+                .await;
         }
+        #[cfg(feature = "hysteria2")]
+        if self.hysteria2.supports_managed_existing(&flow.resume) {
+            return self
+                .send_hysteria2_existing(ManagedExistingSend::datagram(chain_tasks, &flow))
+                .await;
+        }
+        Err(flow_mismatch(
+            "udp_managed_datagram_resume",
+            flow.server,
+            flow.port,
+            "expected managed datagram UDP flow resume",
+        ))
     }
 
     pub(in crate::protocol_runtime::udp) async fn start_stream_packet_flow(
         &mut self,
         request: ManagedStreamPacketFlow<'_>,
     ) -> Result<usize, FlowFailure> {
-        match &request.resume {
-            #[cfg(feature = "trojan")]
-            ProtocolUdpFlowResume::Trojan(_) => {
-                self.send_trojan_existing(ManagedExistingSend {
-                    chain_tasks: request.chain_tasks,
-                    session_id: request.session.id,
-                    proxy: Some(request.proxy),
-                    session: request.session,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume.clone(),
-                    target: &request.session.target,
-                    target_port: request.session.port,
-                    payload: request.payload,
-                })
-                .await
-            }
-            #[cfg(feature = "mieru")]
-            ProtocolUdpFlowResume::Mieru(_) => {
-                self.send_mieru_existing(ManagedExistingSend {
-                    chain_tasks: request.chain_tasks,
-                    session_id: request.session.id,
-                    proxy: Some(request.proxy),
-                    session: request.session,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume.clone(),
-                    target: &request.session.target,
-                    target_port: request.session.port,
-                    payload: request.payload,
-                })
-                .await
-            }
-            _ => Err(flow_mismatch(
-                "udp_stream_packet_resume",
-                request.server,
-                request.port,
-                "expected stream-packet UDP flow resume",
-            )),
+        #[cfg(feature = "trojan")]
+        if self.trojan.supports_managed_existing(&request.resume) {
+            return self
+                .send_trojan_existing(ManagedExistingSend::stream_packet(request))
+                .await;
         }
+        #[cfg(feature = "mieru")]
+        if self.mieru.supports_managed_existing(&request.resume) {
+            return self
+                .send_mieru_existing(ManagedExistingSend::stream_packet(request))
+                .await;
+        }
+        Err(flow_mismatch(
+            "udp_stream_packet_resume",
+            request.server,
+            request.port,
+            "expected stream-packet UDP flow resume",
+        ))
     }
 
     pub(in crate::protocol_runtime::udp) async fn start_relay_stream_flow(
         &mut self,
         request: ManagedRelayStreamFlow<'_>,
     ) -> Result<usize, FlowFailure> {
-        match &request.resume {
-            #[cfg(feature = "trojan")]
-            ProtocolUdpFlowResume::Trojan(_) => {
-                self.send_trojan_relay_existing(ManagedRelaySend {
-                    chain_tasks: request.chain_tasks,
-                    session_id: request.session.id,
-                    stream: request.carrier.stream,
-                    tls_server_name: request.tls_server_name,
-                    proxy: request.proxy,
-                    session: request.session,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume.clone(),
-                    target: &request.session.target,
-                    target_port: request.session.port,
-                    payload: request.payload,
-                })
-                .await
-            }
-            #[cfg(feature = "mieru")]
-            ProtocolUdpFlowResume::Mieru(_) => {
-                self.send_mieru_relay_existing(ManagedRelaySend {
-                    chain_tasks: request.chain_tasks,
-                    session_id: request.session.id,
-                    stream: request.carrier.stream,
-                    tls_server_name: request.tls_server_name,
-                    proxy: request.proxy,
-                    session: request.session,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume.clone(),
-                    target: &request.session.target,
-                    target_port: request.session.port,
-                    payload: request.payload,
-                })
-                .await
-            }
-            _ => Err(flow_mismatch(
-                "udp_relay_stream_resume",
-                request.server,
-                request.port,
-                "expected relay-stream UDP flow resume",
-            )),
+        #[cfg(feature = "trojan")]
+        if self.trojan.supports_managed_relay_existing(&request.resume) {
+            return self
+                .send_trojan_relay_existing(ManagedRelaySend::relay_stream(request))
+                .await;
         }
+        #[cfg(feature = "mieru")]
+        if self.mieru.supports_managed_relay_existing(&request.resume) {
+            return self
+                .send_mieru_relay_existing(ManagedRelaySend::relay_stream(request))
+                .await;
+        }
+        Err(flow_mismatch(
+            "udp_relay_stream_resume",
+            request.server,
+            request.port,
+            "expected relay-stream UDP flow resume",
+        ))
     }
 
     pub(in crate::protocol_runtime::udp) async fn forward_existing_flow(
@@ -333,73 +263,68 @@ impl ManagedProtocolUdpState {
             .outbound
             .upstream()
             .expect("protocol flow should have upstream");
-        match snapshot.resume() {
-            #[cfg(feature = "shadowsocks")]
-            ProtocolUdpFlowResume::Shadowsocks(resume) => Some(
-                self.send_shadowsocks_existing(ManagedExistingSend {
+        let resume = snapshot.resume();
+        #[cfg(feature = "shadowsocks")]
+        if self.shadowsocks.supports_managed_existing(resume) {
+            return Some(
+                self.send_shadowsocks_existing(ManagedExistingSend::forwarded(
                     chain_tasks,
-                    session_id: flow.session.id,
-                    proxy: Some(proxy),
-                    session: &flow.session,
-                    server: upstream.server,
-                    port: upstream.port,
-                    resume: ProtocolUdpFlowResume::Shadowsocks(resume.clone()),
-                    target: &flow.session.target,
-                    target_port: flow.session.port,
+                    proxy,
+                    flow,
+                    resume.clone(),
+                    upstream.server,
+                    upstream.port,
                     payload,
-                })
+                ))
                 .await,
-            ),
-            #[cfg(feature = "hysteria2")]
-            ProtocolUdpFlowResume::Hysteria2(resume) => Some(
-                self.send_hysteria2_existing(ManagedExistingSend {
-                    chain_tasks,
-                    session_id: flow.session.id,
-                    proxy: Some(proxy),
-                    session: &flow.session,
-                    server: upstream.server,
-                    port: upstream.port,
-                    resume: ProtocolUdpFlowResume::Hysteria2(resume.clone()),
-                    target: &flow.session.target,
-                    target_port: flow.session.port,
-                    payload,
-                })
-                .await,
-            ),
-            #[cfg(feature = "trojan")]
-            ProtocolUdpFlowResume::Trojan(resume) => Some(
-                self.send_trojan_existing(ManagedExistingSend {
-                    chain_tasks,
-                    session_id: flow.session.id,
-                    proxy: Some(proxy),
-                    session: &flow.session,
-                    server: upstream.server,
-                    port: upstream.port,
-                    resume: ProtocolUdpFlowResume::Trojan(resume.clone()),
-                    target: &flow.session.target,
-                    target_port: flow.session.port,
-                    payload,
-                })
-                .await,
-            ),
-            #[cfg(feature = "mieru")]
-            ProtocolUdpFlowResume::Mieru(resume) => Some(
-                self.send_mieru_existing(ManagedExistingSend {
-                    chain_tasks,
-                    session_id: flow.session.id,
-                    proxy: Some(proxy),
-                    session: &flow.session,
-                    server: upstream.server,
-                    port: upstream.port,
-                    resume: ProtocolUdpFlowResume::Mieru(resume.clone()),
-                    target: &flow.session.target,
-                    target_port: flow.session.port,
-                    payload,
-                })
-                .await,
-            ),
-            _ => None,
+            );
         }
+        #[cfg(feature = "hysteria2")]
+        if self.hysteria2.supports_managed_existing(resume) {
+            return Some(
+                self.send_hysteria2_existing(ManagedExistingSend::forwarded(
+                    chain_tasks,
+                    proxy,
+                    flow,
+                    resume.clone(),
+                    upstream.server,
+                    upstream.port,
+                    payload,
+                ))
+                .await,
+            );
+        }
+        #[cfg(feature = "trojan")]
+        if self.trojan.supports_managed_existing(resume) {
+            return Some(
+                self.send_trojan_existing(ManagedExistingSend::forwarded(
+                    chain_tasks,
+                    proxy,
+                    flow,
+                    resume.clone(),
+                    upstream.server,
+                    upstream.port,
+                    payload,
+                ))
+                .await,
+            );
+        }
+        #[cfg(feature = "mieru")]
+        if self.mieru.supports_managed_existing(resume) {
+            return Some(
+                self.send_mieru_existing(ManagedExistingSend::forwarded(
+                    chain_tasks,
+                    proxy,
+                    flow,
+                    resume.clone(),
+                    upstream.server,
+                    upstream.port,
+                    payload,
+                ))
+                .await,
+            );
+        }
+        None
     }
 }
 

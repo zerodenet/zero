@@ -8,6 +8,13 @@ use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use zero_core::UdpFlowPacket;
 
 impl H2ChainManager {
+    pub(in crate::protocol_runtime::udp) fn supports_managed_existing(
+        &self,
+        resume: &ProtocolUdpFlowResume,
+    ) -> bool {
+        matches!(resume, ProtocolUdpFlowResume::Hysteria2(_))
+    }
+
     async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
