@@ -1,5 +1,6 @@
 use tokio::task::JoinSet;
-use zero_core::Session;
+use zero_core::{Address, Error, Session};
+use zero_traits::DatagramCodec;
 
 use super::super::mieru_manager::model::{MieruRelayExisting, MieruSendExisting};
 use super::super::state::ProtocolUdpState;
@@ -28,6 +29,7 @@ impl ProtocolUdpState {
                 port: flow.port,
                 username: flow.username,
                 password: flow.password,
+                codec: flow.codec,
                 target: &flow.session.target,
                 target_port: flow.session.port,
                 payload: flow.payload,
@@ -45,6 +47,7 @@ pub(crate) struct MieruUdpFlowRequest<'a> {
     pub username: &'a str,
     pub password: &'a str,
     pub relay_chain: bool,
+    pub codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub payload: &'a [u8],
 }
 
@@ -60,6 +63,7 @@ impl<'a> MieruUdpFlowRequest<'a> {
             username: self.username,
             password: self.password,
             relay_chain: self.relay_chain,
+            codec: self.codec,
             target: &self.session.target,
             target_port: self.session.port,
             payload: self.payload,

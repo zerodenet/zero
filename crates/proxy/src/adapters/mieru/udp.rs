@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
@@ -36,6 +38,7 @@ impl MieruAdapter {
                 port: *port,
                 username,
                 password,
+                codec: Arc::new(mieru::udp_flow_codec()),
                 payload,
             })
             .await
@@ -68,6 +71,7 @@ impl MieruAdapter {
                 port: *port,
                 username,
                 password,
+                codec: Arc::new(mieru::udp_flow_codec()),
                 payload,
             })
             .await

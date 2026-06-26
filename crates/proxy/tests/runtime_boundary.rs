@@ -5174,14 +5174,19 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
 fn mieru_udp_packet_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
     let codec = read("src/protocol_runtime/udp/mieru_manager/codec.rs");
+    let adapter = read("src/adapters/mieru/udp.rs");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
+        .expect("read mieru protocol udp source");
 
     for forbidden in [
         "UdpPacketFraming",
         "MieruUdpAssociatePacket",
+        "MieruInboundUdpPacket",
         "fn encode_associate_packet",
         "fn decode_associate_packet",
         "socks5::build_udp_packet",
         "socks5::parse_udp_packet",
+        "mieru::",
     ] {
         assert!(
             !manager.contains(forbidden),
@@ -5189,18 +5194,20 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         );
         assert!(
             !codec.contains(forbidden),
-            "mieru_manager/codec.rs should delegate Mieru UDP packet framing to protocols/mieru; found `{forbidden}`"
+            "mieru_manager/codec.rs should consume an adapter-provided DatagramCodec instead of naming protocol framing; found `{forbidden}`"
         );
     }
     assert!(
-        !codec.contains("mieru::encode_udp_response")
-            && !codec.contains("mieru::decode_inbound_udp_packet"),
-        "Mieru UDP manager codec should use flow-specific protocol helpers instead of generic UDP helpers"
+        codec.contains("dyn DatagramCodec<Address, Error = Error>")
+            && codec.contains(".encode(")
+            && codec.contains(".decode("),
+        "Mieru UDP manager codec should encode/decode through a neutral DatagramCodec object"
     );
     assert!(
-        codec.contains("mieru::encode_udp_flow_packet")
-            && codec.contains("mieru::decode_udp_flow_packet"),
-        "Mieru UDP packet codec should delegate encode/decode to flow-specific protocols/mieru helpers"
+        adapter.contains("mieru::udp_flow_codec")
+            && protocol_udp.contains("pub fn udp_flow_codec(")
+            && protocol_udp.contains("impl DatagramCodec<Address> for MieruUdpFlowCodec"),
+        "Mieru adapter should request the protocol-owned UDP flow codec"
     );
 }
 

@@ -1,4 +1,5 @@
-use zero_core::Session;
+use zero_core::{Address, Error, Session};
+use zero_traits::DatagramCodec;
 
 use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -13,6 +14,7 @@ pub(crate) struct MieruDatagramSend<'a> {
     pub(crate) port: u16,
     pub(crate) username: &'a str,
     pub(crate) password: &'a str,
+    pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) payload: &'a [u8],
 }
 
@@ -24,6 +26,7 @@ pub(crate) struct MieruRelaySend<'a> {
     pub(crate) port: u16,
     pub(crate) username: &'a str,
     pub(crate) password: &'a str,
+    pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) payload: &'a [u8],
 }
 
@@ -42,6 +45,7 @@ impl UdpDispatch {
                 username: request.username,
                 password: request.password,
                 relay_chain: false,
+                codec: request.codec.clone(),
                 payload: request.payload,
             })
             .await
@@ -60,6 +64,7 @@ impl UdpDispatch {
                 port: request.port,
                 username: request.username,
                 password: request.password,
+                codec: request.codec.clone(),
                 payload: request.payload,
             })
             .await?;
@@ -88,6 +93,7 @@ impl UdpDispatch {
                     port: request.port,
                     username: request.username,
                     password: request.password,
+                    codec: request.codec.clone(),
                     payload: request.payload,
                 },
             )
@@ -107,6 +113,7 @@ impl UdpDispatch {
                 port: request.port,
                 username: request.username,
                 password: request.password,
+                codec: request.codec.clone(),
                 payload: request.payload,
             })
             .await?;

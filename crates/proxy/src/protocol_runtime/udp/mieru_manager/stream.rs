@@ -4,13 +4,19 @@ use mieru::MieruOutbound;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, Mutex};
+use zero_core::{Address, Error};
+use zero_traits::DatagramCodec;
 
 pub(super) struct PacketStream {
     pub(super) send_tx: mpsc::Sender<Vec<u8>>,
     pub(super) recv_tx: bridge::ResponseSender,
 }
 
-pub(super) fn spawn_packet_stream(stream: TcpRelayStream, outbound: MieruOutbound) -> PacketStream {
+pub(super) fn spawn_packet_stream(
+    stream: TcpRelayStream,
+    outbound: MieruOutbound,
+    codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
+) -> PacketStream {
     let (send_tx, send_rx) = mpsc::channel::<Vec<u8>>(32);
     let recv_tx = bridge::response_channel();
 
@@ -18,7 +24,7 @@ pub(super) fn spawn_packet_stream(stream: TcpRelayStream, outbound: MieruOutboun
     let (read_half, write_half) = tokio::io::split(stream);
 
     spawn_send_task(shared_outbound.clone(), send_rx, write_half);
-    spawn_recv_task(shared_outbound, read_half, recv_tx.clone());
+    spawn_recv_task(shared_outbound, read_half, recv_tx.clone(), codec);
 
     PacketStream { send_tx, recv_tx }
 }
@@ -51,6 +57,7 @@ fn spawn_recv_task(
     outbound: Arc<Mutex<MieruOutbound>>,
     mut read_half: tokio::io::ReadHalf<TcpRelayStream>,
     recv_tx: bridge::ResponseSender,
+    codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
 ) {
     tokio::spawn(async move {
         let mut raw = Vec::new();
@@ -70,11 +77,10 @@ fn spawn_recv_task(
                     Ok((segment, consumed)) => {
                         raw.drain(..consumed);
                         if !segment.payload.is_empty() {
-                            if let Ok(packet) = codec::decode_packet(&segment.payload) {
-                                if recv_tx
-                                    .send((packet.target, packet.port, packet.payload))
-                                    .is_err()
-                                {
+                            if let Ok((target, port, payload)) =
+                                codec::decode_packet(codec.as_ref(), &segment.payload)
+                            {
+                                if recv_tx.send((target, port, payload)).is_err() {
                                     return;
                                 }
                             }

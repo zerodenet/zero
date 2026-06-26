@@ -10,6 +10,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use zero_core::{Address, Error};
+use zero_traits::DatagramCodec;
 
 const ATYP_IPV4: u8 = 0x01;
 const ATYP_DOMAIN: u8 = 0x03;
@@ -89,6 +90,30 @@ pub fn encode_udp_flow_packet(
     payload: &[u8],
 ) -> Result<Vec<u8>, Error> {
     encode_udp_response(target, port, payload)
+}
+
+/// Codec state for Mieru UDP flow datagrams.
+///
+/// Mieru UDP flow framing is stateless at this layer; stream encryption state is
+/// owned by `MieruOutbound`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct MieruUdpFlowCodec;
+
+pub fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
+    MieruUdpFlowCodec
+}
+
+impl DatagramCodec<Address> for MieruUdpFlowCodec {
+    type Error = Error;
+
+    fn encode(&self, target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Self::Error> {
+        encode_udp_flow_packet(target, port, payload)
+    }
+
+    fn decode(&self, data: &[u8]) -> Option<(Address, u16, Vec<u8>)> {
+        let decoded = decode_udp_flow_packet(data).ok()?;
+        Some((decoded.target, decoded.port, decoded.payload))
+    }
 }
 
 fn parse_socks5_udp_packet(packet: &[u8]) -> Result<MieruInboundUdpPacket, Error> {

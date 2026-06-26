@@ -34,6 +34,7 @@ pub(super) async fn forward(
             username: existing.username,
             password: existing.password,
             relay_chain: existing.relay_chain,
+            codec: std::sync::Arc::new(mieru::udp_flow_codec()),
             target: &flow.session.target,
             target_port: flow.session.port,
             payload: existing.payload,
