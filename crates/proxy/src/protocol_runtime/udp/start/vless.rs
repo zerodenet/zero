@@ -2,7 +2,9 @@ use tokio::task::JoinSet;
 
 use super::super::state::ProtocolUdpState;
 use super::super::{ChainTask, FlowFailure};
-use super::super::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
+use crate::protocol_runtime::vless_udp::model::{
+    VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream,
+};
 
 impl ProtocolUdpState {
     pub(crate) async fn start_vless_udp_flow(
@@ -90,7 +92,7 @@ impl ProtocolUdpState {
         self.vless
             .start_relay_final_hop(
                 chain_tasks,
-                crate::protocol_runtime::vless_udp::model::VlessUdpRelayFinalHop {
+                crate::protocol_runtime::vless_udp::model::VlessUdpRelayFinalHopStart {
                     proxy: flow.proxy,
                     session: flow.session,
                     carrier: flow.carrier,

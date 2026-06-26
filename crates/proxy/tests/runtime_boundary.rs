@@ -2033,7 +2033,6 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
 fn vless_udp_identity_is_protocol_parsed() {
     let runtime = read("src/protocol_runtime/vless_udp.rs");
     let model = read("src/protocol_runtime/vless_udp/model.rs");
-    let flows = read("src/protocol_runtime/udp/flows.rs");
     let adapter = read("src/adapters/vless/udp.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
         .expect("read protocols/vless/src/outbound.rs");
@@ -2046,10 +2045,6 @@ fn vless_udp_identity_is_protocol_parsed() {
         !model.contains("id: &'a str") && model.contains("vless::VlessUdpIdentity"),
         "VLESS UDP request models should carry protocol-owned identities instead of raw config IDs"
     );
-    let vless_flow_models = flows
-        .split("pub(crate) struct VmessUdpFlow")
-        .next()
-        .expect("VLESS flow models should appear before VMess flow models");
     for forbidden in [
         "pub(crate) id: &'a str",
         "pub(super) id: &'a str",
@@ -2057,7 +2052,7 @@ fn vless_udp_identity_is_protocol_parsed() {
         "pub(super) uuid: [u8; 16]",
     ] {
         assert!(
-            !vless_flow_models.contains(forbidden) && !model.contains(forbidden),
+            !model.contains(forbidden),
             "VLESS UDP request models should not carry raw config IDs or UUID fields; found `{forbidden}`"
         );
     }
@@ -2256,7 +2251,6 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
 fn vmess_udp_identity_is_protocol_parsed() {
     let runtime = read("src/protocol_runtime/vmess_udp.rs");
     let model = read("src/protocol_runtime/vmess_udp/model.rs");
-    let flows = read("src/protocol_runtime/udp/flows.rs");
     let adapter = read("src/adapters/vmess/udp.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read protocols/vmess/src/udp.rs");
@@ -2282,10 +2276,6 @@ fn vmess_udp_identity_is_protocol_parsed() {
         "protocols/vmess should own VMess UDP identity and cipher parsing"
     );
 
-    let vmess_flow_models = flows
-        .split("pub(crate) struct VmessUdpFlow")
-        .nth(1)
-        .expect("VMess UDP flow models should exist");
     for forbidden in [
         "pub(crate) id: &'a str",
         "pub(super) id: &'a str",
@@ -2297,7 +2287,7 @@ fn vmess_udp_identity_is_protocol_parsed() {
         "pub(super) cipher: vmess::VmessCipher",
     ] {
         assert!(
-            !vmess_flow_models.contains(forbidden) && !model.contains(forbidden),
+            !model.contains(forbidden),
             "VMess UDP request models should carry protocol-owned identity plus cipher_name only; found `{forbidden}`"
         );
     }
@@ -3375,6 +3365,19 @@ fn udp_dispatch_internal_state_fields_are_not_crate_public() {
 #[test]
 fn protocol_udp_flow_requests_do_not_extend_udp_dispatch() {
     let content = read("src/protocol_runtime/udp/flows.rs");
+
+    for forbidden in [
+        "VlessUdpFlow",
+        "VlessUdpRelayTwoStream",
+        "VlessUdpRelayFinalHop",
+        "VmessUdpFlow",
+        "VmessUdpRelayFlow",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "protocol_runtime::udp::flows should keep only neutral flow requests, not protocol-specific `{forbidden}`"
+        );
+    }
 
     for forbidden in [
         "impl UdpDispatch",

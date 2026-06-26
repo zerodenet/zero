@@ -1,4 +1,4 @@
-use crate::protocol_runtime::udp::{VmessUdpFlow, VmessUdpRelayFlow};
+use crate::protocol_runtime::vmess_udp::model::{VmessUdpFlow, VmessUdpRelayFlow};
 use crate::runtime::udp_dispatch::{FlowFailure, UdpDispatch};
 
 impl UdpDispatch {

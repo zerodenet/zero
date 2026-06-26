@@ -4,7 +4,7 @@
 //! dialing transports, caching per-target upstream streams, metering, and
 //! response bridge tasks.
 
-pub(super) mod model;
+pub(crate) mod model;
 
 use std::collections::HashMap;
 
@@ -16,7 +16,7 @@ use zero_platform_tokio::TransportConnector;
 
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
-use model::{VmessUdpRelayFlow, VmessUdpStartFlow, VmessUdpUpstream, VmessUdpUpstreamRequest};
+use model::{VmessUdpRelayFlowStart, VmessUdpStartFlow, VmessUdpUpstream, VmessUdpUpstreamRequest};
 
 type VmessResponseSender = broadcast::Sender<vmess::VmessUdpFlowResponse>;
 
@@ -152,7 +152,7 @@ impl VmessUdpOutboundManager {
     pub(crate) async fn start_relay_flow(
         &mut self,
         chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
-        request: VmessUdpRelayFlow<'_>,
+        request: VmessUdpRelayFlowStart<'_>,
     ) -> Result<(), EngineError> {
         let stream = crate::transport::build_vmess_outbound_transport_over_stream(
             crate::transport::VmessFinalHopTransportRequest {

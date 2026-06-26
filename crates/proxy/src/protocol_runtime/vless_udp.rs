@@ -3,7 +3,7 @@
 //! Moved from outbound/vless.rs so inbound can import them without
 //! depending on the outbound module.
 
-pub(super) mod model;
+pub(crate) mod model;
 
 use std::collections::HashMap;
 
@@ -16,7 +16,7 @@ use zero_platform_tokio::TransportConnector;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use model::{
-    VlessUdpRelayFinalHop, VlessUdpRelayTwoStream, VlessUdpStartFlow, VlessUdpUpstream,
+    VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow, VlessUdpUpstream,
     VlessUdpUpstreamRequest,
 };
 
@@ -185,7 +185,7 @@ impl VlessUdpOutboundManager {
     pub(crate) async fn start_relay_final_hop(
         &mut self,
         chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
-        request: VlessUdpRelayFinalHop<'_>,
+        request: VlessUdpRelayFinalHopStart<'_>,
     ) -> Result<(), EngineError> {
         let stream = crate::transport::build_vless_outbound_transport_over_stream(
             crate::transport::VlessFinalHopTransportRequest {

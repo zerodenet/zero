@@ -2,7 +2,7 @@ use tokio::task::JoinSet;
 
 use super::super::state::ProtocolUdpState;
 use super::super::{ChainTask, FlowFailure};
-use super::super::{VmessUdpFlow, VmessUdpRelayFlow};
+use crate::protocol_runtime::vmess_udp::model::{VmessUdpFlow, VmessUdpRelayFlow};
 
 impl ProtocolUdpState {
     pub(crate) async fn start_vmess_udp_flow(
@@ -54,7 +54,7 @@ impl ProtocolUdpState {
         self.vmess
             .start_relay_flow(
                 chain_tasks,
-                crate::protocol_runtime::vmess_udp::model::VmessUdpRelayFlow {
+                crate::protocol_runtime::vmess_udp::model::VmessUdpRelayFlowStart {
                     proxy: flow.proxy,
                     session: flow.session,
                     carrier: flow.carrier,

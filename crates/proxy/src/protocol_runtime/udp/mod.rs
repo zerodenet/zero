@@ -28,10 +28,6 @@ pub(crate) use flows::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowKind,
     ManagedUdpFlowRequest,
 };
-#[cfg(feature = "vless")]
-pub(crate) use flows::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
-#[cfg(feature = "vmess")]
-pub(crate) use flows::{VmessUdpFlow, VmessUdpRelayFlow};
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_chain::{PacketPathManager, SendWithSnapshotRequest};
 pub(crate) use packet_path_traits::ChainTask;
