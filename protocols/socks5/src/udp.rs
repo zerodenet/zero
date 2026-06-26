@@ -1,11 +1,18 @@
 use zero_core::{Address, Error};
-use zero_traits::{DatagramSocket, IpAddress};
+use zero_traits::{AsyncSocket, DatagramSocket, IpAddress, UdpRelayProtocol};
 
+use crate::outbound::{Socks5Outbound, Socks5OutboundAuth, Socks5UdpRelayTarget};
 use crate::shared::{build_udp_packet, decode_udp_associate_response};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Socks5UdpRelayEndpoint {
     pub address: IpAddress,
+    pub port: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpRelayTargetAddress {
+    pub address: Address,
     pub port: u16,
 }
 
@@ -37,6 +44,24 @@ impl<S> Socks5UdpRelay<S> {
     pub fn into_socket(self) -> S {
         self.socket
     }
+}
+
+pub async fn establish_udp_relay_with_control<S>(
+    control_stream: &mut S,
+    auth: Option<(&str, &str)>,
+) -> Result<Socks5UdpRelayTargetAddress, Error>
+where
+    S: AsyncSocket,
+{
+    let (address, port) = Socks5Outbound
+        .establish_udp_relay(
+            control_stream,
+            &Socks5UdpRelayTarget {
+                auth: auth.map(|(username, password)| Socks5OutboundAuth { username, password }),
+            },
+        )
+        .await?;
+    Ok(Socks5UdpRelayTargetAddress { address, port })
 }
 
 impl<S> Socks5UdpRelay<S>

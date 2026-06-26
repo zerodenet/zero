@@ -1915,7 +1915,11 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
 
     assert!(
         active.contains("struct ActiveUpstreamSocks5UdpAssociation")
-            && active.contains("Socks5UdpRelay"),
+            && active.contains("Socks5UdpRelay")
+            && active.contains("socks5::establish_udp_relay_with_control")
+            && !active.contains("Socks5UdpRelayTarget")
+            && !active.contains("Socks5OutboundAuth")
+            && !active.contains(".establish_udp_relay("),
         "SOCKS5 UDP active association should live in protocol_runtime/socks5_udp/active.rs"
     );
     assert!(

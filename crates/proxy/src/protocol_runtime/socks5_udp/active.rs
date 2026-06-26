@@ -5,7 +5,6 @@ use socks5::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
 use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
-use zero_traits::UdpRelayProtocol;
 
 use super::model::UpstreamAssociationCloseReason;
 use crate::runtime::Proxy;
@@ -37,25 +36,15 @@ impl ActiveUpstreamSocks5UdpAssociation {
             .connect_host(server, port, proxy.resolver.as_ref())
             .await?;
         let mut control = MeteredStream::new(control);
-        let (relay_address, relay_port) = socks5::Socks5Outbound
-            .establish_udp_relay(
-                &mut control,
-                &socks5::Socks5UdpRelayTarget {
-                    auth: auth.map(|(username, password)| socks5::Socks5OutboundAuth {
-                        username,
-                        password,
-                    }),
-                },
-            )
-            .await?;
+        let relay_target = socks5::establish_udp_relay_with_control(&mut control, auth).await?;
         proxy.record_session_outbound_traffic(session_id, control.drain_traffic());
         let control = control.into_inner();
         let relay_addr = proxy
             .protocols
             .direct_connector()
             .resolve_address(
-                &relay_address,
-                relay_port,
+                &relay_target.address,
+                relay_target.port,
                 proxy.resolver.as_ref(),
                 "failed to resolve upstream socks5 udp relay",
             )

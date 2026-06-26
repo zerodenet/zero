@@ -23,4 +23,7 @@ pub use shared::{
     encode_udp_associate_response, parse_udp_packet, udp_cache_key, Socks5Reply, Socks5UdpPacket,
     Socks5UdpPacketPathConfig,
 };
-pub use udp::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
+pub use udp::{
+    establish_udp_relay_with_control, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError,
+    Socks5UdpRelayTargetAddress,
+};
