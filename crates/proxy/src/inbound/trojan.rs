@@ -202,7 +202,7 @@ impl Proxy {
                     );
                     break;
                 }
-                packet = trojan::read_inbound_udp_packet(&mut client) => {
+                packet = trojan::read_udp_flow_packet(&mut client) => {
                     match packet {
                         Ok(packet) => {
                             last_activity = TokioInstant::now();
@@ -238,7 +238,7 @@ impl Proxy {
                     if let Some(sid) = session_id {
                         self.record_session_outbound_rx(sid, n as u64);
                     }
-                    trojan::write_udp_response(&mut client, &target, sender.port(), &direct_buf[..n]).await?;
+                    trojan::write_udp_flow_packet(&mut client, &target, sender.port(), &direct_buf[..n]).await?;
                     if let Some(sid) = session_id {
                         self.record_session_inbound_tx(sid, n as u64);
                     }
@@ -256,7 +256,7 @@ impl Proxy {
                                 let target = pkt.target;
                                 let port = pkt.port;
                                 let payload = pkt.payload;
-                                trojan::write_udp_response(&mut client, &target, port, &payload).await?;
+                                trojan::write_udp_flow_packet(&mut client, &target, port, &payload).await?;
                                 if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
                                     self.record_session_inbound_tx(sid, payload.len() as u64);
                                 }
@@ -276,7 +276,7 @@ impl Proxy {
                                 self.record_session_outbound_rx(sid, payload.len() as u64);
                             }
                             let payload_len = payload.len() as u64;
-                            trojan::write_udp_response(&mut client, &target, port, &payload).await?;
+                            trojan::write_udp_flow_packet(&mut client, &target, port, &payload).await?;
                             if let Some(sid) = session_id {
                                 self.record_session_inbound_tx(sid, payload_len);
                             }

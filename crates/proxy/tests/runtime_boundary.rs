@@ -2438,6 +2438,8 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         "TrojanUdpPacket {",
         "UdpPacketStreamFraming<TrojanUdpPacket>",
         "TrojanOutbound as UdpPacketStreamFraming",
+        "trojan::read_inbound_udp_packet",
+        "trojan::write_udp_response",
         "socks5::parse_udp_packet",
     ] {
         assert!(
@@ -2450,7 +2452,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         "Trojan inbound SOCKS5 upstream response bridge should use semantic SOCKS5 associate helpers"
     );
 
-    for required in ["read_inbound_udp_packet", "write_udp_response"] {
+    for required in ["read_udp_flow_packet", "write_udp_flow_packet"] {
         assert!(
             protocol_outbound.contains(required)
                 && inbound.contains(&format!("trojan::{required}")),
