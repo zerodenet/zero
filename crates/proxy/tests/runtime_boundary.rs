@@ -2373,15 +2373,28 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && mux.contains("socks5::decode_udp_associate_response"),
         "VMess inbound SOCKS5 upstream response bridge should use semantic SOCKS5 associate helpers"
     );
-    for required in ["encode_udp_response", "encode_mux_udp_response"] {
+    for forbidden in [
+        "vmess::encode_udp_response",
+        "vmess::encode_mux_udp_response",
+        "vmess::decode_inbound_udp_payload",
+    ] {
+        assert!(
+            !helper.contains(forbidden),
+            "VMess inbound helper should use inbound-specific protocol helpers; found `{forbidden}`"
+        );
+    }
+    for required in [
+        "encode_inbound_udp_response",
+        "encode_inbound_mux_udp_response",
+    ] {
         assert!(
             protocol_udp.contains(required) && helper.contains(&format!("vmess::{required}")),
             "VMess UDP response encoding should be owned by protocols/vmess `{required}`"
         );
     }
     assert!(
-        protocol_udp.contains("decode_inbound_udp_payload")
-            && helper.contains("vmess::decode_inbound_udp_payload"),
+        protocol_udp.contains("decode_inbound_udp_datagram")
+            && helper.contains("vmess::decode_inbound_udp_datagram"),
         "VMess UDP request payload mode detection should be owned by protocols/vmess"
     );
 }

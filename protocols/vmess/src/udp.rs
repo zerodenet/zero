@@ -181,6 +181,25 @@ pub fn encode_mux_udp_response(
     crate::mux::encode_keep_stream(mux_session_id, &payload)
 }
 
+pub fn encode_inbound_udp_response(
+    mode: VmessUdpPayloadMode,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    encode_udp_response(mode, target, port, payload)
+}
+
+pub fn encode_inbound_mux_udp_response(
+    mux_session_id: u16,
+    mode: VmessUdpPayloadMode,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    encode_mux_udp_response(mux_session_id, mode, target, port, payload)
+}
+
 pub fn decode_inbound_udp_payload(
     state: VmessUdpPayloadState,
     default_target: &Address,
@@ -220,6 +239,15 @@ pub fn decode_inbound_udp_payload(
             })
         }
     }
+}
+
+pub fn decode_inbound_udp_datagram(
+    state: VmessUdpPayloadState,
+    default_target: &Address,
+    default_port: u16,
+    payload: &[u8],
+) -> Result<VmessInboundUdpPayload, Error> {
+    decode_inbound_udp_payload(state, default_target, default_port, payload)
 }
 
 pub fn parse_udp_packet(packet: &[u8]) -> Result<VmessUdpPacket, Error> {

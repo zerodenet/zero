@@ -42,7 +42,13 @@ pub(crate) fn encode_vmess_mux_udp_response(
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
-    vmess::encode_mux_udp_response(mux_session_id, mode.response_mode(), target, port, payload)
+    vmess::encode_inbound_mux_udp_response(
+        mux_session_id,
+        mode.response_mode(),
+        target,
+        port,
+        payload,
+    )
 }
 
 pub(crate) fn encode_vmess_udp_response(
@@ -51,7 +57,7 @@ pub(crate) fn encode_vmess_udp_response(
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, zero_core::Error> {
-    vmess::encode_udp_response(mode.response_mode(), target, port, payload)
+    vmess::encode_inbound_udp_response(mode.response_mode(), target, port, payload)
 }
 
 pub(crate) fn decode_vmess_udp_payload(
@@ -60,7 +66,8 @@ pub(crate) fn decode_vmess_udp_payload(
     default_port: u16,
     payload: &[u8],
 ) -> Result<VmessInboundUdpPayload, zero_core::Error> {
-    let decoded = vmess::decode_inbound_udp_payload(mode.0, default_target, default_port, payload)?;
+    let decoded =
+        vmess::decode_inbound_udp_datagram(mode.0, default_target, default_port, payload)?;
     mode.update(decoded.state);
     Ok(VmessInboundUdpPayload {
         target: decoded.target,
