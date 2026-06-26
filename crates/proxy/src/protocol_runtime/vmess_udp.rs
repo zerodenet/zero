@@ -14,6 +14,7 @@ use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
+use crate::protocol_runtime::udp::packet_path_traits::UdpResponsePacket;
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 use model::{
@@ -26,9 +27,9 @@ fn spawn_vmess_udp_relay(
     session_id: u64,
     mut metered: MeteredStream<TcpRelayStream>,
     initial_payload_len: usize,
-) -> (VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>) {
+) -> (VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>) {
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
-    let (recv_tx, _) = broadcast::channel::<vmess::VmessUdpPacket>(32);
+    let (recv_tx, _) = broadcast::channel::<UdpResponsePacket>(32);
     let recv_tx_bg = recv_tx.clone();
 
     proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
@@ -55,7 +56,12 @@ fn spawn_vmess_udp_relay(
                         Ok(n) => {
                             match vmess::decode_udp_flow_packet(&buffer[..n]) {
                                 Ok(packet) => {
-                                    if recv_tx_bg.send(packet).is_err() {
+                                    let response = UdpResponsePacket {
+                                        target: packet.target,
+                                        port: packet.port,
+                                        payload: packet.payload,
+                                    };
+                                    if recv_tx_bg.send(response).is_err() {
                                         break;
                                     }
                                 }
@@ -151,7 +157,7 @@ async fn establish_vmess_udp_upstream_over_stream(
     identity: vmess::VmessUdpIdentity,
     initial_payload: &[u8],
     stream: TcpRelayStream,
-) -> Result<(VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>), EngineError> {
+) -> Result<(VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>), EngineError> {
     let initial_packet =
         vmess::encode_udp_flow_packet(&session.target, session.port, initial_payload)?;
 
@@ -169,7 +175,7 @@ async fn establish_vmess_udp_upstream_over_stream(
 
 async fn establish_vmess_udp_upstream(
     request: &VmessUdpUpstreamRequest<'_>,
-) -> Result<(VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>), EngineError> {
+) -> Result<(VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>), EngineError> {
     let initial_packet = vmess::encode_udp_flow_packet(
         &request.session.target,
         request.session.port,
@@ -314,8 +320,7 @@ async fn establish_vmess_udp_upstream(
 }
 
 pub(crate) struct VmessUdpOutboundManager {
-    upstreams:
-        HashMap<(Address, u16), (VmessUdpUpstream, broadcast::Sender<vmess::VmessUdpPacket>)>,
+    upstreams: HashMap<(Address, u16), (VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>)>,
 }
 
 impl VmessUdpOutboundManager {
@@ -409,7 +414,7 @@ impl VmessUdpOutboundManager {
         &mut self,
         key: (Address, u16),
         upstream: VmessUdpUpstream,
-        recv_tx: broadcast::Sender<vmess::VmessUdpPacket>,
+        recv_tx: broadcast::Sender<UdpResponsePacket>,
     ) {
         self.upstreams.insert(key, (upstream, recv_tx));
     }

@@ -14,6 +14,7 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 use zero_traits::AsyncSocket;
 
+use crate::protocol_runtime::udp::packet_path_traits::UdpResponsePacket;
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 use model::{
@@ -28,9 +29,9 @@ fn spawn_vless_udp_relay(
     session_id: u64,
     mut metered: MeteredStream<TcpRelayStream>,
     initial_payload_len: usize,
-) -> (VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>) {
+) -> (VlessUdpUpstream, broadcast::Sender<UdpResponsePacket>) {
     let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
-    let (recv_tx, _) = broadcast::channel::<vless::VlessUdpPacket>(32);
+    let (recv_tx, _) = broadcast::channel::<UdpResponsePacket>(32);
     let recv_tx_bg = recv_tx.clone();
 
     proxy.record_session_outbound_tx(session_id, initial_payload_len as u64);
@@ -57,7 +58,12 @@ fn spawn_vless_udp_relay(
                         Ok(n) => {
                             match vless::decode_udp_flow_packet(&buffer[..n]) {
                                 Ok(packet) => {
-                                    if recv_tx_bg.send(packet).is_err() {
+                                    let response = UdpResponsePacket {
+                                        target: packet.target,
+                                        port: packet.port,
+                                        payload: packet.payload,
+                                    };
+                                    if recv_tx_bg.send(response).is_err() {
                                         break;
                                     }
                                 }
@@ -90,7 +96,7 @@ async fn establish_vless_udp_upstream_over_stream(
     identity: vless::VlessUdpIdentity,
     initial_payload: &[u8],
     stream: TcpRelayStream,
-) -> Result<(VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>), EngineError> {
+) -> Result<(VlessUdpUpstream, broadcast::Sender<UdpResponsePacket>), EngineError> {
     let initial_packet =
         vless::encode_udp_flow_packet(&session.target, session.port, initial_payload)?;
 
@@ -116,7 +122,7 @@ async fn establish_vless_udp_upstream(
     identity: vless::VlessUdpIdentity,
     initial_payload: &[u8],
     transport: Option<&VlessUdpTransport<'_>>,
-) -> Result<(VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>), EngineError> {
+) -> Result<(VlessUdpUpstream, broadcast::Sender<UdpResponsePacket>), EngineError> {
     let initial_packet =
         vless::encode_udp_flow_packet(&session.target, session.port, initial_payload)?;
 
@@ -174,8 +180,7 @@ async fn establish_vless_udp_upstream(
 /// Response bridge tasks are spawned into the shared `chain_tasks` JoinSet
 /// in [`UdpDispatch`], so all chain outbound responses are polled uniformly.
 pub(crate) struct VlessUdpOutboundManager {
-    upstreams:
-        HashMap<(Address, u16), (VlessUdpUpstream, broadcast::Sender<vless::VlessUdpPacket>)>,
+    upstreams: HashMap<(Address, u16), (VlessUdpUpstream, broadcast::Sender<UdpResponsePacket>)>,
 }
 
 impl VlessUdpOutboundManager {
@@ -343,7 +348,7 @@ impl VlessUdpOutboundManager {
         &mut self,
         key: (Address, u16),
         upstream: VlessUdpUpstream,
-        recv_tx: broadcast::Sender<vless::VlessUdpPacket>,
+        recv_tx: broadcast::Sender<UdpResponsePacket>,
     ) {
         self.upstreams.insert(key, (upstream, recv_tx));
     }

@@ -10,6 +10,13 @@ use zero_engine::EngineError;
 /// polled from a single `select!` branch via UDP dispatch chain polling.
 pub(crate) type ChainTask = Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>;
 
+#[derive(Clone)]
+pub(crate) struct UdpResponsePacket {
+    pub(crate) target: Address,
+    pub(crate) port: u16,
+    pub(crate) payload: Vec<u8>,
+}
+
 /// Runtime context shared by UDP outbound managers for one send operation.
 pub(crate) struct UdpFlowContext<'a> {
     pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,

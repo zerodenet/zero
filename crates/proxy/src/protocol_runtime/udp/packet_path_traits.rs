@@ -12,4 +12,4 @@ pub(crate) use carrier::{
     PacketPathFlowSnapshot, PacketPathLookupKey, UdpDatagramDescriptor, UdpDatagramKey,
     UdpDatagramSource,
 };
-pub(crate) use context::{ChainTask, UdpFlowContext, UdpPacketRef};
+pub(crate) use context::{ChainTask, UdpFlowContext, UdpPacketRef, UdpResponsePacket};

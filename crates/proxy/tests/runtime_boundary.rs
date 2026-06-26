@@ -2047,8 +2047,10 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = read("src/protocol_runtime/vless_udp.rs");
 
     for forbidden in [
+        "broadcast::Sender<vless::VlessUdpPacket>",
         "UdpPacketFraming",
         "VlessUdpFlowCodec",
+        "VlessUdpPacket)",
         "VlessUdpPacketTarget",
         "UdpPacketTunnelProtocol",
         "VlessUdpPacketTunnelTarget",
@@ -2066,8 +2068,9 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     assert!(
         runtime.contains("vless::encode_udp_flow_packet")
             && runtime.contains("vless::decode_udp_flow_packet")
-            && runtime.contains("vless::establish_udp_flow_stream"),
-        "VLESS UDP runtime should call protocols/vless flow packet and tunnel helpers"
+            && runtime.contains("vless::establish_udp_flow_stream")
+            && runtime.contains("UdpResponsePacket"),
+        "VLESS UDP runtime should call protocols/vless flow helpers and store neutral responses"
     );
 }
 
@@ -2168,8 +2171,10 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = read("src/protocol_runtime/vmess_udp.rs");
 
     for forbidden in [
+        "broadcast::Sender<vmess::VmessUdpPacket>",
         "UdpPacketFraming",
         "VmessUdpFlowCodec",
+        "VmessUdpPacket)",
         "VmessUdpPacketTarget",
         "VmessAeadStream::establish_udp_outbound",
         "VmessOutbound",
@@ -2187,8 +2192,9 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     assert!(
         runtime.contains("vmess::encode_udp_flow_packet")
             && runtime.contains("vmess::decode_udp_flow_packet")
-            && runtime.contains("vmess::establish_udp_flow_stream"),
-        "VMess UDP runtime should call protocols/vmess flow packet and tunnel helpers"
+            && runtime.contains("vmess::establish_udp_flow_stream")
+            && runtime.contains("UdpResponsePacket"),
+        "VMess UDP runtime should call protocols/vmess flow helpers and store neutral responses"
     );
 }
 
