@@ -1,5 +1,4 @@
 use tokio::sync::mpsc;
-use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::{Address, Session};
 
 use crate::runtime::Proxy;
@@ -10,13 +9,6 @@ pub(super) struct VmessUdpUpstream {
     pub(super) send_tx: mpsc::Sender<Vec<u8>>,
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct VmessUdpTransport<'a> {
-    pub(crate) tls: Option<&'a ClientTlsConfig>,
-    pub(crate) ws: Option<&'a WebSocketConfig>,
-    pub(crate) grpc: Option<&'a GrpcConfig>,
-}
-
 pub(crate) struct VmessUdpStartFlow<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) session: &'a Session,
@@ -25,7 +17,7 @@ pub(crate) struct VmessUdpStartFlow<'a> {
     pub(crate) identity: vmess::VmessUdpIdentity,
     pub(crate) cipher_name: &'a str,
     pub(crate) mux_concurrency: Option<u32>,
-    pub(crate) transport: VmessUdpTransport<'a>,
+    pub(crate) transport: crate::transport::VmessTransportOptions<'a>,
     pub(crate) payload: &'a [u8],
 }
 
@@ -33,10 +25,8 @@ pub(crate) struct VmessUdpRelayFlow<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) session: &'a Session,
     pub(crate) carrier: crate::transport::RelayCarrier,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
     pub(crate) identity: vmess::VmessUdpIdentity,
-    pub(crate) transport: VmessUdpTransport<'a>,
+    pub(crate) transport: crate::transport::VmessTransportOptions<'a>,
     pub(crate) payload: &'a [u8],
 }
 
@@ -50,6 +40,6 @@ pub(super) struct VmessUdpUpstreamRequest<'a> {
     pub(super) identity: vmess::VmessUdpIdentity,
     pub(super) cipher_name: &'a str,
     pub(super) initial_payload: &'a [u8],
-    pub(super) transport: Option<&'a VmessUdpTransport<'a>>,
+    pub(super) transport: Option<&'a crate::transport::VmessTransportOptions<'a>>,
     pub(super) mux_concurrency: Option<u32>,
 }

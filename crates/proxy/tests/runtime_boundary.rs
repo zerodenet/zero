@@ -2094,7 +2094,6 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
 
     for required in [
         "struct VmessUdpUpstream",
-        "struct VmessUdpTransport",
         "struct VmessUdpStartFlow",
         "struct VmessUdpRelayFlow",
         "struct VmessUdpUpstreamRequest",
@@ -2102,6 +2101,53 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
         assert!(
             model.contains(required),
             "VMess UDP state/request model should live in vmess_udp/model.rs; missing `{required}`"
+        );
+    }
+}
+
+#[test]
+fn vmess_udp_transport_opening_lives_in_transport_crate() {
+    let runtime = read("src/protocol_runtime/vmess_udp.rs");
+    let model = read("src/protocol_runtime/vmess_udp/model.rs");
+    let start = read("src/protocol_runtime/udp/start/vmess.rs");
+    let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
+        .expect("read crates/transport/src/vmess_transport.rs");
+
+    for forbidden in [
+        "zero_transport::tls::connect_tls_upstream",
+        "zero_transport::tls::connect_tls_stream",
+        "zero_transport::grpc::connect_grpc",
+        "zero_transport::ws::connect_ws",
+        "struct VmessUdpTransport",
+    ] {
+        assert!(
+            !runtime.contains(forbidden) && !model.contains(forbidden),
+            "VMess UDP runtime/model should not own transport opening detail; found `{forbidden}`"
+        );
+    }
+
+    assert!(
+        start.contains("crate::transport::VmessTransportOptions")
+            && runtime.contains("crate::transport::VmessTransportConnector")
+            && runtime.contains("crate::transport::build_vmess_outbound_transport_over_stream"),
+        "VMess UDP runtime should request VMess transport helpers instead of opening TLS/WS/gRPC directly"
+    );
+
+    for required in [
+        "pub struct VmessTransportOptions",
+        "pub struct VmessOutboundTransportRequest",
+        "pub struct VmessFinalHopTransportRequest",
+        "pub async fn build_vmess_outbound_transport",
+        "pub async fn build_vmess_outbound_transport_over_stream",
+        "pub struct VmessTransportConnector",
+        "tls::connect_tls_upstream",
+        "tls::connect_tls_stream",
+        "grpc::connect_grpc",
+        "ws::connect_ws",
+    ] {
+        assert!(
+            transport.contains(required),
+            "zero-transport should own VMess transport opening helper `{required}`"
         );
     }
 }
@@ -2337,7 +2383,6 @@ fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
         ("src/protocol_runtime/vless_udp.rs", "VlessUdpTransport"),
         ("src/protocol_runtime/vmess_udp.rs", "VmessUdpStartFlow"),
         ("src/protocol_runtime/vmess_udp.rs", "VmessUdpRelayFlow"),
-        ("src/protocol_runtime/vmess_udp.rs", "VmessUdpTransport"),
         (
             "src/protocol_runtime/vless_mux_pool.rs",
             "VlessMuxOpenRequest",

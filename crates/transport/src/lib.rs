@@ -18,5 +18,7 @@ pub mod split_http;
 pub mod tls;
 #[cfg(feature = "vless")]
 pub mod vless_transport;
+#[cfg(all(feature = "tls", feature = "ws", feature = "grpc"))]
+pub mod vmess_transport;
 #[cfg(feature = "ws")]
 pub mod ws;

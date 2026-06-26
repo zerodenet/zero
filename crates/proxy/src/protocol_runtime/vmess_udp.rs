@@ -12,15 +12,13 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
+use zero_platform_tokio::TransportConnector;
 use zero_traits::AsyncSocket;
 
 use crate::protocol_runtime::udp::packet_path_traits::UdpResponsePacket;
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
-use model::{
-    VmessUdpRelayFlow, VmessUdpStartFlow, VmessUdpTransport, VmessUdpUpstream,
-    VmessUdpUpstreamRequest,
-};
+use model::{VmessUdpRelayFlow, VmessUdpStartFlow, VmessUdpUpstream, VmessUdpUpstreamRequest};
 
 fn spawn_vmess_udp_relay(
     proxy: &Proxy,
@@ -85,70 +83,6 @@ fn spawn_vmess_udp_relay(
         },
         recv_tx,
     )
-}
-
-async fn build_vmess_udp_transport_over_stream(
-    stream: TcpRelayStream,
-    transport: Option<&VmessUdpTransport<'_>>,
-    source_dir: Option<&std::path::Path>,
-    server: &str,
-    port: u16,
-) -> Result<TcpRelayStream, EngineError> {
-    match transport {
-        Some(VmessUdpTransport {
-            grpc: Some(grpc_cfg),
-            ws: None,
-            tls: Some(tls_cfg),
-        }) => {
-            let tls_stream =
-                zero_transport::tls::connect_tls_stream(stream, tls_cfg, source_dir, server)
-                    .await?;
-            Ok(TcpRelayStream::new(
-                zero_transport::grpc::connect_grpc(tls_stream, &grpc_cfg.service_names).await?,
-            ))
-        }
-        Some(VmessUdpTransport {
-            grpc: Some(grpc_cfg),
-            ws: None,
-            tls: None,
-        }) => Ok(TcpRelayStream::new(
-            zero_transport::grpc::connect_grpc(stream, &grpc_cfg.service_names).await?,
-        )),
-        Some(VmessUdpTransport {
-            grpc: None,
-            ws: Some(ws_cfg),
-            tls: Some(tls_cfg),
-        }) => {
-            let tls_stream =
-                zero_transport::tls::connect_tls_stream(stream, tls_cfg, source_dir, server)
-                    .await?;
-            Ok(TcpRelayStream::new(
-                zero_transport::ws::connect_ws(tls_stream, ws_cfg, server, port).await?,
-            ))
-        }
-        Some(VmessUdpTransport {
-            grpc: None,
-            ws: Some(ws_cfg),
-            tls: None,
-        }) => Ok(TcpRelayStream::new(
-            zero_transport::ws::connect_ws(stream, ws_cfg, server, port).await?,
-        )),
-        Some(VmessUdpTransport {
-            grpc: None,
-            ws: None,
-            tls: Some(tls_cfg),
-        }) => zero_transport::tls::connect_tls_stream(stream, tls_cfg, source_dir, server).await,
-        Some(VmessUdpTransport {
-            grpc: None,
-            ws: None,
-            tls: None,
-        })
-        | None => Ok(stream),
-        _ => Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "vmess: ws and grpc are mutually exclusive",
-        ))),
-    }
 }
 
 async fn establish_vmess_udp_upstream_over_stream(
@@ -224,86 +158,14 @@ async fn establish_vmess_udp_upstream(
         )
         .await?;
 
-    let stream: TcpRelayStream = match request.transport {
-        Some(VmessUdpTransport {
-            grpc: Some(grpc_cfg),
-            ws: None,
-            tls: Some(tls_cfg),
-        }) => {
-            let tls_stream = zero_transport::tls::connect_tls_upstream(
-                socket,
-                tls_cfg,
-                request.proxy.config.source_dir(),
-                request.server,
-            )
-            .await?;
-            TcpRelayStream::new(
-                zero_transport::grpc::connect_grpc(tls_stream, &grpc_cfg.service_names).await?,
-            )
+    let stream = match request.transport {
+        Some(transport) => {
+            let connector = crate::transport::VmessTransportConnector::new(*transport);
+            connector
+                .connect(socket, request.server, request.server_port)
+                .await?
         }
-        Some(VmessUdpTransport {
-            grpc: Some(grpc_cfg),
-            ws: None,
-            tls: None,
-        }) => TcpRelayStream::new(
-            zero_transport::grpc::connect_grpc(socket, &grpc_cfg.service_names).await?,
-        ),
-        Some(VmessUdpTransport {
-            grpc: None,
-            ws: Some(ws_cfg),
-            tls: Some(tls_cfg),
-        }) => {
-            let tls_stream = zero_transport::tls::connect_tls_upstream(
-                socket,
-                tls_cfg,
-                request.proxy.config.source_dir(),
-                request.server,
-            )
-            .await?;
-            TcpRelayStream::new(
-                zero_transport::ws::connect_ws(
-                    tls_stream,
-                    ws_cfg,
-                    request.server,
-                    request.server_port,
-                )
-                .await?,
-            )
-        }
-        Some(VmessUdpTransport {
-            grpc: None,
-            ws: Some(ws_cfg),
-            tls: None,
-        }) => TcpRelayStream::new(
-            zero_transport::ws::connect_ws(socket, ws_cfg, request.server, request.server_port)
-                .await?,
-        ),
-        Some(VmessUdpTransport {
-            grpc: None,
-            ws: None,
-            tls: Some(tls_cfg),
-        }) => {
-            let tls_stream = zero_transport::tls::connect_tls_upstream(
-                socket,
-                tls_cfg,
-                request.proxy.config.source_dir(),
-                request.server,
-            )
-            .await?;
-            TcpRelayStream::new(tls_stream)
-        }
-        Some(VmessUdpTransport {
-            grpc: None,
-            ws: None,
-            tls: None,
-        })
-        | None => TcpRelayStream::new(socket),
-        _ => {
-            return Err(EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "vmess: ws and grpc are mutually exclusive",
-            )))
-        }
+        None => socket.into(),
     };
 
     let vmess_stream =
@@ -359,12 +221,11 @@ impl VmessUdpOutboundManager {
         chain_tasks: &mut JoinSet<crate::protocol_runtime::udp::ChainTask>,
         request: VmessUdpRelayFlow<'_>,
     ) -> Result<(), EngineError> {
-        let stream = build_vmess_udp_transport_over_stream(
-            request.carrier.stream,
-            Some(&request.transport),
-            request.proxy.config.source_dir(),
-            request.server,
-            request.port,
+        let stream = crate::transport::build_vmess_outbound_transport_over_stream(
+            crate::transport::VmessFinalHopTransportRequest {
+                carrier: request.carrier,
+                options: request.transport,
+            },
         )
         .await?;
         let (upstream, recv_tx) = establish_vmess_udp_upstream_over_stream(

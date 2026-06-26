@@ -112,8 +112,6 @@ impl VmessAdapter {
                 proxy,
                 session,
                 carrier,
-                server,
-                port: *port,
                 identity,
                 tls: *tls,
                 ws: *ws,

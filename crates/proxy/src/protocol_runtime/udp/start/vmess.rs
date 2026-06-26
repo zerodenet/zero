@@ -10,10 +10,11 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VmessUdpFlow<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::protocol_runtime::vmess_udp::model::VmessUdpTransport {
+        let transport = crate::transport::VmessTransportOptions {
             tls: flow.tls,
             ws: flow.ws,
             grpc: flow.grpc,
+            source_dir: flow.proxy.config.source_dir(),
         };
         self.vmess
             .start_flow(
@@ -44,10 +45,11 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VmessUdpRelayFlow<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::protocol_runtime::vmess_udp::model::VmessUdpTransport {
+        let transport = crate::transport::VmessTransportOptions {
             tls: flow.tls,
             ws: flow.ws,
             grpc: flow.grpc,
+            source_dir: flow.proxy.config.source_dir(),
         };
         self.vmess
             .start_relay_flow(
@@ -56,8 +58,6 @@ impl ProtocolUdpState {
                     proxy: flow.proxy,
                     session: flow.session,
                     carrier: flow.carrier,
-                    server: flow.server,
-                    port: flow.port,
                     identity: flow.identity,
                     transport,
                     payload: flow.payload,

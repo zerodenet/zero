@@ -100,8 +100,6 @@ pub(crate) struct VmessUdpRelayFlow<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) session: &'a Session,
     pub(crate) carrier: crate::transport::RelayCarrier,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
     pub(crate) identity: vmess::VmessUdpIdentity,
     pub(crate) tls: Option<&'a zero_config::ClientTlsConfig>,
     pub(crate) ws: Option<&'a zero_config::WebSocketConfig>,
