@@ -40,7 +40,7 @@ impl UdpSocketPacketPath {
                 &Address::Domain(server.to_owned()),
                 port,
                 proxy.resolver.as_ref(),
-                "failed to resolve shadowsocks packet path carrier",
+                "failed to resolve UDP socket packet-path carrier",
             )
             .await?;
         let bind_addr = match endpoint {

@@ -1,3 +1,3 @@
 #[cfg(feature = "hysteria2")]
-pub(crate) mod hysteria2_carrier;
-pub(crate) mod shadowsocks_carrier;
+pub(crate) mod quic_datagram_carrier;
+pub(crate) mod udp_socket_carrier;

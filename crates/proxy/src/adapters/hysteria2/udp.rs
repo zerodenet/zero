@@ -52,7 +52,7 @@ impl Hysteria2Adapter {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
         let codec = Arc::new(hysteria2::udp_flow_codec());
-        crate::protocol_runtime::udp::packet_path_chain::carriers::hysteria2_carrier::build(
+        crate::protocol_runtime::udp::packet_path_chain::carriers::quic_datagram_carrier::build(
             server,
             *port,
             password,

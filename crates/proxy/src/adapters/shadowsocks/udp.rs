@@ -75,7 +75,7 @@ impl ShadowsocksAdapter {
             cipher_kind,
             password.as_bytes(),
         ));
-        crate::protocol_runtime::udp::packet_path_chain::carriers::shadowsocks_carrier::build(
+        crate::protocol_runtime::udp::packet_path_chain::carriers::udp_socket_carrier::build(
             proxy, server, *port, codec,
         )
         .await

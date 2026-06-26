@@ -53,7 +53,7 @@ impl PacketPathCarrier for QuicDatagramPacketPath {
             .map_err(EngineError::from)?;
         self.conn.send_datagram(datagram.into()).map_err(|e| {
             EngineError::Io(std::io::Error::other(format!(
-                "hysteria2 carrier send: {e}"
+                "QUIC datagram packet-path carrier send: {e}"
             )))
         })?;
         Ok(())
@@ -62,7 +62,7 @@ impl PacketPathCarrier for QuicDatagramPacketPath {
     async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
         let data = self.conn.read_datagram().await.map_err(|e| {
             EngineError::Io(std::io::Error::other(format!(
-                "hysteria2 carrier recv: {e}"
+                "QUIC datagram packet-path carrier recv: {e}"
             )))
         })?;
         let (_, _, payload) = self.codec.decode(&data).ok_or_else(|| {
@@ -76,7 +76,7 @@ impl PacketPathCarrier for QuicDatagramPacketPath {
             return Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!(
-                    "hysteria2 carrier datagram ({len}B) exceeds recv buffer ({}B)",
+                    "QUIC datagram packet-path carrier datagram ({len}B) exceeds recv buffer ({}B)",
                     buf.len()
                 ),
             )));

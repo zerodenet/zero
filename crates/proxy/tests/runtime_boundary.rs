@@ -4788,14 +4788,16 @@ fn packet_path_carriers_live_outside_chain_manager() {
 #[test]
 fn packet_path_protocol_carriers_live_outside_carrier_facade() {
     let facade = read("src/protocol_runtime/udp/packet_path_chain/carriers.rs");
-    let shadowsocks = manifest_dir()
-        .join("src/protocol_runtime/udp/packet_path_chain/carriers/shadowsocks_carrier.rs");
-    let hysteria2 = manifest_dir()
-        .join("src/protocol_runtime/udp/packet_path_chain/carriers/hysteria2_carrier.rs");
+    let udp_socket = manifest_dir()
+        .join("src/protocol_runtime/udp/packet_path_chain/carriers/udp_socket_carrier.rs");
+    let quic_datagram = manifest_dir()
+        .join("src/protocol_runtime/udp/packet_path_chain/carriers/quic_datagram_carrier.rs");
 
     for forbidden in [
         "struct ShadowsocksPacketPath",
         "struct Hysteria2PacketPath",
+        "shadowsocks_carrier",
+        "hysteria2_carrier",
         "ShadowsocksDatagramCodec",
         "Hysteria2UdpPacketTarget",
         "connect_raw",
@@ -4808,12 +4810,12 @@ fn packet_path_protocol_carriers_live_outside_carrier_facade() {
         );
     }
     assert!(
-        shadowsocks.exists(),
-        "Shadowsocks packet-path carrier should live in carriers/shadowsocks_carrier.rs"
+        udp_socket.exists(),
+        "UDP socket packet-path carrier should live in carriers/udp_socket_carrier.rs"
     );
     assert!(
-        hysteria2.exists(),
-        "Hysteria2 packet-path carrier should live in carriers/hysteria2_carrier.rs"
+        quic_datagram.exists(),
+        "QUIC datagram packet-path carrier should live in carriers/quic_datagram_carrier.rs"
     );
 }
 
@@ -5450,7 +5452,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
 #[test]
 fn h2_packet_path_carrier_uses_protocol_built_codec() {
     let adapter = read("src/adapters/hysteria2/udp.rs");
-    let carrier = read("src/protocol_runtime/udp/packet_path_chain/carriers/hysteria2_carrier.rs");
+    let carrier =
+        read("src/protocol_runtime/udp/packet_path_chain/carriers/quic_datagram_carrier.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
 
@@ -5472,14 +5475,14 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
     ] {
         assert!(
             !carrier.contains(forbidden),
-            "Hysteria2 packet-path carrier should consume an adapter-provided codec instead of naming protocol framing; found `{forbidden}`"
+            "QUIC datagram packet-path carrier should consume an adapter-provided codec instead of naming protocol framing; found `{forbidden}`"
         );
     }
     assert!(
         carrier.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
             && carrier.contains(".codec")
             && carrier.contains("connect_raw"),
-        "Hysteria2 packet-path carrier should keep QUIC carrier lifecycle while delegating datagram framing to the codec"
+        "QUIC datagram packet-path carrier should keep carrier lifecycle while delegating datagram framing to the codec"
     );
 }
 
@@ -5746,8 +5749,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let protocol_outbound =
         fs::read_to_string(protocol_outbound).expect("read shadowsocks protocol outbound source");
     let carrier = read("src/protocol_runtime/udp/packet_path_chain/carriers.rs");
-    let shadowsocks_carrier =
-        read("src/protocol_runtime/udp/packet_path_chain/carriers/shadowsocks_carrier.rs");
+    let udp_socket_carrier =
+        read("src/protocol_runtime/udp/packet_path_chain/carriers/udp_socket_carrier.rs");
     let entry = read("src/protocol_runtime/udp/packet_path_chain/entry.rs");
     let traits = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
     let key = read("src/protocol_runtime/udp/packet_path_chain/key.rs");
@@ -5762,8 +5765,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     );
     for forbidden in ["ShadowsocksDatagramCodec", "shadowsocks::"] {
         assert!(
-            !shadowsocks_carrier.contains(forbidden),
-            "Shadowsocks packet-path carrier should consume an adapter-provided codec instead of naming protocol framing; found `{forbidden}`"
+            !udp_socket_carrier.contains(forbidden),
+            "UDP socket packet-path carrier should consume an adapter-provided codec instead of naming protocol framing; found `{forbidden}`"
         );
     }
     assert!(
@@ -5778,9 +5781,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         "Shadowsocks adapter should request a protocol-built packet-path flow codec"
     );
     assert!(
-        !shadowsocks_carrier.contains("shadowsocks::encode_udp_flow_packet")
-            && !shadowsocks_carrier.contains("shadowsocks::decode_udp_flow_packet"),
-        "Shadowsocks packet-path carrier should not call flow-specific protocols/shadowsocks helpers directly"
+        !udp_socket_carrier.contains("shadowsocks::encode_udp_flow_packet")
+            && !udp_socket_carrier.contains("shadowsocks::decode_udp_flow_packet"),
+        "UDP socket packet-path carrier should not call flow-specific protocols/shadowsocks helpers directly"
     );
     for source in [&carrier, &entry] {
         assert!(
