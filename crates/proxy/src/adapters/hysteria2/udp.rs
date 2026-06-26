@@ -39,34 +39,6 @@ impl Hysteria2Adapter {
     }
 
     #[cfg(feature = "shadowsocks")]
-    pub(super) fn udp_packet_path_carrier_snapshot_impl(
-        &self,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::UdpPacketPathCarrier> {
-        let _ = self;
-        let ResolvedLeafOutbound::Hysteria2 {
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-            ..
-        } = leaf
-        else {
-            return None;
-        };
-        Some(
-            crate::protocol_runtime::udp::packet_path_snapshot::hysteria2_packet_path_carrier_snapshot(
-                tag,
-                server,
-                *port,
-                password,
-                *client_fingerprint,
-            ),
-        )
-    }
-
-    #[cfg(feature = "shadowsocks")]
     pub(super) async fn build_udp_packet_path_impl(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,

@@ -14,27 +14,21 @@ impl ProtocolInventory {
         datagram_leaf: &zero_engine::ResolvedLeafOutbound<'a>,
     ) -> Option<(
         crate::protocol_runtime::udp::UdpDatagramSource<'a>,
-        Option<crate::protocol_runtime::udp::UdpPacketPathCarrier>,
+        Option<crate::protocol_runtime::udp::PacketPathCarrierSnapshot>,
     )> {
         let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf).ok()?;
         let datagram_adapter = self.registry.find_outbound_leaf(datagram_leaf).ok()?;
 
-        UdpPacketPathCapability::udp_packet_path_carrier_descriptor(
+        let carrier_desc = UdpPacketPathCapability::udp_packet_path_carrier_descriptor(
             carrier_adapter.as_ref(),
             carrier_leaf,
-        )
-        .is_some()
-        .then(|| {
-            let datagram = UdpPacketPathCapability::udp_datagram_source(
-                datagram_adapter.as_ref(),
-                datagram_leaf,
-            )?;
-            let packet_path_carrier = UdpPacketPathCapability::udp_packet_path_carrier_snapshot(
-                carrier_adapter.as_ref(),
-                carrier_leaf,
-            );
-            Some((datagram, packet_path_carrier))
-        })?
+        )?;
+        let datagram =
+            UdpPacketPathCapability::udp_datagram_source(datagram_adapter.as_ref(), datagram_leaf)?;
+        let packet_path_carrier = Some(
+            crate::protocol_runtime::udp::PacketPathCarrierSnapshot::from_descriptor(&carrier_desc),
+        );
+        Some((datagram, packet_path_carrier))
     }
 
     /// Resolve packet-path entry construction params through the carrier and

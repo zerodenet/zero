@@ -35,6 +35,23 @@ pub(crate) struct PacketPathCarrierDescriptor {
     pub(crate) port: u16,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PacketPathCarrierSnapshot {
+    cache_key: String,
+}
+
+impl PacketPathCarrierSnapshot {
+    pub(crate) fn from_descriptor(descriptor: &PacketPathCarrierDescriptor) -> Self {
+        Self {
+            cache_key: descriptor.cache_key.clone(),
+        }
+    }
+
+    pub(crate) fn cache_key(&self) -> &str {
+        &self.cache_key
+    }
+}
+
 /// Datagram source params for a relay-chain final hop over a packet path.
 ///
 /// Produced by `UdpPacketPathCapability::udp_datagram_source`. The manager builds the

@@ -1,5 +1,5 @@
 #[cfg(feature = "shadowsocks")]
-use crate::protocol_runtime::udp::UdpPacketPathCarrier;
+use crate::protocol_runtime::udp::PacketPathCarrierSnapshot;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProtocolUdpFlowSnapshot {
@@ -12,7 +12,7 @@ pub(crate) enum ProtocolUdpFlowSnapshot {
         password: String,
         datagram_cache_key: String,
         cipher_kind: shadowsocks::CipherKind,
-        packet_path_carrier: Option<UdpPacketPathCarrier>,
+        packet_path_carrier: Option<PacketPathCarrierSnapshot>,
     },
     #[cfg(feature = "hysteria2")]
     Hysteria2 {
@@ -99,7 +99,7 @@ impl ProtocolUdpFlowSnapshot {
     #[cfg(feature = "shadowsocks")]
     pub(crate) fn with_packet_path_carrier(
         mut self,
-        carrier: Option<UdpPacketPathCarrier>,
+        carrier: Option<PacketPathCarrierSnapshot>,
     ) -> Self {
         if let Self::Shadowsocks {
             packet_path_carrier,

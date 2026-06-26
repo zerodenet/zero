@@ -2,7 +2,7 @@ use zero_engine::ResolvedLeafOutbound;
 
 use super::ProtocolUdpState;
 use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
-use crate::protocol_runtime::udp::{FlowFailure, UdpDatagramSource, UdpPacketPathCarrier};
+use crate::protocol_runtime::udp::{FlowFailure, PacketPathCarrierSnapshot, UdpDatagramSource};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
@@ -10,7 +10,7 @@ impl ProtocolUdpState {
     pub(crate) fn datagram_chain_flow_outbound(
         &self,
         datagram: UdpDatagramSource<'_>,
-        packet_path_carrier: Option<UdpPacketPathCarrier>,
+        packet_path_carrier: Option<PacketPathCarrierSnapshot>,
     ) -> UdpFlowOutbound {
         UdpFlowOutbound::Datagram {
             tag: datagram.tag.to_owned(),

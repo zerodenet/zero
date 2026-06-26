@@ -468,7 +468,6 @@ fn udp_relay_runtime_does_not_resolve_packet_path_pair_adapters() {
         "datagram_adapter",
         "udp_packet_path_carrier_descriptor(",
         "udp_datagram_source(",
-        "udp_packet_path_carrier_snapshot(",
     ] {
         assert!(
             !relay.contains(forbidden),
@@ -480,8 +479,7 @@ fn udp_relay_runtime_does_not_resolve_packet_path_pair_adapters() {
             && inventory_udp_packet_path
                 .contains("UdpPacketPathCapability::udp_packet_path_carrier_descriptor")
             && inventory_udp_packet_path.contains("UdpPacketPathCapability::udp_datagram_source")
-            && inventory_udp_packet_path
-                .contains("UdpPacketPathCapability::udp_packet_path_carrier_snapshot"),
+            && inventory_udp_packet_path.contains("PacketPathCarrierSnapshot::from_descriptor"),
         "src/inventory/udp/packet_path.rs should own packet-path pair adapter probing"
     );
 }
@@ -1089,7 +1087,6 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
             "hysteria2",
             &[
                 "hysteria2_packet_path_carrier_descriptor",
-                "hysteria2_packet_path_carrier_snapshot",
                 "build_hysteria2_packet_path",
                 "Hysteria2DatagramSend",
                 "UdpFlowOutbound::Hysteria2",
@@ -1108,7 +1105,6 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
             "shadowsocks",
             &[
                 "shadowsocks_packet_path_carrier_descriptor",
-                "shadowsocks_packet_path_carrier_snapshot",
                 "build_shadowsocks_packet_path",
                 "shadowsocks_udp_datagram_source",
                 "ShadowsocksDatagramSend",
@@ -1120,7 +1116,6 @@ fn adapter_roots_keep_udp_runtime_details_in_udp_modules() {
             "socks5",
             &[
                 "socks5_packet_path_carrier_descriptor",
-                "socks5_packet_path_carrier_snapshot",
                 "build_socks5_packet_path",
                 "Socks5UdpSend",
                 "UdpFlowOutbound::Socks5",
@@ -2835,17 +2830,24 @@ fn udp_flow_helpers_do_not_depend_on_protocol_runtime() {
 }
 
 #[test]
-fn udp_packet_path_carrier_snapshot_lives_with_protocol_runtime() {
+fn udp_packet_path_carrier_snapshot_is_protocol_neutral() {
     let runtime = read("src/runtime/udp_flow/sessions.rs");
     let protocol_runtime = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
+    let traits = read("src/protocol_runtime/udp/packet_path_traits/carrier.rs");
 
     assert!(
         !runtime.contains("enum UdpPacketPathCarrier"),
-        "UdpPacketPathCarrier should not be declared in generic runtime UDP flow state"
+        "protocol-named packet-path carrier snapshots should not be declared in generic runtime UDP flow state"
     );
     assert!(
-        protocol_runtime.contains("enum UdpPacketPathCarrier"),
-        "protocol_runtime::udp should own UdpPacketPathCarrier"
+        !protocol_runtime.contains("enum UdpPacketPathCarrier"),
+        "packet-path carrier snapshot storage should not remain a protocol-named enum"
+    );
+    assert!(
+        traits.contains("struct PacketPathCarrierSnapshot")
+            && traits.contains("cache_key: String")
+            && traits.contains("fn cache_key(&self) -> &str"),
+        "protocol_runtime::udp should expose a neutral packet-path carrier snapshot keyed by adapter-built identity"
     );
 }
 
@@ -2891,17 +2893,24 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         "username: Option<String>",
         "password: Option<String>",
         "shadowsocks::CipherKind",
-        "UdpPacketPathCarrier",
+        "UdpPacketPathCarrier::",
     ] {
         assert!(
             !outbound.contains(forbidden),
             "runtime UDP outbound snapshot should not declare protocol detail `{forbidden}`"
         );
-        assert!(
-            snapshot.contains(forbidden),
-            "protocol UDP flow snapshot should own protocol detail `{forbidden}`"
-        );
+        if forbidden != "UdpPacketPathCarrier::" {
+            assert!(
+                snapshot.contains(forbidden),
+                "protocol UDP flow snapshot should own protocol detail `{forbidden}`"
+            );
+        }
     }
+    assert!(
+        snapshot.contains("PacketPathCarrierSnapshot")
+            && !snapshot.contains("UdpPacketPathCarrier::"),
+        "protocol UDP flow snapshot should keep packet-path carrier identity neutral"
+    );
 }
 
 #[test]
@@ -3789,7 +3798,6 @@ fn udp_packet_path_capability_is_not_on_monolithic_adapter() {
 
     for forbidden in [
         "fn udp_packet_path_carrier_descriptor",
-        "fn udp_packet_path_carrier_snapshot",
         "async fn build_udp_packet_path",
         "fn udp_datagram_source",
     ] {
@@ -3801,7 +3809,6 @@ fn udp_packet_path_capability_is_not_on_monolithic_adapter() {
 
     for forbidden in [
         "ProtocolAdapter::udp_packet_path_carrier_descriptor",
-        "ProtocolAdapter::udp_packet_path_carrier_snapshot",
         "ProtocolAdapter::build_udp_packet_path",
         "ProtocolAdapter::udp_datagram_source",
     ] {
@@ -5767,8 +5774,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         );
     }
     assert!(
-        !carrier_snapshot.contains("cipher: String"),
-        "packet-path carrier snapshots should use adapter-built cache keys instead of raw Shadowsocks cipher strings"
+        !carrier_snapshot.contains("cipher: String")
+            && !carrier_snapshot.contains("enum UdpPacketPathCarrier"),
+        "packet-path carrier snapshots should use neutral adapter-built cache keys instead of protocol-specific payload fields"
     );
 }
 
@@ -5834,16 +5842,26 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
     let root = read("src/protocol_runtime/udp/mod.rs");
     for required in [
         "socks5_packet_path_carrier_descriptor",
-        "socks5_packet_path_carrier_snapshot",
         "shadowsocks_packet_path_carrier_descriptor",
-        "shadowsocks_packet_path_carrier_snapshot",
         "shadowsocks_udp_datagram_source",
         "hysteria2_packet_path_carrier_descriptor",
-        "hysteria2_packet_path_carrier_snapshot",
     ] {
         assert!(
             snapshot.contains(required),
             "protocol_runtime::udp packet-path snapshot module should own `{required}`"
+        );
+    }
+    for forbidden in [
+        "socks5_packet_path_carrier_snapshot",
+        "shadowsocks_packet_path_carrier_snapshot",
+        "hysteria2_packet_path_carrier_snapshot",
+        "UdpPacketPathCarrier::Socks5",
+        "UdpPacketPathCarrier::Shadowsocks",
+        "UdpPacketPathCarrier::Hysteria2",
+    ] {
+        assert!(
+            !snapshot.contains(forbidden),
+            "packet-path snapshot module should not retain protocol-named carrier snapshot storage `{forbidden}`"
         );
     }
     assert!(
@@ -5857,12 +5875,9 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
     for forbidden in [
         "pub(crate) use packet_path_snapshot::{",
         "socks5_packet_path_carrier_descriptor",
-        "socks5_packet_path_carrier_snapshot",
         "shadowsocks_packet_path_carrier_descriptor",
-        "shadowsocks_packet_path_carrier_snapshot",
         "shadowsocks_udp_datagram_source",
         "hysteria2_packet_path_carrier_descriptor",
-        "hysteria2_packet_path_carrier_snapshot",
         "pub(crate) use packet_path_chain::build_shadowsocks_packet_path",
         "pub(crate) use packet_path_chain::build_hysteria2_packet_path",
     ] {

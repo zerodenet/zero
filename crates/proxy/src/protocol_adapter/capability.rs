@@ -164,14 +164,6 @@ pub(crate) trait UdpPacketPathCapability {
     }
 
     #[cfg(feature = "shadowsocks")]
-    fn udp_packet_path_carrier_snapshot(
-        &self,
-        _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::UdpPacketPathCarrier> {
-        None
-    }
-
-    #[cfg(feature = "shadowsocks")]
     async fn build_udp_packet_path(
         &self,
         _ctx: UdpAdapterContext<'_>,

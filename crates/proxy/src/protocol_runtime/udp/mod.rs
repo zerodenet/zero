@@ -33,12 +33,10 @@ pub(crate) use flows::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStre
 pub(crate) use flows::{VmessUdpFlow, VmessUdpRelayFlow};
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_chain::{PacketPathManager, SendWithSnapshotRequest};
-#[cfg(feature = "shadowsocks")]
-pub(crate) use packet_path_snapshot::UdpPacketPathCarrier;
 pub(crate) use packet_path_traits::ChainTask;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_traits::{
-    PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
+    PacketPathCarrier, PacketPathCarrierDescriptor, PacketPathCarrierSnapshot, UdpDatagramSource,
 };
 #[cfg(feature = "hysteria2")]
 pub(crate) use start::Hysteria2UdpFlowRequest;

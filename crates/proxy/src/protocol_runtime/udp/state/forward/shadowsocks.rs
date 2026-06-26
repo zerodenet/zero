@@ -4,7 +4,8 @@ use super::super::ProtocolUdpState;
 use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use crate::protocol_runtime::udp::ss_manager::model::SsSendExisting;
 use crate::protocol_runtime::udp::{
-    ChainTask, FlowFailure, ProtocolUdpFlowSnapshot, SendWithSnapshotRequest, UdpPacketPathCarrier,
+    ChainTask, FlowFailure, PacketPathCarrierSnapshot, ProtocolUdpFlowSnapshot,
+    SendWithSnapshotRequest,
 };
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
@@ -16,7 +17,7 @@ pub(super) struct ExistingFlow<'a> {
     pub(super) password: &'a str,
     pub(super) datagram_cache_key: &'a str,
     pub(super) cipher_kind: shadowsocks::CipherKind,
-    pub(super) packet_path_carrier: Option<&'a UdpPacketPathCarrier>,
+    pub(super) packet_path_carrier: Option<&'a PacketPathCarrierSnapshot>,
     pub(super) payload: &'a [u8],
 }
 
