@@ -34,7 +34,6 @@ pub(super) async fn forward(
             username: existing.resume.username(),
             password: existing.resume.password(),
             relay_chain: existing.resume.relay_chain(),
-            codec: std::sync::Arc::new(existing.resume.codec()),
             target: &flow.session.target,
             target_port: flow.session.port,
             payload: existing.payload,

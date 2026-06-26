@@ -4,8 +4,6 @@ use std::collections::HashMap;
 #[cfg(feature = "mieru")]
 mod bridge;
 #[cfg(feature = "mieru")]
-mod codec;
-#[cfg(feature = "mieru")]
 mod connect;
 #[cfg(feature = "mieru")]
 mod establish;

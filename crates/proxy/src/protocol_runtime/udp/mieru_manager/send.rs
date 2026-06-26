@@ -1,16 +1,13 @@
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use super::model::{MieruKey, MieruRelayExisting, MieruSendExisting};
-use super::{bridge, codec, establish, MieruChainManager};
+use super::model::{MieruKey, MieruPacket, MieruRelayExisting, MieruSendExisting};
+use super::{bridge, establish, MieruChainManager};
 use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use crate::protocol_runtime::udp::FlowFailure;
 use crate::protocol_runtime::udp::{MieruUdpPeer, UdpPeerEndpoint};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
-use std::sync::Arc;
-use zero_core::{Address, Error};
-use zero_traits::DatagramCodec;
 
 impl MieruChainManager {
     async fn send(
@@ -19,7 +16,6 @@ impl MieruChainManager {
         proxy: &Proxy,
         _session: &Session,
         peer: MieruUdpPeer<'_>,
-        flow_codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
@@ -37,18 +33,7 @@ impl MieruChainManager {
 
         if let Some(entry) = self.upstreams.get(&key) {
             bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
-            let wrapped = codec::packet(
-                entry.codec.as_ref(),
-                packet_ref.target,
-                packet_ref.port,
-                packet_ref.payload,
-            )
-            .map_err(|error| FlowFailure {
-                stage: "mieru_udp_packet",
-                error,
-                upstream: Some(peer.endpoint.upstream()),
-            })?;
-            let _ = entry.send_tx.send(wrapped).await;
+            let _ = entry.send_tx.send(packet(packet_ref)).await;
             return Ok(sent);
         }
 
@@ -63,7 +48,7 @@ impl MieruChainManager {
             });
         }
 
-        let entry = establish::direct(proxy, &peer, flow_codec.clone())
+        let entry = establish::direct(proxy, &peer)
             .await
             .map_err(|e| FlowFailure {
                 stage: "mieru_establish",
@@ -75,18 +60,7 @@ impl MieruChainManager {
         let send_tx = entry.send_tx.clone();
         self.upstreams.insert(key, entry);
 
-        let wrapped = codec::packet(
-            flow_codec.as_ref(),
-            packet_ref.target,
-            packet_ref.port,
-            packet_ref.payload,
-        )
-        .map_err(|error| FlowFailure {
-            stage: "mieru_udp_packet",
-            error,
-            upstream: Some(peer.endpoint.upstream()),
-        })?;
-        let _ = send_tx.send(wrapped).await;
+        let _ = send_tx.send(packet(packet_ref)).await;
         Ok(sent)
     }
 
@@ -110,7 +84,6 @@ impl MieruChainManager {
                 password: request.password,
                 relay_chain: request.relay_chain,
             },
-            request.codec,
             UdpPacketRef {
                 target: request.target,
                 port: request.target_port,
@@ -125,37 +98,25 @@ impl MieruChainManager {
         ctx: UdpFlowContext<'_>,
         stream: TcpRelayStream,
         peer: MieruUdpPeer<'_>,
-        flow_codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
         let key = MieruKey::Relay { session_id };
-        let entry =
-            establish::packet_stream(stream, peer.username, peer.password, flow_codec.clone())
-                .await
-                .map_err(|e| FlowFailure {
-                    stage: "mieru_relay_establish",
-                    error: e,
-                    upstream: Some(peer.endpoint.upstream()),
-                })?;
+        let entry = establish::packet_stream(stream, peer.username, peer.password)
+            .await
+            .map_err(|e| FlowFailure {
+                stage: "mieru_relay_establish",
+                error: e,
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
         let send_tx = entry.send_tx.clone();
         self.upstreams.insert(key, entry);
 
-        let wrapped = codec::packet(
-            flow_codec.as_ref(),
-            packet_ref.target,
-            packet_ref.port,
-            packet_ref.payload,
-        )
-        .map_err(|error| FlowFailure {
-            stage: "mieru_udp_packet",
-            error,
-            upstream: Some(peer.endpoint.upstream()),
-        })?;
-        let _ = send_tx.send(wrapped).await;
-        Ok(packet_ref.payload.len())
+        let sent = packet_ref.payload.len();
+        let _ = send_tx.send(packet(packet_ref)).await;
+        Ok(sent)
     }
 
     pub(crate) async fn send_relay_existing(
@@ -177,7 +138,6 @@ impl MieruChainManager {
                 password: request.password,
                 relay_chain: true,
             },
-            request.codec,
             UdpPacketRef {
                 target: request.target,
                 port: request.target_port,
@@ -185,5 +145,13 @@ impl MieruChainManager {
             },
         )
         .await
+    }
+}
+
+fn packet(packet_ref: UdpPacketRef<'_>) -> MieruPacket {
+    MieruPacket {
+        target: packet_ref.target.clone(),
+        port: packet_ref.port,
+        payload: packet_ref.payload.to_vec(),
     }
 }

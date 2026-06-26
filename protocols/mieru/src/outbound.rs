@@ -2,7 +2,7 @@
 
 use alloc::vec::Vec;
 
-use zero_core::Error;
+use zero_core::{Address, Error};
 use zero_traits::AsyncSocket;
 
 use crate::crypto::{derive_key, MieruCipher, NonceConfig};
@@ -12,6 +12,7 @@ use crate::metadata::{
 };
 use crate::segment::{build_data_segment, build_session_segment, parse_segment, Segment};
 use crate::session::MieruSession;
+use crate::udp::{decode_udp_flow_packet, encode_udp_flow_packet};
 
 /// Mieru outbound connection.
 pub struct MieruOutbound {
@@ -20,6 +21,74 @@ pub struct MieruOutbound {
     pub server_cipher: MieruCipher,
     pub c2s_nonce_sent: bool,
     pub s2c_nonce_recv: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MieruUdpFlowPacket {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+}
+
+pub struct MieruUdpFlowIo {
+    outbound: MieruOutbound,
+    recv_raw: Vec<u8>,
+}
+
+impl MieruUdpFlowIo {
+    pub async fn establish<S: AsyncSocket>(
+        stream: &mut S,
+        username: &str,
+        password: &str,
+    ) -> Result<Self, Error> {
+        let mut outbound = MieruOutbound::connect(stream, username, password).await?;
+        send_udp_associate_request(stream, &mut outbound).await?;
+        read_udp_associate_response(stream, &mut outbound).await?;
+        Ok(Self {
+            outbound,
+            recv_raw: Vec::new(),
+        })
+    }
+
+    pub fn encrypt_packet(
+        &mut self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        let packet = encode_udp_flow_packet(target, port, payload)?;
+        self.encrypt_payload(&packet)
+    }
+
+    pub fn encrypt_payload(&mut self, payload: &[u8]) -> Result<Vec<u8>, Error> {
+        self.outbound.encrypt_client_data(payload)
+    }
+
+    pub fn push_encrypted_response(&mut self, data: &[u8]) {
+        self.recv_raw.extend_from_slice(data);
+    }
+
+    pub fn next_packet(&mut self) -> Result<Option<MieruUdpFlowPacket>, Error> {
+        match self
+            .outbound
+            .decrypt_server_data_with_consumed(&self.recv_raw)
+        {
+            Ok((segment, consumed)) => {
+                self.recv_raw.drain(..consumed);
+                if segment.payload.is_empty() {
+                    return Ok(None);
+                }
+                let packet = decode_udp_flow_packet(&segment.payload)?;
+                Ok(Some(MieruUdpFlowPacket {
+                    target: packet.target,
+                    port: packet.port,
+                    payload: packet.payload,
+                }))
+            }
+            Err(Error::Protocol("mieru: need more data")) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
 }
 
 impl MieruOutbound {
@@ -146,6 +215,52 @@ impl MieruOutbound {
         };
         build_session_segment(&meta, &[], &mut self.client_cipher, false)
     }
+}
+
+async fn send_udp_associate_request<S: AsyncSocket>(
+    stream: &mut S,
+    outbound: &mut MieruOutbound,
+) -> Result<(), Error> {
+    let assoc_req = [0x05u8, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0];
+    let assoc_seg = outbound.encrypt_client_data(&assoc_req)?;
+    stream
+        .write_all(&assoc_seg)
+        .await
+        .map_err(|_| Error::Io("mieru udp assoc write"))?;
+    Ok(())
+}
+
+async fn read_udp_associate_response<S: AsyncSocket>(
+    stream: &mut S,
+    outbound: &mut MieruOutbound,
+) -> Result<(), Error> {
+    let mut assoc_raw = Vec::new();
+    let assoc_resp = loop {
+        match outbound.decrypt_server_data_with_consumed(&assoc_raw) {
+            Ok((segment, consumed)) => {
+                assoc_raw.drain(..consumed);
+                break segment.payload;
+            }
+            Err(Error::Protocol("mieru: need more data")) => {
+                let mut scratch = [0u8; 4096];
+                let n = stream
+                    .read(&mut scratch)
+                    .await
+                    .map_err(|_| Error::Io("mieru udp assoc read"))?;
+                if n == 0 {
+                    return Err(Error::Protocol("mieru udp assoc: connection closed"));
+                }
+                assoc_raw.extend_from_slice(&scratch[..n]);
+            }
+            Err(error) => return Err(error),
+        }
+    };
+
+    if assoc_resp.len() < 4 || assoc_resp[0] != 0x05 || assoc_resp[1] != 0x00 {
+        return Err(Error::Protocol("mieru udp assoc rejected"));
+    }
+
+    Ok(())
 }
 
 fn segment_wire_len(segment: &Segment, has_nonce: bool) -> usize {

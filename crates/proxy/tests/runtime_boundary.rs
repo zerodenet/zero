@@ -5249,12 +5249,15 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
 #[test]
 fn mieru_udp_packet_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let codec = read("src/protocol_runtime/udp/mieru_manager/codec.rs");
+    let stream = read("src/protocol_runtime/udp/mieru_manager/stream.rs");
+    let connect = read("src/protocol_runtime/udp/mieru_manager/connect.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/forward/mieru.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
         .expect("read mieru protocol udp source");
+    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
+        .expect("read mieru protocol outbound source");
 
     for forbidden in [
         "UdpPacketFraming",
@@ -5264,22 +5267,30 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         "fn decode_associate_packet",
         "socks5::build_udp_packet",
         "socks5::parse_udp_packet",
-        "mieru::",
     ] {
         assert!(
             !manager.contains(forbidden),
             "mieru_manager.rs should not own Mieru associate packet codec details; found `{forbidden}`"
         );
         assert!(
-            !codec.contains(forbidden),
-            "mieru_manager/codec.rs should consume an adapter-provided DatagramCodec instead of naming protocol framing; found `{forbidden}`"
+            !stream.contains(forbidden),
+            "mieru_manager/stream.rs should delegate Mieru packet codec details to protocols/mieru; found `{forbidden}`"
         );
     }
     assert!(
-        codec.contains("dyn DatagramCodec<Address, Error = Error>")
-            && codec.contains(".encode(")
-            && codec.contains(".decode("),
-        "Mieru UDP manager codec should encode/decode through a neutral DatagramCodec object"
+        !manifest_dir()
+            .join("src/protocol_runtime/udp/mieru_manager/codec.rs")
+            .exists(),
+        "Mieru UDP manager should not keep a proxy-owned codec module"
+    );
+    assert!(
+        protocol_outbound.contains("struct MieruUdpFlowIo")
+            && protocol_outbound.contains("encode_udp_flow_packet")
+            && protocol_outbound.contains("decode_udp_flow_packet")
+            && protocol_outbound.contains("encrypt_payload")
+            && protocol_outbound.contains("next_packet")
+            && connect.contains("MieruUdpFlowIo::establish"),
+        "Mieru UDP flow associate, encryption, and packet codec should live behind a protocol-owned flow I/O helper"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
@@ -5305,11 +5316,11 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         forward.contains("existing.resume.username()")
             && forward.contains("existing.resume.password()")
             && forward.contains("existing.resume.relay_chain()")
-            && forward.contains("existing.resume.codec()")
+            && !forward.contains("existing.resume.codec()")
             && !forward.contains("mieru::udp_flow_codec")
             && !forward.contains("username: &'a str")
             && !forward.contains("relay_chain: bool"),
-        "existing Mieru UDP flow forwarding should recover account, relay state, and codec from the opaque resume descriptor"
+        "existing Mieru UDP flow forwarding should recover account and relay state from the opaque resume descriptor while codec details stay in protocols/mieru"
     );
     let start = read("src/protocol_runtime/udp/start/mieru.rs");
     assert!(
@@ -5317,8 +5328,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && start.contains("resume.username()")
             && start.contains("resume.password()")
             && start.contains("resume.relay_chain()")
-            && start.contains("resume.codec()"),
-        "new Mieru UDP flow start should unpack the unified resume descriptor inside protocol_runtime"
+            && !start.contains("resume.codec()"),
+        "new Mieru UDP flow start should unpack account and relay state only; packet codec stays in protocols/mieru"
     );
 }
 
@@ -5348,7 +5359,9 @@ fn mieru_udp_response_bridge_lives_outside_manager() {
 #[test]
 fn mieru_udp_connect_handshake_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let connect = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/connect.rs");
+    let connect = read("src/protocol_runtime/udp/mieru_manager/connect.rs");
+    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
+        .expect("read mieru protocol outbound source");
 
     for forbidden in [
         "MieruOutbound::connect",
@@ -5363,8 +5376,13 @@ fn mieru_udp_connect_handshake_lives_outside_manager() {
         );
     }
     assert!(
-        connect.exists(),
-        "Mieru UDP connect helpers should live in mieru_manager/connect.rs"
+        connect.contains("MieruUdpFlowIo::establish")
+            && !connect.contains("MieruOutbound::connect")
+            && !connect.contains("encrypt_client_data")
+            && !connect.contains("decrypt_server_data")
+            && protocol_outbound.contains("fn send_udp_associate_request")
+            && protocol_outbound.contains("fn read_udp_associate_response"),
+        "Mieru UDP associate handshake should live behind protocols/mieru flow I/O"
     );
 }
 
@@ -5399,7 +5417,7 @@ fn mieru_udp_establish_logic_lives_outside_manager() {
         "fn establish_direct",
         "fn establish_packet_stream",
         "connect::direct_stream",
-        "connect::establish_udp_associate",
+        "connect::open_udp_flow",
         "spawn_packet_stream",
     ] {
         assert!(
@@ -5544,12 +5562,14 @@ fn trojan_udp_send_orchestration_lives_outside_manager() {
 #[test]
 fn mieru_udp_packet_stream_tasks_live_outside_manager() {
     let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let stream = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/stream.rs");
+    let stream = read("src/protocol_runtime/udp/mieru_manager/stream.rs");
 
     for forbidden in [
         "tokio::io::split",
         "encrypt_client_data(&payload)",
         "decrypt_server_data_with_consumed(&raw)",
+        "decode_udp_flow_packet",
+        "encode_udp_flow_packet",
         "parse_udp_packet",
         "AsyncReadExt",
         "AsyncWriteExt",
@@ -5560,8 +5580,12 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        stream.exists(),
-        "Mieru UDP packet stream tasks should live in mieru_manager/stream.rs"
+        stream.contains("MieruUdpFlowIo")
+            && stream.contains("encrypt_packet")
+            && stream.contains("push_encrypted_response")
+            && stream.contains("next_packet")
+            && !stream.contains("MieruOutbound"),
+        "Mieru UDP packet stream tasks should delegate protocol I/O to protocols/mieru"
     );
 }
 
