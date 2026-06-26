@@ -5,7 +5,8 @@ use super::model::{
     TrojanKey, TrojanRelayExisting, TrojanRelaySend, TrojanSendExisting, TrojanUdpPeer,
 };
 use super::{bridge, establish, TrojanChainManager};
-use crate::protocol_runtime::udp::FlowFailure;
+use crate::protocol_runtime::udp::state::managed::model::{ManagedExistingSend, ManagedRelaySend};
+use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowResume};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -163,5 +164,90 @@ impl TrojanChainManager {
             },
         })
         .await
+    }
+
+    pub(in crate::protocol_runtime::udp) async fn send_managed_existing(
+        &mut self,
+        request: ManagedExistingSend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        let ProtocolUdpFlowResume::Trojan(resume) = request.resume else {
+            return Err(managed_mismatch(
+                "udp_trojan_resume",
+                request.server,
+                request.port,
+                "expected Trojan UDP flow resume",
+            ));
+        };
+        let Some(proxy) = request.proxy else {
+            return Err(managed_mismatch(
+                "udp_trojan_proxy",
+                request.server,
+                request.port,
+                "expected proxy context for Trojan UDP flow",
+            ));
+        };
+        self.send_existing(TrojanSendExisting {
+            chain_tasks: request.chain_tasks,
+            session_id: request.session_id,
+            proxy,
+            session: request.session,
+            server: request.server,
+            port: request.port,
+            resume,
+            target: request.target,
+            target_port: request.target_port,
+            payload: request.payload,
+        })
+        .await
+    }
+
+    pub(in crate::protocol_runtime::udp) async fn send_managed_relay_existing(
+        &mut self,
+        request: ManagedRelaySend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        let ProtocolUdpFlowResume::Trojan(resume) = request.resume else {
+            return Err(managed_mismatch(
+                "udp_trojan_resume",
+                request.server,
+                request.port,
+                "expected Trojan UDP flow resume",
+            ));
+        };
+        let Some(proxy) = request.proxy else {
+            return Err(managed_mismatch(
+                "udp_trojan_resume",
+                request.server,
+                request.port,
+                "expected Trojan UDP relay proxy context",
+            ));
+        };
+        self.send_relay_existing(TrojanRelayExisting {
+            chain_tasks: request.chain_tasks,
+            session_id: request.session_id,
+            stream: request.stream,
+            tls_server_name: request.tls_server_name,
+            proxy,
+            session: request.session,
+            server: request.server,
+            port: request.port,
+            resume,
+            target: request.target,
+            target_port: request.target_port,
+            payload: request.payload,
+        })
+        .await
+    }
+}
+
+fn managed_mismatch(
+    stage: &'static str,
+    server: &str,
+    port: u16,
+    message: &'static str,
+) -> FlowFailure {
+    FlowFailure {
+        stage,
+        error: EngineError::Io(std::io::Error::other(message)),
+        upstream: Some((server.to_string(), port)),
     }
 }

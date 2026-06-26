@@ -1,4 +1,6 @@
+use super::super::state::managed::model::ManagedExistingSend;
 use super::super::FlowFailure;
+use super::super::ProtocolUdpFlowResume;
 use super::model::{H2Entry, H2Key, H2SendExisting, H2UdpPeer};
 use super::{establish, H2ChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
@@ -80,5 +82,43 @@ impl H2ChainManager {
             },
         )
         .await
+    }
+
+    pub(in crate::protocol_runtime::udp) async fn send_managed_existing(
+        &mut self,
+        request: ManagedExistingSend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        let ProtocolUdpFlowResume::Hysteria2(resume) = request.resume else {
+            return Err(managed_mismatch(
+                "udp_hysteria2_resume",
+                request.server,
+                request.port,
+                "expected Hysteria2 UDP flow resume",
+            ));
+        };
+        self.send_existing(H2SendExisting {
+            chain_tasks: request.chain_tasks,
+            session_id: request.session_id,
+            server: request.server,
+            port: request.port,
+            resume,
+            target: request.target,
+            target_port: request.target_port,
+            payload: request.payload,
+        })
+        .await
+    }
+}
+
+fn managed_mismatch(
+    stage: &'static str,
+    server: &str,
+    port: u16,
+    message: &'static str,
+) -> FlowFailure {
+    FlowFailure {
+        stage,
+        error: zero_engine::EngineError::Io(std::io::Error::other(message)),
+        upstream: Some((server.to_string(), port)),
     }
 }

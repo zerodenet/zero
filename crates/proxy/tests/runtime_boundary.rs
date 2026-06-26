@@ -3535,8 +3535,8 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
         state.contains("ManagedUdpFlowKind::Datagram")
             && state.contains("start_managed_datagram_flow")
             && datagram.contains("self.managed.start_datagram_flow")
-            && managed.contains("ProtocolUdpFlowResume::Shadowsocks(resume)")
-            && managed.contains("ProtocolUdpFlowResume::Hysteria2(resume)"),
+            && managed.contains("ProtocolUdpFlowResume::Shadowsocks(_)")
+            && managed.contains("ProtocolUdpFlowResume::Hysteria2(_)"),
         "managed datagram UDP flow kind should leave protocol-specific resume matching in ManagedProtocolUdpState"
     );
 }
@@ -3588,8 +3588,8 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
             && state.contains("start_managed_relay_stream_flow")
             && stream.contains("self.managed.start_stream_packet_flow")
             && stream.contains("self.managed.start_relay_stream_flow")
-            && managed.contains("ProtocolUdpFlowResume::Trojan(resume)")
-            && managed.contains("ProtocolUdpFlowResume::Mieru(resume)"),
+            && managed.contains("ProtocolUdpFlowResume::Trojan(_)")
+            && managed.contains("ProtocolUdpFlowResume::Mieru(_)"),
         "stream-packet and relay-stream UDP flow kinds should leave protocol-specific resume matching in ManagedProtocolUdpState"
     );
 }
@@ -5136,12 +5136,23 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     assert!(
         normalized_forward.contains("self\n            .managed\n            .forward_existing_flow")
             && managed.contains("fn forward_existing_flow")
-            && managed.contains("SsSendExisting")
-            && managed.contains("H2SendExisting")
-            && managed.contains("TrojanSendExisting")
-            && managed.contains("MieruSendExisting"),
-        "existing UDP protocol-flow handler construction should be centralized in ManagedProtocolUdpState"
+            && managed.contains("ManagedExistingSend")
+            && managed.contains("send_managed_existing"),
+        "existing UDP protocol-flow handling should delegate neutral send requests to ManagedProtocolUdpState"
     );
+    for forbidden in [
+        "SsSendExisting",
+        "H2SendExisting",
+        "TrojanSendExisting",
+        "MieruSendExisting",
+        "TrojanRelayExisting",
+        "MieruRelayExisting",
+    ] {
+        assert!(
+            !managed.contains(forbidden),
+            "ManagedProtocolUdpState should not construct protocol manager request model `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -5820,7 +5831,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         "Trojan protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("resume: resume.clone()")
+        forward.contains("ManagedExistingSend")
+            && forward.contains("resume: ProtocolUdpFlowResume::Trojan(resume.clone())")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.sni()")
             && !forward.contains("existing.resume.insecure()")
@@ -5832,8 +5844,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         "existing Trojan UDP flow forwarding should pass the opaque resume descriptor without unpacking auth, TLS, or relay state"
     );
     assert!(
-        start.contains("ProtocolUdpFlowResume::Trojan(resume)")
-            && start.contains("resume: resume.clone()")
+        start.contains("ProtocolUdpFlowResume::Trojan(_)")
+            && start.contains("resume: request.resume.clone()")
             && !start.contains("resume.password()")
             && !start.contains("resume.sni()")
             && !start.contains("resume.insecure()")
@@ -6051,7 +6063,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         "Mieru protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("resume: resume.clone()")
+        forward.contains("ManagedExistingSend")
+            && forward.contains("resume: ProtocolUdpFlowResume::Mieru(resume.clone())")
             && !forward.contains("existing.resume.username()")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.relay_chain()")
@@ -6063,8 +6076,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     );
     let start = read("src/protocol_runtime/udp/state/managed.rs");
     assert!(
-        start.contains("ProtocolUdpFlowResume::Mieru(resume)")
-            && start.contains("resume: resume.clone()")
+        start.contains("ProtocolUdpFlowResume::Mieru(_)")
+            && start.contains("resume: request.resume.clone()")
             && !start.contains("resume.username()")
             && !start.contains("resume.password()")
             && !start.contains("resume.relay_chain()")
@@ -6537,7 +6550,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         "Hysteria2 protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("resume: resume.clone()")
+        forward.contains("ManagedExistingSend")
+            && forward.contains("resume: ProtocolUdpFlowResume::Hysteria2(resume.clone())")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.client_fingerprint()")
             && !forward.contains("existing.resume.codec()")
@@ -7060,7 +7074,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "Shadowsocks protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("resume: resume.clone()")
+        forward.contains("ManagedExistingSend")
+            && forward.contains("resume: ProtocolUdpFlowResume::Shadowsocks(resume.clone())")
             && !forward.contains("existing.resume.cache_key()")
             && !forward.contains("existing.resume.codec()")
             && !forward.contains("shadowsocks::udp_flow_codec")
@@ -7071,8 +7086,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     );
     let start = read("src/protocol_runtime/udp/state/managed.rs");
     assert!(
-        start.contains("ProtocolUdpFlowResume::Shadowsocks(resume)")
-            && start.contains("resume: resume.clone()")
+        start.contains("ProtocolUdpFlowResume::Shadowsocks(_)")
+            && start.contains("resume: flow.resume.clone()")
             && !start.contains("resume.cache_key()")
             && !start.contains("resume.codec()"),
         "new Shadowsocks UDP flow start should pass the unified resume descriptor without unpacking cache identity or codec state"

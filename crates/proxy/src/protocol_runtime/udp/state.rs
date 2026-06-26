@@ -18,7 +18,7 @@ use managed::ManagedProtocolUdpState;
 
 mod cached;
 mod forward;
-mod managed;
+pub(in crate::protocol_runtime::udp) mod managed;
 
 pub(crate) struct ProtocolUdpState {
     pub(super) socks5: Socks5UdpRuntime,

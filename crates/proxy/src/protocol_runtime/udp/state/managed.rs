@@ -1,19 +1,9 @@
 #[cfg(feature = "hysteria2")]
-use crate::protocol_runtime::udp::h2_manager::model::H2SendExisting;
-#[cfg(feature = "hysteria2")]
 use crate::protocol_runtime::udp::h2_manager::H2ChainManager;
-#[cfg(feature = "mieru")]
-use crate::protocol_runtime::udp::mieru_manager::model::{MieruRelayExisting, MieruSendExisting};
 #[cfg(feature = "mieru")]
 use crate::protocol_runtime::udp::mieru_manager::MieruChainManager;
 #[cfg(feature = "shadowsocks")]
-use crate::protocol_runtime::udp::ss_manager::model::SsSendExisting;
-#[cfg(feature = "shadowsocks")]
 use crate::protocol_runtime::udp::ss_manager::SsChainManager;
-#[cfg(feature = "trojan")]
-use crate::protocol_runtime::udp::trojan_manager::model::{
-    TrojanRelayExisting, TrojanSendExisting,
-};
 #[cfg(feature = "trojan")]
 use crate::protocol_runtime::udp::trojan_manager::TrojanChainManager;
 use crate::protocol_runtime::udp::{
@@ -35,6 +25,10 @@ use zero_engine::EngineError;
 
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
+
+pub(in crate::protocol_runtime::udp) mod model;
+
+use model::{ManagedExistingSend, ManagedRelaySend};
 
 pub(in crate::protocol_runtime::udp) struct ManagedProtocolUdpState {
     vless: VlessUdpOutboundManager,
@@ -139,49 +133,49 @@ impl ManagedProtocolUdpState {
     #[cfg(feature = "shadowsocks")]
     async fn send_shadowsocks_existing(
         &mut self,
-        request: SsSendExisting<'_>,
+        request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.shadowsocks.send_existing(request).await
+        self.shadowsocks.send_managed_existing(request).await
     }
 
     #[cfg(feature = "hysteria2")]
     async fn send_hysteria2_existing(
         &mut self,
-        request: H2SendExisting<'_>,
+        request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.hysteria2.send_existing(request).await
+        self.hysteria2.send_managed_existing(request).await
     }
 
     #[cfg(feature = "trojan")]
     async fn send_trojan_existing(
         &mut self,
-        request: TrojanSendExisting<'_>,
+        request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.trojan.send_existing(request).await
+        self.trojan.send_managed_existing(request).await
     }
 
     #[cfg(feature = "trojan")]
     async fn send_trojan_relay_existing(
         &mut self,
-        request: TrojanRelayExisting<'_>,
+        request: ManagedRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.trojan.send_relay_existing(request).await
+        self.trojan.send_managed_relay_existing(request).await
     }
 
     #[cfg(feature = "mieru")]
     async fn send_mieru_existing(
         &mut self,
-        request: MieruSendExisting<'_>,
+        request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.mieru.send_existing(request).await
+        self.mieru.send_managed_existing(request).await
     }
 
     #[cfg(feature = "mieru")]
     async fn send_mieru_relay_existing(
         &mut self,
-        request: MieruRelayExisting<'_>,
+        request: ManagedRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.mieru.send_relay_existing(request).await
+        self.mieru.send_managed_relay_existing(request).await
     }
 
     pub(in crate::protocol_runtime::udp) async fn start_datagram_flow(
@@ -191,22 +185,15 @@ impl ManagedProtocolUdpState {
     ) -> Result<usize, FlowFailure> {
         match &flow.resume {
             #[cfg(feature = "shadowsocks")]
-            ProtocolUdpFlowResume::Shadowsocks(resume) => {
-                let Some(proxy) = flow.proxy else {
-                    return Err(flow_mismatch(
-                        "udp_shadowsocks_proxy",
-                        flow.server,
-                        flow.port,
-                        "expected proxy context for Shadowsocks UDP flow",
-                    ));
-                };
-                self.send_shadowsocks_existing(SsSendExisting {
+            ProtocolUdpFlowResume::Shadowsocks(_) => {
+                self.send_shadowsocks_existing(ManagedExistingSend {
                     chain_tasks,
                     session_id: flow.session.id,
-                    proxy,
+                    proxy: flow.proxy,
+                    session: flow.session,
                     server: flow.server,
                     port: flow.port,
-                    resume: resume.clone(),
+                    resume: flow.resume.clone(),
                     target: &flow.session.target,
                     target_port: flow.session.port,
                     payload: flow.payload,
@@ -214,13 +201,15 @@ impl ManagedProtocolUdpState {
                 .await
             }
             #[cfg(feature = "hysteria2")]
-            ProtocolUdpFlowResume::Hysteria2(resume) => {
-                self.send_hysteria2_existing(H2SendExisting {
+            ProtocolUdpFlowResume::Hysteria2(_) => {
+                self.send_hysteria2_existing(ManagedExistingSend {
                     chain_tasks,
                     session_id: flow.session.id,
+                    proxy: flow.proxy,
+                    session: flow.session,
                     server: flow.server,
                     port: flow.port,
-                    resume: resume.clone(),
+                    resume: flow.resume.clone(),
                     target: &flow.session.target,
                     target_port: flow.session.port,
                     payload: flow.payload,
@@ -242,15 +231,15 @@ impl ManagedProtocolUdpState {
     ) -> Result<usize, FlowFailure> {
         match &request.resume {
             #[cfg(feature = "trojan")]
-            ProtocolUdpFlowResume::Trojan(resume) => {
-                self.send_trojan_existing(TrojanSendExisting {
+            ProtocolUdpFlowResume::Trojan(_) => {
+                self.send_trojan_existing(ManagedExistingSend {
                     chain_tasks: request.chain_tasks,
                     session_id: request.session.id,
-                    proxy: request.proxy,
+                    proxy: Some(request.proxy),
                     session: request.session,
                     server: request.server,
                     port: request.port,
-                    resume: resume.clone(),
+                    resume: request.resume.clone(),
                     target: &request.session.target,
                     target_port: request.session.port,
                     payload: request.payload,
@@ -258,15 +247,15 @@ impl ManagedProtocolUdpState {
                 .await
             }
             #[cfg(feature = "mieru")]
-            ProtocolUdpFlowResume::Mieru(resume) => {
-                self.send_mieru_existing(MieruSendExisting {
+            ProtocolUdpFlowResume::Mieru(_) => {
+                self.send_mieru_existing(ManagedExistingSend {
                     chain_tasks: request.chain_tasks,
                     session_id: request.session.id,
-                    proxy: request.proxy,
+                    proxy: Some(request.proxy),
                     session: request.session,
                     server: request.server,
                     port: request.port,
-                    resume: resume.clone(),
+                    resume: request.resume.clone(),
                     target: &request.session.target,
                     target_port: request.session.port,
                     payload: request.payload,
@@ -288,25 +277,17 @@ impl ManagedProtocolUdpState {
     ) -> Result<usize, FlowFailure> {
         match &request.resume {
             #[cfg(feature = "trojan")]
-            ProtocolUdpFlowResume::Trojan(resume) => {
-                let Some(proxy) = request.proxy else {
-                    return Err(flow_mismatch(
-                        "udp_trojan_resume",
-                        request.server,
-                        request.port,
-                        "expected Trojan UDP relay proxy context",
-                    ));
-                };
-                self.send_trojan_relay_existing(TrojanRelayExisting {
+            ProtocolUdpFlowResume::Trojan(_) => {
+                self.send_trojan_relay_existing(ManagedRelaySend {
                     chain_tasks: request.chain_tasks,
                     session_id: request.session.id,
                     stream: request.carrier.stream,
                     tls_server_name: request.tls_server_name,
-                    proxy,
+                    proxy: request.proxy,
                     session: request.session,
                     server: request.server,
                     port: request.port,
-                    resume: resume.clone(),
+                    resume: request.resume.clone(),
                     target: &request.session.target,
                     target_port: request.session.port,
                     payload: request.payload,
@@ -314,14 +295,17 @@ impl ManagedProtocolUdpState {
                 .await
             }
             #[cfg(feature = "mieru")]
-            ProtocolUdpFlowResume::Mieru(resume) => {
-                self.send_mieru_relay_existing(MieruRelayExisting {
+            ProtocolUdpFlowResume::Mieru(_) => {
+                self.send_mieru_relay_existing(ManagedRelaySend {
                     chain_tasks: request.chain_tasks,
                     session_id: request.session.id,
                     stream: request.carrier.stream,
+                    tls_server_name: request.tls_server_name,
+                    proxy: request.proxy,
+                    session: request.session,
                     server: request.server,
                     port: request.port,
-                    resume: resume.clone(),
+                    resume: request.resume.clone(),
                     target: &request.session.target,
                     target_port: request.session.port,
                     payload: request.payload,
@@ -352,13 +336,14 @@ impl ManagedProtocolUdpState {
         match snapshot.resume() {
             #[cfg(feature = "shadowsocks")]
             ProtocolUdpFlowResume::Shadowsocks(resume) => Some(
-                self.send_shadowsocks_existing(SsSendExisting {
+                self.send_shadowsocks_existing(ManagedExistingSend {
                     chain_tasks,
                     session_id: flow.session.id,
-                    proxy,
+                    proxy: Some(proxy),
+                    session: &flow.session,
                     server: upstream.server,
                     port: upstream.port,
-                    resume: resume.clone(),
+                    resume: ProtocolUdpFlowResume::Shadowsocks(resume.clone()),
                     target: &flow.session.target,
                     target_port: flow.session.port,
                     payload,
@@ -367,12 +352,14 @@ impl ManagedProtocolUdpState {
             ),
             #[cfg(feature = "hysteria2")]
             ProtocolUdpFlowResume::Hysteria2(resume) => Some(
-                self.send_hysteria2_existing(H2SendExisting {
+                self.send_hysteria2_existing(ManagedExistingSend {
                     chain_tasks,
                     session_id: flow.session.id,
+                    proxy: Some(proxy),
+                    session: &flow.session,
                     server: upstream.server,
                     port: upstream.port,
-                    resume: resume.clone(),
+                    resume: ProtocolUdpFlowResume::Hysteria2(resume.clone()),
                     target: &flow.session.target,
                     target_port: flow.session.port,
                     payload,
@@ -381,14 +368,14 @@ impl ManagedProtocolUdpState {
             ),
             #[cfg(feature = "trojan")]
             ProtocolUdpFlowResume::Trojan(resume) => Some(
-                self.send_trojan_existing(TrojanSendExisting {
+                self.send_trojan_existing(ManagedExistingSend {
                     chain_tasks,
                     session_id: flow.session.id,
-                    proxy,
+                    proxy: Some(proxy),
                     session: &flow.session,
                     server: upstream.server,
                     port: upstream.port,
-                    resume: resume.clone(),
+                    resume: ProtocolUdpFlowResume::Trojan(resume.clone()),
                     target: &flow.session.target,
                     target_port: flow.session.port,
                     payload,
@@ -397,14 +384,14 @@ impl ManagedProtocolUdpState {
             ),
             #[cfg(feature = "mieru")]
             ProtocolUdpFlowResume::Mieru(resume) => Some(
-                self.send_mieru_existing(MieruSendExisting {
+                self.send_mieru_existing(ManagedExistingSend {
                     chain_tasks,
                     session_id: flow.session.id,
-                    proxy,
+                    proxy: Some(proxy),
                     session: &flow.session,
                     server: upstream.server,
                     port: upstream.port,
-                    resume: resume.clone(),
+                    resume: ProtocolUdpFlowResume::Mieru(resume.clone()),
                     target: &flow.session.target,
                     target_port: flow.session.port,
                     payload,

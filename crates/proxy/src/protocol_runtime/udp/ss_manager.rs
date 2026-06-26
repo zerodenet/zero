@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::state::managed::model::ManagedExistingSend;
 use super::FlowFailure;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
@@ -100,5 +101,54 @@ impl SsChainManager {
             },
         )
         .await
+    }
+
+    pub(in crate::protocol_runtime::udp) async fn send_managed_existing(
+        &mut self,
+        request: ManagedExistingSend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        let ProtocolUdpFlowResume::Shadowsocks(resume) = request.resume else {
+            return Err(managed_mismatch(
+                "udp_shadowsocks_resume",
+                request.server,
+                request.port,
+                "expected Shadowsocks UDP flow resume",
+            ));
+        };
+        let Some(proxy) = request.proxy else {
+            return Err(managed_mismatch(
+                "udp_shadowsocks_proxy",
+                request.server,
+                request.port,
+                "expected proxy context for Shadowsocks UDP flow",
+            ));
+        };
+        self.send_existing(SsSendExisting {
+            chain_tasks: request.chain_tasks,
+            session_id: request.session_id,
+            proxy,
+            server: request.server,
+            port: request.port,
+            resume,
+            target: request.target,
+            target_port: request.target_port,
+            payload: request.payload,
+        })
+        .await
+    }
+}
+
+use super::ProtocolUdpFlowResume;
+
+fn managed_mismatch(
+    stage: &'static str,
+    server: &str,
+    port: u16,
+    message: &'static str,
+) -> FlowFailure {
+    FlowFailure {
+        stage,
+        error: zero_engine::EngineError::Io(std::io::Error::other(message)),
+        upstream: Some((server.to_string(), port)),
     }
 }
