@@ -3400,6 +3400,7 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
         "start/mod.rs",
         "start/datagram.rs",
         "start/mieru.rs",
+        "start/stream.rs",
         "start/trojan.rs",
         "start/vless.rs",
         "start/vmess.rs",
@@ -3453,6 +3454,43 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
             && datagram.contains("ProtocolUdpFlowResume::Shadowsocks(resume)")
             && datagram.contains("ProtocolUdpFlowResume::Hysteria2(resume)"),
         "managed datagram UDP flow kind should leave protocol-specific resume matching in start/datagram.rs"
+    );
+}
+
+#[test]
+fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
+    let state = read("src/protocol_runtime/udp/state.rs");
+    let stream = read("src/protocol_runtime/udp/start/stream.rs");
+    let trojan = read("src/protocol_runtime/udp/start/trojan.rs");
+    let mieru = read("src/protocol_runtime/udp/start/mieru.rs");
+
+    for forbidden in [
+        "ProtocolUdpFlowResume::Trojan(_)",
+        "ProtocolUdpFlowResume::Mieru(_)",
+        "start_trojan_stream_packet_flow",
+        "start_trojan_relay_stream_flow",
+        "start_mieru_stream_packet_flow",
+        "start_mieru_relay_stream_flow",
+    ] {
+        assert!(
+            !state.contains(forbidden),
+            "state.rs should delegate stream/relay resume dispatch to protocol start modules; found `{forbidden}`"
+        );
+    }
+    assert!(
+        state.contains("(_, ManagedUdpFlowKind::StreamPacket)")
+            && state.contains("(_, ManagedUdpFlowKind::RelayStream)")
+            && state.contains("start_managed_stream_packet_flow")
+            && state.contains("start_managed_relay_stream_flow")
+            && stream.contains("ProtocolUdpFlowResume::Trojan(_)")
+            && stream.contains("ProtocolUdpFlowResume::Mieru(_)")
+            && stream.contains("start_trojan_stream_packet_flow")
+            && stream.contains("start_trojan_relay_stream_flow")
+            && stream.contains("start_mieru_stream_packet_flow")
+            && stream.contains("start_mieru_relay_stream_flow")
+            && trojan.contains("ProtocolUdpFlowResume::Trojan(resume)")
+            && mieru.contains("ProtocolUdpFlowResume::Mieru(resume)"),
+        "stream-packet and relay-stream UDP flow kinds should leave protocol-specific resume matching in start/stream.rs and protocol-owned start modules"
     );
 }
 

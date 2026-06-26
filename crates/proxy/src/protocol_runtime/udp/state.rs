@@ -143,17 +143,16 @@ impl ProtocolUdpState {
                 )
                 .await
             }
-            #[cfg(feature = "trojan")]
-            (ProtocolUdpFlowResume::Trojan(_), ManagedUdpFlowKind::StreamPacket) => {
+            (_, ManagedUdpFlowKind::StreamPacket) => {
                 let Some(proxy) = request.proxy else {
                     return Err(managed_flow_mismatch(
-                        "udp_trojan_proxy",
+                        "udp_stream_packet_proxy",
                         request.server,
                         request.port,
-                        "expected proxy context for Trojan UDP flow",
+                        "expected proxy context for stream-packet UDP flow",
                     ));
                 };
-                self.start_trojan_stream_packet_flow(ManagedStreamPacketFlow {
+                self.start_managed_stream_packet_flow(ManagedStreamPacketFlow {
                     chain_tasks: request.chain_tasks,
                     proxy,
                     session: request.session,
@@ -164,17 +163,16 @@ impl ProtocolUdpState {
                 })
                 .await
             }
-            #[cfg(feature = "trojan")]
-            (ProtocolUdpFlowResume::Trojan(_), ManagedUdpFlowKind::RelayStream) => {
+            (_, ManagedUdpFlowKind::RelayStream) => {
                 let Some(carrier) = request.carrier else {
                     return Err(managed_flow_mismatch(
-                        "udp_trojan_carrier",
+                        "udp_relay_stream_carrier",
                         request.server,
                         request.port,
-                        "expected relay carrier for Trojan UDP flow",
+                        "expected relay carrier for relay-stream UDP flow",
                     ));
                 };
-                self.start_trojan_relay_stream_flow(ManagedRelayStreamFlow {
+                self.start_managed_relay_stream_flow(ManagedRelayStreamFlow {
                     chain_tasks: request.chain_tasks,
                     proxy: request.proxy,
                     session: request.session,
@@ -187,56 +185,6 @@ impl ProtocolUdpState {
                 })
                 .await
             }
-            #[cfg(feature = "mieru")]
-            (ProtocolUdpFlowResume::Mieru(_), ManagedUdpFlowKind::StreamPacket) => {
-                let Some(proxy) = request.proxy else {
-                    return Err(managed_flow_mismatch(
-                        "udp_mieru_proxy",
-                        request.server,
-                        request.port,
-                        "expected proxy context for Mieru UDP flow",
-                    ));
-                };
-                self.start_mieru_stream_packet_flow(ManagedStreamPacketFlow {
-                    chain_tasks: request.chain_tasks,
-                    proxy,
-                    session: request.session,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume,
-                    payload: request.payload,
-                })
-                .await
-            }
-            #[cfg(feature = "mieru")]
-            (ProtocolUdpFlowResume::Mieru(_), ManagedUdpFlowKind::RelayStream) => {
-                let Some(carrier) = request.carrier else {
-                    return Err(managed_flow_mismatch(
-                        "udp_mieru_carrier",
-                        request.server,
-                        request.port,
-                        "expected relay carrier for Mieru UDP flow",
-                    ));
-                };
-                self.start_mieru_relay_stream_flow(ManagedRelayStreamFlow {
-                    chain_tasks: request.chain_tasks,
-                    proxy: request.proxy,
-                    session: request.session,
-                    carrier,
-                    tls_server_name: request.tls_server_name,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume,
-                    payload: request.payload,
-                })
-                .await
-            }
-            _ => Err(managed_flow_mismatch(
-                "udp_managed_flow_resume",
-                request.server,
-                request.port,
-                "managed UDP flow kind does not match protocol resume",
-            )),
         }
     }
 }
