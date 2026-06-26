@@ -31,15 +31,6 @@ impl UdpDispatch {
         &mut self,
         request: TrojanDatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let Some(resume) = request.resume.trojan() else {
-            return Err(FlowFailure {
-                stage: "udp_trojan_resume",
-                error: zero_engine::EngineError::Io(std::io::Error::other(
-                    "expected Trojan UDP flow resume",
-                )),
-                upstream: Some((request.server.to_string(), request.port)),
-            });
-        };
         self.protocol_state
             .start_trojan_udp_flow(crate::protocol_runtime::udp::TrojanUdpFlowRequest {
                 chain_tasks: &mut self.chain_tasks,
@@ -47,11 +38,7 @@ impl UdpDispatch {
                 session: request.session,
                 server: request.server,
                 port: request.port,
-                password: resume.password(),
-                sni: resume.sni(),
-                insecure: resume.insecure(),
-                client_fingerprint: resume.client_fingerprint(),
-                relay_chain: false,
+                resume: request.resume,
                 payload: request.payload,
             })
             .await
@@ -87,15 +74,6 @@ impl UdpDispatch {
         &mut self,
         request: TrojanRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let Some(resume) = request.resume.trojan() else {
-            return Err(FlowFailure {
-                stage: "udp_trojan_resume",
-                error: zero_engine::EngineError::Io(std::io::Error::other(
-                    "expected Trojan UDP flow resume",
-                )),
-                upstream: Some((request.server.to_string(), request.port)),
-            });
-        };
         self.protocol_state
             .start_trojan_udp_relay_flow(crate::protocol_runtime::udp::TrojanUdpRelayFlowRequest {
                 chain_tasks: &mut self.chain_tasks,
@@ -104,10 +82,7 @@ impl UdpDispatch {
                 carrier: request.carrier,
                 server: request.server,
                 port: request.port,
-                password: resume.password(),
-                sni: resume.sni(),
-                insecure: resume.insecure(),
-                client_fingerprint: resume.client_fingerprint(),
+                resume: request.resume,
                 payload: request.payload,
             })
             .await

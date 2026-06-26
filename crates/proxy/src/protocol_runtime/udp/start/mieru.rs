@@ -1,10 +1,9 @@
 use tokio::task::JoinSet;
-use zero_core::{Address, Error, Session};
-use zero_traits::DatagramCodec;
+use zero_core::Session;
 
 use super::super::mieru_manager::model::{MieruRelayExisting, MieruSendExisting};
 use super::super::state::ProtocolUdpState;
-use super::super::{ChainTask, FlowFailure, MieruUdpRelayFlow};
+use super::super::{ChainTask, FlowFailure, MieruUdpRelayFlow, ProtocolUdpFlowResume};
 use crate::runtime::Proxy;
 
 impl ProtocolUdpState {
@@ -12,7 +11,31 @@ impl ProtocolUdpState {
         &mut self,
         request: MieruUdpFlowRequest<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.mieru.send_existing(request.into_existing()).await
+        let ProtocolUdpFlowResume::Mieru(resume) = &request.resume else {
+            return Err(resume_mismatch(
+                "udp_mieru_resume",
+                request.server,
+                request.port,
+                "expected Mieru UDP flow resume",
+            ));
+        };
+        self.mieru
+            .send_existing(MieruSendExisting {
+                chain_tasks: request.chain_tasks,
+                session_id: request.session.id,
+                proxy: request.proxy,
+                session: request.session,
+                server: request.server,
+                port: request.port,
+                username: resume.username(),
+                password: resume.password(),
+                relay_chain: resume.relay_chain(),
+                codec: std::sync::Arc::new(resume.codec()),
+                target: &request.session.target,
+                target_port: request.session.port,
+                payload: request.payload,
+            })
+            .await
     }
 
     pub(crate) async fn start_mieru_udp_relay_flow(
@@ -20,6 +43,14 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: MieruUdpRelayFlow<'_>,
     ) -> Result<usize, FlowFailure> {
+        let ProtocolUdpFlowResume::Mieru(resume) = &flow.resume else {
+            return Err(resume_mismatch(
+                "udp_mieru_resume",
+                flow.server,
+                flow.port,
+                "expected Mieru UDP flow resume",
+            ));
+        };
         self.mieru
             .send_relay_existing(MieruRelayExisting {
                 chain_tasks,
@@ -27,9 +58,9 @@ impl ProtocolUdpState {
                 stream: flow.carrier.stream,
                 server: flow.server,
                 port: flow.port,
-                username: flow.username,
-                password: flow.password,
-                codec: flow.codec,
+                username: resume.username(),
+                password: resume.password(),
+                codec: std::sync::Arc::new(resume.codec()),
                 target: &flow.session.target,
                 target_port: flow.session.port,
                 payload: flow.payload,
@@ -44,29 +75,19 @@ pub(crate) struct MieruUdpFlowRequest<'a> {
     pub session: &'a Session,
     pub server: &'a str,
     pub port: u16,
-    pub username: &'a str,
-    pub password: &'a str,
-    pub relay_chain: bool,
-    pub codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
+    pub resume: ProtocolUdpFlowResume,
     pub payload: &'a [u8],
 }
 
-impl<'a> MieruUdpFlowRequest<'a> {
-    fn into_existing(self) -> MieruSendExisting<'a> {
-        MieruSendExisting {
-            chain_tasks: self.chain_tasks,
-            session_id: self.session.id,
-            proxy: self.proxy,
-            session: self.session,
-            server: self.server,
-            port: self.port,
-            username: self.username,
-            password: self.password,
-            relay_chain: self.relay_chain,
-            codec: self.codec,
-            target: &self.session.target,
-            target_port: self.session.port,
-            payload: self.payload,
-        }
+fn resume_mismatch(
+    stage: &'static str,
+    server: &str,
+    port: u16,
+    message: &'static str,
+) -> FlowFailure {
+    FlowFailure {
+        stage,
+        error: zero_engine::EngineError::Io(std::io::Error::other(message)),
+        upstream: Some((server.to_string(), port)),
     }
 }

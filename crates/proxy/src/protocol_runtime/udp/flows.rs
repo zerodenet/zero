@@ -1,6 +1,7 @@
 use crate::runtime::Proxy;
-use zero_core::{Address, Error, Session};
-use zero_traits::DatagramCodec;
+use zero_core::Session;
+
+use super::ProtocolUdpFlowResume;
 
 #[cfg(feature = "shadowsocks")]
 pub(crate) struct ShadowsocksUdpFlow<'a> {
@@ -8,8 +9,7 @@ pub(crate) struct ShadowsocksUdpFlow<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) cache_key: String,
-    pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
+    pub(crate) resume: ProtocolUdpFlowResume,
     pub(crate) payload: &'a [u8],
 }
 
@@ -19,9 +19,7 @@ pub(crate) struct MieruUdpRelayFlow<'a> {
     pub(crate) carrier: crate::transport::RelayCarrier,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) username: &'a str,
-    pub(crate) password: &'a str,
-    pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
+    pub(crate) resume: ProtocolUdpFlowResume,
     pub(crate) payload: &'a [u8],
 }
 

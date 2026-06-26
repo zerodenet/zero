@@ -16,40 +16,6 @@ pub(crate) enum ProtocolUdpFlowResume {
     Mieru(mieru::MieruUdpFlowResume),
 }
 
-impl ProtocolUdpFlowResume {
-    #[cfg(feature = "shadowsocks")]
-    pub(crate) fn shadowsocks(&self) -> Option<&shadowsocks::ShadowsocksUdpFlowResume> {
-        match self {
-            Self::Shadowsocks(resume) => Some(resume),
-            _ => None,
-        }
-    }
-
-    #[cfg(feature = "hysteria2")]
-    pub(crate) fn hysteria2(&self) -> Option<&hysteria2::Hysteria2UdpFlowResume> {
-        match self {
-            Self::Hysteria2(resume) => Some(resume),
-            _ => None,
-        }
-    }
-
-    #[cfg(feature = "trojan")]
-    pub(crate) fn trojan(&self) -> Option<&trojan::TrojanUdpFlowResume> {
-        match self {
-            Self::Trojan(resume) => Some(resume),
-            _ => None,
-        }
-    }
-
-    #[cfg(feature = "mieru")]
-    pub(crate) fn mieru(&self) -> Option<&mieru::MieruUdpFlowResume> {
-        match self {
-            Self::Mieru(resume) => Some(resume),
-            _ => None,
-        }
-    }
-}
-
 pub(crate) struct Socks5RelayAuth<'a> {
     pub(crate) username: Option<&'a str>,
     pub(crate) password: Option<&'a str>,

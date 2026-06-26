@@ -3,7 +3,7 @@ use zero_core::Session;
 
 use super::super::state::ProtocolUdpState;
 use super::super::trojan_manager::model::{TrojanRelayExisting, TrojanSendExisting};
-use super::super::{ChainTask, FlowFailure};
+use super::super::{ChainTask, FlowFailure, ProtocolUdpFlowResume};
 use crate::runtime::Proxy;
 
 impl ProtocolUdpState {
@@ -11,15 +11,64 @@ impl ProtocolUdpState {
         &mut self,
         request: TrojanUdpFlowRequest<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.trojan.send_existing(request.into_existing()).await
+        let ProtocolUdpFlowResume::Trojan(resume) = &request.resume else {
+            return Err(resume_mismatch(
+                "udp_trojan_resume",
+                request.server,
+                request.port,
+                "expected Trojan UDP flow resume",
+            ));
+        };
+        self.trojan
+            .send_existing(TrojanSendExisting {
+                chain_tasks: request.chain_tasks,
+                session_id: request.session.id,
+                proxy: request.proxy,
+                session: request.session,
+                server: request.server,
+                port: request.port,
+                password: resume.password(),
+                sni: resume.sni(),
+                insecure: resume.insecure(),
+                client_fingerprint: resume.client_fingerprint(),
+                relay_chain: resume.relay_chain(),
+                target: &request.session.target,
+                target_port: request.session.port,
+                payload: request.payload,
+            })
+            .await
     }
 
     pub(crate) async fn start_trojan_udp_relay_flow(
         &mut self,
         request: TrojanUdpRelayFlowRequest<'_>,
     ) -> Result<usize, FlowFailure> {
+        let ProtocolUdpFlowResume::Trojan(resume) = &request.resume else {
+            return Err(resume_mismatch(
+                "udp_trojan_resume",
+                request.server,
+                request.port,
+                "expected Trojan UDP flow resume",
+            ));
+        };
         self.trojan
-            .send_relay_existing(request.into_existing())
+            .send_relay_existing(TrojanRelayExisting {
+                chain_tasks: request.chain_tasks,
+                session_id: request.session.id,
+                stream: request.carrier.stream,
+                tls_server_name: None,
+                proxy: request.proxy,
+                session: request.session,
+                server: request.server,
+                port: request.port,
+                password: resume.password(),
+                sni: resume.sni(),
+                insecure: resume.insecure(),
+                client_fingerprint: resume.client_fingerprint(),
+                target: &request.session.target,
+                target_port: request.session.port,
+                payload: request.payload,
+            })
             .await
     }
 }
@@ -30,33 +79,8 @@ pub(crate) struct TrojanUdpFlowRequest<'a> {
     pub session: &'a Session,
     pub server: &'a str,
     pub port: u16,
-    pub password: &'a str,
-    pub sni: Option<&'a str>,
-    pub insecure: bool,
-    pub client_fingerprint: Option<&'a str>,
-    pub relay_chain: bool,
+    pub resume: ProtocolUdpFlowResume,
     pub payload: &'a [u8],
-}
-
-impl<'a> TrojanUdpFlowRequest<'a> {
-    fn into_existing(self) -> TrojanSendExisting<'a> {
-        TrojanSendExisting {
-            chain_tasks: self.chain_tasks,
-            session_id: self.session.id,
-            proxy: self.proxy,
-            session: self.session,
-            server: self.server,
-            port: self.port,
-            password: self.password,
-            sni: self.sni,
-            insecure: self.insecure,
-            client_fingerprint: self.client_fingerprint,
-            relay_chain: self.relay_chain,
-            target: &self.session.target,
-            target_port: self.session.port,
-            payload: self.payload,
-        }
-    }
 }
 
 pub(crate) struct TrojanUdpRelayFlowRequest<'a> {
@@ -66,31 +90,19 @@ pub(crate) struct TrojanUdpRelayFlowRequest<'a> {
     pub carrier: crate::transport::RelayCarrier,
     pub server: &'a str,
     pub port: u16,
-    pub password: &'a str,
-    pub sni: Option<&'a str>,
-    pub insecure: bool,
-    pub client_fingerprint: Option<&'a str>,
+    pub resume: ProtocolUdpFlowResume,
     pub payload: &'a [u8],
 }
 
-impl<'a> TrojanUdpRelayFlowRequest<'a> {
-    fn into_existing(self) -> TrojanRelayExisting<'a> {
-        TrojanRelayExisting {
-            chain_tasks: self.chain_tasks,
-            session_id: self.session.id,
-            stream: self.carrier.stream,
-            tls_server_name: None,
-            proxy: self.proxy,
-            session: self.session,
-            server: self.server,
-            port: self.port,
-            password: self.password,
-            sni: self.sni,
-            insecure: self.insecure,
-            client_fingerprint: self.client_fingerprint,
-            target: &self.session.target,
-            target_port: self.session.port,
-            payload: self.payload,
-        }
+fn resume_mismatch(
+    stage: &'static str,
+    server: &str,
+    port: u16,
+    message: &'static str,
+) -> FlowFailure {
+    FlowFailure {
+        stage,
+        error: zero_engine::EngineError::Io(std::io::Error::other(message)),
+        upstream: Some((server.to_string(), port)),
     }
 }

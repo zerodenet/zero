@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
@@ -40,7 +38,6 @@ impl MieruAdapter {
                 resume: ProtocolUdpFlowResume::Mieru(mieru::MieruUdpFlowResume::new(
                     username, password, false,
                 )),
-                codec: Arc::new(mieru::udp_flow_codec()),
                 payload,
             })
             .await
@@ -74,7 +71,6 @@ impl MieruAdapter {
                 resume: ProtocolUdpFlowResume::Mieru(mieru::MieruUdpFlowResume::new(
                     username, password, true,
                 )),
-                codec: Arc::new(mieru::udp_flow_codec()),
                 payload,
             })
             .await

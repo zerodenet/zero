@@ -5274,10 +5274,10 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         "Mieru UDP manager codec should encode/decode through a neutral DatagramCodec object"
     );
     assert!(
-        adapter.contains("mieru::udp_flow_codec")
-            && protocol_udp.contains("pub fn udp_flow_codec(")
-            && protocol_udp.contains("impl DatagramCodec<Address> for MieruUdpFlowCodec"),
-        "Mieru adapter should request the protocol-owned UDP flow codec"
+        protocol_udp.contains("pub fn udp_flow_codec(")
+            && protocol_udp.contains("impl DatagramCodec<Address> for MieruUdpFlowCodec")
+            && !adapter.contains("mieru::udp_flow_codec"),
+        "Mieru ordinary UDP flow codec should be protocol-owned and recovered from the resume descriptor, not carried by the adapter"
     );
     assert!(
         adapter.contains("MieruUdpFlowResume::new")
@@ -5302,6 +5302,15 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && !forward.contains("username: &'a str")
             && !forward.contains("relay_chain: bool"),
         "existing Mieru UDP flow forwarding should recover account, relay state, and codec from the opaque resume descriptor"
+    );
+    let start = read("src/protocol_runtime/udp/start/mieru.rs");
+    assert!(
+        start.contains("ProtocolUdpFlowResume::Mieru(resume)")
+            && start.contains("resume.username()")
+            && start.contains("resume.password()")
+            && start.contains("resume.relay_chain()")
+            && start.contains("resume.codec()"),
+        "new Mieru UDP flow start should unpack the unified resume descriptor inside protocol_runtime"
     );
 }
 
@@ -5927,10 +5936,10 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     assert!(
         !shadowsocks_flow_model.contains("cipher: shadowsocks::CipherKind")
             && !shadowsocks_flow_model.contains("password: &'a str")
-            && shadowsocks_flow_model.contains("cache_key: String")
-            && shadowsocks_flow_model
-                .contains("codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>"),
-        "ordinary Shadowsocks UDP flow model should carry opaque cache identity and a protocol-built codec"
+            && !shadowsocks_flow_model.contains("cache_key: String")
+            && !shadowsocks_flow_model.contains("DatagramCodec")
+            && shadowsocks_flow_model.contains("resume: ProtocolUdpFlowResume"),
+        "ordinary Shadowsocks UDP flow model should carry only the unified resume descriptor"
     );
     assert!(
         !shadowsocks_peer_model.contains("cipher: shadowsocks::CipherKind")
@@ -5960,6 +5969,13 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !forward.contains("cipher_kind: shadowsocks::CipherKind")
             && !forward.contains("datagram_cache_key: &'a str"),
         "existing Shadowsocks UDP flow forwarding should recover cache identity and codec from the opaque resume descriptor"
+    );
+    let start = read("src/protocol_runtime/udp/start/datagram.rs");
+    assert!(
+        start.contains("ProtocolUdpFlowResume::Shadowsocks(resume)")
+            && start.contains("resume.cache_key()")
+            && start.contains("resume.codec()"),
+        "new Shadowsocks UDP flow start should unpack cache identity and codec from the unified resume descriptor inside protocol_runtime"
     );
 }
 
@@ -6374,6 +6390,38 @@ fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
             && snapshot.contains("Self::Managed {"),
         "SOCKS5 UDP snapshot constructor should use the unified ProtocolUdpFlowResume wrapper"
     );
+}
+
+#[test]
+fn udp_dispatch_does_not_unpack_protocol_flow_resume() {
+    for source in [
+        "src/runtime/udp_dispatch/hysteria2_flow.rs",
+        "src/runtime/udp_dispatch/mieru_flow.rs",
+        "src/runtime/udp_dispatch/shadowsocks_flow.rs",
+        "src/runtime/udp_dispatch/trojan_flow.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("resume: ProtocolUdpFlowResume"),
+            "{source} should carry the unified protocol UDP flow resume wrapper"
+        );
+        for forbidden in [
+            ".shadowsocks()",
+            ".hysteria2()",
+            ".trojan()",
+            ".mieru()",
+            "resume.cache_key()",
+            "resume.username()",
+            "resume.password()",
+            "resume.codec()",
+            "codec: std::sync::Arc<dyn DatagramCodec",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should pass ProtocolUdpFlowResume through without unpacking `{forbidden}`"
+            );
+        }
+    }
 }
 
 #[test]

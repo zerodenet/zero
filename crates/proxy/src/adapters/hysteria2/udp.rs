@@ -93,7 +93,6 @@ impl Hysteria2Adapter {
                     password,
                     *client_fingerprint,
                 )),
-                codec: Arc::new(hysteria2::udp_flow_codec()),
                 payload,
             })
             .await
