@@ -2013,6 +2013,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "VlessUdpPacketTunnelTarget",
         "encode_udp_packet",
         "decode_udp_packet",
+        "vless::build_udp_packet",
+        "vless::parse_udp_packet",
     ] {
         assert!(
             !runtime.contains(forbidden),
@@ -2020,8 +2022,9 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         );
     }
     assert!(
-        runtime.contains("vless::build_udp_packet") && runtime.contains("vless::parse_udp_packet"),
-        "VLESS UDP runtime should call protocols/vless packet helpers"
+        runtime.contains("vless::encode_udp_flow_packet")
+            && runtime.contains("vless::decode_udp_flow_packet"),
+        "VLESS UDP runtime should call flow-specific protocols/vless packet helpers"
     );
     assert!(
         runtime.contains("vless::establish_udp_packet_tunnel"),

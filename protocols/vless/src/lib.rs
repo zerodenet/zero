@@ -50,7 +50,7 @@ pub use reality::{
     RealityClientOptions, RealityServerOptions, RealityTlsStream,
 };
 pub use shared::{
-    build_udp_packet, build_udp_packet_v2, decode_inbound_udp_packet, encode_mux_udp_response,
-    encode_udp_response, format_uuid, parse_udp_packet, parse_udp_packet_v2, parse_uuid,
-    VlessUdpPacket, VLESS_VERSION,
+    build_udp_packet, build_udp_packet_v2, decode_inbound_udp_packet, decode_udp_flow_packet,
+    encode_mux_udp_response, encode_udp_flow_packet, encode_udp_response, format_uuid,
+    parse_udp_packet, parse_udp_packet_v2, parse_uuid, VlessUdpPacket, VLESS_VERSION,
 };
