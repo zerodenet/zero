@@ -16,8 +16,8 @@ impl ProtocolUdpState {
         payload: &[u8],
     ) -> Result<Option<u64>, EngineError> {
         if let Some(session_id) = self
-            .vless
-            .send_existing(chain_tasks, proxy, target, port, payload)
+            .managed
+            .send_existing_vless(chain_tasks, proxy, target, port, payload)
             .await?
         {
             return Ok(Some(session_id));
@@ -25,8 +25,8 @@ impl ProtocolUdpState {
 
         #[cfg(feature = "vmess")]
         if let Some(session_id) = self
-            .vmess
-            .send_existing(chain_tasks, proxy, target, port, payload)
+            .managed
+            .send_existing_vmess(chain_tasks, proxy, target, port, payload)
             .await?
         {
             return Ok(Some(session_id));

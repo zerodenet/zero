@@ -20,8 +20,8 @@ pub(super) async fn forward(
     existing: ExistingFlow<'_>,
 ) -> Result<usize, FlowFailure> {
     state
-        .hysteria2
-        .send_existing(H2SendExisting {
+        .managed
+        .send_hysteria2_existing(H2SendExisting {
             chain_tasks,
             session_id: flow.session.id,
             server: existing.server,

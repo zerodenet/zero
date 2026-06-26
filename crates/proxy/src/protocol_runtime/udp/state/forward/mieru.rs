@@ -22,8 +22,8 @@ pub(super) async fn forward(
     existing: ExistingFlow<'_>,
 ) -> Result<usize, FlowFailure> {
     state
-        .mieru
-        .send_existing(MieruSendExisting {
+        .managed
+        .send_mieru_existing(MieruSendExisting {
             chain_tasks,
             session_id: flow.session.id,
             proxy,

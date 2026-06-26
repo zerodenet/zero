@@ -17,8 +17,8 @@ impl ProtocolUdpState {
                 "expected Trojan UDP flow resume",
             ));
         };
-        self.trojan
-            .send_existing(TrojanSendExisting {
+        self.managed
+            .send_trojan_existing(TrojanSendExisting {
                 chain_tasks: request.chain_tasks,
                 session_id: request.session.id,
                 proxy: request.proxy,
@@ -53,8 +53,8 @@ impl ProtocolUdpState {
                 "expected Trojan UDP relay proxy context",
             ));
         };
-        self.trojan
-            .send_relay_existing(TrojanRelayExisting {
+        self.managed
+            .send_trojan_relay_existing(TrojanRelayExisting {
                 chain_tasks: request.chain_tasks,
                 session_id: request.session.id,
                 stream: request.carrier.stream,

@@ -24,8 +24,8 @@ impl ProtocolUdpState {
             quic: flow.quic,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.vless
-            .start_flow(
+        self.managed
+            .start_vless_flow(
                 chain_tasks,
                 crate::protocol_runtime::vless_udp::model::VlessUdpStartFlow {
                     proxy: flow.proxy,
@@ -52,8 +52,8 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpRelayTwoStream<'_>,
     ) -> Result<(), FlowFailure> {
-        self.vless
-            .start_relay_two_stream(
+        self.managed
+            .start_vless_relay_two_stream(
                 chain_tasks,
                 crate::protocol_runtime::vless_udp::model::VlessUdpRelayTwoStream {
                     proxy: flow.proxy,
@@ -90,8 +90,8 @@ impl ProtocolUdpState {
             quic: None,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.vless
-            .start_relay_final_hop(
+        self.managed
+            .start_vless_relay_final_hop(
                 chain_tasks,
                 crate::protocol_runtime::vless_udp::model::VlessUdpRelayFinalHopStart {
                     proxy: flow.proxy,

@@ -25,8 +25,8 @@ impl ProtocolUdpState {
                         "expected proxy context for Shadowsocks UDP flow",
                     ));
                 };
-                self.shadowsocks
-                    .send_existing(SsSendExisting {
+                self.managed
+                    .send_shadowsocks_existing(SsSendExisting {
                         chain_tasks,
                         session_id: flow.session.id,
                         proxy,
@@ -41,8 +41,8 @@ impl ProtocolUdpState {
             }
             #[cfg(feature = "hysteria2")]
             ProtocolUdpFlowResume::Hysteria2(resume) => {
-                self.hysteria2
-                    .send_existing(H2SendExisting {
+                self.managed
+                    .send_hysteria2_existing(H2SendExisting {
                         chain_tasks,
                         session_id: flow.session.id,
                         server: flow.server,

@@ -17,8 +17,8 @@ impl ProtocolUdpState {
             grpc: flow.grpc,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.vmess
-            .start_flow(
+        self.managed
+            .start_vmess_flow(
                 chain_tasks,
                 crate::protocol_runtime::vmess_udp::model::VmessUdpStartFlow {
                     proxy: flow.proxy,
@@ -52,8 +52,8 @@ impl ProtocolUdpState {
             grpc: flow.grpc,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.vmess
-            .start_relay_flow(
+        self.managed
+            .start_vmess_relay_flow(
                 chain_tasks,
                 crate::protocol_runtime::vmess_udp::model::VmessUdpRelayFlowStart {
                     proxy: flow.proxy,

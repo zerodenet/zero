@@ -6,9 +6,6 @@ use tokio::time::Instant as TokioInstant;
 use crate::protocol_runtime::socks5_udp::{
     ClosedSocks5UdpAssociation, Socks5UdpAssociationView, Socks5UdpRuntime,
 };
-use crate::protocol_runtime::vless_udp::VlessUdpOutboundManager;
-#[cfg(feature = "vmess")]
-use crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager;
 use zero_engine::EngineError;
 
 use super::{
@@ -17,31 +14,15 @@ use super::{
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
-#[cfg(feature = "hysteria2")]
-use super::h2_manager::H2ChainManager;
-#[cfg(feature = "mieru")]
-use super::mieru_manager::MieruChainManager;
-#[cfg(feature = "shadowsocks")]
-use super::ss_manager::SsChainManager;
-#[cfg(feature = "trojan")]
-use super::trojan_manager::TrojanChainManager;
+use managed::ManagedProtocolUdpState;
 
 mod cached;
 mod forward;
+mod managed;
 
 pub(crate) struct ProtocolUdpState {
     pub(super) socks5: Socks5UdpRuntime,
-    pub(super) vless: VlessUdpOutboundManager,
-    #[cfg(feature = "vmess")]
-    pub(super) vmess: VmessUdpOutboundManager,
-    #[cfg(feature = "shadowsocks")]
-    pub(super) shadowsocks: SsChainManager,
-    #[cfg(feature = "trojan")]
-    pub(super) trojan: TrojanChainManager,
-    #[cfg(feature = "mieru")]
-    pub(super) mieru: MieruChainManager,
-    #[cfg(feature = "hysteria2")]
-    pub(super) hysteria2: H2ChainManager,
+    pub(super) managed: ManagedProtocolUdpState,
     managed_flows: HashMap<ManagedUdpFlowRef, ProtocolUdpFlowSnapshot>,
     next_managed_flow_id: u64,
 }
@@ -50,17 +31,7 @@ impl ProtocolUdpState {
     pub(crate) fn new() -> Self {
         Self {
             socks5: Socks5UdpRuntime::default(),
-            vless: VlessUdpOutboundManager::new(),
-            #[cfg(feature = "vmess")]
-            vmess: VmessUdpOutboundManager::new(),
-            #[cfg(feature = "shadowsocks")]
-            shadowsocks: SsChainManager::new(),
-            #[cfg(feature = "trojan")]
-            trojan: TrojanChainManager::new(),
-            #[cfg(feature = "mieru")]
-            mieru: MieruChainManager::new(),
-            #[cfg(feature = "hysteria2")]
-            hysteria2: H2ChainManager::new(),
+            managed: ManagedProtocolUdpState::new(),
             managed_flows: HashMap::new(),
             next_managed_flow_id: 1,
         }

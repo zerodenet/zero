@@ -4912,6 +4912,7 @@ fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
 #[test]
 fn protocol_udp_state_manager_fields_are_not_crate_public() {
     let content = read("src/protocol_runtime/udp/state.rs");
+    let managed = read("src/protocol_runtime/udp/state/managed.rs");
 
     for field in [
         "vless",
@@ -4926,7 +4927,21 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
             !content.contains(&format!("pub(crate) {field}:")),
             "ProtocolUdpState manager field `{field}` should not be crate-public"
         );
+        assert!(
+            !content.contains(&format!("pub(super) {field}:")),
+            "ProtocolUdpState should collapse protocol manager field `{field}` behind ManagedProtocolUdpState"
+        );
     }
+    assert!(
+        content.contains("managed: ManagedProtocolUdpState")
+            && managed.contains("struct ManagedProtocolUdpState")
+            && managed.contains("vless: VlessUdpOutboundManager")
+            && !managed.contains("pub(crate) vless:")
+            && !managed.contains("pub(super) vless:")
+            && !managed.contains("pub(crate) shadowsocks:")
+            && !managed.contains("pub(super) shadowsocks:"),
+        "ProtocolUdpState should expose one managed UDP sub-state instead of protocol manager fields"
+    );
 }
 
 #[test]

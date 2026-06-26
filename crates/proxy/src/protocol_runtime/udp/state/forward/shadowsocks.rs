@@ -22,8 +22,8 @@ pub(super) async fn forward(
     existing: ExistingFlow<'_>,
 ) -> Result<usize, FlowFailure> {
     state
-        .shadowsocks
-        .send_existing(SsSendExisting {
+        .managed
+        .send_shadowsocks_existing(SsSendExisting {
             chain_tasks,
             session_id: flow.session.id,
             proxy,

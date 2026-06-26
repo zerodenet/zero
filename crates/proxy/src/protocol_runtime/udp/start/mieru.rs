@@ -17,8 +17,8 @@ impl ProtocolUdpState {
                 "expected Mieru UDP flow resume",
             ));
         };
-        self.mieru
-            .send_existing(MieruSendExisting {
+        self.managed
+            .send_mieru_existing(MieruSendExisting {
                 chain_tasks: request.chain_tasks,
                 session_id: request.session.id,
                 proxy: request.proxy,
@@ -45,8 +45,8 @@ impl ProtocolUdpState {
                 "expected Mieru UDP flow resume",
             ));
         };
-        self.mieru
-            .send_relay_existing(MieruRelayExisting {
+        self.managed
+            .send_mieru_relay_existing(MieruRelayExisting {
                 chain_tasks: flow.chain_tasks,
                 session_id: flow.session.id,
                 stream: flow.carrier.stream,

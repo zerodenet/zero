@@ -22,8 +22,8 @@ pub(super) async fn forward(
     existing: ExistingFlow<'_>,
 ) -> Result<usize, FlowFailure> {
     state
-        .trojan
-        .send_existing(TrojanSendExisting {
+        .managed
+        .send_trojan_existing(TrojanSendExisting {
             chain_tasks,
             session_id: flow.session.id,
             proxy,
