@@ -5,7 +5,7 @@ use zero_engine::EngineError;
 
 use super::super::ChainTask;
 
-type RecvItem = (Address, u16, Vec<u8>);
+pub(super) type RecvItem = (Address, u16, Vec<u8>);
 
 pub(super) type ResponseSender = broadcast::Sender<RecvItem>;
 

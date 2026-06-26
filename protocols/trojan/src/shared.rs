@@ -114,9 +114,7 @@ pub async fn read_udp_packet<S: AsyncSocket>(
     read_exact(stream, &mut body).await?;
 
     // Parse body: ATYP + ADDR + PORT + payload
-    let (addr, port, payload_offset) = parse_address(&body)?;
-    let payload = body[payload_offset..].to_vec();
-    Ok((addr, port, payload))
+    parse_udp_packet_body(&body)
 }
 
 // Internal helpers.
@@ -193,6 +191,12 @@ fn parse_address(data: &[u8]) -> Result<(Address, u16, usize), Error> {
     let port = u16::from_be_bytes([data[off], data[off + 1]]);
     off += 2;
     Ok((addr, port, off))
+}
+
+pub(crate) fn parse_udp_packet_body(body: &[u8]) -> Result<(Address, u16, Vec<u8>), Error> {
+    let (addr, port, payload_offset) = parse_address(body)?;
+    let payload = body[payload_offset..].to_vec();
+    Ok((addr, port, payload))
 }
 
 /// Write command byte + address + port + CRLF.

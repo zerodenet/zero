@@ -5731,8 +5731,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && manager_connect.contains("TrojanUdpTlsOptions")
             && manager_stream.contains("trojan::TrojanUdpFlowIo")
             && manager_stream.contains(".establish_with_resume(")
+            && protocol_outbound.contains("pub async fn establish_with_resume")
             && !transport.contains("trojan::"),
-        "Trojan UDP manager should consume protocol-owned flow key, TLS profile, and tunnel establishment helpers without putting protocol calls in zero-transport"
+        "Trojan UDP manager should consume protocol-owned flow key, TLS profile, and protocol-owned tunnel establishment helpers without putting protocol calls in zero-transport"
     );
 }
 
@@ -5744,6 +5745,9 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
+            .expect("read trojan protocol outbound source");
 
     let forbidden = "MeteredStream";
     assert!(
@@ -5768,6 +5772,8 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             !stream.contains(forbidden),
             "trojan_manager/stream.rs should delegate Trojan packet framing to protocols/trojan helpers; found `{forbidden}`"
         );
+    }
+    for forbidden in ["TrojanUdpPacket {", "trojan::TrojanUdpPacket"] {
         assert!(
             !model.contains(forbidden),
             "trojan_manager/model.rs should not rebuild Trojan packet framing details; found `{forbidden}`"
@@ -5788,6 +5794,9 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && stream.contains(".read_flow_packet(")
             && stream.contains("&mut recv_stream")
             && stream.contains("broadcast::Sender<UdpFlowPacket>")
+            && !protocol_outbound.contains("tokio::spawn")
+            && !protocol_outbound.contains("tokio::sync::mpsc::channel")
+            && !protocol_outbound.contains("tokio::sync::broadcast::channel")
             && !stream.contains(".write_stream_packet")
             && !stream.contains(".read_stream_packet")
             && !stream.contains(".read_packet(")
@@ -5795,7 +5804,7 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && !transport.contains("trojan::")
             && !stream.contains("packet.write_to")
             && !model.contains("struct TrojanPacket"),
-        "Trojan UDP packet stream tasks should keep neutral proxy channels and use protocol-owned stream operations instead of owning protocol framing"
+        "Trojan UDP packet stream tasks should stay in proxy runtime glue while packet framing stays behind protocols/trojan helpers"
     );
 }
 
@@ -6104,8 +6113,9 @@ fn trojan_udp_state_model_lives_outside_manager() {
     assert!(
         !model.contains("struct TrojanPacket")
             && !model.contains("trojan::TrojanUdpPacket")
+            && model.contains("mpsc::Sender<UdpFlowPacket>")
             && model.contains("broadcast::Sender<UdpFlowPacket>"),
-        "Trojan UDP state/request models should keep neutral UDP packets instead of storing protocol packet models in proxy"
+        "Trojan UDP state/request models should store neutral packet channels without storing packet models in proxy"
     );
 }
 
@@ -6155,6 +6165,8 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
     assert!(
         protocol_outbound.contains("pub fn udp_flow_packet")
             && protocol_outbound.contains("pub async fn read_flow_packet")
+            && !protocol_outbound.contains("pub async fn open_udp_flow")
+            && !protocol_outbound.contains("pub struct TrojanUdpFlowSender")
             && !establish.contains("trojan::udp_flow_packet")
             && !establish.contains("trojan::TrojanUdpPacket::new")
             && stream.contains("mpsc::Sender<UdpFlowPacket>")
@@ -6163,7 +6175,7 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             && !stream.contains("trojan::TrojanUdpPacket")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("trojan::udp_flow_packet"),
-        "Trojan UDP stream glue should carry neutral UDP packets while proxy stream glue converts them through protocols/trojan"
+        "Trojan UDP stream glue should carry neutral packets while protocols/trojan owns packet conversion"
     );
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")
@@ -6177,7 +6189,7 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             && !stream.contains(".read_packet(")
             && !transport.contains("trojan::TrojanUdpFlowIo")
             && !stream.contains("trojan::establish_udp_packet_tunnel"),
-        "Trojan UDP packet stream should call the protocols/trojan flow I/O stream helpers from proxy stream glue"
+        "Trojan UDP packet stream should call protocols/trojan flow I/O helpers from proxy runtime glue"
     );
 }
 
@@ -6335,20 +6347,17 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .next()
         .expect("H2SendExisting should follow H2Entry");
     assert!(
-        h2_entry_model.contains("hysteria2::Hysteria2UdpFlowSender")
+        h2_entry_model.contains("mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>")
             && !h2_entry_model.contains("resume: hysteria2::Hysteria2UdpFlowResume")
-            && !manager_send.contains("hysteria2::udp_flow_packet")
+            && manager_send.contains("hysteria2::udp_flow_packet")
             && !manager_send.contains("Hysteria2UdpFlowPacket::from_parts")
             && !stream.contains("Hysteria2UdpFlowPacket::from_parts")
             && !manager_send.contains("UdpFlowPacket::from_parts")
             && !stream.contains("UdpFlowPacket::from_parts")
             && !stream.contains("mpsc::Sender<UdpFlowPacket>")
-            && !stream.contains("resume.encode_packet(")
-            && !stream.contains("resume.decode_packet")
+            && stream.contains("packet.encode_with(&resume)")
+            && stream.contains("resume.decode_flow_packet(&data)")
             && stream.contains("hysteria2::udp_flow_packet")
-            && stream.contains("hysteria2::open_udp_flow")
-            && !stream.contains("decode_flow_packet")
-            && !stream.contains("into_parts()")
             && !stream.contains("establish_hysteria2_udp_flow_stream")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("hysteria2::udp_flow_packet")
@@ -6356,7 +6365,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !transport.contains("resume.decode_flow_packet(&data)")
             && !manager_send.contains(".encode_packet(")
             && !stream.contains("mpsc::Sender<Vec<u8>>"),
-        "Hysteria2 UDP manager should store a protocol-owned sender while protocol crate flow tasks encode/decode packets"
+        "Hysteria2 UDP manager should store a protocol-owned packet sender while proxy runtime glue schedules packet encode/decode tasks"
     );
     assert!(
         adapter.contains("Hysteria2UdpFlowResume::new")
@@ -6524,17 +6533,12 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
     for forbidden in [
         "establish_hysteria2_udp_flow_stream",
         "Hysteria2UdpFlowStreamRequest",
-        "tokio::spawn",
-        "mpsc::channel",
-        "broadcast::channel",
         "resume.encode_packet",
         "resume.decode_packet",
-        "decode_flow_packet",
-        "into_parts()",
     ] {
         assert!(
             !stream.contains(forbidden),
-            "h2_manager/stream.rs should keep only QUIC IO glue and delegate Hysteria2 UDP flow tasks to protocols/hysteria2; found `{forbidden}`"
+            "h2_manager/stream.rs should keep QUIC IO glue and runtime task scheduling while delegating packet format helpers; found `{forbidden}`"
         );
     }
     assert!(
@@ -6542,23 +6546,21 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && stream.contains("connect_raw")
             && stream.contains("send_datagram")
             && stream.contains("read_datagram")
-            && stream.contains("Hysteria2UdpDatagramIo")
+            && stream.contains("tokio::spawn")
+            && stream.contains("mpsc::channel::<hysteria2::Hysteria2UdpFlowPacket>")
+            && stream.contains("tokio::sync::broadcast::channel::<bridge::RecvItem>")
             && stream.contains("hysteria2::udp_flow_packet")
-            && stream.contains("hysteria2::open_udp_flow")
-            && protocol_udp.contains("pub fn open_udp_flow")
-            && protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
-            && protocol_udp.contains("pub struct Hysteria2UdpFlowHandle")
-            && protocol_udp.contains("pub type Hysteria2UdpFlowResponse")
-            && protocol_udp.contains("tokio::sync::mpsc::channel::<Hysteria2UdpFlowPacket>")
-            && protocol_udp.contains("tokio::sync::broadcast::channel::<Hysteria2UdpFlowResponse>")
-            && protocol_udp.contains("tokio::spawn")
-            && protocol_udp.contains("packet.encode_with(&resume)")
-            && protocol_udp.contains("resume.decode_flow_packet(&data)")
+            && stream.contains("packet.encode_with(&resume)")
+            && stream.contains("resume.decode_flow_packet(&data)")
+            && !protocol_udp.contains("pub fn open_udp_flow")
+            && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
+            && !protocol_udp.contains("tokio::sync::mpsc::channel")
+            && !protocol_udp.contains("tokio::spawn")
             && !transport.contains("pub async fn establish_hysteria2_udp_flow_stream")
             && !transport.contains("Hysteria2UdpFlowStreamRequest")
             && !transport.contains("hysteria2::udp_flow_packet")
             && !transport.contains("resume.decode_flow_packet"),
-        "Hysteria2 UDP flow tasks should live in protocols/hysteria2 while proxy stream glue adapts the QUIC datagram connection"
+        "Hysteria2 UDP flow tasks should stay in proxy stream glue while protocols/hysteria2 owns packet encode/decode helpers"
     );
 }
 

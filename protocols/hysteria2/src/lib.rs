@@ -1,4 +1,4 @@
-#![cfg_attr(not(any(feature = "crypto", feature = "runtime")), no_std)]
+#![cfg_attr(not(feature = "crypto"), no_std)]
 #![allow(async_fn_in_trait)]
 
 extern crate alloc;
@@ -27,9 +27,4 @@ pub use udp::{
     Hysteria2UdpConnectorProfile, Hysteria2UdpFlowKey, Hysteria2UdpFlowPacket,
     Hysteria2UdpFlowResume, Hysteria2UdpLeafKey, Hysteria2UdpPacket, Hysteria2UdpPacketPathConfig,
     Hysteria2UdpPacketTarget, Hysteria2UdpPeerConfig,
-};
-#[cfg(feature = "runtime")]
-pub use udp::{
-    open_udp_flow, Hysteria2UdpDatagramIo, Hysteria2UdpFlowHandle, Hysteria2UdpFlowResponse,
-    Hysteria2UdpFlowSender,
 };

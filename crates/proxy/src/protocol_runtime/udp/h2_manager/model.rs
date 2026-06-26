@@ -1,4 +1,5 @@
 use super::super::ChainTask;
+use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use zero_core::Address;
 
@@ -16,7 +17,7 @@ impl H2Key {
 }
 
 pub(super) struct H2Entry {
-    pub(super) sender: hysteria2::Hysteria2UdpFlowSender,
+    pub(super) send_tx: mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>,
 }
 
 pub(crate) struct H2SendExisting<'a> {

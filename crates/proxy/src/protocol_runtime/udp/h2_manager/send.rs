@@ -16,10 +16,13 @@ impl H2ChainManager {
         let key = H2Key::from_flow_key(peer.flow_key.clone());
 
         if let Some(entry) = self.upstreams.get(&key) {
+            let packet =
+                hysteria2::udp_flow_packet(packet_ref.target, packet_ref.port, packet_ref.payload);
             return entry
-                .sender
-                .send(packet_ref.target, packet_ref.port, packet_ref.payload)
+                .send_tx
+                .send(packet)
                 .await
+                .map(|_| sent)
                 .map_err(|error| FlowFailure {
                     stage: "h2_send",
                     error: zero_engine::EngineError::Io(std::io::Error::other(format!("{error}"))),
@@ -44,7 +47,7 @@ impl H2ChainManager {
         self.upstreams.insert(
             key,
             H2Entry {
-                sender: sender.clone(),
+                send_tx: sender.clone(),
             },
         );
 
