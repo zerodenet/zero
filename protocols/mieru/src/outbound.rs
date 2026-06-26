@@ -30,6 +30,16 @@ pub struct MieruUdpFlowPacket {
     pub payload: Vec<u8>,
 }
 
+impl MieruUdpFlowPacket {
+    pub fn new(target: Address, port: u16, payload: Vec<u8>) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+}
+
 pub struct MieruUdpFlowIo {
     outbound: MieruOutbound,
     recv_raw: Vec<u8>,
@@ -79,11 +89,11 @@ impl MieruUdpFlowIo {
                     return Ok(None);
                 }
                 let packet = decode_udp_flow_packet(&segment.payload)?;
-                Ok(Some(MieruUdpFlowPacket {
-                    target: packet.target,
-                    port: packet.port,
-                    payload: packet.payload,
-                }))
+                Ok(Some(MieruUdpFlowPacket::new(
+                    packet.target,
+                    packet.port,
+                    packet.payload,
+                )))
             }
             Err(Error::Protocol("mieru: need more data")) => Ok(None),
             Err(error) => Err(error),

@@ -12,15 +12,8 @@ pub(super) enum MieruKey {
     Relay { session_id: u64 },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct MieruPacket {
-    pub(super) target: Address,
-    pub(super) port: u16,
-    pub(super) payload: Vec<u8>,
-}
-
 pub(super) struct MieruEntry {
-    pub(super) send_tx: mpsc::Sender<MieruPacket>,
+    pub(super) send_tx: mpsc::Sender<mieru::MieruUdpFlowPacket>,
     pub(super) recv_tx: bridge::ResponseSender,
 }
 

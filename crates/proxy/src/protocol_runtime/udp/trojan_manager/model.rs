@@ -7,13 +7,6 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 
-#[derive(Debug, Clone)]
-pub(super) struct TrojanPacket {
-    pub(super) target: Address,
-    pub(super) port: u16,
-    pub(super) payload: Vec<u8>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) enum TrojanKey {
     Leaf(trojan::TrojanUdpLeafKey),
@@ -21,8 +14,8 @@ pub(super) enum TrojanKey {
 }
 
 pub(super) struct TrojanEntry {
-    pub(super) send_tx: mpsc::Sender<TrojanPacket>,
-    pub(super) recv_tx: broadcast::Sender<TrojanPacket>,
+    pub(super) send_tx: mpsc::Sender<trojan::TrojanUdpPacket>,
+    pub(super) recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,
 }
 
 pub(crate) struct TrojanSendExisting<'a> {

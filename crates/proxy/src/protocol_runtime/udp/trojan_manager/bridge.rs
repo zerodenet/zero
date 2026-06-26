@@ -3,16 +3,15 @@ use tokio::task::JoinSet;
 use zero_engine::EngineError;
 
 use super::super::ChainTask;
-use super::model::TrojanPacket;
 
-pub(super) fn response_channel() -> broadcast::Sender<TrojanPacket> {
-    let (tx, _) = broadcast::channel::<TrojanPacket>(32);
+pub(super) fn response_channel() -> broadcast::Sender<trojan::TrojanUdpPacket> {
+    let (tx, _) = broadcast::channel::<trojan::TrojanUdpPacket>(32);
     tx
 }
 
 pub(super) fn spawn_response_bridge(
     chain_tasks: &mut JoinSet<ChainTask>,
-    recv_tx: broadcast::Sender<TrojanPacket>,
+    recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,
     session_id: u64,
 ) {
     let mut recv_rx = recv_tx.subscribe();

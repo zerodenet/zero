@@ -5261,8 +5261,6 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "read_udp_flow_packet",
         "write_udp_flow_packet",
         "TrojanUdpPacket {",
-        "trojan::TrojanUdpPacket",
-        "use trojan::TrojanUdpPacket",
     ] {
         assert!(
             !manager.contains(forbidden),
@@ -5274,7 +5272,7 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         );
         assert!(
             !model.contains(forbidden),
-            "trojan_manager/model.rs should keep proxy-owned packet models, not protocol packet structs; found `{forbidden}`"
+            "trojan_manager/model.rs should not rebuild Trojan packet framing details; found `{forbidden}`"
         );
     }
     assert!(
@@ -5283,8 +5281,10 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "Trojan UDP manager stream should use flow-specific protocol helpers instead of generic UDP helpers"
     );
     assert!(
-        stream.contains("trojan::TrojanUdpFlowIo") && !stream.contains("trojan::TrojanUdpPacket"),
-        "Trojan UDP packet stream tasks should delegate packet framing to a protocol-owned flow I/O helper"
+        stream.contains("trojan::TrojanUdpFlowIo")
+            && stream.contains("trojan::TrojanUdpPacket")
+            && !model.contains("struct TrojanPacket"),
+        "Trojan UDP packet stream tasks should use protocol-owned packet and flow I/O helpers"
     );
 }
 
@@ -5329,12 +5329,20 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     );
     assert!(
         protocol_outbound.contains("struct MieruUdpFlowIo")
+            && protocol_outbound.contains("struct MieruUdpFlowPacket")
             && protocol_outbound.contains("encode_udp_flow_packet")
             && protocol_outbound.contains("decode_udp_flow_packet")
             && protocol_outbound.contains("encrypt_payload")
             && protocol_outbound.contains("next_packet")
             && connect.contains("MieruUdpFlowIo::establish"),
         "Mieru UDP flow associate, encryption, and packet codec should live behind a protocol-owned flow I/O helper"
+    );
+    assert!(
+        !manager_model.contains("struct MieruPacket")
+            && manager_model.contains("mieru::MieruUdpFlowPacket")
+            && manager_send.contains("MieruUdpFlowPacket::new")
+            && stream.contains("MieruUdpFlowPacket"),
+        "Mieru UDP manager should use protocol-owned UDP flow packet models instead of duplicating packet shape in proxy"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
@@ -5537,8 +5545,8 @@ fn trojan_udp_state_model_lives_outside_manager() {
         );
     }
     assert!(
-        model.contains("struct TrojanPacket") && !model.contains("TrojanUdpPacket"),
-        "Trojan UDP state/request models should use proxy-owned TrojanPacket rather than protocol packet structs"
+        !model.contains("struct TrojanPacket") && model.contains("trojan::TrojanUdpPacket"),
+        "Trojan UDP state/request models should use protocol-owned UDP flow packet models instead of duplicating packet shape in proxy"
     );
 }
 
@@ -5562,9 +5570,7 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
         );
     }
     for forbidden in [
-        "TrojanUdpPacket {",
-        "use trojan::TrojanUdpPacket",
-        "trojan::TrojanUdpPacket",
+        "TrojanUdpPacket {\n        target:",
         "TrojanUdpPacketTunnelTarget",
         "UdpPacketTunnelProtocol",
     ] {
@@ -5574,7 +5580,7 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
         );
         assert!(
             !establish.contains(forbidden),
-            "trojan_manager/establish.rs should use proxy-owned TrojanPacket models instead of protocol packet structs; found `{forbidden}`"
+            "trojan_manager/establish.rs should use protocol-owned packet helpers without rebuilding protocol packet internals; found `{forbidden}`"
         );
         assert!(
             !stream.contains(forbidden),
@@ -5582,8 +5588,8 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
         );
     }
     assert!(
-        establish.contains("TrojanPacket"),
-        "Trojan UDP establish glue should build proxy-owned TrojanPacket models"
+        establish.contains("trojan::TrojanUdpPacket::new"),
+        "Trojan UDP establish glue should build protocol-owned UDP flow packet models"
     );
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")

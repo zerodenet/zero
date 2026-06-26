@@ -1,5 +1,4 @@
 use super::bridge;
-use super::model::TrojanPacket;
 use super::socket::{ReadOnlySocket, WriteOnlySocket};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
@@ -8,8 +7,8 @@ use zero_core::Session;
 use zero_engine::EngineError;
 
 pub(super) struct PacketStream {
-    pub(super) send_tx: mpsc::Sender<TrojanPacket>,
-    pub(super) recv_tx: broadcast::Sender<TrojanPacket>,
+    pub(super) send_tx: mpsc::Sender<trojan::TrojanUdpPacket>,
+    pub(super) recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,
 }
 
 pub(super) async fn spawn_packet_stream(
@@ -23,7 +22,7 @@ pub(super) async fn spawn_packet_stream(
     flow_io.establish(&mut metered, session, password).await?;
 
     let (read_half, write_half) = tokio::io::split(metered.into_inner());
-    let (send_tx, send_rx) = mpsc::channel::<TrojanPacket>(32);
+    let (send_tx, send_rx) = mpsc::channel::<trojan::TrojanUdpPacket>(32);
     let recv_tx = bridge::response_channel();
 
     spawn_send_task(send_rx, WriteOnlySocket(write_half));
@@ -32,7 +31,10 @@ pub(super) async fn spawn_packet_stream(
     Ok(PacketStream { send_tx, recv_tx })
 }
 
-fn spawn_send_task(mut send_rx: mpsc::Receiver<TrojanPacket>, mut send_stream: WriteOnlySocket) {
+fn spawn_send_task(
+    mut send_rx: mpsc::Receiver<trojan::TrojanUdpPacket>,
+    mut send_stream: WriteOnlySocket,
+) {
     tokio::spawn(async move {
         let flow_io = trojan::TrojanUdpFlowIo;
         while let Some(packet) = send_rx.recv().await {
@@ -52,15 +54,13 @@ fn spawn_send_task(mut send_rx: mpsc::Receiver<TrojanPacket>, mut send_stream: W
     });
 }
 
-fn spawn_recv_task(mut recv_stream: ReadOnlySocket, recv_tx: broadcast::Sender<TrojanPacket>) {
+fn spawn_recv_task(
+    mut recv_stream: ReadOnlySocket,
+    recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,
+) {
     tokio::spawn(async move {
         let flow_io = trojan::TrojanUdpFlowIo;
         while let Ok(packet) = flow_io.read_packet(&mut recv_stream).await {
-            let packet = TrojanPacket {
-                target: packet.target,
-                port: packet.port,
-                payload: packet.payload,
-            };
             if recv_tx.send(packet).is_err() {
                 break;
             }

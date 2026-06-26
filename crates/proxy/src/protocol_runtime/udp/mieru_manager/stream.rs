@@ -1,18 +1,17 @@
 use super::bridge;
-use super::model::MieruPacket;
 use crate::transport::TcpRelayStream;
-use mieru::MieruUdpFlowIo;
+use mieru::{MieruUdpFlowIo, MieruUdpFlowPacket};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, Mutex};
 
 pub(super) struct PacketStream {
-    pub(super) send_tx: mpsc::Sender<MieruPacket>,
+    pub(super) send_tx: mpsc::Sender<MieruUdpFlowPacket>,
     pub(super) recv_tx: bridge::ResponseSender,
 }
 
 pub(super) fn spawn_packet_stream(stream: TcpRelayStream, flow_io: MieruUdpFlowIo) -> PacketStream {
-    let (send_tx, send_rx) = mpsc::channel::<MieruPacket>(32);
+    let (send_tx, send_rx) = mpsc::channel::<MieruUdpFlowPacket>(32);
     let recv_tx = bridge::response_channel();
 
     let shared_flow_io = Arc::new(Mutex::new(flow_io));
@@ -26,7 +25,7 @@ pub(super) fn spawn_packet_stream(stream: TcpRelayStream, flow_io: MieruUdpFlowI
 
 fn spawn_send_task(
     flow_io: Arc<Mutex<MieruUdpFlowIo>>,
-    mut send_rx: mpsc::Receiver<MieruPacket>,
+    mut send_rx: mpsc::Receiver<MieruUdpFlowPacket>,
     mut write_half: tokio::io::WriteHalf<TcpRelayStream>,
 ) {
     tokio::spawn(async move {

@@ -92,6 +92,16 @@ pub struct TrojanUdpPacket {
     pub payload: Vec<u8>,
 }
 
+impl TrojanUdpPacket {
+    pub fn new(target: Address, port: u16, payload: Vec<u8>) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrojanUdpFlowIo;
 
@@ -262,11 +272,7 @@ impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {
         S: AsyncSocket,
     {
         let (target, port, payload) = super::shared::read_udp_packet(stream).await?;
-        Ok(TrojanUdpPacket {
-            target,
-            port,
-            payload,
-        })
+        Ok(TrojanUdpPacket::new(target, port, payload))
     }
 }
 

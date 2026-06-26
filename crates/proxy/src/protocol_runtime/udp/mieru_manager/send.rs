@@ -1,7 +1,7 @@
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use super::model::{MieruKey, MieruPacket, MieruRelayExisting, MieruSendExisting};
+use super::model::{MieruKey, MieruRelayExisting, MieruSendExisting};
 use super::{bridge, establish, MieruChainManager};
 use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use crate::protocol_runtime::udp::FlowFailure;
@@ -144,10 +144,10 @@ impl MieruChainManager {
     }
 }
 
-fn packet(packet_ref: UdpPacketRef<'_>) -> MieruPacket {
-    MieruPacket {
-        target: packet_ref.target.clone(),
-        port: packet_ref.port,
-        payload: packet_ref.payload.to_vec(),
-    }
+fn packet(packet_ref: UdpPacketRef<'_>) -> mieru::MieruUdpFlowPacket {
+    mieru::MieruUdpFlowPacket::new(
+        packet_ref.target.clone(),
+        packet_ref.port,
+        packet_ref.payload.to_vec(),
+    )
 }
