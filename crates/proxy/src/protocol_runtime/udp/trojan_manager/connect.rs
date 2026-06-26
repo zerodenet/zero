@@ -1,4 +1,4 @@
-use super::super::TrojanUdpPeer;
+use super::model::TrojanUdpPeer;
 use crate::runtime::Proxy;
 use crate::transport::{
     open_trojan_udp_tls_relay_stream, open_trojan_udp_tls_stream, TcpRelayStream,

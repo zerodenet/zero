@@ -1,6 +1,5 @@
-use super::super::MieruUdpPeer;
 use super::connect;
-use super::model::MieruEntry;
+use super::model::{MieruEntry, MieruUdpPeer};
 use super::stream;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;

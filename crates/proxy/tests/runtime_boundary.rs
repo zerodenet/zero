@@ -4944,6 +4944,13 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
         "TrojanChainManager",
         "TrojanSendExisting",
         "TrojanRelayExisting",
+        "pub(crate) use peer::",
+        "mod peer;",
+        "SsUdpPeer",
+        "H2UdpPeer",
+        "TrojanUdpPeer",
+        "MieruUdpPeer",
+        "UdpPeerEndpoint",
     ] {
         assert!(
             !root.contains(forbidden),
@@ -5244,6 +5251,10 @@ fn packet_path_traits_are_grouped_by_responsibility() {
     let protocol_udp_root = read("src/protocol_runtime/udp/mod.rs");
     let runtime_root = manifest_dir().join("src/runtime/udp_flow");
     let peer = manifest_dir().join("src/protocol_runtime/udp/peer.rs");
+    let ss_model = read("src/protocol_runtime/udp/ss_manager/model.rs");
+    let h2_model = read("src/protocol_runtime/udp/h2_manager/model.rs");
+    let trojan_model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
+    let mieru_model = read("src/protocol_runtime/udp/mieru_manager/model.rs");
 
     for required in [
         "trait PacketPathCarrier",
@@ -5273,8 +5284,13 @@ fn packet_path_traits_are_grouped_by_responsibility() {
         );
     }
     assert!(
-        peer.exists() && !runtime_root.join("peer.rs").exists(),
-        "protocol UDP peer models should live outside runtime packet-path helpers"
+        !peer.exists()
+            && !runtime_root.join("peer.rs").exists()
+            && ss_model.contains("struct SsUdpPeer")
+            && h2_model.contains("struct H2UdpPeer")
+            && trojan_model.contains("struct TrojanUdpPeer")
+            && mieru_model.contains("struct MieruUdpPeer"),
+        "protocol UDP peer models should stay manager-local, not under runtime packet-path helpers or protocol_runtime::udp root"
     );
     assert!(
         !packet_path.contains("ProtocolAdapter::"),
@@ -5285,6 +5301,43 @@ fn packet_path_traits_are_grouped_by_responsibility() {
             && packet_path.contains("UdpPacketPathCapability::udp_datagram_source"),
         "packet-path trait docs should point carrier/datagram products at UdpPacketPathCapability"
     );
+}
+
+#[test]
+fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
+    let vless_runtime = read("src/protocol_runtime/vless_udp.rs");
+    let vmess_runtime = read("src/protocol_runtime/vmess_udp.rs");
+    let vless_protocol = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
+        .expect("read VLESS protocol shared source");
+    let vmess_protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
+        .expect("read VMess protocol UDP source");
+
+    for (source, content) in [
+        ("src/protocol_runtime/vless_udp.rs", &vless_runtime),
+        ("src/protocol_runtime/vmess_udp.rs", &vmess_runtime),
+    ] {
+        for forbidden in [".encode_packet(", ".decode_packet("] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should call protocol-owned stream packet IO helpers instead of direct UDP packet framing `{forbidden}`"
+            );
+        }
+        assert!(
+            content.contains(".write_packet_tokio(") && content.contains(".read_packet_tokio("),
+            "{source} should keep Tokio orchestration while delegating protocol packet IO"
+        );
+    }
+
+    for (source, content) in [
+        ("protocols/vless/src/shared.rs", &vless_protocol),
+        ("protocols/vmess/src/udp.rs", &vmess_protocol),
+    ] {
+        assert!(
+            content.contains("pub async fn write_packet_tokio")
+                && content.contains("pub async fn read_packet_tokio"),
+            "{source} should own async stream packet IO helpers for UDP flow framing"
+        );
+    }
 }
 
 #[test]
@@ -6934,7 +6987,6 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
 fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let flows = read("src/protocol_runtime/udp/flows.rs");
-    let peer = read("src/protocol_runtime/udp/peer.rs");
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
     let model = read("src/protocol_runtime/udp/ss_manager/model.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
@@ -6961,10 +7013,10 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         .split("#[cfg(feature = \"mieru\")]")
         .next()
         .expect("Shadowsocks UDP flow model should appear before Mieru");
-    let shadowsocks_peer_model = peer
-        .split("/// Hysteria2 UDP peer parameters.")
+    let shadowsocks_peer_model = model
+        .split("pub(crate) struct SsSendExisting")
         .next()
-        .expect("Shadowsocks UDP peer model should appear before Hysteria2");
+        .expect("Shadowsocks UDP peer model should appear before send request model");
     assert!(
         !shadowsocks_flow_model.contains("cipher: shadowsocks::CipherKind")
             && !shadowsocks_flow_model.contains("password: &'a str")

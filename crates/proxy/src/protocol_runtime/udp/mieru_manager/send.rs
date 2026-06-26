@@ -1,10 +1,10 @@
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use super::model::{MieruKey, MieruRelayExisting, MieruSendExisting};
+use super::model::{MieruKey, MieruRelayExisting, MieruSendExisting, MieruUdpPeer};
 use super::{bridge, establish, MieruChainManager};
 use crate::protocol_runtime::udp::FlowFailure;
-use crate::protocol_runtime::udp::{MieruUdpPeer, UdpPeerEndpoint};
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -84,7 +84,7 @@ impl MieruChainManager {
             request.proxy,
             request.session,
             MieruUdpPeer {
-                endpoint: UdpPeerEndpoint {
+                endpoint: OutboundEndpoint {
                     server: request.server,
                     port: request.port,
                 },
@@ -144,7 +144,7 @@ impl MieruChainManager {
             },
             request.stream,
             MieruUdpPeer {
-                endpoint: UdpPeerEndpoint {
+                endpoint: OutboundEndpoint {
                     server: request.server,
                     port: request.port,
                 },

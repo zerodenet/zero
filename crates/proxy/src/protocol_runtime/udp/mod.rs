@@ -9,7 +9,6 @@ mod flows;
 mod h2_manager;
 #[cfg(feature = "mieru")]
 mod mieru_manager;
-mod peer;
 #[cfg(feature = "shadowsocks")]
 mod ss_manager;
 mod start;
@@ -27,13 +26,4 @@ pub(crate) use flows::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowKind,
     ManagedUdpFlowRequest,
 };
-#[cfg(feature = "hysteria2")]
-pub(crate) use peer::H2UdpPeer;
-#[cfg(feature = "mieru")]
-pub(crate) use peer::MieruUdpPeer;
-#[cfg(feature = "shadowsocks")]
-pub(crate) use peer::SsUdpPeer;
-#[cfg(feature = "trojan")]
-pub(crate) use peer::TrojanUdpPeer;
-pub(crate) use peer::UdpPeerEndpoint;
 pub(crate) use state::ProtocolUdpState;

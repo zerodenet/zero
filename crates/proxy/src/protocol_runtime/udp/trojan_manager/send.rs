@@ -1,10 +1,12 @@
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use super::model::{TrojanKey, TrojanRelayExisting, TrojanRelaySend, TrojanSendExisting};
+use super::model::{
+    TrojanKey, TrojanRelayExisting, TrojanRelaySend, TrojanSendExisting, TrojanUdpPeer,
+};
 use super::{bridge, establish, TrojanChainManager};
 use crate::protocol_runtime::udp::FlowFailure;
-use crate::protocol_runtime::udp::{TrojanUdpPeer, UdpPeerEndpoint};
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use zero_core::UdpFlowPacket;
@@ -81,7 +83,7 @@ impl TrojanChainManager {
             request.proxy,
             request.session,
             TrojanUdpPeer {
-                endpoint: UdpPeerEndpoint {
+                endpoint: OutboundEndpoint {
                     server: request.server,
                     port: request.port,
                 },
@@ -147,7 +149,7 @@ impl TrojanChainManager {
             proxy: request.proxy,
             session: request.session,
             peer: TrojanUdpPeer {
-                endpoint: UdpPeerEndpoint {
+                endpoint: OutboundEndpoint {
                     server: request.server,
                     port: request.port,
                 },

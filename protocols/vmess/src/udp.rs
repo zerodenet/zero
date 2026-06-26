@@ -107,6 +107,16 @@ impl VmessUdpFlowIo {
         ))
     }
 
+    pub fn encoded_packet_len(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.encode_packet(target, port, payload)
+            .map(|packet| packet.len())
+    }
+
     pub async fn write_packet<S>(
         &self,
         stream: &mut S,
@@ -124,6 +134,44 @@ impl VmessUdpFlowIo {
             .await
             .map_err(|_| Error::Io("vmess udp flow write"))?;
         Ok(len)
+    }
+
+    pub async fn write_packet_tokio<S>(
+        &self,
+        stream: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        S: tokio::io::AsyncWrite + Unpin,
+    {
+        let encoded = self.encode_packet(target, port, payload)?;
+        let len = encoded.len();
+        tokio::io::AsyncWriteExt::write_all(stream, &encoded)
+            .await
+            .map_err(|_| Error::Io("vmess udp flow write"))?;
+        tokio::io::AsyncWriteExt::flush(stream)
+            .await
+            .map_err(|_| Error::Io("vmess udp flow flush"))?;
+        Ok(len)
+    }
+
+    pub async fn read_packet_tokio<S>(
+        &self,
+        stream: &mut S,
+        buffer: &mut [u8],
+    ) -> Result<Option<VmessUdpFlowPacket>, Error>
+    where
+        S: tokio::io::AsyncRead + Unpin,
+    {
+        let n = tokio::io::AsyncReadExt::read(stream, buffer)
+            .await
+            .map_err(|_| Error::Io("vmess udp flow read"))?;
+        if n == 0 {
+            return Ok(None);
+        }
+        self.decode_packet(&buffer[..n]).map(Some)
     }
 }
 

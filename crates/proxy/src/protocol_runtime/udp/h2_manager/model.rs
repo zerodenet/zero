@@ -1,3 +1,4 @@
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -18,6 +19,11 @@ impl H2Key {
 
 pub(super) struct H2Entry {
     pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
+}
+
+pub(super) struct H2UdpPeer<'a> {
+    pub(super) endpoint: OutboundEndpoint<'a>,
+    pub(super) flow_key: hysteria2::Hysteria2UdpFlowKey,
 }
 
 pub(crate) struct H2SendExisting<'a> {

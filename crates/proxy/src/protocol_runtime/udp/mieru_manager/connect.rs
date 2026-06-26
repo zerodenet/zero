@@ -1,4 +1,4 @@
-use super::super::MieruUdpPeer;
+use super::model::MieruUdpPeer;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use zero_engine::EngineError;

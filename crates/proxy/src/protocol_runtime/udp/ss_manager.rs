@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::FlowFailure;
-use super::{SsUdpPeer, UdpPeerEndpoint};
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use zero_core::UdpFlowPacket;
@@ -11,7 +11,7 @@ mod bridge;
 mod entry;
 pub(super) mod model;
 
-use model::{SsKey, SsSendExisting, SsUpstream};
+use model::{SsKey, SsSendExisting, SsUdpPeer, SsUpstream};
 
 pub(crate) struct SsChainManager {
     upstreams: HashMap<SsKey, Arc<SsUpstream>>,
@@ -86,7 +86,7 @@ impl SsChainManager {
             },
             request.proxy,
             SsUdpPeer {
-                endpoint: UdpPeerEndpoint {
+                endpoint: OutboundEndpoint {
                     server: request.server,
                     port: request.port,
                 },

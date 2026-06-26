@@ -1,5 +1,6 @@
 use super::bridge;
 use super::stream::MieruFlowSender;
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -24,6 +25,12 @@ impl MieruKey {
 pub(super) struct MieruEntry {
     pub(super) sender: MieruFlowSender,
     pub(super) recv_tx: bridge::ResponseSender,
+}
+
+pub(super) struct MieruUdpPeer<'a> {
+    pub(super) endpoint: OutboundEndpoint<'a>,
+    pub(super) resume: &'a mieru::MieruUdpFlowResume,
+    pub(super) flow_key: mieru::MieruUdpFlowKey,
 }
 
 pub(crate) struct MieruSendExisting<'a> {

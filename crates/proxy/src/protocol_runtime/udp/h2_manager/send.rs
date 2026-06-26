@@ -1,7 +1,7 @@
 use super::super::FlowFailure;
-use super::super::{H2UdpPeer, UdpPeerEndpoint};
-use super::model::{H2Entry, H2Key, H2SendExisting};
+use super::model::{H2Entry, H2Key, H2SendExisting, H2UdpPeer};
 use super::{establish, H2ChainManager};
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use zero_core::UdpFlowPacket;
 
@@ -66,7 +66,7 @@ impl H2ChainManager {
                 session_id: request.session_id,
             },
             H2UdpPeer {
-                endpoint: UdpPeerEndpoint {
+                endpoint: OutboundEndpoint {
                     server: request.server,
                     port: request.port,
                 },

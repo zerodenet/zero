@@ -7,7 +7,7 @@ pub(crate) mod model;
 
 use std::collections::HashMap;
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use zero_core::{Address, Session, UdpFlowPacket};
@@ -37,9 +37,7 @@ impl VlessFlowSender {
         payload: &[u8],
     ) -> Result<usize, EngineError> {
         let packet = UdpFlowPacket::from_parts(target, port, payload);
-        let packet_len = vless::VlessUdpFlowIo
-            .encode_packet(target, port, payload)?
-            .len();
+        let packet_len = vless::VlessUdpFlowIo.encoded_packet_len(target, port, payload)?;
         self.send_tx
             .send(packet)
             .await
@@ -408,30 +406,28 @@ fn spawn_udp_flow_task<S>(
                 to_send = send_rx.recv() => {
                     match to_send {
                         Some(packet) => {
-                            let encoded = match flow_io.encode_packet(&packet.target, packet.port, &packet.payload) {
-                                Ok(encoded) => encoded,
-                                Err(_) => break,
-                            };
-                            if stream.write_all(&encoded).await.is_err() {
-                                break;
-                            }
-                            if stream.flush().await.is_err() {
+                            if flow_io
+                                .write_packet_tokio(
+                                    &mut stream,
+                                    &packet.target,
+                                    packet.port,
+                                    &packet.payload,
+                                )
+                                .await
+                                .is_err()
+                            {
                                 break;
                             }
                         }
                         None => break,
                     }
                 }
-                read = stream.read(&mut buffer) => {
+                read = flow_io.read_packet_tokio(&mut stream, &mut buffer) => {
                     match read {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            if let Ok(packet) = flow_io.decode_packet(&buffer[..n]) {
-                                let _ = responses.send(packet.into_parts());
-                            } else {
-                                break;
-                            }
+                        Ok(Some(packet)) => {
+                            let _ = responses.send(packet.into_parts());
                         }
+                        Ok(None) => break,
                         Err(_) => break,
                     }
                 }

@@ -1,4 +1,4 @@
-use super::super::H2UdpPeer;
+use super::model::H2UdpPeer;
 use super::{bridge, stream};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;

@@ -1,5 +1,5 @@
-use super::super::H2UdpPeer;
 use super::bridge;
+use super::model::H2UdpPeer;
 use crate::outbound::hysteria2::Hysteria2Connector;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use std::sync::Arc;

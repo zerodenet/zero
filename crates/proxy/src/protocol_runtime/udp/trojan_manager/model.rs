@@ -1,4 +1,4 @@
-use super::super::TrojanUdpPeer;
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -25,6 +25,12 @@ impl TrojanKey {
 pub(super) struct TrojanEntry {
     pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
     pub(super) recv_tx: broadcast::Sender<UdpFlowPacket>,
+}
+
+pub(super) struct TrojanUdpPeer<'a> {
+    pub(super) endpoint: OutboundEndpoint<'a>,
+    pub(super) resume: &'a trojan::TrojanUdpFlowResume,
+    pub(super) flow_key: trojan::TrojanUdpFlowKey,
 }
 
 pub(crate) struct TrojanSendExisting<'a> {

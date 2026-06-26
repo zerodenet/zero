@@ -1,6 +1,5 @@
-use super::super::TrojanUdpPeer;
 use super::connect;
-use super::model::TrojanEntry;
+use super::model::{TrojanEntry, TrojanUdpPeer};
 use super::stream;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
