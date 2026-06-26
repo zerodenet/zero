@@ -52,6 +52,73 @@ pub struct VmessUdpPacket {
     pub payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VmessUdpFlowPacket {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+}
+
+impl VmessUdpFlowPacket {
+    pub fn new(target: Address, port: u16, payload: Vec<u8>) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn encode(&self) -> Result<Vec<u8>, Error> {
+        encode_udp_flow_packet(&self.target, self.port, &self.payload)
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VmessUdpFlowIo;
+
+impl VmessUdpFlowIo {
+    pub fn encode_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_udp_flow_packet(target, port, payload)
+    }
+
+    pub fn decode_packet(&self, packet: &[u8]) -> Result<VmessUdpFlowPacket, Error> {
+        let packet = decode_udp_flow_packet(packet)?;
+        Ok(VmessUdpFlowPacket::new(
+            packet.target,
+            packet.port,
+            packet.payload,
+        ))
+    }
+
+    pub async fn write_packet<S>(
+        &self,
+        stream: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        S: AsyncSocket,
+    {
+        let encoded = self.encode_packet(target, port, payload)?;
+        let len = encoded.len();
+        stream
+            .write_all(&encoded)
+            .await
+            .map_err(|_| Error::Io("vmess udp flow write"))?;
+        Ok(len)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VmessUdpFlowCodec;
 

@@ -2215,9 +2215,13 @@ fn vmess_udp_identity_is_protocol_parsed() {
 #[test]
 fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = read("src/protocol_runtime/vmess_udp.rs");
+    let model = read("src/protocol_runtime/vmess_udp/model.rs");
+    let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
+        .expect("read protocols/vmess/src/udp.rs");
 
     for forbidden in [
         "broadcast::Sender<vmess::VmessUdpPacket>",
+        "mpsc::Sender<Vec<u8>>",
         "UdpPacketFraming",
         "VmessUdpFlowCodec",
         "VmessUdpPacket)",
@@ -2229,18 +2233,28 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "vmess::build_udp_packet",
         "vmess::parse_udp_packet",
         "vmess::establish_udp_outbound_stream",
+        "vmess::encode_udp_flow_packet",
+        "vmess::decode_udp_flow_packet",
     ] {
         assert!(
-            !runtime.contains(forbidden),
+            !runtime.contains(forbidden) && !model.contains(forbidden),
             "VMess UDP runtime should delegate packet framing to protocols/vmess helpers; found `{forbidden}`"
         );
     }
     assert!(
-        runtime.contains("vmess::encode_udp_flow_packet")
-            && runtime.contains("vmess::decode_udp_flow_packet")
+        runtime.contains("vmess::VmessUdpFlowIo")
+            && runtime.contains("vmess::VmessUdpFlowPacket")
             && runtime.contains("vmess::establish_udp_flow_stream")
             && runtime.contains("UdpResponsePacket"),
-        "VMess UDP runtime should call protocols/vmess flow helpers and store neutral responses"
+        "VMess UDP runtime should call protocols/vmess flow IO helpers and store neutral responses"
+    );
+    assert!(
+        model.contains("mpsc::Sender<vmess::VmessUdpFlowPacket>")
+            && protocol.contains("pub struct VmessUdpFlowIo")
+            && protocol.contains("pub struct VmessUdpFlowPacket")
+            && protocol.contains("pub fn encode_udp_flow_packet")
+            && protocol.contains("pub fn decode_udp_flow_packet"),
+        "protocols/vmess should own VMess UDP flow packet IO while proxy stores only protocol-owned packets"
     );
 }
 

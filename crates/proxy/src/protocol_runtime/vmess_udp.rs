@@ -26,7 +26,8 @@ fn spawn_vmess_udp_relay(
     mut metered: MeteredStream<TcpRelayStream>,
     initial_payload_len: usize,
 ) -> (VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>) {
-    let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
+    let flow_io = vmess::VmessUdpFlowIo;
+    let (send_tx, mut send_rx) = mpsc::channel::<vmess::VmessUdpFlowPacket>(32);
     let (recv_tx, _) = broadcast::channel::<UdpResponsePacket>(32);
     let recv_tx_bg = recv_tx.clone();
 
@@ -39,11 +40,16 @@ fn spawn_vmess_udp_relay(
             tokio::select! {
                 to_send = send_rx.recv() => {
                     match to_send {
-                        Some(payload) => {
-                            if metered.write_all(&payload).await.is_err() {
-                                break;
+                        Some(packet) => {
+                            let (target, port, payload) = packet.into_parts();
+                            match flow_io.write_packet(&mut metered, &target, port, &payload).await {
+                                Ok(packet_len) => {
+                                    proxy_clone.record_session_outbound_tx(session_id, packet_len as u64);
+                                }
+                                Err(_) => {
+                                    break;
+                                }
                             }
-                            proxy_clone.record_session_outbound_tx(session_id, payload.len() as u64);
                         }
                         None => break,
                     }
@@ -52,12 +58,13 @@ fn spawn_vmess_udp_relay(
                     match read {
                         Ok(0) => break,
                         Ok(n) => {
-                            match vmess::decode_udp_flow_packet(&buffer[..n]) {
+                            match flow_io.decode_packet(&buffer[..n]) {
                                 Ok(packet) => {
+                                    let (target, port, payload) = packet.into_parts();
                                     let response = UdpResponsePacket {
-                                        target: packet.target,
-                                        port: packet.port,
-                                        payload: packet.payload,
+                                        target,
+                                        port,
+                                        payload,
                                     };
                                     if recv_tx_bg.send(response).is_err() {
                                         break;
@@ -92,25 +99,27 @@ async fn establish_vmess_udp_upstream_over_stream(
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<(VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>), EngineError> {
-    let initial_packet =
-        vmess::encode_udp_flow_packet(&session.target, session.port, initial_payload)?;
+    let flow_io = vmess::VmessUdpFlowIo;
 
     let vmess_stream = vmess::establish_udp_flow_stream(stream, session, identity).await?;
     let mut metered = MeteredStream::new(TcpRelayStream::new(vmess_stream));
-    metered.write_all(&initial_packet).await?;
+    let initial_packet_len = flow_io
+        .write_packet(&mut metered, &session.target, session.port, initial_payload)
+        .await?;
 
     Ok(spawn_vmess_udp_relay(
         proxy,
         session.id,
         metered,
-        initial_packet.len(),
+        initial_packet_len,
     ))
 }
 
 async fn establish_vmess_udp_upstream(
     request: &VmessUdpUpstreamRequest<'_>,
 ) -> Result<(VmessUdpUpstream, broadcast::Sender<UdpResponsePacket>), EngineError> {
-    let initial_packet = vmess::encode_udp_flow_packet(
+    let flow_io = vmess::VmessUdpFlowIo;
+    let initial_packet = flow_io.encode_packet(
         &request.session.target,
         request.session.port,
         request.initial_payload,
@@ -171,13 +180,20 @@ async fn establish_vmess_udp_upstream(
     let vmess_stream =
         vmess::establish_udp_flow_stream(stream, request.session, request.identity).await?;
     let mut metered = MeteredStream::new(TcpRelayStream::new(vmess_stream));
-    metered.write_all(&initial_packet).await?;
+    let initial_packet_len = flow_io
+        .write_packet(
+            &mut metered,
+            &request.session.target,
+            request.session.port,
+            request.initial_payload,
+        )
+        .await?;
 
     Ok(spawn_vmess_udp_relay(
         request.proxy,
         request.session.id,
         metered,
-        initial_packet.len(),
+        initial_packet_len,
     ))
 }
 
@@ -263,8 +279,8 @@ impl VmessUdpOutboundManager {
         };
 
         proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
-        let packet = vmess::encode_udp_flow_packet(target, port, payload)?;
-        let packet_len = packet.len() as u64;
+        let packet = vmess::VmessUdpFlowPacket::new(target.clone(), port, payload.to_vec());
+        let packet_len = packet.encode()?.len() as u64;
         let _ = upstream.send_tx.send(packet).await;
         proxy.record_session_outbound_tx(upstream.session_id, packet_len);
         self.spawn_bridge(chain_tasks, target.clone(), port, upstream.session_id);
@@ -310,12 +326,12 @@ impl VmessUdpOutboundManager {
                 upstream.session_id,
                 request.initial_payload.len() as u64,
             );
-            let packet = vmess::encode_udp_flow_packet(
-                &request.target,
+            let packet = vmess::VmessUdpFlowPacket::new(
+                request.target.clone(),
                 request.port,
-                request.initial_payload,
-            )?;
-            let packet_len = packet.len() as u64;
+                request.initial_payload.to_vec(),
+            );
+            let packet_len = packet.encode()?.len() as u64;
             let _ = upstream.send_tx.send(packet).await;
             request
                 .proxy
