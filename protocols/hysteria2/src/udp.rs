@@ -130,6 +130,25 @@ pub fn encode_inbound_udp_datagram(
     build_udp_datagram(session_id, 0, target, port, payload)
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Hysteria2InboundUdpCodec;
+
+impl Hysteria2InboundUdpCodec {
+    pub fn decode_datagram(&self, data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
+        decode_inbound_udp_datagram(data)
+    }
+
+    pub fn encode_datagram(
+        &self,
+        session_id: u16,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_inbound_udp_datagram(session_id, target, port, payload)
+    }
+}
+
 pub fn udp_cache_key(
     tag: &str,
     server: &str,

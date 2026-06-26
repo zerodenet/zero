@@ -49,5 +49,5 @@ pub use session::MieruSession;
 pub use udp::{
     decode_inbound_udp_packet, decode_udp_flow_packet, encode_udp_flow_packet, encode_udp_response,
     udp_flow_codec, unwrap_udp_associate, wrap_udp_associate, MieruInboundUdpPacket,
-    MieruUdpAssociatePacket, MieruUdpAssociatePayload, MieruUdpFlowResume,
+    MieruUdpAssociatePacket, MieruUdpAssociatePayload, MieruUdpFlowCodec, MieruUdpFlowResume,
 };

@@ -993,6 +993,8 @@ fn vless_inbound_users_are_adapter_parsed() {
 fn hysteria2_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/hysteria2.rs");
     let adapter = read("src/adapters/hysteria2/inbound.rs");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
+        .expect("read hysteria2 protocol udp source");
 
     assert!(
         inbound.contains("struct Hysteria2InboundRequest")
@@ -1013,6 +1015,8 @@ fn hysteria2_inbound_uses_adapter_request_model() {
         "parse_udp_datagram",
         "hysteria2::build_udp_datagram",
         "hysteria2::parse_udp_datagram",
+        "hysteria2::decode_inbound_udp_datagram",
+        "hysteria2::encode_inbound_udp_datagram",
     ] {
         assert!(
             !inbound.contains(forbidden),
@@ -1020,9 +1024,11 @@ fn hysteria2_inbound_uses_adapter_request_model() {
         );
     }
     assert!(
-        inbound.contains("hysteria2::decode_inbound_udp_datagram")
-            && inbound.contains("hysteria2::encode_inbound_udp_datagram"),
-        "Hysteria2 inbound should delegate UDP datagram framing to inbound-specific protocol helpers"
+        inbound.contains("hysteria2::Hysteria2InboundUdpCodec")
+            && protocol_udp.contains("struct Hysteria2InboundUdpCodec")
+            && protocol_udp.contains("fn decode_datagram")
+            && protocol_udp.contains("fn encode_datagram"),
+        "Hysteria2 inbound should delegate UDP datagram framing through the protocol-owned inbound codec"
     );
 }
 
@@ -2572,6 +2578,8 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
         "mieru::wrap_udp_associate",
         "mieru::decode_inbound_udp_packet",
         "mieru::encode_udp_response",
+        "mieru::decode_udp_flow_packet",
+        "mieru::encode_udp_flow_packet",
         "socks5::parse_udp_packet",
         "socks5::build_udp_packet",
     ] {
@@ -2581,12 +2589,13 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
         );
     }
 
-    for required in ["decode_udp_flow_packet", "encode_udp_flow_packet"] {
-        assert!(
-            protocol_udp.contains(required) && inbound.contains(&format!("mieru::{required}")),
-            "Mieru inbound UDP packet framing should be owned by protocols/mieru `{required}`"
-        );
-    }
+    assert!(
+        inbound.contains("mieru::MieruUdpFlowCodec")
+            && protocol_udp.contains("struct MieruUdpFlowCodec")
+            && protocol_udp.contains("fn encode_packet")
+            && protocol_udp.contains("fn decode_packet"),
+        "Mieru inbound UDP packet framing should go through the protocols/mieru flow codec wrapper"
+    );
 }
 
 #[test]

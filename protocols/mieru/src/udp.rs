@@ -99,6 +99,21 @@ pub fn encode_udp_flow_packet(
 #[derive(Debug, Default, Clone, Copy)]
 pub struct MieruUdpFlowCodec;
 
+impl MieruUdpFlowCodec {
+    pub fn encode_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_udp_flow_packet(target, port, payload)
+    }
+
+    pub fn decode_packet(&self, data: &[u8]) -> Result<MieruInboundUdpPacket, Error> {
+        decode_udp_flow_packet(data)
+    }
+}
+
 pub fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
     MieruUdpFlowCodec
 }

@@ -372,7 +372,7 @@ impl Proxy {
                 dg = conn.read_datagram() => {
                     match dg {
                         Ok(data) => {
-                            if let Ok(pkt) = hysteria2::decode_inbound_udp_datagram(&data) {
+                            if let Ok(pkt) = hysteria2::Hysteria2InboundUdpCodec.decode_datagram(&data) {
                                 let _ = UdpPipe::new(&proxy, &mut dispatch)
                                     .dispatch(UdpPipeInput {
                                         target: pkt.target.clone(),
@@ -405,7 +405,7 @@ impl Proxy {
                                 zero_traits::IpAddress::V4(b) => Address::Ipv4(b),
                                 zero_traits::IpAddress::V6(b) => Address::Ipv6(b),
                             };
-                            if let Ok(dg) = hysteria2::encode_inbound_udp_datagram(h2_sid, &target, sender.port(), &direct_buf[..n]) {
+                            if let Ok(dg) = hysteria2::Hysteria2InboundUdpCodec.encode_datagram(h2_sid, &target, sender.port(), &direct_buf[..n]) {
                                 let _ = conn.send_datagram(dg.into());
                             }
                         }
@@ -417,7 +417,7 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             if let Some(sid) = session_id {
                                 if let Some(&h2_sid) = h2_flows.get(&sid) {
-                                    if let Ok(dg) = hysteria2::encode_inbound_udp_datagram(h2_sid, &target, port, &payload) {
+                                    if let Ok(dg) = hysteria2::Hysteria2InboundUdpCodec.encode_datagram(h2_sid, &target, port, &payload) {
                                         let _ = conn.send_datagram(dg.into());
                                     }
                                 }
