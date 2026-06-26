@@ -5907,6 +5907,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     let stream = read("src/protocol_runtime/udp/h2_manager/stream.rs");
     let manager_send = read("src/protocol_runtime/udp/h2_manager/send.rs");
     let manager_model = read("src/protocol_runtime/udp/h2_manager/model.rs");
+    let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
+        .expect("read zero-transport hysteria2_quic source");
     let adapter = read("src/adapters/hysteria2/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/forward/hysteria2.rs");
@@ -5955,14 +5957,15 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !h2_entry_model.contains("resume: hysteria2::Hysteria2UdpFlowResume")
             && manager_send.contains("Hysteria2UdpFlowPacket::from_parts")
             && stream.contains("Hysteria2UdpFlowPacket::from_parts")
-            && stream.contains("initial_packet.encode_with(&resume)")
-            && stream.contains("packet.encode_with(&resume)")
-            && stream.contains("resume.decode_flow_packet(&data)")
+            && stream.contains("establish_hysteria2_udp_flow_stream")
+            && transport.contains("initial_packet.encode_with(&resume)")
+            && transport.contains("packet.encode_with(&resume)")
+            && transport.contains("resume.decode_flow_packet(&data)")
             && !manager_send.contains(".encode_packet(")
             && !stream.contains(".encode_packet(")
             && !stream.contains(".decode_packet(")
             && !stream.contains("mpsc::Sender<Vec<u8>>"),
-        "Hysteria2 UDP manager should carry protocol-owned flow packet models and keep encode/decode operations behind protocol helpers"
+        "Hysteria2 UDP manager should carry protocol-owned flow packet models while transport owns QUIC datagram encode/decode loops"
     );
     assert!(
         adapter.contains("Hysteria2UdpFlowResume::new")
@@ -6015,7 +6018,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     ] {
         assert!(
             !manager_send.contains(forbidden)
-                && !manager_model.contains(forbidden)
+            && !manager_model.contains(forbidden)
                 && !stream.contains(forbidden),
             "Hysteria2 UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
         );
@@ -6023,8 +6026,9 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     assert!(
         manager_send.contains("request.resume.flow_key(request.server, request.port)")
             && manager_model.contains("fn from_flow_key(")
-            && stream.contains("peer.resume.connector_profile()"),
-        "Hysteria2 UDP manager should consume protocol-owned flow key and connector profile helpers"
+            && stream.contains("Hysteria2UdpFlowStreamRequest")
+            && transport.contains("request.resume.connector_profile()"),
+        "Hysteria2 UDP manager should consume protocol-owned flow keys and delegate connector profile use to transport"
     );
 }
 
@@ -6099,7 +6103,10 @@ fn h2_udp_response_bridge_lives_outside_manager() {
 #[test]
 fn h2_udp_packet_stream_tasks_live_outside_manager() {
     let manager = read("src/protocol_runtime/udp/h2_manager.rs");
-    let stream = manifest_dir().join("src/protocol_runtime/udp/h2_manager/stream.rs");
+    let stream = read("src/protocol_runtime/udp/h2_manager/stream.rs");
+    let stream_path = manifest_dir().join("src/protocol_runtime/udp/h2_manager/stream.rs");
+    let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
+        .expect("read zero-transport hysteria2_quic source");
 
     for forbidden in [
         "Hysteria2Connector",
@@ -6114,8 +6121,35 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        stream.exists(),
+        stream_path.exists(),
         "Hysteria2 UDP packet stream tasks should live in h2_manager/stream.rs"
+    );
+    for forbidden in [
+        "Hysteria2Connector",
+        "connect_raw",
+        "send_datagram",
+        "read_datagram",
+        "tokio::spawn",
+        "connector_profile",
+        "encode_with(&resume)",
+        "decode_flow_packet",
+    ] {
+        assert!(
+            !stream.contains(forbidden),
+            "h2_manager/stream.rs should delegate Hysteria2 QUIC datagram flow details to zero-transport; found `{forbidden}`"
+        );
+    }
+    assert!(
+        stream.contains("establish_hysteria2_udp_flow_stream")
+            && stream.contains("Hysteria2UdpFlowStreamRequest")
+            && transport.contains("pub async fn establish_hysteria2_udp_flow_stream")
+            && transport.contains("Hysteria2Connector::new")
+            && transport.contains("connect_raw")
+            && transport.contains("send_datagram")
+            && transport.contains("read_datagram")
+            && transport.contains("tokio::spawn")
+            && transport.contains("resume.decode_flow_packet"),
+        "zero-transport should own Hysteria2 UDP QUIC packet stream establishment and datagram tasks"
     );
 }
 

@@ -9,11 +9,6 @@ type RecvItem = (Address, u16, Vec<u8>);
 
 pub(super) type ResponseSender = broadcast::Sender<RecvItem>;
 
-pub(super) fn response_channel() -> ResponseSender {
-    let (tx, _) = broadcast::channel::<RecvItem>(32);
-    tx
-}
-
 pub(super) fn spawn_response_bridge(
     chain_tasks: &mut JoinSet<ChainTask>,
     recv_tx: ResponseSender,

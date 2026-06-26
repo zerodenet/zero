@@ -64,7 +64,6 @@ impl H2ChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                resume: &request.resume,
                 flow_key: request.resume.flow_key(request.server, request.port),
             },
             resume,

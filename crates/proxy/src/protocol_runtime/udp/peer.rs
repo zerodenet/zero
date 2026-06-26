@@ -13,7 +13,6 @@ pub(crate) struct SsUdpPeer<'a> {
 #[cfg(feature = "hysteria2")]
 pub(crate) struct H2UdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
-    pub(crate) resume: &'a hysteria2::Hysteria2UdpFlowResume,
     pub(crate) flow_key: hysteria2::Hysteria2UdpFlowKey,
 }
 
