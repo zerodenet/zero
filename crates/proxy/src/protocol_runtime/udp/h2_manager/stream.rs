@@ -1,5 +1,5 @@
 use super::bridge;
-use crate::transport::Hysteria2Connector;
+use crate::outbound::hysteria2::Hysteria2Connector;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 use zero_core::{Error, UdpFlowPacket};

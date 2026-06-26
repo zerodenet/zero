@@ -26,7 +26,9 @@ pub(crate) use zero_transport::h2::accept_h2;
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::http_upgrade::accept_http_upgrade;
 #[cfg(feature = "hysteria2")]
-pub(crate) use zero_transport::hysteria2_quic::{Hysteria2Connector, Hysteria2Stream};
+pub(crate) use zero_transport::hysteria2_quic::{
+    open_quic_connection as open_hysteria2_quic_connection, Hysteria2Stream, QuicConnectionOptions,
+};
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::quic::{connect_quic, QuicInbound};
 #[cfg(feature = "vless")]

@@ -8,7 +8,75 @@ use zero_core::Session;
 use zero_engine::EngineError;
 
 use crate::runtime::Proxy;
-use crate::transport::TcpRelayStream;
+use crate::transport::{Hysteria2Stream, QuicConnectionOptions, TcpRelayStream};
+
+pub(crate) struct Hysteria2Connector {
+    server: String,
+    port: u16,
+    password: String,
+    client_fingerprint: Option<String>,
+}
+
+impl Hysteria2Connector {
+    pub(crate) fn new(server: &str, port: u16, password: &str) -> Self {
+        Self {
+            server: server.to_owned(),
+            port,
+            password: password.to_owned(),
+            client_fingerprint: None,
+        }
+    }
+
+    pub(crate) fn with_fingerprint(mut self, fingerprint: Option<&str>) -> Self {
+        self.client_fingerprint = fingerprint.map(ToOwned::to_owned);
+        self
+    }
+
+    pub(crate) async fn connect_raw(&self) -> Result<quinn::Connection, EngineError> {
+        let conn = crate::transport::open_hysteria2_quic_connection(QuicConnectionOptions {
+            server: &self.server,
+            port: self.port,
+            alpn: vec![b"hysteria2".to_vec()],
+            client_fingerprint: self.client_fingerprint.as_deref(),
+            datagram_receive_buffer_size: Some(65536),
+        })
+        .await?;
+
+        let mut salt = [0u8; 32];
+        conn.export_keying_material(&mut salt, b"hysteria2 auth", &[])
+            .map_err(|_| EngineError::Io(std::io::Error::other("hysteria2 key export failed")))?;
+
+        let (send, recv) = conn.open_bi().await.map_err(|error| {
+            EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {error}")))
+        })?;
+        let mut stream = Hysteria2Stream::new(send, recv);
+        hysteria2::Hysteria2Outbound
+            .authenticate_with_salt(&mut stream, &self.password, &salt)
+            .await
+            .map_err(EngineError::Core)?;
+
+        Ok(conn)
+    }
+
+    pub(crate) async fn connect(&self, session: &Session) -> Result<Hysteria2Stream, EngineError> {
+        let conn = self.connect_raw().await?;
+        let (send, recv) = conn.open_bi().await.map_err(|error| {
+            EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {error}")))
+        })?;
+
+        let mut stream = Hysteria2Stream::new(send, recv);
+        hysteria2::Hysteria2Outbound
+            .send_tcp_connect(&mut stream, session)
+            .await
+            .map_err(EngineError::Core)?;
+        hysteria2::Hysteria2Outbound
+            .read_connect_response(&mut stream)
+            .await
+            .map_err(EngineError::Core)?;
+
+        Ok(stream)
+    }
+}
 
 /// Establish a Hysteria2 TCP upstream via QUIC.
 ///
@@ -22,8 +90,8 @@ pub(crate) async fn connect_tcp(
     password: &str,
     client_fingerprint: Option<&str>,
 ) -> Result<TcpRelayStream, EngineError> {
-    let connector = crate::transport::Hysteria2Connector::new(server, port, password)
-        .with_fingerprint(client_fingerprint);
+    let connector =
+        Hysteria2Connector::new(server, port, password).with_fingerprint(client_fingerprint);
     let stream = connector.connect(session).await?;
     Ok(TcpRelayStream::new(stream))
 }

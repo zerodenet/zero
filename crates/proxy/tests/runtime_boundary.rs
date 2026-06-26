@@ -6309,7 +6309,7 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
             && carrier.contains("PacketPathCarrierAdapter")
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
             && transport.contains("conn: Arc<quinn::Connection>")
-            && adapter.contains("Hysteria2Connector")
+            && adapter.contains("outbound::hysteria2::Hysteria2Connector")
             && adapter.contains("connect_raw"),
         "Hysteria2 adapter should own protocol-specific QUIC connection setup while zero-transport owns connection lifecycle and codec use"
     );
@@ -6390,6 +6390,9 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
 fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
+    let transport_manifest = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
+        .expect("read zero-transport manifest");
+    let outbound = read("src/outbound/hysteria2.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/hysteria2/src/outbound.rs"))
             .expect("read hysteria2 protocol outbound source");
@@ -6400,22 +6403,31 @@ fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
         "parse_auth_response",
         "sign_hmac",
         "parse_tcp_connect_header",
+        "Hysteria2Outbound",
+        "Hysteria2Connector",
+        "hysteria2::",
     ] {
         assert!(
             !transport.contains(forbidden),
-            "zero-transport Hysteria2 connector should delegate protocol handshake/framing to protocols/hysteria2; found `{forbidden}`"
+            "zero-transport QUIC helper should not depend on Hysteria2 protocol handshake/framing; found `{forbidden}`"
         );
     }
     assert!(
-        transport.contains("Hysteria2Outbound")
-            && transport.contains(".authenticate_with_salt(")
-            && transport.contains(".send_tcp_connect(")
-            && transport.contains(".read_connect_response(")
+        transport.contains("pub struct Hysteria2Stream")
+            && transport.contains("pub struct QuicConnectionOptions")
+            && transport.contains("pub async fn open_quic_connection")
+            && !transport_manifest.contains("hysteria2 = {")
+            && outbound.contains("struct Hysteria2Connector")
+            && outbound.contains("open_hysteria2_quic_connection")
+            && outbound.contains("hysteria2::Hysteria2Outbound")
+            && outbound.contains(".authenticate_with_salt(")
+            && outbound.contains(".send_tcp_connect(")
+            && outbound.contains(".read_connect_response(")
             && protocol_outbound.contains("pub async fn authenticate_with_salt")
             && protocol_outbound.contains("crate::shared::sign_hmac")
             && protocol_outbound.contains("crate::shared::build_auth_frame")
             && protocol_outbound.contains("build_tcp_connect_header"),
-        "Hysteria2 transport should own QUIC stream lifecycle while protocols/hysteria2 owns auth and TCP connect framing"
+        "zero-transport should own only QUIC stream lifecycle; proxy/protocol Hysteria2 code should own auth and TCP connect framing"
     );
 }
 

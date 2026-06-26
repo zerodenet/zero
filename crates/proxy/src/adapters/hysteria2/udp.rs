@@ -68,7 +68,7 @@ impl Hysteria2Adapter {
         };
         let codec = Arc::new(packet_path.codec());
         let conn = Arc::new(
-            crate::transport::Hysteria2Connector::new(server, *port, password)
+            crate::outbound::hysteria2::Hysteria2Connector::new(server, *port, password)
                 .with_fingerprint(*client_fingerprint)
                 .connect_raw()
                 .await?,

@@ -1,17 +1,13 @@
-// Hysteria2 QUIC stream wrapper — stream.rs
-//
-// Wraps a quinn SendStream + RecvStream into a single bidirectional
-// AsyncRead + AsyncWrite for use by the proxy relay layer.
-
 use std::io;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-
+use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
-/// Bidirectional QUIC stream for Hysteria2 TCP relay.
+/// Bidirectional QUIC stream wrapper used by Hysteria2 proxy glue.
 pub struct Hysteria2Stream {
     send: quinn::SendStream,
     recv: quinn::RecvStream,
@@ -77,148 +73,78 @@ impl AsyncSocket for Hysteria2Stream {
     }
 }
 
-// ── Hysteria2Connector ──
-
-use hysteria2::Hysteria2Outbound;
-use std::sync::Arc;
-use zero_core::Session;
-use zero_engine::EngineError;
-
-/// Establishes a Hysteria2 outbound connection.
-///
-/// Handles the full flow: QUIC connect → HMAC auth → TCP stream setup.
-/// Implements the same pattern as [`VlessTransportConnector`].
-pub struct Hysteria2Connector {
-    server: String,
-    port: u16,
-    password: String,
-    client_fingerprint: Option<String>,
+pub struct QuicConnectionOptions<'a> {
+    pub server: &'a str,
+    pub port: u16,
+    pub alpn: Vec<Vec<u8>>,
+    pub client_fingerprint: Option<&'a str>,
+    pub datagram_receive_buffer_size: Option<usize>,
 }
 
-impl Hysteria2Connector {
-    pub fn new(server: &str, port: u16, password: &str) -> Self {
-        Self {
-            server: server.to_owned(),
-            port,
-            password: password.to_owned(),
-            client_fingerprint: None,
-        }
-    }
-
-    pub fn with_fingerprint(mut self, fp: Option<&str>) -> Self {
-        self.client_fingerprint = fp.map(|s| s.to_owned());
-        self
-    }
-
-    /// Connect + authenticate, returning the raw QUIC connection.
-    pub async fn connect_raw(&self) -> Result<quinn::Connection, EngineError> {
-        // Build TLS config with optional fingerprint
-        let config_base = if let Some(ref fp_name) = self.client_fingerprint {
-            if let Some(preset) = crate::fingerprint::lookup_fingerprint(fp_name) {
-                let provider = std::sync::Arc::new(crate::fingerprint::build_provider(&preset));
-                tracing::debug!(
-                    fingerprint = %fp_name,
-                    "hysteria2 tls fingerprint applied"
-                );
-                rustls::ClientConfig::builder_with_provider(provider)
-                    .with_protocol_versions(&[&rustls::version::TLS13, &rustls::version::TLS12])
-                    .map_err(|e| {
-                        EngineError::Io(std::io::Error::other(format!(
-                            "hysteria2 tls protocol: {e}"
-                        )))
-                    })?
-            } else {
-                tracing::warn!(
-                    fingerprint = %fp_name,
-                    "unknown hysteria2 tls fingerprint, using defaults"
-                );
-                rustls::ClientConfig::builder()
-            }
+pub async fn open_quic_connection(
+    options: QuicConnectionOptions<'_>,
+) -> Result<quinn::Connection, EngineError> {
+    let config_base = if let Some(fp_name) = options.client_fingerprint {
+        if let Some(preset) = crate::fingerprint::lookup_fingerprint(fp_name) {
+            let provider = std::sync::Arc::new(crate::fingerprint::build_provider(&preset));
+            tracing::debug!(
+                fingerprint = %fp_name,
+                "quic tls fingerprint applied"
+            );
+            rustls::ClientConfig::builder_with_provider(provider)
+                .with_protocol_versions(&[&rustls::version::TLS13, &rustls::version::TLS12])
+                .map_err(|error| {
+                    EngineError::Io(io::Error::other(format!("quic tls protocol: {error}")))
+                })?
         } else {
+            tracing::warn!(
+                fingerprint = %fp_name,
+                "unknown quic tls fingerprint, using defaults"
+            );
             rustls::ClientConfig::builder()
-        };
+        }
+    } else {
+        rustls::ClientConfig::builder()
+    };
 
-        let mut tls_config = config_base
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(SkipVerify))
-            .with_no_client_auth();
-        tls_config.alpn_protocols = vec![b"hysteria2".to_vec()];
+    let mut tls_config = config_base
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(SkipVerify))
+        .with_no_client_auth();
+    tls_config.alpn_protocols = options.alpn;
 
-        let quic_cfg =
-            quinn::crypto::rustls::QuicClientConfig::try_from(tls_config).map_err(|e| {
-                EngineError::Io(std::io::Error::other(format!("hysteria2 tls cfg: {e}")))
-            })?;
+    let quic_cfg = quinn::crypto::rustls::QuicClientConfig::try_from(tls_config)
+        .map_err(|error| EngineError::Io(io::Error::other(format!("quic tls cfg: {error}"))))?;
 
-        let mut client_cfg = quinn::ClientConfig::new(Arc::new(quic_cfg));
-        let mut transport = quinn::TransportConfig::default();
-        transport.max_idle_timeout(Some(std::time::Duration::from_secs(30).try_into().unwrap()));
-        transport.datagram_receive_buffer_size(Some(65536));
-        client_cfg.transport_config(Arc::new(transport));
+    let mut client_cfg = quinn::ClientConfig::new(Arc::new(quic_cfg));
+    let mut transport = quinn::TransportConfig::default();
+    transport.max_idle_timeout(Some(std::time::Duration::from_secs(30).try_into().unwrap()));
+    transport.datagram_receive_buffer_size(options.datagram_receive_buffer_size);
+    client_cfg.transport_config(Arc::new(transport));
 
-        let bind_addr: std::net::SocketAddr = "0.0.0.0:0".parse().map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!("hysteria2 bind addr: {e}")))
-        })?;
-        let socket = std::net::UdpSocket::bind(bind_addr).map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!("hysteria2 bind socket: {e}")))
-        })?;
-        let mut endpoint = quinn::Endpoint::new(
-            quinn::EndpointConfig::default(),
-            None,
-            socket,
-            Arc::new(quinn::TokioRuntime),
-        )
-        .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 endpoint: {e}"))))?;
-        endpoint.set_default_client_config(client_cfg);
+    let bind_addr: std::net::SocketAddr = "0.0.0.0:0"
+        .parse()
+        .map_err(|error| EngineError::Io(io::Error::other(format!("quic bind addr: {error}"))))?;
+    let socket = std::net::UdpSocket::bind(bind_addr)
+        .map_err(|error| EngineError::Io(io::Error::other(format!("quic bind socket: {error}"))))?;
+    let mut endpoint = quinn::Endpoint::new(
+        quinn::EndpointConfig::default(),
+        None,
+        socket,
+        Arc::new(quinn::TokioRuntime),
+    )
+    .map_err(|error| EngineError::Io(io::Error::other(format!("quic endpoint: {error}"))))?;
+    endpoint.set_default_client_config(client_cfg);
 
-        let server_addr = format!("{}:{}", self.server, self.port)
-            .parse::<std::net::SocketAddr>()
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 addr: {e}"))))?;
+    let server_addr = format!("{}:{}", options.server, options.port)
+        .parse::<std::net::SocketAddr>()
+        .map_err(|error| EngineError::Io(io::Error::other(format!("quic addr: {error}"))))?;
 
-        let conn = endpoint
-            .connect(server_addr, &self.server)
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("hysteria2 connect: {e}"))))?
-            .await
-            .map_err(|e| {
-                EngineError::Io(std::io::Error::other(format!("hysteria2 connection: {e}")))
-            })?;
-
-        // HMAC auth is bound to this QUIC connection.
-        let mut salt = [0u8; 32];
-        conn.export_keying_material(&mut salt, b"hysteria2 auth", &[])
-            .map_err(|_| EngineError::Io(std::io::Error::other("hysteria2 key export failed")))?;
-        let (send, recv) = conn.open_bi().await.map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}")))
-        })?;
-        let mut stream = Hysteria2Stream::new(send, recv);
-
-        Hysteria2Outbound
-            .authenticate_with_salt(&mut stream, &self.password, &salt)
-            .await
-            .map_err(EngineError::Core)?;
-
-        Ok(conn)
-    }
-
-    /// Establish a Hysteria2 TCP connection (QUIC connect + auth + TCP stream).
-    pub async fn connect(&self, session: &Session) -> Result<Hysteria2Stream, EngineError> {
-        let conn = self.connect_raw().await?;
-
-        let (send, recv) = conn.open_bi().await.map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {e}")))
-        })?;
-
-        let mut stream = Hysteria2Stream::new(send, recv);
-        Hysteria2Outbound
-            .send_tcp_connect(&mut stream, session)
-            .await
-            .map_err(EngineError::Core)?;
-        Hysteria2Outbound
-            .read_connect_response(&mut stream)
-            .await
-            .map_err(EngineError::Core)?;
-
-        Ok(stream)
-    }
+    endpoint
+        .connect(server_addr, options.server)
+        .map_err(|error| EngineError::Io(io::Error::other(format!("quic connect: {error}"))))?
+        .await
+        .map_err(|error| EngineError::Io(io::Error::other(format!("quic connection: {error}"))))
 }
 
 #[derive(Debug)]
@@ -235,6 +161,7 @@ impl rustls::client::danger::ServerCertVerifier for SkipVerify {
     ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
         Ok(rustls::client::danger::ServerCertVerified::assertion())
     }
+
     fn verify_tls12_signature(
         &self,
         _: &[u8],
@@ -243,6 +170,7 @@ impl rustls::client::danger::ServerCertVerifier for SkipVerify {
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
         Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
     }
+
     fn verify_tls13_signature(
         &self,
         _: &[u8],
@@ -251,6 +179,7 @@ impl rustls::client::danger::ServerCertVerifier for SkipVerify {
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
         Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
     }
+
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
         vec![
             rustls::SignatureScheme::RSA_PKCS1_SHA256,
