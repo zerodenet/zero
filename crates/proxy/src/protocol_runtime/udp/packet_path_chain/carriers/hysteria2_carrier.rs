@@ -25,11 +25,11 @@ impl Hysteria2PacketPath {
     }
 
     fn encode(target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, EngineError> {
-        hysteria2::build_udp_datagram(0, 0, target, port, payload).map_err(EngineError::from)
+        hysteria2::encode_udp_flow_packet(target, port, payload).map_err(EngineError::from)
     }
 
     fn decode(data: &[u8]) -> Result<Vec<u8>, EngineError> {
-        let pkt = hysteria2::parse_udp_datagram(data).map_err(EngineError::from)?;
+        let pkt = hysteria2::decode_udp_flow_packet(data).map_err(EngineError::from)?;
         Ok(pkt.payload)
     }
 }
