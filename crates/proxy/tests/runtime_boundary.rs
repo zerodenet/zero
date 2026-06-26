@@ -5167,6 +5167,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     let adapter = read("src/adapters/trojan/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/forward/trojan.rs");
+    let start = read("src/protocol_runtime/udp/start/trojan.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
             .expect("read trojan protocol outbound source");
@@ -5187,15 +5188,26 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         "Trojan protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("existing.resume.password()")
-            && forward.contains("existing.resume.sni()")
-            && forward.contains("existing.resume.insecure()")
-            && forward.contains("existing.resume.client_fingerprint()")
-            && forward.contains("existing.resume.relay_chain()")
+        forward.contains("resume: existing.resume.clone()")
+            && !forward.contains("existing.resume.password()")
+            && !forward.contains("existing.resume.sni()")
+            && !forward.contains("existing.resume.insecure()")
+            && !forward.contains("existing.resume.client_fingerprint()")
+            && !forward.contains("existing.resume.relay_chain()")
             && !forward.contains("password: &'a str")
             && !forward.contains("client_fingerprint: Option<&'a str>")
             && !forward.contains("relay_chain: bool"),
-        "existing Trojan UDP flow forwarding should recover auth, TLS, and relay state from the opaque resume descriptor"
+        "existing Trojan UDP flow forwarding should pass the opaque resume descriptor without unpacking auth, TLS, or relay state"
+    );
+    assert!(
+        start.contains("ProtocolUdpFlowResume::Trojan(resume)")
+            && start.contains("resume: resume.clone()")
+            && !start.contains("resume.password()")
+            && !start.contains("resume.sni()")
+            && !start.contains("resume.insecure()")
+            && !start.contains("resume.client_fingerprint()")
+            && !start.contains("resume.relay_chain()"),
+        "new Trojan UDP flow start should pass the opaque resume descriptor without unpacking auth, TLS, or relay state"
     );
 }
 
