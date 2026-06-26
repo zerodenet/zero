@@ -176,6 +176,18 @@ impl TrojanUdpFlowIo {
         Ok(UdpFlowPacket::new(target, port, payload))
     }
 
+    pub async fn write_flow_packet<S>(
+        &self,
+        stream: &mut S,
+        packet: &UdpFlowPacket,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.write_packet(stream, &packet.target, packet.port, &packet.payload)
+            .await
+    }
+
     pub async fn write_stream_packet<S>(
         &self,
         stream: &mut S,

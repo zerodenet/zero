@@ -38,12 +38,7 @@ fn spawn_send_task(mut send_rx: mpsc::Receiver<UdpFlowPacket>, mut send_stream: 
         let flow_io = trojan::TrojanUdpFlowIo;
         while let Some(packet) = send_rx.recv().await {
             if flow_io
-                .write_packet(
-                    &mut send_stream,
-                    &packet.target,
-                    packet.port,
-                    &packet.payload,
-                )
+                .write_flow_packet(&mut send_stream, &packet)
                 .await
                 .is_err()
             {

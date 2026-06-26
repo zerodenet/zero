@@ -6162,7 +6162,8 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && stream.contains("tokio::spawn")
             && stream.contains("trojan::TrojanUdpFlowIo")
             && stream.contains(".establish_with_resume(")
-            && stream.contains(".write_packet(")
+            && stream.contains(".write_flow_packet(")
+            && !stream.contains(".write_packet(")
             && stream.contains("&mut send_stream")
             && stream.contains(".read_flow_packet(")
             && stream.contains("&mut recv_stream")
@@ -6541,6 +6542,7 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
     assert!(
         protocol_outbound.contains("pub fn udp_flow_packet")
             && protocol_outbound.contains("pub async fn read_flow_packet")
+            && protocol_outbound.contains("pub async fn write_flow_packet")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && !protocol_outbound.contains("pub struct TrojanUdpFlowSender")
             && !establish.contains("trojan::udp_flow_packet")
@@ -6556,7 +6558,8 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")
             && stream.contains(".establish_with_resume(")
-            && stream.contains(".write_packet(")
+            && stream.contains(".write_flow_packet(")
+            && !stream.contains(".write_packet(")
             && stream.contains("&mut send_stream")
             && stream.contains(".read_flow_packet(")
             && stream.contains("&mut recv_stream")
