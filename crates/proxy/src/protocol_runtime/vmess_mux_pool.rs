@@ -8,8 +8,9 @@ use tokio::sync::mpsc;
 use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::Network;
 use zero_engine::EngineError;
+use zero_platform_tokio::TransportConnector;
 
-use crate::transport::{MeteredStream, TcpRelayStream};
+use crate::transport::{MeteredStream, TcpRelayStream, VmessTransportConnector};
 
 pub(crate) use model::VmessMuxConnectionPool;
 use model::{VmessMuxConn, VmessMuxOpenRequest, VmessMuxPoolKey, VmessMuxTransportKey};
@@ -114,16 +115,13 @@ impl VmessMuxConnectionPool {
             .connect_host(&key.server, key.port, request.proxy.resolver.as_ref())
             .await?;
 
-        let stream = connect_vmess_transport(
-            socket,
-            request.tls,
-            request.ws,
-            request.grpc,
-            request.proxy.config.source_dir(),
-            &key.server,
-            key.port,
-        )
-        .await?;
+        let connector = VmessTransportConnector::new(crate::transport::VmessTransportOptions {
+            tls: request.tls,
+            ws: request.ws,
+            grpc: request.grpc,
+            source_dir: request.proxy.config.source_dir(),
+        });
+        let stream = connector.connect(socket, &key.server, key.port).await?;
 
         let metered = MeteredStream::new(stream);
         let stream = TcpRelayStream::new(
@@ -181,52 +179,6 @@ impl VmessMuxConnectionPool {
             active: Arc::new(Mutex::new(0)),
             max_concurrency: request.max_concurrency,
         })
-    }
-}
-
-async fn connect_vmess_transport(
-    socket: zero_platform_tokio::TokioSocket,
-    tls: Option<&ClientTlsConfig>,
-    ws: Option<&WebSocketConfig>,
-    grpc: Option<&GrpcConfig>,
-    source_dir: Option<&std::path::Path>,
-    server: &str,
-    port: u16,
-) -> Result<TcpRelayStream, EngineError> {
-    match (grpc, ws, tls) {
-        (Some(grpc_cfg), None, Some(tls_cfg)) => {
-            let tls_stream =
-                zero_transport::tls::connect_tls_upstream(socket, tls_cfg, source_dir, server)
-                    .await?;
-            Ok(TcpRelayStream::new(
-                zero_transport::grpc::connect_grpc(tls_stream, &grpc_cfg.service_names).await?,
-            ))
-        }
-        (Some(grpc_cfg), None, None) => Ok(TcpRelayStream::new(
-            zero_transport::grpc::connect_grpc(socket, &grpc_cfg.service_names).await?,
-        )),
-        (None, Some(ws_cfg), Some(tls_cfg)) => {
-            let tls_stream =
-                zero_transport::tls::connect_tls_upstream(socket, tls_cfg, source_dir, server)
-                    .await?;
-            Ok(TcpRelayStream::new(
-                zero_transport::ws::connect_ws(tls_stream, ws_cfg, server, port).await?,
-            ))
-        }
-        (None, Some(ws_cfg), None) => Ok(TcpRelayStream::new(
-            zero_transport::ws::connect_ws(socket, ws_cfg, server, port).await?,
-        )),
-        (None, None, Some(tls_cfg)) => {
-            let tls_stream =
-                zero_transport::tls::connect_tls_upstream(socket, tls_cfg, source_dir, server)
-                    .await?;
-            Ok(TcpRelayStream::new(tls_stream))
-        }
-        (None, None, None) => Ok(TcpRelayStream::new(socket)),
-        _ => Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "vmess: ws and grpc are mutually exclusive",
-        ))),
     }
 }
 

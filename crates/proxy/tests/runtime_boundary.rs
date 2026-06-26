@@ -2376,6 +2376,40 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
 }
 
 #[test]
+fn vmess_mux_pool_transport_opening_lives_in_transport_crate() {
+    let root = read("src/protocol_runtime/vmess_mux_pool.rs");
+    let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
+        .expect("read crates/transport/src/vmess_transport.rs");
+
+    for forbidden in [
+        "connect_vmess_transport",
+        "zero_transport::tls::connect_tls_upstream",
+        "zero_transport::grpc::connect_grpc",
+        "zero_transport::ws::connect_ws",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "VMess mux pool should not own transport opening detail; found `{forbidden}`"
+        );
+    }
+
+    assert!(
+        root.contains("crate::transport::VmessTransportOptions")
+            && root.contains("VmessTransportConnector::new")
+            && root.contains(".connect(socket, &key.server, key.port)"),
+        "VMess mux pool should request VMess transport helpers instead of opening TLS/WS/gRPC directly"
+    );
+    assert!(
+        transport.contains("pub struct VmessTransportConnector")
+            && transport.contains("pub struct VmessTransportOptions")
+            && transport.contains("tls::connect_tls_upstream")
+            && transport.contains("grpc::connect_grpc")
+            && transport.contains("ws::connect_ws"),
+        "zero-transport should own VMess mux transport opening helpers"
+    );
+}
+
+#[test]
 fn vmess_mux_pool_receives_adapter_parsed_cipher() {
     let root = read("src/protocol_runtime/vmess_mux_pool.rs");
     let model = read("src/protocol_runtime/vmess_mux_pool/model.rs");
