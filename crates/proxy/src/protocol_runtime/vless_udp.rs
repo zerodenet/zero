@@ -8,7 +8,7 @@ pub(crate) mod model;
 use std::collections::HashMap;
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinSet;
 use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
@@ -26,8 +26,12 @@ type VlessResponseSender = broadcast::Sender<VlessFlowResponse>;
 
 #[derive(Clone)]
 pub(super) struct VlessFlowSender {
-    send_tx: mpsc::Sender<UdpFlowPacket>,
-    io: vless::VlessEstablishedUdpFlow,
+    send_tx: mpsc::Sender<VlessFlowSend>,
+}
+
+struct VlessFlowSend {
+    packet: UdpFlowPacket,
+    result_tx: oneshot::Sender<Result<usize, EngineError>>,
 }
 
 impl VlessFlowSender {
@@ -38,12 +42,14 @@ impl VlessFlowSender {
         payload: &[u8],
     ) -> Result<usize, EngineError> {
         let packet = UdpFlowPacket::from_parts(target, port, payload);
-        let packet_len = self.io.encoded_packet_len(target, port, payload)?;
+        let (result_tx, result_rx) = oneshot::channel();
         self.send_tx
-            .send(packet)
+            .send(VlessFlowSend { packet, result_tx })
             .await
             .map_err(|_| EngineError::Io(std::io::Error::other("vless udp flow closed")))?;
-        Ok(packet_len)
+        result_rx
+            .await
+            .map_err(|_| EngineError::Io(std::io::Error::other("vless udp flow closed")))?
     }
 }
 
@@ -158,16 +164,12 @@ impl VlessUdpOutboundManager {
                     request.payload,
                 );
                 let flow_io = vless::VlessEstablishedUdpFlow::default();
-                let sent = flow_io.encoded_packet_len(
-                    &request.session.target,
-                    request.session.port,
-                    request.payload,
-                )?;
                 let packet = flow_io.initial_packet(
                     &initial_packet.target,
                     initial_packet.port,
                     &initial_packet.payload,
                 )?;
+                let sent = packet.len();
                 let _ = up_tx.send(packet);
                 request
                     .proxy
@@ -380,14 +382,11 @@ fn spawn_udp_flow<S>(
 where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
 {
-    let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
+    let (send_tx, send_rx) = mpsc::channel::<VlessFlowSend>(32);
     let (responses, _) = broadcast::channel::<VlessFlowResponse>(32);
     spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone(), flow_io);
     VlessFlowHandle {
-        sender: VlessFlowSender {
-            send_tx,
-            io: flow_io,
-        },
+        sender: VlessFlowSender { send_tx },
         responses,
     }
 }
@@ -395,7 +394,7 @@ where
 fn spawn_udp_flow_task<S>(
     mut stream: S,
     initial_packet: Option<UdpFlowPacket>,
-    mut send_rx: mpsc::Receiver<UdpFlowPacket>,
+    mut send_rx: mpsc::Receiver<VlessFlowSend>,
     responses: VlessResponseSender,
     flow_io: vless::VlessEstablishedUdpFlow,
 ) where
@@ -417,17 +416,19 @@ fn spawn_udp_flow_task<S>(
             tokio::select! {
                 to_send = send_rx.recv() => {
                     match to_send {
-                        Some(packet) => {
-                            if flow_io
+                        Some(request) => {
+                            let result = flow_io
                                 .write_packet_tokio(
                                     &mut stream,
-                                    &packet.target,
-                                    packet.port,
-                                    &packet.payload,
+                                    &request.packet.target,
+                                    request.packet.port,
+                                    &request.packet.payload,
                                 )
                                 .await
-                                .is_err()
-                            {
+                                .map_err(EngineError::from);
+                            let should_break = result.is_err();
+                            let _ = request.result_tx.send(result);
+                            if should_break {
                                 break;
                             }
                         }

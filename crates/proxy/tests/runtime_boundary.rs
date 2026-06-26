@@ -2090,6 +2090,13 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         .expect("read zero-transport vless_transport source");
     let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
         .expect("read protocols/vless/src/shared.rs");
+    let sender_model = runtime
+        .split("pub(super) struct VlessFlowSender")
+        .nth(1)
+        .expect("VlessFlowSender should exist")
+        .split("struct VlessFlowSend")
+        .next()
+        .expect("VlessFlowSend should follow VlessFlowSender");
 
     for forbidden in [
         "broadcast::Sender<vless::VlessUdpPacket>",
@@ -2121,12 +2128,16 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vless::establish_udp_flow_stream")
             && !runtime.contains("vless::encode_udp_flow_initial_packet")
             && !runtime.contains("vless::VlessUdpFlowIo")
-            && runtime.contains("mpsc::channel::<UdpFlowPacket>")
+            && runtime.contains("struct VlessFlowSend")
+            && runtime.contains("mpsc::channel::<VlessFlowSend>")
+            && runtime.contains("result_tx: oneshot::Sender<Result<usize, EngineError>>")
+            && !sender_model.contains("vless::VlessEstablishedUdpFlow")
+            && !runtime.contains("encoded_packet_len")
             && runtime.contains("broadcast::channel::<VlessFlowResponse>")
             && runtime.contains("tokio::spawn")
             && model.contains("VlessFlowSender")
             && !model.contains("vless::VlessUdpFlowSender"),
-        "VLESS UDP runtime should own task/channel glue while protocols/vless owns packet helpers"
+        "VLESS UDP runtime should keep protocol flow I/O inside the pump task while protocols/vless owns packet helpers"
     );
     for forbidden in [
         "VlessUdpFlowStream",
@@ -2306,6 +2317,13 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         .expect("read zero-transport vmess_transport source");
     let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read protocols/vmess/src/udp.rs");
+    let sender_model = runtime
+        .split("pub(super) struct VmessFlowSender")
+        .nth(1)
+        .expect("VmessFlowSender should exist")
+        .split("struct VmessFlowSend")
+        .next()
+        .expect("VmessFlowSend should follow VmessFlowSender");
 
     for forbidden in [
         "broadcast::Sender<vmess::VmessUdpPacket>",
@@ -2337,12 +2355,16 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vmess::establish_udp_flow_stream")
             && !runtime.contains("vmess::encode_udp_flow_initial_packet")
             && !runtime.contains("vmess::VmessUdpFlowIo")
-            && runtime.contains("mpsc::channel::<UdpFlowPacket>")
+            && runtime.contains("struct VmessFlowSend")
+            && runtime.contains("mpsc::channel::<VmessFlowSend>")
+            && runtime.contains("result_tx: oneshot::Sender<Result<usize, EngineError>>")
+            && !sender_model.contains("vmess::VmessEstablishedUdpFlow")
+            && !runtime.contains("encoded_packet_len")
             && runtime.contains("broadcast::channel::<VmessFlowResponse>")
             && runtime.contains("tokio::spawn")
             && model.contains("VmessFlowSender")
             && !model.contains("vmess::VmessUdpFlowSender"),
-        "VMess UDP runtime should own task/channel glue while protocols/vmess owns packet helpers"
+        "VMess UDP runtime should keep protocol flow I/O inside the pump task while protocols/vmess owns packet helpers"
     );
     for forbidden in [
         "VmessUdpFlowStream",

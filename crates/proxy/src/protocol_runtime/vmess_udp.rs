@@ -9,7 +9,7 @@ pub(crate) mod model;
 use std::collections::HashMap;
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinSet;
 use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
@@ -24,8 +24,12 @@ type VmessResponseSender = broadcast::Sender<VmessFlowResponse>;
 
 #[derive(Clone)]
 pub(super) struct VmessFlowSender {
-    send_tx: mpsc::Sender<UdpFlowPacket>,
-    io: vmess::VmessEstablishedUdpFlow,
+    send_tx: mpsc::Sender<VmessFlowSend>,
+}
+
+struct VmessFlowSend {
+    packet: UdpFlowPacket,
+    result_tx: oneshot::Sender<Result<usize, EngineError>>,
 }
 
 impl VmessFlowSender {
@@ -36,12 +40,14 @@ impl VmessFlowSender {
         payload: &[u8],
     ) -> Result<usize, EngineError> {
         let packet = UdpFlowPacket::from_parts(target, port, payload);
-        let packet_len = self.io.encoded_packet_len(target, port, payload)?;
+        let (result_tx, result_rx) = oneshot::channel();
         self.send_tx
-            .send(packet)
+            .send(VmessFlowSend { packet, result_tx })
             .await
             .map_err(|_| EngineError::Io(std::io::Error::other("vmess udp flow closed")))?;
-        Ok(packet_len)
+        result_rx
+            .await
+            .map_err(|_| EngineError::Io(std::io::Error::other("vmess udp flow closed")))?
     }
 }
 
@@ -111,11 +117,13 @@ async fn establish_vmess_udp_upstream(
                 },
             )
             .await?;
-        let initial_packet_len = flow_io.encoded_packet_len(
-            &initial_packet.target,
-            initial_packet.port,
-            &initial_packet.payload,
-        )?;
+        let initial_packet_len = flow_io
+            .initial_packet(
+                &initial_packet.target,
+                initial_packet.port,
+                &initial_packet.payload,
+            )?
+            .len();
         let flow = spawn_udp_flow(mux_stream, Some(initial_packet), flow_io);
         request
             .proxy
@@ -313,14 +321,11 @@ fn spawn_udp_flow<S>(
 where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
 {
-    let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
+    let (send_tx, send_rx) = mpsc::channel::<VmessFlowSend>(32);
     let (responses, _) = broadcast::channel::<VmessFlowResponse>(32);
     spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone(), flow_io);
     VmessFlowHandle {
-        sender: VmessFlowSender {
-            send_tx,
-            io: flow_io,
-        },
+        sender: VmessFlowSender { send_tx },
         responses,
     }
 }
@@ -328,7 +333,7 @@ where
 fn spawn_udp_flow_task<S>(
     mut stream: S,
     initial_packet: Option<UdpFlowPacket>,
-    mut send_rx: mpsc::Receiver<UdpFlowPacket>,
+    mut send_rx: mpsc::Receiver<VmessFlowSend>,
     responses: VmessResponseSender,
     flow_io: vmess::VmessEstablishedUdpFlow,
 ) where
@@ -350,17 +355,19 @@ fn spawn_udp_flow_task<S>(
             tokio::select! {
                 to_send = send_rx.recv() => {
                     match to_send {
-                        Some(packet) => {
-                            if flow_io
+                        Some(request) => {
+                            let result = flow_io
                                 .write_packet_tokio(
                                     &mut stream,
-                                    &packet.target,
-                                    packet.port,
-                                    &packet.payload,
+                                    &request.packet.target,
+                                    request.packet.port,
+                                    &request.packet.payload,
                                 )
                                 .await
-                                .is_err()
-                            {
+                                .map_err(EngineError::from);
+                            let should_break = result.is_err();
+                            let _ = request.result_tx.send(result);
+                            if should_break {
                                 break;
                             }
                         }
