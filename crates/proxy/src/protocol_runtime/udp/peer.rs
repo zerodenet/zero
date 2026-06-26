@@ -6,8 +6,7 @@ pub(crate) type UdpPeerEndpoint<'a> = OutboundEndpoint<'a>;
 #[cfg(feature = "shadowsocks")]
 pub(crate) struct SsUdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
-    pub(crate) password: &'a str,
-    pub(crate) cipher: shadowsocks::CipherKind,
+    pub(crate) cache_key: &'a str,
 }
 
 /// Hysteria2 UDP peer parameters.

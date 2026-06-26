@@ -1,4 +1,5 @@
-use zero_core::Session;
+use zero_core::{Address, Error, Session};
+use zero_traits::DatagramCodec;
 
 use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -14,6 +15,7 @@ pub(crate) struct ShadowsocksDatagramSend<'a> {
     pub(crate) password: &'a str,
     pub(crate) datagram_cache_key: String,
     pub(crate) cipher: shadowsocks::CipherKind,
+    pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) payload: &'a [u8],
 }
 
@@ -30,8 +32,8 @@ impl UdpDispatch {
                     session: request.session,
                     server: request.server,
                     port: request.port,
-                    password: request.password,
-                    cipher: request.cipher,
+                    cache_key: request.datagram_cache_key,
+                    codec: request.codec.clone(),
                     payload: request.payload,
                 },
             )
@@ -52,6 +54,7 @@ impl UdpDispatch {
                 password: request.password,
                 datagram_cache_key: request.datagram_cache_key.clone(),
                 cipher: request.cipher,
+                codec: request.codec.clone(),
                 payload: request.payload,
             })
             .await?;

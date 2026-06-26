@@ -5662,11 +5662,17 @@ fn h2_udp_establish_logic_lives_outside_manager() {
 fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
     let codec = read("src/protocol_runtime/udp/ss_manager/codec.rs");
+    let adapter = read("src/adapters/shadowsocks/udp.rs");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
+            .expect("read shadowsocks protocol outbound source");
 
     for forbidden in [
         "UdpDatagramFraming",
         "ShadowsocksUdpPacketTarget",
         "ShadowsocksUdpDecodeContext",
+        "ShadowsocksUdpPacket",
+        "shadowsocks::",
     ] {
         assert!(
             !manager.contains(forbidden),
@@ -5674,18 +5680,21 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
         );
         assert!(
             !codec.contains(forbidden),
-            "ss_manager/codec.rs should delegate Shadowsocks datagram framing to protocols/shadowsocks helpers; found `{forbidden}`"
+            "ss_manager/codec.rs should consume an adapter-provided DatagramCodec instead of naming protocol framing; found `{forbidden}`"
         );
     }
     assert!(
-        !codec.contains("shadowsocks::encode_udp_datagram")
-            && !codec.contains("shadowsocks::decode_udp_datagram"),
-        "Shadowsocks UDP manager codec should use flow-specific protocol helpers instead of generic datagram primitives"
+        codec.contains("dyn DatagramCodec<Address, Error = Error>")
+            && codec.contains(".encode(")
+            && codec.contains(".decode("),
+        "Shadowsocks UDP manager codec should encode/decode through a neutral DatagramCodec object"
     );
     assert!(
-        codec.contains("shadowsocks::encode_udp_flow_packet")
-            && codec.contains("shadowsocks::decode_udp_flow_packet"),
-        "Shadowsocks UDP datagram codec should delegate encode/decode to flow-specific protocols/shadowsocks helpers"
+        adapter.contains("shadowsocks::udp_flow_codec")
+            && protocol_outbound.contains("pub fn udp_flow_codec(")
+            && protocol_outbound
+                .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec"),
+        "Shadowsocks adapter should request the protocol-owned UDP flow codec"
     );
 }
 
@@ -5768,20 +5777,36 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         adapter.contains("CipherKind::from_str"),
         "Shadowsocks UDP adapter should parse ordinary UDP flow cipher config"
     );
-    assert!(
-        !manager.contains("CipherKind::from_str"),
-        "Shadowsocks UDP manager should receive an adapter-parsed CipherKind"
-    );
+    for source in [&manager, &model] {
+        assert!(
+            !source.contains("CipherKind::from_str")
+                && !source.contains("cipher: shadowsocks::CipherKind")
+                && !source.contains("password: &'a str"),
+            "Shadowsocks UDP manager state should receive adapter-built codec/cache identity instead of raw cipher/password details"
+        );
+    }
     let shadowsocks_flow_model = flows
         .split("#[cfg(feature = \"mieru\")]")
         .next()
         .expect("Shadowsocks UDP flow model should appear before Mieru");
-    for source in [shadowsocks_flow_model, &peer, &model] {
-        assert!(
-            !source.contains("cipher: &'a str") && source.contains("cipher: shadowsocks::CipherKind"),
-            "ordinary Shadowsocks UDP flow models should carry CipherKind instead of raw cipher strings"
-        );
-    }
+    let shadowsocks_peer_model = peer
+        .split("/// Hysteria2 UDP peer parameters.")
+        .next()
+        .expect("Shadowsocks UDP peer model should appear before Hysteria2");
+    assert!(
+        !shadowsocks_flow_model.contains("cipher: shadowsocks::CipherKind")
+            && !shadowsocks_flow_model.contains("password: &'a str")
+            && shadowsocks_flow_model.contains("cache_key: String")
+            && shadowsocks_flow_model
+                .contains("codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>"),
+        "ordinary Shadowsocks UDP flow model should carry opaque cache identity and a protocol-built codec"
+    );
+    assert!(
+        !shadowsocks_peer_model.contains("cipher: shadowsocks::CipherKind")
+            && !shadowsocks_peer_model.contains("password: &'a str")
+            && shadowsocks_peer_model.contains("cache_key: &'a str"),
+        "ordinary Shadowsocks UDP peer model should carry only opaque cache identity"
+    );
 }
 
 #[test]

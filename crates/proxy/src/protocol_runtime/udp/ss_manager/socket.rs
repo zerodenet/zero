@@ -3,6 +3,8 @@ use super::codec;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use tracing::{debug, warn};
+use zero_core::{Address, Error};
+use zero_traits::DatagramCodec;
 
 pub(super) fn bind_for_target(target_addr: SocketAddr) -> Arc<tokio::net::UdpSocket> {
     let bind_addr = match target_addr {
@@ -18,17 +20,15 @@ pub(super) fn bind_for_target(target_addr: SocketAddr) -> Arc<tokio::net::UdpSoc
 
 pub(super) fn spawn_recv_loop(
     socket: Arc<tokio::net::UdpSocket>,
-    cipher: shadowsocks::CipherKind,
-    password: String,
+    codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
     waiters: BridgeWaiters,
 ) {
-    tokio::spawn(recv_loop(socket, cipher, password, waiters));
+    tokio::spawn(recv_loop(socket, codec, waiters));
 }
 
 async fn recv_loop(
     socket: Arc<tokio::net::UdpSocket>,
-    cipher: shadowsocks::CipherKind,
-    password: String,
+    codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
     waiters: BridgeWaiters,
 ) {
     let mut buf = vec![0u8; 4096];
@@ -41,7 +41,7 @@ async fn recv_loop(
             }
         };
         let packet = &buf[..n];
-        let Ok(decoded) = codec::decode_packet(packet, cipher, &password) else {
+        let Ok((target, port, payload)) = codec::decode_packet(codec.as_ref(), packet) else {
             warn!(
                 upstream = %sender,
                 bytes = n,
@@ -51,15 +51,15 @@ async fn recv_loop(
         };
         debug!(
             upstream = %sender,
-            target = ?decoded.target,
-            port = decoded.port,
-            bytes = decoded.payload.len(),
+            target = ?target,
+            port = port,
+            bytes = payload.len(),
             "decoded shadowsocks udp response"
         );
-        if !waiters.deliver(decoded.target.clone(), decoded.port, decoded.payload) {
+        if !waiters.deliver(target.clone(), port, payload) {
             warn!(
-                target = ?decoded.target,
-                port = decoded.port,
+                target = ?target,
+                port = port,
                 "no waiter for shadowsocks udp response"
             );
         }

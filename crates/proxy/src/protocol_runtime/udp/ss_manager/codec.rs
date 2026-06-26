@@ -1,22 +1,27 @@
 use zero_core::Address;
+use zero_core::Error;
 use zero_engine::EngineError;
+use zero_traits::DatagramCodec;
 
 pub(super) fn encode_packet(
+    codec: &dyn DatagramCodec<Address, Error = Error>,
     target: &Address,
     port: u16,
     payload: &[u8],
-    cipher: shadowsocks::CipherKind,
-    password: &str,
 ) -> Result<Vec<u8>, EngineError> {
-    shadowsocks::encode_udp_flow_packet(target, port, payload, cipher, password.as_bytes())
-        .map_err(|error| EngineError::Io(std::io::Error::other(error)))
+    codec
+        .encode(target, port, payload)
+        .map_err(EngineError::from)
 }
 
 pub(super) fn decode_packet(
+    codec: &dyn DatagramCodec<Address, Error = Error>,
     payload: &[u8],
-    cipher: shadowsocks::CipherKind,
-    password: &str,
-) -> Result<shadowsocks::ShadowsocksUdpPacket, EngineError> {
-    shadowsocks::decode_udp_flow_packet(payload, cipher, password.as_bytes())
-        .map_err(|error| EngineError::Io(std::io::Error::other(error)))
+) -> Result<(Address, u16, Vec<u8>), EngineError> {
+    codec.decode(payload).ok_or_else(|| {
+        EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "failed to decode Shadowsocks UDP flow datagram",
+        ))
+    })
 }

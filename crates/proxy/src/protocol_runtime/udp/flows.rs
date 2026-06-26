@@ -8,8 +8,8 @@ pub(crate) struct ShadowsocksUdpFlow<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) password: &'a str,
-    pub(crate) cipher: shadowsocks::CipherKind,
+    pub(crate) cache_key: String,
+    pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) payload: &'a [u8],
 }
 

@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use zero_core::{Address, Error};
 use zero_engine::EngineError;
+use zero_traits::DatagramCodec;
 
 use super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use super::FlowFailure;
@@ -32,6 +34,7 @@ impl SsChainManager {
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
         peer: SsUdpPeer<'_>,
+        flow_codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let target_addr = proxy
@@ -54,17 +57,16 @@ impl SsChainManager {
             &mut self.upstreams,
             peer.endpoint.server,
             peer.endpoint.port,
-            peer.password,
-            peer.cipher,
+            peer.cache_key,
+            flow_codec,
             target_addr,
         );
 
         let packet = codec::encode_packet(
+            entry.codec.as_ref(),
             packet_ref.target,
             packet_ref.port,
             packet_ref.payload,
-            peer.cipher,
-            peer.password,
         )
         .map_err(|error| FlowFailure {
             stage: "ss_encode",
@@ -102,9 +104,9 @@ impl SsChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                password: request.password,
-                cipher: request.cipher,
+                cache_key: &request.cache_key,
             },
+            request.codec,
             UdpPacketRef {
                 target: request.target,
                 port: request.target_port,

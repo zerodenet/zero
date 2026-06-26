@@ -147,6 +147,10 @@ impl ShadowsocksAdapter {
                     tag, server, *port, cipher, password,
                 ),
                 cipher: cipher_kind,
+                codec: Arc::new(shadowsocks::udp_flow_codec(
+                    cipher_kind,
+                    password.as_bytes(),
+                )),
                 payload,
             })
             .await

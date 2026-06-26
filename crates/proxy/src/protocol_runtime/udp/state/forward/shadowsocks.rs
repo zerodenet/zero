@@ -10,6 +10,7 @@ pub(super) struct ExistingFlow<'a> {
     pub(super) server: &'a str,
     pub(super) port: u16,
     pub(super) password: &'a str,
+    pub(super) datagram_cache_key: &'a str,
     pub(super) cipher_kind: shadowsocks::CipherKind,
     pub(super) payload: &'a [u8],
 }
@@ -29,8 +30,11 @@ pub(super) async fn forward(
             proxy,
             server: existing.server,
             port: existing.port,
-            password: existing.password,
-            cipher: existing.cipher_kind,
+            cache_key: existing.datagram_cache_key.to_owned(),
+            codec: std::sync::Arc::new(shadowsocks::udp_flow_codec(
+                existing.cipher_kind,
+                existing.password.as_bytes(),
+            )),
             target: &flow.session.target,
             target_port: flow.session.port,
             payload: existing.payload,
@@ -48,8 +52,8 @@ pub(super) async fn forward_if_matches(
 ) -> Option<Result<usize, FlowFailure>> {
     let ProtocolUdpFlowSnapshot::Shadowsocks {
         password,
+        datagram_cache_key,
         cipher_kind,
-        ..
     } = snapshot
     else {
         return None;
@@ -70,6 +74,7 @@ pub(super) async fn forward_if_matches(
                 server: upstream.server,
                 port: upstream.port,
                 password,
+                datagram_cache_key,
                 cipher_kind: *cipher_kind,
                 payload,
             },

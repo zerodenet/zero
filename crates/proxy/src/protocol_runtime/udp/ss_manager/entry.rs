@@ -5,16 +5,18 @@ use std::sync::Arc;
 use super::bridge::BridgeWaiters;
 use super::model::{SsKey, SsUpstream};
 use super::socket;
+use zero_core::{Address, Error};
+use zero_traits::DatagramCodec;
 
 pub(super) fn ensure(
     upstreams: &mut HashMap<SsKey, Arc<SsUpstream>>,
     server: &str,
     port: u16,
-    password: &str,
-    cipher_kind: shadowsocks::CipherKind,
+    cache_key: &str,
+    codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
     target_addr: SocketAddr,
 ) -> Arc<SsUpstream> {
-    let key = SsKey::new(server, port, cipher_kind, password);
+    let key = SsKey::new(server, port, cache_key);
     if let Some(entry) = upstreams.get(&key) {
         return entry.clone();
     }
@@ -24,14 +26,10 @@ pub(super) fn ensure(
     let entry = Arc::new(SsUpstream {
         socket: socket.clone(),
         waiters,
+        codec: codec.clone(),
     });
     upstreams.insert(key, entry.clone());
 
-    socket::spawn_recv_loop(
-        socket,
-        cipher_kind,
-        password.to_owned(),
-        entry.waiters.clone_handle(),
-    );
+    socket::spawn_recv_loop(socket, codec, entry.waiters.clone_handle());
     entry
 }
