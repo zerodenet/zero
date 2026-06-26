@@ -6158,8 +6158,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         !carrier_snapshot.contains("ShadowsocksDatagramCodec")
             && !carrier_snapshot.contains("shadowsocks::udp_datagram_codec")
             && !adapter.contains("shadowsocks::udp_datagram_codec")
-            && adapter.contains("resume.codec()"),
-        "Shadowsocks adapter should request protocol-built resume codecs and pass them through neutral packet-path constructors"
+            && !adapter.contains("resume.codec()")
+            && adapter.contains("resume.packet_path_codec()"),
+        "Shadowsocks adapter should request protocol-built packet-path codecs through explicit protocol packet-path helpers"
     );
     assert!(
         !adapter.contains("shadowsocks::udp_flow_codec")
@@ -6190,12 +6191,15 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     );
     assert!(
         !adapter.contains("shadowsocks::udp_cache_key")
-            && adapter.contains("resume.cache_key().to_owned()"),
-        "Shadowsocks adapter should receive opaque datagram cache keys from protocols/shadowsocks resume config"
+            && !adapter.contains("resume.cache_key()")
+            && adapter.contains("resume.packet_path_cache_key()"),
+        "Shadowsocks adapter should receive opaque packet-path cache keys from protocols/shadowsocks resume config"
     );
     assert!(
-        protocol_outbound.contains("fn udp_cache_key("),
-        "protocols/shadowsocks should own Shadowsocks cache identity construction"
+        protocol_outbound.contains("fn udp_cache_key(")
+            && protocol_outbound.contains("pub fn packet_path_cache_key(&self)")
+            && protocol_outbound.contains("pub fn packet_path_codec(&self)"),
+        "protocols/shadowsocks should own Shadowsocks cache identity and packet-path codec construction"
     );
     for source in [
         &traits,

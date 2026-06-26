@@ -432,6 +432,14 @@ impl ShadowsocksUdpFlowResume {
         }
     }
 
+    pub fn packet_path_cache_key(&self) -> alloc::string::String {
+        self.cache_key.clone()
+    }
+
+    pub fn packet_path_codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        self.codec()
+    }
+
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec(self.cipher, &self.password)
     }
