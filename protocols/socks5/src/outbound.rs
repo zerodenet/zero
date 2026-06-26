@@ -1,3 +1,4 @@
+use alloc::borrow::ToOwned;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -18,6 +19,29 @@ pub struct Socks5Outbound;
 pub struct Socks5OutboundAuth<'a> {
     pub username: &'a str,
     pub password: &'a str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpFlowResume {
+    username: Option<alloc::string::String>,
+    password: Option<alloc::string::String>,
+}
+
+impl Socks5UdpFlowResume {
+    pub fn new(username: Option<&str>, password: Option<&str>) -> Self {
+        Self {
+            username: username.map(ToOwned::to_owned),
+            password: password.map(ToOwned::to_owned),
+        }
+    }
+
+    pub fn username(&self) -> Option<&str> {
+        self.username.as_deref()
+    }
+
+    pub fn password(&self) -> Option<&str> {
+        self.password.as_deref()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

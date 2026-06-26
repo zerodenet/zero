@@ -1,16 +1,11 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProtocolUdpFlowSnapshot {
-    Socks5 {
-        username: Option<String>,
-        password: Option<String>,
-    },
-    Managed {
-        resume: ProtocolUdpFlowResume,
-    },
+    Managed { resume: ProtocolUdpFlowResume },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProtocolUdpFlowResume {
+    Socks5(socks5::Socks5UdpFlowResume),
     #[cfg(feature = "shadowsocks")]
     Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume),
     #[cfg(feature = "hysteria2")]
@@ -28,9 +23,10 @@ pub(crate) struct Socks5RelayAuth<'a> {
 
 impl ProtocolUdpFlowSnapshot {
     pub(crate) fn socks5(username: Option<&str>, password: Option<&str>) -> Self {
-        Self::Socks5 {
-            username: username.map(ToString::to_string),
-            password: password.map(ToString::to_string),
+        Self::Managed {
+            resume: ProtocolUdpFlowResume::Socks5(socks5::Socks5UdpFlowResume::new(
+                username, password,
+            )),
         }
     }
 
@@ -64,9 +60,11 @@ impl ProtocolUdpFlowSnapshot {
 
     pub(crate) fn socks5_relay_auth(&self) -> Option<Socks5RelayAuth<'_>> {
         match self {
-            Self::Socks5 { username, password } => Some(Socks5RelayAuth {
-                username: username.as_deref(),
-                password: password.as_deref(),
+            Self::Managed {
+                resume: ProtocolUdpFlowResume::Socks5(resume),
+            } => Some(Socks5RelayAuth {
+                username: resume.username(),
+                password: resume.password(),
             }),
             Self::Managed { .. } => None,
         }

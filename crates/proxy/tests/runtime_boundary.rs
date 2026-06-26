@@ -2935,14 +2935,14 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         .next()
         .expect("ProtocolUdpFlowResume should follow ProtocolUdpFlowSnapshot");
     assert!(
-        snapshot_enum.contains("Socks5 {")
-            && snapshot_enum.contains("Managed {")
+        snapshot_enum.contains("Managed {")
             && snapshot_enum.contains("resume: ProtocolUdpFlowResume")
+            && !snapshot_enum.contains("Socks5")
             && !snapshot_enum.contains("Shadowsocks")
             && !snapshot_enum.contains("Hysteria2")
             && !snapshot_enum.contains("Trojan")
             && !snapshot_enum.contains("Mieru"),
-        "protocol UDP flow snapshot should expose only Socks5 auth and a unified managed resume wrapper"
+        "protocol UDP flow snapshot should expose only the unified managed resume wrapper"
     );
     let resume_enum = snapshot
         .split("pub(crate) enum ProtocolUdpFlowResume")
@@ -2952,11 +2952,14 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         .next()
         .expect("Socks5RelayAuth should follow ProtocolUdpFlowResume");
     assert!(
-        resume_enum.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
+        resume_enum.contains("Socks5(socks5::Socks5UdpFlowResume)")
+            && resume_enum.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
             && resume_enum.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
             && resume_enum.contains("Trojan(trojan::TrojanUdpFlowResume)")
             && resume_enum.contains("Mieru(mieru::MieruUdpFlowResume)")
+            && !resume_enum.contains("username: Option<String>")
             && !resume_enum.contains("password: String")
+            && !resume_enum.contains("password: Option<String>")
             && !resume_enum.contains("client_fingerprint: Option<String>")
             && !resume_enum.contains("relay_chain: bool")
             && !resume_enum.contains("cipher_kind: shadowsocks::CipherKind"),
@@ -6357,6 +6360,11 @@ fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
             "protocol_runtime::udp::flow_snapshot should own protocol snapshot constructor `{required}`"
         );
     }
+    assert!(
+        snapshot.contains("ProtocolUdpFlowResume::Socks5(socks5::Socks5UdpFlowResume::new(")
+            && snapshot.contains("Self::Managed {"),
+        "SOCKS5 UDP snapshot constructor should use the unified ProtocolUdpFlowResume wrapper"
+    );
 }
 
 #[test]

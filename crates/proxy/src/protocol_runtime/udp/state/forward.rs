@@ -11,7 +11,6 @@ mod mieru;
 mod shadowsocks;
 #[cfg(feature = "trojan")]
 mod trojan;
-use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
@@ -38,7 +37,7 @@ impl ProtocolUdpState {
             ));
         };
 
-        if let ProtocolUdpFlowSnapshot::Socks5 { .. } = snapshot {
+        if snapshot.socks5_relay_auth().is_some() {
             return Err(protocol_forward_unavailable(
                 "udp_protocol_forward",
                 "SOCKS5 relay flows are handled by generic UDP dispatch",
