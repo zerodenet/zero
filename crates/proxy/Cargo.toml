@@ -36,6 +36,7 @@ hysteria2 = [
     "zero-transport/quic",
     "dep:hysteria2",
     "hysteria2/crypto",
+    "hysteria2/runtime",
 ]
 quic_packet_path = ["dep:quinn"]
 shadowsocks = [

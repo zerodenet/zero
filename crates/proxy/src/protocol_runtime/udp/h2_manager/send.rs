@@ -16,16 +16,18 @@ impl H2ChainManager {
         let key = H2Key::from_flow_key(peer.flow_key.clone());
 
         if let Some(entry) = self.upstreams.get(&key) {
-            let packet = zero_core::UdpFlowPacket::from_parts(
-                packet_ref.target,
-                packet_ref.port,
-                packet_ref.payload,
-            );
-            let _ = entry.send_tx.send(packet).await;
-            return Ok(sent);
+            return entry
+                .sender
+                .send(packet_ref.target, packet_ref.port, packet_ref.payload)
+                .await
+                .map_err(|error| FlowFailure {
+                    stage: "h2_send",
+                    error: zero_engine::EngineError::Io(std::io::Error::other(format!("{error}"))),
+                    upstream: Some(peer.endpoint.upstream()),
+                });
         }
 
-        let send_tx = establish::upstream(
+        let sender = establish::upstream(
             ctx.chain_tasks,
             ctx.session_id,
             &peer,
@@ -42,7 +44,7 @@ impl H2ChainManager {
         self.upstreams.insert(
             key,
             H2Entry {
-                send_tx: send_tx.clone(),
+                sender: sender.clone(),
             },
         );
 
