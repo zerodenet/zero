@@ -2617,6 +2617,42 @@ fn protocol_runtime_udp_root_does_not_reexport_internal_managed_flow_models() {
 }
 
 #[test]
+fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
+    let stream = read("src/protocol_runtime/udp/mieru_manager/stream.rs");
+    let protocol = manifest_dir()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root")
+        .join("protocols/mieru/src/outbound.rs");
+    let protocol = std::fs::read_to_string(protocol).expect("read mieru outbound protocol source");
+
+    for forbidden in [
+        "mieru::udp_flow_packet",
+        ".encode_with(&mut flow_io)",
+        "flow_io.push_encrypted_response",
+        "flow_io.next_packet",
+    ] {
+        assert!(
+            !stream.contains(forbidden),
+            "Mieru UDP stream pump should delegate protocol encode/decode detail to MieruUdpFlowIo; found `{forbidden}`"
+        );
+    }
+    for required in [
+        "flow_io.write_flow_packet",
+        "flow_io.decode_encrypted_response",
+    ] {
+        assert!(
+            stream.contains(required),
+            "Mieru UDP stream pump should call protocol flow API `{required}`"
+        );
+    }
+    assert!(
+        protocol.contains("pub fn decode_encrypted_response"),
+        "Mieru protocol crate should own encrypted response buffering and UDP packet decode"
+    );
+}
+
+#[test]
 fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     let root = read("src/inbound/vmess/mux.rs");
     let model = read("src/inbound/vmess/model.rs");
@@ -6600,13 +6636,16 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             && stream.contains("tokio::sync::broadcast::channel::<bridge::ResponseItem>")
             && stream.contains("tokio::spawn")
             && stream.contains("mieru::MieruUdpFlowIo::establish_with_resume")
-            && stream.contains("packet.encode_with(&mut flow_io)")
-            && stream.contains("flow_io.push_encrypted_response")
-            && stream.contains("flow_io.next_packet()")
+            && stream.contains("flow_io.write_flow_packet")
+            && stream.contains("flow_io.decode_encrypted_response")
+            && !stream.contains("packet.encode_with(&mut flow_io)")
+            && !stream.contains("flow_io.push_encrypted_response")
+            && !stream.contains("flow_io.next_packet()")
             && protocol_outbound.contains("pub async fn write_packet")
             && protocol_outbound.contains("pub async fn read_packets")
             && protocol_outbound.contains("pub async fn write_flow_packet")
-            && protocol_outbound.contains("pub async fn read_flow_packets"),
+            && protocol_outbound.contains("pub async fn read_flow_packets")
+            && protocol_outbound.contains("pub fn decode_encrypted_response"),
         "Mieru UDP stream flow task should stay out of zero-transport and live in proxy stream glue"
     );
 }

@@ -1,6 +1,6 @@
 use super::bridge;
 use crate::transport::TcpRelayStream;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use zero_core::{Address, UdpFlowPacket};
 use zero_engine::EngineError;
@@ -69,15 +69,12 @@ fn spawn_udp_flow_task(
                 to_send = send_rx.recv() => {
                     match to_send {
                         Some(packet) => {
-                            let packet = mieru::udp_flow_packet(&packet.target, packet.port, &packet.payload);
-                            let encrypted = match packet.encode_with(&mut flow_io) {
-                                Ok(encrypted) => encrypted,
-                                Err(_) => break,
-                            };
-                            if stream.write_all(&encrypted).await.is_err() {
-                                break;
-                            }
-                            if stream.flush().await.is_err() {
+                            if flow_io.write_flow_packet(
+                                &mut stream,
+                                &packet.target,
+                                packet.port,
+                                &packet.payload,
+                            ).await.is_err() {
                                 break;
                             }
                         }
@@ -88,15 +85,12 @@ fn spawn_udp_flow_task(
                     match read {
                         Ok(0) => break,
                         Ok(n) => {
-                            flow_io.push_encrypted_response(&scratch[..n]);
-                            loop {
-                                match flow_io.next_packet() {
-                                    Ok(Some(packet)) => {
-                                        let _ = responses.send(packet.into_parts());
-                                    }
-                                    Ok(None) => break,
-                                    Err(_) => return,
-                                }
+                            let packets = match flow_io.decode_encrypted_response(&scratch[..n]) {
+                                Ok(packets) => packets,
+                                Err(_) => return,
+                            };
+                            for packet in packets {
+                                let _ = responses.send(packet.into_parts());
                             }
                         }
                         Err(_) => break,

@@ -122,6 +122,20 @@ impl MieruUdpFlowIo {
         }
     }
 
+    pub fn decode_encrypted_response(
+        &mut self,
+        data: &[u8],
+    ) -> Result<Vec<MieruUdpFlowPacket>, Error> {
+        self.push_encrypted_response(data);
+
+        let mut packets = Vec::new();
+        while let Some(packet) = self.next_packet()? {
+            packets.push(packet);
+        }
+
+        Ok(packets)
+    }
+
     pub async fn write_packet<S>(
         &mut self,
         stream: &mut S,
