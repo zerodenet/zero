@@ -40,6 +40,7 @@ hysteria2 = [
 quic_packet_path = ["dep:quinn"]
 shadowsocks = [
     "dep:ring",
+    "zero-transport/shadowsocks",
     "dep:shadowsocks",
     "shadowsocks/crypto",
     "shadowsocks/blake3",

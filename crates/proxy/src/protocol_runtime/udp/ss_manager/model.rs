@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use zero_core::Address;
+use zero_transport::shadowsocks_transport::ShadowsocksUdpSocketFlow;
 
 use super::bridge::BridgeWaiters;
 use crate::runtime::Proxy;
@@ -15,9 +16,8 @@ impl SsKey {
 }
 
 pub(super) struct SsUpstream {
-    pub(super) socket: Arc<tokio::net::UdpSocket>,
+    pub(super) flow: Arc<ShadowsocksUdpSocketFlow>,
     pub(super) waiters: BridgeWaiters,
-    pub(super) resume: shadowsocks::ShadowsocksUdpFlowResume,
 }
 
 pub(crate) struct SsSendExisting<'a> {

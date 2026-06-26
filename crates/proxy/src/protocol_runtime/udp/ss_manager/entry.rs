@@ -4,28 +4,42 @@ use std::sync::Arc;
 
 use super::bridge::BridgeWaiters;
 use super::model::{SsKey, SsUpstream};
-use super::socket;
+use zero_engine::EngineError;
+use zero_transport::shadowsocks_transport;
 
-pub(super) fn ensure(
+pub(super) async fn ensure(
     upstreams: &mut HashMap<SsKey, Arc<SsUpstream>>,
     leaf_key: shadowsocks::ShadowsocksUdpLeafKey,
     resume: shadowsocks::ShadowsocksUdpFlowResume,
     target_addr: SocketAddr,
-) -> Arc<SsUpstream> {
+) -> Result<Arc<SsUpstream>, EngineError> {
     let key = SsKey::new(leaf_key);
     if let Some(entry) = upstreams.get(&key) {
-        return entry.clone();
+        return Ok(entry.clone());
     }
 
-    let socket = socket::bind_for_target(target_addr);
+    let flow = Arc::new(
+        shadowsocks_transport::establish_shadowsocks_udp_socket_flow(target_addr, resume).await?,
+    );
     let waiters = BridgeWaiters::new();
     let entry = Arc::new(SsUpstream {
-        socket: socket.clone(),
+        flow: flow.clone(),
         waiters,
-        resume,
     });
     upstreams.insert(key, entry.clone());
 
-    socket::spawn_recv_loop(socket, entry.resume.clone(), entry.waiters.clone_handle());
-    entry
+    bridge_responses(flow, entry.waiters.clone_handle());
+    Ok(entry)
+}
+
+fn bridge_responses(
+    flow: Arc<shadowsocks_transport::ShadowsocksUdpSocketFlow>,
+    waiters: BridgeWaiters,
+) {
+    tokio::spawn(async move {
+        let mut recv_rx = flow.subscribe();
+        while let Ok((target, port, payload)) = recv_rx.recv().await {
+            waiters.deliver(target, port, payload);
+        }
+    });
 }

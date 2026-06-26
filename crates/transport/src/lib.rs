@@ -14,6 +14,8 @@ pub mod hysteria2_quic;
 pub mod mieru_transport;
 #[cfg(feature = "quic")]
 pub mod quic;
+#[cfg(feature = "shadowsocks")]
+pub mod shadowsocks_transport;
 #[cfg(feature = "split_http")]
 pub mod split_http;
 #[cfg(feature = "tls")]

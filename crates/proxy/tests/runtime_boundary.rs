@@ -6326,7 +6326,10 @@ fn h2_udp_establish_logic_lives_outside_manager() {
 fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
     let adapter = read("src/adapters/shadowsocks/udp.rs");
-    let socket = read("src/protocol_runtime/udp/ss_manager/socket.rs");
+    let entry = read("src/protocol_runtime/udp/ss_manager/entry.rs");
+    let transport =
+        fs::read_to_string(repo_root().join("crates/transport/src/shadowsocks_transport.rs"))
+            .expect("read shadowsocks transport source");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
@@ -6342,8 +6345,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             "ss_manager.rs should not own Shadowsocks datagram codec details; found `{forbidden}`"
         );
         assert!(
-            !socket.contains(forbidden),
-            "ss_manager/socket.rs should delegate Shadowsocks packet codec details to protocols/shadowsocks; found `{forbidden}`"
+            !entry.contains(forbidden),
+            "ss_manager entry glue should delegate Shadowsocks packet codec details outside zero-proxy; found `{forbidden}`"
         );
     }
     assert!(
@@ -6366,10 +6369,19 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     );
     for forbidden in [".encode_packet(", ".decode_packet("] {
         assert!(
-            !manager.contains(forbidden) && !socket.contains(forbidden),
+            !manager.contains(forbidden) && !entry.contains(forbidden),
             "Shadowsocks UDP manager glue should not call raw protocol packet codec operations directly; found `{forbidden}`"
         );
     }
+    assert!(
+        transport.contains("packet.encode_with(&self.resume)")
+            && transport.contains("resume.decode_flow_packet(datagram)")
+            && !manager.contains(".encode_with(")
+            && !entry.contains(".encode_with(")
+            && !manager.contains(".decode_flow_packet(")
+            && !entry.contains(".decode_flow_packet("),
+        "Shadowsocks UDP flow encode/decode should be owned by zero-transport, not ss_manager glue"
+    );
 }
 
 #[test]
@@ -6397,7 +6409,9 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
 #[test]
 fn shadowsocks_udp_socket_runtime_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
-    let socket = manifest_dir().join("src/protocol_runtime/udp/ss_manager/socket.rs");
+    let entry = read("src/protocol_runtime/udp/ss_manager/entry.rs");
+    let transport_path = repo_root().join("crates/transport/src/shadowsocks_transport.rs");
+    let transport = fs::read_to_string(&transport_path).expect("read shadowsocks transport source");
 
     for forbidden in [
         "UdpSocket::bind",
@@ -6407,13 +6421,22 @@ fn shadowsocks_udp_socket_runtime_lives_outside_manager() {
         "shadowsocks udp recv loop stopped",
     ] {
         assert!(
-            !manager.contains(forbidden),
-            "ss_manager.rs should keep socket runtime details in ss_manager/socket.rs; found `{forbidden}`"
+            !manager.contains(forbidden) && !entry.contains(forbidden),
+            "ss_manager glue should keep socket runtime details outside zero-proxy; found `{forbidden}`"
         );
     }
     assert!(
-        socket.exists(),
-        "Shadowsocks UDP socket runtime should live in ss_manager/socket.rs"
+        !manifest_dir()
+            .join("src/protocol_runtime/udp/ss_manager/socket.rs")
+            .exists(),
+        "Shadowsocks UDP socket runtime should not live in zero-proxy ss_manager/socket.rs"
+    );
+    assert!(
+        transport_path.exists()
+            && transport.contains("pub struct ShadowsocksUdpSocketFlow")
+            && transport.contains("tokio::net::UdpSocket::bind")
+            && transport.contains("async fn recv_loop"),
+        "Shadowsocks UDP socket runtime should live in zero-transport"
     );
 }
 

@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use zero_engine::EngineError;
-
 use super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use super::FlowFailure;
 use super::{SsUdpPeer, UdpPeerEndpoint};
@@ -11,7 +9,6 @@ use crate::runtime::Proxy;
 mod bridge;
 mod entry;
 pub(super) mod model;
-mod socket;
 
 use model::{SsKey, SsSendExisting, SsUpstream};
 
@@ -50,27 +47,26 @@ impl SsChainManager {
                 upstream: Some(peer.endpoint.upstream()),
             })?;
 
-        let entry = entry::ensure(&mut self.upstreams, peer.leaf_key, resume, target_addr);
+        let entry = entry::ensure(&mut self.upstreams, peer.leaf_key, resume, target_addr)
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "ss_establish",
+                error,
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
 
         let packet = shadowsocks::ShadowsocksUdpFlowPacket::from_parts(
             packet_ref.target,
             packet_ref.port,
             packet_ref.payload,
         );
-        let datagram = packet
-            .encode_with(&entry.resume)
-            .map_err(|error| FlowFailure {
-                stage: "ss_encode",
-                error: EngineError::from(error),
-                upstream: Some(peer.endpoint.upstream()),
-            })?;
 
         let response_rx = entry.waiters.register(packet_ref.target, packet_ref.port);
-        if let Err(e) = entry.socket.send_to(&datagram, target_addr).await {
+        if let Err(e) = entry.flow.send_packet(packet).await {
             entry.waiters.remove(packet_ref.target, packet_ref.port);
             return Err(FlowFailure {
                 stage: "ss_send",
-                error: EngineError::from(e),
+                error: e,
                 upstream: Some(peer.endpoint.upstream()),
             });
         }
