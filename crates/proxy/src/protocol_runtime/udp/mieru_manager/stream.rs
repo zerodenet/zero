@@ -42,9 +42,17 @@ fn spawn_send_task(
 ) {
     tokio::spawn(async move {
         while let Some(packet) = send_rx.recv().await {
-            let packet = mieru::udp_flow_packet(&packet.target, packet.port, &packet.payload);
             let mut io = flow_io.lock().await;
-            if io.write_packet(&mut write_stream, &packet).await.is_err() {
+            if io
+                .write_flow_packet(
+                    &mut write_stream,
+                    &packet.target,
+                    packet.port,
+                    &packet.payload,
+                )
+                .await
+                .is_err()
+            {
                 break;
             }
         }
@@ -61,7 +69,7 @@ fn spawn_recv_task(
         loop {
             let packets = {
                 let mut io = flow_io.lock().await;
-                match io.read_packets(&mut read_stream, &mut scratch).await {
+                match io.read_flow_packets(&mut read_stream, &mut scratch).await {
                     Ok(Some(packets)) => packets,
                     Ok(None) => break,
                     Err(_) => break,
@@ -69,7 +77,7 @@ fn spawn_recv_task(
             };
 
             for packet in packets {
-                if recv_tx.send(packet.into_parts()).is_err() {
+                if recv_tx.send(packet).is_err() {
                     return;
                 }
             }
