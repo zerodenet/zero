@@ -319,7 +319,7 @@ impl Proxy {
                             Ok(read) => {
                                 last_activity = TokioInstant::now();
                                 proxy.record_udp_upstream_packet_received();
-                                dispatch.touch_socks5_idle(proxy.udp_upstream_idle_timeout());
+                                dispatch.touch_upstream_idle(proxy.udp_upstream_idle_timeout());
                                 if let Ok(pkt) = socks5::decode_udp_associate_response(&upstream_buf[..read]) {
                                     if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                         proxy.record_session_outbound_rx(sid, pkt.payload.len() as u64);
@@ -494,7 +494,7 @@ impl Proxy {
                         Ok(read) => {
                             last_activity = TokioInstant::now();
                             self.record_udp_upstream_packet_received();
-                            dispatch.touch_socks5_idle(self.udp_upstream_idle_timeout());
+                            dispatch.touch_upstream_idle(self.udp_upstream_idle_timeout());
                             if let Ok(pkt) = socks5::decode_udp_associate_response(&upstream_buf[..read]) {
                                 if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                     self.record_session_outbound_rx(sid, pkt.payload.len() as u64);

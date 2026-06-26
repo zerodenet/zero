@@ -3082,9 +3082,13 @@ fn udp_dispatch_poll_refs_does_not_expose_socks5_association_type() {
         "self.socks5.upstream()",
         "Socks5UdpAssociationView",
         "ClosedSocks5UdpAssociation",
+        "Socks5UdpRuntime",
         "pub(crate) fn socks5_upstream_view",
+        "pub(crate) fn socks5_idle_deadline",
+        "pub(crate) fn touch_socks5_idle",
         "pub(crate) fn drop_socks5_upstream",
         "pub(crate) fn drop_socks5_idle",
+        "pub(crate) fn close_socks5_all",
     ] {
         assert!(
             !lifecycle.contains(forbidden),
@@ -3097,6 +3101,7 @@ fn udp_dispatch_poll_refs_does_not_expose_socks5_association_type() {
             && lifecycle.contains("UpstreamAssociationView")
             && lifecycle.contains("ClosedUpstreamAssociation")
             && lifecycle.contains("upstream_association_view")
+            && lifecycle.contains("touch_upstream_idle")
             && lifecycle.contains("drop_upstream_association")
             && lifecycle.contains("drop_idle_upstream_association"),
         "UdpDispatch lifecycle should expose neutral upstream UDP polling and association lifecycle models"
@@ -3390,6 +3395,30 @@ fn udp_dispatch_keeps_protocol_managers_in_protocol_runtime_state() {
     assert!(
         state.contains("socks5: Socks5UdpRuntime"),
         "ProtocolUdpState should own the SOCKS5 UDP association facade"
+    );
+    for forbidden in [
+        "pub(crate) fn socks5_runtime",
+        "pub(crate) fn socks5_upstream_view",
+        "pub(crate) fn socks5_idle_deadline",
+        "pub(crate) fn touch_socks5_idle",
+        "pub(crate) fn drop_socks5_upstream",
+        "pub(crate) fn close_socks5_idle",
+        "pub(crate) fn close_socks5_all",
+    ] {
+        assert!(
+            !state.contains(forbidden),
+            "ProtocolUdpState should expose neutral upstream lifecycle methods, not `{forbidden}`"
+        );
+    }
+    assert!(
+        state.contains("pub(crate) fn upstream_poll")
+            && state.contains("pub(crate) fn upstream_association_view")
+            && state.contains("pub(crate) fn upstream_idle_deadline")
+            && state.contains("pub(crate) fn touch_upstream_idle")
+            && state.contains("pub(crate) fn drop_upstream_association")
+            && state.contains("pub(crate) fn close_idle_upstream")
+            && state.contains("pub(crate) fn close_all_upstreams"),
+        "ProtocolUdpState should expose neutral upstream lifecycle methods"
     );
     assert!(
         content.contains("packet_path: PacketPathManager"),

@@ -6,8 +6,7 @@ use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
-use crate::protocol_runtime::socks5_udp::Socks5UdpRuntime;
-use crate::protocol_runtime::udp::ProtocolUdpState;
+use crate::protocol_runtime::udp::{ProtocolUdpState, ProtocolUpstreamUdpPoll};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::managed::ManagedUdpFlows;
 use crate::runtime::udp_flow::packet_path::ChainTask;
@@ -17,12 +16,12 @@ use crate::runtime::udp_flow::sessions::UdpSessionFlows;
 use crate::runtime::udp_helpers::send_direct_udp_packet;
 
 pub(crate) struct UpstreamUdpPoll<'a> {
-    socks5: &'a Socks5UdpRuntime,
+    protocol: ProtocolUpstreamUdpPoll<'a>,
 }
 
 impl UpstreamUdpPoll<'_> {
     pub(crate) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.socks5.recv_upstream_packet(buf).await
+        self.protocol.recv_packet(buf).await
     }
 }
 
@@ -98,9 +97,9 @@ impl UdpDispatch {
         (
             &self.direct_socket,
             UpstreamUdpPoll {
-                socks5: self.protocol_state.socks5_runtime(),
+                protocol: self.protocol_state.upstream_poll(),
             },
-            self.protocol_state.socks5_idle_deadline(),
+            self.protocol_state.upstream_idle_deadline(),
             &mut self.chain_tasks,
         )
     }
@@ -109,22 +108,14 @@ impl UdpDispatch {
     #[allow(dead_code)]
     pub(crate) fn upstream_association_view(&self) -> Option<UpstreamAssociationView<'_>> {
         self.protocol_state
-            .socks5_upstream_view()
+            .upstream_association_view()
             .map(|association| UpstreamAssociationView {
                 outbound_tag: association.outbound_tag,
             })
     }
 
-    /// The SOCKS5 idle deadline.
-    #[allow(dead_code)]
-    pub(crate) fn socks5_idle_deadline(&self) -> Option<TokioInstant> {
-        self.protocol_state.socks5_idle_deadline()
-    }
-
-    /// Update the SOCKS5 idle deadline (called after each send / recv).
-    #[allow(dead_code)]
-    pub(crate) fn touch_socks5_idle(&mut self, timeout: std::time::Duration) {
-        self.protocol_state.touch_socks5_idle(timeout);
+    pub(crate) fn touch_upstream_idle(&mut self, timeout: std::time::Duration) {
+        self.protocol_state.touch_upstream_idle(timeout);
     }
 
     /// Look up the session ID for a direct response sender.
@@ -157,7 +148,7 @@ impl UdpDispatch {
     /// Drop the SOCKS5 upstream association after a receive error.
     pub(crate) fn drop_upstream_association(&mut self) -> Option<ClosedUpstreamAssociation> {
         self.protocol_state
-            .drop_socks5_upstream()
+            .drop_upstream_association()
             .map(|closed| ClosedUpstreamAssociation {
                 outbound_tag: closed.outbound_tag,
                 server: closed.server,
@@ -167,7 +158,7 @@ impl UdpDispatch {
 
     pub(crate) fn drop_idle_upstream_association(&mut self) -> Option<ClosedUpstreamAssociation> {
         self.protocol_state
-            .close_socks5_idle()
+            .close_idle_upstream()
             .map(|closed| ClosedUpstreamAssociation {
                 outbound_tag: closed.outbound_tag,
                 server: closed.server,
@@ -177,7 +168,7 @@ impl UdpDispatch {
 
     /// Finish all tracked flows and close upstreams.
     pub(crate) fn finish_all(mut self) -> Vec<CompletedUdpFlow> {
-        self.protocol_state.close_socks5_all();
+        self.protocol_state.close_all_upstreams();
 
         self.managed_flows.finish_all();
 

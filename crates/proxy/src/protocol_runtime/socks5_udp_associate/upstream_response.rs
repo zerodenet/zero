@@ -20,7 +20,7 @@ pub(super) async fn handle_upstream_response(
     match upstream {
         Ok(read) => {
             proxy.record_udp_upstream_packet_received();
-            dispatch.touch_socks5_idle(proxy.udp_upstream_idle_timeout());
+            dispatch.touch_upstream_idle(proxy.udp_upstream_idle_timeout());
             forward_upstream_response(
                 proxy,
                 dispatch,
