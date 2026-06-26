@@ -323,6 +323,26 @@ pub fn decode_udp_datagram(
     )
 }
 
+#[cfg(feature = "crypto")]
+pub fn encode_udp_flow_packet(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+    cipher: super::shared::CipherKind,
+    password: &[u8],
+) -> Result<Vec<u8>, Error> {
+    encode_udp_datagram(target, port, payload, cipher, password)
+}
+
+#[cfg(feature = "crypto")]
+pub fn decode_udp_flow_packet(
+    datagram: &[u8],
+    cipher: super::shared::CipherKind,
+    password: &[u8],
+) -> Result<ShadowsocksUdpPacket, Error> {
+    decode_udp_datagram(datagram, cipher, password)
+}
+
 /// Codec state for a Shadowsocks UDP datagram chain hop.
 ///
 /// Captures the cipher and password needed to encode/decode Shadowsocks

@@ -8,7 +8,7 @@ pub(super) fn encode_packet(
     cipher: shadowsocks::CipherKind,
     password: &str,
 ) -> Result<Vec<u8>, EngineError> {
-    shadowsocks::encode_udp_datagram(target, port, payload, cipher, password.as_bytes())
+    shadowsocks::encode_udp_flow_packet(target, port, payload, cipher, password.as_bytes())
         .map_err(|error| EngineError::Io(std::io::Error::other(error)))
 }
 
@@ -17,6 +17,6 @@ pub(super) fn decode_packet(
     cipher: shadowsocks::CipherKind,
     password: &str,
 ) -> Result<shadowsocks::ShadowsocksUdpPacket, EngineError> {
-    shadowsocks::decode_udp_datagram(payload, cipher, password.as_bytes())
+    shadowsocks::decode_udp_flow_packet(payload, cipher, password.as_bytes())
         .map_err(|error| EngineError::Io(std::io::Error::other(error)))
 }

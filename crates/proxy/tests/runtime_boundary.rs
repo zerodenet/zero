@@ -5496,9 +5496,14 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
         );
     }
     assert!(
-        codec.contains("shadowsocks::encode_udp_datagram")
-            && codec.contains("shadowsocks::decode_udp_datagram"),
-        "Shadowsocks UDP datagram codec should delegate encode/decode to protocols/shadowsocks"
+        !codec.contains("shadowsocks::encode_udp_datagram")
+            && !codec.contains("shadowsocks::decode_udp_datagram"),
+        "Shadowsocks UDP manager codec should use flow-specific protocol helpers instead of generic datagram primitives"
+    );
+    assert!(
+        codec.contains("shadowsocks::encode_udp_flow_packet")
+            && codec.contains("shadowsocks::decode_udp_flow_packet"),
+        "Shadowsocks UDP datagram codec should delegate encode/decode to flow-specific protocols/shadowsocks helpers"
     );
 }
 
