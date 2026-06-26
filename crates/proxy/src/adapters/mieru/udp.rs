@@ -37,7 +37,7 @@ impl MieruAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::Mieru(mieru::MieruUdpFlowResume::new(
+                resume: ProtocolUdpFlowResume::mieru(mieru::MieruUdpFlowResume::new(
                     username, password, false,
                 )),
                 payload,
@@ -74,7 +74,7 @@ impl MieruAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::Mieru(mieru::MieruUdpFlowResume::new(
+                resume: ProtocolUdpFlowResume::mieru(mieru::MieruUdpFlowResume::new(
                     username, password, true,
                 )),
                 payload,

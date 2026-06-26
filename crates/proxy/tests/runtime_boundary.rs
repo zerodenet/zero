@@ -2866,7 +2866,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
             && managed.contains("start_tracked_managed_protocol_udp")
             && managed.contains("forward_managed_relay_flow")
             && socks5_adapter.contains("ManagedUdpFlowKind::RelayStream")
-            && socks5_adapter.contains("ProtocolUdpFlowResume::Socks5")
+            && socks5_adapter.contains("ProtocolUdpFlowResume::socks5")
             && !managed.contains("Socks5UdpPacketSend")
             && !managed.contains("username: Option<&'a str>")
             && !managed.contains("password: Option<&'a str>")
@@ -7478,6 +7478,11 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
             );
         }
         for forbidden in [
+            "ProtocolUdpFlowResume::Socks5",
+            "ProtocolUdpFlowResume::Shadowsocks",
+            "ProtocolUdpFlowResume::Hysteria2",
+            "ProtocolUdpFlowResume::Trojan",
+            "ProtocolUdpFlowResume::Mieru",
             ".start_socks5_relay_flow",
             ".start_shadowsocks_datagram_flow",
             ".start_hysteria2_datagram_flow",

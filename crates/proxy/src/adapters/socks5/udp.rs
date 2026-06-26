@@ -96,7 +96,7 @@ impl Socks5Adapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::Socks5(socks5::Socks5UdpFlowResume::new(
+                resume: ProtocolUdpFlowResume::socks5(socks5::Socks5UdpFlowResume::new(
                     *username, *password,
                 )),
                 payload,
