@@ -29,6 +29,12 @@ pub(crate) enum UdpFlowOutbound {
         port: u16,
         protocol: crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot,
     },
+    PacketPathDatagram {
+        tag: String,
+        server: String,
+        port: u16,
+        snapshot: crate::protocol_runtime::udp::PacketPathFlowSnapshot,
+    },
 }
 
 pub(super) struct UdpFlowIndexKeys<'a> {
@@ -52,7 +58,8 @@ impl UdpFlowOutbound {
             Self::Direct { tag, .. }
             | Self::Relay { tag, .. }
             | Self::Datagram { tag, .. }
-            | Self::StreamPacket { tag, .. } => tag,
+            | Self::StreamPacket { tag, .. }
+            | Self::PacketPathDatagram { tag, .. } => tag,
         }
     }
 
@@ -63,13 +70,17 @@ impl UdpFlowOutbound {
             Self::Relay { .. } => UdpPathCategory::Relay,
             Self::Datagram { .. } => UdpPathCategory::Datagram,
             Self::StreamPacket { .. } => UdpPathCategory::StreamPacket,
+            Self::PacketPathDatagram { .. } => UdpPathCategory::PacketPathDatagram,
         }
     }
 
     pub(crate) fn direct_target_addr(&self) -> Option<SocketAddr> {
         match self {
             Self::Direct { target_addr, .. } => Some(*target_addr),
-            Self::Relay { .. } | Self::Datagram { .. } | Self::StreamPacket { .. } => None,
+            Self::Relay { .. }
+            | Self::Datagram { .. }
+            | Self::StreamPacket { .. }
+            | Self::PacketPathDatagram { .. } => None,
         }
     }
 
@@ -78,7 +89,10 @@ impl UdpFlowOutbound {
     ) -> Option<&crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot> {
         match self {
             Self::Relay { protocol, .. } => Some(protocol),
-            Self::Direct { .. } | Self::Datagram { .. } | Self::StreamPacket { .. } => None,
+            Self::Direct { .. }
+            | Self::Datagram { .. }
+            | Self::StreamPacket { .. }
+            | Self::PacketPathDatagram { .. } => None,
         }
     }
 
@@ -87,7 +101,19 @@ impl UdpFlowOutbound {
     ) -> Option<&crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot> {
         match self {
             Self::Datagram { protocol, .. } | Self::StreamPacket { protocol, .. } => Some(protocol),
-            Self::Direct { .. } | Self::Relay { .. } => None,
+            Self::Direct { .. } | Self::Relay { .. } | Self::PacketPathDatagram { .. } => None,
+        }
+    }
+
+    pub(crate) fn packet_path_snapshot(
+        &self,
+    ) -> Option<&crate::protocol_runtime::udp::PacketPathFlowSnapshot> {
+        match self {
+            Self::PacketPathDatagram { snapshot, .. } => Some(snapshot),
+            Self::Direct { .. }
+            | Self::Relay { .. }
+            | Self::Datagram { .. }
+            | Self::StreamPacket { .. } => None,
         }
     }
 
@@ -96,7 +122,8 @@ impl UdpFlowOutbound {
             Self::Direct { .. } => None,
             Self::Relay { server, port, .. }
             | Self::Datagram { server, port, .. }
-            | Self::StreamPacket { server, port, .. } => Some(UdpFlowUpstream {
+            | Self::StreamPacket { server, port, .. }
+            | Self::PacketPathDatagram { server, port, .. } => Some(UdpFlowUpstream {
                 server,
                 port: *port,
             }),
@@ -115,7 +142,8 @@ impl UdpFlowOutbound {
             Self::Direct { .. } => None,
             Self::Relay { tag, .. }
             | Self::Datagram { tag, .. }
-            | Self::StreamPacket { tag, .. } => Some(tag),
+            | Self::StreamPacket { tag, .. }
+            | Self::PacketPathDatagram { tag, .. } => Some(tag),
         }
     }
 
@@ -124,16 +152,18 @@ impl UdpFlowOutbound {
             Self::Direct { .. } => None,
             Self::Relay { server, port, .. }
             | Self::Datagram { server, port, .. }
-            | Self::StreamPacket { server, port, .. } => Some((server.clone(), *port)),
+            | Self::StreamPacket { server, port, .. }
+            | Self::PacketPathDatagram { server, port, .. } => Some((server.clone(), *port)),
         }
     }
 
     fn success_outcome(&self) -> SessionOutcome {
         match self {
             Self::Direct { .. } => SessionOutcome::DirectRelayed,
-            Self::Relay { .. } | Self::Datagram { .. } | Self::StreamPacket { .. } => {
-                SessionOutcome::ChainedRelayed
-            }
+            Self::Relay { .. }
+            | Self::Datagram { .. }
+            | Self::StreamPacket { .. }
+            | Self::PacketPathDatagram { .. } => SessionOutcome::ChainedRelayed,
         }
     }
 

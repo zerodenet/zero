@@ -34,7 +34,7 @@ impl ProtocolUdpState {
         let Some(snapshot) = flow.outbound.protocol_snapshot() else {
             return Err(protocol_forward_unavailable(
                 "udp_protocol_forward",
-                "direct and relay flows are handled by generic UDP dispatch",
+                "direct, relay, and packet-path flows are handled outside protocol snapshots",
             ));
         };
 

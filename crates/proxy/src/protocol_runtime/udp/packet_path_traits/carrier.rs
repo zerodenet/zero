@@ -3,8 +3,6 @@ use std::sync::Arc;
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use crate::protocol_runtime::udp::PacketPathFlowSnapshot;
-
 /// Datagram codec for encoding/decoding inner protocol datagrams.
 pub(crate) use zero_traits::DatagramCodec;
 
@@ -45,10 +43,6 @@ impl PacketPathCarrierSnapshot {
         Self {
             cache_key: descriptor.cache_key.clone(),
         }
-    }
-
-    pub(crate) fn cache_key(&self) -> &str {
-        &self.cache_key
     }
 }
 
@@ -97,32 +91,50 @@ pub(crate) struct UdpDatagramKey {
     pub(crate) cache_key: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PacketPathFlowSnapshot {
+    pub(crate) carrier_cache_key: String,
+    pub(crate) datagram_tag: String,
+    pub(crate) datagram_server: String,
+    pub(crate) datagram_port: u16,
+    pub(crate) datagram_cache_key: String,
+}
+
+impl PacketPathFlowSnapshot {
+    fn from_parts(
+        datagram: &UdpDatagramDescriptor<'_>,
+        carrier: &PacketPathCarrierSnapshot,
+    ) -> Self {
+        Self {
+            carrier_cache_key: carrier.cache_key.clone(),
+            datagram_tag: datagram.tag.to_owned(),
+            datagram_server: datagram.server.to_owned(),
+            datagram_port: datagram.port,
+            datagram_cache_key: datagram.cache_key.clone(),
+        }
+    }
+}
+
 pub(crate) struct PacketPathFlowBinding<'a> {
     datagram: UdpDatagramSource<'a>,
     flow_snapshot: PacketPathFlowSnapshot,
-    carrier_snapshot: Option<PacketPathCarrierSnapshot>,
 }
 
 impl<'a> PacketPathFlowBinding<'a> {
     pub(crate) fn new(
         datagram: UdpDatagramSource<'a>,
-        flow_snapshot: PacketPathFlowSnapshot,
         carrier_desc: &PacketPathCarrierDescriptor,
     ) -> Self {
+        let carrier_snapshot = PacketPathCarrierSnapshot::from_descriptor(carrier_desc);
+        let flow_snapshot =
+            PacketPathFlowSnapshot::from_parts(datagram.descriptor(), &carrier_snapshot);
         Self {
             datagram,
             flow_snapshot,
-            carrier_snapshot: Some(PacketPathCarrierSnapshot::from_descriptor(carrier_desc)),
         }
     }
 
-    pub(crate) fn into_parts(
-        self,
-    ) -> (
-        UdpDatagramSource<'a>,
-        PacketPathFlowSnapshot,
-        Option<PacketPathCarrierSnapshot>,
-    ) {
-        (self.datagram, self.flow_snapshot, self.carrier_snapshot)
+    pub(crate) fn into_parts(self) -> (UdpDatagramSource<'a>, PacketPathFlowSnapshot) {
+        (self.datagram, self.flow_snapshot)
     }
 }

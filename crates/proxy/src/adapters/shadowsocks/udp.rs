@@ -111,38 +111,6 @@ impl ShadowsocksAdapter {
         )
     }
 
-    pub(super) fn udp_packet_path_flow_snapshot_impl(
-        &self,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::PacketPathFlowSnapshot> {
-        let _ = self;
-        let ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-        } = leaf
-        else {
-            return None;
-        };
-        let cipher_kind = parse_shadowsocks_udp_cipher(
-            cipher,
-            "udp_shadowsocks_packet_path_snapshot_cipher",
-            None,
-        )
-        .ok()?;
-        let cache_key = shadowsocks::udp_cache_key(tag, server, *port, cipher, password);
-        let protocol = crate::protocol_runtime::udp::PacketPathFlowSnapshot::shadowsocks(
-            password,
-            cache_key,
-            cipher_kind,
-        );
-        Some(
-            crate::protocol_runtime::udp::packet_path_snapshot::packet_path_flow_snapshot(protocol),
-        )
-    }
-
     pub(super) async fn start_udp_flow_impl(
         &self,
         dispatch: &mut UdpDispatch,

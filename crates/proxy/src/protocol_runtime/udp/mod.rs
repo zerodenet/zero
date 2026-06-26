@@ -22,8 +22,6 @@ mod state;
 mod trojan_manager;
 
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
-#[cfg(feature = "shadowsocks")]
-pub(crate) use flow_snapshot::PacketPathFlowSnapshot;
 pub(crate) use flow_snapshot::ProtocolUdpFlowSnapshot;
 #[cfg(feature = "mieru")]
 pub(crate) use flows::MieruUdpRelayFlow;
@@ -38,8 +36,8 @@ pub(crate) use packet_path_chain::{PacketPathManager, SendWithSnapshotRequest};
 pub(crate) use packet_path_traits::ChainTask;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use packet_path_traits::{
-    PacketPathCarrier, PacketPathCarrierDescriptor, PacketPathCarrierSnapshot,
-    PacketPathFlowBinding, UdpDatagramDescriptor, UdpDatagramSource,
+    PacketPathCarrier, PacketPathCarrierDescriptor, PacketPathFlowBinding, PacketPathFlowSnapshot,
+    UdpDatagramDescriptor, UdpDatagramSource,
 };
 #[cfg(feature = "hysteria2")]
 pub(crate) use start::Hysteria2UdpFlowRequest;

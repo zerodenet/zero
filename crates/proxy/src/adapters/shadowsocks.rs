@@ -56,13 +56,6 @@ impl UdpPacketPathCapability for ShadowsocksAdapter {
     ) -> Option<crate::protocol_runtime::udp::UdpDatagramSource<'a>> {
         self.udp_datagram_source_impl(leaf)
     }
-
-    fn udp_packet_path_flow_snapshot(
-        &self,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::PacketPathFlowSnapshot> {
-        self.udp_packet_path_flow_snapshot_impl(leaf)
-    }
 }
 
 #[cfg(feature = "shadowsocks")]

@@ -11,6 +11,7 @@
 //! | `Relay` | `Socks5` | UDP ASSOCIATE relay through control stream |
 //! | `Datagram` | `Shadowsocks`, `Hysteria2` | Datagram encode/decode over socket or QUIC |
 //! | `StreamPacket` | `Trojan`, `Mieru` | UDP packets over established stream |
+//! | `PacketPathDatagram` | adapter-built packet-path snapshot | Datagram-over-carrier chain |
 
 use std::time::Instant;
 
@@ -91,6 +92,14 @@ impl UdpDispatch {
                 let result = self
                     .protocol_state
                     .forward_existing_protocol_flow(&mut self.chain_tasks, proxy, flow, payload)
+                    .await;
+                self.record_or_fail(flow, proxy, started_at, result)?;
+            }
+
+            UdpPathCategory::PacketPathDatagram => {
+                let result = self
+                    .protocol_state
+                    .forward_existing_packet_path_flow(&mut self.chain_tasks, flow, payload)
                     .await;
                 self.record_or_fail(flow, proxy, started_at, result)?;
             }

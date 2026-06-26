@@ -479,8 +479,6 @@ fn udp_relay_runtime_does_not_resolve_packet_path_pair_adapters() {
             && inventory_udp_packet_path
                 .contains("UdpPacketPathCapability::udp_packet_path_carrier_descriptor")
             && inventory_udp_packet_path.contains("UdpPacketPathCapability::udp_datagram_source")
-            && inventory_udp_packet_path
-                .contains("UdpPacketPathCapability::udp_packet_path_flow_snapshot")
             && inventory_udp_packet_path.contains("PacketPathFlowBinding::new"),
         "src/inventory/udp/packet_path.rs should own packet-path pair adapter probing"
     );
@@ -2852,10 +2850,14 @@ fn udp_packet_path_carrier_snapshot_is_protocol_neutral() {
         "packet-path carrier snapshot storage should not remain a protocol-named enum"
     );
     assert!(
-        traits.contains("struct PacketPathCarrierSnapshot")
-            && traits.contains("cache_key: String")
-            && traits.contains("fn cache_key(&self) -> &str"),
-        "protocol_runtime::udp should expose a neutral packet-path carrier snapshot keyed by adapter-built identity"
+        traits.contains("struct PacketPathCarrierSnapshot") && traits.contains("cache_key: String"),
+        "protocol_runtime::udp should keep neutral packet-path carrier snapshot keyed by adapter-built identity"
+    );
+    assert!(
+        traits.contains("struct PacketPathFlowSnapshot")
+            && traits.contains("carrier_cache_key: String")
+            && traits.contains("datagram_cache_key: String"),
+        "packet-path flow snapshots should store only neutral carrier/datagram cache identities"
     );
 }
 
@@ -2884,6 +2886,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         "Relay {",
         "Datagram {",
         "StreamPacket {",
+        "PacketPathDatagram {",
         "ProtocolUdpFlowSnapshot",
     ] {
         assert!(
@@ -2915,9 +2918,13 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         }
     }
     assert!(
-        snapshot.contains("PacketPathCarrierSnapshot")
+        !snapshot.contains("PacketPathCarrierSnapshot")
             && !snapshot.contains("UdpPacketPathCarrier::"),
-        "protocol UDP flow snapshot should keep packet-path carrier identity neutral"
+        "protocol UDP flow snapshot should not own packet-path carrier identity"
+    );
+    assert!(
+        outbound.contains("snapshot: crate::protocol_runtime::udp::PacketPathFlowSnapshot"),
+        "runtime UDP outbound snapshot should keep packet-path flow identity in a neutral packet-path snapshot"
     );
 }
 
@@ -3808,7 +3815,6 @@ fn udp_packet_path_capability_is_not_on_monolithic_adapter() {
         "fn udp_packet_path_carrier_descriptor",
         "async fn build_udp_packet_path",
         "fn udp_datagram_source",
-        "fn udp_packet_path_flow_snapshot",
     ] {
         assert!(
             !adapter.contains(forbidden),
@@ -3820,7 +3826,6 @@ fn udp_packet_path_capability_is_not_on_monolithic_adapter() {
         "ProtocolAdapter::udp_packet_path_carrier_descriptor",
         "ProtocolAdapter::build_udp_packet_path",
         "ProtocolAdapter::udp_datagram_source",
-        "ProtocolAdapter::udp_packet_path_flow_snapshot",
     ] {
         assert!(
             !capability.contains(forbidden),
@@ -4596,9 +4601,6 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         "H2SendExisting",
         "TrojanSendExisting",
         "MieruSendExisting",
-        "UdpFlowContext",
-        "UdpPacketRef",
-        ".send_with_snapshot(",
         "ExistingFlow {",
         "ProtocolUdpFlowSnapshot::Shadowsocks",
         "ProtocolUdpFlowSnapshot::Hysteria2",
@@ -4667,9 +4669,12 @@ fn protocol_udp_packet_path_facade_lives_outside_state_root() {
     );
     for forbidden in [
         "ProtocolUdpFlowSnapshot::Shadowsocks",
+        "ProtocolUdpFlowSnapshot",
         "password: datagram.password",
         "cipher_kind: datagram.cipher_kind",
         "datagram_cache_key: datagram.datagram_cache_key",
+        ".into_protocol_snapshot()",
+        ".with_packet_path_carrier(",
     ] {
         assert!(
             !packet_path_content.contains(forbidden),
@@ -4677,10 +4682,10 @@ fn protocol_udp_packet_path_facade_lives_outside_state_root() {
         );
     }
     assert!(
-        packet_path_content.contains(".into_protocol_snapshot()")
+        packet_path_content.contains("UdpFlowOutbound::PacketPathDatagram")
             && packet_path_content.contains("flow_binding.into_parts()")
-            && packet_path_content.contains(".with_packet_path_carrier(packet_path_carrier)"),
-        "packet-path state should attach the carrier through the packet-path flow snapshot"
+            && packet_path_content.contains("snapshot: flow_snapshot"),
+        "packet-path state should store a neutral packet-path flow snapshot without converting it to a protocol UDP snapshot"
     );
 }
 
@@ -5001,7 +5006,7 @@ fn packet_path_snapshot_lookup_lives_outside_chain_manager() {
 #[test]
 fn packet_path_snapshot_send_uses_request_model() {
     let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
-    let forward = read("src/protocol_runtime/udp/state/forward/shadowsocks.rs");
+    let packet_path = read("src/protocol_runtime/udp/state/packet_path.rs");
 
     assert!(
         manager.contains("struct SendWithSnapshotRequest")
@@ -5010,8 +5015,9 @@ fn packet_path_snapshot_send_uses_request_model() {
         "packet-path snapshot send should use a request model"
     );
     assert!(
-        forward.contains("SendWithSnapshotRequest {")
-            && forward.contains("carrier_cache_key: carrier.cache_key()"),
+        packet_path.contains("SendWithSnapshotRequest {")
+            && packet_path.contains("carrier_cache_key: &snapshot.carrier_cache_key")
+            && packet_path.contains("pub(crate) async fn forward_existing_packet_path_flow"),
         "packet-path snapshot forward path should pass SendWithSnapshotRequest with opaque carrier cache identity"
     );
 }
@@ -5878,11 +5884,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
 
     let snapshot = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
     let root = read("src/protocol_runtime/udp/mod.rs");
-    for required in [
-        "packet_path_carrier_descriptor",
-        "udp_datagram_source",
-        "packet_path_flow_snapshot",
-    ] {
+    for required in ["packet_path_carrier_descriptor", "udp_datagram_source"] {
         assert!(
             snapshot.contains(required),
             "protocol_runtime::udp packet-path snapshot module should own neutral constructor `{required}`"

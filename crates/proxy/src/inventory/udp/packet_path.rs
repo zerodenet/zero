@@ -22,13 +22,8 @@ impl ProtocolInventory {
         )?;
         let datagram =
             UdpPacketPathCapability::udp_datagram_source(datagram_adapter.as_ref(), datagram_leaf)?;
-        let flow_snapshot = UdpPacketPathCapability::udp_packet_path_flow_snapshot(
-            datagram_adapter.as_ref(),
-            datagram_leaf,
-        )?;
         Some(crate::protocol_runtime::udp::PacketPathFlowBinding::new(
             datagram,
-            flow_snapshot,
             &carrier_desc,
         ))
     }

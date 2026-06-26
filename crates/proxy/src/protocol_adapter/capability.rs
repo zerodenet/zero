@@ -180,12 +180,4 @@ pub(crate) trait UdpPacketPathCapability {
     ) -> Option<crate::protocol_runtime::udp::UdpDatagramSource<'a>> {
         None
     }
-
-    #[cfg(feature = "shadowsocks")]
-    fn udp_packet_path_flow_snapshot(
-        &self,
-        _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::protocol_runtime::udp::PacketPathFlowSnapshot> {
-        None
-    }
 }

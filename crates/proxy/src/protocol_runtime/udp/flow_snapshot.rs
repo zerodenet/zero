@@ -1,41 +1,3 @@
-#[cfg(feature = "shadowsocks")]
-use crate::protocol_runtime::udp::PacketPathCarrierSnapshot;
-
-#[cfg(feature = "shadowsocks")]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PacketPathFlowSnapshot {
-    protocol: ProtocolUdpFlowSnapshot,
-}
-
-#[cfg(feature = "shadowsocks")]
-impl PacketPathFlowSnapshot {
-    pub(crate) fn shadowsocks(
-        password: &str,
-        datagram_cache_key: String,
-        cipher_kind: shadowsocks::CipherKind,
-    ) -> Self {
-        Self {
-            protocol: ProtocolUdpFlowSnapshot::shadowsocks(
-                password,
-                datagram_cache_key,
-                cipher_kind,
-            ),
-        }
-    }
-
-    pub(crate) fn with_packet_path_carrier(
-        mut self,
-        carrier: Option<PacketPathCarrierSnapshot>,
-    ) -> Self {
-        self.protocol = self.protocol.with_packet_path_carrier(carrier);
-        self
-    }
-
-    pub(crate) fn into_protocol_snapshot(self) -> ProtocolUdpFlowSnapshot {
-        self.protocol
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProtocolUdpFlowSnapshot {
     Socks5 {
@@ -47,7 +9,6 @@ pub(crate) enum ProtocolUdpFlowSnapshot {
         password: String,
         datagram_cache_key: String,
         cipher_kind: shadowsocks::CipherKind,
-        packet_path_carrier: Option<PacketPathCarrierSnapshot>,
     },
     #[cfg(feature = "hysteria2")]
     Hysteria2 {
@@ -93,7 +54,6 @@ impl ProtocolUdpFlowSnapshot {
             password: password.to_string(),
             datagram_cache_key,
             cipher_kind,
-            packet_path_carrier: None,
         }
     }
 
@@ -129,21 +89,6 @@ impl ProtocolUdpFlowSnapshot {
             password: password.to_string(),
             relay_chain,
         }
-    }
-
-    #[cfg(feature = "shadowsocks")]
-    pub(crate) fn with_packet_path_carrier(
-        mut self,
-        carrier: Option<PacketPathCarrierSnapshot>,
-    ) -> Self {
-        if let Self::Shadowsocks {
-            packet_path_carrier,
-            ..
-        } = &mut self
-        {
-            *packet_path_carrier = carrier;
-        }
-        self
     }
 
     pub(crate) fn socks5_relay_auth(&self) -> Option<Socks5RelayAuth<'_>> {

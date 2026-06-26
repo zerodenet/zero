@@ -29,9 +29,3 @@ pub(crate) fn udp_datagram_source<'a>(
         codec,
     }
 }
-
-pub(crate) fn packet_path_flow_snapshot(
-    protocol: crate::protocol_runtime::udp::PacketPathFlowSnapshot,
-) -> crate::protocol_runtime::udp::PacketPathFlowSnapshot {
-    protocol
-}
