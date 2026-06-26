@@ -5042,9 +5042,14 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        stream.contains("trojan::write_udp_response")
-            && stream.contains("trojan::read_inbound_udp_packet"),
-        "Trojan UDP packet stream tasks should delegate packet framing to protocols/trojan helpers"
+        !stream.contains("trojan::write_udp_response")
+            && !stream.contains("trojan::read_inbound_udp_packet"),
+        "Trojan UDP manager stream should use flow-specific protocol helpers instead of generic UDP helpers"
+    );
+    assert!(
+        stream.contains("trojan::write_udp_flow_packet")
+            && stream.contains("trojan::read_udp_flow_packet"),
+        "Trojan UDP packet stream tasks should delegate packet framing to flow-specific protocols/trojan helpers"
     );
 }
 

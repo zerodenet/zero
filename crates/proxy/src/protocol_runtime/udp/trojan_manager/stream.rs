@@ -34,7 +34,7 @@ pub(super) async fn spawn_packet_stream(
 fn spawn_send_task(mut send_rx: mpsc::Receiver<TrojanPacket>, mut send_stream: WriteOnlySocket) {
     tokio::spawn(async move {
         while let Some(packet) = send_rx.recv().await {
-            if trojan::write_udp_response(
+            if trojan::write_udp_flow_packet(
                 &mut send_stream,
                 &packet.target,
                 packet.port,
@@ -51,7 +51,7 @@ fn spawn_send_task(mut send_rx: mpsc::Receiver<TrojanPacket>, mut send_stream: W
 
 fn spawn_recv_task(mut recv_stream: ReadOnlySocket, recv_tx: broadcast::Sender<TrojanPacket>) {
     tokio::spawn(async move {
-        while let Ok(packet) = trojan::read_inbound_udp_packet(&mut recv_stream).await {
+        while let Ok(packet) = trojan::read_udp_flow_packet(&mut recv_stream).await {
             let packet = TrojanPacket {
                 target: packet.target,
                 port: packet.port,

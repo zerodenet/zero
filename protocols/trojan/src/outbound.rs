@@ -131,6 +131,13 @@ where
     .await
 }
 
+pub async fn read_udp_flow_packet<S>(stream: &mut S) -> Result<TrojanUdpPacket, Error>
+where
+    S: AsyncSocket,
+{
+    read_inbound_udp_packet(stream).await
+}
+
 pub async fn establish_udp_packet_tunnel<S>(
     stream: &mut S,
     session: &Session,
@@ -167,6 +174,18 @@ where
         &packet,
     )
     .await
+}
+
+pub async fn write_udp_flow_packet<S>(
+    stream: &mut S,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    write_udp_response(stream, target, port, payload).await
 }
 
 /// Build a Trojan UDP associate request (CMD_UDP).
