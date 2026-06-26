@@ -150,6 +150,24 @@ impl TrojanUdpFlowIo {
     {
         read_udp_flow_packet(stream).await
     }
+
+    pub async fn write_stream_packet<S>(
+        &self,
+        stream: &mut S,
+        packet: &TrojanUdpPacket,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        packet.write_to(stream, self).await
+    }
+
+    pub async fn read_stream_packet<S>(&self, stream: &mut S) -> Result<TrojanUdpPacket, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.read_packet(stream).await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

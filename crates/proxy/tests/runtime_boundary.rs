@@ -5283,12 +5283,15 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")
             && stream.contains("trojan::TrojanUdpPacket")
-            && stream.contains("packet.write_to(&mut send_stream, &flow_io)")
-            && !stream.contains("flow_io\n                .write_packet")
+            && stream.contains("flow_io\n                .write_stream_packet")
+            && stream.contains("flow_io.read_stream_packet(&mut recv_stream)")
+            && !stream.contains(".write_packet")
+            && !stream.contains(".read_packet")
+            && !stream.contains("packet.write_to")
             && !stream.contains("packet.target")
             && !stream.contains("packet.payload")
             && !model.contains("struct TrojanPacket"),
-        "Trojan UDP packet stream tasks should use protocol-owned packet operations instead of unpacking packet fields"
+        "Trojan UDP packet stream tasks should use protocol-owned stream operations instead of unpacking packet fields"
     );
 }
 
@@ -5603,9 +5606,10 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")
             && stream.contains(".establish(")
-            && stream.contains("packet.write_to(&mut send_stream, &flow_io)")
+            && stream.contains(".write_stream_packet(&mut send_stream, &packet)")
+            && stream.contains(".read_stream_packet(&mut recv_stream)")
             && !stream.contains("trojan::establish_udp_packet_tunnel"),
-        "Trojan UDP packet stream should call the protocols/trojan flow I/O and packet operation helpers"
+        "Trojan UDP packet stream should call the protocols/trojan flow I/O stream helpers"
     );
 }
 
