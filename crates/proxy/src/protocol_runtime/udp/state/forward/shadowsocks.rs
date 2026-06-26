@@ -2,7 +2,9 @@ use tokio::task::JoinSet;
 
 use super::super::ProtocolUdpState;
 use crate::protocol_runtime::udp::ss_manager::model::SsSendExisting;
-use crate::protocol_runtime::udp::{ChainTask, FlowFailure, ProtocolUdpFlowSnapshot};
+use crate::protocol_runtime::udp::{
+    ChainTask, FlowFailure, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
+};
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
@@ -45,7 +47,10 @@ pub(super) async fn forward_if_matches(
     snapshot: &ProtocolUdpFlowSnapshot,
     payload: &[u8],
 ) -> Option<Result<usize, FlowFailure>> {
-    let ProtocolUdpFlowSnapshot::Shadowsocks { resume } = snapshot else {
+    let ProtocolUdpFlowSnapshot::Managed {
+        resume: ProtocolUdpFlowResume::Shadowsocks(resume),
+    } = snapshot
+    else {
         return None;
     };
 

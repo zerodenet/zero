@@ -2926,57 +2926,41 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             !outbound.contains(forbidden),
             "runtime UDP outbound snapshot should not declare protocol detail `{forbidden}`"
         );
-        if forbidden != "UdpPacketPathCarrier::" {
-            assert!(
-                snapshot.contains(forbidden),
-                "protocol UDP flow snapshot should own protocol detail `{forbidden}`"
-            );
-        }
     }
-    assert!(
-        snapshot.contains("resume: shadowsocks::ShadowsocksUdpFlowResume")
-            && !snapshot.contains("cipher_kind: shadowsocks::CipherKind"),
-        "protocol UDP flow snapshot should keep Shadowsocks resume data opaque instead of exposing parsed cipher state"
-    );
-    let h2_snapshot_variant = snapshot
-        .split("#[cfg(feature = \"hysteria2\")]")
+    let snapshot_enum = snapshot
+        .split("pub(crate) enum ProtocolUdpFlowSnapshot")
         .nth(1)
-        .expect("Hysteria2 UDP snapshot variant should be feature-gated")
-        .split("#[cfg(feature = \"trojan\")]")
+        .expect("ProtocolUdpFlowSnapshot enum should exist")
+        .split("#[derive(Debug, Clone, PartialEq, Eq)]")
         .next()
-        .expect("Hysteria2 UDP snapshot variant should precede Trojan");
+        .expect("ProtocolUdpFlowResume should follow ProtocolUdpFlowSnapshot");
     assert!(
-        snapshot.contains("resume: hysteria2::Hysteria2UdpFlowResume")
-            && !h2_snapshot_variant.contains("password: String")
-            && !h2_snapshot_variant.contains("client_fingerprint: Option<String>"),
-        "protocol UDP flow snapshot should keep Hysteria2 resume data opaque instead of exposing auth or fingerprint state"
+        snapshot_enum.contains("Socks5 {")
+            && snapshot_enum.contains("Managed {")
+            && snapshot_enum.contains("resume: ProtocolUdpFlowResume")
+            && !snapshot_enum.contains("Shadowsocks")
+            && !snapshot_enum.contains("Hysteria2")
+            && !snapshot_enum.contains("Trojan")
+            && !snapshot_enum.contains("Mieru"),
+        "protocol UDP flow snapshot should expose only Socks5 auth and a unified managed resume wrapper"
     );
-    let trojan_snapshot_variant = snapshot
-        .split("#[cfg(feature = \"trojan\")]")
+    let resume_enum = snapshot
+        .split("pub(crate) enum ProtocolUdpFlowResume")
         .nth(1)
-        .expect("Trojan UDP snapshot variant should be feature-gated")
-        .split("#[cfg(feature = \"mieru\")]")
-        .next()
-        .expect("Trojan UDP snapshot variant should precede Mieru");
-    assert!(
-        snapshot.contains("resume: trojan::TrojanUdpFlowResume")
-            && !trojan_snapshot_variant.contains("password: String")
-            && !trojan_snapshot_variant.contains("client_fingerprint: Option<String>")
-            && !trojan_snapshot_variant.contains("relay_chain: bool"),
-        "protocol UDP flow snapshot should keep Trojan resume data opaque instead of exposing auth, TLS, or relay state"
-    );
-    let mieru_snapshot_variant = snapshot
-        .split("#[cfg(feature = \"mieru\")]")
-        .nth(1)
-        .expect("Mieru UDP snapshot variant should be feature-gated")
+        .expect("ProtocolUdpFlowResume enum should exist")
         .split("pub(crate) struct Socks5RelayAuth")
         .next()
-        .expect("Mieru UDP snapshot variant should precede Socks5RelayAuth");
+        .expect("Socks5RelayAuth should follow ProtocolUdpFlowResume");
     assert!(
-        snapshot.contains("resume: mieru::MieruUdpFlowResume")
-            && !mieru_snapshot_variant.contains("username: String")
-            && !mieru_snapshot_variant.contains("relay_chain: bool"),
-        "protocol UDP flow snapshot should keep Mieru resume data opaque instead of exposing account or relay state"
+        resume_enum.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
+            && resume_enum.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
+            && resume_enum.contains("Trojan(trojan::TrojanUdpFlowResume)")
+            && resume_enum.contains("Mieru(mieru::MieruUdpFlowResume)")
+            && !resume_enum.contains("password: String")
+            && !resume_enum.contains("client_fingerprint: Option<String>")
+            && !resume_enum.contains("relay_chain: bool")
+            && !resume_enum.contains("cipher_kind: shadowsocks::CipherKind"),
+        "ProtocolUdpFlowResume should wrap protocol-owned resume objects without exposing protocol-private fields"
     );
     assert!(
         !snapshot.contains("PacketPathCarrierSnapshot")
@@ -5185,19 +5169,13 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && protocol_outbound.contains("pub fn relay_chain(&self) -> bool"),
         "Trojan adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
-    let trojan_snapshot_variant = snapshot
-        .split("#[cfg(feature = \"trojan\")]")
-        .nth(1)
-        .expect("Trojan UDP snapshot variant should be feature-gated")
-        .split("#[cfg(feature = \"mieru\")]")
-        .next()
-        .expect("Trojan UDP snapshot variant should precede Mieru");
     assert!(
-        snapshot.contains("resume: trojan::TrojanUdpFlowResume")
-            && !trojan_snapshot_variant.contains("password: String")
-            && !trojan_snapshot_variant.contains("client_fingerprint: Option<String>")
-            && !trojan_snapshot_variant.contains("relay_chain: bool"),
-        "Trojan protocol UDP flow snapshot should carry only opaque resume data"
+        snapshot.contains("resume: ProtocolUdpFlowResume")
+            && snapshot.contains("Trojan(trojan::TrojanUdpFlowResume)")
+            && !snapshot.contains("password: String")
+            && !snapshot.contains("client_fingerprint: Option<String>")
+            && !snapshot.contains("relay_chain: bool"),
+        "Trojan protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
         forward.contains("existing.resume.password()")
@@ -5305,18 +5283,12 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn relay_chain(&self) -> bool"),
         "Mieru adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
-    let mieru_snapshot_variant = snapshot
-        .split("#[cfg(feature = \"mieru\")]")
-        .nth(1)
-        .expect("Mieru UDP snapshot variant should be feature-gated")
-        .split("pub(crate) struct Socks5RelayAuth")
-        .next()
-        .expect("Mieru UDP snapshot variant should precede Socks5RelayAuth");
     assert!(
-        snapshot.contains("resume: mieru::MieruUdpFlowResume")
-            && !mieru_snapshot_variant.contains("username: String")
-            && !mieru_snapshot_variant.contains("relay_chain: bool"),
-        "Mieru protocol UDP flow snapshot should carry only opaque resume data"
+        snapshot.contains("resume: ProtocolUdpFlowResume")
+            && snapshot.contains("Mieru(mieru::MieruUdpFlowResume)")
+            && !snapshot.contains("username: String")
+            && !snapshot.contains("relay_chain: bool"),
+        "Mieru protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
         forward.contains("existing.resume.username()")
@@ -5615,18 +5587,19 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn client_fingerprint(&self) -> Option<&str>"),
         "Hysteria2 adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
-    let h2_snapshot_variant = snapshot
-        .split("#[cfg(feature = \"hysteria2\")]")
+    let resume_enum = snapshot
+        .split("pub(crate) enum ProtocolUdpFlowResume")
         .nth(1)
-        .expect("Hysteria2 UDP snapshot variant should be feature-gated")
-        .split("#[cfg(feature = \"trojan\")]")
+        .expect("ProtocolUdpFlowResume enum should exist")
+        .split("pub(crate) struct Socks5RelayAuth")
         .next()
-        .expect("Hysteria2 UDP snapshot variant should precede Trojan");
+        .expect("Socks5RelayAuth should follow ProtocolUdpFlowResume");
     assert!(
-        snapshot.contains("resume: hysteria2::Hysteria2UdpFlowResume")
-            && !h2_snapshot_variant.contains("password: String")
-            && !h2_snapshot_variant.contains("client_fingerprint: Option<String>"),
-        "Hysteria2 protocol UDP flow snapshot should carry only opaque resume data"
+        snapshot.contains("resume: ProtocolUdpFlowResume")
+            && snapshot.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
+            && !resume_enum.contains("password: String")
+            && !resume_enum.contains("client_fingerprint: Option<String>"),
+        "Hysteria2 protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
         forward.contains("existing.resume.password()")
@@ -5970,10 +5943,11 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "Shadowsocks adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
     assert!(
-        snapshot.contains("resume: shadowsocks::ShadowsocksUdpFlowResume")
+        snapshot.contains("resume: ProtocolUdpFlowResume")
+            && snapshot.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
             && !snapshot.contains("cipher_kind: shadowsocks::CipherKind")
             && !snapshot.contains("datagram_cache_key: String"),
-        "Shadowsocks protocol UDP flow snapshot should carry only opaque resume data"
+        "Shadowsocks protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
         forward.contains("existing.resume.cache_key()")

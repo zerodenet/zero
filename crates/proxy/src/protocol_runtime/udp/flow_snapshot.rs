@@ -4,18 +4,21 @@ pub(crate) enum ProtocolUdpFlowSnapshot {
         username: Option<String>,
         password: Option<String>,
     },
+    Managed {
+        resume: ProtocolUdpFlowResume,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ProtocolUdpFlowResume {
     #[cfg(feature = "shadowsocks")]
-    Shadowsocks {
-        resume: shadowsocks::ShadowsocksUdpFlowResume,
-    },
+    Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume),
     #[cfg(feature = "hysteria2")]
-    Hysteria2 {
-        resume: hysteria2::Hysteria2UdpFlowResume,
-    },
+    Hysteria2(hysteria2::Hysteria2UdpFlowResume),
     #[cfg(feature = "trojan")]
-    Trojan { resume: trojan::TrojanUdpFlowResume },
+    Trojan(trojan::TrojanUdpFlowResume),
     #[cfg(feature = "mieru")]
-    Mieru { resume: mieru::MieruUdpFlowResume },
+    Mieru(mieru::MieruUdpFlowResume),
 }
 
 pub(crate) struct Socks5RelayAuth<'a> {
@@ -33,22 +36,30 @@ impl ProtocolUdpFlowSnapshot {
 
     #[cfg(feature = "shadowsocks")]
     pub(crate) fn shadowsocks(resume: shadowsocks::ShadowsocksUdpFlowResume) -> Self {
-        Self::Shadowsocks { resume }
+        Self::Managed {
+            resume: ProtocolUdpFlowResume::Shadowsocks(resume),
+        }
     }
 
     #[cfg(feature = "hysteria2")]
     pub(crate) fn hysteria2(resume: hysteria2::Hysteria2UdpFlowResume) -> Self {
-        Self::Hysteria2 { resume }
+        Self::Managed {
+            resume: ProtocolUdpFlowResume::Hysteria2(resume),
+        }
     }
 
     #[cfg(feature = "trojan")]
     pub(crate) fn trojan(resume: trojan::TrojanUdpFlowResume) -> Self {
-        Self::Trojan { resume }
+        Self::Managed {
+            resume: ProtocolUdpFlowResume::Trojan(resume),
+        }
     }
 
     #[cfg(feature = "mieru")]
     pub(crate) fn mieru(resume: mieru::MieruUdpFlowResume) -> Self {
-        Self::Mieru { resume }
+        Self::Managed {
+            resume: ProtocolUdpFlowResume::Mieru(resume),
+        }
     }
 
     pub(crate) fn socks5_relay_auth(&self) -> Option<Socks5RelayAuth<'_>> {
@@ -57,14 +68,7 @@ impl ProtocolUdpFlowSnapshot {
                 username: username.as_deref(),
                 password: password.as_deref(),
             }),
-            #[cfg(feature = "shadowsocks")]
-            Self::Shadowsocks { .. } => None,
-            #[cfg(feature = "hysteria2")]
-            Self::Hysteria2 { .. } => None,
-            #[cfg(feature = "trojan")]
-            Self::Trojan { .. } => None,
-            #[cfg(feature = "mieru")]
-            Self::Mieru { .. } => None,
+            Self::Managed { .. } => None,
         }
     }
 }

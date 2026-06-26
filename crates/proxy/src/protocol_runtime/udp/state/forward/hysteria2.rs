@@ -2,7 +2,9 @@ use tokio::task::JoinSet;
 
 use super::super::ProtocolUdpState;
 use crate::protocol_runtime::udp::h2_manager::model::H2SendExisting;
-use crate::protocol_runtime::udp::{ChainTask, FlowFailure, ProtocolUdpFlowSnapshot};
+use crate::protocol_runtime::udp::{
+    ChainTask, FlowFailure, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
+};
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 
 pub(super) struct ExistingFlow<'a> {
@@ -42,7 +44,10 @@ pub(super) async fn forward_if_matches(
     snapshot: &ProtocolUdpFlowSnapshot,
     payload: &[u8],
 ) -> Option<Result<usize, FlowFailure>> {
-    let ProtocolUdpFlowSnapshot::Hysteria2 { resume } = snapshot else {
+    let ProtocolUdpFlowSnapshot::Managed {
+        resume: ProtocolUdpFlowResume::Hysteria2(resume),
+    } = snapshot
+    else {
         return None;
     };
 
