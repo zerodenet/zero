@@ -79,6 +79,18 @@ pub fn encode_udp_response(target: &Address, port: u16, payload: &[u8]) -> Resul
     Ok(wrap_udp_associate(&packet))
 }
 
+pub fn decode_udp_flow_packet(data: &[u8]) -> Result<MieruInboundUdpPacket, Error> {
+    decode_inbound_udp_packet(data)
+}
+
+pub fn encode_udp_flow_packet(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    encode_udp_response(target, port, payload)
+}
+
 fn parse_socks5_udp_packet(packet: &[u8]) -> Result<MieruInboundUdpPacket, Error> {
     if packet.len() < 4 {
         return Err(Error::Protocol("mieru udp socks5 packet is too short"));

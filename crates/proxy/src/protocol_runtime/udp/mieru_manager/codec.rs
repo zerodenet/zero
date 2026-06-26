@@ -6,9 +6,9 @@ pub(super) fn packet(
     target_port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, EngineError> {
-    mieru::encode_udp_response(target, target_port, payload).map_err(EngineError::from)
+    mieru::encode_udp_flow_packet(target, target_port, payload).map_err(EngineError::from)
 }
 
 pub(super) fn decode_packet(payload: &[u8]) -> Result<mieru::MieruInboundUdpPacket, EngineError> {
-    mieru::decode_inbound_udp_packet(payload).map_err(EngineError::from)
+    mieru::decode_udp_flow_packet(payload).map_err(EngineError::from)
 }

@@ -47,6 +47,7 @@ pub use segment::{
 #[cfg(feature = "crypto")]
 pub use session::MieruSession;
 pub use udp::{
-    decode_inbound_udp_packet, encode_udp_response, unwrap_udp_associate, wrap_udp_associate,
-    MieruInboundUdpPacket, MieruUdpAssociatePacket, MieruUdpAssociatePayload,
+    decode_inbound_udp_packet, decode_udp_flow_packet, encode_udp_flow_packet, encode_udp_response,
+    unwrap_udp_associate, wrap_udp_associate, MieruInboundUdpPacket, MieruUdpAssociatePacket,
+    MieruUdpAssociatePayload,
 };

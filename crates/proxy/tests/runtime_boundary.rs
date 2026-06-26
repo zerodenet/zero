@@ -5071,9 +5071,14 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         );
     }
     assert!(
-        codec.contains("mieru::encode_udp_response")
-            && codec.contains("mieru::decode_inbound_udp_packet"),
-        "Mieru UDP packet codec should delegate encode/decode to protocols/mieru"
+        !codec.contains("mieru::encode_udp_response")
+            && !codec.contains("mieru::decode_inbound_udp_packet"),
+        "Mieru UDP manager codec should use flow-specific protocol helpers instead of generic UDP helpers"
+    );
+    assert!(
+        codec.contains("mieru::encode_udp_flow_packet")
+            && codec.contains("mieru::decode_udp_flow_packet"),
+        "Mieru UDP packet codec should delegate encode/decode to flow-specific protocols/mieru helpers"
     );
 }
 
