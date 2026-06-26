@@ -4822,6 +4822,7 @@ fn packet_path_protocol_carriers_live_outside_carrier_facade() {
         "hysteria2_carrier",
         "ShadowsocksDatagramCodec",
         "Hysteria2UdpPacketTarget",
+        r#"#[cfg(feature = "hysteria2")]"#,
         "connect_raw",
         "build_shadowsocks_packet_path",
         "build_hysteria2_packet_path",

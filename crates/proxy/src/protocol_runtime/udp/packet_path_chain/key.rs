@@ -5,7 +5,7 @@ use crate::protocol_runtime::udp::packet_path_traits::{
 /// Owned, hashable identity of one carrier+datagram packet-path connection.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct PathKey {
-    /// Adapter-provided carrier identity (e.g. `"socks5|host:port|user"`).
+    /// Adapter-provided carrier identity (e.g. `"carrier|host:port|identity"`).
     pub(super) carrier_key: String,
     pub(super) datagram_tag: String,
     pub(super) datagram_server: String,
