@@ -4,11 +4,6 @@ use zero_engine::EngineError;
 
 use super::super::ChainTask;
 
-pub(super) fn response_channel() -> broadcast::Sender<trojan::TrojanUdpPacket> {
-    let (tx, _) = broadcast::channel::<trojan::TrojanUdpPacket>(32);
-    tx
-}
-
 pub(super) fn spawn_response_bridge(
     chain_tasks: &mut JoinSet<ChainTask>,
     recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,

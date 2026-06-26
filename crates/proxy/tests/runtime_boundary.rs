@@ -5286,17 +5286,28 @@ fn feature_gated_udp_manager_modules_do_not_embed_disabled_stubs() {
 #[test]
 fn trojan_udp_socket_wrappers_live_outside_manager() {
     let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
+    let stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
     let socket = manifest_dir().join("src/protocol_runtime/udp/trojan_manager/socket.rs");
+    let transport =
+        fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
+            .expect("read zero-transport trojan_transport source");
 
     for forbidden in ["struct ReadOnlySocket", "struct WriteOnlySocket"] {
         assert!(
-            !manager.contains(forbidden),
-            "trojan_manager.rs should keep stream socket adapters in trojan_manager/socket.rs; found `{forbidden}`"
+            !manager.contains(forbidden) && !stream.contains(forbidden),
+            "Trojan UDP proxy manager should delegate stream socket adapters to zero-transport; found `{forbidden}`"
         );
     }
     assert!(
-        socket.exists(),
-        "Trojan UDP socket wrappers should live in trojan_manager/socket.rs"
+        !socket.exists(),
+        "Trojan UDP socket wrappers should no longer live in zero-proxy"
+    );
+    assert!(
+        transport.contains("struct ReadOnlySocket")
+            && transport.contains("struct WriteOnlySocket")
+            && transport.contains("impl AsyncSocket for ReadOnlySocket")
+            && transport.contains("impl AsyncSocket for WriteOnlySocket"),
+        "Trojan UDP stream half AsyncSocket adapters should live in zero-transport"
     );
 }
 
@@ -5389,6 +5400,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     let manager_establish = read("src/protocol_runtime/udp/trojan_manager/establish.rs");
     let manager_stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
     let manager_model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
+    let transport =
+        fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
+            .expect("read zero-transport trojan_transport source");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
             .expect("read trojan protocol outbound source");
@@ -5462,7 +5476,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         manager_send.contains("request.resume.flow_key(request.server, request.port)")
             && manager_connect.contains("peer.resume.tls_profile(")
             && manager_connect.contains("TrojanUdpTlsOptions")
-            && manager_stream.contains(".establish_with_resume("),
+            && manager_stream.contains("establish_trojan_udp_flow_stream")
+            && transport.contains(".establish_with_resume("),
         "Trojan UDP manager should consume protocol-owned flow key, TLS profile, and tunnel establishment helpers"
     );
 }
@@ -5472,11 +5487,20 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
     let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
     let stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
     let model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
+    let transport =
+        fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
+            .expect("read zero-transport trojan_transport source");
 
-    for forbidden in ["MeteredStream", "tokio::io::split"] {
+    for forbidden in [
+        "MeteredStream",
+        "tokio::io::split",
+        "tokio::spawn",
+        "write_stream_packet",
+        "read_stream_packet",
+    ] {
         assert!(
-            !manager.contains(forbidden),
-            "trojan_manager.rs should keep packet stream task details in trojan_manager/stream.rs; found `{forbidden}`"
+            !manager.contains(forbidden) && !stream.contains(forbidden),
+            "Trojan UDP proxy manager should delegate packet stream task details to zero-transport; found `{forbidden}`"
         );
     }
     for forbidden in [
@@ -5494,7 +5518,7 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         );
         assert!(
             !stream.contains(forbidden),
-            "trojan_manager/stream.rs should delegate Trojan packet framing to protocols/trojan helpers; found `{forbidden}`"
+            "trojan_manager/stream.rs should delegate Trojan packet framing to zero-transport/protocol helpers; found `{forbidden}`"
         );
         assert!(
             !model.contains(forbidden),
@@ -5507,17 +5531,20 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "Trojan UDP manager stream should use flow-specific protocol helpers instead of generic UDP helpers"
     );
     assert!(
-        stream.contains("trojan::TrojanUdpFlowIo")
-            && stream.contains("trojan::TrojanUdpPacket")
-            && stream.contains("flow_io\n                .write_stream_packet")
-            && stream.contains("flow_io.read_stream_packet(&mut recv_stream)")
+        stream.contains("establish_trojan_udp_flow_stream")
+            && stream.contains("TrojanUdpFlowStreamRequest")
+            && transport.contains("trojan::TrojanUdpFlowIo")
+            && transport.contains("trojan::TrojanUdpPacket")
+            && transport.contains(".establish_with_resume(")
+            && transport.contains(".write_stream_packet")
+            && transport.contains(".read_stream_packet")
             && !stream.contains(".write_packet")
             && !stream.contains(".read_packet")
             && !stream.contains("packet.write_to")
             && !stream.contains("packet.target")
             && !stream.contains("packet.payload")
             && !model.contains("struct TrojanPacket"),
-        "Trojan UDP packet stream tasks should use protocol-owned stream operations instead of unpacking packet fields"
+        "Trojan UDP packet stream tasks should live in zero-transport and use protocol-owned stream operations instead of unpacking packet fields"
     );
 }
 
@@ -5811,6 +5838,9 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
     let establish = read("src/protocol_runtime/udp/trojan_manager/establish.rs");
     let stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
+    let transport =
+        fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
+            .expect("read zero-transport trojan_transport source");
 
     for forbidden in [
         "fn establish_direct",
@@ -5848,12 +5878,13 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
         "Trojan UDP establish glue should build protocol-owned UDP flow packet models"
     );
     assert!(
-        stream.contains("trojan::TrojanUdpFlowIo")
-            && stream.contains(".establish_with_resume(")
-            && stream.contains(".write_stream_packet(&mut send_stream, &packet)")
-            && stream.contains(".read_stream_packet(&mut recv_stream)")
+        stream.contains("establish_trojan_udp_flow_stream")
+            && transport.contains("trojan::TrojanUdpFlowIo")
+            && transport.contains(".establish_with_resume(")
+            && transport.contains(".write_stream_packet(&mut send_stream, &packet)")
+            && transport.contains(".read_stream_packet(&mut recv_stream)")
             && !stream.contains("trojan::establish_udp_packet_tunnel"),
-        "Trojan UDP packet stream should call the protocols/trojan flow I/O stream helpers"
+        "Trojan UDP packet stream should call the protocols/trojan flow I/O stream helpers from zero-transport"
     );
 }
 
