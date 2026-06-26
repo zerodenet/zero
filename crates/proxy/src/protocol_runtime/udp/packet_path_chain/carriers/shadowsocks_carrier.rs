@@ -58,7 +58,7 @@ impl PacketPathCarrier for ShadowsocksPacketPath {
         payload: &[u8],
     ) -> Result<(), EngineError> {
         let packet =
-            shadowsocks::encode_udp_datagram(target, port, payload, self.cipher, &self.password)
+            shadowsocks::encode_udp_flow_packet(target, port, payload, self.cipher, &self.password)
                 .map_err(EngineError::from)?;
         self.socket
             .send_to(&packet, self.endpoint)
@@ -73,8 +73,9 @@ impl PacketPathCarrier for ShadowsocksPacketPath {
             .recv_from(buf)
             .await
             .map_err(EngineError::from)?;
-        let decoded = shadowsocks::decode_udp_datagram(&buf[..read], self.cipher, &self.password)
-            .map_err(EngineError::from)?;
+        let decoded =
+            shadowsocks::decode_udp_flow_packet(&buf[..read], self.cipher, &self.password)
+                .map_err(EngineError::from)?;
         let len = decoded.payload.len();
         buf[..len].copy_from_slice(&decoded.payload);
         Ok(len)
