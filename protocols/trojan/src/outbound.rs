@@ -100,6 +100,19 @@ impl TrojanUdpPacket {
             payload,
         }
     }
+
+    pub async fn write_to<S>(&self, stream: &mut S, flow_io: &TrojanUdpFlowIo) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        flow_io
+            .write_packet(stream, &self.target, self.port, &self.payload)
+            .await
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -319,11 +332,7 @@ pub async fn write_udp_response<S>(
 where
     S: AsyncSocket,
 {
-    let packet = TrojanUdpPacket {
-        target: target.clone(),
-        port,
-        payload: payload.to_vec(),
-    };
+    let packet = TrojanUdpPacket::new(target.clone(), port, payload.to_vec());
     <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::write_udp_packet(
         &TrojanOutbound,
         stream,

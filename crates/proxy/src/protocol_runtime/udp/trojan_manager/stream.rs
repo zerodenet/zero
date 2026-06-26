@@ -38,16 +38,7 @@ fn spawn_send_task(
     tokio::spawn(async move {
         let flow_io = trojan::TrojanUdpFlowIo;
         while let Some(packet) = send_rx.recv().await {
-            if flow_io
-                .write_packet(
-                    &mut send_stream,
-                    &packet.target,
-                    packet.port,
-                    &packet.payload,
-                )
-                .await
-                .is_err()
-            {
+            if packet.write_to(&mut send_stream, &flow_io).await.is_err() {
                 break;
             }
         }

@@ -20,6 +20,7 @@ pub(super) fn spawn_response_bridge(
             .recv()
             .await
             .map_err(|_| EngineError::Io(std::io::Error::other("trojan upstream closed")))?;
-        Ok((packet.target, packet.port, packet.payload, Some(session_id)))
+        let (target, port, payload) = packet.into_parts();
+        Ok((target, port, payload, Some(session_id)))
     });
 }

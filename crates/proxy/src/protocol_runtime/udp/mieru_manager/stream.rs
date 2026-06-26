@@ -32,7 +32,7 @@ fn spawn_send_task(
         while let Some(packet) = send_rx.recv().await {
             let encrypted = {
                 let mut io = flow_io.lock().await;
-                match io.encrypt_packet(&packet.target, packet.port, &packet.payload) {
+                match packet.encode_with(&mut io) {
                     Ok(encrypted) => encrypted,
                     Err(_) => break,
                 }
@@ -70,10 +70,7 @@ fn spawn_recv_task(
                 };
                 match packet {
                     Ok(Some(packet)) => {
-                        if recv_tx
-                            .send((packet.target, packet.port, packet.payload))
-                            .is_err()
-                        {
+                        if recv_tx.send(packet.into_parts()).is_err() {
                             return;
                         }
                     }

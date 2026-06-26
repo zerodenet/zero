@@ -5283,8 +5283,12 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")
             && stream.contains("trojan::TrojanUdpPacket")
+            && stream.contains("packet.write_to(&mut send_stream, &flow_io)")
+            && !stream.contains("flow_io\n                .write_packet")
+            && !stream.contains("packet.target")
+            && !stream.contains("packet.payload")
             && !model.contains("struct TrojanPacket"),
-        "Trojan UDP packet stream tasks should use protocol-owned packet and flow I/O helpers"
+        "Trojan UDP packet stream tasks should use protocol-owned packet operations instead of unpacking packet fields"
     );
 }
 
@@ -5341,8 +5345,12 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         !manager_model.contains("struct MieruPacket")
             && manager_model.contains("mieru::MieruUdpFlowPacket")
             && manager_send.contains("MieruUdpFlowPacket::new")
-            && stream.contains("MieruUdpFlowPacket"),
-        "Mieru UDP manager should use protocol-owned UDP flow packet models instead of duplicating packet shape in proxy"
+            && stream.contains("MieruUdpFlowPacket")
+            && stream.contains("packet.encode_with(&mut io)")
+            && stream.contains("packet.into_parts()")
+            && !stream.contains("packet.target")
+            && !stream.contains("packet.payload"),
+        "Mieru UDP manager should use protocol-owned UDP flow packet operations instead of unpacking packet fields in proxy"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
@@ -5594,8 +5602,9 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")
             && stream.contains(".establish(")
+            && stream.contains("packet.write_to(&mut send_stream, &flow_io)")
             && !stream.contains("trojan::establish_udp_packet_tunnel"),
-        "Trojan UDP packet stream should call the protocols/trojan flow I/O helper"
+        "Trojan UDP packet stream should call the protocols/trojan flow I/O and packet operation helpers"
     );
 }
 
@@ -5648,11 +5657,13 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
     }
     assert!(
         stream.contains("MieruUdpFlowIo")
-            && stream.contains("encrypt_packet")
+            && stream.contains("packet.encode_with(&mut io)")
             && stream.contains("push_encrypted_response")
             && stream.contains("next_packet")
+            && stream.contains("packet.into_parts()")
+            && !stream.contains("encrypt_packet(")
             && !stream.contains("MieruOutbound"),
-        "Mieru UDP packet stream tasks should delegate protocol I/O to protocols/mieru"
+        "Mieru UDP packet stream tasks should delegate packet encode/decode operations to protocols/mieru"
     );
 }
 

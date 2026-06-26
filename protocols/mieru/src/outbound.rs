@@ -38,6 +38,14 @@ impl MieruUdpFlowPacket {
             payload,
         }
     }
+
+    pub fn encode_with(&self, flow_io: &mut MieruUdpFlowIo) -> Result<Vec<u8>, Error> {
+        flow_io.encrypt_packet(&self.target, self.port, &self.payload)
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 pub struct MieruUdpFlowIo {
