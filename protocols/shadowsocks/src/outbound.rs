@@ -426,6 +426,12 @@ impl ShadowsocksUdpFlowResume {
         &self.cache_key
     }
 
+    pub fn leaf_cache_key(&self) -> ShadowsocksUdpLeafKey {
+        ShadowsocksUdpLeafKey {
+            cache_key: self.cache_key.clone(),
+        }
+    }
+
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec(self.cipher, &self.password)
     }
@@ -442,6 +448,19 @@ impl ShadowsocksUdpFlowResume {
     pub fn decode_packet(&self, data: &[u8]) -> Option<(Address, u16, alloc::vec::Vec<u8>)> {
         let decoded = decode_udp_flow_packet(data, self.cipher, &self.password).ok()?;
         Some((decoded.target, decoded.port, decoded.payload))
+    }
+}
+
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ShadowsocksUdpLeafKey {
+    cache_key: alloc::string::String,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpLeafKey {
+    pub fn cache_key(&self) -> &str {
+        &self.cache_key
     }
 }
 

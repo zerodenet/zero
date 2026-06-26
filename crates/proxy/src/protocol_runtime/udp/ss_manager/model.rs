@@ -6,19 +6,11 @@ use super::bridge::BridgeWaiters;
 use crate::runtime::Proxy;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct SsKey {
-    server: String,
-    port: u16,
-    cache_key: String,
-}
+pub(super) struct SsKey(shadowsocks::ShadowsocksUdpLeafKey);
 
 impl SsKey {
-    pub(super) fn new(server: &str, port: u16, cache_key: &str) -> Self {
-        Self {
-            server: server.to_owned(),
-            port,
-            cache_key: cache_key.to_owned(),
-        }
+    pub(super) fn new(leaf_key: shadowsocks::ShadowsocksUdpLeafKey) -> Self {
+        Self(leaf_key)
     }
 }
 

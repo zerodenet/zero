@@ -6,15 +6,14 @@ pub(crate) type UdpPeerEndpoint<'a> = OutboundEndpoint<'a>;
 #[cfg(feature = "shadowsocks")]
 pub(crate) struct SsUdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
-    pub(crate) cache_key: &'a str,
+    pub(crate) leaf_key: shadowsocks::ShadowsocksUdpLeafKey,
 }
 
 /// Hysteria2 UDP peer parameters.
 #[cfg(feature = "hysteria2")]
 pub(crate) struct H2UdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
-    pub(crate) password: &'a str,
-    pub(crate) client_fingerprint: Option<&'a str>,
+    pub(crate) resume: &'a hysteria2::Hysteria2UdpFlowResume,
 }
 
 /// Trojan UDP peer parameters.

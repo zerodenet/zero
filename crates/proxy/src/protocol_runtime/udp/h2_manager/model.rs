@@ -5,19 +5,12 @@ use tokio::task::JoinSet;
 use zero_core::Address;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct H2Key {
-    server: String,
-    port: u16,
-    password: String,
-}
+pub(super) struct H2Key(hysteria2::Hysteria2UdpLeafKey);
 
 impl H2Key {
     pub(super) fn from_peer(peer: &H2UdpPeer<'_>) -> Self {
-        Self {
-            server: peer.endpoint.server.to_owned(),
-            port: peer.endpoint.port,
-            password: peer.password.to_owned(),
-        }
+        let peer_config = peer.resume.peer_config();
+        Self(peer_config.leaf_cache_key(peer.endpoint.server, peer.endpoint.port))
     }
 }
 

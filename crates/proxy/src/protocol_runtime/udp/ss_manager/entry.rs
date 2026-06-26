@@ -8,13 +8,11 @@ use super::socket;
 
 pub(super) fn ensure(
     upstreams: &mut HashMap<SsKey, Arc<SsUpstream>>,
-    server: &str,
-    port: u16,
-    cache_key: &str,
+    leaf_key: shadowsocks::ShadowsocksUdpLeafKey,
     resume: shadowsocks::ShadowsocksUdpFlowResume,
     target_addr: SocketAddr,
 ) -> Arc<SsUpstream> {
-    let key = SsKey::new(server, port, cache_key);
+    let key = SsKey::new(leaf_key);
     if let Some(entry) = upstreams.get(&key) {
         return entry.clone();
     }

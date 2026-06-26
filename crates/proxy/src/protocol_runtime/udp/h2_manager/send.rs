@@ -69,8 +69,7 @@ impl H2ChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                password: request.resume.password(),
-                client_fingerprint: request.resume.client_fingerprint(),
+                resume: &request.resume,
             },
             resume,
             UdpPacketRef {

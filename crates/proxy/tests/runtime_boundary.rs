@@ -5651,6 +5651,8 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
 fn h2_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/h2_manager.rs");
     let stream = read("src/protocol_runtime/udp/h2_manager/stream.rs");
+    let manager_send = read("src/protocol_runtime/udp/h2_manager/send.rs");
+    let manager_model = read("src/protocol_runtime/udp/h2_manager/model.rs");
     let adapter = read("src/adapters/hysteria2/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/forward/hysteria2.rs");
@@ -5690,6 +5692,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     assert!(
         adapter.contains("Hysteria2UdpFlowResume::new")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
+            && protocol_udp.contains("pub fn peer_config(&self)")
+            && protocol_udp.contains("struct Hysteria2UdpLeafKey")
             && protocol_udp.contains("pub fn codec(&self)")
             && protocol_udp.contains("pub fn client_fingerprint(&self) -> Option<&str>"),
         "Hysteria2 adapter should build an opaque protocol-owned UDP flow resume descriptor"
@@ -5718,6 +5722,21 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !forward.contains("client_fingerprint: Option<&'a str>"),
         "existing Hysteria2 UDP flow forwarding should pass the opaque resume descriptor without unpacking auth or codec state"
     );
+    for forbidden in [
+        "request.resume.password()",
+        "request.resume.client_fingerprint()",
+        "password: String",
+        "client_fingerprint: Option<String>",
+        "peer.password",
+        "peer.client_fingerprint",
+    ] {
+        assert!(
+            !manager_send.contains(forbidden)
+                && !manager_model.contains(forbidden)
+                && !stream.contains(forbidden),
+            "Hysteria2 UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -6048,13 +6067,16 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     assert!(
         !shadowsocks_peer_model.contains("cipher: shadowsocks::CipherKind")
             && !shadowsocks_peer_model.contains("password: &'a str")
-            && shadowsocks_peer_model.contains("cache_key: &'a str"),
-        "ordinary Shadowsocks UDP peer model should carry only opaque cache identity"
+            && !shadowsocks_peer_model.contains("cache_key: &'a str")
+            && shadowsocks_peer_model.contains("leaf_key: shadowsocks::ShadowsocksUdpLeafKey"),
+        "ordinary Shadowsocks UDP peer model should carry only protocol-owned opaque cache identity"
     );
     assert!(
         adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && !adapter.contains("ShadowsocksUdpFlowResume::new")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowResume")
+            && protocol_outbound.contains("pub fn leaf_cache_key(&self)")
+            && protocol_outbound.contains("struct ShadowsocksUdpLeafKey")
             && protocol_outbound.contains("pub fn from_config(")
             && protocol_outbound.contains("pub fn codec(&self)")
             && protocol_outbound.contains("pub fn cache_key(&self) -> &str"),
@@ -6085,6 +6107,20 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !start.contains("resume.codec()"),
         "new Shadowsocks UDP flow start should pass the unified resume descriptor without unpacking cache identity or codec state"
     );
+    let manager = read("src/protocol_runtime/udp/ss_manager.rs");
+    let manager_model = read("src/protocol_runtime/udp/ss_manager/model.rs");
+    for forbidden in [
+        "request.resume.cache_key()",
+        "request.resume.codec()",
+        "cache_key: String",
+        "cache_key: &str",
+        "SsKey::new(server",
+    ] {
+        assert!(
+            !manager.contains(forbidden) && !manager_model.contains(forbidden),
+            "Shadowsocks UDP manager should use protocol-owned leaf key instead of unpacking `{forbidden}`"
+        );
+    }
 }
 
 #[test]
