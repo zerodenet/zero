@@ -182,6 +182,24 @@ pub struct VlessUdpPacket {
     pub payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VlessUdpFlowCodec;
+
+impl VlessUdpFlowCodec {
+    pub fn encode_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_udp_flow_packet(target, port, payload)
+    }
+
+    pub fn decode_packet(&self, packet: &[u8]) -> Result<VlessUdpPacket, Error> {
+        decode_udp_flow_packet(packet)
+    }
+}
+
 pub fn parse_udp_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
     if packet.len() < 3 {
         return Err(Error::Protocol("VLESS UDP packet is too short"));

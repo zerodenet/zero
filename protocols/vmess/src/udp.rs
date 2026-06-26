@@ -40,6 +40,24 @@ pub struct VmessUdpPacket {
     pub payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VmessUdpFlowCodec;
+
+impl VmessUdpFlowCodec {
+    pub fn encode_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_udp_flow_packet(target, port, payload)
+    }
+
+    pub fn decode_packet(&self, packet: &[u8]) -> Result<VmessUdpPacket, Error> {
+        decode_udp_flow_packet(packet)
+    }
+}
+
 pub struct VmessInboundUdpPayload {
     pub state: VmessUdpPayloadState,
     pub target: Address,

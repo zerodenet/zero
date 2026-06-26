@@ -26,11 +26,15 @@ fn encode_vmess_udp_packet(
     port: u16,
     payload: &[u8],
 ) -> Result<Vec<u8>, EngineError> {
-    vmess::encode_udp_flow_packet(target, port, payload).map_err(EngineError::from)
+    vmess::VmessUdpFlowCodec
+        .encode_packet(target, port, payload)
+        .map_err(EngineError::from)
 }
 
 fn decode_vmess_udp_packet(packet: &[u8]) -> Result<vmess::VmessUdpPacket, EngineError> {
-    vmess::decode_udp_flow_packet(packet).map_err(EngineError::from)
+    vmess::VmessUdpFlowCodec
+        .decode_packet(packet)
+        .map_err(EngineError::from)
 }
 
 fn spawn_vmess_udp_relay(
