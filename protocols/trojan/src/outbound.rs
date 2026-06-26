@@ -131,6 +131,18 @@ impl TrojanUdpFlowIo {
         establish_udp_packet_tunnel(stream, session, password).await
     }
 
+    pub async fn establish_with_resume<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+        resume: &TrojanUdpFlowResume,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        resume.establish_udp_tunnel(self, stream, session).await
+    }
+
     pub async fn write_packet<S>(
         &self,
         stream: &mut S,
@@ -224,6 +236,75 @@ impl TrojanUdpFlowResume {
             client_fingerprint: self.client_fingerprint.as_deref(),
             relay_chain: self.relay_chain,
         }
+    }
+
+    pub fn leaf_cache_key(&self, server: &str, port: u16) -> TrojanUdpLeafKey {
+        self.peer_config().leaf_cache_key(server, port)
+    }
+
+    pub fn flow_key(&self, server: &str, port: u16) -> TrojanUdpFlowKey {
+        if self.relay_chain {
+            TrojanUdpFlowKey::Relay
+        } else {
+            TrojanUdpFlowKey::Leaf(self.leaf_cache_key(server, port))
+        }
+    }
+
+    pub fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
+        TrojanUdpTlsProfile {
+            server_name: self
+                .sni
+                .as_deref()
+                .or(fallback_server_name)
+                .map(ToOwned::to_owned),
+            insecure: self.insecure,
+            client_fingerprint: self.client_fingerprint.clone(),
+        }
+    }
+
+    pub async fn establish_udp_tunnel<S>(
+        &self,
+        flow_io: &TrojanUdpFlowIo,
+        stream: &mut S,
+        session: &Session,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        flow_io.establish(stream, session, &self.password).await
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TrojanUdpFlowKey {
+    Leaf(TrojanUdpLeafKey),
+    Relay,
+}
+
+impl TrojanUdpFlowKey {
+    pub fn is_relay(&self) -> bool {
+        matches!(self, Self::Relay)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanUdpTlsProfile {
+    server_name: Option<String>,
+    insecure: bool,
+    client_fingerprint: Option<String>,
+}
+
+impl TrojanUdpTlsProfile {
+    pub fn server_name(&self) -> Option<&str> {
+        self.server_name.as_deref()
+    }
+
+    pub fn insecure(&self) -> bool {
+        self.insecure
+    }
+
+    pub fn client_fingerprint(&self) -> Option<&str> {
+        self.client_fingerprint.as_deref()
     }
 }
 

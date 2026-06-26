@@ -21,7 +21,7 @@ pub(crate) struct H2UdpPeer<'a> {
 pub(crate) struct TrojanUdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
     pub(crate) resume: &'a trojan::TrojanUdpFlowResume,
-    pub(crate) relay_chain: bool,
+    pub(crate) flow_key: trojan::TrojanUdpFlowKey,
 }
 
 /// Mieru UDP peer parameters.

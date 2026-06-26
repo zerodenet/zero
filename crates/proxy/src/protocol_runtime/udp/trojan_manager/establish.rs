@@ -15,17 +15,8 @@ pub(super) async fn direct(
     target_port: u16,
 ) -> Result<TrojanEntry, EngineError> {
     let tls_stream = connect::direct_tls_stream(proxy, peer).await?;
-    let peer_config = peer.resume.peer_config();
 
-    packet_stream(
-        proxy,
-        session,
-        tls_stream,
-        peer_config.password(),
-        target,
-        target_port,
-    )
-    .await
+    packet_stream(proxy, session, tls_stream, peer.resume, target, target_port).await
 }
 
 pub(super) async fn over_relay_stream(
@@ -38,29 +29,20 @@ pub(super) async fn over_relay_stream(
     target_port: u16,
 ) -> Result<TrojanEntry, EngineError> {
     let tls_stream = connect::relay_tls_stream(stream, tls_server_name, proxy, peer).await?;
-    let peer_config = peer.resume.peer_config();
 
-    packet_stream(
-        proxy,
-        session,
-        tls_stream,
-        peer_config.password(),
-        target,
-        target_port,
-    )
-    .await
+    packet_stream(proxy, session, tls_stream, peer.resume, target, target_port).await
 }
 
 async fn packet_stream(
     proxy: &Proxy,
     session: &Session,
     stream: TcpRelayStream,
-    password: &str,
+    resume: &trojan::TrojanUdpFlowResume,
     _target: &Address,
     _target_port: u16,
 ) -> Result<TrojanEntry, EngineError> {
     let stream::PacketStream { send_tx, recv_tx } =
-        stream::spawn_packet_stream(proxy, session, stream, password).await?;
+        stream::spawn_packet_stream(proxy, session, stream, resume).await?;
 
     Ok(TrojanEntry { send_tx, recv_tx })
 }

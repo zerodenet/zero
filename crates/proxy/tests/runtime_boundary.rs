@@ -5181,6 +5181,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     let forward = read("src/protocol_runtime/udp/state/forward/trojan.rs");
     let start = read("src/protocol_runtime/udp/start/trojan.rs");
     let manager_send = read("src/protocol_runtime/udp/trojan_manager/send.rs");
+    let manager_connect = read("src/protocol_runtime/udp/trojan_manager/connect.rs");
+    let manager_establish = read("src/protocol_runtime/udp/trojan_manager/establish.rs");
+    let manager_stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
     let manager_model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
@@ -5190,6 +5193,10 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         adapter.contains("TrojanUdpFlowResume::new")
             && protocol_outbound.contains("struct TrojanUdpFlowResume")
             && protocol_outbound.contains("pub fn peer_config(&self)")
+            && protocol_outbound.contains("pub fn flow_key(&self")
+            && protocol_outbound.contains("struct TrojanUdpTlsProfile")
+            && protocol_outbound.contains("pub fn tls_profile(&self")
+            && protocol_outbound.contains("pub async fn establish_udp_tunnel")
             && protocol_outbound.contains("struct TrojanUdpLeafKey")
             && protocol_outbound.contains("pub fn client_fingerprint(&self) -> Option<&str>")
             && protocol_outbound.contains("pub fn relay_chain(&self) -> bool"),
@@ -5231,14 +5238,28 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         "request.resume.insecure()",
         "request.resume.client_fingerprint()",
         "request.resume.relay_chain()",
+        ".peer_config()",
+        "peer_config.",
+        "peer_config:",
+        "TrojanUdpPeerConfig",
         "TrojanKey::Leaf {",
         "password: String",
     ] {
         assert!(
-            !manager_send.contains(forbidden) && !manager_model.contains(forbidden),
+            !manager_send.contains(forbidden)
+                && !manager_connect.contains(forbidden)
+                && !manager_establish.contains(forbidden)
+                && !manager_stream.contains(forbidden)
+                && !manager_model.contains(forbidden),
             "Trojan UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
         );
     }
+    assert!(
+        manager_send.contains("request.resume.flow_key(request.server, request.port)")
+            && manager_connect.contains("peer.resume.tls_profile(")
+            && manager_stream.contains(".establish_with_resume("),
+        "Trojan UDP manager should consume protocol-owned flow key, TLS profile, and tunnel establishment helpers"
+    );
 }
 
 #[test]
@@ -5605,7 +5626,7 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
     );
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")
-            && stream.contains(".establish(")
+            && stream.contains(".establish_with_resume(")
             && stream.contains(".write_stream_packet(&mut send_stream, &packet)")
             && stream.contains(".read_stream_packet(&mut recv_stream)")
             && !stream.contains("trojan::establish_udp_packet_tunnel"),

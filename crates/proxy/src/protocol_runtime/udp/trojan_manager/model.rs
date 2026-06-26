@@ -13,6 +13,15 @@ pub(super) enum TrojanKey {
     Relay { session_id: u64 },
 }
 
+impl TrojanKey {
+    pub(super) fn from_flow_key(flow_key: trojan::TrojanUdpFlowKey, session_id: u64) -> Self {
+        match flow_key {
+            trojan::TrojanUdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
+            trojan::TrojanUdpFlowKey::Relay => Self::Relay { session_id },
+        }
+    }
+}
+
 pub(super) struct TrojanEntry {
     pub(super) send_tx: mpsc::Sender<trojan::TrojanUdpPacket>,
     pub(super) recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,

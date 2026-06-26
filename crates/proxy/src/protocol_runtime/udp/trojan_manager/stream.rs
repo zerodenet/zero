@@ -15,11 +15,13 @@ pub(super) async fn spawn_packet_stream(
     _proxy: &Proxy,
     session: &Session,
     stream: TcpRelayStream,
-    password: &str,
+    resume: &trojan::TrojanUdpFlowResume,
 ) -> Result<PacketStream, EngineError> {
     let mut metered = MeteredStream::new(stream);
     let flow_io = trojan::TrojanUdpFlowIo;
-    flow_io.establish(&mut metered, session, password).await?;
+    flow_io
+        .establish_with_resume(&mut metered, session, resume)
+        .await?;
 
     let (read_half, write_half) = tokio::io::split(metered.into_inner());
     let (send_tx, send_rx) = mpsc::channel::<trojan::TrojanUdpPacket>(32);
