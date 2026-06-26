@@ -1,7 +1,7 @@
 use super::super::ChainTask;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
-use zero_core::Address;
+use zero_core::{Address, UdpFlowPacket};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) enum H2Key {
@@ -17,7 +17,7 @@ impl H2Key {
 }
 
 pub(super) struct H2Entry {
-    pub(super) send_tx: mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>,
+    pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
 }
 
 pub(crate) struct H2SendExisting<'a> {

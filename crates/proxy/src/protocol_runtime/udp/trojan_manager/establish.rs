@@ -46,7 +46,3 @@ async fn packet_stream(
 
     Ok(TrojanEntry { send_tx, recv_tx })
 }
-
-pub(super) fn packet(target: &Address, port: u16, payload: &[u8]) -> trojan::TrojanUdpPacket {
-    trojan::udp_flow_packet(target, port, payload)
-}

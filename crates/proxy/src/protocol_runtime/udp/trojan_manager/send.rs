@@ -7,6 +7,7 @@ use crate::protocol_runtime::udp::packet_path_traits::{UdpFlowContext, UdpPacket
 use crate::protocol_runtime::udp::FlowFailure;
 use crate::protocol_runtime::udp::{TrojanUdpPeer, UdpPeerEndpoint};
 use crate::runtime::Proxy;
+use zero_core::UdpFlowPacket;
 
 impl TrojanChainManager {
     async fn send(
@@ -25,7 +26,7 @@ impl TrojanChainManager {
             bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
             let _ = entry
                 .send_tx
-                .send(establish::packet(
+                .send(UdpFlowPacket::from_parts(
                     packet_ref.target,
                     packet_ref.port,
                     packet_ref.payload,
@@ -58,7 +59,7 @@ impl TrojanChainManager {
         self.upstreams.insert(key, entry);
 
         let _ = send_tx
-            .send(establish::packet(
+            .send(UdpFlowPacket::from_parts(
                 packet_ref.target,
                 packet_ref.port,
                 packet_ref.payload,
@@ -122,7 +123,7 @@ impl TrojanChainManager {
         let send_tx = entry.send_tx.clone();
         self.upstreams.insert(key, entry);
         let _ = send_tx
-            .send(establish::packet(
+            .send(UdpFlowPacket::from_parts(
                 packet_ref.target,
                 packet_ref.port,
                 packet_ref.payload,

@@ -3,11 +3,11 @@ use crate::transport::{
     establish_trojan_udp_flow_stream, TcpRelayStream, TrojanUdpFlowStreamRequest,
 };
 use tokio::sync::{broadcast, mpsc};
-use zero_core::Session;
+use zero_core::{Session, UdpFlowPacket};
 use zero_engine::EngineError;
 
 pub(super) struct PacketStream {
-    pub(super) send_tx: mpsc::Sender<trojan::TrojanUdpPacket>,
+    pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
     pub(super) recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,
 }
 

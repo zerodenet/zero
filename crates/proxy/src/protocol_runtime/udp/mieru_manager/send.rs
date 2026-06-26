@@ -8,6 +8,7 @@ use crate::protocol_runtime::udp::FlowFailure;
 use crate::protocol_runtime::udp::{MieruUdpPeer, UdpPeerEndpoint};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
+use zero_core::UdpFlowPacket;
 
 impl MieruChainManager {
     async fn send(
@@ -137,6 +138,6 @@ impl MieruChainManager {
     }
 }
 
-fn packet(packet_ref: UdpPacketRef<'_>) -> mieru::MieruUdpFlowPacket {
-    mieru::udp_flow_packet(packet_ref.target, packet_ref.port, packet_ref.payload)
+fn packet(packet_ref: UdpPacketRef<'_>) -> UdpFlowPacket {
+    UdpFlowPacket::from_parts(packet_ref.target, packet_ref.port, packet_ref.payload)
 }

@@ -82,8 +82,7 @@ impl AsyncSocket for Hysteria2Stream {
 use hysteria2::{build_auth_frame, build_tcp_connect_header, parse_auth_response, sign_hmac};
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
-use zero_core::Address;
-use zero_core::Session;
+use zero_core::{Address, Error, Session, UdpFlowPacket};
 use zero_engine::EngineError;
 
 /// Establishes a Hysteria2 outbound connection.
@@ -257,7 +256,7 @@ impl Hysteria2Connector {
 pub type Hysteria2UdpResponse = (Address, u16, Vec<u8>);
 
 pub struct Hysteria2UdpFlowStream {
-    pub send_tx: mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>,
+    pub send_tx: mpsc::Sender<UdpFlowPacket>,
     pub recv_tx: broadcast::Sender<Hysteria2UdpResponse>,
 }
 
@@ -265,7 +264,7 @@ pub struct Hysteria2UdpFlowStreamRequest {
     pub server: String,
     pub port: u16,
     pub resume: hysteria2::Hysteria2UdpFlowResume,
-    pub initial_packet: hysteria2::Hysteria2UdpFlowPacket,
+    pub initial_packet: UdpFlowPacket,
 }
 
 pub async fn establish_hysteria2_udp_flow_stream(
@@ -277,7 +276,7 @@ pub async fn establish_hysteria2_udp_flow_stream(
             .with_fingerprint(connector_profile.client_fingerprint());
     let conn = Arc::new(connector.connect_raw().await?);
 
-    let (send_tx, send_rx) = mpsc::channel::<hysteria2::Hysteria2UdpFlowPacket>(32);
+    let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
     let (recv_tx, _) = broadcast::channel::<Hysteria2UdpResponse>(32);
 
     spawn_hysteria2_udp_send_task(
@@ -293,18 +292,18 @@ pub async fn establish_hysteria2_udp_flow_stream(
 
 fn spawn_hysteria2_udp_send_task(
     conn: Arc<quinn::Connection>,
-    mut send_rx: mpsc::Receiver<hysteria2::Hysteria2UdpFlowPacket>,
-    initial_packet: hysteria2::Hysteria2UdpFlowPacket,
+    mut send_rx: mpsc::Receiver<UdpFlowPacket>,
+    initial_packet: UdpFlowPacket,
     resume: hysteria2::Hysteria2UdpFlowResume,
 ) {
     tokio::spawn(async move {
-        if let Ok(datagram) = initial_packet.encode_with(&resume) {
+        if let Ok(datagram) = encode_hysteria2_udp_flow_packet(initial_packet, &resume) {
             if conn.send_datagram(datagram.into()).is_err() {
                 return;
             }
         }
         while let Some(packet) = send_rx.recv().await {
-            let Ok(datagram) = packet.encode_with(&resume) else {
+            let Ok(datagram) = encode_hysteria2_udp_flow_packet(packet, &resume) else {
                 break;
             };
             if conn.send_datagram(datagram.into()).is_err() {
@@ -312,6 +311,14 @@ fn spawn_hysteria2_udp_send_task(
             }
         }
     });
+}
+
+fn encode_hysteria2_udp_flow_packet(
+    packet: UdpFlowPacket,
+    resume: &hysteria2::Hysteria2UdpFlowResume,
+) -> Result<Vec<u8>, Error> {
+    let packet = hysteria2::udp_flow_packet(&packet.target, packet.port, &packet.payload);
+    packet.encode_with(resume)
 }
 
 fn spawn_hysteria2_udp_recv_task(

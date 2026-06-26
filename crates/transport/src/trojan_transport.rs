@@ -6,7 +6,7 @@ use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::sync::{broadcast, mpsc};
 use zero_config::ClientTlsConfig;
-use zero_core::Session;
+use zero_core::{Session, UdpFlowPacket};
 use zero_engine::EngineError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 use zero_traits::AsyncSocket;
@@ -34,7 +34,7 @@ pub async fn open_trojan_udp_tls_relay_stream(
 }
 
 pub struct TrojanUdpFlowStream {
-    pub send_tx: mpsc::Sender<trojan::TrojanUdpPacket>,
+    pub send_tx: mpsc::Sender<UdpFlowPacket>,
     pub recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,
 }
 
@@ -54,7 +54,7 @@ pub async fn establish_trojan_udp_flow_stream(
         .await?;
 
     let (read_half, write_half) = tokio::io::split(stream);
-    let (send_tx, send_rx) = mpsc::channel::<trojan::TrojanUdpPacket>(32);
+    let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
     let (recv_tx, _) = broadcast::channel::<trojan::TrojanUdpPacket>(32);
 
     spawn_trojan_udp_send_task(send_rx, WriteOnlySocket(write_half));
@@ -64,12 +64,13 @@ pub async fn establish_trojan_udp_flow_stream(
 }
 
 fn spawn_trojan_udp_send_task(
-    mut send_rx: mpsc::Receiver<trojan::TrojanUdpPacket>,
+    mut send_rx: mpsc::Receiver<UdpFlowPacket>,
     mut send_stream: WriteOnlySocket,
 ) {
     tokio::spawn(async move {
         let flow_io = trojan::TrojanUdpFlowIo;
         while let Some(packet) = send_rx.recv().await {
+            let packet = trojan::udp_flow_packet(&packet.target, packet.port, &packet.payload);
             if flow_io
                 .write_stream_packet(&mut send_stream, &packet)
                 .await

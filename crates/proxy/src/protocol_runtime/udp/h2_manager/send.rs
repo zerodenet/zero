@@ -16,8 +16,11 @@ impl H2ChainManager {
         let key = H2Key::from_flow_key(peer.flow_key.clone());
 
         if let Some(entry) = self.upstreams.get(&key) {
-            let packet =
-                hysteria2::udp_flow_packet(packet_ref.target, packet_ref.port, packet_ref.payload);
+            let packet = zero_core::UdpFlowPacket::from_parts(
+                packet_ref.target,
+                packet_ref.port,
+                packet_ref.payload,
+            );
             let _ = entry.send_tx.send(packet).await;
             return Ok(sent);
         }

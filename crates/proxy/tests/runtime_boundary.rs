@@ -5735,17 +5735,21 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     );
     assert!(
         !manager_model.contains("struct MieruPacket")
-            && manager_model.contains("mieru::MieruUdpFlowPacket")
-            && manager_send.contains("mieru::udp_flow_packet")
+            && manager_model.contains("mpsc::Sender<UdpFlowPacket>")
+            && !manager_model.contains("mpsc::Sender<mieru::MieruUdpFlowPacket>")
+            && !manager_send.contains("mieru::udp_flow_packet")
             && !manager_send.contains("MieruUdpFlowPacket::new")
-            && stream.contains("MieruUdpFlowPacket")
+            && !stream.contains("MieruUdpFlowPacket")
+            && stream.contains("mpsc::Sender<UdpFlowPacket>")
+            && transport.contains("mpsc::Sender<UdpFlowPacket>")
+            && transport.contains("mieru::udp_flow_packet")
             && stream.contains("establish_mieru_udp_flow_stream")
             && transport.contains("io.write_packet(&mut write_stream, &packet)")
             && transport.contains("io.read_packets(&mut read_stream, &mut scratch)")
             && transport.contains("packet.into_parts()")
             && !stream.contains("packet.target")
             && !stream.contains("packet.payload"),
-        "Mieru UDP manager should use protocol-owned UDP flow stream operations instead of unpacking packet fields in proxy"
+        "Mieru UDP manager should carry neutral UDP packets while transport glue converts them through protocols/mieru"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
@@ -6018,9 +6022,12 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             .expect("read trojan protocol outbound source");
     assert!(
         protocol_outbound.contains("pub fn udp_flow_packet")
-            && establish.contains("trojan::udp_flow_packet")
-            && !establish.contains("trojan::TrojanUdpPacket::new"),
-        "Trojan UDP establish glue should ask protocols/trojan to build UDP flow packet models"
+            && !establish.contains("trojan::udp_flow_packet")
+            && !establish.contains("trojan::TrojanUdpPacket::new")
+            && stream.contains("mpsc::Sender<UdpFlowPacket>")
+            && transport.contains("mpsc::Sender<UdpFlowPacket>")
+            && transport.contains("trojan::udp_flow_packet"),
+        "Trojan UDP stream glue should carry neutral UDP packets while transport converts them through protocols/trojan"
     );
     assert!(
         stream.contains("establish_trojan_udp_flow_stream")
@@ -6171,21 +6178,24 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .next()
         .expect("H2SendExisting should follow H2Entry");
     assert!(
-        h2_entry_model.contains("mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>")
+        h2_entry_model.contains("mpsc::Sender<UdpFlowPacket>")
             && !h2_entry_model.contains("resume: hysteria2::Hysteria2UdpFlowResume")
-            && manager_send.contains("hysteria2::udp_flow_packet")
-            && stream.contains("hysteria2::udp_flow_packet")
+            && !manager_send.contains("hysteria2::udp_flow_packet")
+            && !stream.contains("hysteria2::udp_flow_packet")
             && !manager_send.contains("Hysteria2UdpFlowPacket::from_parts")
             && !stream.contains("Hysteria2UdpFlowPacket::from_parts")
+            && manager_send.contains("UdpFlowPacket::from_parts")
+            && stream.contains("UdpFlowPacket::from_parts")
             && stream.contains("establish_hysteria2_udp_flow_stream")
-            && transport.contains("initial_packet.encode_with(&resume)")
-            && transport.contains("packet.encode_with(&resume)")
+            && transport.contains("mpsc::Sender<UdpFlowPacket>")
+            && transport.contains("hysteria2::udp_flow_packet")
+            && transport.contains("encode_hysteria2_udp_flow_packet")
             && transport.contains("resume.decode_flow_packet(&data)")
             && !manager_send.contains(".encode_packet(")
             && !stream.contains(".encode_packet(")
             && !stream.contains(".decode_packet(")
             && !stream.contains("mpsc::Sender<Vec<u8>>"),
-        "Hysteria2 UDP manager should carry protocol-owned flow packet models while transport owns QUIC datagram encode/decode loops"
+        "Hysteria2 UDP manager should carry neutral UDP packets while transport glue converts them through protocols/hysteria2"
     );
     assert!(
         adapter.contains("Hysteria2UdpFlowResume::new")

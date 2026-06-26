@@ -1,13 +1,12 @@
 use crate::transport::{
     establish_mieru_udp_flow_stream, MieruUdpFlowStreamRequest, TcpRelayStream,
 };
-use mieru::MieruUdpFlowPacket;
 use tokio::sync::{broadcast, mpsc};
-use zero_core::Address;
+use zero_core::{Address, UdpFlowPacket};
 use zero_engine::EngineError;
 
 pub(super) struct PacketStream {
-    pub(super) send_tx: mpsc::Sender<MieruUdpFlowPacket>,
+    pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
     pub(super) recv_tx: broadcast::Sender<(Address, u16, Vec<u8>)>,
 }
 
