@@ -1,16 +1,18 @@
 use super::super::ChainTask;
-use super::super::H2UdpPeer;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use zero_core::Address;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct H2Key(hysteria2::Hysteria2UdpLeafKey);
+pub(super) enum H2Key {
+    Leaf(hysteria2::Hysteria2UdpLeafKey),
+}
 
 impl H2Key {
-    pub(super) fn from_peer(peer: &H2UdpPeer<'_>) -> Self {
-        let peer_config = peer.resume.peer_config();
-        Self(peer_config.leaf_cache_key(peer.endpoint.server, peer.endpoint.port))
+    pub(super) fn from_flow_key(flow_key: hysteria2::Hysteria2UdpFlowKey) -> Self {
+        match flow_key {
+            hysteria2::Hysteria2UdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
+        }
     }
 }
 

@@ -17,13 +17,13 @@ pub(super) async fn establish(
     initial_packet: UdpPacketRef<'_>,
     resume: hysteria2::Hysteria2UdpFlowResume,
 ) -> Result<PacketStream, EngineError> {
-    let peer_config = peer.resume.peer_config();
+    let connector_profile = peer.resume.connector_profile();
     let connector = Hysteria2Connector::new(
         peer.endpoint.server,
         peer.endpoint.port,
-        peer_config.password(),
+        connector_profile.password(),
     )
-    .with_fingerprint(peer_config.client_fingerprint());
+    .with_fingerprint(connector_profile.client_fingerprint());
     let conn = Arc::new(connector.connect_raw().await?);
 
     let (send_tx, send_rx) = mpsc::channel::<hysteria2::Hysteria2UdpFlowPacket>(32);

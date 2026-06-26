@@ -5798,6 +5798,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         adapter.contains("Hysteria2UdpFlowResume::new")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
             && protocol_udp.contains("pub fn peer_config(&self)")
+            && protocol_udp.contains("pub fn flow_key(&self")
+            && protocol_udp.contains("enum Hysteria2UdpFlowKey")
+            && protocol_udp.contains("struct Hysteria2UdpConnectorProfile")
+            && protocol_udp.contains("pub fn connector_profile(&self)")
             && protocol_udp.contains("struct Hysteria2UdpLeafKey")
             && protocol_udp.contains("pub fn codec(&self)")
             && protocol_udp.contains("pub fn client_fingerprint(&self) -> Option<&str>"),
@@ -5830,6 +5834,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     for forbidden in [
         "request.resume.password()",
         "request.resume.client_fingerprint()",
+        ".peer_config()",
+        "peer_config.",
+        "peer_config:",
+        "Hysteria2UdpPeerConfig",
         "password: String",
         "client_fingerprint: Option<String>",
         "peer.password",
@@ -5842,6 +5850,12 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             "Hysteria2 UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
         );
     }
+    assert!(
+        manager_send.contains("request.resume.flow_key(request.server, request.port)")
+            && manager_model.contains("fn from_flow_key(")
+            && stream.contains("peer.resume.connector_profile()"),
+        "Hysteria2 UDP manager should consume protocol-owned flow key and connector profile helpers"
+    );
 }
 
 #[test]
@@ -5940,7 +5954,12 @@ fn h2_udp_state_model_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/h2_manager.rs");
     let model = manifest_dir().join("src/protocol_runtime/udp/h2_manager/model.rs");
 
-    for forbidden in ["struct H2Entry", "struct H2SendExisting", "struct H2Key"] {
+    for forbidden in [
+        "struct H2Entry",
+        "struct H2SendExisting",
+        "struct H2Key",
+        "enum H2Key",
+    ] {
         assert!(
             !manager.contains(forbidden),
             "h2_manager.rs should keep state/request models in h2_manager/model.rs; found `{forbidden}`"
@@ -5957,14 +5976,19 @@ fn h2_udp_model_details_live_outside_manager_root() {
     let manager = read("src/protocol_runtime/udp/h2_manager.rs");
     let model = read("src/protocol_runtime/udp/h2_manager/model.rs");
 
-    for forbidden in ["struct H2Entry", "struct H2SendExisting", "struct H2Key"] {
+    for forbidden in [
+        "struct H2Entry",
+        "struct H2SendExisting",
+        "struct H2Key",
+        "enum H2Key",
+    ] {
         assert!(
             !manager.contains(forbidden),
             "h2_manager.rs should keep model details in h2_manager/model.rs; found `{forbidden}`"
         );
     }
 
-    for required in ["struct H2Entry", "struct H2SendExisting", "struct H2Key"] {
+    for required in ["struct H2Entry", "struct H2SendExisting", "H2Key"] {
         assert!(
             model.contains(required),
             "h2_manager model details should live in h2_manager/model.rs; missing `{required}`"

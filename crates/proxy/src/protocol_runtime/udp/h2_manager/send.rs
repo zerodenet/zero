@@ -13,7 +13,7 @@ impl H2ChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
-        let key = H2Key::from_peer(&peer);
+        let key = H2Key::from_flow_key(peer.flow_key.clone());
 
         if let Some(entry) = self.upstreams.get(&key) {
             let packet = hysteria2::Hysteria2UdpFlowPacket::from_parts(
@@ -65,6 +65,7 @@ impl H2ChainManager {
                     port: request.port,
                 },
                 resume: &request.resume,
+                flow_key: request.resume.flow_key(request.server, request.port),
             },
             resume,
             UdpPacketRef {

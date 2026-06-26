@@ -255,6 +255,21 @@ impl Hysteria2UdpFlowResume {
         }
     }
 
+    pub fn leaf_cache_key(&self, server: &str, port: u16) -> Hysteria2UdpLeafKey {
+        self.peer_config().leaf_cache_key(server, port)
+    }
+
+    pub fn flow_key(&self, server: &str, port: u16) -> Hysteria2UdpFlowKey {
+        Hysteria2UdpFlowKey::Leaf(self.leaf_cache_key(server, port))
+    }
+
+    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
+        Hysteria2UdpConnectorProfile {
+            password: self.password.clone(),
+            client_fingerprint: self.client_fingerprint.clone(),
+        }
+    }
+
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec()
     }
@@ -276,6 +291,27 @@ impl Hysteria2UdpFlowResume {
     pub fn decode_flow_packet(&self, data: &[u8]) -> Option<Hysteria2UdpFlowPacket> {
         let (target, port, payload) = self.decode_packet(data)?;
         Some(Hysteria2UdpFlowPacket::new(target, port, payload))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Hysteria2UdpFlowKey {
+    Leaf(Hysteria2UdpLeafKey),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2UdpConnectorProfile {
+    password: String,
+    client_fingerprint: Option<String>,
+}
+
+impl Hysteria2UdpConnectorProfile {
+    pub fn password(&self) -> &str {
+        &self.password
+    }
+
+    pub fn client_fingerprint(&self) -> Option<&str> {
+        self.client_fingerprint.as_deref()
     }
 }
 
