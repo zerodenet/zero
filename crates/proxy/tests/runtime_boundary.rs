@@ -1936,9 +1936,9 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         "SOCKS5 packet-path carrier should delegate protocol response decoding to protocols/socks5"
     );
     assert!(
-        root.contains("Socks5UdpPacketSend")
+        !root.contains("Socks5UdpPacketSend")
             && !root.contains("pub(crate) use send::Socks5UdpSend"),
-        "SOCKS5 UDP facade should expose only the packet-send facade model, not the internal send request"
+        "SOCKS5 UDP facade should not expose packet-send request models"
     );
     assert!(
         send.exists() && runtime.exists() && packet_path.exists(),
@@ -2881,6 +2881,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
 fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
     let model = read("src/protocol_runtime/socks5_udp/model.rs");
     let send = read("src/protocol_runtime/socks5_udp/send.rs");
+    let runtime = read("src/protocol_runtime/socks5_udp/runtime.rs");
     let start = read("src/protocol_runtime/udp/start/socks5.rs");
     let response = read("src/protocol_runtime/socks5_udp_associate/upstream_response.rs");
 
@@ -2894,10 +2895,11 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
         "SOCKS5 UDP association identity should be named outbound_tag, not a generic tag"
     );
     assert!(
-        start.contains("let Some(outbound_tag) = request.outbound_tag")
-            && start.contains("tag: outbound_tag")
+        start.contains("start_relay_flow(inbound_tag, request)")
+            && runtime.contains("let Some(outbound_tag) = request.outbound_tag")
+            && runtime.contains("tag: outbound_tag")
             && !start.contains("tag: inbound_tag"),
-        "SOCKS5 managed UDP start must pass the outbound tag into the upstream association"
+        "SOCKS5 UDP runtime must pass the outbound tag into the upstream association without exposing it through start glue"
     );
     assert!(
         send.contains("outbound_tag: request.tag.to_owned()")
@@ -3557,17 +3559,16 @@ fn protocol_udp_socks5_start_dispatch_lives_outside_state_root() {
 
     for forbidden in ["ProtocolUdpFlowResume::Socks5", "Socks5UdpPacketSend"] {
         assert!(
-            !state.contains(forbidden),
-            "state.rs should delegate SOCKS5 relay start to start/socks5.rs; found `{forbidden}`"
+            !state.contains(forbidden) && !socks5.contains(forbidden),
+            "state.rs and start/socks5.rs should delegate SOCKS5 relay details to protocol_runtime::socks5_udp; found `{forbidden}`"
         );
     }
     assert!(
         state.contains("ManagedUdpFlowKind::RelayStream")
             && state.contains("start_socks5_relay_flow")
-            && socks5.contains("Socks5UdpPacketSend")
-            && socks5.contains("send_packet(packet, inbound_tag)")
+            && socks5.contains("start_relay_flow(inbound_tag, request)")
             && !socks5.contains("ProtocolUdpFlowResume::Socks5"),
-        "SOCKS5 relay construction should live in start/socks5.rs without unpacking protocol resume in state.rs"
+        "SOCKS5 relay start should stay as UDP orchestration glue and delegate packet construction to socks5_udp"
     );
 }
 

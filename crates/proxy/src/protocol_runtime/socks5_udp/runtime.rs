@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use tokio::time::Instant as TokioInstant;
-use zero_core::Session;
 use zero_engine::EngineError;
 
 use super::active::ActiveUpstreamSocks5UdpAssociation;
@@ -9,7 +8,7 @@ use super::model::{
     ClosedSocks5UdpAssociation, Socks5UdpAssociationView, UpstreamAssociationCloseReason,
 };
 use super::send::{self, Socks5UdpSend};
-use crate::protocol_runtime::udp::ProtocolUdpFlowResume;
+use crate::protocol_runtime::udp::{FlowFailure, ManagedUdpFlowRequest, ProtocolUdpFlowResume};
 
 #[derive(Default)]
 pub(crate) struct Socks5UdpRuntime {
@@ -51,15 +50,32 @@ impl Socks5UdpRuntime {
         send::send(request, inbound_tag, self).await
     }
 
-    pub(crate) async fn send_packet(
+    pub(crate) async fn start_relay_flow(
         &mut self,
-        request: Socks5UdpPacketSend<'_>,
         inbound_tag: &str,
-    ) -> Result<usize, EngineError> {
+        request: ManagedUdpFlowRequest<'_>,
+    ) -> Result<usize, FlowFailure> {
+        let Some(proxy) = request.proxy else {
+            return Err(socks5_flow_mismatch(
+                "udp_socks5_proxy",
+                request.server,
+                request.port,
+                "expected proxy context for SOCKS5 UDP flow",
+            ));
+        };
+        let Some(outbound_tag) = request.outbound_tag else {
+            return Err(socks5_flow_mismatch(
+                "udp_socks5_outbound_tag",
+                request.server,
+                request.port,
+                "expected outbound tag for SOCKS5 UDP flow",
+            ));
+        };
+
         self.send(
             Socks5UdpSend {
-                proxy: request.proxy,
-                tag: request.tag,
+                proxy,
+                tag: outbound_tag,
                 server: request.server,
                 port: request.port,
                 resume: request.resume,
@@ -69,6 +85,11 @@ impl Socks5UdpRuntime {
             inbound_tag,
         )
         .await
+        .map_err(|error| FlowFailure {
+            stage: "udp_upstream_send",
+            error,
+            upstream: Some((request.server.to_string(), request.port)),
+        })
     }
 
     pub(crate) fn close_idle(&mut self) -> Option<ClosedSocks5UdpAssociation> {
@@ -107,16 +128,6 @@ impl Socks5UdpRuntime {
     }
 }
 
-pub(crate) struct Socks5UdpPacketSend<'a> {
-    pub(crate) proxy: &'a crate::runtime::Proxy,
-    pub(crate) tag: &'a str,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) resume: ProtocolUdpFlowResume,
-    pub(crate) session: &'a Session,
-    pub(crate) payload: &'a [u8],
-}
-
 pub(crate) async fn recv_upstream_packet(
     runtime: &Socks5UdpRuntime,
     buf: &mut [u8],
@@ -124,5 +135,18 @@ pub(crate) async fn recv_upstream_packet(
     match runtime.upstream.as_ref() {
         Some(association) => association.recv_packet(buf).await,
         None => std::future::pending::<Result<usize, EngineError>>().await,
+    }
+}
+
+fn socks5_flow_mismatch(
+    stage: &'static str,
+    server: &str,
+    port: u16,
+    message: &'static str,
+) -> FlowFailure {
+    FlowFailure {
+        stage,
+        error: EngineError::Io(std::io::Error::other(message)),
+        upstream: Some((server.to_string(), port)),
     }
 }
