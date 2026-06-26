@@ -3413,6 +3413,7 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
 
 #[test]
 fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
+    let state = read("src/protocol_runtime/udp/state.rs");
     let datagram = read("src/protocol_runtime/udp/start/datagram.rs");
     let trojan = manifest_dir().join("src/protocol_runtime/udp/start/trojan.rs");
     let mieru = manifest_dir().join("src/protocol_runtime/udp/start/mieru.rs");
@@ -3437,6 +3438,21 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     assert!(
         mieru.exists(),
         "Mieru UDP start facade should live in start/mieru.rs"
+    );
+    for forbidden in [
+        "ProtocolUdpFlowResume::Shadowsocks(_)",
+        "ProtocolUdpFlowResume::Hysteria2(_)",
+    ] {
+        assert!(
+            !state.contains(forbidden),
+            "state.rs should delegate datagram resume dispatch to start/datagram.rs; found `{forbidden}`"
+        );
+    }
+    assert!(
+        state.contains("(_, ManagedUdpFlowKind::Datagram)")
+            && datagram.contains("ProtocolUdpFlowResume::Shadowsocks(resume)")
+            && datagram.contains("ProtocolUdpFlowResume::Hysteria2(resume)"),
+        "managed datagram UDP flow kind should leave protocol-specific resume matching in start/datagram.rs"
     );
 }
 

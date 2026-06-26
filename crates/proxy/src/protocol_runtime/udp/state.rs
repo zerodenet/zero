@@ -129,23 +129,7 @@ impl ProtocolUdpState {
                         upstream: Some((request.server.to_string(), request.port)),
                     })
             }
-            #[cfg(feature = "shadowsocks")]
-            (ProtocolUdpFlowResume::Shadowsocks(_), ManagedUdpFlowKind::Datagram) => {
-                self.start_managed_datagram_flow(
-                    request.chain_tasks,
-                    ManagedDatagramFlow {
-                        proxy: request.proxy,
-                        session: request.session,
-                        server: request.server,
-                        port: request.port,
-                        resume: request.resume,
-                        payload: request.payload,
-                    },
-                )
-                .await
-            }
-            #[cfg(feature = "hysteria2")]
-            (ProtocolUdpFlowResume::Hysteria2(_), ManagedUdpFlowKind::Datagram) => {
+            (_, ManagedUdpFlowKind::Datagram) => {
                 self.start_managed_datagram_flow(
                     request.chain_tasks,
                     ManagedDatagramFlow {
