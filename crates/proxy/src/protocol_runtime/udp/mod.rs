@@ -7,13 +7,22 @@ mod flow_snapshot;
 mod flows;
 #[cfg(feature = "hysteria2")]
 mod h2_manager;
+#[cfg(feature = "hysteria2")]
+pub(crate) mod hysteria2_flow;
+#[cfg(feature = "mieru")]
+pub(crate) mod mieru_flow;
 #[cfg(feature = "mieru")]
 mod mieru_manager;
 mod peer;
 #[cfg(feature = "shadowsocks")]
+pub(crate) mod shadowsocks_flow;
+pub(crate) mod socks5_flow;
+#[cfg(feature = "shadowsocks")]
 mod ss_manager;
 mod start;
 mod state;
+#[cfg(feature = "trojan")]
+pub(crate) mod trojan_flow;
 #[cfg(feature = "trojan")]
 mod trojan_manager;
 

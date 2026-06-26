@@ -6,8 +6,8 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
+use crate::protocol_runtime::udp::shadowsocks_flow::ShadowsocksDatagramSend;
 use crate::protocol_runtime::udp::ProtocolUdpFlowResume;
-use crate::runtime::udp_dispatch::shadowsocks_flow::ShadowsocksDatagramSend;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
 

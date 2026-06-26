@@ -38,7 +38,7 @@ pub(crate) struct ManagedRelayStreamFlow<'a> {
 
 pub(crate) struct ManagedUdpFlowRequest<'a> {
     pub(crate) chain_tasks:
-        &'a mut tokio::task::JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
+        Option<&'a mut tokio::task::JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>>,
     pub(crate) proxy: Option<&'a Proxy>,
     pub(crate) kind: ManagedUdpFlowKind,
     pub(crate) outbound_tag: Option<&'a str>,

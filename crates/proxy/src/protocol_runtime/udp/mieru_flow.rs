@@ -1,13 +1,12 @@
-use zero_core::Session;
-
 use crate::protocol_runtime::udp::{
     ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume,
 };
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
+use zero_core::Session;
 
-pub(crate) struct TrojanDatagramSend<'a> {
+pub(crate) struct MieruDatagramSend<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) tag: &'a str,
     pub(crate) session: &'a Session,
@@ -17,8 +16,7 @@ pub(crate) struct TrojanDatagramSend<'a> {
     pub(crate) payload: &'a [u8],
 }
 
-pub(crate) struct TrojanRelaySend<'a> {
-    pub(crate) proxy: &'a Proxy,
+pub(crate) struct MieruRelaySend<'a> {
     pub(crate) tag: &'a str,
     pub(crate) session: &'a Session,
     pub(crate) carrier: crate::transport::RelayCarrier,
@@ -29,37 +27,33 @@ pub(crate) struct TrojanRelaySend<'a> {
 }
 
 impl UdpDispatch {
-    pub(crate) async fn send_trojan_datagram(
+    pub(crate) async fn send_mieru_datagram(
         &mut self,
-        request: TrojanDatagramSend<'_>,
+        request: MieruDatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.protocol_state
-            .start_managed_udp_flow(
-                &self.inbound_tag,
-                ManagedUdpFlowRequest {
-                    chain_tasks: &mut self.chain_tasks,
-                    proxy: Some(request.proxy),
-                    kind: ManagedUdpFlowKind::StreamPacket,
-                    outbound_tag: Some(request.tag),
-                    session: request.session,
-                    carrier: None,
-                    tls_server_name: None,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume,
-                    payload: request.payload,
-                },
-            )
-            .await
+        self.start_managed_protocol_flow(ManagedUdpFlowRequest {
+            chain_tasks: None,
+            proxy: Some(request.proxy),
+            kind: ManagedUdpFlowKind::StreamPacket,
+            outbound_tag: Some(request.tag),
+            session: request.session,
+            carrier: None,
+            tls_server_name: None,
+            server: request.server,
+            port: request.port,
+            resume: request.resume,
+            payload: request.payload,
+        })
+        .await
     }
 
-    pub(crate) async fn start_trojan_datagram_flow(
+    pub(crate) async fn start_mieru_datagram_flow(
         &mut self,
-        request: TrojanDatagramSend<'_>,
+        request: MieruDatagramSend<'_>,
     ) -> Result<FlowStartResult, FlowFailure> {
         let resume = request.resume.clone();
         let sent = self
-            .send_trojan_datagram(TrojanDatagramSend {
+            .send_mieru_datagram(MieruDatagramSend {
                 proxy: request.proxy,
                 tag: request.tag,
                 session: request.session,
@@ -69,7 +63,7 @@ impl UdpDispatch {
                 payload: request.payload,
             })
             .await?;
-        let managed = self.protocol_state.register_managed_flow(resume);
+        let managed = self.register_managed_protocol_flow(resume);
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::StreamPacket {
                 tag: request.tag.to_string(),
@@ -81,38 +75,33 @@ impl UdpDispatch {
         })
     }
 
-    pub(crate) async fn send_trojan_relay(
+    pub(crate) async fn send_mieru_relay(
         &mut self,
-        request: TrojanRelaySend<'_>,
+        request: MieruRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.protocol_state
-            .start_managed_udp_flow(
-                &self.inbound_tag,
-                ManagedUdpFlowRequest {
-                    chain_tasks: &mut self.chain_tasks,
-                    proxy: Some(request.proxy),
-                    kind: ManagedUdpFlowKind::RelayStream,
-                    outbound_tag: Some(request.tag),
-                    session: request.session,
-                    carrier: Some(request.carrier),
-                    tls_server_name: None,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume,
-                    payload: request.payload,
-                },
-            )
-            .await
+        self.start_managed_protocol_flow(ManagedUdpFlowRequest {
+            chain_tasks: None,
+            proxy: None,
+            kind: ManagedUdpFlowKind::RelayStream,
+            outbound_tag: Some(request.tag),
+            session: request.session,
+            carrier: Some(request.carrier),
+            tls_server_name: None,
+            server: request.server,
+            port: request.port,
+            resume: request.resume,
+            payload: request.payload,
+        })
+        .await
     }
 
-    pub(crate) async fn start_trojan_relay_flow(
+    pub(crate) async fn start_mieru_relay_flow(
         &mut self,
-        request: TrojanRelaySend<'_>,
+        request: MieruRelaySend<'_>,
     ) -> Result<FlowStartResult, FlowFailure> {
         let resume = request.resume.clone();
         let sent = self
-            .send_trojan_relay(TrojanRelaySend {
-                proxy: request.proxy,
+            .send_mieru_relay(MieruRelaySend {
                 tag: request.tag,
                 session: request.session,
                 carrier: request.carrier,
@@ -122,7 +111,7 @@ impl UdpDispatch {
                 payload: request.payload,
             })
             .await?;
-        let managed = self.protocol_state.register_managed_flow(resume);
+        let managed = self.register_managed_protocol_flow(resume);
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::StreamPacket {
                 tag: request.tag.to_string(),

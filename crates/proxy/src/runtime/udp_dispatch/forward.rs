@@ -17,7 +17,6 @@ use std::time::Instant;
 
 use zero_engine::EngineError;
 
-use super::socks5_flow::Socks5RelaySend;
 use super::UdpDispatch;
 use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpPathCategory};
 use crate::runtime::udp_helpers::send_direct_udp_packet;
@@ -56,25 +55,11 @@ impl UdpDispatch {
 
             // Relay path.
             UdpPathCategory::Relay => {
-                let Some(upstream) = flow.outbound.upstream() else {
-                    unreachable!("Relay category maps to an upstream endpoint");
-                };
                 let Some(managed) = flow.outbound.relay_managed_flow() else {
                     unreachable!("Relay category maps to a managed relay flow");
                 };
                 match self
-                    .send_socks5(Socks5RelaySend {
-                        proxy,
-                        tag: flow.outbound.tag(),
-                        server: upstream.server,
-                        port: upstream.port,
-                        resume: self
-                            .protocol_state
-                            .managed_flow_resume(managed)
-                            .expect("managed relay flow should have protocol resume"),
-                        session: &flow.session,
-                        payload,
-                    })
+                    .forward_socks5_relay_flow(proxy, flow, managed, payload)
                     .await
                 {
                     Ok(sent) => {

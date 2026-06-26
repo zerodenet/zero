@@ -107,16 +107,11 @@ fn protocol_identity_parsing_is_confined_to_adapters() {
 fn runtime_protocol_runtime_references_are_confined_to_facades() {
     let allowed_exact = [
         "src/runtime/udp_dispatch/mod.rs",
-        "src/runtime/udp_dispatch/hysteria2_flow.rs",
         "src/runtime/udp_dispatch/lifecycle.rs",
-        "src/runtime/udp_dispatch/mieru_flow.rs",
-        "src/runtime/udp_dispatch/shadowsocks_flow.rs",
-        "src/runtime/udp_dispatch/socks5_flow.rs",
-        "src/runtime/udp_dispatch/trojan_flow.rs",
+        "src/runtime/udp_dispatch/managed.rs",
         "src/runtime/udp_dispatch/vless_flow.rs",
         "src/runtime/udp_dispatch/vmess_flow.rs",
         "src/runtime/udp_dispatch/start/relay.rs",
-        "src/runtime/udp_flow/outbound.rs",
     ];
 
     for path in rust_sources_under("src/runtime") {
@@ -2844,7 +2839,7 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
 
 #[test]
 fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
-    let dispatch = read("src/runtime/udp_dispatch/socks5_flow.rs");
+    let dispatch = read("src/protocol_runtime/udp/socks5_flow.rs");
     let forward = read("src/runtime/udp_dispatch/forward.rs");
     let socks5_adapter = read("src/adapters/socks5/udp.rs");
 
@@ -2856,9 +2851,9 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
         "record_udp_upstream_send_failure",
     ] {
         assert!(
-            !dispatch.contains(forbidden),
-            "runtime UDP dispatch should delegate SOCKS5 UDP send details to protocol_runtime; found `{forbidden}`"
-        );
+                !dispatch.contains(forbidden),
+                "SOCKS5 UDP flow facade should delegate packet send details to protocol_runtime::socks5_udp; found `{forbidden}`"
+            );
     }
     for source in [&forward, &socks5_adapter] {
         assert!(
@@ -2868,7 +2863,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
     }
     assert!(
         !dispatch.contains("Socks5UdpPacketSend")
-            && dispatch.contains("start_managed_udp_flow")
+            && dispatch.contains("start_managed_protocol_flow")
             && dispatch.contains("ManagedUdpFlowKind::RelayStream")
             && dispatch.contains("outbound_tag: Some(request.tag)")
             && dispatch.contains("pub(crate) async fn send_socks5(")
@@ -2878,7 +2873,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
             && !forward.contains("socks5_relay_auth")
             && !forward.contains("username: auth.username")
             && !forward.contains("password: auth.password"),
-        "runtime UDP SOCKS5 facade should use the neutral managed UDP flow facade"
+        "SOCKS5 UDP facade should use the neutral managed UDP flow bridge"
     );
 }
 
@@ -3613,23 +3608,23 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
         !root.join("start/protocol.rs").exists(),
         "runtime UDP dispatch should not keep broad protocol start wrappers; use narrow per-flow dispatch facades"
     );
+    for file_name in [
+        "hysteria2_flow.rs",
+        "mieru_flow.rs",
+        "shadowsocks_flow.rs",
+        "socks5_flow.rs",
+        "trojan_flow.rs",
+    ] {
+        assert!(
+            !root.join(file_name).exists(),
+            "protocol-named UDP flow facade should live under protocol_runtime/udp, not runtime/udp_dispatch/{file_name}"
+        );
+    }
 
     for path in rust_sources_under("src/runtime/udp_dispatch") {
         let source = relative(&path);
         let content = fs::read_to_string(&path).expect("read rust source");
         let allowed_facade = match source.as_str() {
-            "src/runtime/udp_dispatch/hysteria2_flow.rs" => {
-                Some(("Hysteria2DatagramSend", "start_managed_udp_flow"))
-            }
-            "src/runtime/udp_dispatch/mieru_flow.rs" => {
-                Some(("MieruDatagramSend", "start_managed_udp_flow"))
-            }
-            "src/runtime/udp_dispatch/shadowsocks_flow.rs" => {
-                Some(("ShadowsocksDatagramSend", "start_managed_udp_flow"))
-            }
-            "src/runtime/udp_dispatch/trojan_flow.rs" => {
-                Some(("TrojanDatagramSend", "start_managed_udp_flow"))
-            }
             "src/runtime/udp_dispatch/vless_flow.rs" => {
                 Some(("VlessUdpFlow", "start_vless_udp_flow"))
             }
@@ -4870,6 +4865,28 @@ fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
         content.contains("pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};"),
         "src/runtime/udp_dispatch/mod.rs should keep only generic UDP dispatch result types in the root facade"
     );
+
+    let managed = read("src/runtime/udp_dispatch/managed.rs");
+    assert!(
+        managed.contains("start_managed_protocol_flow")
+            && managed.contains("register_managed_protocol_flow")
+            && managed.contains("managed_protocol_flow_resume"),
+        "runtime UDP managed bridge should expose only narrow protocol-state helpers"
+    );
+    for forbidden in [
+        "Hysteria2DatagramSend",
+        "MieruDatagramSend",
+        "MieruRelaySend",
+        "ShadowsocksDatagramSend",
+        "Socks5RelaySend",
+        "TrojanDatagramSend",
+        "TrojanRelaySend",
+    ] {
+        assert!(
+            !managed.contains(forbidden),
+            "runtime UDP managed bridge should not know protocol-named flow request `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -7315,33 +7332,33 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
 
     for (source, request, start, flow_start) in [
         (
-            "src/runtime/udp_dispatch/hysteria2_flow.rs",
+            "src/protocol_runtime/udp/hysteria2_flow.rs",
             "Hysteria2DatagramSend",
-            "start_managed_udp_flow",
+            "start_managed_protocol_flow",
             "start_hysteria2_datagram_flow",
         ),
         (
-            "src/runtime/udp_dispatch/mieru_flow.rs",
+            "src/protocol_runtime/udp/mieru_flow.rs",
             "MieruDatagramSend",
-            "start_managed_udp_flow",
+            "start_managed_protocol_flow",
             "start_mieru_datagram_flow",
         ),
         (
-            "src/runtime/udp_dispatch/shadowsocks_flow.rs",
+            "src/protocol_runtime/udp/shadowsocks_flow.rs",
             "ShadowsocksDatagramSend",
-            "start_managed_udp_flow",
+            "start_managed_protocol_flow",
             "start_shadowsocks_datagram_flow",
         ),
         (
-            "src/runtime/udp_dispatch/socks5_flow.rs",
+            "src/protocol_runtime/udp/socks5_flow.rs",
             "Socks5RelaySend",
-            "start_managed_udp_flow",
+            "start_managed_protocol_flow",
             "start_socks5_relay_flow",
         ),
         (
-            "src/runtime/udp_dispatch/trojan_flow.rs",
+            "src/protocol_runtime/udp/trojan_flow.rs",
             "TrojanDatagramSend",
-            "start_managed_udp_flow",
+            "start_managed_protocol_flow",
             "start_trojan_datagram_flow",
         ),
         (
@@ -7364,7 +7381,10 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
                 "{source} should own dispatch facade detail `{required}`"
             );
         }
-        if source != "src/runtime/udp_dispatch/socks5_flow.rs" {
+        if matches!(
+            source,
+            "src/runtime/udp_dispatch/vless_flow.rs" | "src/runtime/udp_dispatch/vmess_flow.rs"
+        ) {
             assert!(
                 facade.contains("&mut self.chain_tasks"),
                 "{source} should own chain task bridging for packet/stream UDP flows"
@@ -7392,15 +7412,16 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
     }
 
     for source in [
-        "src/runtime/udp_dispatch/hysteria2_flow.rs",
-        "src/runtime/udp_dispatch/mieru_flow.rs",
-        "src/runtime/udp_dispatch/shadowsocks_flow.rs",
-        "src/runtime/udp_dispatch/socks5_flow.rs",
-        "src/runtime/udp_dispatch/trojan_flow.rs",
+        "src/protocol_runtime/udp/hysteria2_flow.rs",
+        "src/protocol_runtime/udp/mieru_flow.rs",
+        "src/protocol_runtime/udp/shadowsocks_flow.rs",
+        "src/protocol_runtime/udp/socks5_flow.rs",
+        "src/protocol_runtime/udp/trojan_flow.rs",
     ] {
         let facade = read(source);
         assert!(
-            facade.contains("register_managed_flow") && facade.contains("FlowStartResult::Flow"),
+            facade.contains("register_managed_protocol_flow")
+                && facade.contains("FlowStartResult::Flow"),
             "{source} should register protocol UDP resume state and return an opaque tracked flow"
         );
         for forbidden in [
@@ -7455,10 +7476,10 @@ fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
 #[test]
 fn udp_dispatch_does_not_unpack_protocol_flow_resume() {
     for source in [
-        "src/runtime/udp_dispatch/hysteria2_flow.rs",
-        "src/runtime/udp_dispatch/mieru_flow.rs",
-        "src/runtime/udp_dispatch/shadowsocks_flow.rs",
-        "src/runtime/udp_dispatch/trojan_flow.rs",
+        "src/protocol_runtime/udp/hysteria2_flow.rs",
+        "src/protocol_runtime/udp/mieru_flow.rs",
+        "src/protocol_runtime/udp/shadowsocks_flow.rs",
+        "src/protocol_runtime/udp/trojan_flow.rs",
     ] {
         let content = read(source);
         assert!(

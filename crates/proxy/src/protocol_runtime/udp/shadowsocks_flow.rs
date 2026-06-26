@@ -21,24 +21,20 @@ impl UdpDispatch {
         &mut self,
         request: ShadowsocksDatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.protocol_state
-            .start_managed_udp_flow(
-                &self.inbound_tag,
-                ManagedUdpFlowRequest {
-                    chain_tasks: &mut self.chain_tasks,
-                    proxy: Some(request.proxy),
-                    kind: ManagedUdpFlowKind::Datagram,
-                    outbound_tag: Some(request.tag),
-                    session: request.session,
-                    carrier: None,
-                    tls_server_name: None,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume,
-                    payload: request.payload,
-                },
-            )
-            .await
+        self.start_managed_protocol_flow(ManagedUdpFlowRequest {
+            chain_tasks: None,
+            proxy: Some(request.proxy),
+            kind: ManagedUdpFlowKind::Datagram,
+            outbound_tag: Some(request.tag),
+            session: request.session,
+            carrier: None,
+            tls_server_name: None,
+            server: request.server,
+            port: request.port,
+            resume: request.resume,
+            payload: request.payload,
+        })
+        .await
     }
 
     pub(crate) async fn start_shadowsocks_datagram_flow(
@@ -57,7 +53,7 @@ impl UdpDispatch {
                 payload: request.payload,
             })
             .await?;
-        let managed = self.protocol_state.register_managed_flow(resume);
+        let managed = self.register_managed_protocol_flow(resume);
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Datagram {
                 tag: request.tag.to_string(),

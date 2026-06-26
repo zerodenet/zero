@@ -65,18 +65,10 @@ use zero_platform_tokio::TokioDatagramSocket;
 
 mod dispatch;
 mod forward;
-#[cfg(feature = "hysteria2")]
-pub(crate) mod hysteria2_flow;
 mod lifecycle;
-#[cfg(feature = "mieru")]
-pub(crate) mod mieru_flow;
+mod managed;
 mod packet_path;
-#[cfg(feature = "shadowsocks")]
-pub(crate) mod shadowsocks_flow;
-pub(crate) mod socks5_flow;
 mod start;
-#[cfg(feature = "trojan")]
-pub(crate) mod trojan_flow;
 mod types;
 #[cfg(feature = "vless")]
 pub(crate) mod vless_flow;

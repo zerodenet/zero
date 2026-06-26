@@ -127,8 +127,16 @@ impl ProtocolUdpState {
     ) -> Result<usize, FlowFailure> {
         match request.kind {
             ManagedUdpFlowKind::Datagram => {
+                let Some(chain_tasks) = request.chain_tasks else {
+                    return Err(managed_flow_mismatch(
+                        "udp_managed_flow_chain_tasks",
+                        request.server,
+                        request.port,
+                        "expected chain task context for managed UDP flow",
+                    ));
+                };
                 self.start_managed_datagram_flow(
-                    request.chain_tasks,
+                    chain_tasks,
                     ManagedDatagramFlow {
                         proxy: request.proxy,
                         session: request.session,
@@ -141,6 +149,14 @@ impl ProtocolUdpState {
                 .await
             }
             ManagedUdpFlowKind::StreamPacket => {
+                let Some(chain_tasks) = request.chain_tasks else {
+                    return Err(managed_flow_mismatch(
+                        "udp_managed_flow_chain_tasks",
+                        request.server,
+                        request.port,
+                        "expected chain task context for managed UDP flow",
+                    ));
+                };
                 let Some(proxy) = request.proxy else {
                     return Err(managed_flow_mismatch(
                         "udp_stream_packet_proxy",
@@ -150,7 +166,7 @@ impl ProtocolUdpState {
                     ));
                 };
                 self.start_managed_stream_packet_flow(ManagedStreamPacketFlow {
-                    chain_tasks: request.chain_tasks,
+                    chain_tasks,
                     proxy,
                     session: request.session,
                     server: request.server,
@@ -162,9 +178,17 @@ impl ProtocolUdpState {
             }
             ManagedUdpFlowKind::RelayStream => {
                 if let Some(carrier) = request.carrier {
+                    let Some(chain_tasks) = request.chain_tasks else {
+                        return Err(managed_flow_mismatch(
+                            "udp_managed_flow_chain_tasks",
+                            request.server,
+                            request.port,
+                            "expected chain task context for managed UDP flow",
+                        ));
+                    };
                     return self
                         .start_managed_relay_stream_flow(ManagedRelayStreamFlow {
-                            chain_tasks: request.chain_tasks,
+                            chain_tasks,
                             proxy: request.proxy,
                             session: request.session,
                             carrier,
