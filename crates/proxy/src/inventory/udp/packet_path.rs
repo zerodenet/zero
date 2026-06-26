@@ -7,7 +7,6 @@ use crate::runtime::Proxy;
 impl ProtocolInventory {
     /// Return packet-path datagram params and carrier snapshot when the two
     /// relay-chain leaves form a supported packet-path pair.
-    #[cfg(feature = "shadowsocks")]
     pub(crate) fn udp_packet_path_pair<'a>(
         &self,
         carrier_leaf: &zero_engine::ResolvedLeafOutbound<'a>,
@@ -30,7 +29,6 @@ impl ProtocolInventory {
 
     /// Resolve packet-path entry construction params through the carrier and
     /// datagram adapters.
-    #[cfg(feature = "shadowsocks")]
     pub(crate) fn resolve_udp_packet_path_candidate<'a>(
         &self,
         carrier_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
@@ -66,7 +64,6 @@ impl ProtocolInventory {
     }
 
     /// Build the concrete packet-path carrier through the carrier adapter.
-    #[cfg(feature = "shadowsocks")]
     pub(crate) async fn build_udp_packet_path_carrier(
         &self,
         proxy: &Proxy,

@@ -155,7 +155,6 @@ pub(crate) trait UdpFlowCapability {
 
 #[async_trait]
 pub(crate) trait UdpPacketPathCapability {
-    #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_descriptor(
         &self,
         _leaf: &ResolvedLeafOutbound<'_>,
@@ -163,7 +162,6 @@ pub(crate) trait UdpPacketPathCapability {
         None
     }
 
-    #[cfg(feature = "shadowsocks")]
     async fn build_udp_packet_path(
         &self,
         _ctx: UdpAdapterContext<'_>,
@@ -173,7 +171,6 @@ pub(crate) trait UdpPacketPathCapability {
         Err(super::defaults::packet_path_carrier_unsupported())
     }
 
-    #[cfg(feature = "shadowsocks")]
     fn udp_datagram_source<'a>(
         &self,
         _leaf: &ResolvedLeafOutbound<'a>,

@@ -35,7 +35,6 @@ impl ProtocolAdapter for Hysteria2Adapter {}
 #[cfg(feature = "hysteria2")]
 #[async_trait]
 impl UdpPacketPathCapability for Hysteria2Adapter {
-    #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_descriptor(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
@@ -43,7 +42,6 @@ impl UdpPacketPathCapability for Hysteria2Adapter {
         self.udp_packet_path_carrier_descriptor_impl(leaf)
     }
 
-    #[cfg(feature = "shadowsocks")]
     async fn build_udp_packet_path(
         &self,
         _ctx: UdpAdapterContext<'_>,

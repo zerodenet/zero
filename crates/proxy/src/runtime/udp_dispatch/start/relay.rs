@@ -16,7 +16,6 @@ impl UdpDispatch {
         // Datagram-over-packet-path: carrier provides a raw send/recv channel,
         // datagram encodes through it. Resolve both positions via the adapter
         // registry; no match on the protocol enum.
-        #[cfg(feature = "shadowsocks")]
         if chain.len() == 2 {
             let carrier_leaf = &chain[0];
             let datagram_leaf = &chain[1];

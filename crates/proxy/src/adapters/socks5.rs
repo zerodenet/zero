@@ -35,7 +35,6 @@ impl ProtocolAdapter for Socks5Adapter {}
 #[cfg(feature = "socks5")]
 #[async_trait]
 impl UdpPacketPathCapability for Socks5Adapter {
-    #[cfg(feature = "shadowsocks")]
     fn udp_packet_path_carrier_descriptor(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
@@ -43,7 +42,6 @@ impl UdpPacketPathCapability for Socks5Adapter {
         self.udp_packet_path_carrier_descriptor_impl(leaf)
     }
 
-    #[cfg(feature = "shadowsocks")]
     async fn build_udp_packet_path(
         &self,
         ctx: UdpAdapterContext<'_>,

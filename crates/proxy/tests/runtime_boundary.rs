@@ -491,6 +491,21 @@ fn udp_relay_runtime_does_not_resolve_packet_path_pair_adapters() {
 }
 
 #[test]
+fn packet_path_dispatch_is_not_feature_gated_by_datagram_protocol() {
+    for source in [
+        "src/protocol_adapter/capability.rs",
+        "src/inventory/udp/packet_path.rs",
+        "src/runtime/udp_dispatch/start/relay.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            !content.contains(r#"#[cfg(feature = "shadowsocks")]"#),
+            "{source} should expose generic packet-path dispatch independently of the current datagram protocol feature"
+        );
+    }
+}
+
+#[test]
 fn packet_path_entry_does_not_resolve_adapter_objects() {
     let entry = read("src/protocol_runtime/udp/packet_path_chain/entry.rs");
     let inventory_udp_packet_path = read("src/inventory/udp/packet_path.rs");
