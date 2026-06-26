@@ -2938,6 +2938,19 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && !snapshot.contains("cipher_kind: shadowsocks::CipherKind"),
         "protocol UDP flow snapshot should keep Shadowsocks resume data opaque instead of exposing parsed cipher state"
     );
+    let mieru_snapshot_variant = snapshot
+        .split("#[cfg(feature = \"mieru\")]")
+        .nth(1)
+        .expect("Mieru UDP snapshot variant should be feature-gated")
+        .split("pub(crate) struct Socks5RelayAuth")
+        .next()
+        .expect("Mieru UDP snapshot variant should precede Socks5RelayAuth");
+    assert!(
+        snapshot.contains("resume: mieru::MieruUdpFlowResume")
+            && !mieru_snapshot_variant.contains("username: String")
+            && !mieru_snapshot_variant.contains("relay_chain: bool"),
+        "protocol UDP flow snapshot should keep Mieru resume data opaque instead of exposing account or relay state"
+    );
     assert!(
         !snapshot.contains("PacketPathCarrierSnapshot")
             && !snapshot.contains("UdpPacketPathCarrier::"),
@@ -5179,6 +5192,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
     let codec = read("src/protocol_runtime/udp/mieru_manager/codec.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
+    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let forward = read("src/protocol_runtime/udp/state/forward/mieru.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
         .expect("read mieru protocol udp source");
 
@@ -5212,6 +5227,36 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn udp_flow_codec(")
             && protocol_udp.contains("impl DatagramCodec<Address> for MieruUdpFlowCodec"),
         "Mieru adapter should request the protocol-owned UDP flow codec"
+    );
+    assert!(
+        adapter.contains("MieruUdpFlowResume::new")
+            && protocol_udp.contains("struct MieruUdpFlowResume")
+            && protocol_udp.contains("pub fn codec(&self)")
+            && protocol_udp.contains("pub fn relay_chain(&self) -> bool"),
+        "Mieru adapter should build an opaque protocol-owned UDP flow resume descriptor"
+    );
+    let mieru_snapshot_variant = snapshot
+        .split("#[cfg(feature = \"mieru\")]")
+        .nth(1)
+        .expect("Mieru UDP snapshot variant should be feature-gated")
+        .split("pub(crate) struct Socks5RelayAuth")
+        .next()
+        .expect("Mieru UDP snapshot variant should precede Socks5RelayAuth");
+    assert!(
+        snapshot.contains("resume: mieru::MieruUdpFlowResume")
+            && !mieru_snapshot_variant.contains("username: String")
+            && !mieru_snapshot_variant.contains("relay_chain: bool"),
+        "Mieru protocol UDP flow snapshot should carry only opaque resume data"
+    );
+    assert!(
+        forward.contains("existing.resume.username()")
+            && forward.contains("existing.resume.password()")
+            && forward.contains("existing.resume.relay_chain()")
+            && forward.contains("existing.resume.codec()")
+            && !forward.contains("mieru::udp_flow_codec")
+            && !forward.contains("username: &'a str")
+            && !forward.contains("relay_chain: bool"),
+        "existing Mieru UDP flow forwarding should recover account, relay state, and codec from the opaque resume descriptor"
     );
 }
 

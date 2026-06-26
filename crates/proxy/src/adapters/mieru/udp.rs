@@ -36,8 +36,7 @@ impl MieruAdapter {
                 session,
                 server,
                 port: *port,
-                username,
-                password,
+                resume: mieru::MieruUdpFlowResume::new(username, password, false),
                 codec: Arc::new(mieru::udp_flow_codec()),
                 payload,
             })
@@ -69,8 +68,7 @@ impl MieruAdapter {
                 carrier,
                 server,
                 port: *port,
-                username,
-                password,
+                resume: mieru::MieruUdpFlowResume::new(username, password, true),
                 codec: Arc::new(mieru::udp_flow_codec()),
                 payload,
             })

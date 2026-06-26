@@ -9,9 +9,7 @@ use crate::runtime::Proxy;
 pub(super) struct ExistingFlow<'a> {
     pub(super) server: &'a str,
     pub(super) port: u16,
-    pub(super) username: &'a str,
-    pub(super) password: &'a str,
-    pub(super) relay_chain: bool,
+    pub(super) resume: &'a mieru::MieruUdpFlowResume,
     pub(super) payload: &'a [u8],
 }
 
@@ -31,10 +29,10 @@ pub(super) async fn forward(
             session: &flow.session,
             server: existing.server,
             port: existing.port,
-            username: existing.username,
-            password: existing.password,
-            relay_chain: existing.relay_chain,
-            codec: std::sync::Arc::new(mieru::udp_flow_codec()),
+            username: existing.resume.username(),
+            password: existing.resume.password(),
+            relay_chain: existing.resume.relay_chain(),
+            codec: std::sync::Arc::new(existing.resume.codec()),
             target: &flow.session.target,
             target_port: flow.session.port,
             payload: existing.payload,
@@ -50,12 +48,7 @@ pub(super) async fn forward_if_matches(
     snapshot: &ProtocolUdpFlowSnapshot,
     payload: &[u8],
 ) -> Option<Result<usize, FlowFailure>> {
-    let ProtocolUdpFlowSnapshot::Mieru {
-        username,
-        password,
-        relay_chain,
-    } = snapshot
-    else {
+    let ProtocolUdpFlowSnapshot::Mieru { resume } = snapshot else {
         return None;
     };
 
@@ -73,9 +66,7 @@ pub(super) async fn forward_if_matches(
             ExistingFlow {
                 server: upstream.server,
                 port: upstream.port,
-                username,
-                password,
-                relay_chain: *relay_chain,
+                resume,
                 payload,
             },
         )

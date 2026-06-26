@@ -22,11 +22,7 @@ pub(crate) enum ProtocolUdpFlowSnapshot {
         relay_chain: bool,
     },
     #[cfg(feature = "mieru")]
-    Mieru {
-        username: String,
-        password: String,
-        relay_chain: bool,
-    },
+    Mieru { resume: mieru::MieruUdpFlowResume },
 }
 
 pub(crate) struct Socks5RelayAuth<'a> {
@@ -73,12 +69,8 @@ impl ProtocolUdpFlowSnapshot {
     }
 
     #[cfg(feature = "mieru")]
-    pub(crate) fn mieru(username: &str, password: &str, relay_chain: bool) -> Self {
-        Self::Mieru {
-            username: username.to_string(),
-            password: password.to_string(),
-            relay_chain,
-        }
+    pub(crate) fn mieru(resume: mieru::MieruUdpFlowResume) -> Self {
+        Self::Mieru { resume }
     }
 
     pub(crate) fn socks5_relay_auth(&self) -> Option<Socks5RelayAuth<'_>> {

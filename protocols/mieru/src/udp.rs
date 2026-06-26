@@ -103,6 +103,39 @@ pub fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
     MieruUdpFlowCodec
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MieruUdpFlowResume {
+    username: String,
+    password: String,
+    relay_chain: bool,
+}
+
+impl MieruUdpFlowResume {
+    pub fn new(username: &str, password: &str, relay_chain: bool) -> Self {
+        Self {
+            username: username.to_owned(),
+            password: password.to_owned(),
+            relay_chain,
+        }
+    }
+
+    pub fn username(&self) -> &str {
+        &self.username
+    }
+
+    pub fn password(&self) -> &str {
+        &self.password
+    }
+
+    pub fn relay_chain(&self) -> bool {
+        self.relay_chain
+    }
+
+    pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        udp_flow_codec()
+    }
+}
+
 impl DatagramCodec<Address> for MieruUdpFlowCodec {
     type Error = Error;
 
