@@ -5666,12 +5666,12 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && stream.contains("trojan::TrojanUdpFlowIo")
             && stream.contains("trojan::TrojanUdpPacket")
             && stream.contains(".establish_with_resume(")
-            && stream.contains(".write_stream_packet")
-            && stream.contains(".read_stream_packet")
-            && stream.contains("trojan::udp_flow_packet")
+            && stream.contains(".write_packet(&mut send_stream")
+            && stream.contains(".read_packet(&mut recv_stream)")
+            && !stream.contains(".write_stream_packet")
+            && !stream.contains(".read_stream_packet")
+            && !stream.contains("trojan::udp_flow_packet")
             && !transport.contains("trojan::")
-            && !stream.contains(".write_packet")
-            && !stream.contains(".read_packet")
             && !stream.contains("packet.write_to")
             && !model.contains("struct TrojanPacket"),
         "Trojan UDP packet stream tasks should stay in proxy glue and use protocol-owned stream operations instead of owning protocol framing"
@@ -6025,7 +6025,7 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             && !establish.contains("trojan::udp_flow_packet")
             && !establish.contains("trojan::TrojanUdpPacket::new")
             && stream.contains("mpsc::Sender<UdpFlowPacket>")
-            && stream.contains("trojan::udp_flow_packet")
+            && !stream.contains("trojan::udp_flow_packet")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("trojan::udp_flow_packet"),
         "Trojan UDP stream glue should carry neutral UDP packets while proxy stream glue converts them through protocols/trojan"
@@ -6033,8 +6033,10 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")
             && stream.contains(".establish_with_resume(")
-            && stream.contains(".write_stream_packet(&mut send_stream, &packet)")
-            && stream.contains(".read_stream_packet(&mut recv_stream)")
+            && stream.contains(".write_packet(&mut send_stream")
+            && stream.contains(".read_packet(&mut recv_stream)")
+            && !stream.contains(".write_stream_packet")
+            && !stream.contains(".read_stream_packet")
             && !transport.contains("trojan::TrojanUdpFlowIo")
             && !stream.contains("trojan::establish_udp_packet_tunnel"),
         "Trojan UDP packet stream should call the protocols/trojan flow I/O stream helpers from proxy stream glue"

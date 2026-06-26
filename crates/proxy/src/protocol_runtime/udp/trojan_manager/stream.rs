@@ -37,9 +37,13 @@ fn spawn_send_task(mut send_rx: mpsc::Receiver<UdpFlowPacket>, mut send_stream: 
     tokio::spawn(async move {
         let flow_io = trojan::TrojanUdpFlowIo;
         while let Some(packet) = send_rx.recv().await {
-            let packet = trojan::udp_flow_packet(&packet.target, packet.port, &packet.payload);
             if flow_io
-                .write_stream_packet(&mut send_stream, &packet)
+                .write_packet(
+                    &mut send_stream,
+                    &packet.target,
+                    packet.port,
+                    &packet.payload,
+                )
                 .await
                 .is_err()
             {
@@ -55,7 +59,7 @@ fn spawn_recv_task(
 ) {
     tokio::spawn(async move {
         let flow_io = trojan::TrojanUdpFlowIo;
-        while let Ok(packet) = flow_io.read_stream_packet(&mut recv_stream).await {
+        while let Ok(packet) = flow_io.read_packet(&mut recv_stream).await {
             if recv_tx.send(packet).is_err() {
                 break;
             }
