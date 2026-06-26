@@ -126,15 +126,12 @@ impl Socks5UdpRuntime {
         }
         self.idle_deadline = None;
     }
-}
 
-pub(crate) async fn recv_upstream_packet(
-    runtime: &Socks5UdpRuntime,
-    buf: &mut [u8],
-) -> Result<usize, EngineError> {
-    match runtime.upstream.as_ref() {
-        Some(association) => association.recv_packet(buf).await,
-        None => std::future::pending::<Result<usize, EngineError>>().await,
+    pub(crate) async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        match self.upstream.as_ref() {
+            Some(association) => association.recv_packet(buf).await,
+            None => std::future::pending::<Result<usize, EngineError>>().await,
+        }
     }
 }
 

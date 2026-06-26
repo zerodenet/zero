@@ -14,7 +14,6 @@ use zero_core::Session;
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
-use crate::protocol_runtime::socks5_udp::recv_upstream_packet;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
@@ -191,7 +190,7 @@ impl Proxy {
         let mut upstream_buf = vec![0_u8; 64 * 1024];
 
         loop {
-            let (direct_sock, socks5_up, socks5_idle, chain_tasks) = dispatch.poll_refs();
+            let (direct_sock, upstream_udp, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
                 _ = tokio::time::sleep_until(last_activity + timeout) => {
@@ -243,7 +242,7 @@ impl Proxy {
                         self.record_session_inbound_tx(sid, n as u64);
                     }
                 }
-                upstream = recv_upstream_packet(socks5_up, &mut upstream_buf) => {
+                upstream = upstream_udp.recv_packet(&mut upstream_buf) => {
                     match upstream {
                         Ok(read) => {
                             last_activity = TokioInstant::now();

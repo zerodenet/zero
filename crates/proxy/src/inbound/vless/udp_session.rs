@@ -3,7 +3,6 @@ use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 use zero_traits::AsyncSocket;
 
-use crate::protocol_runtime::socks5_udp::recv_upstream_packet;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
@@ -47,7 +46,7 @@ impl Proxy {
             // all futures simultaneously without borrow conflicts.
             // VLESS chain responses now flow through chain_tasks.JoinSet
             // alongside SS/H2/Trojan/Mieru -?no separate vless_mgr poll.
-            let (direct_sock, socks5_up, socks5_idle, chain_tasks) = dispatch.poll_refs();
+            let (direct_sock, upstream_udp, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
                 _ = tokio::time::sleep_until(last_activity + timeout) => {
@@ -128,7 +127,7 @@ impl Proxy {
                         }
                     }
                 }
-                upstream = recv_upstream_packet(socks5_up, &mut upstream_buffer) => {
+                upstream = upstream_udp.recv_packet(&mut upstream_buffer) => {
                     // SOCKS5 chain upstream response -?re-encode as VLESS.
                     match upstream {
                         Ok(read) => {

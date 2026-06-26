@@ -3083,15 +3083,16 @@ fn udp_dispatch_poll_refs_does_not_expose_socks5_association_type() {
     ] {
         assert!(
             !lifecycle.contains(forbidden),
-            "UdpDispatch poll refs should expose Socks5UdpRuntime facade, not SOCKS5 association internals; found `{forbidden}`"
-        );
+        "UdpDispatch poll refs should expose upstream UDP poll glue, not SOCKS5 association internals; found `{forbidden}`"
+    );
     }
     assert!(
-        lifecycle.contains("Socks5UdpRuntime")
-            && lifecycle.contains("Socks5UdpAssociationView")
-            && lifecycle.contains("ClosedSocks5UdpAssociation"),
-        "UdpDispatch lifecycle should expose SOCKS5 facade types through local imports"
-    );
+    lifecycle.contains("UpstreamUdpPoll")
+        && lifecycle.contains("recv_packet")
+        && lifecycle.contains("Socks5UdpAssociationView")
+        && lifecycle.contains("ClosedSocks5UdpAssociation"),
+    "UdpDispatch lifecycle should expose neutral upstream UDP polling while keeping SOCKS5 lifecycle views local"
+);
     assert!(
         !lifecycle.contains("crate::protocol_runtime::socks5_udp::Socks5UdpRuntime")
             && !lifecycle.contains("crate::protocol_runtime::socks5_udp::Socks5UdpAssociationView")
@@ -3099,6 +3100,24 @@ fn udp_dispatch_poll_refs_does_not_expose_socks5_association_type() {
                 .contains("crate::protocol_runtime::socks5_udp::ClosedSocks5UdpAssociation"),
         "UdpDispatch lifecycle should not scatter fully-qualified SOCKS5 runtime facade type paths"
     );
+}
+
+#[test]
+fn inbound_udp_loops_do_not_import_socks5_udp_runtime_helpers() {
+    for path in rust_sources_under("src/inbound") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in [
+            "protocol_runtime::socks5_udp::recv_upstream_packet",
+            "recv_upstream_packet(",
+            "Socks5UdpRuntime",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should poll upstream UDP through UdpDispatch, not SOCKS5 runtime helper `{forbidden}`"
+            );
+        }
+    }
 }
 
 #[test]

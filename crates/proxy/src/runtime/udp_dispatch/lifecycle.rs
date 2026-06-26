@@ -18,6 +18,16 @@ use crate::runtime::udp_flow::sessions::CompletedUdpFlow;
 use crate::runtime::udp_flow::sessions::UdpSessionFlows;
 use crate::runtime::udp_helpers::send_direct_udp_packet;
 
+pub(crate) struct UpstreamUdpPoll<'a> {
+    socks5: &'a Socks5UdpRuntime,
+}
+
+impl UpstreamUdpPoll<'_> {
+    pub(crate) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        self.socks5.recv_upstream_packet(buf).await
+    }
+}
+
 impl UdpDispatch {
     /// Create a new dispatcher with an ephemeral direct socket.
     pub(crate) async fn new(inbound_tag: &str) -> Result<Self, EngineError> {
@@ -73,13 +83,15 @@ impl UdpDispatch {
         &mut self,
     ) -> (
         &TokioDatagramSocket,
-        &Socks5UdpRuntime,
+        UpstreamUdpPoll<'_>,
         Option<TokioInstant>,
         &mut JoinSet<ChainTask>,
     ) {
         (
             &self.direct_socket,
-            self.protocol_state.socks5_runtime(),
+            UpstreamUdpPoll {
+                socks5: self.protocol_state.socks5_runtime(),
+            },
             self.protocol_state.socks5_idle_deadline(),
             &mut self.chain_tasks,
         )
