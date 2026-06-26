@@ -5022,6 +5022,49 @@ fn protocol_udp_manager_roots_do_not_reexport_request_models() {
 }
 
 #[test]
+fn protocol_udp_manager_request_models_are_manager_private() {
+    for source in [
+        "src/protocol_runtime/udp/h2_manager/model.rs",
+        "src/protocol_runtime/udp/mieru_manager/model.rs",
+        "src/protocol_runtime/udp/ss_manager/model.rs",
+        "src/protocol_runtime/udp/trojan_manager/model.rs",
+    ] {
+        let content = read(source);
+        for forbidden in [
+            "pub(crate) struct H2SendExisting",
+            "pub(crate) struct MieruSendExisting",
+            "pub(crate) struct MieruRelayExisting",
+            "pub(crate) struct SsSendExisting",
+            "pub(crate) struct TrojanSendExisting",
+            "pub(crate) struct TrojanRelayExisting",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should keep protocol UDP request model `{forbidden}` manager-private"
+            );
+        }
+    }
+
+    for source in [
+        "src/protocol_runtime/udp/h2_manager/send.rs",
+        "src/protocol_runtime/udp/mieru_manager/send.rs",
+        "src/protocol_runtime/udp/ss_manager.rs",
+        "src/protocol_runtime/udp/trojan_manager/send.rs",
+    ] {
+        let content = read(source);
+        for forbidden in [
+            "pub(crate) async fn send_existing",
+            "pub(crate) async fn send_relay_existing",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should expose managed send entrypoints instead of request-model send method `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn udp_dispatch_cached_flow_fast_path_delegates_to_protocol_state() {
     let content = read("src/runtime/udp_dispatch/dispatch.rs");
 
@@ -6531,7 +6574,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .split("pub(super) struct H2Entry")
         .nth(1)
         .expect("H2Entry model should exist")
-        .split("pub(crate) struct H2SendExisting")
+        .split("pub(super) struct H2SendExisting")
         .next()
         .expect("H2SendExisting should follow H2Entry");
     assert!(
@@ -7070,7 +7113,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         .next()
         .expect("Shadowsocks UDP flow model should appear before Mieru");
     let shadowsocks_peer_model = model
-        .split("pub(crate) struct SsSendExisting")
+        .split("pub(super) struct SsSendExisting")
         .next()
         .expect("Shadowsocks UDP peer model should appear before send request model");
     assert!(

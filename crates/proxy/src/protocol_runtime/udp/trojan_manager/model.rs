@@ -33,17 +33,17 @@ pub(super) struct TrojanUdpPeer<'a> {
     pub(super) flow_key: trojan::TrojanUdpFlowKey,
 }
 
-pub(crate) struct TrojanSendExisting<'a> {
-    pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
-    pub(crate) session_id: u64,
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) resume: trojan::TrojanUdpFlowResume,
-    pub(crate) target: &'a Address,
-    pub(crate) target_port: u16,
-    pub(crate) payload: &'a [u8],
+pub(super) struct TrojanSendExisting<'a> {
+    pub(super) chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub(super) session_id: u64,
+    pub(super) proxy: &'a Proxy,
+    pub(super) session: &'a Session,
+    pub(super) server: &'a str,
+    pub(super) port: u16,
+    pub(super) resume: trojan::TrojanUdpFlowResume,
+    pub(super) target: &'a Address,
+    pub(super) target_port: u16,
+    pub(super) payload: &'a [u8],
 }
 
 pub(super) struct TrojanRelaySend<'a> {
@@ -56,17 +56,17 @@ pub(super) struct TrojanRelaySend<'a> {
     pub(super) packet: UdpPacketRef<'a>,
 }
 
-pub(crate) struct TrojanRelayExisting<'a> {
-    pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
-    pub(crate) session_id: u64,
-    pub(crate) stream: TcpRelayStream,
-    pub(crate) tls_server_name: Option<&'a str>,
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) resume: trojan::TrojanUdpFlowResume,
-    pub(crate) target: &'a Address,
-    pub(crate) target_port: u16,
-    pub(crate) payload: &'a [u8],
+pub(super) struct TrojanRelayExisting<'a> {
+    pub(super) chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub(super) session_id: u64,
+    pub(super) stream: TcpRelayStream,
+    pub(super) tls_server_name: Option<&'a str>,
+    pub(super) proxy: &'a Proxy,
+    pub(super) session: &'a Session,
+    pub(super) server: &'a str,
+    pub(super) port: u16,
+    pub(super) resume: trojan::TrojanUdpFlowResume,
+    pub(super) target: &'a Address,
+    pub(super) target_port: u16,
+    pub(super) payload: &'a [u8],
 }

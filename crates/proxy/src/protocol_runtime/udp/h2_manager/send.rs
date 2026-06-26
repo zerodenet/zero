@@ -64,10 +64,7 @@ impl H2ChainManager {
         Ok(sent)
     }
 
-    pub(crate) async fn send_existing(
-        &mut self,
-        request: H2SendExisting<'_>,
-    ) -> Result<usize, FlowFailure> {
+    async fn send_existing(&mut self, request: H2SendExisting<'_>) -> Result<usize, FlowFailure> {
         let resume = request.resume.clone();
         self.send(
             UdpFlowContext {

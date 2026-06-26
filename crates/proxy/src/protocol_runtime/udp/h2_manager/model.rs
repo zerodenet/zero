@@ -26,13 +26,13 @@ pub(super) struct H2UdpPeer<'a> {
     pub(super) flow_key: hysteria2::Hysteria2UdpFlowKey,
 }
 
-pub(crate) struct H2SendExisting<'a> {
-    pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
-    pub(crate) session_id: u64,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) resume: hysteria2::Hysteria2UdpFlowResume,
-    pub(crate) target: &'a Address,
-    pub(crate) target_port: u16,
-    pub(crate) payload: &'a [u8],
+pub(super) struct H2SendExisting<'a> {
+    pub(super) chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub(super) session_id: u64,
+    pub(super) server: &'a str,
+    pub(super) port: u16,
+    pub(super) resume: hysteria2::Hysteria2UdpFlowResume,
+    pub(super) target: &'a Address,
+    pub(super) target_port: u16,
+    pub(super) payload: &'a [u8],
 }

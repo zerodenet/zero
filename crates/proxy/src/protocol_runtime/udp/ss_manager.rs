@@ -82,10 +82,7 @@ impl SsChainManager {
         Ok(packet_ref.payload.len())
     }
 
-    pub(crate) async fn send_existing(
-        &mut self,
-        request: SsSendExisting<'_>,
-    ) -> Result<usize, FlowFailure> {
+    async fn send_existing(&mut self, request: SsSendExisting<'_>) -> Result<usize, FlowFailure> {
         let leaf_key = request.resume.leaf_cache_key();
         self.send(
             UdpFlowContext {

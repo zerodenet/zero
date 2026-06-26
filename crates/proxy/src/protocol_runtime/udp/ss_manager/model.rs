@@ -26,15 +26,15 @@ pub(super) struct SsUdpPeer<'a> {
     pub(super) leaf_key: shadowsocks::ShadowsocksUdpLeafKey,
 }
 
-pub(crate) struct SsSendExisting<'a> {
-    pub(crate) chain_tasks:
+pub(super) struct SsSendExisting<'a> {
+    pub(super) chain_tasks:
         &'a mut tokio::task::JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
-    pub(crate) session_id: u64,
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) resume: shadowsocks::ShadowsocksUdpFlowResume,
-    pub(crate) target: &'a Address,
-    pub(crate) target_port: u16,
-    pub(crate) payload: &'a [u8],
+    pub(super) session_id: u64,
+    pub(super) proxy: &'a Proxy,
+    pub(super) server: &'a str,
+    pub(super) port: u16,
+    pub(super) resume: shadowsocks::ShadowsocksUdpFlowResume,
+    pub(super) target: &'a Address,
+    pub(super) target_port: u16,
+    pub(super) payload: &'a [u8],
 }

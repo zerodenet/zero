@@ -87,7 +87,7 @@ impl MieruChainManager {
         Ok(sent)
     }
 
-    pub(crate) async fn send_existing(
+    async fn send_existing(
         &mut self,
         request: MieruSendExisting<'_>,
     ) -> Result<usize, FlowFailure> {
@@ -148,7 +148,7 @@ impl MieruChainManager {
         Ok(sent)
     }
 
-    pub(crate) async fn send_relay_existing(
+    async fn send_relay_existing(
         &mut self,
         request: MieruRelayExisting<'_>,
     ) -> Result<usize, FlowFailure> {

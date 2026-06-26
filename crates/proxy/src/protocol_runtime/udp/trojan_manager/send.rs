@@ -86,7 +86,7 @@ impl TrojanChainManager {
         Ok(sent)
     }
 
-    pub(crate) async fn send_existing(
+    async fn send_existing(
         &mut self,
         request: TrojanSendExisting<'_>,
     ) -> Result<usize, FlowFailure> {
@@ -150,7 +150,7 @@ impl TrojanChainManager {
         Ok(packet_ref.payload.len())
     }
 
-    pub(crate) async fn send_relay_existing(
+    async fn send_relay_existing(
         &mut self,
         request: TrojanRelayExisting<'_>,
     ) -> Result<usize, FlowFailure> {

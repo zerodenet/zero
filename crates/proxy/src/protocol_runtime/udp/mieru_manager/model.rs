@@ -33,27 +33,27 @@ pub(super) struct MieruUdpPeer<'a> {
     pub(super) flow_key: mieru::MieruUdpFlowKey,
 }
 
-pub(crate) struct MieruSendExisting<'a> {
-    pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
-    pub(crate) session_id: u64,
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) resume: mieru::MieruUdpFlowResume,
-    pub(crate) target: &'a Address,
-    pub(crate) target_port: u16,
-    pub(crate) payload: &'a [u8],
+pub(super) struct MieruSendExisting<'a> {
+    pub(super) chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub(super) session_id: u64,
+    pub(super) proxy: &'a Proxy,
+    pub(super) session: &'a Session,
+    pub(super) server: &'a str,
+    pub(super) port: u16,
+    pub(super) resume: mieru::MieruUdpFlowResume,
+    pub(super) target: &'a Address,
+    pub(super) target_port: u16,
+    pub(super) payload: &'a [u8],
 }
 
-pub(crate) struct MieruRelayExisting<'a> {
-    pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
-    pub(crate) session_id: u64,
-    pub(crate) stream: TcpRelayStream,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) resume: mieru::MieruUdpFlowResume,
-    pub(crate) target: &'a Address,
-    pub(crate) target_port: u16,
-    pub(crate) payload: &'a [u8],
+pub(super) struct MieruRelayExisting<'a> {
+    pub(super) chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub(super) session_id: u64,
+    pub(super) stream: TcpRelayStream,
+    pub(super) server: &'a str,
+    pub(super) port: u16,
+    pub(super) resume: mieru::MieruUdpFlowResume,
+    pub(super) target: &'a Address,
+    pub(super) target_port: u16,
+    pub(super) payload: &'a [u8],
 }
