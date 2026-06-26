@@ -5691,8 +5691,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let manager_connect = read("src/protocol_runtime/udp/mieru_manager/connect.rs");
     let manager_establish = read("src/protocol_runtime/udp/mieru_manager/establish.rs");
     let manager_model = read("src/protocol_runtime/udp/mieru_manager/model.rs");
-    let transport = fs::read_to_string(repo_root().join("crates/transport/src/mieru_transport.rs"))
-        .expect("read zero-transport mieru_transport source");
+    let transport_manifest = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
+        .expect("read zero-transport manifest");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
         .expect("read mieru protocol udp source");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
@@ -5730,7 +5730,12 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && protocol_outbound.contains("decode_udp_flow_packet")
             && protocol_outbound.contains("encrypt_payload")
             && protocol_outbound.contains("next_packet")
-            && transport.contains("MieruUdpFlowIo::establish_with_resume"),
+            && stream.contains("MieruUdpFlowIo::establish_with_resume")
+            && !repo_root()
+                .join("crates/transport/src/mieru_transport.rs")
+                .exists()
+            && !transport_manifest.contains("dep:mieru")
+            && !transport_manifest.contains("mieru/crypto"),
         "Mieru UDP flow associate, encryption, and packet codec should live behind a protocol-owned flow I/O helper"
     );
     assert!(
@@ -5739,17 +5744,15 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && !manager_model.contains("mpsc::Sender<mieru::MieruUdpFlowPacket>")
             && !manager_send.contains("mieru::udp_flow_packet")
             && !manager_send.contains("MieruUdpFlowPacket::new")
-            && !stream.contains("MieruUdpFlowPacket")
+            && stream.contains("MieruUdpFlowIo")
             && stream.contains("mpsc::Sender<UdpFlowPacket>")
-            && transport.contains("mpsc::Sender<UdpFlowPacket>")
-            && transport.contains("mieru::udp_flow_packet")
-            && stream.contains("establish_mieru_udp_flow_stream")
-            && transport.contains("io.write_packet(&mut write_stream, &packet)")
-            && transport.contains("io.read_packets(&mut read_stream, &mut scratch)")
-            && transport.contains("packet.into_parts()")
-            && !stream.contains("packet.target")
-            && !stream.contains("packet.payload"),
-        "Mieru UDP manager should carry neutral UDP packets while transport glue converts them through protocols/mieru"
+            && stream.contains("mieru::udp_flow_packet")
+            && stream.contains("io.write_packet(&mut write_stream, &packet)")
+            && stream.contains("io.read_packets(&mut read_stream, &mut scratch)")
+            && stream.contains("packet.into_parts()")
+            && stream.contains("packet.target")
+            && stream.contains("packet.payload"),
+        "Mieru UDP manager should carry neutral UDP packets while proxy stream glue converts them through protocols/mieru"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
@@ -5819,7 +5822,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     assert!(
         manager_send.contains("request.resume.flow_key(request.server, request.port)")
             && !manager_connect.contains("MieruUdpFlowIo::establish_with_resume")
-            && transport.contains("MieruUdpFlowIo::establish_with_resume")
+            && stream.contains("MieruUdpFlowIo::establish_with_resume")
             && manager_establish.contains("packet_stream(stream, peer.resume).await")
             && protocol_outbound.contains("pub async fn establish_with_resume"),
         "Mieru UDP manager should consume protocol-owned flow key and UDP establish helper"
@@ -5853,8 +5856,7 @@ fn mieru_udp_response_bridge_lives_outside_manager() {
 fn mieru_udp_connect_handshake_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
     let connect = read("src/protocol_runtime/udp/mieru_manager/connect.rs");
-    let transport = fs::read_to_string(repo_root().join("crates/transport/src/mieru_transport.rs"))
-        .expect("read zero-transport mieru_transport source");
+    let stream = read("src/protocol_runtime/udp/mieru_manager/stream.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
         .expect("read mieru protocol outbound source");
 
@@ -5872,7 +5874,7 @@ fn mieru_udp_connect_handshake_lives_outside_manager() {
     }
     assert!(
         !connect.contains("MieruUdpFlowIo::establish")
-            && transport.contains("MieruUdpFlowIo::establish_with_resume")
+            && stream.contains("MieruUdpFlowIo::establish_with_resume")
             && !connect.contains("MieruOutbound::connect")
             && !connect.contains("encrypt_client_data")
             && !connect.contains("decrypt_server_data")
@@ -6072,32 +6074,27 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
     let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
     let stream = read("src/protocol_runtime/udp/mieru_manager/stream.rs");
     let socket = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/socket.rs");
-    let transport = fs::read_to_string(repo_root().join("crates/transport/src/mieru_transport.rs"))
-        .expect("read zero-transport mieru_transport source");
+    let transport = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
+        .expect("read zero-transport manifest");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
         .expect("read mieru protocol outbound source");
 
     for forbidden in [
-        "tokio::io::split",
         "encrypt_client_data(&payload)",
         "decrypt_server_data_with_consumed(&raw)",
         "decode_udp_flow_packet",
         "encode_udp_flow_packet",
         "parse_udp_packet",
-        "AsyncReadExt",
-        "AsyncWriteExt",
     ] {
         assert!(
             !manager.contains(forbidden) && !stream.contains(forbidden),
-            "Mieru UDP proxy manager should delegate packet stream task details to zero-transport; found `{forbidden}`"
+            "Mieru UDP proxy glue should delegate protocol packet details to protocols/mieru; found `{forbidden}`"
         );
     }
     for forbidden in [
         "packet.encode_with",
         "push_encrypted_response",
         "next_packet",
-        "AsyncReadExt",
-        "AsyncWriteExt",
     ] {
         assert!(
             !stream.contains(forbidden),
@@ -6106,22 +6103,27 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
     }
     assert!(
         !socket.exists(),
-        "Mieru UDP stream half AsyncSocket adapters should no longer live in zero-proxy"
+        "Mieru UDP stream half AsyncSocket adapters should remain in the stream glue module, not a separate proxy socket module"
     );
     assert!(
-        stream.contains("establish_mieru_udp_flow_stream")
-            && stream.contains("MieruUdpFlowStreamRequest")
-            && transport.contains("MieruUdpFlowIo")
-            && transport.contains("io.write_packet(&mut write_stream, &packet)")
-            && transport.contains("io.read_packets(&mut read_stream, &mut scratch)")
-            && transport.contains("packet.into_parts()")
-            && transport.contains("struct ReadOnlySocket")
-            && transport.contains("struct WriteOnlySocket")
+        !repo_root()
+            .join("crates/transport/src/mieru_transport.rs")
+            .exists()
+            && !transport.contains("dep:mieru")
+            && !transport.contains("mieru/crypto")
+            && !stream.contains("establish_mieru_udp_flow_stream")
+            && !stream.contains("MieruUdpFlowStreamRequest")
+            && stream.contains("MieruUdpFlowIo")
+            && stream.contains("io.write_packet(&mut write_stream, &packet)")
+            && stream.contains("io.read_packets(&mut read_stream, &mut scratch)")
+            && stream.contains("packet.into_parts()")
+            && stream.contains("struct ReadOnlySocket")
+            && stream.contains("struct WriteOnlySocket")
             && !stream.contains("encrypt_packet(")
             && !stream.contains("MieruOutbound")
             && protocol_outbound.contains("pub async fn write_packet")
             && protocol_outbound.contains("pub async fn read_packets"),
-        "Mieru UDP packet stream tasks should live in zero-transport and delegate packet I/O operations to protocols/mieru"
+        "Mieru UDP stream glue should stay out of zero-transport and delegate packet I/O operations to protocols/mieru"
     );
 }
 

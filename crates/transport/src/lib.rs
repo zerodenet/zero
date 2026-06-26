@@ -10,8 +10,6 @@ pub mod h2;
 pub mod http_upgrade;
 #[cfg(feature = "quic")]
 pub mod hysteria2_quic;
-#[cfg(feature = "mieru")]
-pub mod mieru_transport;
 #[cfg(feature = "quic")]
 pub mod quic;
 #[cfg(feature = "shadowsocks")]

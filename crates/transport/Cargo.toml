@@ -17,7 +17,7 @@ quic = []
 tls = []
 ws = []
 hysteria2 = []
-mieru = ["dep:mieru", "mieru/crypto"]
+mieru = []
 shadowsocks = []
 trojan = ["tls", "dep:trojan"]
 vless = ["grpc", "h2", "http_upgrade", "split_http", "quic", "tls", "ws"]
@@ -46,7 +46,6 @@ zero-engine = { path = "../engine" }
 ztls = { path = "../ztls" }
 zero-platform-tokio = { path = "../platform/tokio" }
 hysteria2 = { path = "../../protocols/hysteria2", features = ["crypto"] }
-mieru = { path = "../../protocols/mieru", optional = true, default-features = false }
 trojan = { path = "../../protocols/trojan", optional = true, default-features = false }
 vless = { path = "../../protocols/vless", default-features = false, features = ["reality"] }
 zero-traits = { path = "../traits" }
