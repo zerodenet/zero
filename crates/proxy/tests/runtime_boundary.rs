@@ -3648,6 +3648,7 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     let state = read("src/protocol_runtime/udp/state.rs");
     let datagram = read("src/protocol_runtime/udp/start/datagram.rs");
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
+    let managed_datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
 
     for forbidden in [
         "TrojanUdpFlowRequest",
@@ -3693,8 +3694,9 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
         state.contains("ManagedUdpFlowKind::Datagram")
             && state.contains("start_managed_datagram_flow")
             && datagram.contains("self.managed.start_datagram_flow")
-            && managed.contains("supports_managed_existing(&flow.resume)")
-            && managed.contains("ManagedExistingSend::datagram"),
+            && managed.contains("ManagedDatagramState")
+            && managed_datagram.contains("supports_managed_existing(&flow.resume)")
+            && managed_datagram.contains("ManagedExistingSend::datagram"),
         "managed datagram UDP flow kind should delegate resume recognition to protocol managers"
     );
 }
@@ -3724,6 +3726,7 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
     let state = read("src/protocol_runtime/udp/state.rs");
     let stream = read("src/protocol_runtime/udp/start/stream.rs");
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
+    let managed_stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
 
     for forbidden in [
         "ProtocolUdpFlowResume::Trojan(_)",
@@ -3754,10 +3757,11 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
             && state.contains("start_managed_relay_stream_flow")
             && stream.contains("self.managed.start_stream_packet_flow")
             && stream.contains("self.managed.start_relay_stream_flow")
-            && managed.contains("supports_managed_existing(&request.resume)")
-            && managed.contains("supports_managed_relay_existing(&request.resume)")
-            && managed.contains("ManagedExistingSend::stream_packet")
-            && managed.contains("ManagedRelaySend::relay_stream"),
+            && managed.contains("ManagedStreamState")
+            && managed_stream.contains("supports_managed_existing(&request.resume)")
+            && managed_stream.contains("supports_managed_relay_existing(&request.resume)")
+            && managed_stream.contains("ManagedExistingSend::stream_packet")
+            && managed_stream.contains("ManagedRelaySend::relay_stream"),
         "stream-packet and relay-stream UDP flow kinds should delegate resume recognition to protocol managers"
     );
 }
@@ -5098,10 +5102,16 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
         content.contains("managed: ManagedProtocolUdpState")
             && managed.contains("struct ManagedProtocolUdpState")
             && managed.contains("vless: VlessUdpOutboundManager")
+            && managed.contains("datagram: ManagedDatagramState")
+            && managed.contains("stream: ManagedStreamState")
             && !managed.contains("pub(crate) vless:")
             && !managed.contains("pub(super) vless:")
             && !managed.contains("pub(crate) shadowsocks:")
-            && !managed.contains("pub(super) shadowsocks:"),
+            && !managed.contains("pub(super) shadowsocks:")
+            && !managed.contains("shadowsocks: SsChainManager")
+            && !managed.contains("hysteria2: H2ChainManager")
+            && !managed.contains("trojan: TrojanChainManager")
+            && !managed.contains("mieru: MieruChainManager"),
         "ProtocolUdpState should expose one managed UDP sub-state instead of protocol manager fields"
     );
 }
@@ -5326,6 +5336,8 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     let forward = read("src/protocol_runtime/udp/state/forward.rs");
     let normalized_forward = forward.replace("\r\n", "\n");
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
+    let managed_datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
+    let managed_stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
     let socks5_runtime = read("src/protocol_runtime/socks5_udp/runtime.rs");
 
     for forbidden in [
@@ -5353,9 +5365,12 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
             && socks5_runtime.contains("fn handles_resume(&self, resume: &ProtocolUdpFlowResume)")
             && socks5_runtime.contains("resume.as_socks5().is_some()")
             && managed.contains("fn forward_existing_flow")
-            && managed.contains("ManagedExistingSend")
-            && managed.contains("send_managed_existing")
-            && managed.contains("supports_managed_existing(resume)"),
+            && managed_datagram.contains("ManagedExistingSend")
+            && managed_datagram.contains("send_managed_existing")
+            && managed_datagram.contains("supports_managed_existing(resume)")
+            && managed_stream.contains("ManagedExistingSend")
+            && managed_stream.contains("send_managed_existing")
+            && managed_stream.contains("supports_managed_existing(resume)"),
         "existing UDP protocol-flow handling should delegate neutral send requests to ManagedProtocolUdpState"
     );
     for forbidden in [
@@ -6017,8 +6032,8 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
 fn trojan_udp_flow_resume_is_protocol_owned() {
     let adapter = read("src/adapters/trojan/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/managed.rs");
-    let start = read("src/protocol_runtime/udp/state/managed.rs");
+    let forward = read("src/protocol_runtime/udp/state/managed/stream.rs");
+    let start = read("src/protocol_runtime/udp/state/managed/stream.rs");
     let manager_send = read("src/protocol_runtime/udp/trojan_manager/send.rs");
     let manager_connect = read("src/protocol_runtime/udp/trojan_manager/connect.rs");
     let manager_establish = read("src/protocol_runtime/udp/trojan_manager/establish.rs");
@@ -6188,7 +6203,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let stream = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/stream.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/managed.rs");
+    let forward = read("src/protocol_runtime/udp/state/managed/stream.rs");
     let manager_send = read("src/protocol_runtime/udp/mieru_manager/send.rs");
     let manager_connect = read("src/protocol_runtime/udp/mieru_manager/connect.rs");
     let manager_establish = read("src/protocol_runtime/udp/mieru_manager/establish.rs");
@@ -6298,7 +6313,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && !forward.contains("relay_chain: bool"),
         "existing Mieru UDP flow forwarding should pass the opaque resume descriptor without unpacking account or relay state"
     );
-    let start = read("src/protocol_runtime/udp/state/managed.rs");
+    let start = read("src/protocol_runtime/udp/state/managed/stream.rs");
     assert!(
         !start.contains("ProtocolUdpFlowResume::Mieru")
             && start.contains("ManagedExistingSend::stream_packet")
@@ -6689,7 +6704,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .expect("read zero-transport hysteria2_quic source");
     let adapter = read("src/adapters/hysteria2/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/managed.rs");
+    let forward = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
 
@@ -7245,7 +7260,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
     let model = read("src/protocol_runtime/udp/ss_manager/model.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/managed.rs");
+    let forward = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
@@ -7316,7 +7331,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !forward.contains("datagram_cache_key: &'a str"),
         "existing Shadowsocks UDP flow forwarding should pass the opaque resume descriptor without unpacking cache identity or codec state"
     );
-    let start = read("src/protocol_runtime/udp/state/managed.rs");
+    let start = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     assert!(
         !start.contains("ProtocolUdpFlowResume::Shadowsocks")
             && start.contains("ManagedExistingSend::datagram")
@@ -7361,7 +7376,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let outbound = read("src/runtime/udp_flow/outbound.rs");
     let carrier_snapshot = read("src/runtime/udp_flow/packet_path.rs");
     let snapshot = read("src/runtime/udp_flow/packet_path_chain/snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/managed.rs");
+    let forward = read("src/protocol_runtime/udp/state/managed/datagram.rs");
 
     assert!(
         !adapter.contains("CipherKind::from_str") && adapter.contains("ShadowsocksUdpFlowResume::from_config"),
