@@ -17,13 +17,14 @@ pub(super) fn resolve_candidate<'a>(
         .protocols
         .resolve_udp_packet_path_candidate(carrier_leaf, datagram_leaf)?;
 
+    let datagram_desc = datagram.descriptor();
     debug!(
         carrier = %carrier_desc.cache_key,
         carrier_server = %carrier_desc.server,
         carrier_port = carrier_desc.port,
-        datagram_tag = %datagram.tag,
-        datagram_server = %datagram.server,
-        datagram_port = datagram.port,
+        datagram_tag = %datagram_desc.tag,
+        datagram_server = %datagram_desc.server,
+        datagram_port = datagram_desc.port,
         "ensuring UDP packet-path relay chain"
     );
 
@@ -43,6 +44,7 @@ pub(super) async fn build_entry(
         .build_udp_packet_path_carrier(proxy, carrier_leaf)
         .await?;
     let codec = candidate.datagram.codec.clone();
+    let datagram_desc = candidate.datagram.descriptor();
     let waiters = Arc::new(Mutex::new(VecDeque::new()));
     tokio::spawn(recv_loop(path.clone(), waiters.clone(), codec.clone()));
 
@@ -50,7 +52,7 @@ pub(super) async fn build_entry(
         path,
         waiters,
         codec,
-        datagram_server: candidate.datagram.server.to_owned(),
-        datagram_port: candidate.datagram.port,
+        datagram_server: datagram_desc.server.to_owned(),
+        datagram_port: datagram_desc.port,
     })
 }

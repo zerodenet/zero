@@ -4667,7 +4667,7 @@ fn protocol_udp_packet_path_facade_lives_outside_state_root() {
         );
     }
     assert!(
-        packet_path_content.contains("protocol_snapshot")
+        packet_path_content.contains(".into_protocol_snapshot()")
             && packet_path_content.contains(".with_packet_path_carrier(packet_path_carrier)"),
         "packet-path state should attach the carrier through the datagram source protocol snapshot"
     );
@@ -4873,10 +4873,10 @@ fn packet_path_key_model_lives_outside_chain_manager() {
         "packet-path key model should use opaque carrier/datagram key parts instead of reading source internals"
     );
     assert!(
-        model.contains("self.datagram.key_part()")
+        model.contains("self.datagram.descriptor().key_part()")
             && traits.contains("struct UdpDatagramKey")
             && traits.contains("fn key_part(&self) -> UdpDatagramKey"),
-        "UdpDatagramSource should provide the packet-path datagram key part"
+        "UdpDatagramSource should expose a neutral descriptor that provides the packet-path datagram key part"
     );
 }
 
@@ -5747,10 +5747,12 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     assert!(
         !traits.contains("password: &'a str")
             && !traits.contains("cipher_kind: shadowsocks::CipherKind")
-            && traits.contains("datagram_cache_key: String")
+            && traits.contains("struct UdpDatagramDescriptor")
+            && traits.contains("cache_key: String")
+            && traits.contains("descriptor: UdpDatagramDescriptor<'a>")
             && traits.contains("protocol_snapshot: ProtocolUdpFlowSnapshot")
             && traits.contains("codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>"),
-        "UdpDatagramSource should carry cache identity, protocol snapshot, and adapter-provided packet-path datagram codec instead of protocol-private fields"
+        "UdpDatagramSource should separate neutral descriptor identity from protocol snapshot and adapter-provided packet-path datagram codec"
     );
     assert!(
         adapter.contains("shadowsocks::udp_cache_key"),

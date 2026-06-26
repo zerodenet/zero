@@ -25,6 +25,6 @@ pub(super) struct EntryCandidate<'a> {
 
 impl EntryCandidate<'_> {
     pub(super) fn key(&self) -> PathKey {
-        PathKey::from_sources(&self.carrier_desc, self.datagram.key_part())
+        PathKey::from_sources(&self.carrier_desc, self.datagram.descriptor().key_part())
     }
 }

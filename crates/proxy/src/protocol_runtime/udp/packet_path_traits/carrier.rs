@@ -54,27 +54,45 @@ impl PacketPathCarrierSnapshot {
 
 /// Datagram source params for a relay-chain final hop over a packet path.
 ///
-/// Produced by `UdpPacketPathCapability::udp_datagram_source`. The manager builds the
-/// inner `DatagramCodec` from parsed protocol fields; `datagram_cache_key`
+/// Produced by `UdpPacketPathCapability::udp_datagram_source`. The `cache_key`
 /// feeds packet-path cache identity without exposing raw config parsing to the
 /// manager.
-pub(crate) struct UdpDatagramSource<'a> {
+pub(crate) struct UdpDatagramDescriptor<'a> {
     pub(crate) tag: &'a str,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) datagram_cache_key: String,
-    pub(crate) protocol_snapshot: ProtocolUdpFlowSnapshot,
-    pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
+    pub(crate) cache_key: String,
 }
 
-impl UdpDatagramSource<'_> {
+impl UdpDatagramDescriptor<'_> {
     pub(crate) fn key_part(&self) -> UdpDatagramKey {
         UdpDatagramKey {
             tag: self.tag.to_owned(),
             server: self.server.to_owned(),
             port: self.port,
-            cache_key: self.datagram_cache_key.clone(),
+            cache_key: self.cache_key.clone(),
         }
+    }
+}
+
+/// Adapter-provided datagram role output for packet-path relay chains.
+///
+/// The descriptor is the generic chain-management surface. The protocol
+/// snapshot and codec are consumed only when tracking the flow or framing
+/// datagrams for the already selected path.
+pub(crate) struct UdpDatagramSource<'a> {
+    pub(crate) descriptor: UdpDatagramDescriptor<'a>,
+    pub(crate) protocol_snapshot: ProtocolUdpFlowSnapshot,
+    pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
+}
+
+impl UdpDatagramSource<'_> {
+    pub(crate) fn descriptor(&self) -> &UdpDatagramDescriptor<'_> {
+        &self.descriptor
+    }
+
+    pub(crate) fn into_protocol_snapshot(self) -> ProtocolUdpFlowSnapshot {
+        self.protocol_snapshot
     }
 }
 

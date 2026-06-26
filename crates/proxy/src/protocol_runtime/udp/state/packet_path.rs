@@ -12,13 +12,19 @@ impl ProtocolUdpState {
         datagram: UdpDatagramSource<'_>,
         packet_path_carrier: Option<PacketPathCarrierSnapshot>,
     ) -> UdpFlowOutbound {
+        let descriptor = datagram.descriptor();
+        let tag = descriptor.tag.to_owned();
+        let server = descriptor.server.to_owned();
+        let port = descriptor.port;
+        let protocol = datagram
+            .into_protocol_snapshot()
+            .with_packet_path_carrier(packet_path_carrier);
+
         UdpFlowOutbound::Datagram {
-            tag: datagram.tag.to_owned(),
-            server: datagram.server.to_owned(),
-            port: datagram.port,
-            protocol: datagram
-                .protocol_snapshot
-                .with_packet_path_carrier(packet_path_carrier),
+            tag,
+            server,
+            port,
+            protocol,
         }
     }
 
