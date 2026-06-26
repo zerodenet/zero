@@ -5779,19 +5779,23 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         }
     }
 
-    let cache_key = read("src/protocol_runtime/udp/cache_key.rs");
-    for required in ["fn socks5(", "socks5|"] {
-        assert!(
-            cache_key.contains(required),
-            "protocol_runtime::udp cache_key module should own `{required}`"
-        );
-    }
+    let udp_root = read("src/protocol_runtime/udp/mod.rs");
+    let packet_path_snapshot = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
+    let socks5_shared = manifest_dir()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root")
+        .join("protocols/socks5/src/shared.rs");
+    let socks5_shared =
+        fs::read_to_string(socks5_shared).expect("read socks5 protocol shared source");
     assert!(
-        !cache_key.contains("fn shadowsocks(")
-            && !cache_key.contains("shadowsocks|")
-            && !cache_key.contains("fn hysteria2(")
-            && !cache_key.contains("hysteria2|"),
-        "Shadowsocks and Hysteria2 cache identity should live in their owning protocol crates"
+        !udp_root.contains("mod cache_key")
+            && !packet_path_snapshot.contains("socks5_udp_cache_key"),
+        "protocol_runtime::udp should not own packet-path cache identity helpers"
+    );
+    assert!(
+        socks5_shared.contains("fn udp_cache_key(") && socks5_shared.contains("socks5|"),
+        "protocols/socks5 should own SOCKS5 cache identity construction"
     );
 }
 

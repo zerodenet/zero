@@ -56,7 +56,7 @@ pub(crate) fn socks5_packet_path_carrier_descriptor(
     username: Option<&str>,
 ) -> crate::protocol_runtime::udp::PacketPathCarrierDescriptor {
     crate::protocol_runtime::udp::PacketPathCarrierDescriptor {
-        cache_key: crate::protocol_runtime::udp::socks5_udp_cache_key(tag, server, port, username),
+        cache_key: socks5::udp_cache_key(tag, server, port, username),
         server: server.to_owned(),
         port,
     }
@@ -71,7 +71,7 @@ pub(crate) fn socks5_packet_path_carrier_snapshot(
     password: Option<&str>,
 ) -> UdpPacketPathCarrier {
     UdpPacketPathCarrier::Socks5 {
-        cache_key: crate::protocol_runtime::udp::socks5_udp_cache_key(tag, server, port, username),
+        cache_key: socks5::udp_cache_key(tag, server, port, username),
         tag: tag.to_owned(),
         server: server.to_owned(),
         port,

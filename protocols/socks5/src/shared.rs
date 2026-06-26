@@ -1,3 +1,4 @@
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -258,4 +259,11 @@ pub fn encode_udp_associate_response(
     payload: &[u8],
 ) -> Result<Vec<u8>, Error> {
     build_udp_packet(address, port, payload)
+}
+
+pub fn udp_cache_key(tag: &str, server: &str, port: u16, username: Option<&str>) -> String {
+    let auth = username
+        .map(|value| alloc::format!("|auth:{value}"))
+        .unwrap_or_default();
+    alloc::format!("socks5|{tag}|{server}:{port}{auth}")
 }

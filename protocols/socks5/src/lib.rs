@@ -19,6 +19,6 @@ pub use outbound::{
 };
 pub use shared::{
     build_udp_packet, decode_udp_associate_request, decode_udp_associate_response,
-    encode_udp_associate_response, parse_udp_packet, Socks5Reply, Socks5UdpPacket,
+    encode_udp_associate_response, parse_udp_packet, udp_cache_key, Socks5Reply, Socks5UdpPacket,
 };
 pub use udp::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
