@@ -24,6 +24,6 @@ pub use shared::{
     Socks5UdpPacketPathConfig,
 };
 pub use udp::{
-    establish_udp_relay_with_control, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError,
-    Socks5UdpRelayTargetAddress,
+    establish_udp_relay_with_control, Socks5UdpAssociation, Socks5UdpRelay, Socks5UdpRelayEndpoint,
+    Socks5UdpRelayError, Socks5UdpRelayTargetAddress,
 };

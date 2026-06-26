@@ -1,7 +1,7 @@
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use socks5::{Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
+use socks5::{Socks5UdpAssociation, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
 use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
@@ -17,8 +17,7 @@ pub(super) struct ActiveUpstreamSocks5UdpAssociation {
     port: u16,
     proxy: Proxy,
     close_recorded: AtomicBool,
-    _control: TokioSocket,
-    relay: Socks5UdpRelay<TokioDatagramSocket>,
+    association: Socks5UdpAssociation<TokioSocket, TokioDatagramSocket>,
 }
 
 impl ActiveUpstreamSocks5UdpAssociation {
@@ -62,13 +61,15 @@ impl ActiveUpstreamSocks5UdpAssociation {
             port,
             proxy: proxy.clone(),
             close_recorded: AtomicBool::new(false),
-            _control: control,
-            relay: Socks5UdpRelay::new(
-                relay,
-                Socks5UdpRelayEndpoint {
-                    address: zero_platform_tokio::socket_addr_to_ip(relay_addr),
-                    port: relay_addr.port(),
-                },
+            association: Socks5UdpAssociation::new(
+                control,
+                Socks5UdpRelay::new(
+                    relay,
+                    Socks5UdpRelayEndpoint {
+                        address: zero_platform_tokio::socket_addr_to_ip(relay_addr),
+                        port: relay_addr.port(),
+                    },
+                ),
             ),
         })
     }
@@ -107,7 +108,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        match self.relay.send_packet(target, port, payload).await {
+        match self.association.send_packet(target, port, payload).await {
             Ok(sent) => Ok(sent),
             Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
             Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),
@@ -115,7 +116,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
     }
 
     pub(super) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        match self.relay.recv_packet(buf).await {
+        match self.association.recv_packet(buf).await {
             Ok(read) => Ok(read),
             Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
             Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),
@@ -123,7 +124,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
     }
 
     pub(super) async fn recv_payload(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        match self.relay.recv_payload(buf).await {
+        match self.association.recv_payload(buf).await {
             Ok(read) => Ok(read),
             Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
             Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),

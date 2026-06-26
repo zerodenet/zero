@@ -28,6 +28,29 @@ pub struct Socks5UdpRelay<S> {
     endpoint: Socks5UdpRelayEndpoint,
 }
 
+#[derive(Debug)]
+pub struct Socks5UdpAssociation<C, S> {
+    _control: C,
+    relay: Socks5UdpRelay<S>,
+}
+
+impl<C, S> Socks5UdpAssociation<C, S> {
+    pub fn new(control: C, relay: Socks5UdpRelay<S>) -> Self {
+        Self {
+            _control: control,
+            relay,
+        }
+    }
+
+    pub fn relay(&self) -> &Socks5UdpRelay<S> {
+        &self.relay
+    }
+
+    pub fn into_parts(self) -> (C, Socks5UdpRelay<S>) {
+        (self._control, self.relay)
+    }
+}
+
 impl<S> Socks5UdpRelay<S> {
     pub fn new(socket: S, endpoint: Socks5UdpRelayEndpoint) -> Self {
         Self { socket, endpoint }
@@ -43,6 +66,34 @@ impl<S> Socks5UdpRelay<S> {
 
     pub fn into_socket(self) -> S {
         self.socket
+    }
+}
+
+impl<C, S> Socks5UdpAssociation<C, S>
+where
+    S: DatagramSocket,
+{
+    pub async fn send_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>> {
+        self.relay.send_packet(target, port, payload).await
+    }
+
+    pub async fn recv_packet(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>> {
+        self.relay.recv_packet(buf).await
+    }
+
+    pub async fn recv_payload(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>> {
+        self.relay.recv_payload(buf).await
     }
 }
 
