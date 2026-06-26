@@ -269,7 +269,7 @@ impl Proxy {
                         Ok(0) => break,
                         Ok(n) => {
                             let data = &read_buf[..n];
-                            if let Ok(pkt) = mieru::decode_inbound_udp_packet(data) {
+                            if let Ok(pkt) = mieru::decode_udp_flow_packet(data) {
                                 let target_addr = match &pkt.target {
                                         zero_core::Address::Domain(domain) => {
                                             match self.resolver.resolve(domain).await {
@@ -319,7 +319,7 @@ impl Proxy {
                     match recv {
                         Ok((n, sender)) => {
                             if let Some((target, port)) = session_map.get(&sender) {
-                                if let Ok(frame) = mieru::encode_udp_response(
+                                if let Ok(frame) = mieru::encode_udp_flow_packet(
                                     target, *port, &recv_buf[..n],
                                 ) {
                                     if let Err(e) = client.write_all(&frame).await {

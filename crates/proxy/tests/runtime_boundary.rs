@@ -2500,6 +2500,8 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
     for forbidden in [
         "mieru::unwrap_udp_associate",
         "mieru::wrap_udp_associate",
+        "mieru::decode_inbound_udp_packet",
+        "mieru::encode_udp_response",
         "socks5::parse_udp_packet",
         "socks5::build_udp_packet",
     ] {
@@ -2509,7 +2511,7 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
         );
     }
 
-    for required in ["decode_inbound_udp_packet", "encode_udp_response"] {
+    for required in ["decode_udp_flow_packet", "encode_udp_flow_packet"] {
         assert!(
             protocol_udp.contains(required) && inbound.contains(&format!("mieru::{required}")),
             "Mieru inbound UDP packet framing should be owned by protocols/mieru `{required}`"
