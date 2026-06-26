@@ -5479,17 +5479,23 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
         "hysteria2::encode_udp_flow_packet",
         "hysteria2::decode_udp_flow_packet",
         "Hysteria2UdpPacketTarget",
+        "Hysteria2Connector",
+        "connect_raw",
+        "client_fingerprint",
+        "password: &str",
     ] {
         assert!(
             !carrier.contains(forbidden),
-            "QUIC datagram packet-path carrier should consume an adapter-provided codec instead of naming protocol framing; found `{forbidden}`"
+            "QUIC datagram packet-path carrier should consume adapter-provided connection/codec objects instead of naming protocol details; found `{forbidden}`"
         );
     }
     assert!(
         carrier.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
             && carrier.contains(".codec")
-            && carrier.contains("connect_raw"),
-        "QUIC datagram packet-path carrier should keep carrier lifecycle while delegating datagram framing to the codec"
+            && carrier.contains("conn: Arc<quinn::Connection>")
+            && adapter.contains("Hysteria2Connector")
+            && adapter.contains("connect_raw"),
+        "Hysteria2 adapter should own protocol-specific QUIC connection setup while the carrier keeps only connection lifecycle and codec use"
     );
 }
 

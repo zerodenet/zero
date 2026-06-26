@@ -8,14 +8,10 @@ use zero_traits::DatagramCodec;
 use crate::protocol_runtime::udp::PacketPathCarrier;
 
 pub(crate) async fn build(
-    server: &str,
-    port: u16,
-    password: &str,
-    client_fingerprint: Option<&str>,
+    conn: Arc<quinn::Connection>,
     codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 ) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
-    let path = QuicDatagramPacketPath::establish(server, port, password, client_fingerprint, codec)
-        .await?;
+    let path = QuicDatagramPacketPath::new(conn, codec);
     Ok(Arc::new(path))
 }
 
@@ -25,17 +21,11 @@ pub(super) struct QuicDatagramPacketPath {
 }
 
 impl QuicDatagramPacketPath {
-    pub(super) async fn establish(
-        server: &str,
-        port: u16,
-        password: &str,
-        client_fingerprint: Option<&str>,
+    pub(super) fn new(
+        conn: Arc<quinn::Connection>,
         codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
-    ) -> Result<Self, EngineError> {
-        let connector = crate::transport::Hysteria2Connector::new(server, port, password)
-            .with_fingerprint(client_fingerprint);
-        let conn = Arc::new(connector.connect_raw().await?);
-        Ok(Self { conn, codec })
+    ) -> Self {
+        Self { conn, codec }
     }
 }
 
