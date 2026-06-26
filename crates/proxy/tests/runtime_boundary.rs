@@ -5729,8 +5729,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     }
     assert!(
         !carrier_snapshot.contains("ShadowsocksDatagramCodec")
-            && carrier_snapshot.contains("shadowsocks::udp_datagram_codec"),
-        "Shadowsocks packet-path datagram source should request a protocol-built codec without naming its concrete type"
+            && !carrier_snapshot.contains("shadowsocks::udp_datagram_codec")
+            && adapter.contains("shadowsocks::udp_datagram_codec"),
+        "Shadowsocks adapter should request the protocol-built datagram codec and pass it through neutral packet-path constructors"
     );
     assert!(
         !shadowsocks_carrier.contains("shadowsocks::encode_udp_datagram")
@@ -5847,18 +5848,24 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
     let snapshot = read("src/protocol_runtime/udp/packet_path_snapshot.rs");
     let root = read("src/protocol_runtime/udp/mod.rs");
     for required in [
+        "packet_path_carrier_descriptor",
+        "udp_datagram_source",
+        "packet_path_flow_snapshot",
+    ] {
+        assert!(
+            snapshot.contains(required),
+            "protocol_runtime::udp packet-path snapshot module should own neutral constructor `{required}`"
+        );
+    }
+    for forbidden in [
         "socks5_packet_path_carrier_descriptor",
         "shadowsocks_packet_path_carrier_descriptor",
         "shadowsocks_udp_datagram_source",
         "shadowsocks_packet_path_flow_snapshot",
         "hysteria2_packet_path_carrier_descriptor",
-    ] {
-        assert!(
-            snapshot.contains(required),
-            "protocol_runtime::udp packet-path snapshot module should own `{required}`"
-        );
-    }
-    for forbidden in [
+        "socks5::",
+        "shadowsocks::",
+        "hysteria2::",
         "socks5_packet_path_carrier_snapshot",
         "shadowsocks_packet_path_carrier_snapshot",
         "hysteria2_packet_path_carrier_snapshot",
@@ -5872,9 +5879,9 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         );
     }
     assert!(
-        snapshot.contains("ProtocolUdpFlowSnapshot::shadowsocks(")
-            && snapshot.contains("PacketPathFlowSnapshot::from_protocol"),
-        "packet-path flow snapshot helper should use the protocol snapshot constructor"
+        !snapshot.contains("ProtocolUdpFlowSnapshot::shadowsocks(")
+            && !snapshot.contains("ProtocolUdpFlowSnapshot"),
+        "packet-path snapshot helpers should not construct or name protocol flow snapshots"
     );
     assert!(
         !snapshot.contains("protocol_snapshot:"),

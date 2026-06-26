@@ -28,12 +28,10 @@ impl Hysteria2Adapter {
             return None;
         };
         Some(
-            crate::protocol_runtime::udp::packet_path_snapshot::hysteria2_packet_path_carrier_descriptor(
-                tag,
+            crate::protocol_runtime::udp::packet_path_snapshot::packet_path_carrier_descriptor(
+                hysteria2::udp_cache_key(tag, server, *port, password, *client_fingerprint),
                 server,
                 *port,
-                password,
-                *client_fingerprint,
             ),
         )
     }

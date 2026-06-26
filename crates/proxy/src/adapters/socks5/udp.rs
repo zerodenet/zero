@@ -27,12 +27,15 @@ impl Socks5Adapter {
         else {
             return None;
         };
+        let cache_key = socks5::udp_cache_key(
+            tag,
+            server,
+            *port,
+            username.zip(*password).map(|(user, _)| user),
+        );
         Some(
-            crate::protocol_runtime::udp::packet_path_snapshot::socks5_packet_path_carrier_descriptor(
-                tag,
-                server,
-                *port,
-                username.zip(*password).map(|(user, _)| user),
+            crate::protocol_runtime::udp::packet_path_snapshot::packet_path_carrier_descriptor(
+                cache_key, server, *port,
             ),
         )
     }

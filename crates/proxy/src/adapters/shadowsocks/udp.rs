@@ -42,8 +42,10 @@ impl ShadowsocksAdapter {
             return None;
         };
         Some(
-            crate::protocol_runtime::udp::packet_path_snapshot::shadowsocks_packet_path_carrier_descriptor(
-                tag, server, *port, cipher, password,
+            crate::protocol_runtime::udp::packet_path_snapshot::packet_path_carrier_descriptor(
+                shadowsocks::udp_cache_key(tag, server, *port, cipher, password),
+                server,
+                *port,
             ),
         )
     }
@@ -97,14 +99,14 @@ impl ShadowsocksAdapter {
         let cipher_kind =
             parse_shadowsocks_udp_cipher(cipher, "udp_shadowsocks_datagram_source_cipher", None)
                 .ok()?;
+        let cache_key = shadowsocks::udp_cache_key(tag, server, *port, cipher, password);
+        let codec = Arc::new(shadowsocks::udp_datagram_codec(
+            cipher_kind,
+            password.as_bytes(),
+        ));
         Some(
-            crate::protocol_runtime::udp::packet_path_snapshot::shadowsocks_udp_datagram_source(
-                tag,
-                server,
-                *port,
-                cipher,
-                password,
-                cipher_kind,
+            crate::protocol_runtime::udp::packet_path_snapshot::udp_datagram_source(
+                tag, server, *port, cache_key, codec,
             ),
         )
     }
@@ -130,15 +132,14 @@ impl ShadowsocksAdapter {
             None,
         )
         .ok()?;
+        let cache_key = shadowsocks::udp_cache_key(tag, server, *port, cipher, password);
+        let protocol = crate::protocol_runtime::udp::PacketPathFlowSnapshot::shadowsocks(
+            password,
+            cache_key,
+            cipher_kind,
+        );
         Some(
-            crate::protocol_runtime::udp::packet_path_snapshot::shadowsocks_packet_path_flow_snapshot(
-                tag,
-                server,
-                *port,
-                cipher,
-                password,
-                cipher_kind,
-            ),
+            crate::protocol_runtime::udp::packet_path_snapshot::packet_path_flow_snapshot(protocol),
         )
     }
 

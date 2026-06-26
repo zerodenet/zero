@@ -9,8 +9,18 @@ pub(crate) struct PacketPathFlowSnapshot {
 
 #[cfg(feature = "shadowsocks")]
 impl PacketPathFlowSnapshot {
-    pub(crate) fn from_protocol(protocol: ProtocolUdpFlowSnapshot) -> Self {
-        Self { protocol }
+    pub(crate) fn shadowsocks(
+        password: &str,
+        datagram_cache_key: String,
+        cipher_kind: shadowsocks::CipherKind,
+    ) -> Self {
+        Self {
+            protocol: ProtocolUdpFlowSnapshot::shadowsocks(
+                password,
+                datagram_cache_key,
+                cipher_kind,
+            ),
+        }
     }
 
     pub(crate) fn with_packet_path_carrier(
