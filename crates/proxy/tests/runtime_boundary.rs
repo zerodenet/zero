@@ -3036,7 +3036,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     );
     assert!(
         upstream_response.contains("async fn handle_upstream_response")
-            && upstream_response.contains("socks5_upstream_view")
+            && upstream_response.contains("upstream_association_view")
             && upstream_response.contains("upstream_response_session_id")
             && upstream_response.contains("record_udp_upstream_recv_failure")
             && upstream_response.contains("failed to attribute upstream UDP response"),
@@ -3044,7 +3044,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     );
     assert!(
         idle_timeout.contains("fn handle_idle_timeout")
-            && idle_timeout.contains("drop_socks5_idle")
+            && idle_timeout.contains("drop_idle_upstream_association")
             && idle_timeout.contains("log_udp_upstream_association_idle_timeout"),
         "SOCKS5 UDP idle timeout cleanup should live in socks5_udp_associate/idle_timeout.rs"
     );
@@ -3080,25 +3080,26 @@ fn udp_dispatch_poll_refs_does_not_expose_socks5_association_type() {
     for forbidden in [
         "Option<&crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>",
         "self.socks5.upstream()",
+        "Socks5UdpAssociationView",
+        "ClosedSocks5UdpAssociation",
+        "pub(crate) fn socks5_upstream_view",
+        "pub(crate) fn drop_socks5_upstream",
+        "pub(crate) fn drop_socks5_idle",
     ] {
         assert!(
             !lifecycle.contains(forbidden),
-        "UdpDispatch poll refs should expose upstream UDP poll glue, not SOCKS5 association internals; found `{forbidden}`"
-    );
+            "UdpDispatch lifecycle should expose upstream UDP glue, not SOCKS5 association internals; found `{forbidden}`"
+        );
     }
     assert!(
-    lifecycle.contains("UpstreamUdpPoll")
-        && lifecycle.contains("recv_packet")
-        && lifecycle.contains("Socks5UdpAssociationView")
-        && lifecycle.contains("ClosedSocks5UdpAssociation"),
-    "UdpDispatch lifecycle should expose neutral upstream UDP polling while keeping SOCKS5 lifecycle views local"
-);
-    assert!(
-        !lifecycle.contains("crate::protocol_runtime::socks5_udp::Socks5UdpRuntime")
-            && !lifecycle.contains("crate::protocol_runtime::socks5_udp::Socks5UdpAssociationView")
-            && !lifecycle
-                .contains("crate::protocol_runtime::socks5_udp::ClosedSocks5UdpAssociation"),
-        "UdpDispatch lifecycle should not scatter fully-qualified SOCKS5 runtime facade type paths"
+        lifecycle.contains("UpstreamUdpPoll")
+            && lifecycle.contains("recv_packet")
+            && lifecycle.contains("UpstreamAssociationView")
+            && lifecycle.contains("ClosedUpstreamAssociation")
+            && lifecycle.contains("upstream_association_view")
+            && lifecycle.contains("drop_upstream_association")
+            && lifecycle.contains("drop_idle_upstream_association"),
+        "UdpDispatch lifecycle should expose neutral upstream UDP polling and association lifecycle models"
     );
 }
 

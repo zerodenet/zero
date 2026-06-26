@@ -32,7 +32,7 @@ pub(super) async fn handle_upstream_response(
             .await
         }
         Err(error) => {
-            if let Some(closed) = dispatch.drop_socks5_upstream() {
+            if let Some(closed) = dispatch.drop_upstream_association() {
                 proxy.record_udp_upstream_recv_failure();
                 log_udp_upstream_association_dropped(
                     inbound_tag,
@@ -77,7 +77,7 @@ fn upstream_response_session_id(
     inbound_tag: &str,
     payload: &[u8],
 ) -> Option<u64> {
-    let association = dispatch.socks5_upstream_view()?;
+    let association = dispatch.upstream_association_view()?;
     match socks5::decode_udp_associate_response(payload) {
         Ok(packet) => dispatch.upstream_response_session_id(
             association.outbound_tag,

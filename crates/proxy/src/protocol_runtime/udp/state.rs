@@ -3,9 +3,10 @@ use std::time::Duration;
 use std::collections::HashMap;
 use tokio::time::Instant as TokioInstant;
 
-use crate::protocol_runtime::socks5_udp::{
-    ClosedSocks5UdpAssociation, Socks5UdpAssociationView, Socks5UdpRuntime,
+use crate::protocol_runtime::socks5_udp::model::{
+    ClosedSocks5UdpAssociation, Socks5UdpAssociationView,
 };
+use crate::protocol_runtime::socks5_udp::Socks5UdpRuntime;
 use zero_engine::EngineError;
 
 use super::{

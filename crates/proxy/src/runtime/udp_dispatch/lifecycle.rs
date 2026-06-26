@@ -6,9 +6,7 @@ use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
-use crate::protocol_runtime::socks5_udp::{
-    ClosedSocks5UdpAssociation, Socks5UdpAssociationView, Socks5UdpRuntime,
-};
+use crate::protocol_runtime::socks5_udp::Socks5UdpRuntime;
 use crate::protocol_runtime::udp::ProtocolUdpState;
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::managed::ManagedUdpFlows;
@@ -26,6 +24,16 @@ impl UpstreamUdpPoll<'_> {
     pub(crate) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
         self.socks5.recv_upstream_packet(buf).await
     }
+}
+
+pub(crate) struct UpstreamAssociationView<'a> {
+    pub(crate) outbound_tag: &'a str,
+}
+
+pub(crate) struct ClosedUpstreamAssociation {
+    pub(crate) outbound_tag: String,
+    pub(crate) server: String,
+    pub(crate) port: u16,
 }
 
 impl UdpDispatch {
@@ -99,8 +107,12 @@ impl UdpDispatch {
 
     /// View of the SOCKS5 upstream association, if established.
     #[allow(dead_code)]
-    pub(crate) fn socks5_upstream_view(&self) -> Option<Socks5UdpAssociationView<'_>> {
-        self.protocol_state.socks5_upstream_view()
+    pub(crate) fn upstream_association_view(&self) -> Option<UpstreamAssociationView<'_>> {
+        self.protocol_state
+            .socks5_upstream_view()
+            .map(|association| UpstreamAssociationView {
+                outbound_tag: association.outbound_tag,
+            })
     }
 
     /// The SOCKS5 idle deadline.
@@ -143,27 +155,24 @@ impl UdpDispatch {
     }
 
     /// Drop the SOCKS5 upstream association after a receive error.
-    pub(crate) fn drop_socks5_upstream(&mut self) -> Option<ClosedSocks5UdpAssociation> {
-        self.protocol_state.drop_socks5_upstream()
+    pub(crate) fn drop_upstream_association(&mut self) -> Option<ClosedUpstreamAssociation> {
+        self.protocol_state
+            .drop_socks5_upstream()
+            .map(|closed| ClosedUpstreamAssociation {
+                outbound_tag: closed.outbound_tag,
+                server: closed.server,
+                port: closed.port,
+            })
     }
 
-    /// Close the SOCKS5 upstream association on idle timeout.
-    #[allow(dead_code)]
-    pub(crate) fn close_socks5_idle(&mut self) {
-        use crate::logging::log_udp_upstream_association_idle_timeout;
-        if let Some(closed) = self.protocol_state.close_socks5_idle() {
-            log_udp_upstream_association_idle_timeout(
-                &self.inbound_tag,
-                &closed.outbound_tag,
-                &closed.server,
-                closed.port,
-                std::time::Duration::default(),
-            );
-        }
-    }
-
-    pub(crate) fn drop_socks5_idle(&mut self) -> Option<ClosedSocks5UdpAssociation> {
-        self.protocol_state.close_socks5_idle()
+    pub(crate) fn drop_idle_upstream_association(&mut self) -> Option<ClosedUpstreamAssociation> {
+        self.protocol_state
+            .close_socks5_idle()
+            .map(|closed| ClosedUpstreamAssociation {
+                outbound_tag: closed.outbound_tag,
+                server: closed.server,
+                port: closed.port,
+            })
     }
 
     /// Finish all tracked flows and close upstreams.
