@@ -1,10 +1,7 @@
 use super::bridge::BridgeWaiters;
-use super::codec;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use tracing::{debug, warn};
-use zero_core::{Address, Error};
-use zero_traits::DatagramCodec;
 
 pub(super) fn bind_for_target(target_addr: SocketAddr) -> Arc<tokio::net::UdpSocket> {
     let bind_addr = match target_addr {
@@ -20,15 +17,15 @@ pub(super) fn bind_for_target(target_addr: SocketAddr) -> Arc<tokio::net::UdpSoc
 
 pub(super) fn spawn_recv_loop(
     socket: Arc<tokio::net::UdpSocket>,
-    codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
+    resume: shadowsocks::ShadowsocksUdpFlowResume,
     waiters: BridgeWaiters,
 ) {
-    tokio::spawn(recv_loop(socket, codec, waiters));
+    tokio::spawn(recv_loop(socket, resume, waiters));
 }
 
 async fn recv_loop(
     socket: Arc<tokio::net::UdpSocket>,
-    codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
+    resume: shadowsocks::ShadowsocksUdpFlowResume,
     waiters: BridgeWaiters,
 ) {
     let mut buf = vec![0u8; 4096];
@@ -41,7 +38,7 @@ async fn recv_loop(
             }
         };
         let packet = &buf[..n];
-        let Ok((target, port, payload)) = codec::decode_packet(codec.as_ref(), packet) else {
+        let Some((target, port, payload)) = resume.decode_packet(packet) else {
             warn!(
                 upstream = %sender,
                 bytes = n,

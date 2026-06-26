@@ -5592,7 +5592,7 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
 #[test]
 fn h2_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/h2_manager.rs");
-    let codec = read("src/protocol_runtime/udp/h2_manager/codec.rs");
+    let stream = read("src/protocol_runtime/udp/h2_manager/stream.rs");
     let adapter = read("src/adapters/hysteria2/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/forward/hysteria2.rs");
@@ -5603,28 +5603,29 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         "UdpDatagramFraming",
         "Hysteria2UdpPacketTarget",
         "Hysteria2UdpPacket",
-        "hysteria2::",
     ] {
         assert!(
             !manager.contains(forbidden),
             "h2_manager.rs should not own Hysteria2 datagram codec details; found `{forbidden}`"
         );
         assert!(
-            !codec.contains(forbidden),
-            "h2_manager/codec.rs should consume an adapter-provided DatagramCodec instead of naming protocol framing; found `{forbidden}`"
+            !stream.contains(forbidden),
+            "h2_manager/stream.rs should delegate Hysteria2 packet codec details to protocols/hysteria2; found `{forbidden}`"
         );
     }
     assert!(
-        codec.contains("dyn DatagramCodec<Address, Error = Error>")
-            && codec.contains(".encode(")
-            && codec.contains(".decode("),
-        "Hysteria2 UDP manager codec should encode/decode through a neutral DatagramCodec object"
+        !manifest_dir()
+            .join("src/protocol_runtime/udp/h2_manager/codec.rs")
+            .exists(),
+        "Hysteria2 UDP manager should not keep a proxy-owned codec module"
     );
     assert!(
         adapter.contains("hysteria2::udp_flow_codec")
             && protocol_udp.contains("pub fn udp_flow_codec(")
-            && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec"),
-        "Hysteria2 adapter should request the protocol-owned UDP flow codec"
+            && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec")
+            && protocol_udp.contains("pub fn encode_packet(")
+            && protocol_udp.contains("pub fn decode_packet(&self"),
+        "Hysteria2 adapter and UDP manager should consume protocol-owned UDP flow packet helpers"
     );
     assert!(
         adapter.contains("Hysteria2UdpFlowResume::new")
@@ -5648,13 +5649,14 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         "Hysteria2 protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("existing.resume.password()")
-            && forward.contains("existing.resume.client_fingerprint()")
-            && forward.contains("existing.resume.codec()")
+        forward.contains("resume: existing.resume.clone()")
+            && !forward.contains("existing.resume.password()")
+            && !forward.contains("existing.resume.client_fingerprint()")
+            && !forward.contains("existing.resume.codec()")
             && !forward.contains("hysteria2::udp_flow_codec")
             && !forward.contains("password: &'a str")
             && !forward.contains("client_fingerprint: Option<&'a str>"),
-        "existing Hysteria2 UDP flow forwarding should recover auth, fingerprint, and codec from the opaque resume descriptor"
+        "existing Hysteria2 UDP flow forwarding should pass the opaque resume descriptor without unpacking auth or codec state"
     );
 }
 
@@ -5830,8 +5832,8 @@ fn h2_udp_establish_logic_lives_outside_manager() {
 #[test]
 fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
-    let codec = read("src/protocol_runtime/udp/ss_manager/codec.rs");
     let adapter = read("src/adapters/shadowsocks/udp.rs");
+    let socket = read("src/protocol_runtime/udp/ss_manager/socket.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
@@ -5841,29 +5843,30 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
         "ShadowsocksUdpPacketTarget",
         "ShadowsocksUdpDecodeContext",
         "ShadowsocksUdpPacket",
-        "shadowsocks::",
     ] {
         assert!(
             !manager.contains(forbidden),
             "ss_manager.rs should not own Shadowsocks datagram codec details; found `{forbidden}`"
         );
         assert!(
-            !codec.contains(forbidden),
-            "ss_manager/codec.rs should consume an adapter-provided DatagramCodec instead of naming protocol framing; found `{forbidden}`"
+            !socket.contains(forbidden),
+            "ss_manager/socket.rs should delegate Shadowsocks packet codec details to protocols/shadowsocks; found `{forbidden}`"
         );
     }
     assert!(
-        codec.contains("dyn DatagramCodec<Address, Error = Error>")
-            && codec.contains(".encode(")
-            && codec.contains(".decode("),
-        "Shadowsocks UDP manager codec should encode/decode through a neutral DatagramCodec object"
+        !manifest_dir()
+            .join("src/protocol_runtime/udp/ss_manager/codec.rs")
+            .exists(),
+        "Shadowsocks UDP manager should not keep a proxy-owned codec module"
     );
     assert!(
         adapter.contains("shadowsocks::udp_flow_codec")
             && protocol_outbound.contains("pub fn udp_flow_codec(")
             && protocol_outbound
-                .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec"),
-        "Shadowsocks adapter should request the protocol-owned UDP flow codec"
+                .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec")
+            && protocol_outbound.contains("pub fn encode_packet(")
+            && protocol_outbound.contains("pub fn decode_packet(&self"),
+        "Shadowsocks adapter and UDP manager should consume protocol-owned UDP flow packet helpers"
     );
 }
 
@@ -5996,20 +5999,22 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "Shadowsocks protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("existing.resume.cache_key()")
-            && forward.contains("existing.resume.codec()")
+        forward.contains("resume: existing.resume.clone()")
+            && !forward.contains("existing.resume.cache_key()")
+            && !forward.contains("existing.resume.codec()")
             && !forward.contains("shadowsocks::udp_flow_codec")
             && !forward.contains("password: &'a str")
             && !forward.contains("cipher_kind: shadowsocks::CipherKind")
             && !forward.contains("datagram_cache_key: &'a str"),
-        "existing Shadowsocks UDP flow forwarding should recover cache identity and codec from the opaque resume descriptor"
+        "existing Shadowsocks UDP flow forwarding should pass the opaque resume descriptor without unpacking cache identity or codec state"
     );
     let start = read("src/protocol_runtime/udp/start/datagram.rs");
     assert!(
         start.contains("ProtocolUdpFlowResume::Shadowsocks(resume)")
-            && start.contains("resume.cache_key()")
-            && start.contains("resume.codec()"),
-        "new Shadowsocks UDP flow start should unpack cache identity and codec from the unified resume descriptor inside protocol_runtime"
+            && start.contains("resume: resume.clone()")
+            && !start.contains("resume.cache_key()")
+            && !start.contains("resume.codec()"),
+        "new Shadowsocks UDP flow start should pass the unified resume descriptor without unpacking cache identity or codec state"
     );
 }
 

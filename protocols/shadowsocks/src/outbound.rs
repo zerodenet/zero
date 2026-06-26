@@ -409,6 +409,20 @@ impl ShadowsocksUdpFlowResume {
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec(self.cipher, &self.password)
     }
+
+    pub fn encode_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<alloc::vec::Vec<u8>, Error> {
+        encode_udp_flow_packet(target, port, payload, self.cipher, &self.password)
+    }
+
+    pub fn decode_packet(&self, data: &[u8]) -> Option<(Address, u16, alloc::vec::Vec<u8>)> {
+        let decoded = decode_udp_flow_packet(data, self.cipher, &self.password).ok()?;
+        Some((decoded.target, decoded.port, decoded.payload))
+    }
 }
 
 #[cfg(feature = "crypto")]

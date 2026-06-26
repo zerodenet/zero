@@ -179,6 +179,20 @@ impl Hysteria2UdpFlowResume {
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec()
     }
+
+    pub fn encode_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_udp_flow_packet(target, port, payload)
+    }
+
+    pub fn decode_packet(&self, data: &[u8]) -> Option<(Address, u16, Vec<u8>)> {
+        let decoded = decode_udp_flow_packet(data).ok()?;
+        Some((decoded.target, decoded.port, decoded.payload))
+    }
 }
 
 impl DatagramCodec<Address> for Hysteria2DatagramCodec {

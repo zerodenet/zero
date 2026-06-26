@@ -4,8 +4,6 @@ use std::collections::HashMap;
 #[cfg(feature = "hysteria2")]
 mod bridge;
 #[cfg(feature = "hysteria2")]
-mod codec;
-#[cfg(feature = "hysteria2")]
 mod establish;
 #[cfg(feature = "hysteria2")]
 pub(super) mod model;

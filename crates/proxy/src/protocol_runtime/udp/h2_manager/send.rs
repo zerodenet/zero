@@ -2,34 +2,29 @@ use super::super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use super::super::FlowFailure;
 use super::super::{H2UdpPeer, UdpPeerEndpoint};
 use super::model::{H2Entry, H2Key, H2SendExisting};
-use super::{codec, establish, H2ChainManager};
-use std::sync::Arc;
-use zero_core::{Address, Error};
-use zero_traits::DatagramCodec;
+use super::{establish, H2ChainManager};
+use zero_engine::EngineError;
 
 impl H2ChainManager {
     async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         peer: H2UdpPeer<'_>,
-        flow_codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
+        resume: hysteria2::Hysteria2UdpFlowResume,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let key = H2Key::from_peer(&peer);
 
         if let Some(entry) = self.upstreams.get(&key) {
-            let dg = codec::packet(
-                entry.codec.as_ref(),
-                packet_ref.target,
-                packet_ref.port,
-                packet_ref.payload,
-            )
-            .map_err(|error| FlowFailure {
-                stage: "h2_udp_packet",
-                error,
-                upstream: Some(peer.endpoint.upstream()),
-            })?;
+            let dg = entry
+                .resume
+                .encode_packet(packet_ref.target, packet_ref.port, packet_ref.payload)
+                .map_err(|error| FlowFailure {
+                    stage: "h2_udp_packet",
+                    error: EngineError::from(error),
+                    upstream: Some(peer.endpoint.upstream()),
+                })?;
             let _ = entry.send_tx.send(dg).await;
             return Ok(sent);
         }
@@ -38,7 +33,7 @@ impl H2ChainManager {
             ctx.chain_tasks,
             ctx.session_id,
             &peer,
-            flow_codec.clone(),
+            resume.clone(),
             packet_ref,
         )
         .await
@@ -52,7 +47,7 @@ impl H2ChainManager {
             key,
             H2Entry {
                 send_tx: send_tx.clone(),
-                codec: flow_codec,
+                resume,
             },
         );
 
@@ -63,6 +58,7 @@ impl H2ChainManager {
         &mut self,
         request: H2SendExisting<'_>,
     ) -> Result<usize, FlowFailure> {
+        let resume = request.resume.clone();
         self.send(
             UdpFlowContext {
                 chain_tasks: request.chain_tasks,
@@ -73,10 +69,10 @@ impl H2ChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                password: request.password,
-                client_fingerprint: request.client_fingerprint,
+                password: request.resume.password(),
+                client_fingerprint: request.resume.client_fingerprint(),
             },
-            request.codec,
+            resume,
             UdpPacketRef {
                 target: request.target,
                 port: request.target_port,

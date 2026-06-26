@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use zero_core::{Address, Error};
-use zero_traits::DatagramCodec;
+use zero_core::Address;
 
 use super::bridge::BridgeWaiters;
 use crate::runtime::Proxy;
@@ -26,7 +25,7 @@ impl SsKey {
 pub(super) struct SsUpstream {
     pub(super) socket: Arc<tokio::net::UdpSocket>,
     pub(super) waiters: BridgeWaiters,
-    pub(super) codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
+    pub(super) resume: shadowsocks::ShadowsocksUdpFlowResume,
 }
 
 pub(crate) struct SsSendExisting<'a> {
@@ -35,8 +34,7 @@ pub(crate) struct SsSendExisting<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) cache_key: String,
-    pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
+    pub(crate) resume: shadowsocks::ShadowsocksUdpFlowResume,
     pub(crate) target: &'a Address,
     pub(crate) target_port: u16,
     pub(crate) payload: &'a [u8],

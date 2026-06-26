@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use zero_core::{Address, Error};
 use zero_engine::EngineError;
-use zero_traits::DatagramCodec;
 
 use super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use super::FlowFailure;
@@ -11,7 +9,6 @@ use super::{SsUdpPeer, UdpPeerEndpoint};
 use crate::runtime::Proxy;
 
 mod bridge;
-mod codec;
 mod entry;
 pub(super) mod model;
 mod socket;
@@ -34,7 +31,7 @@ impl SsChainManager {
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
         peer: SsUdpPeer<'_>,
-        flow_codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
+        resume: shadowsocks::ShadowsocksUdpFlowResume,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let target_addr = proxy
@@ -58,21 +55,18 @@ impl SsChainManager {
             peer.endpoint.server,
             peer.endpoint.port,
             peer.cache_key,
-            flow_codec,
+            resume,
             target_addr,
         );
 
-        let packet = codec::encode_packet(
-            entry.codec.as_ref(),
-            packet_ref.target,
-            packet_ref.port,
-            packet_ref.payload,
-        )
-        .map_err(|error| FlowFailure {
-            stage: "ss_encode",
-            error,
-            upstream: Some(peer.endpoint.upstream()),
-        })?;
+        let packet = entry
+            .resume
+            .encode_packet(packet_ref.target, packet_ref.port, packet_ref.payload)
+            .map_err(|error| FlowFailure {
+                stage: "ss_encode",
+                error: EngineError::from(error),
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
 
         let response_rx = entry.waiters.register(packet_ref.target, packet_ref.port);
         if let Err(e) = entry.socket.send_to(&packet, target_addr).await {
@@ -93,6 +87,7 @@ impl SsChainManager {
         &mut self,
         request: SsSendExisting<'_>,
     ) -> Result<usize, FlowFailure> {
+        let cache_key = request.resume.cache_key().to_owned();
         self.send(
             UdpFlowContext {
                 chain_tasks: request.chain_tasks,
@@ -104,9 +99,9 @@ impl SsChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                cache_key: &request.cache_key,
+                cache_key: &cache_key,
             },
-            request.codec,
+            request.resume,
             UdpPacketRef {
                 target: request.target,
                 port: request.target_port,
