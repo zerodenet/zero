@@ -31,10 +31,16 @@ impl ProtocolUdpState {
         flow: &UdpFlowSnapshot,
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
-        let Some(snapshot) = flow.outbound.protocol_snapshot() else {
+        let Some(managed) = flow.outbound.managed_flow() else {
             return Err(protocol_forward_unavailable(
                 "udp_protocol_forward",
                 "direct, relay, and packet-path flows are handled outside protocol snapshots",
+            ));
+        };
+        let Some(snapshot) = self.managed_flow_snapshot(managed) else {
+            return Err(protocol_forward_unavailable(
+                "udp_protocol_forward",
+                "managed UDP flow snapshot was dropped",
             ));
         };
 
@@ -47,25 +53,26 @@ impl ProtocolUdpState {
 
         #[cfg(feature = "shadowsocks")]
         if let Some(result) =
-            shadowsocks::forward_if_matches(self, chain_tasks, proxy, flow, snapshot, payload).await
+            shadowsocks::forward_if_matches(self, chain_tasks, proxy, flow, &snapshot, payload)
+                .await
         {
             return result;
         }
         #[cfg(feature = "hysteria2")]
         if let Some(result) =
-            hysteria2::forward_if_matches(self, chain_tasks, flow, snapshot, payload).await
+            hysteria2::forward_if_matches(self, chain_tasks, flow, &snapshot, payload).await
         {
             return result;
         }
         #[cfg(feature = "trojan")]
         if let Some(result) =
-            trojan::forward_if_matches(self, chain_tasks, proxy, flow, snapshot, payload).await
+            trojan::forward_if_matches(self, chain_tasks, proxy, flow, &snapshot, payload).await
         {
             return result;
         }
         #[cfg(feature = "mieru")]
         if let Some(result) =
-            mieru::forward_if_matches(self, chain_tasks, proxy, flow, snapshot, payload).await
+            mieru::forward_if_matches(self, chain_tasks, proxy, flow, &snapshot, payload).await
         {
             return result;
         }

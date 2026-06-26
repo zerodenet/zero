@@ -4,6 +4,15 @@ use zero_engine::SessionOutcome;
 
 use crate::runtime::orchestration::UdpPathCategory;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct ManagedUdpFlowRef(u64);
+
+impl ManagedUdpFlowRef {
+    pub(crate) fn new(id: u64) -> Self {
+        Self(id)
+    }
+}
+
 /// Outbound type tracked per UDP flow.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UdpFlowOutbound {
@@ -15,19 +24,19 @@ pub(crate) enum UdpFlowOutbound {
         tag: String,
         server: String,
         port: u16,
-        protocol: crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot,
+        managed: ManagedUdpFlowRef,
     },
     Datagram {
         tag: String,
         server: String,
         port: u16,
-        protocol: crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot,
+        managed: ManagedUdpFlowRef,
     },
     StreamPacket {
         tag: String,
         server: String,
         port: u16,
-        protocol: crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot,
+        managed: ManagedUdpFlowRef,
     },
     PacketPathDatagram {
         tag: String,
@@ -84,11 +93,9 @@ impl UdpFlowOutbound {
         }
     }
 
-    pub(crate) fn relay_protocol_snapshot(
-        &self,
-    ) -> Option<&crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot> {
+    pub(crate) fn relay_managed_flow(&self) -> Option<ManagedUdpFlowRef> {
         match self {
-            Self::Relay { protocol, .. } => Some(protocol),
+            Self::Relay { managed, .. } => Some(*managed),
             Self::Direct { .. }
             | Self::Datagram { .. }
             | Self::StreamPacket { .. }
@@ -96,11 +103,9 @@ impl UdpFlowOutbound {
         }
     }
 
-    pub(crate) fn protocol_snapshot(
-        &self,
-    ) -> Option<&crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot> {
+    pub(crate) fn managed_flow(&self) -> Option<ManagedUdpFlowRef> {
         match self {
-            Self::Datagram { protocol, .. } | Self::StreamPacket { protocol, .. } => Some(protocol),
+            Self::Datagram { managed, .. } | Self::StreamPacket { managed, .. } => Some(*managed),
             Self::Direct { .. } | Self::Relay { .. } | Self::PacketPathDatagram { .. } => None,
         }
     }

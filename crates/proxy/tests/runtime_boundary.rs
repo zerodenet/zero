@@ -3197,6 +3197,7 @@ fn udp_flow_outbound_snapshot_is_not_declared_in_session_bookkeeping() {
 fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
     let outbound = read("src/runtime/udp_flow/outbound.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let state = read("src/protocol_runtime/udp/state.rs");
 
     for required in [
         "Direct {",
@@ -3204,7 +3205,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         "Datagram {",
         "StreamPacket {",
         "PacketPathDatagram {",
-        "ProtocolUdpFlowSnapshot",
+        "ManagedUdpFlowRef",
     ] {
         assert!(
             outbound.contains(required),
@@ -3221,6 +3222,9 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         "username: Option<String>",
         "password: Option<String>",
         "UdpPacketPathCarrier::",
+        "ProtocolUdpFlowSnapshot",
+        "ProtocolUdpFlowResume",
+        "crate::protocol_runtime::udp",
     ] {
         assert!(
             !outbound.contains(forbidden),
@@ -3274,6 +3278,18 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         outbound.contains("snapshot:")
             && outbound.contains("crate::runtime::udp_flow::packet_path::PacketPathFlowSnapshot"),
         "runtime UDP outbound snapshot should keep packet-path flow identity in a neutral packet-path snapshot"
+    );
+    assert!(
+        outbound.contains("managed: ManagedUdpFlowRef")
+            && outbound.contains("pub(crate) fn managed_flow(")
+            && outbound.contains("pub(crate) fn relay_managed_flow("),
+        "runtime UDP outbound snapshot should store only opaque managed flow references"
+    );
+    assert!(
+        state.contains("HashMap<ManagedUdpFlowRef, ProtocolUdpFlowSnapshot>")
+            && state.contains("fn register_managed_flow")
+            && state.contains("fn managed_flow_snapshot"),
+        "ProtocolUdpState should own protocol UDP resume snapshots behind runtime opaque managed flow refs"
     );
 }
 
@@ -7384,10 +7400,11 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
     ] {
         let facade = read(source);
         assert!(
-            facade.contains("ProtocolUdpFlowSnapshot") && facade.contains("FlowStartResult::Flow"),
-            "{source} should own tracked protocol UDP flow result construction"
+            facade.contains("register_managed_flow") && facade.contains("FlowStartResult::Flow"),
+            "{source} should register protocol UDP resume state and return an opaque tracked flow"
         );
         for forbidden in [
+            "ProtocolUdpFlowSnapshot",
             "ProtocolUdpFlowSnapshot::Socks5",
             "ProtocolUdpFlowSnapshot::Shadowsocks",
             "ProtocolUdpFlowSnapshot::Hysteria2",

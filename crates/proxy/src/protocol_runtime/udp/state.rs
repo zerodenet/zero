@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use std::collections::HashMap;
 use tokio::time::Instant as TokioInstant;
 
 use crate::protocol_runtime::socks5_udp::{
@@ -12,8 +13,9 @@ use zero_engine::EngineError;
 
 use super::{
     FlowFailure, ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
-    ManagedUdpFlowKind, ManagedUdpFlowRequest,
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
 };
+use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
 #[cfg(feature = "hysteria2")]
 use super::h2_manager::H2ChainManager;
@@ -40,6 +42,8 @@ pub(crate) struct ProtocolUdpState {
     pub(super) mieru: MieruChainManager,
     #[cfg(feature = "hysteria2")]
     pub(super) hysteria2: H2ChainManager,
+    managed_flows: HashMap<ManagedUdpFlowRef, ProtocolUdpFlowSnapshot>,
+    next_managed_flow_id: u64,
 }
 
 impl ProtocolUdpState {
@@ -57,7 +61,35 @@ impl ProtocolUdpState {
             mieru: MieruChainManager::new(),
             #[cfg(feature = "hysteria2")]
             hysteria2: H2ChainManager::new(),
+            managed_flows: HashMap::new(),
+            next_managed_flow_id: 1,
         }
+    }
+
+    pub(crate) fn register_managed_flow(
+        &mut self,
+        resume: ProtocolUdpFlowResume,
+    ) -> ManagedUdpFlowRef {
+        let flow_ref = ManagedUdpFlowRef::new(self.next_managed_flow_id);
+        self.next_managed_flow_id += 1;
+        self.managed_flows
+            .insert(flow_ref, ProtocolUdpFlowSnapshot::managed(resume));
+        flow_ref
+    }
+
+    pub(super) fn managed_flow_snapshot(
+        &self,
+        flow_ref: ManagedUdpFlowRef,
+    ) -> Option<ProtocolUdpFlowSnapshot> {
+        self.managed_flows.get(&flow_ref).cloned()
+    }
+
+    pub(crate) fn managed_flow_resume(
+        &self,
+        flow_ref: ManagedUdpFlowRef,
+    ) -> Option<ProtocolUdpFlowResume> {
+        self.managed_flow_snapshot(flow_ref)
+            .map(|snapshot| snapshot.resume().clone())
     }
 
     pub(crate) fn socks5_runtime(&self) -> &Socks5UdpRuntime {

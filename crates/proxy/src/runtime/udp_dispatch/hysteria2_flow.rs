@@ -1,5 +1,5 @@
 use crate::protocol_runtime::udp::{
-    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume,
 };
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
@@ -45,6 +45,7 @@ impl UdpDispatch {
         &mut self,
         request: Hysteria2DatagramSend<'_>,
     ) -> Result<FlowStartResult, FlowFailure> {
+        let resume = request.resume.clone();
         let sent = self
             .send_hysteria2_datagram(Hysteria2DatagramSend {
                 tag: request.tag,
@@ -55,12 +56,13 @@ impl UdpDispatch {
                 payload: request.payload,
             })
             .await?;
+        let managed = self.protocol_state.register_managed_flow(resume);
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Datagram {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::managed(request.resume),
+                managed,
             }),
             tx_bytes: sent as u64,
         })

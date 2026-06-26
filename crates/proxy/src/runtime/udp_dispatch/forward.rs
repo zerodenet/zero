@@ -59,8 +59,8 @@ impl UdpDispatch {
                 let Some(upstream) = flow.outbound.upstream() else {
                     unreachable!("Relay category maps to an upstream endpoint");
                 };
-                let Some(protocol) = flow.outbound.relay_protocol_snapshot() else {
-                    unreachable!("Relay category maps to a relay protocol snapshot");
+                let Some(managed) = flow.outbound.relay_managed_flow() else {
+                    unreachable!("Relay category maps to a managed relay flow");
                 };
                 match self
                     .send_socks5(Socks5RelaySend {
@@ -68,7 +68,10 @@ impl UdpDispatch {
                         tag: flow.outbound.tag(),
                         server: upstream.server,
                         port: upstream.port,
-                        resume: protocol.resume().clone(),
+                        resume: self
+                            .protocol_state
+                            .managed_flow_resume(managed)
+                            .expect("managed relay flow should have protocol resume"),
                         session: &flow.session,
                         payload,
                     })

@@ -1,7 +1,7 @@
 use zero_core::Session;
 
 use crate::protocol_runtime::udp::{
-    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume,
 };
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
@@ -57,6 +57,7 @@ impl UdpDispatch {
         &mut self,
         request: TrojanDatagramSend<'_>,
     ) -> Result<FlowStartResult, FlowFailure> {
+        let resume = request.resume.clone();
         let sent = self
             .send_trojan_datagram(TrojanDatagramSend {
                 proxy: request.proxy,
@@ -68,12 +69,13 @@ impl UdpDispatch {
                 payload: request.payload,
             })
             .await?;
+        let managed = self.protocol_state.register_managed_flow(resume);
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::StreamPacket {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::managed(request.resume),
+                managed,
             }),
             tx_bytes: sent as u64,
         })
@@ -107,6 +109,7 @@ impl UdpDispatch {
         &mut self,
         request: TrojanRelaySend<'_>,
     ) -> Result<FlowStartResult, FlowFailure> {
+        let resume = request.resume.clone();
         let sent = self
             .send_trojan_relay(TrojanRelaySend {
                 proxy: request.proxy,
@@ -119,12 +122,13 @@ impl UdpDispatch {
                 payload: request.payload,
             })
             .await?;
+        let managed = self.protocol_state.register_managed_flow(resume);
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::StreamPacket {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::managed(request.resume),
+                managed,
             }),
             tx_bytes: sent as u64,
         })

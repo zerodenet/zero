@@ -1,5 +1,5 @@
 use crate::protocol_runtime::udp::{
-    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume,
 };
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
@@ -49,7 +49,7 @@ impl UdpDispatch {
         &mut self,
         request: Socks5RelaySend<'_>,
     ) -> Result<FlowStartResult, FlowFailure> {
-        let protocol = ProtocolUdpFlowSnapshot::managed(request.resume.clone());
+        let resume = request.resume.clone();
         let sent = self
             .send_socks5(Socks5RelaySend {
                 proxy: request.proxy,
@@ -66,12 +66,13 @@ impl UdpDispatch {
                 error,
                 upstream: Some((request.server.to_string(), request.port)),
             })?;
+        let managed = self.protocol_state.register_managed_flow(resume);
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Relay {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol,
+                managed,
             }),
             tx_bytes: sent as u64,
         })
