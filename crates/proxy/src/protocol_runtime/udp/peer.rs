@@ -21,10 +21,7 @@ pub(crate) struct H2UdpPeer<'a> {
 #[cfg(feature = "trojan")]
 pub(crate) struct TrojanUdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
-    pub(crate) password: &'a str,
-    pub(crate) sni: Option<&'a str>,
-    pub(crate) insecure: bool,
-    pub(crate) client_fingerprint: Option<&'a str>,
+    pub(crate) resume: &'a trojan::TrojanUdpFlowResume,
     pub(crate) relay_chain: bool,
 }
 
@@ -32,7 +29,6 @@ pub(crate) struct TrojanUdpPeer<'a> {
 #[cfg(feature = "mieru")]
 pub(crate) struct MieruUdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
-    pub(crate) username: &'a str,
-    pub(crate) password: &'a str,
+    pub(crate) resume: &'a mieru::MieruUdpFlowResume,
     pub(crate) relay_chain: bool,
 }

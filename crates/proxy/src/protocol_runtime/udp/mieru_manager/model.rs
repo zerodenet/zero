@@ -8,15 +8,8 @@ use zero_core::{Address, Session};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) enum MieruKey {
-    Leaf {
-        server: String,
-        port: u16,
-        username: String,
-        password: String,
-    },
-    Relay {
-        session_id: u64,
-    },
+    Leaf(mieru::MieruUdpLeafKey),
+    Relay { session_id: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

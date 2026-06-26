@@ -16,14 +16,8 @@ pub(super) struct TrojanPacket {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) enum TrojanKey {
-    Leaf {
-        server: String,
-        port: u16,
-        password: String,
-    },
-    Relay {
-        session_id: u64,
-    },
+    Leaf(trojan::TrojanUdpLeafKey),
+    Relay { session_id: u64 },
 }
 
 pub(super) struct TrojanEntry {

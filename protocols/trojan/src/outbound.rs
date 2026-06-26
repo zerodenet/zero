@@ -174,6 +174,72 @@ impl TrojanUdpFlowResume {
     pub fn relay_chain(&self) -> bool {
         self.relay_chain
     }
+
+    pub fn peer_config(&self) -> TrojanUdpPeerConfig<'_> {
+        TrojanUdpPeerConfig {
+            password: &self.password,
+            sni: self.sni.as_deref(),
+            insecure: self.insecure,
+            client_fingerprint: self.client_fingerprint.as_deref(),
+            relay_chain: self.relay_chain,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TrojanUdpPeerConfig<'a> {
+    password: &'a str,
+    sni: Option<&'a str>,
+    insecure: bool,
+    client_fingerprint: Option<&'a str>,
+    relay_chain: bool,
+}
+
+impl<'a> TrojanUdpPeerConfig<'a> {
+    pub fn password(&self) -> &'a str {
+        self.password
+    }
+
+    pub fn sni(&self) -> Option<&'a str> {
+        self.sni
+    }
+
+    pub fn insecure(&self) -> bool {
+        self.insecure
+    }
+
+    pub fn client_fingerprint(&self) -> Option<&'a str> {
+        self.client_fingerprint
+    }
+
+    pub fn relay_chain(&self) -> bool {
+        self.relay_chain
+    }
+
+    pub fn leaf_cache_key(&self, server: &str, port: u16) -> TrojanUdpLeafKey {
+        TrojanUdpLeafKey {
+            server: server.to_owned(),
+            port,
+            password: self.password.to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TrojanUdpLeafKey {
+    server: String,
+    port: u16,
+    password: String,
+}
+
+impl TrojanUdpLeafKey {
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
 }
 
 impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {

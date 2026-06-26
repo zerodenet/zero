@@ -20,15 +20,11 @@ impl MieruChainManager {
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
+        let peer_config = peer.resume.peer_config();
         let key = if peer.relay_chain {
             MieruKey::Relay { session_id }
         } else {
-            MieruKey::Leaf {
-                server: peer.endpoint.server.to_owned(),
-                port: peer.endpoint.port,
-                username: peer.username.to_owned(),
-                password: peer.password.to_owned(),
-            }
+            MieruKey::Leaf(peer_config.leaf_cache_key(peer.endpoint.server, peer.endpoint.port))
         };
 
         if let Some(entry) = self.upstreams.get(&key) {
@@ -80,9 +76,8 @@ impl MieruChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                username: request.resume.username(),
-                password: request.resume.password(),
-                relay_chain: request.resume.relay_chain(),
+                resume: &request.resume,
+                relay_chain: request.resume.peer_config().relay_chain(),
             },
             UdpPacketRef {
                 target: request.target,
@@ -102,13 +97,15 @@ impl MieruChainManager {
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
         let key = MieruKey::Relay { session_id };
-        let entry = establish::packet_stream(stream, peer.username, peer.password)
-            .await
-            .map_err(|e| FlowFailure {
-                stage: "mieru_relay_establish",
-                error: e,
-                upstream: Some(peer.endpoint.upstream()),
-            })?;
+        let peer_config = peer.resume.peer_config();
+        let entry =
+            establish::packet_stream(stream, peer_config.username(), peer_config.password())
+                .await
+                .map_err(|e| FlowFailure {
+                    stage: "mieru_relay_establish",
+                    error: e,
+                    upstream: Some(peer.endpoint.upstream()),
+                })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
         let send_tx = entry.send_tx.clone();
@@ -134,8 +131,7 @@ impl MieruChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                username: request.resume.username(),
-                password: request.resume.password(),
+                resume: &request.resume,
                 relay_chain: true,
             },
             UdpPacketRef {

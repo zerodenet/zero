@@ -11,7 +11,8 @@ pub(super) async fn direct(
     peer: &MieruUdpPeer<'_>,
 ) -> Result<MieruEntry, EngineError> {
     let stream = connect::direct_stream(proxy, peer).await?;
-    packet_stream(stream, peer.username, peer.password).await
+    let peer_config = peer.resume.peer_config();
+    packet_stream(stream, peer_config.username(), peer_config.password()).await
 }
 
 pub(super) async fn packet_stream(

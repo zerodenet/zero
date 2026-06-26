@@ -149,6 +149,62 @@ impl MieruUdpFlowResume {
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec()
     }
+
+    pub fn peer_config(&self) -> MieruUdpPeerConfig<'_> {
+        MieruUdpPeerConfig {
+            username: &self.username,
+            password: &self.password,
+            relay_chain: self.relay_chain,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct MieruUdpPeerConfig<'a> {
+    username: &'a str,
+    password: &'a str,
+    relay_chain: bool,
+}
+
+impl<'a> MieruUdpPeerConfig<'a> {
+    pub fn username(&self) -> &'a str {
+        self.username
+    }
+
+    pub fn password(&self) -> &'a str {
+        self.password
+    }
+
+    pub fn relay_chain(&self) -> bool {
+        self.relay_chain
+    }
+
+    pub fn leaf_cache_key(&self, server: &str, port: u16) -> MieruUdpLeafKey {
+        MieruUdpLeafKey {
+            server: server.to_owned(),
+            port,
+            username: self.username.to_owned(),
+            password: self.password.to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MieruUdpLeafKey {
+    server: String,
+    port: u16,
+    username: String,
+    password: String,
+}
+
+impl MieruUdpLeafKey {
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
 }
 
 impl DatagramCodec<Address> for MieruUdpFlowCodec {

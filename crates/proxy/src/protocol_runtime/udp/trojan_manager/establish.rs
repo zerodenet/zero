@@ -15,12 +15,13 @@ pub(super) async fn direct(
     target_port: u16,
 ) -> Result<TrojanEntry, EngineError> {
     let tls_stream = connect::direct_tls_stream(proxy, peer).await?;
+    let peer_config = peer.resume.peer_config();
 
     packet_stream(
         proxy,
         session,
         tls_stream,
-        peer.password,
+        peer_config.password(),
         target,
         target_port,
     )
@@ -37,12 +38,13 @@ pub(super) async fn over_relay_stream(
     target_port: u16,
 ) -> Result<TrojanEntry, EngineError> {
     let tls_stream = connect::relay_tls_stream(stream, tls_server_name, proxy, peer).await?;
+    let peer_config = peer.resume.peer_config();
 
     packet_stream(
         proxy,
         session,
         tls_stream,
-        peer.password,
+        peer_config.password(),
         target,
         target_port,
     )

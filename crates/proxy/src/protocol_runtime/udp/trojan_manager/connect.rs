@@ -8,6 +8,7 @@ pub(super) async fn direct_tls_stream(
     proxy: &Proxy,
     peer: &TrojanUdpPeer<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
+    let peer_config = peer.resume.peer_config();
     let upstream = proxy
         .protocols
         .direct_connector()
@@ -20,7 +21,7 @@ pub(super) async fn direct_tls_stream(
 
     let tls_stream = zero_transport::tls::connect_tls_upstream(
         upstream,
-        &tls_config(peer, peer.sni),
+        &tls_config(peer_config, peer_config.sni()),
         proxy.config.source_dir(),
         peer.endpoint.server,
     )
@@ -35,22 +36,26 @@ pub(super) async fn relay_tls_stream(
     proxy: &Proxy,
     peer: &TrojanUdpPeer<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
+    let peer_config = peer.resume.peer_config();
     zero_transport::tls::connect_tls_stream(
         stream,
-        &tls_config(peer, peer.sni.or(tls_server_name)),
+        &tls_config(peer_config, peer_config.sni().or(tls_server_name)),
         proxy.config.source_dir(),
         peer.endpoint.server,
     )
     .await
 }
 
-fn tls_config(peer: &TrojanUdpPeer<'_>, server_name: Option<&str>) -> ClientTlsConfig {
+fn tls_config(
+    peer_config: trojan::TrojanUdpPeerConfig<'_>,
+    server_name: Option<&str>,
+) -> ClientTlsConfig {
     ClientTlsConfig {
         server_name: server_name.map(|s| s.to_owned()),
         disable_sni: false,
         ca_cert_path: None,
-        insecure: peer.insecure,
+        insecure: peer_config.insecure(),
         alpn: Vec::new(),
-        client_fingerprint: peer.client_fingerprint.map(|s| s.to_owned()),
+        client_fingerprint: peer_config.client_fingerprint().map(|s| s.to_owned()),
     }
 }

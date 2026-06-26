@@ -19,14 +19,11 @@ impl TrojanChainManager {
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
+        let peer_config = peer.resume.peer_config();
         let key = if peer.relay_chain {
             TrojanKey::Relay { session_id }
         } else {
-            TrojanKey::Leaf {
-                server: peer.endpoint.server.to_owned(),
-                port: peer.endpoint.port,
-                password: peer.password.to_owned(),
-            }
+            TrojanKey::Leaf(peer_config.leaf_cache_key(peer.endpoint.server, peer.endpoint.port))
         };
 
         if let Some(entry) = self.upstreams.get(&key) {
@@ -92,11 +89,8 @@ impl TrojanChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                password: request.resume.password(),
-                sni: request.resume.sni(),
-                insecure: request.resume.insecure(),
-                client_fingerprint: request.resume.client_fingerprint(),
-                relay_chain: request.resume.relay_chain(),
+                resume: &request.resume,
+                relay_chain: request.resume.peer_config().relay_chain(),
             },
             UdpPacketRef {
                 target: request.target,
@@ -161,10 +155,7 @@ impl TrojanChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                password: request.resume.password(),
-                sni: request.resume.sni(),
-                insecure: request.resume.insecure(),
-                client_fingerprint: request.resume.client_fingerprint(),
+                resume: &request.resume,
                 relay_chain: true,
             },
             packet: UdpPacketRef {

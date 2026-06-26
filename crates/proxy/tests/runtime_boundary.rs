@@ -5177,6 +5177,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/forward/trojan.rs");
     let start = read("src/protocol_runtime/udp/start/trojan.rs");
+    let manager_send = read("src/protocol_runtime/udp/trojan_manager/send.rs");
+    let manager_model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
             .expect("read trojan protocol outbound source");
@@ -5184,6 +5186,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     assert!(
         adapter.contains("TrojanUdpFlowResume::new")
             && protocol_outbound.contains("struct TrojanUdpFlowResume")
+            && protocol_outbound.contains("pub fn peer_config(&self)")
+            && protocol_outbound.contains("struct TrojanUdpLeafKey")
             && protocol_outbound.contains("pub fn client_fingerprint(&self) -> Option<&str>")
             && protocol_outbound.contains("pub fn relay_chain(&self) -> bool"),
         "Trojan adapter should build an opaque protocol-owned UDP flow resume descriptor"
@@ -5218,6 +5222,20 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && !start.contains("resume.relay_chain()"),
         "new Trojan UDP flow start should pass the opaque resume descriptor without unpacking auth, TLS, or relay state"
     );
+    for forbidden in [
+        "request.resume.password()",
+        "request.resume.sni()",
+        "request.resume.insecure()",
+        "request.resume.client_fingerprint()",
+        "request.resume.relay_chain()",
+        "TrojanKey::Leaf {",
+        "password: String",
+    ] {
+        assert!(
+            !manager_send.contains(forbidden) && !manager_model.contains(forbidden),
+            "Trojan UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -5275,6 +5293,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let adapter = read("src/adapters/mieru/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/forward/mieru.rs");
+    let manager_send = read("src/protocol_runtime/udp/mieru_manager/send.rs");
+    let manager_model = read("src/protocol_runtime/udp/mieru_manager/model.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
         .expect("read mieru protocol udp source");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
@@ -5322,6 +5342,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     assert!(
         adapter.contains("MieruUdpFlowResume::new")
             && protocol_udp.contains("struct MieruUdpFlowResume")
+            && protocol_udp.contains("pub fn peer_config(&self)")
+            && protocol_udp.contains("struct MieruUdpLeafKey")
             && protocol_udp.contains("pub fn codec(&self)")
             && protocol_udp.contains("pub fn relay_chain(&self) -> bool"),
         "Mieru adapter should build an opaque protocol-owned UDP flow resume descriptor"
@@ -5354,6 +5376,19 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && !start.contains("resume.codec()"),
         "new Mieru UDP flow start should pass the opaque resume descriptor without unpacking account or relay state"
     );
+    for forbidden in [
+        "request.resume.username()",
+        "request.resume.password()",
+        "request.resume.relay_chain()",
+        "MieruKey::Leaf {",
+        "username: String",
+        "password: String",
+    ] {
+        assert!(
+            !manager_send.contains(forbidden) && !manager_model.contains(forbidden),
+            "Mieru UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
+        );
+    }
 }
 
 #[test]
