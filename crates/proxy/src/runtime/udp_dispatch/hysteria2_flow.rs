@@ -1,4 +1,5 @@
-use zero_core::Session;
+use zero_core::{Address, Error, Session};
+use zero_traits::DatagramCodec;
 
 use crate::protocol_runtime::udp::ProtocolUdpFlowSnapshot;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -11,6 +12,7 @@ pub(crate) struct Hysteria2DatagramSend<'a> {
     pub(crate) port: u16,
     pub(crate) password: &'a str,
     pub(crate) client_fingerprint: Option<&'a str>,
+    pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) payload: &'a [u8],
 }
 
@@ -28,6 +30,7 @@ impl UdpDispatch {
                 port: request.port,
                 password: request.password,
                 client_fingerprint: request.client_fingerprint,
+                codec: request.codec.clone(),
                 payload: request.payload,
             })
             .await
@@ -46,6 +49,7 @@ impl UdpDispatch {
                 port: request.port,
                 password: request.password,
                 client_fingerprint: request.client_fingerprint,
+                codec: request.codec.clone(),
                 payload: request.payload,
             })
             .await?;

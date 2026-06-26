@@ -1,5 +1,6 @@
 use tokio::task::JoinSet;
-use zero_core::Session;
+use zero_core::{Address, Error, Session};
+use zero_traits::DatagramCodec;
 
 #[cfg(feature = "hysteria2")]
 use super::super::h2_manager::model::H2SendExisting;
@@ -50,6 +51,7 @@ pub(crate) struct Hysteria2UdpFlowRequest<'a> {
     pub port: u16,
     pub password: &'a str,
     pub client_fingerprint: Option<&'a str>,
+    pub codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub payload: &'a [u8],
 }
 
@@ -63,6 +65,7 @@ impl<'a> Hysteria2UdpFlowRequest<'a> {
             port: self.port,
             password: self.password,
             client_fingerprint: self.client_fingerprint,
+            codec: self.codec,
             target: &self.session.target,
             target_port: self.session.port,
             payload: self.payload,

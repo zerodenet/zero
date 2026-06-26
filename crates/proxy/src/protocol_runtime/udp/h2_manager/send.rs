@@ -3,40 +3,56 @@ use super::super::FlowFailure;
 use super::super::{H2UdpPeer, UdpPeerEndpoint};
 use super::model::{H2Entry, H2Key, H2SendExisting};
 use super::{codec, establish, H2ChainManager};
+use std::sync::Arc;
+use zero_core::{Address, Error};
+use zero_traits::DatagramCodec;
 
 impl H2ChainManager {
     async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         peer: H2UdpPeer<'_>,
+        flow_codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let key = H2Key::from_peer(&peer);
 
         if let Some(entry) = self.upstreams.get(&key) {
-            let dg = codec::packet(packet_ref.target, packet_ref.port, packet_ref.payload)
-                .map_err(|error| FlowFailure {
-                    stage: "h2_udp_packet",
-                    error,
-                    upstream: Some(peer.endpoint.upstream()),
-                })?;
+            let dg = codec::packet(
+                entry.codec.as_ref(),
+                packet_ref.target,
+                packet_ref.port,
+                packet_ref.payload,
+            )
+            .map_err(|error| FlowFailure {
+                stage: "h2_udp_packet",
+                error,
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
             let _ = entry.send_tx.send(dg).await;
             return Ok(sent);
         }
 
-        let send_tx = establish::upstream(ctx.chain_tasks, ctx.session_id, &peer, packet_ref)
-            .await
-            .map_err(|e| FlowFailure {
-                stage: "h2_establish",
-                error: e,
-                upstream: Some(peer.endpoint.upstream()),
-            })?;
+        let send_tx = establish::upstream(
+            ctx.chain_tasks,
+            ctx.session_id,
+            &peer,
+            flow_codec.clone(),
+            packet_ref,
+        )
+        .await
+        .map_err(|e| FlowFailure {
+            stage: "h2_establish",
+            error: e,
+            upstream: Some(peer.endpoint.upstream()),
+        })?;
 
         self.upstreams.insert(
             key,
             H2Entry {
                 send_tx: send_tx.clone(),
+                codec: flow_codec,
             },
         );
 
@@ -60,6 +76,7 @@ impl H2ChainManager {
                 password: request.password,
                 client_fingerprint: request.client_fingerprint,
             },
+            request.codec,
             UdpPacketRef {
                 target: request.target,
                 port: request.target_port,

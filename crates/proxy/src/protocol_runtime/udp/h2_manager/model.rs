@@ -1,8 +1,10 @@
 use super::super::ChainTask;
 use super::super::H2UdpPeer;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
-use zero_core::Address;
+use zero_core::{Address, Error};
+use zero_traits::DatagramCodec;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct H2Key {
@@ -23,6 +25,7 @@ impl H2Key {
 
 pub(super) struct H2Entry {
     pub(super) send_tx: mpsc::Sender<Vec<u8>>,
+    pub(super) codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
 }
 
 pub(crate) struct H2SendExisting<'a> {
@@ -32,6 +35,7 @@ pub(crate) struct H2SendExisting<'a> {
     pub(crate) port: u16,
     pub(crate) password: &'a str,
     pub(crate) client_fingerprint: Option<&'a str>,
+    pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) target: &'a Address,
     pub(crate) target_port: u16,
     pub(crate) payload: &'a [u8],

@@ -5449,26 +5449,36 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
 fn h2_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/h2_manager.rs");
     let codec = read("src/protocol_runtime/udp/h2_manager/codec.rs");
+    let adapter = read("src/adapters/hysteria2/udp.rs");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
+        .expect("read hysteria2 protocol udp source");
 
-    for forbidden in ["UdpDatagramFraming", "Hysteria2UdpPacketTarget"] {
+    for forbidden in [
+        "UdpDatagramFraming",
+        "Hysteria2UdpPacketTarget",
+        "Hysteria2UdpPacket",
+        "hysteria2::",
+    ] {
         assert!(
             !manager.contains(forbidden),
             "h2_manager.rs should not own Hysteria2 datagram codec details; found `{forbidden}`"
         );
         assert!(
             !codec.contains(forbidden),
-            "h2_manager/codec.rs should delegate Hysteria2 datagram framing to protocols/hysteria2 helpers; found `{forbidden}`"
+            "h2_manager/codec.rs should consume an adapter-provided DatagramCodec instead of naming protocol framing; found `{forbidden}`"
         );
     }
     assert!(
-        !codec.contains("hysteria2::build_udp_datagram")
-            && !codec.contains("hysteria2::parse_udp_datagram"),
-        "Hysteria2 UDP manager codec should use flow-specific protocol helpers instead of generic datagram primitives"
+        codec.contains("dyn DatagramCodec<Address, Error = Error>")
+            && codec.contains(".encode(")
+            && codec.contains(".decode("),
+        "Hysteria2 UDP manager codec should encode/decode through a neutral DatagramCodec object"
     );
     assert!(
-        codec.contains("hysteria2::encode_udp_flow_packet")
-            && codec.contains("hysteria2::decode_udp_flow_packet"),
-        "Hysteria2 UDP datagram codec should delegate encode/decode to flow-specific protocols/hysteria2 helpers"
+        adapter.contains("hysteria2::udp_flow_codec")
+            && protocol_udp.contains("pub fn udp_flow_codec(")
+            && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec"),
+        "Hysteria2 adapter should request the protocol-owned UDP flow codec"
     );
 }
 

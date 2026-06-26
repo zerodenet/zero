@@ -28,6 +28,7 @@ pub(super) async fn forward(
             port: existing.port,
             password: existing.password,
             client_fingerprint: existing.client_fingerprint,
+            codec: std::sync::Arc::new(hysteria2::udp_flow_codec()),
             target: &flow.session.target,
             target_port: flow.session.port,
             payload: existing.payload,
