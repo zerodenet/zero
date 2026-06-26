@@ -18,9 +18,8 @@ pub(super) async fn packet_stream(
     stream: TcpRelayStream,
     resume: &mieru::MieruUdpFlowResume,
 ) -> Result<MieruEntry, EngineError> {
-    let connect::EstablishedSession { stream, flow_io } =
-        connect::open_udp_flow(stream, resume).await?;
-    let stream::PacketStream { send_tx, recv_tx } = stream::spawn_packet_stream(stream, flow_io);
+    let stream::PacketStream { send_tx, recv_tx } =
+        stream::spawn_packet_stream(stream, resume).await?;
 
     Ok(MieruEntry { send_tx, recv_tx })
 }

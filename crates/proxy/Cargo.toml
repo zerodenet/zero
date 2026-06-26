@@ -60,6 +60,7 @@ vmess = [
     "dep:tokio-rustls",
 ]
 mieru = [
+    "zero-transport/mieru",
     "dep:mieru",
     "mieru/crypto",
 ]

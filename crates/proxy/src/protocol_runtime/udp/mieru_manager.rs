@@ -12,8 +12,6 @@ pub(super) mod model;
 #[cfg(feature = "mieru")]
 mod send;
 #[cfg(feature = "mieru")]
-mod socket;
-#[cfg(feature = "mieru")]
 mod stream;
 
 #[cfg(feature = "mieru")]

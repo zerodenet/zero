@@ -30,6 +30,10 @@ pub(crate) use zero_transport::hysteria2_quic::{
     establish_hysteria2_udp_flow_stream, Hysteria2Connector, Hysteria2Stream,
     Hysteria2UdpFlowStreamRequest,
 };
+#[cfg(feature = "mieru")]
+pub(crate) use zero_transport::mieru_transport::{
+    establish_mieru_udp_flow_stream, MieruUdpFlowStreamRequest,
+};
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::quic::{connect_quic, QuicInbound};
 #[cfg(feature = "vless")]
