@@ -1,15 +1,14 @@
+use super::super::state::ProtocolUdpState;
+use super::super::trojan_manager::model::{TrojanRelayExisting, TrojanSendExisting};
+use super::super::{ChainTask, FlowFailure, ManagedStreamPacketFlow, ProtocolUdpFlowResume};
+use crate::runtime::Proxy;
 use tokio::task::JoinSet;
 use zero_core::Session;
 
-use super::super::state::ProtocolUdpState;
-use super::super::trojan_manager::model::{TrojanRelayExisting, TrojanSendExisting};
-use super::super::{ChainTask, FlowFailure, ProtocolUdpFlowResume};
-use crate::runtime::Proxy;
-
 impl ProtocolUdpState {
-    pub(crate) async fn start_trojan_udp_flow(
+    pub(crate) async fn start_trojan_stream_packet_flow(
         &mut self,
-        request: TrojanUdpFlowRequest<'_>,
+        request: ManagedStreamPacketFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         let ProtocolUdpFlowResume::Trojan(resume) = &request.resume else {
             return Err(resume_mismatch(
@@ -64,16 +63,6 @@ impl ProtocolUdpState {
             })
             .await
     }
-}
-
-pub(crate) struct TrojanUdpFlowRequest<'a> {
-    pub chain_tasks: &'a mut JoinSet<ChainTask>,
-    pub proxy: &'a Proxy,
-    pub session: &'a Session,
-    pub server: &'a str,
-    pub port: u16,
-    pub resume: ProtocolUdpFlowResume,
-    pub payload: &'a [u8],
 }
 
 pub(crate) struct TrojanUdpRelayFlowRequest<'a> {

@@ -30,7 +30,7 @@ impl UdpDispatch {
         request: MieruDatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
         self.protocol_state
-            .start_mieru_udp_flow(crate::protocol_runtime::udp::MieruUdpFlowRequest {
+            .start_mieru_stream_packet_flow(crate::protocol_runtime::udp::ManagedStreamPacketFlow {
                 chain_tasks: &mut self.chain_tasks,
                 proxy: request.proxy,
                 session: request.session,

@@ -24,9 +24,9 @@ mod trojan_manager;
 
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
 pub(crate) use flow_snapshot::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
-pub(crate) use flows::ManagedDatagramFlow;
 #[cfg(feature = "mieru")]
 pub(crate) use flows::MieruUdpRelayFlow;
+pub(crate) use flows::{ManagedDatagramFlow, ManagedStreamPacketFlow};
 #[cfg(feature = "vless")]
 pub(crate) use flows::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
 #[cfg(feature = "vmess")]
@@ -48,8 +48,6 @@ pub(crate) use peer::SsUdpPeer;
 #[cfg(feature = "trojan")]
 pub(crate) use peer::TrojanUdpPeer;
 pub(crate) use peer::UdpPeerEndpoint;
-#[cfg(feature = "mieru")]
-pub(crate) use start::MieruUdpFlowRequest;
 #[cfg(feature = "trojan")]
-pub(crate) use start::{TrojanUdpFlowRequest, TrojanUdpRelayFlowRequest};
+pub(crate) use start::TrojanUdpRelayFlowRequest;
 pub(crate) use state::ProtocolUdpState;

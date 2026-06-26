@@ -12,6 +12,16 @@ pub(crate) struct ManagedDatagramFlow<'a> {
     pub(crate) payload: &'a [u8],
 }
 
+pub(crate) struct ManagedStreamPacketFlow<'a> {
+    pub(crate) chain_tasks: &'a mut tokio::task::JoinSet<super::ChainTask>,
+    pub(crate) proxy: &'a Proxy,
+    pub(crate) session: &'a Session,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) payload: &'a [u8],
+}
+
 #[cfg(feature = "mieru")]
 pub(crate) struct MieruUdpRelayFlow<'a> {
     pub(crate) session: &'a Session,

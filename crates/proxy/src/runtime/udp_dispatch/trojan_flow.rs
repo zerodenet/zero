@@ -32,15 +32,17 @@ impl UdpDispatch {
         request: TrojanDatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
         self.protocol_state
-            .start_trojan_udp_flow(crate::protocol_runtime::udp::TrojanUdpFlowRequest {
-                chain_tasks: &mut self.chain_tasks,
-                proxy: request.proxy,
-                session: request.session,
-                server: request.server,
-                port: request.port,
-                resume: request.resume,
-                payload: request.payload,
-            })
+            .start_trojan_stream_packet_flow(
+                crate::protocol_runtime::udp::ManagedStreamPacketFlow {
+                    chain_tasks: &mut self.chain_tasks,
+                    proxy: request.proxy,
+                    session: request.session,
+                    server: request.server,
+                    port: request.port,
+                    resume: request.resume,
+                    payload: request.payload,
+                },
+            )
             .await
     }
 

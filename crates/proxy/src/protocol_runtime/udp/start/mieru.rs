@@ -1,15 +1,14 @@
-use tokio::task::JoinSet;
-use zero_core::Session;
-
 use super::super::mieru_manager::model::{MieruRelayExisting, MieruSendExisting};
 use super::super::state::ProtocolUdpState;
-use super::super::{ChainTask, FlowFailure, MieruUdpRelayFlow, ProtocolUdpFlowResume};
-use crate::runtime::Proxy;
+use super::super::{
+    ChainTask, FlowFailure, ManagedStreamPacketFlow, MieruUdpRelayFlow, ProtocolUdpFlowResume,
+};
+use tokio::task::JoinSet;
 
 impl ProtocolUdpState {
-    pub(crate) async fn start_mieru_udp_flow(
+    pub(crate) async fn start_mieru_stream_packet_flow(
         &mut self,
-        request: MieruUdpFlowRequest<'_>,
+        request: ManagedStreamPacketFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         let ProtocolUdpFlowResume::Mieru(resume) = &request.resume else {
             return Err(resume_mismatch(
@@ -62,16 +61,6 @@ impl ProtocolUdpState {
             })
             .await
     }
-}
-
-pub(crate) struct MieruUdpFlowRequest<'a> {
-    pub chain_tasks: &'a mut JoinSet<ChainTask>,
-    pub proxy: &'a Proxy,
-    pub session: &'a Session,
-    pub server: &'a str,
-    pub port: u16,
-    pub resume: ProtocolUdpFlowResume,
-    pub payload: &'a [u8],
 }
 
 fn resume_mismatch(

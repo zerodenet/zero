@@ -3223,13 +3223,13 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
                 Some(("Hysteria2DatagramSend", "start_managed_datagram_flow"))
             }
             "src/runtime/udp_dispatch/mieru_flow.rs" => {
-                Some(("MieruDatagramSend", "start_mieru_udp_flow"))
+                Some(("MieruDatagramSend", "start_mieru_stream_packet_flow"))
             }
             "src/runtime/udp_dispatch/shadowsocks_flow.rs" => {
                 Some(("ShadowsocksDatagramSend", "start_managed_datagram_flow"))
             }
             "src/runtime/udp_dispatch/trojan_flow.rs" => {
-                Some(("TrojanDatagramSend", "start_trojan_udp_flow"))
+                Some(("TrojanDatagramSend", "start_trojan_stream_packet_flow"))
             }
             "src/runtime/udp_dispatch/vless_flow.rs" => {
                 Some(("VlessDatagramSend", "start_vless_udp_flow"))
@@ -6578,7 +6578,7 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
         (
             "src/runtime/udp_dispatch/mieru_flow.rs",
             "MieruDatagramSend",
-            "start_mieru_udp_flow",
+            "start_mieru_stream_packet_flow",
             "start_mieru_datagram_flow",
         ),
         (
@@ -6596,7 +6596,7 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
         (
             "src/runtime/udp_dispatch/trojan_flow.rs",
             "TrojanDatagramSend",
-            "start_trojan_udp_flow",
+            "start_trojan_stream_packet_flow",
             "start_trojan_datagram_flow",
         ),
         (
