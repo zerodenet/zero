@@ -11,17 +11,15 @@ pub(super) async fn direct(
     peer: &MieruUdpPeer<'_>,
 ) -> Result<MieruEntry, EngineError> {
     let stream = connect::direct_stream(proxy, peer).await?;
-    let peer_config = peer.resume.peer_config();
-    packet_stream(stream, peer_config.username(), peer_config.password()).await
+    packet_stream(stream, peer.resume).await
 }
 
 pub(super) async fn packet_stream(
     stream: TcpRelayStream,
-    username: &str,
-    password: &str,
+    resume: &mieru::MieruUdpFlowResume,
 ) -> Result<MieruEntry, EngineError> {
     let connect::EstablishedSession { stream, flow_io } =
-        connect::open_udp_flow(stream, username, password).await?;
+        connect::open_udp_flow(stream, resume).await?;
     let stream::PacketStream { send_tx, recv_tx } = stream::spawn_packet_stream(stream, flow_io);
 
     Ok(MieruEntry { send_tx, recv_tx })

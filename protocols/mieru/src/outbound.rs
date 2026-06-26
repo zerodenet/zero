@@ -68,6 +68,16 @@ impl MieruUdpFlowIo {
         })
     }
 
+    pub async fn establish_with_resume<S>(
+        stream: &mut S,
+        resume: &crate::udp::MieruUdpFlowResume,
+    ) -> Result<Self, Error>
+    where
+        S: AsyncSocket,
+    {
+        Self::establish(stream, resume.username(), resume.password()).await
+    }
+
     pub fn encrypt_packet(
         &mut self,
         target: &Address,

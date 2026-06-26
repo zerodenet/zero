@@ -12,6 +12,15 @@ pub(super) enum MieruKey {
     Relay { session_id: u64 },
 }
 
+impl MieruKey {
+    pub(super) fn from_flow_key(flow_key: mieru::MieruUdpFlowKey, session_id: u64) -> Self {
+        match flow_key {
+            mieru::MieruUdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
+            mieru::MieruUdpFlowKey::Relay => Self::Relay { session_id },
+        }
+    }
+}
+
 pub(super) struct MieruEntry {
     pub(super) send_tx: mpsc::Sender<mieru::MieruUdpFlowPacket>,
     pub(super) recv_tx: bridge::ResponseSender,

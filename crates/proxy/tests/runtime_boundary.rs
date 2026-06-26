@@ -5325,6 +5325,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/forward/mieru.rs");
     let manager_send = read("src/protocol_runtime/udp/mieru_manager/send.rs");
+    let manager_connect = read("src/protocol_runtime/udp/mieru_manager/connect.rs");
+    let manager_establish = read("src/protocol_runtime/udp/mieru_manager/establish.rs");
     let manager_model = read("src/protocol_runtime/udp/mieru_manager/model.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
         .expect("read mieru protocol udp source");
@@ -5387,6 +5389,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         adapter.contains("MieruUdpFlowResume::new")
             && protocol_udp.contains("struct MieruUdpFlowResume")
             && protocol_udp.contains("pub fn peer_config(&self)")
+            && protocol_udp.contains("pub fn flow_key(&self")
+            && protocol_udp.contains("enum MieruUdpFlowKey")
             && protocol_udp.contains("struct MieruUdpLeafKey")
             && protocol_udp.contains("pub fn codec(&self)")
             && protocol_udp.contains("pub fn relay_chain(&self) -> bool"),
@@ -5424,15 +5428,29 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         "request.resume.username()",
         "request.resume.password()",
         "request.resume.relay_chain()",
+        ".peer_config()",
+        "peer_config.",
+        "peer_config:",
+        "MieruUdpPeerConfig",
         "MieruKey::Leaf {",
         "username: String",
         "password: String",
     ] {
         assert!(
-            !manager_send.contains(forbidden) && !manager_model.contains(forbidden),
+            !manager_send.contains(forbidden)
+                && !manager_connect.contains(forbidden)
+                && !manager_establish.contains(forbidden)
+                && !manager_model.contains(forbidden),
             "Mieru UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
         );
     }
+    assert!(
+        manager_send.contains("request.resume.flow_key(request.server, request.port)")
+            && manager_connect.contains("MieruUdpFlowIo::establish_with_resume")
+            && manager_establish.contains("packet_stream(stream, peer.resume).await")
+            && protocol_outbound.contains("pub async fn establish_with_resume"),
+        "Mieru UDP manager should consume protocol-owned flow key and UDP establish helper"
+    );
 }
 
 #[test]

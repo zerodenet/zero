@@ -146,6 +146,18 @@ impl MieruUdpFlowResume {
         self.relay_chain
     }
 
+    pub fn leaf_cache_key(&self, server: &str, port: u16) -> MieruUdpLeafKey {
+        self.peer_config().leaf_cache_key(server, port)
+    }
+
+    pub fn flow_key(&self, server: &str, port: u16) -> MieruUdpFlowKey {
+        if self.relay_chain {
+            MieruUdpFlowKey::Relay
+        } else {
+            MieruUdpFlowKey::Leaf(self.leaf_cache_key(server, port))
+        }
+    }
+
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec()
     }
@@ -156,6 +168,18 @@ impl MieruUdpFlowResume {
             password: &self.password,
             relay_chain: self.relay_chain,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MieruUdpFlowKey {
+    Leaf(MieruUdpLeafKey),
+    Relay,
+}
+
+impl MieruUdpFlowKey {
+    pub fn is_relay(&self) -> bool {
+        matches!(self, Self::Relay)
     }
 }
 

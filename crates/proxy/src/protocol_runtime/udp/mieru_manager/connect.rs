@@ -27,10 +27,9 @@ pub(super) async fn direct_stream(
 
 pub(super) async fn open_udp_flow(
     mut stream: TcpRelayStream,
-    username: &str,
-    password: &str,
+    resume: &mieru::MieruUdpFlowResume,
 ) -> Result<EstablishedSession, EngineError> {
-    let flow_io = MieruUdpFlowIo::establish(&mut stream, username, password)
+    let flow_io = MieruUdpFlowIo::establish_with_resume(&mut stream, resume)
         .await
         .map_err(|error| {
             EngineError::Io(std::io::Error::other(format!(

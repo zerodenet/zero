@@ -29,5 +29,5 @@ pub(crate) struct TrojanUdpPeer<'a> {
 pub(crate) struct MieruUdpPeer<'a> {
     pub(crate) endpoint: UdpPeerEndpoint<'a>,
     pub(crate) resume: &'a mieru::MieruUdpFlowResume,
-    pub(crate) relay_chain: bool,
+    pub(crate) flow_key: mieru::MieruUdpFlowKey,
 }
