@@ -2,7 +2,7 @@ use tokio::task::JoinSet;
 use zero_engine::EngineError;
 
 use super::ProtocolUdpState;
-use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowResume};
+use crate::protocol_runtime::udp::FlowFailure;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
@@ -36,7 +36,7 @@ impl ProtocolUdpState {
             ));
         };
 
-        if matches!(snapshot.resume(), ProtocolUdpFlowResume::Socks5(_)) {
+        if self.socks5.handles_resume(snapshot.resume()) {
             return Err(protocol_forward_unavailable(
                 "udp_protocol_forward",
                 "SOCKS5 relay flows are handled by generic UDP dispatch",

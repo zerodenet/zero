@@ -18,6 +18,10 @@ pub(crate) struct Socks5UdpRuntime {
 }
 
 impl Socks5UdpRuntime {
+    pub(crate) fn handles_resume(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        matches!(resume, ProtocolUdpFlowResume::Socks5(_))
+    }
+
     pub(crate) fn idle_deadline(&self) -> Option<TokioInstant> {
         self.idle_deadline
     }

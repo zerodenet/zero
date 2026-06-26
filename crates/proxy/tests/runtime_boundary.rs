@@ -5135,6 +5135,7 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     let forward = read("src/protocol_runtime/udp/state/forward.rs");
     let normalized_forward = forward.replace("\r\n", "\n");
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
+    let socks5_runtime = read("src/protocol_runtime/socks5_udp/runtime.rs");
 
     for forbidden in [
         "SsSendExisting",
@@ -5147,6 +5148,8 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         "client_fingerprint",
         "relay_chain",
         ".upstream()",
+        "ProtocolUdpFlowResume",
+        "Socks5(_)",
     ] {
         assert!(
             !forward.contains(forbidden),
@@ -5155,6 +5158,9 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     }
     assert!(
         normalized_forward.contains("self\n            .managed\n            .forward_existing_flow")
+            && forward.contains("self.socks5.handles_resume(snapshot.resume())")
+            && socks5_runtime.contains("fn handles_resume(&self, resume: &ProtocolUdpFlowResume)")
+            && socks5_runtime.contains("ProtocolUdpFlowResume::Socks5(_)")
             && managed.contains("fn forward_existing_flow")
             && managed.contains("ManagedExistingSend")
             && managed.contains("send_managed_existing")
