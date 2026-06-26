@@ -5844,16 +5844,16 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         "Mieru UDP manager should not keep a proxy-owned codec module"
     );
     assert!(
-        !stream.exists(),
-        "Mieru UDP flow stream driver should live in protocols/mieru, not proxy mieru_manager/stream.rs"
+        stream.exists(),
+        "Mieru UDP flow stream runtime glue should live in proxy mieru_manager/stream.rs"
     );
     assert!(
         protocol_outbound.contains("struct MieruUdpFlowIo")
             && protocol_outbound.contains("struct MieruUdpFlowPacket")
-            && protocol_outbound.contains("struct MieruUdpFlowHandle")
-            && protocol_outbound.contains("struct MieruUdpFlowSender")
-            && protocol_outbound.contains("pub type MieruUdpFlowResponse")
-            && protocol_outbound.contains("pub async fn open_udp_flow")
+            && !protocol_outbound.contains("struct MieruUdpFlowHandle")
+            && !protocol_outbound.contains("struct MieruUdpFlowSender")
+            && !protocol_outbound.contains("pub type MieruUdpFlowResponse")
+            && !protocol_outbound.contains("pub async fn open_udp_flow")
             && protocol_outbound.contains("pub fn udp_flow_packet")
             && protocol_outbound.contains("encode_udp_flow_packet")
             && protocol_outbound.contains("decode_udp_flow_packet")
@@ -5861,20 +5861,21 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && protocol_outbound.contains("next_packet")
             && protocol_outbound.contains("pub async fn write_flow_packet")
             && protocol_outbound.contains("pub async fn read_flow_packets")
-            && protocol_outbound.contains("MieruUdpFlowIo::establish_with_resume")
-            && protocol_outbound.contains("mpsc::channel::<MieruUdpFlowPacket>")
-            && protocol_outbound.contains("broadcast::channel::<MieruUdpFlowResponse>")
-            && protocol_outbound.contains("tokio::spawn")
+            && protocol_outbound.contains("pub async fn establish_with_resume")
+            && !protocol_outbound.contains("mpsc::channel::<MieruUdpFlowPacket>")
+            && !protocol_outbound.contains("broadcast::channel")
+            && !protocol_outbound.contains("tokio::spawn")
             && !repo_root()
                 .join("crates/transport/src/mieru_transport.rs")
                 .exists()
             && !transport_manifest.contains("dep:mieru")
             && !transport_manifest.contains("mieru/crypto"),
-        "Mieru UDP flow associate, encryption, and packet codec should live behind a protocol-owned flow I/O helper"
+        "Mieru UDP associate, encryption, and packet codec should stay protocol-owned while runtime glue stays in proxy"
     );
     assert!(
         !manager_model.contains("struct MieruPacket")
-            && manager_model.contains("mieru::MieruUdpFlowSender")
+            && manager_model.contains("MieruFlowSender")
+            && !manager_model.contains("mieru::MieruUdpFlowSender")
             && !manager_model.contains("mpsc::Sender<UdpFlowPacket>")
             && !manager_model.contains("UdpFlowPacket")
             && !manager_send.contains("mieru::udp_flow_packet")
@@ -5882,7 +5883,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && !manager_send.contains("MieruUdpFlowIo")
             && manager_send.contains(".sender")
             && manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)"),
-        "Mieru UDP manager should hold only protocol-owned flow handles while protocols/mieru drives packet I/O"
+        "Mieru UDP manager should hold proxy-owned flow senders while protocols/mieru owns packet I/O helpers"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
@@ -5952,9 +5953,9 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     assert!(
         manager_send.contains("request.resume.flow_key(request.server, request.port)")
             && !manager_connect.contains("MieruUdpFlowIo::establish_with_resume")
-            && manager_establish.contains("mieru::open_udp_flow(stream, resume)")
+            && manager_establish.contains("stream::spawn_packet_stream(stream, resume)")
             && protocol_outbound.contains("pub async fn establish_with_resume")
-            && protocol_outbound.contains("pub async fn open_udp_flow"),
+            && !protocol_outbound.contains("pub async fn open_udp_flow"),
         "Mieru UDP manager should consume protocol-owned flow key and UDP establish helper"
     );
 }
@@ -6006,12 +6007,12 @@ fn mieru_udp_connect_handshake_lives_outside_manager() {
     assert!(
         !connect.contains("MieruUdpFlowIo::establish")
             && !establish.contains("MieruUdpFlowIo::establish")
-            && !stream.exists()
+            && stream.exists()
             && !connect.contains("MieruOutbound::connect")
             && !connect.contains("encrypt_client_data")
             && !connect.contains("decrypt_server_data")
-            && establish.contains("mieru::open_udp_flow(stream, resume)")
-            && protocol_outbound.contains("pub async fn open_udp_flow")
+            && establish.contains("stream::spawn_packet_stream(stream, resume)")
+            && !protocol_outbound.contains("pub async fn open_udp_flow")
             && protocol_outbound.contains("fn send_udp_associate_request")
             && protocol_outbound.contains("fn read_udp_associate_response"),
         "Mieru UDP associate handshake should live behind protocols/mieru flow I/O"
@@ -6244,16 +6245,10 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     for forbidden in [
-        "MieruUdpFlowIo",
-        "packet.encode_with",
-        "push_encrypted_response",
-        "next_packet",
         "write_flow_packet",
         "read_flow_packets",
         "struct ReadOnlySocket",
         "struct WriteOnlySocket",
-        "mpsc::channel::<MieruUdpFlowPacket>",
-        "broadcast::channel::<MieruUdpFlowResponse>",
     ] {
         assert!(
             !manager.contains(forbidden)
@@ -6263,31 +6258,40 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        !stream.exists() && !socket.exists(),
-        "Mieru UDP stream task and socket adapters should live in protocols/mieru, not proxy"
+        stream.exists() && !socket.exists(),
+        "Mieru UDP stream task should live in proxy stream glue without a separate socket module"
     );
+    let stream = read("src/protocol_runtime/udp/mieru_manager/stream.rs");
     assert!(
         !repo_root()
             .join("crates/transport/src/mieru_transport.rs")
             .exists()
             && !transport.contains("dep:mieru")
             && !transport.contains("mieru/crypto")
-            && manager_model.contains("mieru::MieruUdpFlowSender")
+            && manager_model.contains("MieruFlowSender")
+            && !manager_model.contains("mieru::MieruUdpFlowSender")
             && manager_send.contains(".sender")
             && manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
             && !manager_send.contains("UdpFlowPacket")
-            && protocol_outbound.contains("pub async fn open_udp_flow")
-            && protocol_outbound.contains("pub struct MieruUdpFlowHandle")
-            && protocol_outbound.contains("pub struct MieruUdpFlowSender")
-            && protocol_outbound.contains("pub type MieruUdpFlowResponse")
-            && protocol_outbound.contains("mpsc::channel::<MieruUdpFlowPacket>")
-            && protocol_outbound.contains("broadcast::channel::<MieruUdpFlowResponse>")
-            && protocol_outbound.contains("tokio::spawn")
+            && !protocol_outbound.contains("pub async fn open_udp_flow")
+            && !protocol_outbound.contains("pub struct MieruUdpFlowHandle")
+            && !protocol_outbound.contains("pub struct MieruUdpFlowSender")
+            && !protocol_outbound.contains("pub type MieruUdpFlowResponse")
+            && !protocol_outbound.contains("mpsc::channel::<MieruUdpFlowPacket>")
+            && !protocol_outbound.contains("broadcast::channel")
+            && !protocol_outbound.contains("tokio::spawn")
+            && stream.contains("mpsc::channel::<mieru::MieruUdpFlowPacket>")
+            && stream.contains("tokio::sync::broadcast::channel::<bridge::ResponseItem>")
+            && stream.contains("tokio::spawn")
+            && stream.contains("mieru::MieruUdpFlowIo::establish_with_resume")
+            && stream.contains("packet.encode_with(&mut flow_io)")
+            && stream.contains("flow_io.push_encrypted_response")
+            && stream.contains("flow_io.next_packet()")
             && protocol_outbound.contains("pub async fn write_packet")
             && protocol_outbound.contains("pub async fn read_packets")
             && protocol_outbound.contains("pub async fn write_flow_packet")
             && protocol_outbound.contains("pub async fn read_flow_packets"),
-        "Mieru UDP stream flow task should stay out of zero-transport/proxy and live in protocols/mieru"
+        "Mieru UDP stream flow task should stay out of zero-transport and live in proxy stream glue"
     );
 }
 

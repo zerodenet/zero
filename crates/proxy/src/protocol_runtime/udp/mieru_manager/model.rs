@@ -1,5 +1,6 @@
 use super::super::ChainTask;
 use super::bridge;
+use super::stream::MieruFlowSender;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use tokio::task::JoinSet;
@@ -21,7 +22,7 @@ impl MieruKey {
 }
 
 pub(super) struct MieruEntry {
-    pub(super) sender: mieru::MieruUdpFlowSender,
+    pub(super) sender: MieruFlowSender,
     pub(super) recv_tx: bridge::ResponseSender,
 }
 

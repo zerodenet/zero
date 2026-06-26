@@ -39,8 +39,7 @@ pub use metadata::{
 };
 #[cfg(feature = "crypto")]
 pub use outbound::{
-    open_udp_flow, udp_flow_packet, MieruOutbound, MieruTcpTarget, MieruUdpFlowHandle,
-    MieruUdpFlowIo, MieruUdpFlowPacket, MieruUdpFlowResponse, MieruUdpFlowSender,
+    udp_flow_packet, MieruOutbound, MieruTcpTarget, MieruUdpFlowIo, MieruUdpFlowPacket,
 };
 pub use protocol::MieruProtocol;
 #[cfg(feature = "crypto")]
