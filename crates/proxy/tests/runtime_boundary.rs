@@ -6519,11 +6519,14 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
                 .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowPacket")
             && protocol_outbound.contains("pub fn udp_flow_packet")
-            && manager.contains("shadowsocks::udp_flow_packet")
+            && !manager.contains("shadowsocks::udp_flow_packet")
+            && manager.contains("UdpFlowPacket::from_parts")
+            && transport.contains("send_packet(&self, packet: UdpFlowPacket)")
+            && transport.contains("shadowsocks::udp_flow_packet")
             && !manager.contains("ShadowsocksUdpFlowPacket::from_parts")
             && protocol_outbound.contains("pub fn encode_with(")
             && protocol_outbound.contains("pub fn decode_flow_packet(&self"),
-        "Shadowsocks adapter and UDP manager should consume protocol-owned UDP flow packet helpers"
+        "Shadowsocks UDP manager should carry neutral UDP packets while transport glue converts them through protocols/shadowsocks"
     );
     for forbidden in [".encode_packet(", ".decode_packet("] {
         assert!(

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tokio::sync::broadcast;
 use tracing::{debug, warn};
-use zero_core::Address;
+use zero_core::{Address, UdpFlowPacket};
 use zero_engine::EngineError;
 
 pub type ShadowsocksUdpResponse = (Address, u16, Vec<u8>);
@@ -38,10 +38,8 @@ impl ShadowsocksUdpSocketFlow {
         self.recv_tx.subscribe()
     }
 
-    pub async fn send_packet(
-        &self,
-        packet: shadowsocks::ShadowsocksUdpFlowPacket,
-    ) -> Result<(), EngineError> {
+    pub async fn send_packet(&self, packet: UdpFlowPacket) -> Result<(), EngineError> {
+        let packet = shadowsocks::udp_flow_packet(&packet.target, packet.port, &packet.payload);
         let datagram = packet.encode_with(&self.resume)?;
         self.socket.send_to(&datagram, self.endpoint).await?;
         Ok(())

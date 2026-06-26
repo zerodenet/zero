@@ -5,6 +5,7 @@ use super::packet_path_traits::{UdpFlowContext, UdpPacketRef};
 use super::FlowFailure;
 use super::{SsUdpPeer, UdpPeerEndpoint};
 use crate::runtime::Proxy;
+use zero_core::UdpFlowPacket;
 
 mod bridge;
 mod entry;
@@ -56,7 +57,7 @@ impl SsChainManager {
             })?;
 
         let packet =
-            shadowsocks::udp_flow_packet(packet_ref.target, packet_ref.port, packet_ref.payload);
+            UdpFlowPacket::from_parts(packet_ref.target, packet_ref.port, packet_ref.payload);
 
         let response_rx = entry.waiters.register(packet_ref.target, packet_ref.port);
         if let Err(e) = entry.flow.send_packet(packet).await {
