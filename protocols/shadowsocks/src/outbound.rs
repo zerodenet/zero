@@ -418,6 +418,12 @@ pub fn udp_flow_codec(
 }
 
 #[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ShadowsocksUdpCacheKey {
+    cache_key: alloc::string::String,
+}
+
+#[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShadowsocksUdpFlowResume {
     cache_key: alloc::string::String,
@@ -464,6 +470,12 @@ impl ShadowsocksUdpFlowResume {
         }
     }
 
+    pub fn socket_flow_cache_key(&self) -> ShadowsocksUdpCacheKey {
+        ShadowsocksUdpCacheKey {
+            cache_key: self.cache_key.clone(),
+        }
+    }
+
     pub fn packet_path_cache_key(&self) -> alloc::string::String {
         self.cache_key.clone()
     }
@@ -474,6 +486,10 @@ impl ShadowsocksUdpFlowResume {
 
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec(self.cipher, &self.password)
+    }
+
+    pub fn socket_flow_codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        self.codec()
     }
 
     fn encode_flow_packet(

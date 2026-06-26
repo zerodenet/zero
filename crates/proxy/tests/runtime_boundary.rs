@@ -7341,13 +7341,19 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         !shadowsocks_peer_model.contains("cipher: shadowsocks::CipherKind")
             && !shadowsocks_peer_model.contains("password: &'a str")
             && !shadowsocks_peer_model.contains("cache_key: &'a str")
-            && shadowsocks_peer_model.contains("leaf_key: shadowsocks::ShadowsocksUdpLeafKey"),
+            && !shadowsocks_peer_model.contains("leaf_key:")
+            && shadowsocks_peer_model.contains("SsKey(shadowsocks::ShadowsocksUdpCacheKey)")
+            && shadowsocks_peer_model.contains("fn from_resume(")
+            && shadowsocks_peer_model.contains("socket_flow_cache_key()"),
         "ordinary Shadowsocks UDP peer model should carry only protocol-owned opaque cache identity"
     );
     assert!(
         adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && !adapter.contains("ShadowsocksUdpFlowResume::new")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowResume")
+            && protocol_outbound.contains("struct ShadowsocksUdpCacheKey")
+            && protocol_outbound.contains("pub fn socket_flow_cache_key(&self)")
+            && protocol_outbound.contains("pub fn socket_flow_codec(&self)")
             && protocol_outbound.contains("pub fn leaf_cache_key(&self)")
             && protocol_outbound.contains("struct ShadowsocksUdpLeafKey")
             && protocol_outbound.contains("pub fn from_config(")
@@ -7384,6 +7390,9 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
     let manager_model = read("src/protocol_runtime/udp/ss_manager/model.rs");
     for forbidden in [
+        "ShadowsocksUdpLeafKey",
+        "leaf_cache_key",
+        "resume.codec()",
         "request.resume.cache_key()",
         "request.resume.codec()",
         "cache_key: String",
@@ -7392,7 +7401,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     ] {
         assert!(
             !manager.contains(forbidden) && !manager_model.contains(forbidden),
-            "Shadowsocks UDP manager should use protocol-owned leaf key instead of unpacking `{forbidden}`"
+            "Shadowsocks UDP manager should use a protocol-owned cache key/codec handle instead of unpacking `{forbidden}`"
         );
     }
 }

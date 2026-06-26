@@ -8,11 +8,11 @@ use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::Proxy;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct SsKey(shadowsocks::ShadowsocksUdpLeafKey);
+pub(super) struct SsKey(shadowsocks::ShadowsocksUdpCacheKey);
 
 impl SsKey {
-    pub(super) fn new(leaf_key: shadowsocks::ShadowsocksUdpLeafKey) -> Self {
-        Self(leaf_key)
+    pub(super) fn from_resume(resume: &shadowsocks::ShadowsocksUdpFlowResume) -> Self {
+        Self(resume.socket_flow_cache_key())
     }
 }
 
@@ -23,7 +23,6 @@ pub(super) struct SsUpstream {
 
 pub(super) struct SsUdpPeer<'a> {
     pub(super) endpoint: OutboundEndpoint<'a>,
-    pub(super) leaf_key: shadowsocks::ShadowsocksUdpLeafKey,
 }
 
 pub(super) struct SsSendExisting<'a> {

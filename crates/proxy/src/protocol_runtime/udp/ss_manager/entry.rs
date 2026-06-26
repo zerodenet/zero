@@ -9,11 +9,10 @@ use zero_transport::shadowsocks_transport;
 
 pub(super) async fn ensure(
     upstreams: &mut HashMap<SsKey, Arc<SsUpstream>>,
-    leaf_key: shadowsocks::ShadowsocksUdpLeafKey,
     resume: shadowsocks::ShadowsocksUdpFlowResume,
     target_addr: SocketAddr,
 ) -> Result<Arc<SsUpstream>, EngineError> {
-    let key = SsKey::new(leaf_key);
+    let key = SsKey::from_resume(&resume);
     if let Some(entry) = upstreams.get(&key) {
         return Ok(entry.clone());
     }
@@ -21,7 +20,7 @@ pub(super) async fn ensure(
     let flow = Arc::new(
         shadowsocks_transport::establish_shadowsocks_udp_socket_flow(
             target_addr,
-            Arc::new(resume.codec()),
+            Arc::new(resume.socket_flow_codec()),
         )
         .await?,
     );

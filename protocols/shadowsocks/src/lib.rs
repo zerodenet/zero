@@ -20,8 +20,9 @@ pub use outbound::{
     decode_udp_datagram, decode_udp_flow_packet, encode_udp_datagram, encode_udp_flow_packet,
     parse_udp_cipher, udp_cache_key, udp_datagram_codec, udp_flow_codec, udp_flow_packet,
     ShadowsocksDatagramCodec, ShadowsocksOutboundSession, ShadowsocksTcpTarget,
-    ShadowsocksUdpDecodeContext, ShadowsocksUdpFlowPacket, ShadowsocksUdpFlowResume,
-    ShadowsocksUdpLeafKey, ShadowsocksUdpPacket, ShadowsocksUdpPacketTarget,
+    ShadowsocksUdpCacheKey, ShadowsocksUdpDecodeContext, ShadowsocksUdpFlowPacket,
+    ShadowsocksUdpFlowResume, ShadowsocksUdpLeafKey, ShadowsocksUdpPacket,
+    ShadowsocksUdpPacketTarget,
 };
 #[cfg(feature = "crypto")]
 pub use shared::{

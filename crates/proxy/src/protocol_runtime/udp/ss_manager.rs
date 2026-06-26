@@ -56,7 +56,7 @@ impl SsChainManager {
                 upstream: Some(peer.endpoint.upstream()),
             })?;
 
-        let entry = entry::ensure(&mut self.upstreams, peer.leaf_key, resume, target_addr)
+        let entry = entry::ensure(&mut self.upstreams, resume, target_addr)
             .await
             .map_err(|error| FlowFailure {
                 stage: "ss_establish",
@@ -83,7 +83,6 @@ impl SsChainManager {
     }
 
     async fn send_existing(&mut self, request: SsSendExisting<'_>) -> Result<usize, FlowFailure> {
-        let leaf_key = request.resume.leaf_cache_key();
         self.send(
             UdpFlowContext {
                 chain_tasks: request.chain_tasks,
@@ -95,7 +94,6 @@ impl SsChainManager {
                     server: request.server,
                     port: request.port,
                 },
-                leaf_key,
             },
             request.resume,
             UdpPacketRef {
