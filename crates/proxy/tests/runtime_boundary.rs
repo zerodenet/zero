@@ -3482,10 +3482,8 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
     for path in [
         "start/mod.rs",
         "start/datagram.rs",
-        "start/mieru.rs",
         "start/socks5.rs",
         "start/stream.rs",
-        "start/trojan.rs",
         "start/vless.rs",
         "start/vmess.rs",
     ] {
@@ -3500,8 +3498,7 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
 fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     let state = read("src/protocol_runtime/udp/state.rs");
     let datagram = read("src/protocol_runtime/udp/start/datagram.rs");
-    let trojan = manifest_dir().join("src/protocol_runtime/udp/start/trojan.rs");
-    let mieru = manifest_dir().join("src/protocol_runtime/udp/start/mieru.rs");
+    let managed = read("src/protocol_runtime/udp/state/managed.rs");
 
     for forbidden in [
         "TrojanUdpFlowRequest",
@@ -3517,12 +3514,13 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
         );
     }
     assert!(
-        trojan.exists(),
-        "Trojan UDP start facade should live in start/trojan.rs"
-    );
-    assert!(
-        mieru.exists(),
-        "Mieru UDP start facade should live in start/mieru.rs"
+        !manifest_dir()
+            .join("src/protocol_runtime/udp/start/trojan.rs")
+            .exists()
+            && !manifest_dir()
+                .join("src/protocol_runtime/udp/start/mieru.rs")
+                .exists(),
+        "Trojan and Mieru UDP start dispatch should be centralized in ManagedProtocolUdpState"
     );
     for forbidden in [
         "ProtocolUdpFlowResume::Shadowsocks(_)",
@@ -3536,9 +3534,10 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     assert!(
         state.contains("ManagedUdpFlowKind::Datagram")
             && state.contains("start_managed_datagram_flow")
-            && datagram.contains("ProtocolUdpFlowResume::Shadowsocks(resume)")
-            && datagram.contains("ProtocolUdpFlowResume::Hysteria2(resume)"),
-        "managed datagram UDP flow kind should leave protocol-specific resume matching in start/datagram.rs"
+            && datagram.contains("self.managed.start_datagram_flow")
+            && managed.contains("ProtocolUdpFlowResume::Shadowsocks(resume)")
+            && managed.contains("ProtocolUdpFlowResume::Hysteria2(resume)"),
+        "managed datagram UDP flow kind should leave protocol-specific resume matching in ManagedProtocolUdpState"
     );
 }
 
@@ -3567,8 +3566,7 @@ fn protocol_udp_socks5_start_dispatch_lives_outside_state_root() {
 fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
     let state = read("src/protocol_runtime/udp/state.rs");
     let stream = read("src/protocol_runtime/udp/start/stream.rs");
-    let trojan = read("src/protocol_runtime/udp/start/trojan.rs");
-    let mieru = read("src/protocol_runtime/udp/start/mieru.rs");
+    let managed = read("src/protocol_runtime/udp/state/managed.rs");
 
     for forbidden in [
         "ProtocolUdpFlowResume::Trojan(_)",
@@ -3588,15 +3586,11 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
             && state.contains("ManagedUdpFlowKind::RelayStream")
             && state.contains("start_managed_stream_packet_flow")
             && state.contains("start_managed_relay_stream_flow")
-            && stream.contains("ProtocolUdpFlowResume::Trojan(_)")
-            && stream.contains("ProtocolUdpFlowResume::Mieru(_)")
-            && stream.contains("start_trojan_stream_packet_flow")
-            && stream.contains("start_trojan_relay_stream_flow")
-            && stream.contains("start_mieru_stream_packet_flow")
-            && stream.contains("start_mieru_relay_stream_flow")
-            && trojan.contains("ProtocolUdpFlowResume::Trojan(resume)")
-            && mieru.contains("ProtocolUdpFlowResume::Mieru(resume)"),
-        "stream-packet and relay-stream UDP flow kinds should leave protocol-specific resume matching in start/stream.rs and protocol-owned start modules"
+            && stream.contains("self.managed.start_stream_packet_flow")
+            && stream.contains("self.managed.start_relay_stream_flow")
+            && managed.contains("ProtocolUdpFlowResume::Trojan(resume)")
+            && managed.contains("ProtocolUdpFlowResume::Mieru(resume)"),
+        "stream-packet and relay-stream UDP flow kinds should leave protocol-specific resume matching in ManagedProtocolUdpState"
     );
 }
 
@@ -5119,7 +5113,8 @@ fn protocol_udp_existing_flow_forward_lives_outside_state_root() {
 #[test]
 fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     let forward = read("src/protocol_runtime/udp/state/forward.rs");
-    let root = manifest_dir().join("src/protocol_runtime/udp/state/forward");
+    let normalized_forward = forward.replace("\r\n", "\n");
+    let managed = read("src/protocol_runtime/udp/state/managed.rs");
 
     for forbidden in [
         "SsSendExisting",
@@ -5127,10 +5122,6 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         "TrojanSendExisting",
         "MieruSendExisting",
         "ExistingFlow {",
-        "ProtocolUdpFlowSnapshot::Shadowsocks",
-        "ProtocolUdpFlowSnapshot::Hysteria2",
-        "ProtocolUdpFlowSnapshot::Trojan",
-        "ProtocolUdpFlowSnapshot::Mieru",
         "datagram_cache_key",
         "cipher_kind",
         "client_fingerprint",
@@ -5142,12 +5133,15 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
             "state/forward.rs should delegate protocol UDP flow field extraction to state/forward/*.rs; found `{forbidden}`"
         );
     }
-    for path in ["shadowsocks.rs", "hysteria2.rs", "trojan.rs", "mieru.rs"] {
-        assert!(
-            root.join(path).exists(),
-            "existing UDP protocol-flow handler should live in state/forward/{path}"
-        );
-    }
+    assert!(
+        normalized_forward.contains("self\n            .managed\n            .forward_existing_flow")
+            && managed.contains("fn forward_existing_flow")
+            && managed.contains("SsSendExisting")
+            && managed.contains("H2SendExisting")
+            && managed.contains("TrojanSendExisting")
+            && managed.contains("MieruSendExisting"),
+        "existing UDP protocol-flow handler construction should be centralized in ManagedProtocolUdpState"
+    );
 }
 
 #[test]
@@ -5790,8 +5784,8 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
 fn trojan_udp_flow_resume_is_protocol_owned() {
     let adapter = read("src/adapters/trojan/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/forward/trojan.rs");
-    let start = read("src/protocol_runtime/udp/start/trojan.rs");
+    let forward = read("src/protocol_runtime/udp/state/managed.rs");
+    let start = read("src/protocol_runtime/udp/state/managed.rs");
     let manager_send = read("src/protocol_runtime/udp/trojan_manager/send.rs");
     let manager_connect = read("src/protocol_runtime/udp/trojan_manager/connect.rs");
     let manager_establish = read("src/protocol_runtime/udp/trojan_manager/establish.rs");
@@ -5826,7 +5820,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         "Trojan protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("resume: existing.resume.clone()")
+        forward.contains("resume: resume.clone()")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.sni()")
             && !forward.contains("existing.resume.insecure()")
@@ -5958,7 +5952,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let stream = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/stream.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/forward/mieru.rs");
+    let forward = read("src/protocol_runtime/udp/state/managed.rs");
     let manager_send = read("src/protocol_runtime/udp/mieru_manager/send.rs");
     let manager_connect = read("src/protocol_runtime/udp/mieru_manager/connect.rs");
     let manager_establish = read("src/protocol_runtime/udp/mieru_manager/establish.rs");
@@ -6057,7 +6051,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         "Mieru protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("resume: existing.resume.clone()")
+        forward.contains("resume: resume.clone()")
             && !forward.contains("existing.resume.username()")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.relay_chain()")
@@ -6067,7 +6061,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && !forward.contains("relay_chain: bool"),
         "existing Mieru UDP flow forwarding should pass the opaque resume descriptor without unpacking account or relay state"
     );
-    let start = read("src/protocol_runtime/udp/start/mieru.rs");
+    let start = read("src/protocol_runtime/udp/state/managed.rs");
     assert!(
         start.contains("ProtocolUdpFlowResume::Mieru(resume)")
             && start.contains("resume: resume.clone()")
@@ -6452,7 +6446,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .expect("read zero-transport hysteria2_quic source");
     let adapter = read("src/adapters/hysteria2/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/forward/hysteria2.rs");
+    let forward = read("src/protocol_runtime/udp/state/managed.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
 
@@ -6543,7 +6537,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         "Hysteria2 protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("resume: existing.resume.clone()")
+        forward.contains("resume: resume.clone()")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.client_fingerprint()")
             && !forward.contains("existing.resume.codec()")
@@ -7005,7 +6999,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let manager = read("src/protocol_runtime/udp/ss_manager.rs");
     let model = read("src/protocol_runtime/udp/ss_manager/model.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/forward/shadowsocks.rs");
+    let forward = read("src/protocol_runtime/udp/state/managed.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
@@ -7066,7 +7060,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "Shadowsocks protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("resume: existing.resume.clone()")
+        forward.contains("resume: resume.clone()")
             && !forward.contains("existing.resume.cache_key()")
             && !forward.contains("existing.resume.codec()")
             && !forward.contains("shadowsocks::udp_flow_codec")
@@ -7075,7 +7069,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !forward.contains("datagram_cache_key: &'a str"),
         "existing Shadowsocks UDP flow forwarding should pass the opaque resume descriptor without unpacking cache identity or codec state"
     );
-    let start = read("src/protocol_runtime/udp/start/datagram.rs");
+    let start = read("src/protocol_runtime/udp/state/managed.rs");
     assert!(
         start.contains("ProtocolUdpFlowResume::Shadowsocks(resume)")
             && start.contains("resume: resume.clone()")
@@ -7120,7 +7114,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let outbound = read("src/runtime/udp_flow/outbound.rs");
     let carrier_snapshot = read("src/runtime/udp_flow/packet_path.rs");
     let snapshot = read("src/runtime/udp_flow/packet_path_chain/snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/forward/shadowsocks.rs");
+    let forward = read("src/protocol_runtime/udp/state/managed.rs");
 
     assert!(
         !adapter.contains("CipherKind::from_str") && adapter.contains("ShadowsocksUdpFlowResume::from_config"),

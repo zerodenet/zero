@@ -4,14 +4,6 @@ use zero_engine::EngineError;
 use super::ProtocolUdpState;
 use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowResume};
 use crate::runtime::udp_flow::packet_path::ChainTask;
-#[cfg(feature = "hysteria2")]
-mod hysteria2;
-#[cfg(feature = "mieru")]
-mod mieru;
-#[cfg(feature = "shadowsocks")]
-mod shadowsocks;
-#[cfg(feature = "trojan")]
-mod trojan;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
@@ -51,28 +43,10 @@ impl ProtocolUdpState {
             ));
         }
 
-        #[cfg(feature = "shadowsocks")]
-        if let Some(result) =
-            shadowsocks::forward_if_matches(self, chain_tasks, proxy, flow, &snapshot, payload)
-                .await
-        {
-            return result;
-        }
-        #[cfg(feature = "hysteria2")]
-        if let Some(result) =
-            hysteria2::forward_if_matches(self, chain_tasks, flow, &snapshot, payload).await
-        {
-            return result;
-        }
-        #[cfg(feature = "trojan")]
-        if let Some(result) =
-            trojan::forward_if_matches(self, chain_tasks, proxy, flow, &snapshot, payload).await
-        {
-            return result;
-        }
-        #[cfg(feature = "mieru")]
-        if let Some(result) =
-            mieru::forward_if_matches(self, chain_tasks, proxy, flow, &snapshot, payload).await
+        if let Some(result) = self
+            .managed
+            .forward_existing_flow(chain_tasks, proxy, flow, &snapshot, payload)
+            .await
         {
             return result;
         }
