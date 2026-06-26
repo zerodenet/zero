@@ -6,9 +6,9 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::socks5::Socks5Adapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::socks5_flow::Socks5RelaySend;
-use crate::protocol_runtime::udp::ProtocolUdpFlowResume;
+use crate::protocol_runtime::udp::{ManagedUdpFlowKind, ProtocolUdpFlowResume};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 use crate::runtime::Proxy;
 
 impl Socks5Adapter {
@@ -88,17 +88,26 @@ impl Socks5Adapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         dispatch
-            .start_socks5_relay_flow(Socks5RelaySend {
-                proxy,
+            .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
+                proxy: Some(proxy),
                 tag,
+                session,
+                carrier: None,
+                tls_server_name: None,
                 server,
                 port: *port,
                 resume: ProtocolUdpFlowResume::Socks5(socks5::Socks5UdpFlowResume::new(
                     *username, *password,
                 )),
-                session,
                 payload,
+                kind: ManagedUdpFlowKind::RelayStream,
+                outbound: ManagedUdpOutboundKind::Relay,
             })
             .await
+            .map_err(|failure| FlowFailure {
+                stage: failure.stage,
+                error: failure.error,
+                upstream: failure.upstream,
+            })
     }
 }

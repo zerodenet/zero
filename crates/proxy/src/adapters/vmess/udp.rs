@@ -4,7 +4,7 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::vmess_flow::{VmessUdpFlow, VmessUdpRelayFlow};
+use crate::protocol_runtime::udp::vmess_flow::{self, VmessUdpFlow, VmessUdpRelayFlow};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
 
@@ -55,8 +55,9 @@ impl VmessAdapter {
             "udp_vmess_parse_identity",
             Some((server, *port)),
         )?;
-        dispatch
-            .send_vmess_datagram(VmessUdpFlow {
+        vmess_flow::send_datagram(
+            dispatch,
+            VmessUdpFlow {
                 proxy,
                 session,
                 server,
@@ -68,8 +69,9 @@ impl VmessAdapter {
                 ws: *ws,
                 grpc: *grpc,
                 payload,
-            })
-            .await?;
+            },
+        )
+        .await?;
 
         Ok(FlowStartResult::ManagedFlow {
             session_id: session.id,
@@ -107,8 +109,9 @@ impl VmessAdapter {
             "udp_vmess_relay_final_hop_parse_identity",
             Some((server, *port)),
         )?;
-        dispatch
-            .send_vmess_relay(VmessUdpRelayFlow {
+        vmess_flow::send_relay(
+            dispatch,
+            VmessUdpRelayFlow {
                 proxy,
                 session,
                 carrier,
@@ -117,8 +120,9 @@ impl VmessAdapter {
                 ws: *ws,
                 grpc: *grpc,
                 payload,
-            })
-            .await?;
+            },
+        )
+        .await?;
 
         Ok(FlowStartResult::ManagedFlow {
             session_id: session.id,

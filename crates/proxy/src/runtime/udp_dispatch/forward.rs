@@ -59,7 +59,7 @@ impl UdpDispatch {
                     unreachable!("Relay category maps to a managed relay flow");
                 };
                 match self
-                    .forward_socks5_relay_flow(proxy, flow, managed, payload)
+                    .forward_managed_relay_flow(proxy, flow, managed, payload)
                     .await
                 {
                     Ok(sent) => {

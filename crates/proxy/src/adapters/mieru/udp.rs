@@ -4,9 +4,9 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::mieru_flow::{MieruDatagramSend, MieruRelaySend};
-use crate::protocol_runtime::udp::ProtocolUdpFlowResume;
+use crate::protocol_runtime::udp::{ManagedUdpFlowKind, ProtocolUdpFlowResume};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 use crate::runtime::Proxy;
 
 impl MieruAdapter {
@@ -29,16 +29,20 @@ impl MieruAdapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         dispatch
-            .start_mieru_datagram_flow(MieruDatagramSend {
-                proxy,
+            .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
+                proxy: Some(proxy),
                 tag,
                 session,
+                carrier: None,
+                tls_server_name: None,
                 server,
                 port: *port,
                 resume: ProtocolUdpFlowResume::Mieru(mieru::MieruUdpFlowResume::new(
                     username, password, false,
                 )),
                 payload,
+                kind: ManagedUdpFlowKind::StreamPacket,
+                outbound: ManagedUdpOutboundKind::StreamPacket,
             })
             .await
     }
@@ -62,16 +66,20 @@ impl MieruAdapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         dispatch
-            .start_mieru_relay_flow(MieruRelaySend {
+            .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
+                proxy: None,
                 tag,
                 session,
-                carrier,
+                carrier: Some(carrier),
+                tls_server_name: None,
                 server,
                 port: *port,
                 resume: ProtocolUdpFlowResume::Mieru(mieru::MieruUdpFlowResume::new(
                     username, password, true,
                 )),
                 payload,
+                kind: ManagedUdpFlowKind::RelayStream,
+                outbound: ManagedUdpOutboundKind::StreamPacket,
             })
             .await
     }

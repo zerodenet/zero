@@ -76,6 +76,7 @@ mod types;
 use crate::protocol_runtime::udp::ProtocolUdpState;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::packet_path_chain::PacketPathManager;
+pub(crate) use managed::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
 // UdpDispatch.

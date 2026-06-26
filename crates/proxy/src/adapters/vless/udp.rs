@@ -5,7 +5,7 @@ use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
 use crate::protocol_runtime::udp::vless_flow::{
-    VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream,
+    self, VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream,
 };
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
@@ -58,8 +58,9 @@ impl VlessAdapter {
         let identity =
             parse_vless_udp_identity(id, "udp_vless_parse_identity", Some((server, *port)))?;
 
-        dispatch
-            .send_vless_datagram(VlessUdpFlow {
+        vless_flow::send_datagram(
+            dispatch,
+            VlessUdpFlow {
                 proxy,
                 session,
                 server,
@@ -75,13 +76,14 @@ impl VlessAdapter {
                 split_http: *split_http,
                 quic: *quic,
                 payload,
-            })
-            .await
-            .map_err(|error| FlowFailure {
-                stage: error.stage,
-                error: error.error,
-                upstream: error.upstream,
-            })?;
+            },
+        )
+        .await
+        .map_err(|error| FlowFailure {
+            stage: error.stage,
+            error: error.error,
+            upstream: error.upstream,
+        })?;
 
         Ok(FlowStartResult::ManagedFlow {
             session_id,
@@ -144,8 +146,9 @@ impl VlessAdapter {
         let split_http_cfg = split_http
             .as_ref()
             .expect("udp_relay_needs_two_streams checked split_http is Some");
-        dispatch
-            .send_vless_relay_two_stream(VlessUdpRelayTwoStream {
+        vless_flow::send_relay_two_stream(
+            dispatch,
+            VlessUdpRelayTwoStream {
                 proxy,
                 session,
                 post_carrier,
@@ -153,8 +156,9 @@ impl VlessAdapter {
                 identity,
                 split_http: split_http_cfg,
                 payload,
-            })
-            .await?;
+            },
+        )
+        .await?;
 
         Ok(FlowStartResult::ManagedFlow {
             session_id,
@@ -204,8 +208,9 @@ impl VlessAdapter {
         let tag_owned = (*tag).to_string();
         let identity =
             parse_vless_udp_identity(id, "udp_vless_relay_final_hop_parse_identity", None)?;
-        dispatch
-            .send_vless_relay_final_hop(VlessUdpRelayFinalHop {
+        vless_flow::send_relay_final_hop(
+            dispatch,
+            VlessUdpRelayFinalHop {
                 proxy,
                 session,
                 carrier,
@@ -218,8 +223,9 @@ impl VlessAdapter {
                 http_upgrade: *http_upgrade,
                 split_http: *split_http,
                 payload,
-            })
-            .await?;
+            },
+        )
+        .await?;
 
         Ok(FlowStartResult::ManagedFlow {
             session_id,

@@ -6,9 +6,9 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::shadowsocks_flow::ShadowsocksDatagramSend;
-use crate::protocol_runtime::udp::ProtocolUdpFlowResume;
+use crate::protocol_runtime::udp::{ManagedUdpFlowKind, ProtocolUdpFlowResume};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 use crate::runtime::Proxy;
 
 impl ShadowsocksAdapter {
@@ -123,14 +123,18 @@ impl ShadowsocksAdapter {
             upstream: Some((server.to_string(), *port)),
         })?;
         dispatch
-            .start_shadowsocks_datagram_flow(ShadowsocksDatagramSend {
-                proxy,
+            .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
+                proxy: Some(proxy),
                 tag,
                 session,
+                carrier: None,
+                tls_server_name: None,
                 server,
                 port: *port,
                 resume: ProtocolUdpFlowResume::Shadowsocks(resume),
                 payload,
+                kind: ManagedUdpFlowKind::Datagram,
+                outbound: ManagedUdpOutboundKind::Datagram,
             })
             .await
     }
