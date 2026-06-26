@@ -131,7 +131,7 @@ impl ShadowsocksAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::shadowsocks(resume),
+                resume: ProtocolUdpFlowResume::new(resume),
                 payload,
                 kind: ManagedUdpFlowKind::Datagram,
                 outbound: ManagedUdpOutboundKind::Datagram,

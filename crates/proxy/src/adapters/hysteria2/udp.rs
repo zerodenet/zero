@@ -105,7 +105,7 @@ impl Hysteria2Adapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::hysteria2(hysteria2::Hysteria2UdpFlowResume::new(
+                resume: ProtocolUdpFlowResume::new(hysteria2::Hysteria2UdpFlowResume::new(
                     password,
                     *client_fingerprint,
                 )),

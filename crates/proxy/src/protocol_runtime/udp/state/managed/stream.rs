@@ -1,7 +1,9 @@
 #[cfg(feature = "mieru")]
 use crate::protocol_runtime::udp::mieru_manager::MieruChainManager;
 use crate::protocol_runtime::udp::state::managed::flow_mismatch;
-use crate::protocol_runtime::udp::state::managed::model::{ManagedExistingSend, ManagedRelaySend};
+use crate::protocol_runtime::udp::state::managed::model::{
+    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
+};
 #[cfg(feature = "trojan")]
 use crate::protocol_runtime::udp::trojan_manager::TrojanChainManager;
 use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowSnapshot};
@@ -13,37 +15,29 @@ use tokio::task::JoinSet;
 use crate::protocol_runtime::udp::flows::{ManagedRelayStreamFlow, ManagedStreamPacketFlow};
 
 pub(in crate::protocol_runtime::udp::state::managed) struct ManagedStreamState {
-    #[cfg(feature = "trojan")]
-    trojan: TrojanChainManager,
-    #[cfg(feature = "mieru")]
-    mieru: MieruChainManager,
+    handlers: Vec<Box<dyn ManagedStreamFlowHandler>>,
 }
 
 impl ManagedStreamState {
     pub(in crate::protocol_runtime::udp::state::managed) fn new() -> Self {
-        Self {
+        let handlers: Vec<Box<dyn ManagedStreamFlowHandler>> = vec![
             #[cfg(feature = "trojan")]
-            trojan: TrojanChainManager::new(),
+            (Box::new(TrojanChainManager::new()) as Box<dyn ManagedStreamFlowHandler>),
             #[cfg(feature = "mieru")]
-            mieru: MieruChainManager::new(),
-        }
+            (Box::new(MieruChainManager::new()) as Box<dyn ManagedStreamFlowHandler>),
+        ];
+        Self { handlers }
     }
 
     pub(in crate::protocol_runtime::udp::state::managed) async fn start_stream_packet_flow(
         &mut self,
         request: ManagedStreamPacketFlow<'_>,
     ) -> Result<usize, FlowFailure> {
-        #[cfg(feature = "trojan")]
-        if self.trojan.supports_managed_existing(&request.resume) {
-            return self
-                .trojan
-                .send_managed_existing(ManagedExistingSend::stream_packet(request))
-                .await;
-        }
-        #[cfg(feature = "mieru")]
-        if self.mieru.supports_managed_existing(&request.resume) {
-            return self
-                .mieru
+        for handler in &mut self.handlers {
+            if !handler.supports_managed_existing(&request.resume) {
+                continue;
+            }
+            return handler
                 .send_managed_existing(ManagedExistingSend::stream_packet(request))
                 .await;
         }
@@ -59,17 +53,11 @@ impl ManagedStreamState {
         &mut self,
         request: ManagedRelayStreamFlow<'_>,
     ) -> Result<usize, FlowFailure> {
-        #[cfg(feature = "trojan")]
-        if self.trojan.supports_managed_relay_existing(&request.resume) {
-            return self
-                .trojan
-                .send_managed_relay_existing(ManagedRelaySend::relay_stream(request))
-                .await;
-        }
-        #[cfg(feature = "mieru")]
-        if self.mieru.supports_managed_relay_existing(&request.resume) {
-            return self
-                .mieru
+        for handler in &mut self.handlers {
+            if !handler.supports_managed_relay_existing(&request.resume) {
+                continue;
+            }
+            return handler
                 .send_managed_relay_existing(ManagedRelaySend::relay_stream(request))
                 .await;
         }
@@ -94,26 +82,12 @@ impl ManagedStreamState {
             .upstream()
             .expect("protocol flow should have upstream");
         let resume = snapshot.resume();
-        #[cfg(feature = "trojan")]
-        if self.trojan.supports_managed_existing(resume) {
+        for handler in &mut self.handlers {
+            if !handler.supports_managed_existing(resume) {
+                continue;
+            }
             return Some(
-                self.trojan
-                    .send_managed_existing(ManagedExistingSend::forwarded(
-                        chain_tasks,
-                        proxy,
-                        flow,
-                        resume.clone(),
-                        upstream.server,
-                        upstream.port,
-                        payload,
-                    ))
-                    .await,
-            );
-        }
-        #[cfg(feature = "mieru")]
-        if self.mieru.supports_managed_existing(resume) {
-            return Some(
-                self.mieru
+                handler
                     .send_managed_existing(ManagedExistingSend::forwarded(
                         chain_tasks,
                         proxy,

@@ -28,7 +28,7 @@ pub(crate) async fn send(
     inbound_tag: &str,
     runtime: &mut Socks5UdpRuntime,
 ) -> Result<usize, EngineError> {
-    let Some(resume) = request.resume.as_socks5() else {
+    let Some(resume) = request.resume.as_ref::<socks5::Socks5UdpFlowResume>() else {
         return Err(EngineError::Io(std::io::Error::other(
             "expected SOCKS5 UDP flow resume",
         )));

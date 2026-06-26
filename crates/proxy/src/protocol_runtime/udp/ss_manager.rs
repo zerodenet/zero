@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::state::managed::model::ManagedExistingSend;
+use super::state::managed::model::{ManagedDatagramFlowHandler, ManagedExistingSend};
 use super::FlowFailure;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
@@ -25,11 +25,10 @@ impl SsChainManager {
         }
     }
 
-    pub(in crate::protocol_runtime::udp) fn supports_managed_existing(
-        &self,
-        resume: &ProtocolUdpFlowResume,
-    ) -> bool {
-        resume.as_shadowsocks().is_some()
+    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        resume
+            .as_ref::<shadowsocks::ShadowsocksUdpFlowResume>()
+            .is_some()
     }
 
     async fn send(
@@ -105,11 +104,14 @@ impl SsChainManager {
         .await
     }
 
-    pub(in crate::protocol_runtime::udp) async fn send_managed_existing(
+    async fn send_managed_existing(
         &mut self,
         request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let Some(resume) = request.resume.into_shadowsocks() else {
+        let Some(resume) = request
+            .resume
+            .cloned::<shadowsocks::ShadowsocksUdpFlowResume>()
+        else {
             return Err(managed_mismatch(
                 "udp_shadowsocks_resume",
                 request.server,
@@ -137,6 +139,20 @@ impl SsChainManager {
             payload: request.payload,
         })
         .await
+    }
+}
+
+#[async_trait::async_trait]
+impl ManagedDatagramFlowHandler for SsChainManager {
+    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        SsChainManager::supports_managed_existing(self, resume)
+    }
+
+    async fn send_managed_existing(
+        &mut self,
+        request: ManagedExistingSend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        SsChainManager::send_managed_existing(self, request).await
     }
 }
 

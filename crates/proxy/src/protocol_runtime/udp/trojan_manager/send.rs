@@ -5,7 +5,9 @@ use super::model::{
     TrojanKey, TrojanRelayExisting, TrojanRelaySend, TrojanSendExisting, TrojanUdpPeer,
 };
 use super::{bridge, establish, TrojanChainManager};
-use crate::protocol_runtime::udp::state::managed::model::{ManagedExistingSend, ManagedRelaySend};
+use crate::protocol_runtime::udp::state::managed::model::{
+    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
+};
 use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowResume};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
@@ -13,18 +15,12 @@ use crate::runtime::Proxy;
 use zero_core::UdpFlowPacket;
 
 impl TrojanChainManager {
-    pub(in crate::protocol_runtime::udp) fn supports_managed_existing(
-        &self,
-        resume: &ProtocolUdpFlowResume,
-    ) -> bool {
-        resume.as_trojan().is_some()
+    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        resume.as_ref::<trojan::TrojanUdpFlowResume>().is_some()
     }
 
-    pub(in crate::protocol_runtime::udp) fn supports_managed_relay_existing(
-        &self,
-        resume: &ProtocolUdpFlowResume,
-    ) -> bool {
-        resume.as_trojan().is_some()
+    fn supports_managed_relay_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        resume.as_ref::<trojan::TrojanUdpFlowResume>().is_some()
     }
 
     async fn send(
@@ -185,11 +181,11 @@ impl TrojanChainManager {
         .await
     }
 
-    pub(in crate::protocol_runtime::udp) async fn send_managed_existing(
+    async fn send_managed_existing(
         &mut self,
         request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let Some(resume) = request.resume.into_trojan() else {
+        let Some(resume) = request.resume.cloned::<trojan::TrojanUdpFlowResume>() else {
             return Err(managed_mismatch(
                 "udp_trojan_resume",
                 request.server,
@@ -220,11 +216,11 @@ impl TrojanChainManager {
         .await
     }
 
-    pub(in crate::protocol_runtime::udp) async fn send_managed_relay_existing(
+    async fn send_managed_relay_existing(
         &mut self,
         request: ManagedRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let Some(resume) = request.resume.into_trojan() else {
+        let Some(resume) = request.resume.cloned::<trojan::TrojanUdpFlowResume>() else {
             return Err(managed_mismatch(
                 "udp_trojan_resume",
                 request.server,
@@ -255,6 +251,31 @@ impl TrojanChainManager {
             payload: request.payload,
         })
         .await
+    }
+}
+
+#[async_trait::async_trait]
+impl ManagedStreamFlowHandler for TrojanChainManager {
+    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        TrojanChainManager::supports_managed_existing(self, resume)
+    }
+
+    fn supports_managed_relay_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        TrojanChainManager::supports_managed_relay_existing(self, resume)
+    }
+
+    async fn send_managed_existing(
+        &mut self,
+        request: ManagedExistingSend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        TrojanChainManager::send_managed_existing(self, request).await
+    }
+
+    async fn send_managed_relay_existing(
+        &mut self,
+        request: ManagedRelaySend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        TrojanChainManager::send_managed_relay_existing(self, request).await
     }
 }
 

@@ -25,7 +25,7 @@ pub(crate) struct ProtocolUdpFlowResume {
 }
 
 impl ProtocolUdpFlowResume {
-    fn new<T>(resume: T) -> Self
+    pub(crate) fn new<T>(resume: T) -> Self
     where
         T: Any + Send + Sync + std::fmt::Debug,
     {
@@ -34,86 +34,18 @@ impl ProtocolUdpFlowResume {
         }
     }
 
-    fn as_resume<T>(&self) -> Option<&T>
+    pub(crate) fn as_ref<T>(&self) -> Option<&T>
     where
         T: Any,
     {
         self.inner.as_any().downcast_ref::<T>()
     }
 
-    fn clone_resume<T>(self) -> Option<T>
+    pub(crate) fn cloned<T>(self) -> Option<T>
     where
         T: Any + Clone,
     {
-        self.as_resume::<T>().cloned()
-    }
-
-    pub(crate) fn socks5(resume: socks5::Socks5UdpFlowResume) -> Self {
-        Self::new(resume)
-    }
-
-    pub(crate) fn as_socks5(&self) -> Option<&socks5::Socks5UdpFlowResume> {
-        self.as_resume()
-    }
-
-    #[cfg(feature = "shadowsocks")]
-    pub(crate) fn shadowsocks(resume: shadowsocks::ShadowsocksUdpFlowResume) -> Self {
-        Self::new(resume)
-    }
-
-    #[cfg(feature = "shadowsocks")]
-    pub(crate) fn as_shadowsocks(&self) -> Option<&shadowsocks::ShadowsocksUdpFlowResume> {
-        self.as_resume()
-    }
-
-    #[cfg(feature = "shadowsocks")]
-    pub(crate) fn into_shadowsocks(self) -> Option<shadowsocks::ShadowsocksUdpFlowResume> {
-        self.clone_resume()
-    }
-
-    #[cfg(feature = "hysteria2")]
-    pub(crate) fn hysteria2(resume: hysteria2::Hysteria2UdpFlowResume) -> Self {
-        Self::new(resume)
-    }
-
-    #[cfg(feature = "hysteria2")]
-    pub(crate) fn as_hysteria2(&self) -> Option<&hysteria2::Hysteria2UdpFlowResume> {
-        self.as_resume()
-    }
-
-    #[cfg(feature = "hysteria2")]
-    pub(crate) fn into_hysteria2(self) -> Option<hysteria2::Hysteria2UdpFlowResume> {
-        self.clone_resume()
-    }
-
-    #[cfg(feature = "trojan")]
-    pub(crate) fn trojan(resume: trojan::TrojanUdpFlowResume) -> Self {
-        Self::new(resume)
-    }
-
-    #[cfg(feature = "trojan")]
-    pub(crate) fn as_trojan(&self) -> Option<&trojan::TrojanUdpFlowResume> {
-        self.as_resume()
-    }
-
-    #[cfg(feature = "trojan")]
-    pub(crate) fn into_trojan(self) -> Option<trojan::TrojanUdpFlowResume> {
-        self.clone_resume()
-    }
-
-    #[cfg(feature = "mieru")]
-    pub(crate) fn mieru(resume: mieru::MieruUdpFlowResume) -> Self {
-        Self::new(resume)
-    }
-
-    #[cfg(feature = "mieru")]
-    pub(crate) fn as_mieru(&self) -> Option<&mieru::MieruUdpFlowResume> {
-        self.as_resume()
-    }
-
-    #[cfg(feature = "mieru")]
-    pub(crate) fn into_mieru(self) -> Option<mieru::MieruUdpFlowResume> {
-        self.clone_resume()
+        self.as_ref::<T>().cloned()
     }
 }
 

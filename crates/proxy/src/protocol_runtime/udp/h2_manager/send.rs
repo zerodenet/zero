@@ -1,4 +1,4 @@
-use super::super::state::managed::model::ManagedExistingSend;
+use super::super::state::managed::model::{ManagedDatagramFlowHandler, ManagedExistingSend};
 use super::super::FlowFailure;
 use super::super::ProtocolUdpFlowResume;
 use super::model::{H2Entry, H2Key, H2SendExisting, H2UdpPeer};
@@ -8,11 +8,10 @@ use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use zero_core::UdpFlowPacket;
 
 impl H2ChainManager {
-    pub(in crate::protocol_runtime::udp) fn supports_managed_existing(
-        &self,
-        resume: &ProtocolUdpFlowResume,
-    ) -> bool {
-        resume.as_hysteria2().is_some()
+    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        resume
+            .as_ref::<hysteria2::Hysteria2UdpFlowResume>()
+            .is_some()
     }
 
     async fn send(
@@ -87,11 +86,11 @@ impl H2ChainManager {
         .await
     }
 
-    pub(in crate::protocol_runtime::udp) async fn send_managed_existing(
+    async fn send_managed_existing(
         &mut self,
         request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let Some(resume) = request.resume.into_hysteria2() else {
+        let Some(resume) = request.resume.cloned::<hysteria2::Hysteria2UdpFlowResume>() else {
             return Err(managed_mismatch(
                 "udp_hysteria2_resume",
                 request.server,
@@ -110,6 +109,20 @@ impl H2ChainManager {
             payload: request.payload,
         })
         .await
+    }
+}
+
+#[async_trait::async_trait]
+impl ManagedDatagramFlowHandler for H2ChainManager {
+    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        H2ChainManager::supports_managed_existing(self, resume)
+    }
+
+    async fn send_managed_existing(
+        &mut self,
+        request: ManagedExistingSend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        H2ChainManager::send_managed_existing(self, request).await
     }
 }
 

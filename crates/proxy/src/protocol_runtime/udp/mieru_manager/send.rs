@@ -3,7 +3,9 @@ use zero_engine::EngineError;
 
 use super::model::{MieruKey, MieruRelayExisting, MieruSendExisting, MieruUdpPeer};
 use super::{bridge, establish, MieruChainManager};
-use crate::protocol_runtime::udp::state::managed::model::{ManagedExistingSend, ManagedRelaySend};
+use crate::protocol_runtime::udp::state::managed::model::{
+    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
+};
 use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowResume};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
@@ -11,18 +13,12 @@ use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 impl MieruChainManager {
-    pub(in crate::protocol_runtime::udp) fn supports_managed_existing(
-        &self,
-        resume: &ProtocolUdpFlowResume,
-    ) -> bool {
-        resume.as_mieru().is_some()
+    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        resume.as_ref::<mieru::MieruUdpFlowResume>().is_some()
     }
 
-    pub(in crate::protocol_runtime::udp) fn supports_managed_relay_existing(
-        &self,
-        resume: &ProtocolUdpFlowResume,
-    ) -> bool {
-        resume.as_mieru().is_some()
+    fn supports_managed_relay_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        resume.as_ref::<mieru::MieruUdpFlowResume>().is_some()
     }
 
     async fn send(
@@ -180,11 +176,11 @@ impl MieruChainManager {
         .await
     }
 
-    pub(in crate::protocol_runtime::udp) async fn send_managed_existing(
+    async fn send_managed_existing(
         &mut self,
         request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let Some(resume) = request.resume.into_mieru() else {
+        let Some(resume) = request.resume.cloned::<mieru::MieruUdpFlowResume>() else {
             return Err(managed_mismatch(
                 "udp_mieru_resume",
                 request.server,
@@ -215,11 +211,11 @@ impl MieruChainManager {
         .await
     }
 
-    pub(in crate::protocol_runtime::udp) async fn send_managed_relay_existing(
+    async fn send_managed_relay_existing(
         &mut self,
         request: ManagedRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let Some(resume) = request.resume.into_mieru() else {
+        let Some(resume) = request.resume.cloned::<mieru::MieruUdpFlowResume>() else {
             return Err(managed_mismatch(
                 "udp_mieru_resume",
                 request.server,
@@ -239,6 +235,31 @@ impl MieruChainManager {
             payload: request.payload,
         })
         .await
+    }
+}
+
+#[async_trait::async_trait]
+impl ManagedStreamFlowHandler for MieruChainManager {
+    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        MieruChainManager::supports_managed_existing(self, resume)
+    }
+
+    fn supports_managed_relay_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        MieruChainManager::supports_managed_relay_existing(self, resume)
+    }
+
+    async fn send_managed_existing(
+        &mut self,
+        request: ManagedExistingSend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        MieruChainManager::send_managed_existing(self, request).await
+    }
+
+    async fn send_managed_relay_existing(
+        &mut self,
+        request: ManagedRelaySend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        MieruChainManager::send_managed_relay_existing(self, request).await
     }
 }
 

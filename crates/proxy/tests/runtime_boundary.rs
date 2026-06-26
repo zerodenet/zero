@@ -2997,7 +2997,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
             && managed.contains("start_tracked_managed_protocol_udp")
             && managed.contains("forward_managed_relay_flow")
             && socks5_adapter.contains("ManagedUdpFlowKind::RelayStream")
-            && socks5_adapter.contains("ProtocolUdpFlowResume::socks5")
+            && socks5_adapter.contains("ProtocolUdpFlowResume::new")
             && !managed.contains("Socks5UdpPacketSend")
             && !managed.contains("username: Option<&'a str>")
             && !managed.contains("password: Option<&'a str>")
@@ -3412,9 +3412,15 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         snapshot.contains("trait ProtocolUdpFlowResumeObject")
             && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
             && snapshot.contains("downcast_ref::<T>()")
-            && resume_model.contains("pub(crate) fn socks5(")
-            && resume_model.contains("pub(crate) fn as_socks5(")
+            && resume_model.contains("pub(crate) fn new<T>(")
+            && resume_model.contains("pub(crate) fn as_ref<T>(")
+            && resume_model.contains("pub(crate) fn cloned<T>(")
             && !snapshot.contains("pub(crate) enum ProtocolUdpFlowResume")
+            && !resume_model.contains("socks5::")
+            && !resume_model.contains("shadowsocks::")
+            && !resume_model.contains("hysteria2::")
+            && !resume_model.contains("trojan::")
+            && !resume_model.contains("mieru::")
             && !resume_model.contains("Socks5(socks5::Socks5UdpFlowResume)")
             && !resume_model.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
             && !resume_model.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
@@ -3734,9 +3740,10 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
             && state.contains("start_managed_datagram_flow")
             && datagram.contains("self.managed.start_datagram_flow")
             && managed.contains("ManagedDatagramState")
-            && managed_datagram.contains("supports_managed_existing(&flow.resume)")
+            && managed_datagram.contains("handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>")
+            && managed_datagram.contains("for handler in &mut self.handlers")
             && managed_datagram.contains("ManagedExistingSend::datagram"),
-        "managed datagram UDP flow kind should delegate resume recognition to protocol managers"
+        "managed datagram UDP flow kind should dispatch through registered datagram handlers"
     );
 }
 
@@ -3797,11 +3804,11 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
             && stream.contains("self.managed.start_stream_packet_flow")
             && stream.contains("self.managed.start_relay_stream_flow")
             && managed.contains("ManagedStreamState")
-            && managed_stream.contains("supports_managed_existing(&request.resume)")
-            && managed_stream.contains("supports_managed_relay_existing(&request.resume)")
+            && managed_stream.contains("handlers: Vec<Box<dyn ManagedStreamFlowHandler>>")
+            && managed_stream.contains("for handler in &mut self.handlers")
             && managed_stream.contains("ManagedExistingSend::stream_packet")
             && managed_stream.contains("ManagedRelaySend::relay_stream"),
-        "stream-packet and relay-stream UDP flow kinds should delegate resume recognition to protocol managers"
+        "stream-packet and relay-stream UDP flow kinds should dispatch through registered stream handlers"
     );
 }
 
@@ -5118,6 +5125,8 @@ fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
 fn protocol_udp_state_manager_fields_are_not_crate_public() {
     let content = read("src/protocol_runtime/udp/state.rs");
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
+    let datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
+    let stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
 
     for field in [
         "vless",
@@ -5143,14 +5152,16 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
             && managed.contains("vless: VlessUdpOutboundManager")
             && managed.contains("datagram: ManagedDatagramState")
             && managed.contains("stream: ManagedStreamState")
+            && datagram.contains("handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>")
+            && stream.contains("handlers: Vec<Box<dyn ManagedStreamFlowHandler>>")
             && !managed.contains("pub(crate) vless:")
             && !managed.contains("pub(super) vless:")
             && !managed.contains("pub(crate) shadowsocks:")
             && !managed.contains("pub(super) shadowsocks:")
-            && !managed.contains("shadowsocks: SsChainManager")
-            && !managed.contains("hysteria2: H2ChainManager")
-            && !managed.contains("trojan: TrojanChainManager")
-            && !managed.contains("mieru: MieruChainManager"),
+            && !datagram.contains("shadowsocks: SsChainManager")
+            && !datagram.contains("hysteria2: H2ChainManager")
+            && !stream.contains("trojan: TrojanChainManager")
+            && !stream.contains("mieru: MieruChainManager"),
         "ProtocolUdpState should expose one managed UDP sub-state instead of protocol manager fields"
     );
 }
@@ -5376,6 +5387,7 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     let normalized_forward = forward.replace("\r\n", "\n");
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
     let managed_datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
+    let managed_model = read("src/protocol_runtime/udp/state/managed/model.rs");
     let managed_stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
     let socks5_runtime = read("src/protocol_runtime/socks5_udp/runtime.rs");
 
@@ -5402,15 +5414,17 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         normalized_forward.contains("self\n            .managed\n            .forward_existing_flow")
             && forward.contains("self.socks5.handles_resume(snapshot.resume())")
             && socks5_runtime.contains("fn handles_resume(&self, resume: &ProtocolUdpFlowResume)")
-            && socks5_runtime.contains("resume.as_socks5().is_some()")
+            && socks5_runtime.contains("resume.as_ref::<socks5::Socks5UdpFlowResume>()")
             && managed.contains("fn forward_existing_flow")
+            && managed_model.contains("trait ManagedDatagramFlowHandler")
+            && managed_model.contains("trait ManagedStreamFlowHandler")
             && managed_datagram.contains("ManagedExistingSend")
             && managed_datagram.contains("send_managed_existing")
-            && managed_datagram.contains("supports_managed_existing(resume)")
+            && managed_datagram.contains("for handler in &mut self.handlers")
             && managed_stream.contains("ManagedExistingSend")
             && managed_stream.contains("send_managed_existing")
-            && managed_stream.contains("supports_managed_existing(resume)"),
-        "existing UDP protocol-flow handling should delegate neutral send requests to ManagedProtocolUdpState"
+            && managed_stream.contains("for handler in &mut self.handlers"),
+        "existing UDP protocol-flow handling should dispatch neutral send requests through managed handlers"
     );
     for forbidden in [
         "SsSendExisting",
@@ -5427,6 +5441,21 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         assert!(
             !managed.contains(forbidden),
             "ManagedProtocolUdpState should not construct protocol manager request model `{forbidden}`"
+        );
+    }
+    for forbidden in [
+        "shadowsocks: SsChainManager",
+        "hysteria2: H2ChainManager",
+        "trojan: TrojanChainManager",
+        "mieru: MieruChainManager",
+        "self.shadowsocks",
+        "self.hysteria2",
+        "self.trojan",
+        "self.mieru",
+    ] {
+        assert!(
+            !managed_datagram.contains(forbidden) && !managed_stream.contains(forbidden),
+            "managed UDP sub-states should dispatch through handler lists, not protocol field `{forbidden}`"
         );
     }
 }
@@ -7876,7 +7905,13 @@ fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
     }
     assert!(
         snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
-            && snapshot.contains("pub(crate) fn socks5(")
+            && snapshot.contains("pub(crate) fn new<T>(")
+            && snapshot.contains("pub(crate) fn as_ref<T>(")
+            && !snapshot.contains("socks5::")
+            && !snapshot.contains("shadowsocks::")
+            && !snapshot.contains("hysteria2::")
+            && !snapshot.contains("trojan::")
+            && !snapshot.contains("mieru::")
             && !snapshot.contains("Socks5(socks5::Socks5UdpFlowResume)")
             && snapshot.contains("Self::Managed {"),
         "SOCKS5 UDP snapshot state should use the unified ProtocolUdpFlowResume wrapper"

@@ -39,7 +39,7 @@ impl TrojanAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::trojan(trojan::TrojanUdpFlowResume::new(
+                resume: ProtocolUdpFlowResume::new(trojan::TrojanUdpFlowResume::new(
                     password,
                     *sni,
                     *insecure,
@@ -83,7 +83,7 @@ impl TrojanAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::trojan(trojan::TrojanUdpFlowResume::new(
+                resume: ProtocolUdpFlowResume::new(trojan::TrojanUdpFlowResume::new(
                     password,
                     *sni,
                     *insecure,

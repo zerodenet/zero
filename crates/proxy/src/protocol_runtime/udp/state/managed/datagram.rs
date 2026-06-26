@@ -2,7 +2,9 @@
 use crate::protocol_runtime::udp::h2_manager::H2ChainManager;
 #[cfg(feature = "shadowsocks")]
 use crate::protocol_runtime::udp::ss_manager::SsChainManager;
-use crate::protocol_runtime::udp::state::managed::model::ManagedExistingSend;
+use crate::protocol_runtime::udp::state::managed::model::{
+    ManagedDatagramFlowHandler, ManagedExistingSend,
+};
 use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowSnapshot};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
@@ -12,20 +14,18 @@ use tokio::task::JoinSet;
 use crate::protocol_runtime::udp::flows::ManagedDatagramFlow;
 
 pub(in crate::protocol_runtime::udp::state::managed) struct ManagedDatagramState {
-    #[cfg(feature = "shadowsocks")]
-    shadowsocks: SsChainManager,
-    #[cfg(feature = "hysteria2")]
-    hysteria2: H2ChainManager,
+    handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>,
 }
 
 impl ManagedDatagramState {
     pub(in crate::protocol_runtime::udp::state::managed) fn new() -> Self {
-        Self {
+        let handlers: Vec<Box<dyn ManagedDatagramFlowHandler>> = vec![
             #[cfg(feature = "shadowsocks")]
-            shadowsocks: SsChainManager::new(),
+            (Box::new(SsChainManager::new()) as Box<dyn ManagedDatagramFlowHandler>),
             #[cfg(feature = "hysteria2")]
-            hysteria2: H2ChainManager::new(),
-        }
+            (Box::new(H2ChainManager::new()) as Box<dyn ManagedDatagramFlowHandler>),
+        ];
+        Self { handlers }
     }
 
     pub(in crate::protocol_runtime::udp::state::managed) async fn start_datagram_flow(
@@ -33,18 +33,12 @@ impl ManagedDatagramState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: ManagedDatagramFlow<'_>,
     ) -> Option<Result<usize, FlowFailure>> {
-        #[cfg(feature = "shadowsocks")]
-        if self.shadowsocks.supports_managed_existing(&flow.resume) {
+        for handler in &mut self.handlers {
+            if !handler.supports_managed_existing(&flow.resume) {
+                continue;
+            }
             return Some(
-                self.shadowsocks
-                    .send_managed_existing(ManagedExistingSend::datagram(chain_tasks, &flow))
-                    .await,
-            );
-        }
-        #[cfg(feature = "hysteria2")]
-        if self.hysteria2.supports_managed_existing(&flow.resume) {
-            return Some(
-                self.hysteria2
+                handler
                     .send_managed_existing(ManagedExistingSend::datagram(chain_tasks, &flow))
                     .await,
             );
@@ -65,26 +59,12 @@ impl ManagedDatagramState {
             .upstream()
             .expect("protocol flow should have upstream");
         let resume = snapshot.resume();
-        #[cfg(feature = "shadowsocks")]
-        if self.shadowsocks.supports_managed_existing(resume) {
+        for handler in &mut self.handlers {
+            if !handler.supports_managed_existing(resume) {
+                continue;
+            }
             return Some(
-                self.shadowsocks
-                    .send_managed_existing(ManagedExistingSend::forwarded(
-                        chain_tasks,
-                        proxy,
-                        flow,
-                        resume.clone(),
-                        upstream.server,
-                        upstream.port,
-                        payload,
-                    ))
-                    .await,
-            );
-        }
-        #[cfg(feature = "hysteria2")]
-        if self.hysteria2.supports_managed_existing(resume) {
-            return Some(
-                self.hysteria2
+                handler
                     .send_managed_existing(ManagedExistingSend::forwarded(
                         chain_tasks,
                         proxy,
