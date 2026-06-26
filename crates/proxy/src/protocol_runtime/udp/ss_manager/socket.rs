@@ -37,8 +37,8 @@ async fn recv_loop(
                 break;
             }
         };
-        let packet = &buf[..n];
-        let Some((target, port, payload)) = resume.decode_packet(packet) else {
+        let datagram = &buf[..n];
+        let Some(packet) = resume.decode_flow_packet(datagram) else {
             warn!(
                 upstream = %sender,
                 bytes = n,
@@ -46,6 +46,7 @@ async fn recv_loop(
             );
             continue;
         };
+        let (target, port, payload) = packet.into_parts();
         debug!(
             upstream = %sender,
             target = ?target,

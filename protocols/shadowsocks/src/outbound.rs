@@ -209,6 +209,33 @@ pub struct ShadowsocksUdpPacket {
 }
 
 #[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksUdpFlowPacket {
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpFlowPacket {
+    pub fn from_parts(target: &Address, port: u16, payload: &[u8]) -> Self {
+        Self {
+            target: target.clone(),
+            port,
+            payload: payload.to_vec(),
+        }
+    }
+
+    pub fn encode_with(&self, resume: &ShadowsocksUdpFlowResume) -> Result<Vec<u8>, Error> {
+        resume.encode_flow_packet(self)
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
+}
+
+#[cfg(feature = "crypto")]
 impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecodeContext<'a>>
     for ShadowsocksOutbound
 {
@@ -444,18 +471,26 @@ impl ShadowsocksUdpFlowResume {
         udp_flow_codec(self.cipher, &self.password)
     }
 
-    pub fn encode_packet(
+    fn encode_flow_packet(
         &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
+        packet: &ShadowsocksUdpFlowPacket,
     ) -> Result<alloc::vec::Vec<u8>, Error> {
-        encode_udp_flow_packet(target, port, payload, self.cipher, &self.password)
+        encode_udp_flow_packet(
+            &packet.target,
+            packet.port,
+            &packet.payload,
+            self.cipher,
+            &self.password,
+        )
     }
 
-    pub fn decode_packet(&self, data: &[u8]) -> Option<(Address, u16, alloc::vec::Vec<u8>)> {
+    pub fn decode_flow_packet(&self, data: &[u8]) -> Option<ShadowsocksUdpFlowPacket> {
         let decoded = decode_udp_flow_packet(data, self.cipher, &self.password).ok()?;
-        Some((decoded.target, decoded.port, decoded.payload))
+        Some(ShadowsocksUdpFlowPacket {
+            target: decoded.target,
+            port: decoded.port,
+            payload: decoded.payload,
+        })
     }
 }
 

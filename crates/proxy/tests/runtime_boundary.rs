@@ -6014,10 +6014,17 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && protocol_outbound.contains("pub fn from_config(")
             && protocol_outbound
                 .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec")
-            && protocol_outbound.contains("pub fn encode_packet(")
-            && protocol_outbound.contains("pub fn decode_packet(&self"),
+            && protocol_outbound.contains("struct ShadowsocksUdpFlowPacket")
+            && protocol_outbound.contains("pub fn encode_with(")
+            && protocol_outbound.contains("pub fn decode_flow_packet(&self"),
         "Shadowsocks adapter and UDP manager should consume protocol-owned UDP flow packet helpers"
     );
+    for forbidden in [".encode_packet(", ".decode_packet("] {
+        assert!(
+            !manager.contains(forbidden) && !socket.contains(forbidden),
+            "Shadowsocks UDP manager glue should not call raw protocol packet codec operations directly; found `{forbidden}`"
+        );
+    }
 }
 
 #[test]

@@ -52,9 +52,13 @@ impl SsChainManager {
 
         let entry = entry::ensure(&mut self.upstreams, peer.leaf_key, resume, target_addr);
 
-        let packet = entry
-            .resume
-            .encode_packet(packet_ref.target, packet_ref.port, packet_ref.payload)
+        let packet = shadowsocks::ShadowsocksUdpFlowPacket::from_parts(
+            packet_ref.target,
+            packet_ref.port,
+            packet_ref.payload,
+        );
+        let datagram = packet
+            .encode_with(&entry.resume)
             .map_err(|error| FlowFailure {
                 stage: "ss_encode",
                 error: EngineError::from(error),
@@ -62,7 +66,7 @@ impl SsChainManager {
             })?;
 
         let response_rx = entry.waiters.register(packet_ref.target, packet_ref.port);
-        if let Err(e) = entry.socket.send_to(&packet, target_addr).await {
+        if let Err(e) = entry.socket.send_to(&datagram, target_addr).await {
             entry.waiters.remove(packet_ref.target, packet_ref.port);
             return Err(FlowFailure {
                 stage: "ss_send",
