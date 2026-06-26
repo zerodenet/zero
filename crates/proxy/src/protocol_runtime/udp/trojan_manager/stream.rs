@@ -19,7 +19,8 @@ pub(super) async fn spawn_packet_stream(
     password: &str,
 ) -> Result<PacketStream, EngineError> {
     let mut metered = MeteredStream::new(stream);
-    trojan::establish_udp_packet_tunnel(&mut metered, session, password).await?;
+    let flow_io = trojan::TrojanUdpFlowIo;
+    flow_io.establish(&mut metered, session, password).await?;
 
     let (read_half, write_half) = tokio::io::split(metered.into_inner());
     let (send_tx, send_rx) = mpsc::channel::<TrojanPacket>(32);
@@ -33,15 +34,17 @@ pub(super) async fn spawn_packet_stream(
 
 fn spawn_send_task(mut send_rx: mpsc::Receiver<TrojanPacket>, mut send_stream: WriteOnlySocket) {
     tokio::spawn(async move {
+        let flow_io = trojan::TrojanUdpFlowIo;
         while let Some(packet) = send_rx.recv().await {
-            if trojan::write_udp_flow_packet(
-                &mut send_stream,
-                &packet.target,
-                packet.port,
-                &packet.payload,
-            )
-            .await
-            .is_err()
+            if flow_io
+                .write_packet(
+                    &mut send_stream,
+                    &packet.target,
+                    packet.port,
+                    &packet.payload,
+                )
+                .await
+                .is_err()
             {
                 break;
             }
@@ -51,7 +54,8 @@ fn spawn_send_task(mut send_rx: mpsc::Receiver<TrojanPacket>, mut send_stream: W
 
 fn spawn_recv_task(mut recv_stream: ReadOnlySocket, recv_tx: broadcast::Sender<TrojanPacket>) {
     tokio::spawn(async move {
-        while let Ok(packet) = trojan::read_udp_flow_packet(&mut recv_stream).await {
+        let flow_io = trojan::TrojanUdpFlowIo;
+        while let Ok(packet) = flow_io.read_packet(&mut recv_stream).await {
             let packet = TrojanPacket {
                 target: packet.target,
                 port: packet.port,

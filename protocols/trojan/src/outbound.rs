@@ -92,6 +92,43 @@ pub struct TrojanUdpPacket {
     pub payload: Vec<u8>,
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct TrojanUdpFlowIo;
+
+impl TrojanUdpFlowIo {
+    pub async fn establish<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+        password: &str,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        establish_udp_packet_tunnel(stream, session, password).await
+    }
+
+    pub async fn write_packet<S>(
+        &self,
+        stream: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        write_udp_flow_packet(stream, target, port, payload).await
+    }
+
+    pub async fn read_packet<S>(&self, stream: &mut S) -> Result<TrojanUdpPacket, Error>
+    where
+        S: AsyncSocket,
+    {
+        read_udp_flow_packet(stream).await
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrojanUdpFlowResume {
     password: String,

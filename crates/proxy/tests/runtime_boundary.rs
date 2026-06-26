@@ -5215,6 +5215,9 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "UdpPacketStreamFraming",
         "write_udp_packet",
         "read_udp_packet",
+        "establish_udp_packet_tunnel",
+        "read_udp_flow_packet",
+        "write_udp_flow_packet",
         "TrojanUdpPacket {",
         "trojan::TrojanUdpPacket",
         "use trojan::TrojanUdpPacket",
@@ -5238,9 +5241,8 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "Trojan UDP manager stream should use flow-specific protocol helpers instead of generic UDP helpers"
     );
     assert!(
-        stream.contains("trojan::write_udp_flow_packet")
-            && stream.contains("trojan::read_udp_flow_packet"),
-        "Trojan UDP packet stream tasks should delegate packet framing to flow-specific protocols/trojan helpers"
+        stream.contains("trojan::TrojanUdpFlowIo") && !stream.contains("trojan::TrojanUdpPacket"),
+        "Trojan UDP packet stream tasks should delegate packet framing to a protocol-owned flow I/O helper"
     );
 }
 
@@ -5505,8 +5507,10 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
         "Trojan UDP establish glue should build proxy-owned TrojanPacket models"
     );
     assert!(
-        stream.contains("trojan::establish_udp_packet_tunnel"),
-        "Trojan UDP packet stream should call protocols/trojan tunnel helper"
+        stream.contains("trojan::TrojanUdpFlowIo")
+            && stream.contains(".establish(")
+            && !stream.contains("trojan::establish_udp_packet_tunnel"),
+        "Trojan UDP packet stream should call the protocols/trojan flow I/O helper"
     );
 }
 

@@ -16,7 +16,7 @@ pub use metadata::TrojanProtocol;
 pub use outbound::{
     build_udp_request, establish_udp_packet_tunnel, read_inbound_udp_packet, read_udp_flow_packet,
     write_udp_flow_packet, write_udp_response, TrojanOutbound, TrojanTcpTunnelTarget,
-    TrojanUdpFlowResume, TrojanUdpPacket, TrojanUdpPacketTunnelTarget,
+    TrojanUdpFlowIo, TrojanUdpFlowResume, TrojanUdpPacket, TrojanUdpPacketTunnelTarget,
 };
 pub use shared::{
     build_udp_packet, read_password, read_request, read_udp_packet, write_password, write_request,
