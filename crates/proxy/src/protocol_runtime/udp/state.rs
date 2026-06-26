@@ -23,11 +23,9 @@ use super::mieru_manager::MieruChainManager;
 use super::ss_manager::SsChainManager;
 #[cfg(feature = "trojan")]
 use super::trojan_manager::TrojanChainManager;
-use crate::runtime::udp_flow::packet_path_chain::PacketPathManager;
 
 mod cached;
 mod forward;
-mod packet_path;
 
 pub(crate) struct ProtocolUdpState {
     pub(super) socks5: Socks5UdpRuntime,
@@ -36,7 +34,6 @@ pub(crate) struct ProtocolUdpState {
     pub(super) vmess: VmessUdpOutboundManager,
     #[cfg(feature = "shadowsocks")]
     pub(super) shadowsocks: SsChainManager,
-    pub(super) packet_path: PacketPathManager,
     #[cfg(feature = "trojan")]
     pub(super) trojan: TrojanChainManager,
     #[cfg(feature = "mieru")]
@@ -54,7 +51,6 @@ impl ProtocolUdpState {
             vmess: VmessUdpOutboundManager::new(),
             #[cfg(feature = "shadowsocks")]
             shadowsocks: SsChainManager::new(),
-            packet_path: PacketPathManager::new(),
             #[cfg(feature = "trojan")]
             trojan: TrojanChainManager::new(),
             #[cfg(feature = "mieru")]

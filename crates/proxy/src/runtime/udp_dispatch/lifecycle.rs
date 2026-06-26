@@ -13,6 +13,7 @@ use crate::protocol_runtime::udp::ProtocolUdpState;
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::managed::ManagedUdpFlows;
 use crate::runtime::udp_flow::packet_path::ChainTask;
+use crate::runtime::udp_flow::packet_path_chain::PacketPathManager;
 use crate::runtime::udp_flow::sessions::CompletedUdpFlow;
 use crate::runtime::udp_flow::sessions::UdpSessionFlows;
 use crate::runtime::udp_helpers::send_direct_udp_packet;
@@ -26,6 +27,7 @@ impl UdpDispatch {
             flows: UdpSessionFlows::default(),
             direct_socket,
             protocol_state: ProtocolUdpState::new(),
+            packet_path: PacketPathManager::new(),
             managed_flows: ManagedUdpFlows::default(),
             chain_tasks: JoinSet::new(),
         })
@@ -39,6 +41,7 @@ impl UdpDispatch {
             flows: UdpSessionFlows::default(),
             direct_socket,
             protocol_state: ProtocolUdpState::new(),
+            packet_path: PacketPathManager::new(),
             managed_flows: ManagedUdpFlows::default(),
             chain_tasks: JoinSet::new(),
         }

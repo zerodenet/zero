@@ -3358,6 +3358,14 @@ fn udp_dispatch_keeps_protocol_managers_in_protocol_runtime_state() {
         state.contains("socks5: Socks5UdpRuntime"),
         "ProtocolUdpState should own the SOCKS5 UDP association facade"
     );
+    assert!(
+        content.contains("packet_path: PacketPathManager"),
+        "UdpDispatch should own the generic packet-path manager"
+    );
+    assert!(
+        !state.contains("PacketPathManager") && !state.contains("packet_path:"),
+        "ProtocolUdpState should not own generic packet-path runtime infrastructure"
+    );
 
     for forbidden in [
         "socks5_upstream:",
@@ -3366,7 +3374,6 @@ fn udp_dispatch_keeps_protocol_managers_in_protocol_runtime_state() {
         "vless_manager:",
         "vmess_manager:",
         "ss_manager:",
-        "packet_path_manager:",
         "trojan_manager:",
         "mieru_manager:",
         "h2_manager:",
@@ -4947,16 +4954,24 @@ fn udp_dispatch_cached_flow_fast_path_delegates_to_protocol_state() {
 }
 
 #[test]
-fn udp_relay_start_delegates_packet_path_chain_to_protocol_state() {
+fn udp_relay_start_delegates_packet_path_chain_to_dispatch_runtime() {
     let content = read("src/runtime/udp_dispatch/start/relay.rs");
+    let root = read("src/runtime/udp_dispatch/mod.rs");
+    let packet_path = read("src/runtime/udp_dispatch/packet_path.rs");
 
     assert!(
         content.contains("send_packet_path_chain"),
-        "UDP relay start should delegate packet-path manager work to ProtocolUdpState"
+        "UDP relay start should delegate packet-path manager work to UdpDispatch"
     );
     assert!(
-        !content.contains(".packet_path"),
-        "src/runtime/udp_dispatch/start/relay.rs should not reach into packet_path manager directly"
+        packet_path.contains("self.packet_path")
+            && root.contains("packet_path: PacketPathManager")
+            && packet_path.contains("UdpFlowContext"),
+        "runtime udp_dispatch/packet_path.rs should own packet-path manager dispatch glue"
+    );
+    assert!(
+        !content.contains(".protocol_state") && !content.contains(".packet_path"),
+        "src/runtime/udp_dispatch/start/relay.rs should not reach into protocol state or packet_path manager directly"
     );
     assert!(
         !content.contains("UdpFlowOutbound::"),
@@ -4982,6 +4997,7 @@ fn udp_forward_stays_protocol_neutral_and_does_not_construct_peer_types() {
         "Socks5UdpSend",
         "protocol_runtime::socks5_udp",
         ".packet_path",
+        "forward_existing_packet_path_flow(&mut self.chain_tasks",
         ".shadowsocks",
         ".hysteria2",
         ".trojan",
@@ -5081,25 +5097,34 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
 }
 
 #[test]
-fn protocol_udp_packet_path_facade_lives_outside_state_root() {
+fn protocol_udp_packet_path_facade_lives_in_udp_dispatch_runtime() {
     let state = read("src/protocol_runtime/udp/state.rs");
-    let packet_path_content = read("src/protocol_runtime/udp/state/packet_path.rs");
-    let packet_path = manifest_dir().join("src/protocol_runtime/udp/state/packet_path.rs");
+    let packet_path_content = read("src/runtime/udp_dispatch/packet_path.rs");
+    let protocol_state_packet_path =
+        manifest_dir().join("src/protocol_runtime/udp/state/packet_path.rs");
+    let dispatch_packet_path = manifest_dir().join("src/runtime/udp_dispatch/packet_path.rs");
 
     for forbidden in [
         "fn datagram_chain_flow_outbound",
         "fn send_packet_path_chain",
+        "fn forward_existing_packet_path_flow",
         "UdpFlowOutbound::Shadowsocks",
         "packet_path_carrier",
+        "PacketPathManager",
+        "mod packet_path;",
     ] {
         assert!(
             !state.contains(forbidden),
-            "src/protocol_runtime/udp/state.rs should keep packet-path facade details in state/packet_path.rs; found `{forbidden}`"
+            "src/protocol_runtime/udp/state.rs should not own packet-path facade details; found `{forbidden}`"
         );
     }
     assert!(
-        packet_path.exists(),
-        "UDP packet-path facade should live in protocol_runtime/udp/state/packet_path.rs"
+        !protocol_state_packet_path.exists(),
+        "UDP packet-path facade should not live in protocol_runtime/udp/state/packet_path.rs"
+    );
+    assert!(
+        dispatch_packet_path.exists(),
+        "UDP packet-path facade should live in runtime/udp_dispatch/packet_path.rs"
     );
     for forbidden in [
         "ProtocolUdpFlowSnapshot::Shadowsocks",
@@ -5119,7 +5144,7 @@ fn protocol_udp_packet_path_facade_lives_outside_state_root() {
         packet_path_content.contains("UdpFlowOutbound::PacketPathDatagram")
             && packet_path_content.contains("flow_binding.into_parts()")
             && packet_path_content.contains("snapshot: flow_snapshot"),
-        "packet-path state should store a neutral packet-path flow snapshot without converting it to a protocol UDP snapshot"
+        "packet-path dispatch should store a neutral packet-path flow snapshot without converting it to a protocol UDP snapshot"
     );
 }
 
@@ -5497,7 +5522,7 @@ fn packet_path_snapshot_lookup_lives_outside_chain_manager() {
 #[test]
 fn packet_path_snapshot_send_uses_request_model() {
     let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
-    let packet_path = read("src/protocol_runtime/udp/state/packet_path.rs");
+    let packet_path = read("src/runtime/udp_dispatch/packet_path.rs");
 
     assert!(
         manager.contains("struct SendWithSnapshotRequest")
@@ -5510,7 +5535,7 @@ fn packet_path_snapshot_send_uses_request_model() {
             && packet_path.contains("lookup_key: snapshot.lookup_key()")
             && !packet_path.contains("carrier_cache_key: &snapshot.carrier_cache_key")
             && !packet_path.contains("datagram_cache_key: &snapshot.datagram_cache_key")
-            && packet_path.contains("pub(crate) async fn forward_existing_packet_path_flow"),
+            && packet_path.contains("forward_existing_packet_path_flow"),
         "packet-path snapshot forward path should convert snapshots into neutral lookup keys without unpacking cache fields"
     );
 }

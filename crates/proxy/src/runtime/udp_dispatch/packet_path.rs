@@ -1,18 +1,14 @@
 use zero_engine::ResolvedLeafOutbound;
 
-use super::ProtocolUdpState;
-use crate::runtime::udp_dispatch::FlowFailure;
+use super::{FlowFailure, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
-use crate::runtime::udp_flow::packet_path::{
-    ChainTask, PacketPathFlowBinding, UdpFlowContext, UdpPacketRef,
-};
+use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpFlowContext, UdpPacketRef};
 use crate::runtime::udp_flow::packet_path_chain::SendWithSnapshotRequest;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
-impl ProtocolUdpState {
-    pub(crate) fn datagram_chain_flow_outbound(
-        &self,
+impl UdpDispatch {
+    pub(super) fn datagram_chain_flow_outbound(
         flow_binding: PacketPathFlowBinding<'_>,
     ) -> UdpFlowOutbound {
         let (datagram, flow_snapshot) = flow_binding.into_parts();
@@ -29,22 +25,30 @@ impl ProtocolUdpState {
         }
     }
 
-    pub(crate) async fn send_packet_path_chain(
+    pub(super) async fn send_packet_path_chain(
         &mut self,
-        context: UdpFlowContext<'_>,
+        session_id: u64,
         proxy: &Proxy,
         carrier_leaf: &ResolvedLeafOutbound<'_>,
         datagram_leaf: &ResolvedLeafOutbound<'_>,
         packet: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         self.packet_path
-            .send(context, proxy, carrier_leaf, datagram_leaf, packet)
+            .send(
+                UdpFlowContext {
+                    chain_tasks: &mut self.chain_tasks,
+                    session_id,
+                },
+                proxy,
+                carrier_leaf,
+                datagram_leaf,
+                packet,
+            )
             .await
     }
 
-    pub(crate) async fn forward_existing_packet_path_flow(
+    pub(super) async fn forward_existing_packet_path_flow(
         &mut self,
-        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
         flow: &UdpFlowSnapshot,
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
@@ -55,7 +59,7 @@ impl ProtocolUdpState {
         self.packet_path
             .send_with_snapshot(SendWithSnapshotRequest {
                 ctx: UdpFlowContext {
-                    chain_tasks,
+                    chain_tasks: &mut self.chain_tasks,
                     session_id: flow.session.id,
                 },
                 lookup_key: snapshot.lookup_key(),

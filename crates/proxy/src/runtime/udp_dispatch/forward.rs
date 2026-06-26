@@ -93,10 +93,7 @@ impl UdpDispatch {
             }
 
             UdpPathCategory::PacketPathDatagram => {
-                let result = self
-                    .protocol_state
-                    .forward_existing_packet_path_flow(&mut self.chain_tasks, flow, payload)
-                    .await;
+                let result = self.forward_existing_packet_path_flow(flow, payload).await;
                 self.record_or_fail(flow, proxy, started_at, result)?;
             }
         }

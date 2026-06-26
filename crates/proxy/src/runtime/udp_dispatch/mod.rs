@@ -70,6 +70,7 @@ pub(crate) mod hysteria2_flow;
 mod lifecycle;
 #[cfg(feature = "mieru")]
 pub(crate) mod mieru_flow;
+mod packet_path;
 #[cfg(feature = "shadowsocks")]
 pub(crate) mod shadowsocks_flow;
 pub(crate) mod socks5_flow;
@@ -86,6 +87,7 @@ pub(crate) mod vmess_flow;
 
 use crate::protocol_runtime::udp::ProtocolUdpState;
 use crate::runtime::udp_flow::packet_path::ChainTask;
+use crate::runtime::udp_flow::packet_path_chain::PacketPathManager;
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
 // UdpDispatch.
@@ -101,6 +103,8 @@ pub(crate) struct UdpDispatch {
     direct_socket: TokioDatagramSocket,
     /// Protocol-specific UDP managers.
     protocol_state: ProtocolUdpState,
+    /// Generic datagram-over-packet-path manager for relay-chain UDP flows.
+    packet_path: PacketPathManager,
     /// Session handles for protocol-managed flows owned outside
     /// [`UdpSessionFlows`].
     managed_flows: ManagedUdpFlows,
