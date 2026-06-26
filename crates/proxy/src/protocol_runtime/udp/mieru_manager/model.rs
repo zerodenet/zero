@@ -8,17 +8,20 @@ use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) enum MieruKey {
-    Leaf(mieru::MieruUdpLeafKey),
-    Relay { session_id: u64 },
-}
+pub(super) struct MieruKey(mieru::MieruUdpCacheKey);
 
 impl MieruKey {
-    pub(super) fn from_flow_key(flow_key: mieru::MieruUdpFlowKey, session_id: u64) -> Self {
-        match flow_key {
-            mieru::MieruUdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
-            mieru::MieruUdpFlowKey::Relay => Self::Relay { session_id },
-        }
+    pub(super) fn from_resume(
+        resume: &mieru::MieruUdpFlowResume,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> Self {
+        Self(resume.cache_key(server, port, session_id))
+    }
+
+    pub(super) fn relay(session_id: u64) -> Self {
+        Self(mieru::MieruUdpCacheKey::relay(session_id))
     }
 }
 
@@ -30,7 +33,7 @@ pub(super) struct MieruEntry {
 pub(super) struct MieruUdpPeer<'a> {
     pub(super) endpoint: OutboundEndpoint<'a>,
     pub(super) resume: &'a mieru::MieruUdpFlowResume,
-    pub(super) flow_key: mieru::MieruUdpFlowKey,
+    pub(super) relay: bool,
 }
 
 pub(super) struct MieruSendExisting<'a> {

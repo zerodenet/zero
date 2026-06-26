@@ -6306,12 +6306,24 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && protocol_udp.contains("struct MieruUdpFlowResume")
             && protocol_udp.contains("pub fn peer_config(&self)")
             && protocol_udp.contains("pub fn flow_key(&self")
+            && protocol_udp.contains("pub fn cache_key(&self")
             && protocol_udp.contains("enum MieruUdpFlowKey")
+            && protocol_udp.contains("enum MieruUdpCacheKey")
             && protocol_udp.contains("struct MieruUdpLeafKey")
             && protocol_udp.contains("pub fn codec(&self)")
+            && protocol_udp.contains("pub fn flow_requires_relay_upstream(&self) -> bool")
             && protocol_udp.contains("pub fn relay_chain(&self) -> bool"),
         "Mieru adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
+    for forbidden in ["MieruUdpFlowKey", "MieruUdpLeafKey", "fn from_flow_key("] {
+        assert!(
+            !manager_send.contains(forbidden)
+                && !manager_connect.contains(forbidden)
+                && !manager_establish.contains(forbidden)
+                && !manager_model.contains(forbidden),
+            "Mieru UDP manager should not match or store protocol-private cache-key internals `{forbidden}`"
+        );
+    }
     assert!(
         snapshot.contains("resume: ProtocolUdpFlowResume")
             && snapshot.contains("Mieru(mieru::MieruUdpFlowResume)")
@@ -6363,12 +6375,13 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         );
     }
     assert!(
-        manager_send.contains("request.resume.flow_key(request.server, request.port)")
+        manager_model.contains("resume.cache_key(server, port, session_id)")
+            && manager_send.contains("request.resume.flow_requires_relay_upstream()")
             && !manager_connect.contains("MieruUdpFlowIo::establish_with_resume")
             && manager_establish.contains("stream::spawn_packet_stream(stream, resume)")
             && protocol_outbound.contains("pub async fn establish_with_resume")
             && !protocol_outbound.contains("pub async fn open_udp_flow"),
-        "Mieru UDP manager should consume protocol-owned flow key and UDP establish helper"
+        "Mieru UDP manager should consume protocol-owned opaque cache key and UDP establish helper"
     );
 }
 

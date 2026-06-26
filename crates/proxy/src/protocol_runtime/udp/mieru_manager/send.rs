@@ -35,7 +35,12 @@ impl MieruChainManager {
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
-        let key = MieruKey::from_flow_key(peer.flow_key.clone(), session_id);
+        let key = MieruKey::from_resume(
+            peer.resume,
+            peer.endpoint.server,
+            peer.endpoint.port,
+            session_id,
+        );
 
         if let Some(entry) = self.upstreams.get(&key) {
             bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
@@ -53,7 +58,7 @@ impl MieruChainManager {
             return Ok(sent);
         }
 
-        if peer.flow_key.is_relay() {
+        if peer.relay {
             return Err(FlowFailure {
                 stage: "mieru_relay_upstream",
                 error: EngineError::Io(std::io::Error::new(
@@ -104,7 +109,7 @@ impl MieruChainManager {
                     port: request.port,
                 },
                 resume: &request.resume,
-                flow_key: request.resume.flow_key(request.server, request.port),
+                relay: request.resume.flow_requires_relay_upstream(),
             },
             UdpPacketRef {
                 target: request.target,
@@ -123,7 +128,7 @@ impl MieruChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
-        let key = MieruKey::Relay { session_id };
+        let key = MieruKey::relay(session_id);
         let entry = establish::packet_stream(stream, peer.resume)
             .await
             .map_err(|e| FlowFailure {
@@ -164,7 +169,7 @@ impl MieruChainManager {
                     port: request.port,
                 },
                 resume: &request.resume,
-                flow_key: mieru::MieruUdpFlowKey::Relay,
+                relay: true,
             },
             UdpPacketRef {
                 target: request.target,

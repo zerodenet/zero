@@ -146,6 +146,10 @@ impl MieruUdpFlowResume {
         self.relay_chain
     }
 
+    pub fn flow_requires_relay_upstream(&self) -> bool {
+        self.relay_chain
+    }
+
     pub fn leaf_cache_key(&self, server: &str, port: u16) -> MieruUdpLeafKey {
         self.peer_config().leaf_cache_key(server, port)
     }
@@ -156,6 +160,10 @@ impl MieruUdpFlowResume {
         } else {
             MieruUdpFlowKey::Leaf(self.leaf_cache_key(server, port))
         }
+    }
+
+    pub fn cache_key(&self, server: &str, port: u16, session_id: u64) -> MieruUdpCacheKey {
+        MieruUdpCacheKey::from_flow_key(self.flow_key(server, port), session_id)
     }
 
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
@@ -180,6 +188,25 @@ pub enum MieruUdpFlowKey {
 impl MieruUdpFlowKey {
     pub fn is_relay(&self) -> bool {
         matches!(self, Self::Relay)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MieruUdpCacheKey {
+    Leaf(MieruUdpLeafKey),
+    Relay { session_id: u64 },
+}
+
+impl MieruUdpCacheKey {
+    pub fn from_flow_key(flow_key: MieruUdpFlowKey, session_id: u64) -> Self {
+        match flow_key {
+            MieruUdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
+            MieruUdpFlowKey::Relay => Self::Relay { session_id },
+        }
+    }
+
+    pub fn relay(session_id: u64) -> Self {
+        Self::Relay { session_id }
     }
 }
 
