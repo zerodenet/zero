@@ -77,12 +77,13 @@ impl VlessAdapter {
                 )
                 .await
             {
-                let packet = ::vless::build_udp_packet(&session.target, session.port, payload)
-                    .map_err(|error| FlowFailure {
-                        stage: "udp_vless_mux_encode",
-                        error: error.into(),
-                        upstream: Some(((*server).to_string(), *port)),
-                    })?;
+                let packet =
+                    ::vless::encode_udp_flow_packet(&session.target, session.port, payload)
+                        .map_err(|error| FlowFailure {
+                            stage: "udp_vless_mux_encode",
+                            error: error.into(),
+                            upstream: Some(((*server).to_string(), *port)),
+                        })?;
                 let _ = up_tx.send(packet);
                 proxy.record_session_outbound_tx(session_id, payload.len() as u64);
                 return Ok(FlowStartResult::ManagedFlow {
