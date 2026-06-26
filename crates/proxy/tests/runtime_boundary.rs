@@ -2938,6 +2938,19 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && !snapshot.contains("cipher_kind: shadowsocks::CipherKind"),
         "protocol UDP flow snapshot should keep Shadowsocks resume data opaque instead of exposing parsed cipher state"
     );
+    let h2_snapshot_variant = snapshot
+        .split("#[cfg(feature = \"hysteria2\")]")
+        .nth(1)
+        .expect("Hysteria2 UDP snapshot variant should be feature-gated")
+        .split("#[cfg(feature = \"trojan\")]")
+        .next()
+        .expect("Hysteria2 UDP snapshot variant should precede Trojan");
+    assert!(
+        snapshot.contains("resume: hysteria2::Hysteria2UdpFlowResume")
+            && !h2_snapshot_variant.contains("password: String")
+            && !h2_snapshot_variant.contains("client_fingerprint: Option<String>"),
+        "protocol UDP flow snapshot should keep Hysteria2 resume data opaque instead of exposing auth or fingerprint state"
+    );
     let mieru_snapshot_variant = snapshot
         .split("#[cfg(feature = \"mieru\")]")
         .nth(1)
@@ -5506,6 +5519,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/protocol_runtime/udp/h2_manager.rs");
     let codec = read("src/protocol_runtime/udp/h2_manager/codec.rs");
     let adapter = read("src/adapters/hysteria2/udp.rs");
+    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let forward = read("src/protocol_runtime/udp/state/forward/hysteria2.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
 
@@ -5535,6 +5550,35 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn udp_flow_codec(")
             && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec"),
         "Hysteria2 adapter should request the protocol-owned UDP flow codec"
+    );
+    assert!(
+        adapter.contains("Hysteria2UdpFlowResume::new")
+            && protocol_udp.contains("struct Hysteria2UdpFlowResume")
+            && protocol_udp.contains("pub fn codec(&self)")
+            && protocol_udp.contains("pub fn client_fingerprint(&self) -> Option<&str>"),
+        "Hysteria2 adapter should build an opaque protocol-owned UDP flow resume descriptor"
+    );
+    let h2_snapshot_variant = snapshot
+        .split("#[cfg(feature = \"hysteria2\")]")
+        .nth(1)
+        .expect("Hysteria2 UDP snapshot variant should be feature-gated")
+        .split("#[cfg(feature = \"trojan\")]")
+        .next()
+        .expect("Hysteria2 UDP snapshot variant should precede Trojan");
+    assert!(
+        snapshot.contains("resume: hysteria2::Hysteria2UdpFlowResume")
+            && !h2_snapshot_variant.contains("password: String")
+            && !h2_snapshot_variant.contains("client_fingerprint: Option<String>"),
+        "Hysteria2 protocol UDP flow snapshot should carry only opaque resume data"
+    );
+    assert!(
+        forward.contains("existing.resume.password()")
+            && forward.contains("existing.resume.client_fingerprint()")
+            && forward.contains("existing.resume.codec()")
+            && !forward.contains("hysteria2::udp_flow_codec")
+            && !forward.contains("password: &'a str")
+            && !forward.contains("client_fingerprint: Option<&'a str>"),
+        "existing Hysteria2 UDP flow forwarding should recover auth, fingerprint, and codec from the opaque resume descriptor"
     );
 }
 

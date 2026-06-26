@@ -10,8 +10,7 @@ pub(crate) struct Hysteria2DatagramSend<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) password: &'a str,
-    pub(crate) client_fingerprint: Option<&'a str>,
+    pub(crate) resume: hysteria2::Hysteria2UdpFlowResume,
     pub(crate) codec: std::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
     pub(crate) payload: &'a [u8],
 }
@@ -28,8 +27,8 @@ impl UdpDispatch {
                 session: request.session,
                 server: request.server,
                 port: request.port,
-                password: request.password,
-                client_fingerprint: request.client_fingerprint,
+                password: request.resume.password(),
+                client_fingerprint: request.resume.client_fingerprint(),
                 codec: request.codec.clone(),
                 payload: request.payload,
             })
@@ -47,8 +46,7 @@ impl UdpDispatch {
                 session: request.session,
                 server: request.server,
                 port: request.port,
-                password: request.password,
-                client_fingerprint: request.client_fingerprint,
+                resume: request.resume.clone(),
                 codec: request.codec.clone(),
                 payload: request.payload,
             })
@@ -58,10 +56,7 @@ impl UdpDispatch {
                 tag: request.tag.to_string(),
                 server: request.server.to_string(),
                 port: request.port,
-                protocol: ProtocolUdpFlowSnapshot::hysteria2(
-                    request.password,
-                    request.client_fingerprint,
-                ),
+                protocol: ProtocolUdpFlowSnapshot::hysteria2(request.resume),
             }),
             tx_bytes: sent as u64,
         })

@@ -8,8 +8,7 @@ use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 pub(super) struct ExistingFlow<'a> {
     pub(super) server: &'a str,
     pub(super) port: u16,
-    pub(super) password: &'a str,
-    pub(super) client_fingerprint: Option<&'a str>,
+    pub(super) resume: &'a hysteria2::Hysteria2UdpFlowResume,
     pub(super) payload: &'a [u8],
 }
 
@@ -26,9 +25,9 @@ pub(super) async fn forward(
             session_id: flow.session.id,
             server: existing.server,
             port: existing.port,
-            password: existing.password,
-            client_fingerprint: existing.client_fingerprint,
-            codec: std::sync::Arc::new(hysteria2::udp_flow_codec()),
+            password: existing.resume.password(),
+            client_fingerprint: existing.resume.client_fingerprint(),
+            codec: std::sync::Arc::new(existing.resume.codec()),
             target: &flow.session.target,
             target_port: flow.session.port,
             payload: existing.payload,
@@ -43,11 +42,7 @@ pub(super) async fn forward_if_matches(
     snapshot: &ProtocolUdpFlowSnapshot,
     payload: &[u8],
 ) -> Option<Result<usize, FlowFailure>> {
-    let ProtocolUdpFlowSnapshot::Hysteria2 {
-        password,
-        client_fingerprint,
-    } = snapshot
-    else {
+    let ProtocolUdpFlowSnapshot::Hysteria2 { resume } = snapshot else {
         return None;
     };
 
@@ -64,8 +59,7 @@ pub(super) async fn forward_if_matches(
             ExistingFlow {
                 server: upstream.server,
                 port: upstream.port,
-                password,
-                client_fingerprint: client_fingerprint.as_deref(),
+                resume,
                 payload,
             },
         )

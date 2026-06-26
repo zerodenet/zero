@@ -10,8 +10,7 @@ pub(crate) enum ProtocolUdpFlowSnapshot {
     },
     #[cfg(feature = "hysteria2")]
     Hysteria2 {
-        password: String,
-        client_fingerprint: Option<String>,
+        resume: hysteria2::Hysteria2UdpFlowResume,
     },
     #[cfg(feature = "trojan")]
     Trojan {
@@ -44,11 +43,8 @@ impl ProtocolUdpFlowSnapshot {
     }
 
     #[cfg(feature = "hysteria2")]
-    pub(crate) fn hysteria2(password: &str, client_fingerprint: Option<&str>) -> Self {
-        Self::Hysteria2 {
-            password: password.to_string(),
-            client_fingerprint: client_fingerprint.map(ToString::to_string),
-        }
+    pub(crate) fn hysteria2(resume: hysteria2::Hysteria2UdpFlowResume) -> Self {
+        Self::Hysteria2 { resume }
     }
 
     #[cfg(feature = "trojan")]

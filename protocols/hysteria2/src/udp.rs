@@ -154,6 +154,33 @@ pub fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
     Hysteria2DatagramCodec
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2UdpFlowResume {
+    password: String,
+    client_fingerprint: Option<String>,
+}
+
+impl Hysteria2UdpFlowResume {
+    pub fn new(password: &str, client_fingerprint: Option<&str>) -> Self {
+        Self {
+            password: password.to_owned(),
+            client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
+        }
+    }
+
+    pub fn password(&self) -> &str {
+        &self.password
+    }
+
+    pub fn client_fingerprint(&self) -> Option<&str> {
+        self.client_fingerprint.as_deref()
+    }
+
+    pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        udp_flow_codec()
+    }
+}
+
 impl DatagramCodec<Address> for Hysteria2DatagramCodec {
     type Error = Error;
 

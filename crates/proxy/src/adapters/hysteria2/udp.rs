@@ -88,8 +88,7 @@ impl Hysteria2Adapter {
                 session,
                 server,
                 port: *port,
-                password,
-                client_fingerprint: *client_fingerprint,
+                resume: hysteria2::Hysteria2UdpFlowResume::new(password, *client_fingerprint),
                 codec: Arc::new(hysteria2::udp_flow_codec()),
                 payload,
             })
