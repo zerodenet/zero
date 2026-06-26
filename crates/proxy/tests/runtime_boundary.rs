@@ -4861,8 +4861,9 @@ fn packet_path_key_model_lives_outside_chain_manager() {
     );
     assert!(
         !key_content.contains("UdpDatagramSource")
-            && !key_content.contains("datagram.datagram_cache_key"),
-        "packet-path key model should use the datagram source key part instead of reading source internals"
+            && !key_content.contains("datagram.datagram_cache_key")
+            && !key_content.contains("UdpPacketPathCarrier"),
+        "packet-path key model should use opaque carrier/datagram key parts instead of reading source internals"
     );
     assert!(
         model.contains("self.datagram.key_part()")
@@ -4952,6 +4953,7 @@ fn packet_path_diagnostics_live_outside_chain_manager() {
 #[test]
 fn packet_path_snapshot_lookup_lives_outside_chain_manager() {
     let manager = read("src/protocol_runtime/udp/packet_path_chain.rs");
+    let snapshot_content = read("src/protocol_runtime/udp/packet_path_chain/snapshot.rs");
     let snapshot = manifest_dir().join("src/protocol_runtime/udp/packet_path_chain/snapshot.rs");
 
     for forbidden in [
@@ -4968,6 +4970,11 @@ fn packet_path_snapshot_lookup_lives_outside_chain_manager() {
         snapshot.exists(),
         "packet-path snapshot lookup should live in packet_path_chain/snapshot.rs"
     );
+    assert!(
+        snapshot_content.contains("carrier_cache_key: &'a str")
+            && !snapshot_content.contains("UdpPacketPathCarrier"),
+        "packet-path snapshot lookup should use opaque carrier cache identity"
+    );
 }
 
 #[test]
@@ -4977,12 +4984,14 @@ fn packet_path_snapshot_send_uses_request_model() {
 
     assert!(
         manager.contains("struct SendWithSnapshotRequest")
-            && manager.contains("request: SendWithSnapshotRequest<'_>"),
+            && manager.contains("request: SendWithSnapshotRequest<'_>")
+            && manager.contains("carrier_cache_key: &'a str"),
         "packet-path snapshot send should use a request model"
     );
     assert!(
-        forward.contains("SendWithSnapshotRequest {"),
-        "packet-path snapshot forward path should pass SendWithSnapshotRequest"
+        forward.contains("SendWithSnapshotRequest {")
+            && forward.contains("carrier_cache_key: carrier.cache_key()"),
+        "packet-path snapshot forward path should pass SendWithSnapshotRequest with opaque carrier cache identity"
     );
 }
 

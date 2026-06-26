@@ -35,7 +35,7 @@ pub(super) async fn forward(
                     chain_tasks,
                     session_id: flow.session.id,
                 },
-                carrier,
+                carrier_cache_key: carrier.cache_key(),
                 datagram_tag: existing.tag,
                 datagram_server: existing.server,
                 datagram_port: existing.port,

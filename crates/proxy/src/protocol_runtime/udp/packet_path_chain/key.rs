@@ -1,7 +1,6 @@
 use crate::protocol_runtime::udp::packet_path_traits::{
     PacketPathCarrierDescriptor, UdpDatagramKey,
 };
-use crate::protocol_runtime::udp::UdpPacketPathCarrier;
 
 /// Owned, hashable identity of one carrier+datagram packet-path connection.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -16,14 +15,14 @@ pub(super) struct PathKey {
 
 impl PathKey {
     pub(super) fn from_snapshot(
-        carrier: &UdpPacketPathCarrier,
+        carrier_cache_key: &str,
         datagram_tag: &str,
         datagram_server: &str,
         datagram_port: u16,
         datagram_cache_key: &str,
     ) -> Self {
         Self {
-            carrier_key: carrier.cache_key().to_owned(),
+            carrier_key: carrier_cache_key.to_owned(),
             datagram_tag: datagram_tag.to_owned(),
             datagram_server: datagram_server.to_owned(),
             datagram_port,

@@ -68,7 +68,7 @@ impl PacketPathManager {
         let entry = snapshot::lookup_entry(
             &self.upstreams,
             snapshot::SnapshotLookup {
-                carrier: request.carrier,
+                carrier_cache_key: request.carrier_cache_key,
                 datagram_tag: request.datagram_tag,
                 datagram_server: request.datagram_server,
                 datagram_port: request.datagram_port,
@@ -101,7 +101,7 @@ impl PacketPathManager {
 
 pub(crate) struct SendWithSnapshotRequest<'a> {
     pub ctx: UdpFlowContext<'a>,
-    pub carrier: &'a crate::protocol_runtime::udp::UdpPacketPathCarrier,
+    pub carrier_cache_key: &'a str,
     pub datagram_tag: &'a str,
     pub datagram_server: &'a str,
     pub datagram_port: u16,
