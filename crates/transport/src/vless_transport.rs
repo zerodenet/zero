@@ -7,8 +7,8 @@
 use std::path::Path;
 
 use zero_config::{
-    ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, RealityConfig, SplitHttpConfig,
-    WebSocketConfig,
+    ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, QuicConfig, RealityConfig,
+    SplitHttpConfig, WebSocketConfig,
 };
 use zero_engine::EngineError;
 use zero_platform_tokio::{RelayCarrier, TcpRelayStream, TokioSocket};
@@ -17,7 +17,7 @@ use std::io;
 
 use zero_platform_tokio::TransportConnector;
 
-use crate::{grpc, h2, http_upgrade, split_http, tls, ws};
+use crate::{grpc, h2, http_upgrade, quic, split_http, tls, ws};
 use vless::{upgrade_reality_client, RealityClientOptions};
 
 #[derive(Clone, Copy)]
@@ -42,6 +42,41 @@ pub struct VlessOutboundTransportRequest<'a> {
 pub struct VlessFinalHopTransportRequest<'a> {
     pub carrier: RelayCarrier,
     pub options: VlessTransportOptions<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub struct VlessUdpTransportOptions<'a> {
+    pub tls: Option<&'a ClientTlsConfig>,
+    pub reality: Option<&'a RealityConfig>,
+    pub ws: Option<&'a WebSocketConfig>,
+    pub grpc: Option<&'a GrpcConfig>,
+    pub h2: Option<&'a H2Config>,
+    pub http_upgrade: Option<&'a HttpUpgradeConfig>,
+    pub split_http: Option<&'a SplitHttpConfig>,
+    pub quic: Option<&'a QuicConfig>,
+    pub source_dir: Option<&'a Path>,
+}
+
+impl<'a> VlessUdpTransportOptions<'a> {
+    pub fn stream_options(self) -> VlessTransportOptions<'a> {
+        VlessTransportOptions {
+            tls: self.tls,
+            reality: self.reality,
+            ws: self.ws,
+            grpc: self.grpc,
+            h2: self.h2,
+            http_upgrade: self.http_upgrade,
+            split_http: self.split_http,
+            source_dir: self.source_dir,
+        }
+    }
+}
+
+pub struct VlessUdpOutboundTransportRequest<'a> {
+    pub socket: TokioSocket,
+    pub options: VlessUdpTransportOptions<'a>,
+    pub server: &'a str,
+    pub port: u16,
 }
 
 /// Wrap a raw TCP socket with the configured VLESS transport layer.
@@ -206,6 +241,32 @@ pub async fn build_vless_outbound_transport(
     }
 }
 
+pub async fn build_vless_udp_outbound_transport(
+    request: VlessUdpOutboundTransportRequest<'_>,
+) -> Result<TcpRelayStream, EngineError> {
+    let VlessUdpOutboundTransportRequest {
+        socket,
+        options,
+        server,
+        port,
+    } = request;
+
+    if let Some(quic_config) = options.quic {
+        let server_name = quic_config.server_name.as_deref().unwrap_or(server);
+        return Ok(TcpRelayStream::new(
+            quic::connect_quic(server_name, port, quic_config.insecure).await?,
+        ));
+    }
+
+    build_vless_outbound_transport(VlessOutboundTransportRequest {
+        socket,
+        options: options.stream_options(),
+        server,
+        port,
+    })
+    .await
+}
+
 // TransportConnector impl
 
 /// Wrap an already established relay stream with the configured VLESS transport layer.
@@ -349,9 +410,19 @@ pub struct VlessTransportConnector<'a> {
     options: VlessTransportOptions<'a>,
 }
 
+pub struct VlessUdpTransportConnector<'a> {
+    options: VlessUdpTransportOptions<'a>,
+}
+
 impl<'a> VlessTransportConnector<'a> {
     /// Create a new connector with the given transport configuration.
     pub fn new(options: VlessTransportOptions<'a>) -> Self {
+        Self { options }
+    }
+}
+
+impl<'a> VlessUdpTransportConnector<'a> {
+    pub fn new(options: VlessUdpTransportOptions<'a>) -> Self {
         Self { options }
     }
 }
@@ -366,6 +437,29 @@ impl TransportConnector for VlessTransportConnector<'_> {
         port: u16,
     ) -> io::Result<Self::Stream> {
         build_vless_outbound_transport(VlessOutboundTransportRequest {
+            socket,
+            options: self.options,
+            server,
+            port,
+        })
+        .await
+        .map_err(|e| match e {
+            EngineError::Io(io_err) => io_err,
+            other => io::Error::other(other),
+        })
+    }
+}
+
+impl TransportConnector for VlessUdpTransportConnector<'_> {
+    type Stream = TcpRelayStream;
+
+    async fn connect(
+        &self,
+        socket: TokioSocket,
+        server: &str,
+        port: u16,
+    ) -> io::Result<Self::Stream> {
+        build_vless_udp_outbound_transport(VlessUdpOutboundTransportRequest {
             socket,
             options: self.options,
             server,

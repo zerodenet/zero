@@ -1,8 +1,5 @@
 use tokio::sync::mpsc;
-use zero_config::{
-    ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, QuicConfig, RealityConfig,
-    SplitHttpConfig, WebSocketConfig,
-};
+use zero_config::SplitHttpConfig;
 use zero_core::{Address, Session};
 
 use crate::runtime::Proxy;
@@ -14,19 +11,6 @@ pub(super) struct VlessUdpUpstream {
     pub(super) send_tx: mpsc::Sender<vless::VlessUdpFlowPacket>,
 }
 
-/// Transport options for VLESS UDP upstream connections.
-#[derive(Clone, Copy)]
-pub(crate) struct VlessUdpTransport<'a> {
-    pub(crate) tls: Option<&'a ClientTlsConfig>,
-    pub(crate) reality: Option<&'a RealityConfig>,
-    pub(crate) ws: Option<&'a WebSocketConfig>,
-    pub(crate) grpc: Option<&'a GrpcConfig>,
-    pub(crate) h2: Option<&'a H2Config>,
-    pub(crate) http_upgrade: Option<&'a HttpUpgradeConfig>,
-    pub(crate) split_http: Option<&'a SplitHttpConfig>,
-    pub(crate) quic: Option<&'a QuicConfig>,
-}
-
 pub(crate) struct VlessUdpStartFlow<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) session: &'a Session,
@@ -34,7 +18,7 @@ pub(crate) struct VlessUdpStartFlow<'a> {
     pub(crate) port: u16,
     pub(crate) identity: vless::VlessUdpIdentity,
     pub(crate) flow: Option<&'a str>,
-    pub(crate) transport: VlessUdpTransport<'a>,
+    pub(crate) transport: crate::transport::VlessUdpTransportOptions<'a>,
     pub(crate) payload: &'a [u8],
 }
 
@@ -53,7 +37,7 @@ pub(crate) struct VlessUdpRelayFinalHop<'a> {
     pub(crate) session: &'a Session,
     pub(crate) carrier: crate::transport::RelayCarrier,
     pub(crate) identity: vless::VlessUdpIdentity,
-    pub(crate) transport: VlessUdpTransport<'a>,
+    pub(crate) transport: crate::transport::VlessUdpTransportOptions<'a>,
     pub(crate) payload: &'a [u8],
 }
 
@@ -66,5 +50,5 @@ pub(super) struct VlessUdpUpstreamRequest<'a> {
     pub(super) server_port: u16,
     pub(super) identity: vless::VlessUdpIdentity,
     pub(super) initial_payload: &'a [u8],
-    pub(super) transport: Option<&'a VlessUdpTransport<'a>>,
+    pub(super) transport: Option<&'a crate::transport::VlessUdpTransportOptions<'a>>,
 }

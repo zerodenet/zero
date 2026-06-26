@@ -10,7 +10,7 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpFlow<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::protocol_runtime::vless_udp::model::VlessUdpTransport {
+        let transport = crate::transport::VlessUdpTransportOptions {
             tls: flow.tls,
             reality: flow.reality,
             ws: flow.ws,
@@ -19,6 +19,7 @@ impl ProtocolUdpState {
             http_upgrade: flow.http_upgrade,
             split_http: flow.split_http,
             quic: flow.quic,
+            source_dir: flow.proxy.config.source_dir(),
         };
         self.vless
             .start_flow(
@@ -75,7 +76,7 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpRelayFinalHop<'_>,
     ) -> Result<(), FlowFailure> {
-        let transport = crate::protocol_runtime::vless_udp::model::VlessUdpTransport {
+        let transport = crate::transport::VlessUdpTransportOptions {
             tls: flow.tls,
             reality: flow.reality,
             ws: flow.ws,
@@ -84,6 +85,7 @@ impl ProtocolUdpState {
             http_upgrade: flow.http_upgrade,
             split_http: flow.split_http,
             quic: None,
+            source_dir: flow.proxy.config.source_dir(),
         };
         self.vless
             .start_relay_final_hop(

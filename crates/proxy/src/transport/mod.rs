@@ -44,7 +44,8 @@ pub(crate) use zero_transport::vless_transport::build_vless_split_http_over_rela
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::vless_transport::{
     build_vless_outbound_transport_over_stream, VlessFinalHopTransportRequest,
-    VlessTransportConnector, VlessTransportOptions,
+    VlessTransportConnector, VlessTransportOptions, VlessUdpTransportConnector,
+    VlessUdpTransportOptions,
 };
 #[cfg(feature = "vmess")]
 pub(crate) use zero_transport::vmess_transport::{

@@ -1965,7 +1965,6 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
 
     for required in [
         "struct VlessUdpUpstream",
-        "struct VlessUdpTransport",
         "struct VlessUdpStartFlow",
         "struct VlessUdpRelayTwoStream",
         "struct VlessUdpRelayFinalHop",
@@ -1974,6 +1973,49 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
         assert!(
             model.contains(required),
             "VLESS UDP state/request model should live in vless_udp/model.rs; missing `{required}`"
+        );
+    }
+}
+
+#[test]
+fn vless_udp_transport_opening_lives_in_transport_crate() {
+    let runtime = read("src/protocol_runtime/vless_udp.rs");
+    let model = read("src/protocol_runtime/vless_udp/model.rs");
+    let start = read("src/protocol_runtime/udp/start/vless.rs");
+    let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
+        .expect("read crates/transport/src/vless_transport.rs");
+
+    for forbidden in [
+        "crate::transport::connect_quic",
+        "zero_transport::quic::connect_quic",
+        "struct VlessUdpTransport",
+        "pub(crate) struct VlessUdpTransport",
+    ] {
+        assert!(
+            !runtime.contains(forbidden) && !model.contains(forbidden),
+            "VLESS UDP runtime/model should not own transport opening detail; found `{forbidden}`"
+        );
+    }
+
+    assert!(
+        start.contains("crate::transport::VlessUdpTransportOptions")
+            && runtime.contains("crate::transport::VlessUdpTransportConnector")
+            && runtime.contains("crate::transport::build_vless_outbound_transport_over_stream"),
+        "VLESS UDP runtime should request VLESS transport helpers instead of opening QUIC/TCP transports directly"
+    );
+
+    for required in [
+        "pub struct VlessUdpTransportOptions",
+        "pub struct VlessUdpOutboundTransportRequest",
+        "pub async fn build_vless_udp_outbound_transport",
+        "pub struct VlessUdpTransportConnector",
+        "quic::connect_quic",
+        "pub struct VlessTransportOptions",
+        "pub async fn build_vless_outbound_transport_over_stream",
+    ] {
+        assert!(
+            transport.contains(required),
+            "zero-transport should own VLESS UDP transport helper `{required}`"
         );
     }
 }

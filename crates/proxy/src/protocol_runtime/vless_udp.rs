@@ -18,8 +18,8 @@ use crate::protocol_runtime::udp::packet_path_traits::UdpResponsePacket;
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 use model::{
-    VlessUdpRelayFinalHop, VlessUdpRelayTwoStream, VlessUdpStartFlow, VlessUdpTransport,
-    VlessUdpUpstream, VlessUdpUpstreamRequest,
+    VlessUdpRelayFinalHop, VlessUdpRelayTwoStream, VlessUdpStartFlow, VlessUdpUpstream,
+    VlessUdpUpstreamRequest,
 };
 
 /// Spawn the bidirectional meter + relay task for a VLESS UDP upstream,
@@ -129,32 +129,8 @@ async fn establish_vless_udp_upstream(
     port: u16,
     identity: vless::VlessUdpIdentity,
     initial_payload: &[u8],
-    transport: Option<&VlessUdpTransport<'_>>,
+    transport: Option<&crate::transport::VlessUdpTransportOptions<'_>>,
 ) -> Result<(VlessUdpUpstream, broadcast::Sender<UdpResponsePacket>), EngineError> {
-    let flow_io = vless::VlessUdpFlowIo;
-
-    // QUIC uses UDP -?handle before TCP connect entirely
-    if let Some(t) = transport {
-        if let Some(quic) = t.quic {
-            let server_name = quic.server_name.as_deref().unwrap_or(server);
-            let quic_stream =
-                crate::transport::connect_quic(server_name, port, quic.insecure).await?;
-
-            let mut metered = MeteredStream::new(TcpRelayStream::new(quic_stream));
-            vless::establish_udp_flow_stream(&mut metered, session, identity).await?;
-            let initial_packet_len = flow_io
-                .write_packet(&mut metered, &session.target, session.port, initial_payload)
-                .await?;
-
-            return Ok(spawn_vless_udp_relay(
-                proxy,
-                session.id,
-                metered,
-                initial_packet_len,
-            ));
-        }
-    }
-
     let socket = proxy
         .protocols
         .direct_connector()
@@ -163,18 +139,7 @@ async fn establish_vless_udp_upstream(
 
     let stream: TcpRelayStream = match transport {
         Some(t) => {
-            let connector = crate::transport::VlessTransportConnector::new(
-                crate::transport::VlessTransportOptions {
-                    tls: t.tls,
-                    reality: t.reality,
-                    ws: t.ws,
-                    grpc: t.grpc,
-                    h2: t.h2,
-                    http_upgrade: t.http_upgrade,
-                    split_http: t.split_http,
-                    source_dir: proxy.config.source_dir(),
-                },
-            );
+            let connector = crate::transport::VlessUdpTransportConnector::new(*t);
             connector.connect(socket, server, port).await?
         }
         None => socket.into(),
@@ -305,7 +270,7 @@ impl VlessUdpOutboundManager {
                     h2: request.transport.h2,
                     http_upgrade: request.transport.http_upgrade,
                     split_http: request.transport.split_http,
-                    source_dir: request.proxy.config.source_dir(),
+                    source_dir: request.transport.source_dir,
                 },
             },
         )
