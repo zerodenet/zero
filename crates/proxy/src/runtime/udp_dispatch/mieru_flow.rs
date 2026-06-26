@@ -1,4 +1,6 @@
-use crate::protocol_runtime::udp::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
+use crate::protocol_runtime::udp::{
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
+};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
@@ -30,15 +32,21 @@ impl UdpDispatch {
         request: MieruDatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
         self.protocol_state
-            .start_mieru_stream_packet_flow(crate::protocol_runtime::udp::ManagedStreamPacketFlow {
-                chain_tasks: &mut self.chain_tasks,
-                proxy: request.proxy,
-                session: request.session,
-                server: request.server,
-                port: request.port,
-                resume: request.resume,
-                payload: request.payload,
-            })
+            .start_managed_udp_flow(
+                &self.inbound_tag,
+                ManagedUdpFlowRequest {
+                    chain_tasks: &mut self.chain_tasks,
+                    proxy: Some(request.proxy),
+                    kind: ManagedUdpFlowKind::StreamPacket,
+                    session: request.session,
+                    carrier: None,
+                    tls_server_name: None,
+                    server: request.server,
+                    port: request.port,
+                    resume: request.resume,
+                    payload: request.payload,
+                },
+            )
             .await
     }
 
@@ -73,17 +81,21 @@ impl UdpDispatch {
         request: MieruRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
         self.protocol_state
-            .start_mieru_relay_stream_flow(crate::protocol_runtime::udp::ManagedRelayStreamFlow {
-                chain_tasks: &mut self.chain_tasks,
-                proxy: None,
-                session: request.session,
-                carrier: request.carrier,
-                tls_server_name: None,
-                server: request.server,
-                port: request.port,
-                resume: request.resume,
-                payload: request.payload,
-            })
+            .start_managed_udp_flow(
+                &self.inbound_tag,
+                ManagedUdpFlowRequest {
+                    chain_tasks: &mut self.chain_tasks,
+                    proxy: None,
+                    kind: ManagedUdpFlowKind::RelayStream,
+                    session: request.session,
+                    carrier: Some(request.carrier),
+                    tls_server_name: None,
+                    server: request.server,
+                    port: request.port,
+                    resume: request.resume,
+                    payload: request.payload,
+                },
+            )
             .await
     }
 

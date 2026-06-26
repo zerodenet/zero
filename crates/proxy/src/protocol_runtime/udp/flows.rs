@@ -34,6 +34,26 @@ pub(crate) struct ManagedRelayStreamFlow<'a> {
     pub(crate) payload: &'a [u8],
 }
 
+pub(crate) struct ManagedUdpFlowRequest<'a> {
+    pub(crate) chain_tasks: &'a mut tokio::task::JoinSet<super::ChainTask>,
+    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) kind: ManagedUdpFlowKind,
+    pub(crate) session: &'a Session,
+    pub(crate) carrier: Option<crate::transport::RelayCarrier>,
+    pub(crate) tls_server_name: Option<&'a str>,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) payload: &'a [u8],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ManagedUdpFlowKind {
+    Datagram,
+    StreamPacket,
+    RelayStream,
+}
+
 #[cfg(feature = "vless")]
 pub(crate) struct VlessUdpFlow<'a> {
     pub(crate) proxy: &'a Proxy,

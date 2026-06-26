@@ -1,10 +1,11 @@
-use zero_engine::EngineError;
-
-use crate::protocol_runtime::udp::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
+use crate::protocol_runtime::udp::{
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
+};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 use zero_core::Session;
+use zero_engine::EngineError;
 
 pub(crate) struct Socks5RelaySend<'a> {
     pub(crate) proxy: &'a Proxy,
@@ -22,18 +23,24 @@ impl UdpDispatch {
         &mut self,
         request: Socks5RelaySend<'_>,
     ) -> Result<usize, EngineError> {
-        let packet = crate::protocol_runtime::socks5_udp::Socks5UdpPacketSend {
-            proxy: request.proxy,
-            tag: request.tag,
-            server: request.server,
-            port: request.port,
-            resume: request.resume,
-            session: request.session,
-            payload: request.payload,
-        };
         self.protocol_state
-            .send_socks5_packet(packet, &self.inbound_tag)
+            .start_managed_udp_flow(
+                &self.inbound_tag,
+                ManagedUdpFlowRequest {
+                    chain_tasks: &mut self.chain_tasks,
+                    proxy: Some(request.proxy),
+                    kind: ManagedUdpFlowKind::RelayStream,
+                    session: request.session,
+                    carrier: None,
+                    tls_server_name: None,
+                    server: request.server,
+                    port: request.port,
+                    resume: request.resume,
+                    payload: request.payload,
+                },
+            )
             .await
+            .map_err(|failure| failure.error)
     }
 
     /// Start and describe a SOCKS5 UDP relay flow.

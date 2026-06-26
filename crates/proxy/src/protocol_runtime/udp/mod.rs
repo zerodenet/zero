@@ -24,7 +24,10 @@ mod trojan_manager;
 
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
 pub(crate) use flow_snapshot::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
-pub(crate) use flows::{ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow};
+pub(crate) use flows::{
+    ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowKind,
+    ManagedUdpFlowRequest,
+};
 #[cfg(feature = "vless")]
 pub(crate) use flows::{VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream};
 #[cfg(feature = "vmess")]

@@ -2800,7 +2800,9 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
         );
     }
     assert!(
-        dispatch.contains("crate::protocol_runtime::socks5_udp::Socks5UdpPacketSend")
+        !dispatch.contains("Socks5UdpPacketSend")
+            && dispatch.contains("start_managed_udp_flow")
+            && dispatch.contains("ManagedUdpFlowKind::RelayStream")
             && dispatch.contains("pub(crate) async fn send_socks5(")
             && dispatch.contains("resume: ProtocolUdpFlowResume")
             && !dispatch.contains("username: Option<&'a str>")
@@ -2808,7 +2810,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
             && !forward.contains("socks5_relay_auth")
             && !forward.contains("username: auth.username")
             && !forward.contains("password: auth.password"),
-        "runtime UDP SOCKS5 facade should construct the protocol-runtime facade request"
+        "runtime UDP SOCKS5 facade should use the neutral managed UDP flow facade"
     );
 }
 
@@ -3399,16 +3401,16 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
         let content = fs::read_to_string(&path).expect("read rust source");
         let allowed_facade = match source.as_str() {
             "src/runtime/udp_dispatch/hysteria2_flow.rs" => {
-                Some(("Hysteria2DatagramSend", "start_managed_datagram_flow"))
+                Some(("Hysteria2DatagramSend", "start_managed_udp_flow"))
             }
             "src/runtime/udp_dispatch/mieru_flow.rs" => {
-                Some(("MieruDatagramSend", "start_mieru_relay_stream_flow"))
+                Some(("MieruDatagramSend", "start_managed_udp_flow"))
             }
             "src/runtime/udp_dispatch/shadowsocks_flow.rs" => {
-                Some(("ShadowsocksDatagramSend", "start_managed_datagram_flow"))
+                Some(("ShadowsocksDatagramSend", "start_managed_udp_flow"))
             }
             "src/runtime/udp_dispatch/trojan_flow.rs" => {
-                Some(("TrojanDatagramSend", "start_trojan_relay_stream_flow"))
+                Some(("TrojanDatagramSend", "start_managed_udp_flow"))
             }
             "src/runtime/udp_dispatch/vless_flow.rs" => {
                 Some(("VlessDatagramSend", "start_vless_udp_flow"))
@@ -3433,6 +3435,10 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
             "TrojanUdpFlowRequest",
             "TrojanUdpRelayFlowRequest",
             "MieruUdpFlowRequest",
+            "ManagedDatagramFlow {",
+            "ManagedStreamPacketFlow {",
+            "ManagedRelayStreamFlow {",
+            "Socks5UdpPacketSend",
             "start_trojan_udp_relay_flow",
             "start_mieru_udp_relay_flow",
         ] {
@@ -6876,31 +6882,31 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
         (
             "src/runtime/udp_dispatch/hysteria2_flow.rs",
             "Hysteria2DatagramSend",
-            "start_managed_datagram_flow",
+            "start_managed_udp_flow",
             "start_hysteria2_datagram_flow",
         ),
         (
             "src/runtime/udp_dispatch/mieru_flow.rs",
             "MieruDatagramSend",
-            "start_mieru_relay_stream_flow",
+            "start_managed_udp_flow",
             "start_mieru_datagram_flow",
         ),
         (
             "src/runtime/udp_dispatch/shadowsocks_flow.rs",
             "ShadowsocksDatagramSend",
-            "start_managed_datagram_flow",
+            "start_managed_udp_flow",
             "start_shadowsocks_datagram_flow",
         ),
         (
             "src/runtime/udp_dispatch/socks5_flow.rs",
             "Socks5RelaySend",
-            "send_socks5_packet",
+            "start_managed_udp_flow",
             "start_socks5_relay_flow",
         ),
         (
             "src/runtime/udp_dispatch/trojan_flow.rs",
             "TrojanDatagramSend",
-            "start_trojan_relay_stream_flow",
+            "start_managed_udp_flow",
             "start_trojan_datagram_flow",
         ),
         (

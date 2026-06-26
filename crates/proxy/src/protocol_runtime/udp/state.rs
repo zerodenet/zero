@@ -3,12 +3,17 @@ use std::time::Duration;
 use tokio::time::Instant as TokioInstant;
 
 use crate::protocol_runtime::socks5_udp::{
-    ClosedSocks5UdpAssociation, Socks5UdpAssociationView, Socks5UdpPacketSend, Socks5UdpRuntime,
+    ClosedSocks5UdpAssociation, Socks5UdpAssociationView, Socks5UdpRuntime,
 };
 use crate::protocol_runtime::vless_udp::VlessUdpOutboundManager;
 #[cfg(feature = "vmess")]
 use crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager;
 use zero_engine::EngineError;
+
+use super::{
+    FlowFailure, ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume,
+};
 
 #[cfg(feature = "hysteria2")]
 use super::h2_manager::H2ChainManager;
@@ -63,14 +68,6 @@ impl ProtocolUdpState {
         }
     }
 
-    pub(crate) async fn send_socks5_packet(
-        &mut self,
-        request: Socks5UdpPacketSend<'_>,
-        inbound_tag: &str,
-    ) -> Result<usize, EngineError> {
-        self.socks5.send_packet(request, inbound_tag).await
-    }
-
     pub(crate) fn socks5_runtime(&self) -> &Socks5UdpRuntime {
         &self.socks5
     }
@@ -97,5 +94,178 @@ impl ProtocolUdpState {
 
     pub(crate) fn close_socks5_all(self) {
         self.socks5.close_all();
+    }
+
+    pub(crate) async fn start_managed_udp_flow(
+        &mut self,
+        inbound_tag: &str,
+        request: ManagedUdpFlowRequest<'_>,
+    ) -> Result<usize, FlowFailure> {
+        match (&request.resume, request.kind) {
+            (ProtocolUdpFlowResume::Socks5(resume), ManagedUdpFlowKind::RelayStream) => {
+                let Some(proxy) = request.proxy else {
+                    return Err(managed_flow_mismatch(
+                        "udp_socks5_proxy",
+                        request.server,
+                        request.port,
+                        "expected proxy context for SOCKS5 UDP flow",
+                    ));
+                };
+                let packet = crate::protocol_runtime::socks5_udp::Socks5UdpPacketSend {
+                    proxy,
+                    tag: inbound_tag,
+                    server: request.server,
+                    port: request.port,
+                    resume: ProtocolUdpFlowResume::Socks5(resume.clone()),
+                    session: request.session,
+                    payload: request.payload,
+                };
+                self.socks5
+                    .send_packet(packet, inbound_tag)
+                    .await
+                    .map_err(|error| FlowFailure {
+                        stage: "udp_upstream_send",
+                        error,
+                        upstream: Some((request.server.to_string(), request.port)),
+                    })
+            }
+            #[cfg(feature = "shadowsocks")]
+            (ProtocolUdpFlowResume::Shadowsocks(_), ManagedUdpFlowKind::Datagram) => {
+                self.start_managed_datagram_flow(
+                    request.chain_tasks,
+                    ManagedDatagramFlow {
+                        proxy: request.proxy,
+                        session: request.session,
+                        server: request.server,
+                        port: request.port,
+                        resume: request.resume,
+                        payload: request.payload,
+                    },
+                )
+                .await
+            }
+            #[cfg(feature = "hysteria2")]
+            (ProtocolUdpFlowResume::Hysteria2(_), ManagedUdpFlowKind::Datagram) => {
+                self.start_managed_datagram_flow(
+                    request.chain_tasks,
+                    ManagedDatagramFlow {
+                        proxy: request.proxy,
+                        session: request.session,
+                        server: request.server,
+                        port: request.port,
+                        resume: request.resume,
+                        payload: request.payload,
+                    },
+                )
+                .await
+            }
+            #[cfg(feature = "trojan")]
+            (ProtocolUdpFlowResume::Trojan(_), ManagedUdpFlowKind::StreamPacket) => {
+                let Some(proxy) = request.proxy else {
+                    return Err(managed_flow_mismatch(
+                        "udp_trojan_proxy",
+                        request.server,
+                        request.port,
+                        "expected proxy context for Trojan UDP flow",
+                    ));
+                };
+                self.start_trojan_stream_packet_flow(ManagedStreamPacketFlow {
+                    chain_tasks: request.chain_tasks,
+                    proxy,
+                    session: request.session,
+                    server: request.server,
+                    port: request.port,
+                    resume: request.resume,
+                    payload: request.payload,
+                })
+                .await
+            }
+            #[cfg(feature = "trojan")]
+            (ProtocolUdpFlowResume::Trojan(_), ManagedUdpFlowKind::RelayStream) => {
+                let Some(carrier) = request.carrier else {
+                    return Err(managed_flow_mismatch(
+                        "udp_trojan_carrier",
+                        request.server,
+                        request.port,
+                        "expected relay carrier for Trojan UDP flow",
+                    ));
+                };
+                self.start_trojan_relay_stream_flow(ManagedRelayStreamFlow {
+                    chain_tasks: request.chain_tasks,
+                    proxy: request.proxy,
+                    session: request.session,
+                    carrier,
+                    tls_server_name: request.tls_server_name,
+                    server: request.server,
+                    port: request.port,
+                    resume: request.resume,
+                    payload: request.payload,
+                })
+                .await
+            }
+            #[cfg(feature = "mieru")]
+            (ProtocolUdpFlowResume::Mieru(_), ManagedUdpFlowKind::StreamPacket) => {
+                let Some(proxy) = request.proxy else {
+                    return Err(managed_flow_mismatch(
+                        "udp_mieru_proxy",
+                        request.server,
+                        request.port,
+                        "expected proxy context for Mieru UDP flow",
+                    ));
+                };
+                self.start_mieru_stream_packet_flow(ManagedStreamPacketFlow {
+                    chain_tasks: request.chain_tasks,
+                    proxy,
+                    session: request.session,
+                    server: request.server,
+                    port: request.port,
+                    resume: request.resume,
+                    payload: request.payload,
+                })
+                .await
+            }
+            #[cfg(feature = "mieru")]
+            (ProtocolUdpFlowResume::Mieru(_), ManagedUdpFlowKind::RelayStream) => {
+                let Some(carrier) = request.carrier else {
+                    return Err(managed_flow_mismatch(
+                        "udp_mieru_carrier",
+                        request.server,
+                        request.port,
+                        "expected relay carrier for Mieru UDP flow",
+                    ));
+                };
+                self.start_mieru_relay_stream_flow(ManagedRelayStreamFlow {
+                    chain_tasks: request.chain_tasks,
+                    proxy: request.proxy,
+                    session: request.session,
+                    carrier,
+                    tls_server_name: request.tls_server_name,
+                    server: request.server,
+                    port: request.port,
+                    resume: request.resume,
+                    payload: request.payload,
+                })
+                .await
+            }
+            _ => Err(managed_flow_mismatch(
+                "udp_managed_flow_resume",
+                request.server,
+                request.port,
+                "managed UDP flow kind does not match protocol resume",
+            )),
+        }
+    }
+}
+
+fn managed_flow_mismatch(
+    stage: &'static str,
+    server: &str,
+    port: u16,
+    message: &'static str,
+) -> FlowFailure {
+    FlowFailure {
+        stage,
+        error: EngineError::Io(std::io::Error::other(message)),
+        upstream: Some((server.to_string(), port)),
     }
 }

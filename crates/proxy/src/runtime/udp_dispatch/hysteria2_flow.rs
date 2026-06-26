@@ -1,4 +1,6 @@
-use crate::protocol_runtime::udp::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
+use crate::protocol_runtime::udp::{
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot,
+};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use zero_core::Session;
@@ -19,11 +21,15 @@ impl UdpDispatch {
         request: Hysteria2DatagramSend<'_>,
     ) -> Result<usize, FlowFailure> {
         self.protocol_state
-            .start_managed_datagram_flow(
-                &mut self.chain_tasks,
-                crate::protocol_runtime::udp::ManagedDatagramFlow {
+            .start_managed_udp_flow(
+                &self.inbound_tag,
+                ManagedUdpFlowRequest {
+                    chain_tasks: &mut self.chain_tasks,
                     proxy: None,
+                    kind: ManagedUdpFlowKind::Datagram,
                     session: request.session,
+                    carrier: None,
+                    tls_server_name: None,
                     server: request.server,
                     port: request.port,
                     resume: request.resume,
