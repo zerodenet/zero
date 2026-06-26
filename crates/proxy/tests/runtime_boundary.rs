@@ -1930,8 +1930,9 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     );
     assert!(
         !packet_path_source.contains("socks5::parse_udp_packet")
-            && packet_path_source.contains("socks5::decode_udp_associate_response"),
-        "SOCKS5 packet-path carrier should decode responses through semantic SOCKS5 associate helpers"
+            && !packet_path_source.contains("socks5::decode_udp_associate_response")
+            && packet_path_source.contains(".recv_payload(buf).await"),
+        "SOCKS5 packet-path carrier should delegate protocol response decoding to protocols/socks5"
     );
     assert!(
         root.contains("Socks5UdpPacketSend")

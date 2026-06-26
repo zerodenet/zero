@@ -1,7 +1,7 @@
 use zero_core::{Address, Error};
 use zero_traits::{DatagramSocket, IpAddress};
 
-use crate::shared::build_udp_packet;
+use crate::shared::{build_udp_packet, decode_udp_associate_response};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Socks5UdpRelayEndpoint {
@@ -76,6 +76,18 @@ where
         }
 
         Ok(read)
+    }
+
+    pub async fn recv_payload(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>> {
+        let read = self.recv_packet(buf).await?;
+        let packet =
+            decode_udp_associate_response(&buf[..read]).map_err(Socks5UdpRelayError::Protocol)?;
+        let payload_len = packet.payload.len();
+        buf[..payload_len].copy_from_slice(&packet.payload);
+        Ok(payload_len)
     }
 }
 

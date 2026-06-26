@@ -132,6 +132,14 @@ impl ActiveUpstreamSocks5UdpAssociation {
             Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),
         }
     }
+
+    pub(super) async fn recv_payload(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        match self.relay.recv_payload(buf).await {
+            Ok(read) => Ok(read),
+            Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
+            Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),
+        }
+    }
 }
 
 impl Drop for ActiveUpstreamSocks5UdpAssociation {
