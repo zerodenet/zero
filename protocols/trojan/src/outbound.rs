@@ -1,6 +1,6 @@
 //! Trojan outbound protocol handler.
 
-use zero_core::{Address, Error, ProtocolType, Session};
+use zero_core::{Address, Error, ProtocolType, Session, UdpFlowPacket};
 use zero_traits::{
     AsyncSocket, TcpTunnelProtocol, UdpPacketStreamFraming, UdpPacketTunnelProtocol,
 };
@@ -165,6 +165,15 @@ impl TrojanUdpFlowIo {
         S: AsyncSocket,
     {
         read_udp_flow_packet(stream).await
+    }
+
+    pub async fn read_flow_packet<S>(&self, stream: &mut S) -> Result<UdpFlowPacket, Error>
+    where
+        S: AsyncSocket,
+    {
+        let packet = self.read_packet(stream).await?;
+        let (target, port, payload) = packet.into_parts();
+        Ok(UdpFlowPacket::new(target, port, payload))
     }
 
     pub async fn write_stream_packet<S>(

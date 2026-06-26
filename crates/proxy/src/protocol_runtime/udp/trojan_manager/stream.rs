@@ -9,7 +9,7 @@ use zero_traits::AsyncSocket;
 
 pub(super) struct PacketStream {
     pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
-    pub(super) recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,
+    pub(super) recv_tx: broadcast::Sender<UdpFlowPacket>,
 }
 
 pub(super) async fn spawn_packet_stream(
@@ -25,7 +25,7 @@ pub(super) async fn spawn_packet_stream(
 
     let (read_half, write_half) = tokio::io::split(stream);
     let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
-    let (recv_tx, _) = broadcast::channel::<trojan::TrojanUdpPacket>(32);
+    let (recv_tx, _) = broadcast::channel::<UdpFlowPacket>(32);
 
     spawn_send_task(send_rx, WriteOnlySocket(write_half));
     spawn_recv_task(ReadOnlySocket(read_half), recv_tx.clone());
@@ -53,13 +53,10 @@ fn spawn_send_task(mut send_rx: mpsc::Receiver<UdpFlowPacket>, mut send_stream: 
     });
 }
 
-fn spawn_recv_task(
-    mut recv_stream: ReadOnlySocket,
-    recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,
-) {
+fn spawn_recv_task(mut recv_stream: ReadOnlySocket, recv_tx: broadcast::Sender<UdpFlowPacket>) {
     tokio::spawn(async move {
         let flow_io = trojan::TrojanUdpFlowIo;
-        while let Ok(packet) = flow_io.read_packet(&mut recv_stream).await {
+        while let Ok(packet) = flow_io.read_flow_packet(&mut recv_stream).await {
             if recv_tx.send(packet).is_err() {
                 break;
             }

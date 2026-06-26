@@ -24,7 +24,7 @@ impl TrojanKey {
 
 pub(super) struct TrojanEntry {
     pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
-    pub(super) recv_tx: broadcast::Sender<trojan::TrojanUdpPacket>,
+    pub(super) recv_tx: broadcast::Sender<UdpFlowPacket>,
 }
 
 pub(crate) struct TrojanSendExisting<'a> {

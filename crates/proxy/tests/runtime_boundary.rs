@@ -5641,6 +5641,7 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "read_udp_flow_packet",
         "write_udp_flow_packet",
         "TrojanUdpPacket {",
+        "trojan::TrojanUdpPacket",
     ] {
         assert!(
             !manager.contains(forbidden),
@@ -5664,19 +5665,20 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         stream.contains("tokio::io::split")
             && stream.contains("tokio::spawn")
             && stream.contains("trojan::TrojanUdpFlowIo")
-            && stream.contains("trojan::TrojanUdpPacket")
             && stream.contains(".establish_with_resume(")
             && stream.contains(".write_packet(")
             && stream.contains("&mut send_stream")
-            && stream.contains(".read_packet(")
+            && stream.contains(".read_flow_packet(")
             && stream.contains("&mut recv_stream")
+            && stream.contains("broadcast::Sender<UdpFlowPacket>")
             && !stream.contains(".write_stream_packet")
             && !stream.contains(".read_stream_packet")
+            && !stream.contains(".read_packet(")
             && !stream.contains("trojan::udp_flow_packet")
             && !transport.contains("trojan::")
             && !stream.contains("packet.write_to")
             && !model.contains("struct TrojanPacket"),
-        "Trojan UDP packet stream tasks should stay in proxy glue and use protocol-owned stream operations instead of owning protocol framing"
+        "Trojan UDP packet stream tasks should keep neutral proxy channels and use protocol-owned stream operations instead of owning protocol framing"
     );
 }
 
@@ -5976,8 +5978,10 @@ fn trojan_udp_state_model_lives_outside_manager() {
         );
     }
     assert!(
-        !model.contains("struct TrojanPacket") && model.contains("trojan::TrojanUdpPacket"),
-        "Trojan UDP state/request models should use protocol-owned UDP flow packet models instead of duplicating packet shape in proxy"
+        !model.contains("struct TrojanPacket")
+            && !model.contains("trojan::TrojanUdpPacket")
+            && model.contains("broadcast::Sender<UdpFlowPacket>"),
+        "Trojan UDP state/request models should keep neutral UDP packets instead of storing protocol packet models in proxy"
     );
 }
 
@@ -6026,10 +6030,13 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             .expect("read trojan protocol outbound source");
     assert!(
         protocol_outbound.contains("pub fn udp_flow_packet")
+            && protocol_outbound.contains("pub async fn read_flow_packet")
             && !establish.contains("trojan::udp_flow_packet")
             && !establish.contains("trojan::TrojanUdpPacket::new")
             && stream.contains("mpsc::Sender<UdpFlowPacket>")
+            && stream.contains("broadcast::Sender<UdpFlowPacket>")
             && !stream.contains("trojan::udp_flow_packet")
+            && !stream.contains("trojan::TrojanUdpPacket")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("trojan::udp_flow_packet"),
         "Trojan UDP stream glue should carry neutral UDP packets while proxy stream glue converts them through protocols/trojan"
@@ -6039,10 +6046,11 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             && stream.contains(".establish_with_resume(")
             && stream.contains(".write_packet(")
             && stream.contains("&mut send_stream")
-            && stream.contains(".read_packet(")
+            && stream.contains(".read_flow_packet(")
             && stream.contains("&mut recv_stream")
             && !stream.contains(".write_stream_packet")
             && !stream.contains(".read_stream_packet")
+            && !stream.contains(".read_packet(")
             && !transport.contains("trojan::TrojanUdpFlowIo")
             && !stream.contains("trojan::establish_udp_packet_tunnel"),
         "Trojan UDP packet stream should call the protocols/trojan flow I/O stream helpers from proxy stream glue"
