@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use zero_core::Address;
 use zero_engine::EngineError;
 use zero_traits::DatagramCodec;
+use zero_transport::udp_packet_path::QuicDatagramPacketPath;
 
 use crate::protocol_runtime::udp::PacketPathCarrier;
 
@@ -12,66 +13,23 @@ pub(crate) async fn build(
     codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 ) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
     let path = QuicDatagramPacketPath::new(conn, codec);
-    Ok(Arc::new(path))
+    Ok(Arc::new(PacketPathCarrierAdapter(path)))
 }
 
-pub(super) struct QuicDatagramPacketPath {
-    conn: Arc<quinn::Connection>,
-    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
-}
-
-impl QuicDatagramPacketPath {
-    pub(super) fn new(
-        conn: Arc<quinn::Connection>,
-        codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
-    ) -> Self {
-        Self { conn, codec }
-    }
-}
+struct PacketPathCarrierAdapter(QuicDatagramPacketPath);
 
 #[async_trait]
-impl PacketPathCarrier for QuicDatagramPacketPath {
+impl PacketPathCarrier for PacketPathCarrierAdapter {
     async fn send_to(
         &self,
         target: &Address,
         port: u16,
         payload: &[u8],
     ) -> Result<(), EngineError> {
-        let datagram = self
-            .codec
-            .encode(target, port, payload)
-            .map_err(EngineError::from)?;
-        self.conn.send_datagram(datagram.into()).map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!(
-                "QUIC datagram packet-path carrier send: {e}"
-            )))
-        })?;
-        Ok(())
+        self.0.send_to(target, port, payload).await
     }
 
     async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        let data = self.conn.read_datagram().await.map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!(
-                "QUIC datagram packet-path carrier recv: {e}"
-            )))
-        })?;
-        let (_, _, payload) = self.codec.decode(&data).ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "failed to decode QUIC packet-path datagram",
-            ))
-        })?;
-        let len = payload.len();
-        if len > buf.len() {
-            return Err(EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "QUIC datagram packet-path carrier datagram ({len}B) exceeds recv buffer ({}B)",
-                    buf.len()
-                ),
-            )));
-        }
-        buf[..len].copy_from_slice(&payload);
-        Ok(len)
+        self.0.recv_from(buf).await
     }
 }

@@ -22,6 +22,7 @@ pub mod split_http;
 pub mod tls;
 #[cfg(feature = "trojan")]
 pub mod trojan_transport;
+pub mod udp_packet_path;
 #[cfg(feature = "vless")]
 pub mod vless_transport;
 #[cfg(all(feature = "tls", feature = "ws", feature = "grpc"))]
