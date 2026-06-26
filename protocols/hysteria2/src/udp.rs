@@ -1,5 +1,6 @@
 // Hysteria2 UDP datagram — udp.rs
 
+use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -285,6 +286,15 @@ impl Hysteria2UdpFlowResume {
         payload: &[u8],
     ) -> Result<Vec<u8>, Error> {
         encode_udp_flow_packet(target, port, payload)
+    }
+
+    pub fn encode_flow_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.encode_packet(target, port, payload)
     }
 
     pub fn decode_packet(&self, data: &[u8]) -> Option<(Address, u16, Vec<u8>)> {

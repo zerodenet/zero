@@ -2653,6 +2653,32 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
 }
 
 #[test]
+fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
+    let stream = read("src/protocol_runtime/udp/h2_manager/stream.rs");
+    let protocol = manifest_dir()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root")
+        .join("protocols/hysteria2/src/udp.rs");
+    let protocol = std::fs::read_to_string(protocol).expect("read hysteria2 udp protocol source");
+
+    for forbidden in ["hysteria2::udp_flow_packet", ".encode_with(&resume)"] {
+        assert!(
+            !stream.contains(forbidden),
+            "Hysteria2 UDP stream pump should delegate packet construction/encoding to protocol resume API; found `{forbidden}`"
+        );
+    }
+    assert!(
+        stream.contains("resume.encode_flow_packet"),
+        "Hysteria2 UDP stream pump should call the protocol resume encode boundary"
+    );
+    assert!(
+        protocol.contains("pub fn encode_flow_packet"),
+        "Hysteria2 protocol crate should own flow packet encoding"
+    );
+}
+
+#[test]
 fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     let root = read("src/inbound/vmess/mux.rs");
     let model = read("src/inbound/vmess/model.rs");
@@ -6692,6 +6718,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec")
             && protocol_udp.contains("pub fn udp_flow_packet")
             && protocol_udp.contains("pub fn encode_packet(")
+            && protocol_udp.contains("pub fn encode_flow_packet(")
             && protocol_udp.contains("pub fn decode_packet(&self"),
         "Hysteria2 adapter and UDP manager should consume protocol-owned UDP flow packet helpers"
     );
@@ -6709,11 +6736,11 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !manager_send.contains("Hysteria2UdpFlowPacket::from_parts")
             && !stream.contains("Hysteria2UdpFlowPacket::from_parts")
             && manager_send.contains("UdpFlowPacket::from_parts")
-            && !stream.contains("UdpFlowPacket::from_parts")
             && stream.contains("mpsc::Sender<UdpFlowPacket>")
-            && stream.contains("packet.encode_with(&resume)")
+            && stream.contains("resume.encode_flow_packet")
+            && !stream.contains("packet.encode_with(&resume)")
+            && !stream.contains("hysteria2::udp_flow_packet")
             && stream.contains("resume.decode_flow_packet(&data)")
-            && stream.contains("hysteria2::udp_flow_packet")
             && !stream.contains("establish_hysteria2_udp_flow_stream")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("hysteria2::udp_flow_packet")
@@ -6889,7 +6916,8 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
     for forbidden in [
         "establish_hysteria2_udp_flow_stream",
         "Hysteria2UdpFlowStreamRequest",
-        "resume.encode_packet",
+        "hysteria2::udp_flow_packet",
+        "packet.encode_with(&resume)",
         "resume.decode_packet",
     ] {
         assert!(
@@ -6905,8 +6933,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && stream.contains("tokio::spawn")
             && stream.contains("mpsc::channel::<UdpFlowPacket>")
             && stream.contains("tokio::sync::broadcast::channel::<bridge::RecvItem>")
-            && stream.contains("hysteria2::udp_flow_packet")
-            && stream.contains("packet.encode_with(&resume)")
+            && stream.contains("resume.encode_flow_packet")
             && stream.contains("resume.decode_flow_packet(&data)")
             && !protocol_udp.contains("pub fn open_udp_flow")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
@@ -6915,6 +6942,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && !transport.contains("pub async fn establish_hysteria2_udp_flow_stream")
             && !transport.contains("Hysteria2UdpFlowStreamRequest")
             && !transport.contains("hysteria2::udp_flow_packet")
+            && !transport.contains("resume.encode_flow_packet")
             && !transport.contains("resume.decode_flow_packet"),
         "Hysteria2 UDP flow tasks should stay in proxy stream glue while protocols/hysteria2 owns packet encode/decode helpers"
     );
