@@ -22,10 +22,12 @@ pub(crate) struct ManagedStreamPacketFlow<'a> {
     pub(crate) payload: &'a [u8],
 }
 
-#[cfg(feature = "mieru")]
-pub(crate) struct MieruUdpRelayFlow<'a> {
+pub(crate) struct ManagedRelayStreamFlow<'a> {
+    pub(crate) chain_tasks: &'a mut tokio::task::JoinSet<super::ChainTask>,
+    pub(crate) proxy: Option<&'a Proxy>,
     pub(crate) session: &'a Session,
     pub(crate) carrier: crate::transport::RelayCarrier,
+    pub(crate) tls_server_name: Option<&'a str>,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
     pub(crate) resume: ProtocolUdpFlowResume,

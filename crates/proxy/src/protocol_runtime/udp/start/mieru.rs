@@ -1,9 +1,8 @@
 use super::super::mieru_manager::model::{MieruRelayExisting, MieruSendExisting};
 use super::super::state::ProtocolUdpState;
 use super::super::{
-    ChainTask, FlowFailure, ManagedStreamPacketFlow, MieruUdpRelayFlow, ProtocolUdpFlowResume,
+    FlowFailure, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ProtocolUdpFlowResume,
 };
-use tokio::task::JoinSet;
 
 impl ProtocolUdpState {
     pub(crate) async fn start_mieru_stream_packet_flow(
@@ -34,10 +33,9 @@ impl ProtocolUdpState {
             .await
     }
 
-    pub(crate) async fn start_mieru_udp_relay_flow(
+    pub(crate) async fn start_mieru_relay_stream_flow(
         &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        flow: MieruUdpRelayFlow<'_>,
+        flow: ManagedRelayStreamFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         let ProtocolUdpFlowResume::Mieru(resume) = &flow.resume else {
             return Err(resume_mismatch(
@@ -49,7 +47,7 @@ impl ProtocolUdpState {
         };
         self.mieru
             .send_relay_existing(MieruRelayExisting {
-                chain_tasks,
+                chain_tasks: flow.chain_tasks,
                 session_id: flow.session.id,
                 stream: flow.carrier.stream,
                 server: flow.server,

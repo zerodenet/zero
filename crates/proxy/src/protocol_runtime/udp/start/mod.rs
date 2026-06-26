@@ -7,6 +7,3 @@ mod trojan;
 mod vless;
 #[cfg(feature = "vmess")]
 mod vmess;
-
-#[cfg(feature = "trojan")]
-pub(crate) use trojan::TrojanUdpRelayFlowRequest;

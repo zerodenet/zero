@@ -1,9 +1,8 @@
 use super::super::state::ProtocolUdpState;
 use super::super::trojan_manager::model::{TrojanRelayExisting, TrojanSendExisting};
-use super::super::{ChainTask, FlowFailure, ManagedStreamPacketFlow, ProtocolUdpFlowResume};
-use crate::runtime::Proxy;
-use tokio::task::JoinSet;
-use zero_core::Session;
+use super::super::{
+    FlowFailure, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ProtocolUdpFlowResume,
+};
 
 impl ProtocolUdpState {
     pub(crate) async fn start_trojan_stream_packet_flow(
@@ -34,9 +33,9 @@ impl ProtocolUdpState {
             .await
     }
 
-    pub(crate) async fn start_trojan_udp_relay_flow(
+    pub(crate) async fn start_trojan_relay_stream_flow(
         &mut self,
-        request: TrojanUdpRelayFlowRequest<'_>,
+        request: ManagedRelayStreamFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         let ProtocolUdpFlowResume::Trojan(resume) = &request.resume else {
             return Err(resume_mismatch(
@@ -46,13 +45,21 @@ impl ProtocolUdpState {
                 "expected Trojan UDP flow resume",
             ));
         };
+        let Some(proxy) = request.proxy else {
+            return Err(resume_mismatch(
+                "udp_trojan_resume",
+                request.server,
+                request.port,
+                "expected Trojan UDP relay proxy context",
+            ));
+        };
         self.trojan
             .send_relay_existing(TrojanRelayExisting {
                 chain_tasks: request.chain_tasks,
                 session_id: request.session.id,
                 stream: request.carrier.stream,
-                tls_server_name: None,
-                proxy: request.proxy,
+                tls_server_name: request.tls_server_name,
+                proxy,
                 session: request.session,
                 server: request.server,
                 port: request.port,
@@ -63,17 +70,6 @@ impl ProtocolUdpState {
             })
             .await
     }
-}
-
-pub(crate) struct TrojanUdpRelayFlowRequest<'a> {
-    pub chain_tasks: &'a mut JoinSet<ChainTask>,
-    pub proxy: &'a Proxy,
-    pub session: &'a Session,
-    pub carrier: crate::transport::RelayCarrier,
-    pub server: &'a str,
-    pub port: u16,
-    pub resume: ProtocolUdpFlowResume,
-    pub payload: &'a [u8],
 }
 
 fn resume_mismatch(

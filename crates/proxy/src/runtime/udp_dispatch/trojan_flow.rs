@@ -77,11 +77,12 @@ impl UdpDispatch {
         request: TrojanRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
         self.protocol_state
-            .start_trojan_udp_relay_flow(crate::protocol_runtime::udp::TrojanUdpRelayFlowRequest {
+            .start_trojan_relay_stream_flow(crate::protocol_runtime::udp::ManagedRelayStreamFlow {
                 chain_tasks: &mut self.chain_tasks,
-                proxy: request.proxy,
+                proxy: Some(request.proxy),
                 session: request.session,
                 carrier: request.carrier,
+                tls_server_name: None,
                 server: request.server,
                 port: request.port,
                 resume: request.resume,

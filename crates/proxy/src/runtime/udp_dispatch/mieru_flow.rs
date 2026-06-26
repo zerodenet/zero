@@ -73,17 +73,17 @@ impl UdpDispatch {
         request: MieruRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
         self.protocol_state
-            .start_mieru_udp_relay_flow(
-                &mut self.chain_tasks,
-                crate::protocol_runtime::udp::MieruUdpRelayFlow {
-                    session: request.session,
-                    carrier: request.carrier,
-                    server: request.server,
-                    port: request.port,
-                    resume: request.resume,
-                    payload: request.payload,
-                },
-            )
+            .start_mieru_relay_stream_flow(crate::protocol_runtime::udp::ManagedRelayStreamFlow {
+                chain_tasks: &mut self.chain_tasks,
+                proxy: None,
+                session: request.session,
+                carrier: request.carrier,
+                tls_server_name: None,
+                server: request.server,
+                port: request.port,
+                resume: request.resume,
+                payload: request.payload,
+            })
             .await
     }
 

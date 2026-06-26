@@ -1205,6 +1205,7 @@ fn adapter_root_does_not_import_protocol_udp_request_types() {
         "VmessUdpFlow",
         "VmessUdpRelayFlow",
         "MieruUdpRelayFlow",
+        "TrojanUdpRelayFlowRequest",
     ] {
         assert!(
             !adapters.contains(forbidden),
@@ -3223,13 +3224,13 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
                 Some(("Hysteria2DatagramSend", "start_managed_datagram_flow"))
             }
             "src/runtime/udp_dispatch/mieru_flow.rs" => {
-                Some(("MieruDatagramSend", "start_mieru_stream_packet_flow"))
+                Some(("MieruDatagramSend", "start_mieru_relay_stream_flow"))
             }
             "src/runtime/udp_dispatch/shadowsocks_flow.rs" => {
                 Some(("ShadowsocksDatagramSend", "start_managed_datagram_flow"))
             }
             "src/runtime/udp_dispatch/trojan_flow.rs" => {
-                Some(("TrojanDatagramSend", "start_trojan_stream_packet_flow"))
+                Some(("TrojanDatagramSend", "start_trojan_relay_stream_flow"))
             }
             "src/runtime/udp_dispatch/vless_flow.rs" => {
                 Some(("VlessDatagramSend", "start_vless_udp_flow"))
@@ -3244,28 +3245,18 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
                 content.contains(request) && content.contains(start),
                 "{source} should own its narrow protocol-state bridge"
             );
-            continue;
         }
         for forbidden in [
             "ShadowsocksUdpFlow",
             "MieruUdpRelayFlow",
-            "VlessUdpFlow",
-            "VlessUdpRelayFinalHop",
-            "VlessUdpRelayTwoStream",
-            "VmessUdpFlow",
-            "VmessUdpRelayFlow",
             "start_hysteria2_udp_flow",
             "start_shadowsocks_udp_flow",
             "Hysteria2UdpFlowRequest",
             "TrojanUdpFlowRequest",
             "TrojanUdpRelayFlowRequest",
             "MieruUdpFlowRequest",
+            "start_trojan_udp_relay_flow",
             "start_mieru_udp_relay_flow",
-            "start_vless_udp_flow",
-            "start_vless_udp_relay_two_stream",
-            "start_vless_udp_relay_final_hop",
-            "start_vmess_udp_flow",
-            "start_vmess_udp_relay_flow",
         ] {
             assert!(
                 !content.contains(forbidden),
@@ -6578,7 +6569,7 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
         (
             "src/runtime/udp_dispatch/mieru_flow.rs",
             "MieruDatagramSend",
-            "start_mieru_stream_packet_flow",
+            "start_mieru_relay_stream_flow",
             "start_mieru_datagram_flow",
         ),
         (
@@ -6596,7 +6587,7 @@ fn udp_adapters_use_dispatch_facades_for_protocol_state() {
         (
             "src/runtime/udp_dispatch/trojan_flow.rs",
             "TrojanDatagramSend",
-            "start_trojan_stream_packet_flow",
+            "start_trojan_relay_stream_flow",
             "start_trojan_datagram_flow",
         ),
         (
@@ -6733,6 +6724,7 @@ fn adapters_do_not_import_protocol_udp_types_through_runtime_dispatch() {
             "crate::runtime::udp_dispatch::build_hysteria2_packet_path",
             "crate::runtime::udp_dispatch::ShadowsocksUdpFlow",
             "crate::runtime::udp_dispatch::MieruUdpRelayFlow",
+            "crate::runtime::udp_dispatch::TrojanUdpRelayFlowRequest",
             "crate::runtime::udp_dispatch::VlessUdpFlow",
             "crate::runtime::udp_dispatch::VmessUdpFlow",
         ] {
