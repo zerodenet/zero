@@ -2850,8 +2850,10 @@ fn udp_packet_path_carrier_snapshot_is_protocol_neutral() {
         "packet-path carrier snapshot storage should not remain a protocol-named enum"
     );
     assert!(
-        traits.contains("struct PacketPathCarrierSnapshot") && traits.contains("cache_key: String"),
-        "protocol_runtime::udp should keep neutral packet-path carrier snapshot keyed by adapter-built identity"
+        !traits.contains("struct PacketPathCarrierSnapshot")
+            && traits.contains("struct PacketPathCarrierDescriptor")
+            && traits.contains("carrier_cache_key: String"),
+        "packet-path flow snapshots should derive carrier identity directly from the adapter-built carrier descriptor"
     );
     assert!(
         traits.contains("struct PacketPathFlowSnapshot")

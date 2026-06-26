@@ -33,19 +33,6 @@ pub(crate) struct PacketPathCarrierDescriptor {
     pub(crate) port: u16,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PacketPathCarrierSnapshot {
-    cache_key: String,
-}
-
-impl PacketPathCarrierSnapshot {
-    pub(crate) fn from_descriptor(descriptor: &PacketPathCarrierDescriptor) -> Self {
-        Self {
-            cache_key: descriptor.cache_key.clone(),
-        }
-    }
-}
-
 /// Datagram source params for a relay-chain final hop over a packet path.
 ///
 /// Produced by `UdpPacketPathCapability::udp_datagram_source`. The `cache_key`
@@ -103,7 +90,7 @@ pub(crate) struct PacketPathFlowSnapshot {
 impl PacketPathFlowSnapshot {
     fn from_parts(
         datagram: &UdpDatagramDescriptor<'_>,
-        carrier: &PacketPathCarrierSnapshot,
+        carrier: &PacketPathCarrierDescriptor,
     ) -> Self {
         Self {
             carrier_cache_key: carrier.cache_key.clone(),
@@ -125,9 +112,7 @@ impl<'a> PacketPathFlowBinding<'a> {
         datagram: UdpDatagramSource<'a>,
         carrier_desc: &PacketPathCarrierDescriptor,
     ) -> Self {
-        let carrier_snapshot = PacketPathCarrierSnapshot::from_descriptor(carrier_desc);
-        let flow_snapshot =
-            PacketPathFlowSnapshot::from_parts(datagram.descriptor(), &carrier_snapshot);
+        let flow_snapshot = PacketPathFlowSnapshot::from_parts(datagram.descriptor(), carrier_desc);
         Self {
             datagram,
             flow_snapshot,
