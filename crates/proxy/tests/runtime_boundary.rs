@@ -1332,6 +1332,49 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
 }
 
 #[test]
+fn stream_udp_roots_delegate_flow_building() {
+    for (root_path, flow_path, config) in [
+        (
+            "src/adapters/trojan/udp.rs",
+            "src/adapters/trojan/udp/flow.rs",
+            "TrojanUdpFlowConfig::new",
+        ),
+        (
+            "src/adapters/mieru/udp.rs",
+            "src/adapters/mieru/udp/flow.rs",
+            "MieruUdpFlowConfig::new",
+        ),
+    ] {
+        let root = read(root_path);
+        let flow = read(flow_path);
+
+        assert!(
+            root.contains("mod flow;"),
+            "{root_path} should wire flow as protocol-local UDP glue"
+        );
+        for forbidden in [
+            config,
+            ".flow_resume(false)",
+            ".flow_resume(true)",
+            "ManagedProtocolUdpSend {",
+            "ManagedUdpFlowResume::new",
+        ] {
+            assert!(
+                !root.contains(forbidden),
+                "{root_path} should be a UDP capability facade and not own `{forbidden}`"
+            );
+        }
+        assert!(
+            flow.contains(config)
+                && flow.contains(".flow_resume(request.relay_chain)")
+                && flow.contains("ManagedProtocolUdpSend {")
+                && flow.contains("ManagedUdpFlowResume::new"),
+            "{flow_path} should own stream UDP flow and relay-final-hop resume construction"
+        );
+    }
+}
+
+#[test]
 fn adapter_root_is_facade_only() {
     let adapters = read("src/adapters/mod.rs");
 
@@ -7270,6 +7313,7 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
 #[test]
 fn trojan_udp_flow_resume_is_protocol_owned() {
     let adapter = read("src/adapters/trojan/udp.rs");
+    let adapter_flow = read("src/adapters/trojan/udp/flow.rs");
     let snapshot = read("src/runtime/udp_flow/managed/flow.rs");
     let forward = read("src/runtime/udp_flow/managed/stream.rs");
     let start = read("src/runtime/udp_flow/managed/stream.rs");
@@ -7289,9 +7333,11 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
 
     assert!(
         !adapter.contains("TrojanUdpFlowResume::new")
-            && adapter.contains("TrojanUdpFlowConfig::new")
-            && adapter.contains(".flow_resume(false)")
-            && adapter.contains(".flow_resume(true)")
+            && !adapter.contains("TrojanUdpFlowConfig::new")
+            && !adapter.contains(".flow_resume(false)")
+            && !adapter.contains(".flow_resume(true)")
+            && adapter_flow.contains("TrojanUdpFlowConfig::new")
+            && adapter_flow.contains(".flow_resume(request.relay_chain)")
             && protocol_outbound.contains("struct TrojanUdpFlowResume")
             && protocol_outbound.contains("struct TrojanUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self, relay_chain: bool)")
@@ -7517,6 +7563,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let manager = read("src/adapters/mieru/udp/manager.rs");
     let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
+    let adapter_flow = read("src/adapters/mieru/udp/flow.rs");
     let snapshot = read("src/runtime/udp_flow/managed/flow.rs");
     let forward = read("src/runtime/udp_flow/managed/stream.rs");
     let manager_send = read("src/adapters/mieru/udp/manager/send.rs");
@@ -7614,9 +7661,11 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     );
     assert!(
         !adapter.contains("MieruUdpFlowResume::new")
-            && adapter.contains("MieruUdpFlowConfig::new")
-            && adapter.contains(".flow_resume(false)")
-            && adapter.contains(".flow_resume(true)")
+            && !adapter.contains("MieruUdpFlowConfig::new")
+            && !adapter.contains(".flow_resume(false)")
+            && !adapter.contains(".flow_resume(true)")
+            && adapter_flow.contains("MieruUdpFlowConfig::new")
+            && adapter_flow.contains(".flow_resume(request.relay_chain)")
             && protocol_udp.contains("struct MieruUdpFlowResume")
             && protocol_udp.contains("struct MieruUdpFlowConfig")
             && protocol_udp.contains("pub fn flow_resume(&self, relay_chain: bool)")
@@ -9454,8 +9503,8 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
         "src/adapters/socks5/udp.rs",
         "src/adapters/shadowsocks/udp/flow.rs",
         "src/adapters/hysteria2/udp/flow.rs",
-        "src/adapters/trojan/udp.rs",
-        "src/adapters/mieru/udp.rs",
+        "src/adapters/trojan/udp/flow.rs",
+        "src/adapters/mieru/udp/flow.rs",
     ] {
         let adapter = read(source);
         for required in [
@@ -9590,9 +9639,9 @@ fn udp_dispatch_does_not_unpack_protocol_flow_resume() {
     for source in [
         "src/runtime/udp_dispatch/managed.rs",
         "src/adapters/hysteria2/udp/flow.rs",
-        "src/adapters/mieru/udp.rs",
+        "src/adapters/mieru/udp/flow.rs",
         "src/adapters/shadowsocks/udp.rs",
-        "src/adapters/trojan/udp.rs",
+        "src/adapters/trojan/udp/flow.rs",
     ] {
         let content = read(source);
         for forbidden in [
