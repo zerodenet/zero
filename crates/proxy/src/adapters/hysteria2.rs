@@ -22,7 +22,7 @@ mod inbound;
 #[cfg(feature = "hysteria2")]
 mod tcp;
 #[cfg(feature = "hysteria2")]
-mod udp;
+pub(crate) mod udp;
 
 #[cfg(feature = "hysteria2")]
 #[derive(Debug)]

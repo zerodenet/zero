@@ -20,7 +20,7 @@ mod inbound;
 #[cfg(feature = "trojan")]
 mod tcp;
 #[cfg(feature = "trojan")]
-mod udp;
+pub(crate) mod udp;
 
 #[cfg(feature = "trojan")]
 #[derive(Debug)]

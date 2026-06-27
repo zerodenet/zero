@@ -56,15 +56,15 @@ pub(crate) fn protocol_udp_handlers() -> ProtocolUdpHandlers {
         managed: ManagedUdpHandlers {
             datagram: vec![
                 #[cfg(feature = "shadowsocks")]
-                crate::protocol_runtime::udp::shadowsocks_datagram_handler(),
+                crate::adapters::shadowsocks_udp_datagram_handler(),
                 #[cfg(feature = "hysteria2")]
-                crate::protocol_runtime::udp::hysteria2_datagram_handler(),
+                crate::adapters::hysteria2_udp_datagram_handler(),
             ],
             stream: vec![
                 #[cfg(feature = "trojan")]
-                crate::protocol_runtime::udp::trojan_stream_handler(),
+                crate::adapters::trojan_udp_stream_handler(),
                 #[cfg(feature = "mieru")]
-                crate::protocol_runtime::udp::mieru_stream_handler(),
+                crate::adapters::mieru_udp_stream_handler(),
             ],
         },
     }

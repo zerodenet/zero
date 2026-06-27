@@ -22,7 +22,7 @@ mod inbound;
 #[cfg(feature = "shadowsocks")]
 mod tcp;
 #[cfg(feature = "shadowsocks")]
-mod udp;
+pub(crate) mod udp;
 
 #[cfg(feature = "shadowsocks")]
 #[derive(Debug)]

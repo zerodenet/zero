@@ -6,10 +6,16 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::{ManagedUdpFlowKind, ProtocolUdpFlowResume};
+use crate::protocol_runtime::udp::{
+    ManagedDatagramFlowHandler, ManagedUdpFlowKind, ProtocolUdpFlowResume,
+};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 use crate::runtime::Proxy;
+
+pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> {
+    Box::new(crate::protocol_runtime::udp::ss_manager::SsChainManager::new())
+}
 
 impl ShadowsocksAdapter {
     pub(super) fn udp_packet_path_carrier_descriptor_impl(

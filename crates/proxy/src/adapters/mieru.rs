@@ -20,7 +20,7 @@ mod inbound;
 #[cfg(feature = "mieru")]
 mod tcp;
 #[cfg(feature = "mieru")]
-mod udp;
+pub(crate) mod udp;
 
 #[cfg(feature = "mieru")]
 #[derive(Debug)]

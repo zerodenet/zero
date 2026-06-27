@@ -4,10 +4,16 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::trojan::TrojanAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::{ManagedUdpFlowKind, ProtocolUdpFlowResume};
+use crate::protocol_runtime::udp::{
+    ManagedStreamFlowHandler, ManagedUdpFlowKind, ProtocolUdpFlowResume,
+};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 use crate::runtime::Proxy;
+
+pub(crate) fn managed_stream_handler() -> Box<dyn ManagedStreamFlowHandler> {
+    Box::new(crate::protocol_runtime::udp::trojan_manager::TrojanChainManager::new())
+}
 
 impl TrojanAdapter {
     pub(super) async fn start_udp_flow_impl(

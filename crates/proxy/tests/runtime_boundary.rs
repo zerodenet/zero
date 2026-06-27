@@ -1224,12 +1224,16 @@ fn adapter_root_is_facade_only() {
         "mod vless;",
         "mod vmess;",
         "pub(crate) use direct::DirectAdapter;",
+        "pub(crate) use hysteria2::udp::managed_datagram_handler as hysteria2_udp_datagram_handler;",
         "pub(crate) use http_connect::HttpConnectAdapter;",
         "pub(crate) use hysteria2::Hysteria2Adapter;",
+        "pub(crate) use mieru::udp::managed_stream_handler as mieru_udp_stream_handler;",
         "pub(crate) use mieru::MieruAdapter;",
         "pub(crate) use mixed::MixedAdapter;",
+        "pub(crate) use shadowsocks::udp::managed_datagram_handler as shadowsocks_udp_datagram_handler;",
         "pub(crate) use shadowsocks::ShadowsocksAdapter;",
         "pub(crate) use socks5::Socks5Adapter;",
+        "pub(crate) use trojan::udp::managed_stream_handler as trojan_udp_stream_handler;",
         "pub(crate) use trojan::TrojanAdapter;",
         "pub(crate) use vless::VlessAdapter;",
         "pub(crate) use vmess::VmessAdapter;",
@@ -3767,8 +3771,10 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     );
     assert!(
         register.contains("protocol_udp_handlers")
-            && register.contains("shadowsocks_datagram_handler")
-            && register.contains("hysteria2_datagram_handler"),
+            && register.contains("crate::adapters::shadowsocks_udp_datagram_handler")
+            && register.contains("crate::adapters::hysteria2_udp_datagram_handler")
+            && !register.contains("crate::protocol_runtime::udp::shadowsocks_datagram_handler")
+            && !register.contains("crate::protocol_runtime::udp::hysteria2_datagram_handler"),
         "datagram UDP handler collection should live at the compiled registration boundary"
     );
 }
@@ -3842,8 +3848,10 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
     );
     assert!(
         register.contains("protocol_udp_handlers")
-            && register.contains("trojan_stream_handler")
-            && register.contains("mieru_stream_handler"),
+            && register.contains("crate::adapters::trojan_udp_stream_handler")
+            && register.contains("crate::adapters::mieru_udp_stream_handler")
+            && !register.contains("crate::protocol_runtime::udp::trojan_stream_handler")
+            && !register.contains("crate::protocol_runtime::udp::mieru_stream_handler"),
         "stream UDP handler collection should live at the compiled registration boundary"
     );
 }
@@ -5246,6 +5254,12 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
         "TrojanUdpPeer",
         "MieruUdpPeer",
         "UdpPeerEndpoint",
+        "shadowsocks_datagram_handler",
+        "hysteria2_datagram_handler",
+        "trojan_stream_handler",
+        "mieru_stream_handler",
+        "Box<dyn ManagedDatagramFlowHandler>",
+        "Box<dyn ManagedStreamFlowHandler>",
     ] {
         assert!(
             !root.contains(forbidden),
@@ -5253,14 +5267,53 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
         );
     }
     assert!(
-        root.contains("shadowsocks_datagram_handler")
-            && root.contains("hysteria2_datagram_handler")
-            && root.contains("trojan_stream_handler")
-            && root.contains("mieru_stream_handler")
-            && root.contains("Box<dyn ManagedDatagramFlowHandler>")
-            && root.contains("Box<dyn ManagedStreamFlowHandler>"),
-        "UDP root should expose only opaque managed UDP handler factories for the registration boundary"
+        root.contains("pub(crate) mod h2_manager")
+            && root.contains("pub(crate) mod mieru_manager")
+            && root.contains("pub(crate) mod ss_manager")
+            && root.contains("pub(crate) mod trojan_manager")
+            && root.contains("ManagedDatagramFlowHandler")
+            && root.contains("ManagedStreamFlowHandler"),
+        "UDP root should expose manager modules without protocol-named handler factories"
     );
+}
+
+#[test]
+fn protocol_udp_manager_construction_is_adapter_registered() {
+    let allowed = [
+        "src/adapters/hysteria2/udp.rs",
+        "src/adapters/mieru/udp.rs",
+        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/trojan/udp.rs",
+        "src/protocol_runtime/udp/h2_manager.rs",
+        "src/protocol_runtime/udp/h2_manager/",
+        "src/protocol_runtime/udp/mieru_manager.rs",
+        "src/protocol_runtime/udp/mieru_manager/",
+        "src/protocol_runtime/udp/ss_manager.rs",
+        "src/protocol_runtime/udp/ss_manager/",
+        "src/protocol_runtime/udp/trojan_manager.rs",
+        "src/protocol_runtime/udp/trojan_manager/",
+    ];
+
+    for path in rust_sources_under("src") {
+        let source = relative(&path);
+        if source == "src/protocol_runtime/udp/mod.rs"
+            || allowed.iter().any(|allowed| source.starts_with(allowed))
+        {
+            continue;
+        }
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in [
+            "protocol_runtime::udp::h2_manager",
+            "protocol_runtime::udp::mieru_manager",
+            "protocol_runtime::udp::ss_manager",
+            "protocol_runtime::udp::trojan_manager",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should not construct or import protocol UDP manager module `{forbidden}` directly"
+            );
+        }
+    }
 }
 
 #[test]
