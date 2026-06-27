@@ -2404,6 +2404,12 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         ".read_packet_tokio(",
         "tokio::select!",
         "tokio::spawn",
+        "vmess::VmessEstablishedUdpFlow",
+        "vmess::VmessInitialUdpFlowPacket",
+        "vmess::establish_udp_flow(",
+        "vmess::spawn_udp_flow",
+        "VmessInitialUdpFlowPacket::from_parts",
+        "initial_packet.encoded_len(&flow_io)",
     ] {
         assert!(
             !runtime.contains(forbidden) && !model.contains(forbidden),
@@ -2420,17 +2426,16 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     assert!(
         !runtime.contains("vmess::open_udp_flow")
             && !runtime.contains("vmess::open_mux_udp_flow")
-            && runtime.contains("vmess::establish_udp_flow")
-            && runtime.contains("vmess::VmessEstablishedUdpFlow")
-            && runtime.contains("vmess::spawn_udp_flow")
+            && runtime.contains("vmess::establish_udp_flow_with_initial_packet")
+            && runtime.contains("vmess::start_udp_flow_with_initial_packet")
             && !runtime.contains("vmess::establish_udp_flow_stream")
             && !runtime.contains("vmess::encode_udp_flow_initial_packet")
             && !runtime.contains("vmess::VmessUdpFlowIo")
-            && runtime.contains("vmess::VmessInitialUdpFlowPacket::from_parts")
-            && runtime.contains("initial_packet.encoded_len(&flow_io)")
             && !runtime.contains("broadcast::channel::<VmessFlowResponse>")
             && model.contains("vmess::VmessUdpFlowSession")
             && !model.contains("vmess::VmessUdpFlowSender")
+            && protocol.contains("pub async fn establish_udp_flow_with_initial_packet")
+            && protocol.contains("pub fn start_udp_flow_with_initial_packet")
             && protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("tokio::select!")
             && protocol.contains("struct VmessUdpFlowSender")
@@ -6242,7 +6247,7 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
         (
             "src/adapters/vmess/udp/manager.rs",
             &vmess_runtime,
-            "spawn_udp_flow",
+            "establish_udp_flow_with_initial_packet",
         ),
     ] {
         for forbidden in [".encode_packet(", ".decode_packet("] {

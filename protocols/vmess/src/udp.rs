@@ -346,6 +346,11 @@ pub struct VmessUdpFlowHandle {
     responses: VmessUdpFlowResponses,
 }
 
+pub struct VmessEstablishedUdpFlowHandle {
+    pub handle: VmessUdpFlowHandle,
+    pub initial_packet_len: usize,
+}
+
 #[derive(Clone)]
 pub struct VmessUdpFlowSession {
     sender: VmessUdpFlowSender,
@@ -455,6 +460,26 @@ where
     }
 }
 
+pub fn start_udp_flow_with_initial_packet<S>(
+    stream: S,
+    target: &Address,
+    port: u16,
+    initial_payload: &[u8],
+) -> Result<VmessEstablishedUdpFlowHandle, Error>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    let flow_io = VmessEstablishedUdpFlow::default();
+    let initial_packet = VmessInitialUdpFlowPacket::from_parts(target, port, initial_payload);
+    let initial_packet_len = initial_packet.encoded_len(&flow_io)?;
+    let handle = spawn_udp_flow(stream, Some(initial_packet), flow_io);
+
+    Ok(VmessEstablishedUdpFlowHandle {
+        handle,
+        initial_packet_len,
+    })
+}
+
 fn spawn_udp_flow_task<S>(
     mut stream: S,
     initial_packet: Option<VmessInitialUdpFlowPacket>,
@@ -523,6 +548,27 @@ where
 {
     let stream = establish_udp_flow_stream(stream, session, identity).await?;
     Ok((stream, VmessEstablishedUdpFlow { io: VmessUdpFlowIo }))
+}
+
+pub async fn establish_udp_flow_with_initial_packet<S>(
+    stream: S,
+    session: &Session,
+    identity: VmessUdpIdentity,
+    initial_payload: &[u8],
+) -> Result<VmessEstablishedUdpFlowHandle, Error>
+where
+    S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+{
+    let (stream, flow_io) = establish_udp_flow(stream, session, identity).await?;
+    let initial_packet =
+        VmessInitialUdpFlowPacket::from_parts(&session.target, session.port, initial_payload);
+    let initial_packet_len = initial_packet.encoded_len(&flow_io)?;
+    let handle = spawn_udp_flow(stream, Some(initial_packet), flow_io);
+
+    Ok(VmessEstablishedUdpFlowHandle {
+        handle,
+        initial_packet_len,
+    })
 }
 
 pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {

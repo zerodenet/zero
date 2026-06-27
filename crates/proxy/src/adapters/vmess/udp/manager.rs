@@ -34,30 +34,16 @@ async fn establish_vmess_udp_upstream_over_stream(
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<VmessUdpUpstream, EngineError> {
-    let (stream, flow_io) = vmess::establish_udp_flow(stream, session, identity).await?;
-    let initial_packet = vmess::VmessInitialUdpFlowPacket::from_parts(
-        &session.target,
-        session.port,
-        initial_payload,
-    );
-    let initial_packet_len = initial_packet
-        .encoded_len(&flow_io)
-        .map_err(EngineError::from)?;
-    let flow = vmess::spawn_udp_flow(stream, Some(initial_packet), flow_io);
-    proxy.record_session_outbound_tx(session.id, initial_packet_len as u64);
-    Ok(upstream_from_stream(session.id, flow))
+    let established =
+        vmess::establish_udp_flow_with_initial_packet(stream, session, identity, initial_payload)
+            .await?;
+    proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
+    Ok(upstream_from_stream(session.id, established.handle))
 }
 
 async fn establish_vmess_udp_upstream(
     request: &VmessUdpUpstreamRequest<'_>,
 ) -> Result<VmessUdpUpstream, EngineError> {
-    let flow_io = vmess::VmessEstablishedUdpFlow::default();
-    let initial_packet = vmess::VmessInitialUdpFlowPacket::from_parts(
-        &request.session.target,
-        request.session.port,
-        request.initial_payload,
-    );
-
     if let Some(max_concurrency) = request.mux_concurrency {
         let mux_stream = request
             .mux_pool
@@ -75,12 +61,16 @@ async fn establish_vmess_udp_upstream(
                 max_concurrency,
             })
             .await?;
-        let initial_packet_len = initial_packet.encoded_len(&flow_io)?;
-        let flow = vmess::spawn_udp_flow(mux_stream, Some(initial_packet), flow_io);
+        let established = vmess::start_udp_flow_with_initial_packet(
+            mux_stream,
+            &request.session.target,
+            request.session.port,
+            request.initial_payload,
+        )?;
         request
             .proxy
-            .record_session_outbound_tx(request.session.id, initial_packet_len as u64);
-        return Ok(upstream_from_stream(request.session.id, flow));
+            .record_session_outbound_tx(request.session.id, established.initial_packet_len as u64);
+        return Ok(upstream_from_stream(request.session.id, established.handle));
     }
 
     let socket = request
