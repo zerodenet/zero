@@ -15,7 +15,7 @@ use super::{
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
 use cached::CachedProtocolUdpState;
-pub(crate) use cached::{CachedUdpFlowHandler, CachedUdpFlowStart, CachedUdpHandlers};
+pub(crate) use cached::CachedUdpHandlers;
 use managed::ManagedProtocolUdpState;
 pub(crate) use managed::{
     ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedStreamFlowHandler,
@@ -58,6 +58,12 @@ impl ProtocolUdpState {
             managed_flows: HashMap::new(),
             next_managed_flow_id: 1,
         }
+    }
+
+    pub(in crate::protocol_runtime::udp) fn cached_handlers(
+        &mut self,
+    ) -> impl Iterator<Item = &mut dyn super::CachedUdpFlowHandler> {
+        self.cached.handlers()
     }
 
     pub(crate) fn register_managed_flow(

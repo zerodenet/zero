@@ -9,7 +9,7 @@ use crate::runtime::Proxy;
 pub(in crate::protocol_runtime::udp::state) mod model;
 
 pub(in crate::protocol_runtime::udp::state) use model::CachedProtocolUdpState;
-pub(crate) use model::{CachedUdpFlowHandler, CachedUdpFlowStart, CachedUdpHandlers};
+pub(crate) use model::CachedUdpHandlers;
 
 impl ProtocolUdpState {
     pub(crate) async fn send_existing_cached_flow(
@@ -30,13 +30,5 @@ impl ProtocolUdpState {
         }
 
         Ok(None)
-    }
-
-    pub(in crate::protocol_runtime::udp) async fn start_cached_flow(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        request: CachedUdpFlowStart<'_>,
-    ) -> Result<(), EngineError> {
-        self.cached.start_cached_flow(chain_tasks, request).await
     }
 }

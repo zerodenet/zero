@@ -23,10 +23,8 @@ pub(crate) mod vmess_flow;
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
 pub(crate) use flow_snapshot::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
 pub(crate) use flows::{ManagedUdpFlowKind, ManagedUdpFlowRequest};
-pub(crate) use state::{
-    CachedUdpFlowHandler, CachedUdpFlowStart, CachedUdpHandlers, ProtocolUdpHandlers,
-    ProtocolUdpState,
-};
+pub(crate) use start::{CachedUdpFlowHandler, CachedUdpFlowStart};
+pub(crate) use state::{CachedUdpHandlers, ProtocolUdpHandlers, ProtocolUdpState};
 pub(crate) use state::{
     ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedStreamFlowHandler,
     ManagedUdpHandlers,
