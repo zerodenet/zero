@@ -32,6 +32,14 @@ impl Hysteria2Connector {
         self
     }
 
+    pub(crate) fn from_udp_profile(
+        server: &str,
+        port: u16,
+        profile: hysteria2::Hysteria2UdpConnectorProfile,
+    ) -> Self {
+        Self::new(server, port, profile.password()).with_fingerprint(profile.client_fingerprint())
+    }
+
     pub(crate) async fn connect_raw(&self) -> Result<quinn::Connection, EngineError> {
         let conn = crate::transport::open_hysteria2_quic_connection(QuicConnectionOptions {
             server: &self.server,

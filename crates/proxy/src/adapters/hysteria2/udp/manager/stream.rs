@@ -13,12 +13,14 @@ pub(super) async fn establish(
     initial_packet: UdpPacketRef<'_>,
     resume: hysteria2::Hysteria2UdpFlowResume,
 ) -> Result<PacketStream, EngineError> {
-    let connector_profile = resume.connector_profile();
     let conn = Arc::new(
-        Hysteria2Connector::new(endpoint.server, endpoint.port, connector_profile.password())
-            .with_fingerprint(connector_profile.client_fingerprint())
-            .connect_raw()
-            .await?,
+        Hysteria2Connector::from_udp_profile(
+            endpoint.server,
+            endpoint.port,
+            resume.connector_profile(),
+        )
+        .connect_raw()
+        .await?,
     );
     let session = hysteria2::start_udp_flow_with_initial_packet(
         conn,

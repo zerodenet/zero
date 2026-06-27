@@ -210,6 +210,43 @@ impl<'a> Hysteria2UdpPacketPathConfig<'a> {
     }
 
     pub fn cache_key(&self) -> String {
+        self.packet_path().cache_key()
+    }
+
+    pub fn packet_path(&self) -> Hysteria2UdpPacketPath<'a> {
+        Hysteria2UdpPacketPath {
+            tag: self.tag,
+            server: self.server,
+            port: self.port,
+            password: self.password,
+            client_fingerprint: self.client_fingerprint,
+        }
+    }
+
+    pub fn flow_resume(&self) -> Hysteria2UdpFlowResume {
+        Hysteria2UdpFlowResume::new(self.password, self.client_fingerprint)
+    }
+
+    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
+        self.flow_resume().connector_profile()
+    }
+
+    pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        udp_flow_codec()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Hysteria2UdpPacketPath<'a> {
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    password: &'a str,
+    client_fingerprint: Option<&'a str>,
+}
+
+impl<'a> Hysteria2UdpPacketPath<'a> {
+    pub fn cache_key(&self) -> String {
         udp_cache_key(
             self.tag,
             self.server,
@@ -217,6 +254,13 @@ impl<'a> Hysteria2UdpPacketPathConfig<'a> {
             self.password,
             self.client_fingerprint,
         )
+    }
+
+    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
+        Hysteria2UdpConnectorProfile {
+            password: self.password.to_owned(),
+            client_fingerprint: self.client_fingerprint.map(ToOwned::to_owned),
+        }
     }
 
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {

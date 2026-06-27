@@ -2945,7 +2945,7 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
     }
     assert!(
         stream.contains("hysteria2::start_udp_flow_with_initial_packet")
-            && stream.contains("Hysteria2Connector::new")
+            && stream.contains("Hysteria2Connector::from_udp_profile")
             && stream.contains("connect_raw"),
         "Hysteria2 UDP stream glue should only connect QUIC and call the protocol-owned flow pump"
     );
@@ -7617,10 +7617,15 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         "Hysteria2 UDP manager should store protocol-owned flow sessions while protocols/hysteria2 owns packet encode/decode and flow pump"
     );
     assert!(
-        adapter.contains("Hysteria2UdpFlowResume::new")
+        !adapter.contains("Hysteria2UdpFlowResume::new")
+            && adapter.contains(".flow_resume()")
+            && adapter.contains(".packet_path()")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
+            && protocol_udp.contains("pub struct Hysteria2UdpPacketPath")
             && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
             && protocol_udp.contains("pub fn new(")
+            && protocol_udp.contains("pub fn flow_resume(&self)")
+            && protocol_udp.contains("pub fn packet_path(&self)")
             && protocol_udp.contains("pub fn peer_config(&self)")
             && protocol_udp.contains("pub fn flow_key(&self")
             && protocol_udp.contains("fn cache_key(&self, server: &str, port: u16)")
@@ -7696,8 +7701,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("H2UdpPeer")
+            && stream.contains("Hysteria2Connector::from_udp_profile")
             && stream.contains("resume.connector_profile()")
-            && stream.contains("Hysteria2Connector::new")
             && !transport.contains("request.resume.connector_profile()"),
         "Hysteria2 UDP manager should consume protocol-owned opaque cache keys through neutral endpoints and keep UDP connector profile use in proxy stream glue"
     );
@@ -7814,7 +7819,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        stream.contains("Hysteria2Connector::new")
+        stream.contains("Hysteria2Connector::from_udp_profile")
             && stream.contains("connect_raw")
             && stream.contains("hysteria2::start_udp_flow_with_initial_packet")
             && !stream.contains("hysteria2::spawn_udp_flow")
@@ -8453,7 +8458,9 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     assert!(
         hysteria2_udp.contains("fn udp_cache_key(")
             && !hysteria2_udp.contains("pub fn udp_cache_key(")
-            && hysteria2_udp.contains("hysteria2|"),
+            && hysteria2_udp.contains("hysteria2|")
+            && hysteria2_udp.contains("pub fn packet_path(&self)")
+            && hysteria2_udp.contains("pub struct Hysteria2UdpPacketPath"),
         "protocols/hysteria2 should own Hysteria2 cache identity construction internally"
     );
 }

@@ -32,13 +32,14 @@ impl Hysteria2Adapter {
         else {
             return None;
         };
-        let packet_path = hysteria2::Hysteria2UdpPacketPathConfig::new(
+        let config = hysteria2::Hysteria2UdpPacketPathConfig::new(
             tag,
             server,
             *port,
             password,
             *client_fingerprint,
         );
+        let packet_path = config.packet_path();
         Some(
             crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
                 packet_path.cache_key(),
@@ -65,19 +66,23 @@ impl Hysteria2Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let packet_path = hysteria2::Hysteria2UdpPacketPathConfig::new(
+        let config = hysteria2::Hysteria2UdpPacketPathConfig::new(
             "",
             server,
             *port,
             password,
             *client_fingerprint,
         );
+        let packet_path = config.packet_path();
         let codec = std::sync::Arc::new(packet_path.codec());
         let conn = std::sync::Arc::new(
-            crate::outbound::hysteria2::Hysteria2Connector::new(server, *port, password)
-                .with_fingerprint(*client_fingerprint)
-                .connect_raw()
-                .await?,
+            crate::outbound::hysteria2::Hysteria2Connector::from_udp_profile(
+                server,
+                *port,
+                packet_path.connector_profile(),
+            )
+            .connect_raw()
+            .await?,
         );
         crate::runtime::udp_flow::packet_path_chain::carriers::quic_datagram_carrier::build(
             conn, codec,
@@ -103,6 +108,13 @@ impl Hysteria2Adapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
+        let config = hysteria2::Hysteria2UdpPacketPathConfig::new(
+            tag,
+            server,
+            *port,
+            password,
+            *client_fingerprint,
+        );
         dispatch
             .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
                 proxy: None,
@@ -112,10 +124,7 @@ impl Hysteria2Adapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ManagedUdpFlowResume::new(hysteria2::Hysteria2UdpFlowResume::new(
-                    password,
-                    *client_fingerprint,
-                )),
+                resume: ManagedUdpFlowResume::new(config.flow_resume()),
                 payload,
                 kind: ManagedUdpFlowKind::Datagram,
                 outbound: ManagedUdpOutboundKind::Datagram,
