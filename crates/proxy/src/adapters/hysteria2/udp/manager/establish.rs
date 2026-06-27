@@ -1,5 +1,5 @@
-use super::{bridge, stream};
 use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_flow::managed::spawn_tuple_response_bridge;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use tokio::task::JoinSet;
@@ -12,10 +12,16 @@ pub(super) async fn upstream(
     resume: hysteria2::Hysteria2UdpFlowResume,
     initial_packet: UdpPacketRef<'_>,
 ) -> Result<hysteria2::Hysteria2UdpFlowSession, EngineError> {
-    let stream::PacketStream { session } =
-        stream::establish(endpoint, initial_packet, resume).await?;
+    let session =
+        crate::outbound::hysteria2::establish_udp_flow_session(endpoint, initial_packet, resume)
+            .await?;
 
-    bridge::spawn_response_bridge(chain_tasks, session.subscribe_responses(), session_id);
+    spawn_tuple_response_bridge(
+        chain_tasks,
+        session.subscribe_responses(),
+        session_id,
+        "h2 upstream closed",
+    );
 
     Ok(session)
 }

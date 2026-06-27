@@ -1,12 +1,12 @@
 use zero_engine::EngineError;
 
 use super::model::{MieruRelayExisting, MieruSendExisting};
-use super::{bridge, establish, MieruChainManager};
+use super::{establish, MieruChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::managed::{
-    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
+    spawn_tuple_response_bridge, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
+    ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -37,7 +37,12 @@ impl MieruChainManager {
             .upstreams
             .get(resume, endpoint.server, endpoint.port, session_id)
         {
-            bridge::spawn_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
+            spawn_tuple_response_bridge(
+                ctx.chain_tasks,
+                entry.subscribe_responses(),
+                session_id,
+                "mieru upstream closed",
+            );
             entry
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
                 .await
@@ -70,7 +75,12 @@ impl MieruChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        bridge::spawn_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
+        spawn_tuple_response_bridge(
+            ctx.chain_tasks,
+            entry.subscribe_responses(),
+            session_id,
+            "mieru upstream closed",
+        );
         self.upstreams.insert(
             resume,
             endpoint.server,
@@ -132,7 +142,12 @@ impl MieruChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        bridge::spawn_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
+        spawn_tuple_response_bridge(
+            ctx.chain_tasks,
+            entry.subscribe_responses(),
+            session_id,
+            "mieru upstream closed",
+        );
         self.upstreams.insert(
             resume,
             endpoint.server,

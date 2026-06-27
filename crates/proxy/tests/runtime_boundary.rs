@@ -2931,7 +2931,7 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
 
 #[test]
 fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
-    let stream = read("src/adapters/hysteria2/udp/manager/stream.rs");
+    let establish = read("src/adapters/hysteria2/udp/manager/establish.rs");
     let protocol = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -2955,16 +2955,16 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         "hysteria2::Hysteria2UdpFlowSession::new",
     ] {
         assert!(
-            !stream.contains(forbidden),
-            "Hysteria2 UDP stream glue should delegate packet construction/encoding and pump detail to protocols/hysteria2; found `{forbidden}`"
+            !establish.contains(forbidden),
+            "Hysteria2 UDP establish glue should delegate packet construction/encoding and pump detail to protocols/hysteria2; found `{forbidden}`"
         );
     }
     assert!(
-        stream.contains("outbound::hysteria2::establish_udp_flow_session")
-            && !stream.contains("Hysteria2Connector::from_udp_profile")
-            && !stream.contains("connect_raw_with_udp_profile")
-            && !stream.contains("resume.connector_profile()"),
-        "Hysteria2 UDP stream glue should delegate QUIC/profile setup and protocol flow pumping to outbound/hysteria2"
+        establish.contains("outbound::hysteria2::establish_udp_flow_session")
+            && !establish.contains("Hysteria2Connector::from_udp_profile")
+            && !establish.contains("connect_raw_with_udp_profile")
+            && !establish.contains("resume.connector_profile()"),
+        "Hysteria2 UDP establish glue should delegate QUIC/profile setup and protocol flow pumping to outbound/hysteria2"
     );
     assert!(
         protocol.contains("struct Hysteria2UdpFlowIo")
@@ -7225,6 +7225,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
 #[test]
 fn mieru_udp_response_bridge_lives_outside_manager() {
     let manager = read("src/adapters/mieru/udp/manager.rs");
+    let send = read("src/adapters/mieru/udp/manager/send.rs");
+    let managed = read("src/runtime/udp_flow/managed/mod.rs");
     let bridge = manifest_dir().join("src/adapters/mieru/udp/manager/bridge.rs");
 
     for forbidden in [
@@ -7236,12 +7238,15 @@ fn mieru_udp_response_bridge_lives_outside_manager() {
     ] {
         assert!(
             !manager.contains(forbidden),
-            "mieru_manager.rs should keep response bridge details in mieru_manager/bridge.rs; found `{forbidden}`"
+            "mieru_manager.rs should not own response bridge details; found `{forbidden}`"
         );
     }
     assert!(
-        bridge.exists(),
-        "Mieru UDP response bridge should live in mieru_manager/bridge.rs"
+        !bridge.exists()
+            && send.contains("spawn_tuple_response_bridge")
+            && managed.contains("pub(crate) fn spawn_tuple_response_bridge")
+            && managed.contains("broadcast::Receiver<(Address, u16, Vec<u8>)>"),
+        "Mieru UDP response bridge should use generic managed UDP response glue, not mieru_manager/bridge.rs"
     );
 }
 
@@ -7606,7 +7611,7 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
 #[test]
 fn h2_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/adapters/hysteria2/udp/manager.rs");
-    let stream = read("src/adapters/hysteria2/udp/manager/stream.rs");
+    let establish = read("src/adapters/hysteria2/udp/manager/establish.rs");
     let manager_send = read("src/adapters/hysteria2/udp/manager/send.rs");
     let manager_model = read("src/adapters/hysteria2/udp/manager/model.rs");
     let outbound = read("src/outbound/hysteria2.rs");
@@ -7630,8 +7635,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             "h2_manager.rs should not own Hysteria2 datagram codec details; found `{forbidden}`"
         );
         assert!(
-            !stream.contains(forbidden),
-            "h2_manager/stream.rs should delegate Hysteria2 packet codec details to protocols/hysteria2; found `{forbidden}`"
+            !establish.contains(forbidden),
+            "h2_manager/establish.rs should delegate Hysteria2 packet codec details to protocols/hysteria2; found `{forbidden}`"
         );
     }
     assert!(
@@ -7662,21 +7667,21 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !manager_model.contains("hysteria2::Hysteria2UdpFlowSender")
             && !manager_send.contains("hysteria2::udp_flow_packet")
             && !manager_send.contains("Hysteria2UdpFlowPacket::from_parts")
-            && !stream.contains("Hysteria2UdpFlowPacket::from_parts")
-            && !stream.contains("use zero_core::UdpFlowPacket")
+            && !establish.contains("Hysteria2UdpFlowPacket::from_parts")
+            && !establish.contains("use zero_core::UdpFlowPacket")
             && !manager_send.contains("UdpFlowPacket::from_parts")
-            && !stream.contains("zero_core::UdpFlowPacket::from_parts")
-            && !stream.contains("let initial_packet = UdpFlowPacket::from_parts")
-            && !stream.contains("hysteria2::Hysteria2InitialUdpFlowPacket::from_parts")
+            && !establish.contains("zero_core::UdpFlowPacket::from_parts")
+            && !establish.contains("let initial_packet = UdpFlowPacket::from_parts")
+            && !establish.contains("hysteria2::Hysteria2InitialUdpFlowPacket::from_parts")
             && manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
-            && !stream.contains("mpsc::Sender<UdpFlowPacket>")
-            && !stream.contains("mpsc::channel::<UdpFlowPacket>")
-            && !stream.contains("flow_io.encode_packet")
-            && !stream.contains("packet.encode_with(&resume)")
-            && !stream.contains("hysteria2::udp_flow_packet")
-            && !stream.contains("flow_io.decode_packet(&data)")
-            && stream.contains("outbound::hysteria2::establish_udp_flow_session")
-            && !stream.contains("hysteria2::spawn_udp_flow")
+            && !establish.contains("mpsc::Sender<UdpFlowPacket>")
+            && !establish.contains("mpsc::channel::<UdpFlowPacket>")
+            && !establish.contains("flow_io.encode_packet")
+            && !establish.contains("packet.encode_with(&resume)")
+            && !establish.contains("hysteria2::udp_flow_packet")
+            && !establish.contains("flow_io.decode_packet(&data)")
+            && establish.contains("outbound::hysteria2::establish_udp_flow_session")
+            && !establish.contains("hysteria2::spawn_udp_flow")
             && protocol_udp.contains("struct Hysteria2UdpFlowSender")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowSession")
@@ -7687,15 +7692,15 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("Hysteria2InitialUdpFlowPacket")
             && protocol_udp.contains("flow_io.encode_packet")
             && protocol_udp.contains("flow_io.decode_packet(&data)")
-            && !stream.contains("resume.encode_flow_packet")
-            && !stream.contains("resume.decode_flow_packet")
-            && !stream.contains("establish_hysteria2_udp_flow_stream")
+            && !establish.contains("resume.encode_flow_packet")
+            && !establish.contains("resume.decode_flow_packet")
+            && !establish.contains("establish_hysteria2_udp_flow_stream")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("hysteria2::udp_flow_packet")
             && !transport.contains("encode_hysteria2_udp_flow_packet")
             && !transport.contains("resume.decode_flow_packet(&data)")
             && !manager_send.contains(".encode_packet(")
-            && !stream.contains("mpsc::Sender<Vec<u8>>"),
+            && !establish.contains("mpsc::Sender<Vec<u8>>"),
         "Hysteria2 UDP manager should store protocol-owned flow sessions while protocols/hysteria2 owns packet encode/decode and flow pump"
     );
     assert!(
@@ -7792,7 +7797,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         assert!(
             !manager_send.contains(forbidden)
             && !manager_model.contains(forbidden)
-                && !stream.contains(forbidden),
+                && !establish.contains(forbidden),
             "Hysteria2 UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
         );
     }
@@ -7801,10 +7806,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("H2UdpPeer")
-            && stream.contains("outbound::hysteria2::establish_udp_flow_session")
-            && !stream.contains("Hysteria2Connector::from_udp_profile")
-            && !stream.contains("resume.connector_profile()")
-            && !stream.contains("connect_raw_with_udp_profile")
+            && establish.contains("outbound::hysteria2::establish_udp_flow_session")
+            && !establish.contains("Hysteria2Connector::from_udp_profile")
+            && !establish.contains("resume.connector_profile()")
+            && !establish.contains("connect_raw_with_udp_profile")
             && outbound.contains("resume.connector_profile()")
             && outbound.contains("connect_raw_with_udp_profile")
             && !outbound.contains("profile.password()")
@@ -7865,6 +7870,8 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
 #[test]
 fn h2_udp_response_bridge_lives_outside_manager() {
     let manager = read("src/adapters/hysteria2/udp/manager.rs");
+    let establish = read("src/adapters/hysteria2/udp/manager/establish.rs");
+    let managed = read("src/runtime/udp_flow/managed/mod.rs");
     let bridge = manifest_dir().join("src/adapters/hysteria2/udp/manager/bridge.rs");
 
     for forbidden in [
@@ -7875,19 +7882,23 @@ fn h2_udp_response_bridge_lives_outside_manager() {
     ] {
         assert!(
             !manager.contains(forbidden),
-            "h2_manager.rs should keep response bridge details in h2_manager/bridge.rs; found `{forbidden}`"
+            "h2_manager.rs should not own response bridge details; found `{forbidden}`"
         );
     }
     assert!(
-        bridge.exists(),
-        "Hysteria2 UDP response bridge should live in h2_manager/bridge.rs"
+        !bridge.exists()
+            && establish.contains("spawn_tuple_response_bridge")
+            && managed.contains("pub(crate) fn spawn_tuple_response_bridge")
+            && managed.contains("broadcast::Receiver<(Address, u16, Vec<u8>)>")
+            && managed.contains("closed_message"),
+        "Hysteria2 UDP response bridge should use generic managed UDP response glue, not h2_manager/bridge.rs"
     );
 }
 
 #[test]
 fn h2_udp_packet_stream_tasks_live_outside_manager() {
     let manager = read("src/adapters/hysteria2/udp/manager.rs");
-    let stream = read("src/adapters/hysteria2/udp/manager/stream.rs");
+    let establish = read("src/adapters/hysteria2/udp/manager/establish.rs");
     let stream_path = manifest_dir().join("src/adapters/hysteria2/udp/manager/stream.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
@@ -7908,8 +7919,8 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        stream_path.exists(),
-        "Hysteria2 UDP packet stream glue should live in h2_manager/stream.rs"
+        !stream_path.exists(),
+        "Hysteria2 UDP packet stream glue should not need a dedicated h2_manager/stream.rs wrapper"
     );
     for forbidden in [
         "establish_hysteria2_udp_flow_stream",
@@ -7921,24 +7932,24 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         "resume.decode_packet",
     ] {
         assert!(
-            !stream.contains(forbidden),
-            "h2_manager/stream.rs should keep QUIC IO glue and runtime task scheduling while delegating packet format helpers; found `{forbidden}`"
+            !establish.contains(forbidden),
+            "h2_manager/establish.rs should delegate packet format helpers; found `{forbidden}`"
         );
     }
     assert!(
-        stream.contains("outbound::hysteria2::establish_udp_flow_session")
-            && !stream.contains("Hysteria2Connector::from_udp_profile")
-            && !stream.contains("connect_raw_with_udp_profile")
-            && !stream.contains("hysteria2::start_udp_flow_with_initial_packet")
-            && !stream.contains("hysteria2::spawn_udp_flow")
-            && !stream.contains("hysteria2::Hysteria2UdpFlowSession::new")
-            && !stream.contains("send_datagram")
-            && !stream.contains("read_datagram")
-            && !stream.contains("tokio::spawn")
-            && !stream.contains("mpsc::channel::<UdpFlowPacket>")
-            && !stream.contains("tokio::sync::broadcast::channel::<bridge::RecvItem>")
-            && !stream.contains("flow_io.encode_packet")
-            && !stream.contains("flow_io.decode_packet(&data)")
+        establish.contains("outbound::hysteria2::establish_udp_flow_session")
+            && !establish.contains("Hysteria2Connector::from_udp_profile")
+            && !establish.contains("connect_raw_with_udp_profile")
+            && !establish.contains("hysteria2::start_udp_flow_with_initial_packet")
+            && !establish.contains("hysteria2::spawn_udp_flow")
+            && !establish.contains("hysteria2::Hysteria2UdpFlowSession::new")
+            && !establish.contains("send_datagram")
+            && !establish.contains("read_datagram")
+            && !establish.contains("tokio::spawn")
+            && !establish.contains("mpsc::channel::<UdpFlowPacket>")
+            && !establish.contains("tokio::sync::broadcast::channel")
+            && !establish.contains("flow_io.encode_packet")
+            && !establish.contains("flow_io.decode_packet(&data)")
             && !protocol_udp.contains("pub fn open_udp_flow")
             && protocol_udp.contains("pub async fn authenticate_connection")
             && protocol_udp.contains("struct Hysteria2UdpFlowSender")
@@ -8040,7 +8051,7 @@ fn h2_udp_model_details_live_outside_manager_root() {
     let model = read("src/adapters/hysteria2/udp/manager/model.rs");
     let send = read("src/adapters/hysteria2/udp/manager/send.rs");
     let establish = read("src/adapters/hysteria2/udp/manager/establish.rs");
-    let stream = read("src/adapters/hysteria2/udp/manager/stream.rs");
+    let stream = manifest_dir().join("src/adapters/hysteria2/udp/manager/stream.rs");
 
     for forbidden in [
         "struct H2Entry",
@@ -8066,10 +8077,10 @@ fn h2_udp_model_details_live_outside_manager_root() {
             && !model.contains("H2UdpPeer")
             && send.contains("OutboundEndpoint {")
             && establish.contains("endpoint: OutboundEndpoint")
-            && stream.contains("endpoint: OutboundEndpoint")
+            && !stream.exists()
             && read("src/adapters/hysteria2/udp/manager.rs")
                 .contains("hysteria2::Hysteria2UdpFlowStore<hysteria2::Hysteria2UdpFlowSession>"),
-        "h2_manager should store protocol-owned flow stores without adapter-local H2Key or H2UdpPeer wrappers"
+        "h2_manager should store protocol-owned flow stores without adapter-local H2Key/H2UdpPeer wrappers or a dedicated stream wrapper"
     );
 }
 
