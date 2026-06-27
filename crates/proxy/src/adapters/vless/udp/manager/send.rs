@@ -33,7 +33,7 @@ impl VlessUdpOutboundManager {
                 })
                 .await
             {
-                let packet = vless::encode_udp_flow_initial_packet(
+                let packet = request.config.encode_initial_flow_packet(
                     &request.session.target,
                     request.session.port,
                     request.payload,

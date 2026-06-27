@@ -264,6 +264,16 @@ impl<'a> VlessUdpFlowConfig<'a> {
     }
 
     #[cfg(feature = "reality")]
+    pub fn encode_initial_flow_packet(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        crate::shared::encode_udp_flow_initial_packet(target, port, payload)
+    }
+
+    #[cfg(feature = "reality")]
     pub async fn establish_flow_with_initial_packet<S>(
         &self,
         stream: S,
