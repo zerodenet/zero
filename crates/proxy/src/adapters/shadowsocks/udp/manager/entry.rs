@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use super::bridge::BridgeWaiters;
+use super::bridge::{self, BridgeWaiters};
 use super::model::SsUpstream;
 use zero_engine::EngineError;
 use zero_transport::shadowsocks_transport;
@@ -31,18 +31,6 @@ pub(super) async fn ensure(
     });
     upstreams.insert(key, entry.clone());
 
-    bridge_responses(flow, entry.waiters.clone_handle());
+    bridge::spawn_upstream_response_pump(flow, entry.waiters.clone_handle());
     Ok(entry)
-}
-
-fn bridge_responses(
-    flow: Arc<shadowsocks_transport::ShadowsocksUdpSocketFlow>,
-    waiters: BridgeWaiters,
-) {
-    tokio::spawn(async move {
-        let mut recv_rx = flow.subscribe();
-        while let Ok((target, port, payload)) = recv_rx.recv().await {
-            waiters.deliver(target, port, payload);
-        }
-    });
 }

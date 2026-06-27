@@ -5,6 +5,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use zero_core::Address;
 use zero_engine::EngineError;
+use zero_transport::shadowsocks_transport::ShadowsocksUdpSocketFlow;
 
 use crate::runtime::udp_flow::packet_path::ChainTask;
 
@@ -77,6 +78,18 @@ pub(super) fn spawn_response_bridge(
                 Ok((resp_target, resp_port, resp_payload, Some(session_id)))
             }
             Err(_) => Err(EngineError::Io(std::io::Error::other("ss upstream closed"))),
+        }
+    });
+}
+
+pub(super) fn spawn_upstream_response_pump(
+    flow: Arc<ShadowsocksUdpSocketFlow>,
+    waiters: BridgeWaiters,
+) {
+    tokio::spawn(async move {
+        let mut recv_rx = flow.subscribe();
+        while let Ok((target, port, payload)) = recv_rx.recv().await {
+            waiters.deliver(target, port, payload);
         }
     });
 }

@@ -40,9 +40,17 @@ impl ShadowsocksUdpSocketFlow {
     }
 
     pub async fn send_packet(&self, packet: UdpFlowPacket) -> Result<(), EngineError> {
-        let datagram = self
-            .codec
-            .encode(&packet.target, packet.port, &packet.payload)?;
+        self.send_datagram(&packet.target, packet.port, &packet.payload)
+            .await
+    }
+
+    pub async fn send_datagram(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        let datagram = self.codec.encode(target, port, payload)?;
         self.socket.send_to(&datagram, self.endpoint).await?;
         Ok(())
     }

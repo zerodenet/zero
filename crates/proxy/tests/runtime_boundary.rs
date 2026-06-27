@@ -7722,8 +7722,10 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && protocol_outbound.contains("struct ShadowsocksUdpFlowPacket")
             && protocol_outbound.contains("pub fn udp_flow_packet")
             && !manager.contains("shadowsocks::udp_flow_packet")
-            && manager.contains("UdpFlowPacket::from_parts")
+            && !manager.contains("UdpFlowPacket::from_parts")
+            && manager.contains(".send_datagram(packet_ref.target, packet_ref.port, packet_ref.payload)")
             && transport.contains("send_packet(&self, packet: UdpFlowPacket)")
+            && transport.contains("pub async fn send_datagram(")
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
             && !transport.contains("shadowsocks::")
             && !transport_manifest.contains("dep:shadowsocks")
@@ -7731,7 +7733,7 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && !manager.contains("ShadowsocksUdpFlowPacket::from_parts")
             && protocol_outbound.contains("pub fn encode_with(")
             && protocol_outbound.contains("pub fn decode_flow_packet(&self"),
-        "Shadowsocks UDP manager should carry neutral UDP packets while transport consumes a protocol-built codec"
+        "Shadowsocks UDP manager should send target datagrams through transport while transport consumes a protocol-built codec"
     );
     for forbidden in [".encode_packet(", ".decode_packet("] {
         assert!(
@@ -7740,7 +7742,7 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
         );
     }
     assert!(
-        transport.contains(".codec\n            .encode")
+        transport.contains("self.codec.encode(target, port, payload)")
             && transport.contains("codec.decode(datagram)")
             && !manager.contains(".encode_with(")
             && !entry.contains(".encode_with(")
@@ -7753,6 +7755,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
 #[test]
 fn shadowsocks_udp_response_bridge_lives_outside_manager() {
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
+    let bridge_source = read("src/adapters/shadowsocks/udp/manager/bridge.rs");
     let bridge = manifest_dir().join("src/adapters/shadowsocks/udp/manager/bridge.rs");
 
     for forbidden in [
@@ -7766,9 +7770,22 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
             "ss_manager.rs should keep response waiter bridge details in ss_manager/bridge.rs; found `{forbidden}`"
         );
     }
+    for forbidden in [
+        "tokio::spawn",
+        "flow.subscribe()",
+        "while let Ok((target, port, payload))",
+    ] {
+        assert!(
+            !entry.contains(forbidden),
+            "ss_manager/entry.rs should keep response pump details in ss_manager/bridge.rs; found `{forbidden}`"
+        );
+    }
     assert!(
-        bridge.exists(),
-        "Shadowsocks UDP response bridge should live in ss_manager/bridge.rs"
+        bridge.exists()
+            && bridge_source.contains("pub(super) fn spawn_upstream_response_pump")
+            && bridge_source.contains("flow.subscribe()")
+            && bridge_source.contains("tokio::spawn"),
+        "Shadowsocks UDP response waiter bridge and upstream response pump should live in ss_manager/bridge.rs"
     );
 }
 

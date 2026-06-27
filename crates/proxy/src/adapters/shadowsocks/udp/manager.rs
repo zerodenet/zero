@@ -7,7 +7,6 @@ use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::managed::{ManagedDatagramFlowHandler, ManagedExistingSend};
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
-use zero_core::UdpFlowPacket;
 
 mod bridge;
 mod entry;
@@ -64,11 +63,12 @@ impl SsChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        let packet =
-            UdpFlowPacket::from_parts(packet_ref.target, packet_ref.port, packet_ref.payload);
-
         let response_rx = entry.waiters.register(packet_ref.target, packet_ref.port);
-        if let Err(e) = entry.flow.send_packet(packet).await {
+        if let Err(e) = entry
+            .flow
+            .send_datagram(packet_ref.target, packet_ref.port, packet_ref.payload)
+            .await
+        {
             entry.waiters.remove(packet_ref.target, packet_ref.port);
             return Err(FlowFailure {
                 stage: "ss_send",
