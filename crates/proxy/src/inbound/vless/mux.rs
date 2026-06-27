@@ -279,8 +279,8 @@ impl Proxy {
                         break;
                     }
                     last_activity = TokioInstant::now();
-                    let packet = match vless::VlessInboundUdpCodec.decode_datagram(&payload) {
-                        Ok(packet) => packet,
+                    let request = match vless::VlessInboundUdpCodec.decode_request(&payload) {
+                        Ok(request) => request,
                         Err(error) => {
                             warn!(%error, mux_session_id, "vless mux udp packet parse failed");
                             continue;
@@ -288,9 +288,9 @@ impl Proxy {
                     };
                     if let Err(error) = UdpPipe::new(self, &mut dispatch)
                         .dispatch(UdpPipeInput {
-                            target: packet.target,
-                            port: packet.port,
-                            payload: &packet.payload,
+                            target: request.target().clone(),
+                            port: request.port(),
+                            payload: request.payload(),
                             protocol: zero_core::ProtocolType::Vless,
                             auth,
                             client_session_id: None,

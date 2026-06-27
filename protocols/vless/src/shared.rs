@@ -184,6 +184,39 @@ pub struct VlessUdpPacket {
     pub payload: Vec<u8>,
 }
 
+/// Protocol-owned decoded inbound UDP request.
+///
+/// Proxy inbound glue treats this as the native datagram request to submit into
+/// the UDP pipe without depending on the wire packet model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VlessInboundUdpRequest {
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl VlessInboundUdpRequest {
+    fn from_packet(packet: VlessUdpPacket) -> Self {
+        Self {
+            target: packet.target,
+            port: packet.port,
+            payload: packet.payload,
+        }
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessUdpFlowPacket {
     pub target: Address,
@@ -570,6 +603,11 @@ pub fn encode_inbound_mux_udp_response(
 pub struct VlessInboundUdpCodec;
 
 impl VlessInboundUdpCodec {
+    pub fn decode_request(&self, packet: &[u8]) -> Result<VlessInboundUdpRequest, Error> {
+        self.decode_datagram(packet)
+            .map(VlessInboundUdpRequest::from_packet)
+    }
+
     pub fn decode_datagram(&self, packet: &[u8]) -> Result<VlessUdpPacket, Error> {
         decode_inbound_udp_datagram(packet)
     }
