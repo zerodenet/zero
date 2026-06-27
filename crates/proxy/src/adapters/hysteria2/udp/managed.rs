@@ -23,6 +23,8 @@ pub(super) fn handler() -> Box<dyn ManagedDatagramFlowHandler> {
 impl ManagedDatagramFlowConnector<hysteria2::Hysteria2UdpFlowResume>
     for Hysteria2ManagedDatagramConnector
 {
+    const INITIAL_PACKET_PRE_SENT: bool = true;
+
     fn flow_cache_key(
         &self,
         resume: &hysteria2::Hysteria2UdpFlowResume,
@@ -33,6 +35,7 @@ impl ManagedDatagramFlowConnector<hysteria2::Hysteria2UdpFlowResume>
 
     async fn establish(
         &self,
+        _proxy: Option<&crate::runtime::Proxy>,
         endpoint: OutboundEndpoint<'_>,
         resume: hysteria2::Hysteria2UdpFlowResume,
         initial_packet: UdpPacketRef<'_>,

@@ -6205,12 +6205,11 @@ fn protocol_udp_manager_construction_is_adapter_registered() {
         "src/adapters/hysteria2/udp.rs",
         "src/adapters/hysteria2/udp/managed.rs",
         "src/adapters/mieru/udp.rs",
+        "src/adapters/shadowsocks/udp/managed.rs",
         "src/adapters/shadowsocks/udp.rs",
         "src/adapters/trojan/udp.rs",
         "src/adapters/mieru/udp/manager.rs",
         "src/adapters/mieru/udp/manager/",
-        "src/adapters/shadowsocks/udp/manager.rs",
-        "src/adapters/shadowsocks/udp/manager/",
         "src/adapters/trojan/udp/manager.rs",
         "src/adapters/trojan/udp/manager/",
     ];
@@ -6242,7 +6241,6 @@ fn protocol_udp_manager_roots_do_not_reexport_request_models() {
     for (source, forbidden) in [
         ("src/adapters/mieru/udp/manager.rs", "MieruSendExisting"),
         ("src/adapters/mieru/udp/manager.rs", "MieruRelayExisting"),
-        ("src/adapters/shadowsocks/udp/manager.rs", "SsSendExisting"),
         ("src/adapters/trojan/udp/manager.rs", "TrojanSendExisting"),
         ("src/adapters/trojan/udp/manager.rs", "TrojanRelayExisting"),
     ] {
@@ -6261,14 +6259,12 @@ fn protocol_udp_manager_roots_do_not_reexport_request_models() {
 fn protocol_udp_manager_request_models_are_manager_private() {
     for source in [
         "src/adapters/mieru/udp/manager/model.rs",
-        "src/adapters/shadowsocks/udp/manager/model.rs",
         "src/adapters/trojan/udp/manager/model.rs",
     ] {
         let content = read(source);
         for forbidden in [
             "pub(crate) struct MieruSendExisting",
             "pub(crate) struct MieruRelayExisting",
-            "pub(crate) struct SsSendExisting",
             "pub(crate) struct TrojanSendExisting",
             "pub(crate) struct TrojanRelayExisting",
         ] {
@@ -6281,7 +6277,6 @@ fn protocol_udp_manager_request_models_are_manager_private() {
 
     for source in [
         "src/adapters/mieru/udp/manager/send.rs",
-        "src/adapters/shadowsocks/udp/manager.rs",
         "src/adapters/trojan/udp/manager/send.rs",
     ] {
         let content = read(source);
@@ -6301,10 +6296,14 @@ fn protocol_udp_manager_request_models_are_manager_private() {
         "src/adapters/hysteria2/udp/manager/model.rs",
         "src/adapters/hysteria2/udp/manager/send.rs",
         "src/adapters/hysteria2/udp/manager/establish.rs",
+        "src/adapters/shadowsocks/udp/manager.rs",
+        "src/adapters/shadowsocks/udp/manager/model.rs",
+        "src/adapters/shadowsocks/udp/manager/entry.rs",
+        "src/adapters/shadowsocks/udp/manager/bridge.rs",
     ] {
         assert!(
             !manifest_dir().join(removed).exists(),
-            "Hysteria2 UDP should use generic managed datagram runtime glue instead of `{removed}`"
+            "datagram UDP protocols should use generic managed datagram runtime glue instead of `{removed}`"
         );
     }
 }
@@ -6742,7 +6741,10 @@ fn adapters_do_not_construct_udp_dispatch_peer_helpers() {
         if source.contains("/udp/manager") || source.contains("\\udp\\manager") {
             continue;
         }
-        let allow_neutral_managed_connector = source == "src/adapters/hysteria2/udp/managed.rs";
+        let allow_neutral_managed_connector = matches!(
+            source.as_str(),
+            "src/adapters/hysteria2/udp/managed.rs" | "src/adapters/shadowsocks/udp/managed.rs"
+        );
         let content = fs::read_to_string(&path).expect("read rust source");
         for forbidden in [
             "SsUdpPeer",
@@ -6787,7 +6789,7 @@ fn packet_path_traits_are_grouped_by_responsibility() {
     let protocol_udp_root = read("src/runtime/udp_flow/registered/mod.rs");
     let runtime_root = manifest_dir().join("src/runtime/udp_flow");
     let peer = manifest_dir().join("src/runtime/udp_flow/registered/peer.rs");
-    let ss_model = read("src/adapters/shadowsocks/udp/manager/model.rs");
+    let ss_managed = read("src/adapters/shadowsocks/udp/managed.rs");
     let h2_managed = read("src/adapters/hysteria2/udp/managed.rs");
     let trojan_model = read("src/adapters/trojan/udp/manager/model.rs");
     let mieru_model = read("src/adapters/mieru/udp/manager/model.rs");
@@ -6822,7 +6824,7 @@ fn packet_path_traits_are_grouped_by_responsibility() {
     assert!(
         !peer.exists()
             && !runtime_root.join("peer.rs").exists()
-            && !ss_model.contains("struct SsUdpPeer")
+            && !ss_managed.contains("struct SsUdpPeer")
             && !h2_managed.contains("struct H2UdpPeer")
             && !trojan_model.contains("struct TrojanUdpPeer")
             && !mieru_model.contains("struct MieruUdpPeer"),
@@ -8803,13 +8805,11 @@ fn h2_udp_establish_logic_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
-    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let adapter_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
-    let entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
-    let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
-    let bridge_source = read("src/adapters/shadowsocks/udp/manager/bridge.rs");
+    let generic_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/shadowsocks_transport.rs"))
             .expect("read shadowsocks transport source");
@@ -8826,20 +8826,22 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
         "ShadowsocksUdpPacket",
     ] {
         assert!(
-            !manager.contains(forbidden),
-            "ss_manager.rs should not own Shadowsocks datagram codec details; found `{forbidden}`"
-        );
-        assert!(
-            !entry.contains(forbidden),
-            "ss_manager entry glue should delegate Shadowsocks packet codec details outside zero-proxy; found `{forbidden}`"
+            !managed.contains(forbidden),
+            "Shadowsocks UDP managed glue should not own datagram codec details; found `{forbidden}`"
         );
     }
-    assert!(
-        !manifest_dir()
-            .join("src/adapters/shadowsocks/udp/manager/codec.rs")
-            .exists(),
-        "Shadowsocks UDP manager should not keep a proxy-owned codec module"
-    );
+    for removed in [
+        "src/adapters/shadowsocks/udp/manager.rs",
+        "src/adapters/shadowsocks/udp/manager/model.rs",
+        "src/adapters/shadowsocks/udp/manager/entry.rs",
+        "src/adapters/shadowsocks/udp/manager/bridge.rs",
+        "src/adapters/shadowsocks/udp/manager/codec.rs",
+    ] {
+        assert!(
+            !manifest_dir().join(removed).exists(),
+            "Shadowsocks UDP should not keep proxy-owned manager file `{removed}`"
+        );
+    }
     assert!(
         !adapter.contains("shadowsocks::udp_flow_codec")
             && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
@@ -8859,45 +8861,43 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
                 .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowPacket")
             && protocol_outbound.contains("pub fn udp_flow_packet")
-            && !manager.contains("shadowsocks::udp_flow_packet")
-            && !manager.contains("UdpFlowPacket::from_parts")
-            && manager.contains(".send_datagram(")
-            && !model.contains("ShadowsocksUdpSocketFlow")
-            && !model.contains("BridgeWaiters")
-            && bridge_source.contains("self.flow.send_datagram(target, port, payload)")
+            && !managed.contains("shadowsocks::udp_flow_packet")
+            && !managed.contains("UdpFlowPacket::from_parts")
+            && generic_manager.contains(".send_datagram(")
+            && !managed.contains("BridgeWaiters")
+            && managed.contains("self.flow.send_datagram(target, port, payload)")
             && transport.contains("send_packet(&self, packet: UdpFlowPacket)")
             && transport.contains("pub async fn send_datagram(")
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
             && !transport.contains("shadowsocks::")
             && !transport_manifest.contains("dep:shadowsocks")
             && !transport_manifest.contains("shadowsocks = { path = \"../../protocols/shadowsocks\"")
-            && !manager.contains("ShadowsocksUdpFlowPacket::from_parts")
+            && !managed.contains("ShadowsocksUdpFlowPacket::from_parts")
             && protocol_outbound.contains("pub fn encode_with(")
             && protocol_outbound.contains("pub fn decode_flow_packet(&self"),
-        "Shadowsocks UDP manager should send target datagrams through transport while transport consumes a protocol-built codec"
+        "Shadowsocks UDP managed glue should send target datagrams through transport while transport consumes a protocol-built codec"
     );
     for forbidden in [".encode_packet(", ".decode_packet("] {
         assert!(
-            !manager.contains(forbidden) && !entry.contains(forbidden),
-            "Shadowsocks UDP manager glue should not call raw protocol packet codec operations directly; found `{forbidden}`"
+            !managed.contains(forbidden) && !generic_manager.contains(forbidden),
+            "Shadowsocks UDP managed glue should not call raw protocol packet codec operations directly; found `{forbidden}`"
         );
     }
     assert!(
         transport.contains("self.codec.encode(target, port, payload)")
             && transport.contains("codec.decode(datagram)")
-            && !manager.contains(".encode_with(")
-            && !entry.contains(".encode_with(")
-            && !manager.contains(".decode_flow_packet(")
-            && !entry.contains(".decode_flow_packet("),
+            && !managed.contains(".encode_with(")
+            && !generic_manager.contains(".encode_with(")
+            && !managed.contains(".decode_flow_packet(")
+            && !generic_manager.contains(".decode_flow_packet("),
         "Shadowsocks UDP flow encode/decode should be delegated through an adapter-provided datagram codec"
     );
 }
 
 #[test]
 fn shadowsocks_udp_response_bridge_lives_outside_manager() {
-    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
-    let entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
-    let bridge_source = read("src/adapters/shadowsocks/udp/manager/bridge.rs");
+    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let generic_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let managed_datagram = read("src/runtime/udp_flow/managed/datagram.rs");
     let bridge = manifest_dir().join("src/adapters/shadowsocks/udp/manager/bridge.rs");
 
@@ -8908,8 +8908,8 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
         "fn remove_waiter",
     ] {
         assert!(
-            !manager.contains(forbidden) && !bridge_source.contains(forbidden),
-            "Shadowsocks UDP manager glue should use neutral managed datagram waiter helpers instead of owning `{forbidden}`"
+            !managed.contains(forbidden) && !generic_manager.contains(forbidden),
+            "Shadowsocks UDP managed glue should use neutral managed datagram waiter helpers instead of owning `{forbidden}`"
         );
     }
     for forbidden in [
@@ -8918,8 +8918,8 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
         "while let Ok((target, port, payload))",
     ] {
         assert!(
-            !entry.contains(forbidden),
-            "ss_manager/entry.rs should keep response pump details in ss_manager/bridge.rs; found `{forbidden}`"
+            !generic_manager.contains(forbidden),
+            "generic managed datagram manager should keep response pump details in managed/datagram.rs; found `{forbidden}`"
         );
     }
     for forbidden in [
@@ -8930,14 +8930,14 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
         "waiters.deliver",
     ] {
         assert!(
-            !bridge_source.contains(forbidden),
-            "Shadowsocks UDP bridge should use neutral managed datagram response glue instead of owning `{forbidden}`"
+            !managed.contains(forbidden),
+            "Shadowsocks UDP managed glue should use neutral managed datagram response glue instead of owning `{forbidden}`"
         );
     }
     assert!(
-        bridge.exists()
-            && bridge_source.contains("managed_datagram_connection")
-            && bridge_source.contains("flow.subscribe()")
+        !bridge.exists()
+            && managed.contains("managed_datagram_connection")
+            && managed.contains("flow.subscribe()")
             && managed_datagram.contains("pub(crate) struct ManagedDatagramResponseWaiters")
             && managed_datagram.contains("pub(crate) fn spawn_datagram_response_bridge")
             && managed_datagram.contains("fn spawn_upstream_response_pump")
@@ -8949,8 +8949,7 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_socket_runtime_lives_outside_manager() {
-    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
-    let entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
+    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
     let transport_path = repo_root().join("crates/transport/src/shadowsocks_transport.rs");
     let transport = fs::read_to_string(&transport_path).expect("read shadowsocks transport source");
 
@@ -8962,8 +8961,8 @@ fn shadowsocks_udp_socket_runtime_lives_outside_manager() {
         "shadowsocks udp recv loop stopped",
     ] {
         assert!(
-            !manager.contains(forbidden) && !entry.contains(forbidden),
-            "ss_manager glue should keep socket runtime details outside zero-proxy; found `{forbidden}`"
+            !managed.contains(forbidden),
+            "Shadowsocks UDP managed glue should keep socket runtime details outside zero-proxy; found `{forbidden}`"
         );
     }
     assert!(
@@ -8983,7 +8982,8 @@ fn shadowsocks_udp_socket_runtime_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_state_model_lives_outside_manager() {
-    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let generic_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let model = manifest_dir().join("src/adapters/shadowsocks/udp/manager/model.rs");
 
     for forbidden in [
@@ -8994,13 +8994,15 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
         "format!(\"{cipher_kind:?}\")",
     ] {
         assert!(
-            !manager.contains(forbidden),
-            "ss_manager.rs should keep state/request models in ss_manager/model.rs; found `{forbidden}`"
+            !managed.contains(forbidden),
+            "Shadowsocks UDP managed glue should not keep state/request model `{forbidden}`"
         );
     }
     assert!(
-        model.exists(),
-        "Shadowsocks UDP state/request models should live in ss_manager/model.rs"
+        !model.exists()
+            && generic_manager.contains("pub(crate) struct ManagedDatagramSocketFlowManager")
+            && generic_manager.contains("ManagedExistingSend<'_>"),
+        "Shadowsocks UDP should use the generic managed datagram socket request model instead of ss_manager/model.rs"
     );
 }
 
@@ -9009,9 +9011,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let flows = read("src/runtime/udp_flow/managed/flow.rs");
-    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
-    let manager_entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
-    let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
+    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let generic_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let snapshot = read("src/runtime/udp_flow/managed/flow.rs");
     let forward = read("src/runtime/udp_flow/managed/datagram.rs");
@@ -9027,7 +9028,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && protocol_outbound.contains("pub fn parse_udp_cipher("),
         "Shadowsocks UDP adapter should ask protocols/shadowsocks to parse ordinary UDP flow cipher config"
     );
-    for source in [&manager, &model] {
+    for source in [&managed, &generic_manager] {
         assert!(
             !source.contains("CipherKind::from_str")
                 && !source.contains("cipher: shadowsocks::CipherKind")
@@ -9039,10 +9040,6 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         .split("#[cfg(feature = \"mieru\")]")
         .next()
         .expect("Shadowsocks UDP flow model should appear before Mieru");
-    let shadowsocks_peer_model = model
-        .split("pub(super) struct SsSendExisting")
-        .next()
-        .expect("Shadowsocks UDP peer model should appear before send request model");
     assert!(
         !shadowsocks_flow_model.contains("cipher: shadowsocks::CipherKind")
             && !shadowsocks_flow_model.contains("password: &'a str")
@@ -9052,33 +9049,27 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "ordinary Shadowsocks UDP flow model should carry only the unified resume descriptor"
     );
     assert!(
-        !shadowsocks_peer_model.contains("cipher: shadowsocks::CipherKind")
-            && !shadowsocks_peer_model.contains("password: &'a str")
-            && !shadowsocks_peer_model.contains("cache_key: &'a str")
-            && !shadowsocks_peer_model.contains("leaf_key:")
-            && !shadowsocks_peer_model.contains("SsKey")
-            && !shadowsocks_peer_model.contains("fn from_resume(")
-            && !shadowsocks_peer_model.contains("socket_flow_cache_key()")
-            && manager.contains("ManagedDatagramConnectionCache")
-            && !manager.contains("ManagedDatagramConnectionCacheKey")
-            && manager.contains("resume.flow_cache_key()")
-            && manager_entry.contains("ManagedDatagramConnectionCache")
-            && !manager_entry.contains("ManagedDatagramConnectionCacheKey")
-            && manager_entry.contains(".get_or_insert_key(")
-            && !manager_entry.contains("upstreams.get(")
-            && !manager_entry.contains("upstreams.insert(")
+        !managed.contains("cache_key: &'a str")
+            && !managed.contains("leaf_key:")
+            && !managed.contains("SsKey")
+            && !managed.contains("fn from_resume(")
+            && !managed.contains("socket_flow_cache_key()")
+            && generic_manager.contains("ManagedDatagramConnectionCache")
+            && !managed.contains("ManagedDatagramConnectionCacheKey")
+            && managed.contains("resume.flow_cache_key()")
+            && generic_manager.contains(".get_or_insert_key(")
+            && !managed.contains("upstreams.get(")
+            && !managed.contains("upstreams.insert(")
             && managed_cache.contains("struct ManagedDatagramConnectionCache")
             && managed_cache.contains("async fn get_or_insert_with")
             && !managed_cache.contains("pub(crate) async fn get_or_insert_with")
             && managed_cache.contains("pub(crate) async fn get_or_insert_key")
-            && !manager.contains("shadowsocks::ShadowsocksUdpFlowEntries")
-            && !manager_entry.contains("shadowsocks::ShadowsocksUdpFlowEntries")
-            && manager_entry.contains("SharedManagedDatagramUdpConnection")
-            && !manager.contains("Arc<SsUpstream>")
-            && !manager.contains(".flow.")
-            && !manager.contains(".waiters")
-            && !manager.contains("shadowsocks::ShadowsocksUdpFlowStore<Arc<SsUpstream>>")
-            && !manager.contains("HashMap<shadowsocks::ShadowsocksUdpCacheKey"),
+            && !managed.contains("shadowsocks::ShadowsocksUdpFlowEntries")
+            && managed.contains("SharedManagedDatagramUdpConnection")
+            && !managed.contains("Arc<SsUpstream>")
+            && !managed.contains(".waiters")
+            && !managed.contains("shadowsocks::ShadowsocksUdpFlowStore<Arc<SsUpstream>>")
+            && !managed.contains("HashMap<shadowsocks::ShadowsocksUdpCacheKey"),
         "ordinary Shadowsocks UDP peer model should carry only protocol-owned opaque cache identity and a neutral datagram connection"
     );
     assert!(
@@ -9133,8 +9124,6 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !start.contains("resume.codec()"),
         "new Shadowsocks UDP flow start should pass the unified resume descriptor without unpacking cache identity or codec state"
     );
-    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
-    let manager_model = read("src/adapters/shadowsocks/udp/manager/model.rs");
     for forbidden in [
         "ShadowsocksUdpLeafKey",
         "leaf_cache_key",
@@ -9147,8 +9136,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "SsKey::from_resume",
     ] {
         assert!(
-            !manager.contains(forbidden) && !manager_model.contains(forbidden),
-            "Shadowsocks UDP manager should use a protocol-owned cache key/codec handle instead of unpacking `{forbidden}`"
+            !managed.contains(forbidden) && !generic_manager.contains(forbidden),
+            "Shadowsocks UDP managed glue should use a protocol-owned cache key/codec handle instead of unpacking `{forbidden}`"
         );
     }
 }
@@ -9444,10 +9433,8 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
 
 #[test]
 fn shadowsocks_udp_entry_cache_lives_outside_manager() {
-    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
-    let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
-    let entry_source = read("src/adapters/shadowsocks/udp/manager/entry.rs");
-    let bridge_source = read("src/adapters/shadowsocks/udp/manager/bridge.rs");
+    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let generic_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let entry = manifest_dir().join("src/adapters/shadowsocks/udp/manager/entry.rs");
 
     for forbidden in [
@@ -9459,37 +9446,29 @@ fn shadowsocks_udp_entry_cache_lives_outside_manager() {
         "socket::spawn_recv_loop",
     ] {
         assert!(
-            !manager.contains(forbidden),
-            "ss_manager.rs should keep entry/cache construction in ss_manager/entry.rs; found `{forbidden}`"
+            !managed.contains(forbidden),
+            "Shadowsocks UDP managed glue should not own old manager entry/cache detail `{forbidden}`"
         );
     }
     assert!(
-        !manager.contains("ManagedDatagramConnectionCacheKey")
-            && !entry_source.contains("ManagedDatagramConnectionCacheKey"),
-        "Shadowsocks UDP manager/entry should pass opaque cache identity strings to runtime cache helpers"
+        !managed.contains("ManagedDatagramConnectionCacheKey")
+            && !generic_manager.contains("ManagedDatagramConnectionCacheKey"),
+        "Shadowsocks UDP managed glue should pass opaque cache identity strings to runtime cache helpers"
     );
     assert!(
-        entry.exists(),
-        "Shadowsocks UDP entry/cache construction should live in ss_manager/entry.rs"
+        !entry.exists(),
+        "Shadowsocks UDP entry/cache construction should use generic managed datagram runtime glue"
     );
     assert!(
-        manager.contains(".send_datagram(")
-            && !manager.contains(".flow.")
-            && !manager.contains(".waiters")
-            && !manager.contains("BridgeWaiters")
-            && !model.contains("impl ManagedDatagramUdpConnection")
-            && !model.contains("SsUpstream")
-            && !model.contains("self.waiters.register")
-            && !model.contains("self.flow.send_datagram")
-            && entry_source.contains("bridge::establish_datagram_connection")
-            && !entry_source.contains("ShadowsocksUdpSocketFlow")
-            && !entry_source.contains("BridgeWaiters")
-            && !bridge_source.contains("struct SsDatagramConnection")
-            && !bridge_source.contains("impl ManagedDatagramUdpConnection")
-            && !bridge_source.contains("self.waiters.register")
-            && bridge_source.contains("impl ManagedDatagramSender")
-            && bridge_source.contains("self.flow.send_datagram"),
-        "Shadowsocks UDP manager should send through a neutral datagram connection while bridge only adapts protocol flow sending"
+        generic_manager.contains(".send_datagram(")
+            && !managed.contains(".waiters")
+            && !managed.contains("BridgeWaiters")
+            && !managed.contains("impl ManagedDatagramUdpConnection")
+            && !managed.contains("SsUpstream")
+            && !managed.contains("self.waiters.register")
+            && managed.contains("impl ManagedDatagramSender")
+            && managed.contains("self.flow.send_datagram"),
+        "Shadowsocks UDP managed glue should send through a neutral datagram connection while only adapting protocol flow sending"
     );
 }
 

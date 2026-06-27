@@ -7,11 +7,11 @@ use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
 use crate::runtime::Proxy;
 
 mod flow;
-mod manager;
+mod managed;
 mod packet_path;
 
 pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> {
-    Box::new(manager::SsChainManager::new())
+    managed::handler()
 }
 
 impl ShadowsocksAdapter {
