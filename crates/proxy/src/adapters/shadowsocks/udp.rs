@@ -6,11 +6,10 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::{
-    ManagedDatagramFlowHandler, ManagedUdpFlowKind, ProtocolUdpFlowResume,
-};
+use crate::protocol_runtime::udp::{ManagedDatagramFlowHandler, ManagedUdpFlowKind};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::Proxy;
 
 mod manager;
@@ -139,7 +138,7 @@ impl ShadowsocksAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::new(resume),
+                resume: ManagedUdpFlowResume::new(resume),
                 payload,
                 kind: ManagedUdpFlowKind::Datagram,
                 outbound: ManagedUdpOutboundKind::Datagram,

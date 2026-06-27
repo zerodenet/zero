@@ -2,7 +2,8 @@ use crate::protocol_runtime::udp::state::managed::flow_mismatch;
 use crate::protocol_runtime::udp::state::managed::model::{
     ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
 };
-use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowSnapshot};
+use crate::protocol_runtime::udp::FlowFailure;
+use crate::runtime::udp_flow::managed::ManagedUdpFlowSnapshot;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
@@ -66,7 +67,7 @@ impl ManagedStreamState {
         chain_tasks: &mut JoinSet<ChainTask>,
         proxy: &Proxy,
         flow: &UdpFlowSnapshot,
-        snapshot: &ProtocolUdpFlowSnapshot,
+        snapshot: &ManagedUdpFlowSnapshot,
         payload: &[u8],
     ) -> Option<Result<usize, FlowFailure>> {
         let upstream = flow

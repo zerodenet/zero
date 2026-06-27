@@ -4,11 +4,12 @@ use async_trait::async_trait;
 use tokio::time::Instant as TokioInstant;
 use zero_engine::EngineError;
 
-use crate::protocol_runtime::udp::{FlowFailure, ManagedUdpFlowRequest, ProtocolUdpFlowResume};
+use crate::protocol_runtime::udp::{FlowFailure, ManagedUdpFlowRequest};
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 
 #[async_trait]
 pub(crate) trait UpstreamAssociationHandler: Send + Sync {
-    fn supports_upstream_resume(&self, resume: &ProtocolUdpFlowResume) -> bool;
+    fn supports_upstream_resume(&self, resume: &ManagedUdpFlowResume) -> bool;
 
     async fn send_upstream(
         &mut self,
@@ -46,7 +47,7 @@ impl UpstreamAssociationState {
 
     pub(in crate::protocol_runtime::udp::state) fn handles_resume(
         &self,
-        resume: &ProtocolUdpFlowResume,
+        resume: &ManagedUdpFlowResume,
     ) -> bool {
         self.handlers
             .upstream

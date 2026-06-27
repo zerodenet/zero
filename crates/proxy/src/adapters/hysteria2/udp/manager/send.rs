@@ -1,14 +1,13 @@
 use super::model::{H2Entry, H2SendExisting, H2UdpPeer};
 use super::{establish, H2ChainManager};
-use crate::protocol_runtime::udp::{
-    FlowFailure, ManagedDatagramFlowHandler, ManagedExistingSend, ProtocolUdpFlowResume,
-};
+use crate::protocol_runtime::udp::{FlowFailure, ManagedDatagramFlowHandler, ManagedExistingSend};
 use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use zero_core::UdpFlowPacket;
 
 impl H2ChainManager {
-    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+    fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
         resume
             .as_ref::<hysteria2::Hysteria2UdpFlowResume>()
             .is_some()
@@ -114,7 +113,7 @@ impl H2ChainManager {
 
 #[async_trait::async_trait]
 impl ManagedDatagramFlowHandler for H2ChainManager {
-    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+    fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
         H2ChainManager::supports_managed_existing(self, resume)
     }
 

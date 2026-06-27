@@ -4,11 +4,10 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::{
-    ManagedStreamFlowHandler, ManagedUdpFlowKind, ProtocolUdpFlowResume,
-};
+use crate::protocol_runtime::udp::{ManagedStreamFlowHandler, ManagedUdpFlowKind};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::Proxy;
 
 mod manager;
@@ -45,7 +44,7 @@ impl MieruAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::new(mieru::MieruUdpFlowResume::new(
+                resume: ManagedUdpFlowResume::new(mieru::MieruUdpFlowResume::new(
                     username, password, false,
                 )),
                 payload,
@@ -82,7 +81,7 @@ impl MieruAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ProtocolUdpFlowResume::new(mieru::MieruUdpFlowResume::new(
+                resume: ManagedUdpFlowResume::new(mieru::MieruUdpFlowResume::new(
                     username, password, true,
                 )),
                 payload,

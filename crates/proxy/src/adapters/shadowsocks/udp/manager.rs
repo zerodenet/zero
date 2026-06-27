@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::protocol_runtime::udp::{
-    FlowFailure, ManagedDatagramFlowHandler, ManagedExistingSend, ProtocolUdpFlowResume,
-};
+use crate::protocol_runtime::udp::{FlowFailure, ManagedDatagramFlowHandler, ManagedExistingSend};
 use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use zero_core::UdpFlowPacket;
@@ -26,7 +25,7 @@ impl SsChainManager {
         }
     }
 
-    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+    fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
         resume
             .as_ref::<shadowsocks::ShadowsocksUdpFlowResume>()
             .is_some()
@@ -145,7 +144,7 @@ impl SsChainManager {
 
 #[async_trait::async_trait]
 impl ManagedDatagramFlowHandler for SsChainManager {
-    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+    fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
         SsChainManager::supports_managed_existing(self, resume)
     }
 

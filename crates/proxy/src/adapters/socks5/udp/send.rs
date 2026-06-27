@@ -10,7 +10,7 @@ use crate::logging::{
     log_udp_upstream_association_created, log_udp_upstream_association_dropped,
     log_udp_upstream_association_reused,
 };
-use crate::protocol_runtime::udp::ProtocolUdpFlowResume;
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::Proxy;
 
 pub(super) struct Socks5UdpSend<'a> {
@@ -18,7 +18,7 @@ pub(super) struct Socks5UdpSend<'a> {
     pub(crate) tag: &'a str,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) resume: ManagedUdpFlowResume,
     pub(crate) session: &'a Session,
     pub(crate) payload: &'a [u8],
 }

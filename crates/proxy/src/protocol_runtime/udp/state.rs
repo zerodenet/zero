@@ -6,10 +6,8 @@ use tokio::time::Instant as TokioInstant;
 use zero_engine::EngineError;
 
 use super::flows::{ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow};
-use super::{
-    FlowFailure, ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume,
-    ProtocolUdpFlowSnapshot,
-};
+use super::{FlowFailure, ManagedUdpFlowKind, ManagedUdpFlowRequest};
+use crate::runtime::udp_flow::managed::{ManagedUdpFlowResume, ManagedUdpFlowSnapshot};
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
 use cached::CachedProtocolUdpState;
@@ -41,7 +39,7 @@ pub(crate) struct ProtocolUdpState {
     cached: CachedProtocolUdpState,
     pub(super) managed: ManagedProtocolUdpState,
     upstream: UpstreamAssociationState,
-    managed_flows: HashMap<ManagedUdpFlowRef, ProtocolUdpFlowSnapshot>,
+    managed_flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>,
     next_managed_flow_id: u64,
 }
 
@@ -64,26 +62,26 @@ impl ProtocolUdpState {
 
     pub(crate) fn register_managed_flow(
         &mut self,
-        resume: ProtocolUdpFlowResume,
+        resume: ManagedUdpFlowResume,
     ) -> ManagedUdpFlowRef {
         let flow_ref = ManagedUdpFlowRef::new(self.next_managed_flow_id);
         self.next_managed_flow_id += 1;
         self.managed_flows
-            .insert(flow_ref, ProtocolUdpFlowSnapshot::managed(resume));
+            .insert(flow_ref, ManagedUdpFlowSnapshot::managed(resume));
         flow_ref
     }
 
     pub(super) fn managed_flow_snapshot(
         &self,
         flow_ref: ManagedUdpFlowRef,
-    ) -> Option<ProtocolUdpFlowSnapshot> {
+    ) -> Option<ManagedUdpFlowSnapshot> {
         self.managed_flows.get(&flow_ref).cloned()
     }
 
     pub(crate) fn managed_flow_resume(
         &self,
         flow_ref: ManagedUdpFlowRef,
-    ) -> Option<ProtocolUdpFlowResume> {
+    ) -> Option<ManagedUdpFlowResume> {
         self.managed_flow_snapshot(flow_ref)
             .map(|snapshot| snapshot.resume().clone())
     }

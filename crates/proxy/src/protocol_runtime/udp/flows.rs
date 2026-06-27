@@ -1,14 +1,13 @@
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::Proxy;
 use zero_core::Session;
-
-use super::ProtocolUdpFlowResume;
 
 pub(crate) struct ManagedDatagramFlow<'a> {
     pub(crate) proxy: Option<&'a Proxy>,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) resume: ManagedUdpFlowResume,
     pub(crate) payload: &'a [u8],
 }
 
@@ -19,7 +18,7 @@ pub(crate) struct ManagedStreamPacketFlow<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) resume: ManagedUdpFlowResume,
     pub(crate) payload: &'a [u8],
 }
 
@@ -32,7 +31,7 @@ pub(crate) struct ManagedRelayStreamFlow<'a> {
     pub(crate) tls_server_name: Option<&'a str>,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) resume: ManagedUdpFlowResume,
     pub(crate) payload: &'a [u8],
 }
 
@@ -47,7 +46,7 @@ pub(crate) struct ManagedUdpFlowRequest<'a> {
     pub(crate) tls_server_name: Option<&'a str>,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) resume: ManagedUdpFlowResume,
     pub(crate) payload: &'a [u8],
 }
 

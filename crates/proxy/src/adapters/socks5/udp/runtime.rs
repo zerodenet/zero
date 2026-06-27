@@ -10,8 +10,9 @@ use super::model::{
 };
 use super::send::{self, Socks5UdpSend};
 use crate::protocol_runtime::udp::{
-    FlowFailure, ManagedUdpFlowRequest, ProtocolUdpFlowResume, UpstreamAssociationHandler,
+    FlowFailure, ManagedUdpFlowRequest, UpstreamAssociationHandler,
 };
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 
 #[derive(Default)]
 pub(crate) struct Socks5UdpRuntime {
@@ -20,7 +21,7 @@ pub(crate) struct Socks5UdpRuntime {
 }
 
 impl Socks5UdpRuntime {
-    pub(crate) fn handles_resume(&self, resume: &ProtocolUdpFlowResume) -> bool {
+    pub(crate) fn handles_resume(&self, resume: &ManagedUdpFlowResume) -> bool {
         resume.as_ref::<socks5::Socks5UdpFlowResume>().is_some()
     }
 
@@ -133,7 +134,7 @@ impl Socks5UdpRuntime {
 
 #[async_trait]
 impl UpstreamAssociationHandler for Socks5UdpRuntime {
-    fn supports_upstream_resume(&self, resume: &ProtocolUdpFlowResume) -> bool {
+    fn supports_upstream_resume(&self, resume: &ManagedUdpFlowResume) -> bool {
         self.handles_resume(resume)
     }
 

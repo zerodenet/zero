@@ -5,19 +5,19 @@ use super::model::{MieruRelayExisting, MieruSendExisting, MieruUdpPeer};
 use super::{bridge, establish, MieruChainManager};
 use crate::protocol_runtime::udp::{
     FlowFailure, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
-    ProtocolUdpFlowResume,
 };
 use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 impl MieruChainManager {
-    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+    fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
         resume.as_ref::<mieru::MieruUdpFlowResume>().is_some()
     }
 
-    fn supports_managed_relay_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+    fn supports_managed_relay_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
         resume.as_ref::<mieru::MieruUdpFlowResume>().is_some()
     }
 
@@ -237,11 +237,11 @@ impl MieruChainManager {
 
 #[async_trait::async_trait]
 impl ManagedStreamFlowHandler for MieruChainManager {
-    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+    fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
         MieruChainManager::supports_managed_existing(self, resume)
     }
 
-    fn supports_managed_relay_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
+    fn supports_managed_relay_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
         MieruChainManager::supports_managed_relay_existing(self, resume)
     }
 

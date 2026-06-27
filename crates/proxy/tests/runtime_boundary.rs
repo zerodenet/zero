@@ -3082,7 +3082,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
             && managed.contains("start_tracked_managed_protocol_udp")
             && managed.contains("forward_managed_relay_flow")
             && socks5_adapter.contains("ManagedUdpFlowKind::RelayStream")
-            && socks5_adapter.contains("ProtocolUdpFlowResume::new")
+            && socks5_adapter.contains("ManagedUdpFlowResume::new")
             && !managed.contains("Socks5UdpPacketSend")
             && !managed.contains("username: Option<&'a str>")
             && !managed.contains("password: Option<&'a str>")
@@ -3447,7 +3447,7 @@ fn udp_flow_outbound_snapshot_is_not_declared_in_session_bookkeeping() {
 #[test]
 fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
     let outbound = read("src/runtime/udp_flow/outbound.rs");
-    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let snapshot = read("src/runtime/udp_flow/managed.rs");
     let state = read("src/protocol_runtime/udp/state.rs");
 
     for required in [
@@ -3473,8 +3473,8 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         "username: Option<String>",
         "password: Option<String>",
         "UdpPacketPathCarrier::",
-        "ProtocolUdpFlowSnapshot",
-        "ProtocolUdpFlowResume",
+        "ManagedUdpFlowSnapshot",
+        "ManagedUdpFlowResume",
         "crate::protocol_runtime::udp",
     ] {
         assert!(
@@ -3483,15 +3483,15 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         );
     }
     let snapshot_enum = snapshot
-        .split("pub(crate) enum ProtocolUdpFlowSnapshot")
+        .split("pub(crate) enum ManagedUdpFlowSnapshot")
         .nth(1)
-        .expect("ProtocolUdpFlowSnapshot enum should exist")
-        .split("trait ProtocolUdpFlowResumeObject")
+        .expect("ManagedUdpFlowSnapshot enum should exist")
+        .split("trait ManagedUdpFlowResumeObject")
         .next()
-        .expect("ProtocolUdpFlowResume should follow ProtocolUdpFlowSnapshot");
+        .expect("ManagedUdpFlowResume should follow ManagedUdpFlowSnapshot");
     assert!(
         snapshot_enum.contains("Managed {")
-            && snapshot_enum.contains("resume: ProtocolUdpFlowResume")
+            && snapshot_enum.contains("resume: ManagedUdpFlowResume")
             && !snapshot_enum.contains("Socks5")
             && !snapshot_enum.contains("Shadowsocks")
             && !snapshot_enum.contains("Hysteria2")
@@ -3500,20 +3500,20 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         "protocol UDP flow snapshot should expose only the unified managed resume wrapper"
     );
     let resume_model = snapshot
-        .split("pub(crate) struct ProtocolUdpFlowResume")
+        .split("pub(crate) struct ManagedUdpFlowResume")
         .nth(1)
-        .expect("ProtocolUdpFlowResume struct should exist")
-        .split("impl ProtocolUdpFlowSnapshot")
+        .expect("ManagedUdpFlowResume struct should exist")
+        .split("impl ManagedUdpFlowSnapshot")
         .next()
-        .expect("ProtocolUdpFlowSnapshot impl should follow ProtocolUdpFlowResume");
+        .expect("ManagedUdpFlowSnapshot impl should follow ManagedUdpFlowResume");
     assert!(
-        snapshot.contains("trait ProtocolUdpFlowResumeObject")
-            && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+        snapshot.contains("trait ManagedUdpFlowResumeObject")
+            && snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
             && snapshot.contains("downcast_ref::<T>()")
             && resume_model.contains("pub(crate) fn new<T>(")
             && resume_model.contains("pub(crate) fn as_ref<T>(")
             && resume_model.contains("pub(crate) fn cloned<T>(")
-            && !snapshot.contains("pub(crate) enum ProtocolUdpFlowResume")
+            && !snapshot.contains("pub(crate) enum ManagedUdpFlowResume")
             && !resume_model.contains("socks5::")
             && !resume_model.contains("shadowsocks::")
             && !resume_model.contains("hysteria2::")
@@ -3530,7 +3530,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && !resume_model.contains("client_fingerprint: Option<String>")
             && !resume_model.contains("relay_chain: bool")
             && !resume_model.contains("cipher_kind: shadowsocks::CipherKind"),
-        "ProtocolUdpFlowResume should be an opaque type-erased wrapper around protocol-owned resume objects"
+        "ManagedUdpFlowResume should be an opaque type-erased wrapper around protocol-owned resume objects"
     );
     assert!(
         !snapshot.contains("PacketPathCarrierSnapshot")
@@ -3549,7 +3549,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         "runtime UDP outbound snapshot should store only opaque managed flow references"
     );
     assert!(
-        state.contains("HashMap<ManagedUdpFlowRef, ProtocolUdpFlowSnapshot>")
+        state.contains("HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>")
             && state.contains("fn register_managed_flow")
             && state.contains("fn managed_flow_snapshot"),
         "ProtocolUdpState should own protocol UDP resume snapshots behind runtime opaque managed flow refs"
@@ -3835,8 +3835,8 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
         "Trojan and Mieru UDP start dispatch should be centralized in ManagedProtocolUdpState"
     );
     for forbidden in [
-        "ProtocolUdpFlowResume::Shadowsocks(_)",
-        "ProtocolUdpFlowResume::Hysteria2(_)",
+        "ManagedUdpFlowResume::Shadowsocks(_)",
+        "ManagedUdpFlowResume::Hysteria2(_)",
     ] {
         assert!(
             !state.contains(forbidden),
@@ -3844,8 +3844,8 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
         );
     }
     for forbidden in [
-        "ProtocolUdpFlowResume::Shadowsocks",
-        "ProtocolUdpFlowResume::Hysteria2",
+        "ManagedUdpFlowResume::Shadowsocks",
+        "ManagedUdpFlowResume::Hysteria2",
     ] {
         assert!(
             !managed.contains(forbidden),
@@ -3884,7 +3884,7 @@ fn protocol_udp_upstream_start_dispatch_lives_behind_registered_handlers() {
     let socks5_runtime = read("src/adapters/socks5/udp/runtime.rs");
 
     for forbidden in [
-        "ProtocolUdpFlowResume::Socks5",
+        "ManagedUdpFlowResume::Socks5",
         "Socks5UdpPacketSend",
         "start_socks5_relay_flow",
         "Socks5UdpRuntime",
@@ -3917,8 +3917,8 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
     let register = read("src/register.rs");
 
     for forbidden in [
-        "ProtocolUdpFlowResume::Trojan(_)",
-        "ProtocolUdpFlowResume::Mieru(_)",
+        "ManagedUdpFlowResume::Trojan(_)",
+        "ManagedUdpFlowResume::Mieru(_)",
         "start_trojan_stream_packet_flow",
         "start_trojan_relay_stream_flow",
         "start_mieru_stream_packet_flow",
@@ -3930,8 +3930,8 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
         );
     }
     for forbidden in [
-        "ProtocolUdpFlowResume::Trojan",
-        "ProtocolUdpFlowResume::Mieru",
+        "ManagedUdpFlowResume::Trojan",
+        "ManagedUdpFlowResume::Mieru",
     ] {
         assert!(
             !managed.contains(forbidden),
@@ -3970,7 +3970,6 @@ fn udp_dispatch_does_not_keep_external_managed_flow_handles() {
     let dispatch = read("src/runtime/udp_dispatch/mod.rs");
     let lifecycle = read("src/runtime/udp_dispatch/lifecycle.rs");
     let types = read("src/runtime/udp_dispatch/types.rs");
-    let managed = manifest_dir().join("src/runtime/udp_flow/managed.rs");
 
     for source in [&dispatch, &lifecycle] {
         for forbidden in [
@@ -3987,8 +3986,8 @@ fn udp_dispatch_does_not_keep_external_managed_flow_handles() {
         }
     }
     assert!(
-        !managed.exists() && !types.contains("ManagedFlow"),
-        "runtime::udp_flow::managed and FlowStartResult::ManagedFlow should not preserve a second UDP lifecycle"
+        !types.contains("ManagedFlow"),
+        "FlowStartResult::ManagedFlow should not preserve a second UDP lifecycle"
     );
 }
 
@@ -5656,7 +5655,7 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         "client_fingerprint",
         "relay_chain",
         ".upstream()",
-        "ProtocolUdpFlowResume",
+        "ManagedUdpFlowResume",
         "Socks5(_)",
     ] {
         assert!(
@@ -5669,13 +5668,13 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
             && forward.contains("self.upstream.handles_resume(snapshot.resume())")
             && upstream.contains("fn handles_resume")
             && upstream.contains("handler.supports_upstream_resume(resume)")
-            && socks5_runtime.contains("fn supports_upstream_resume(&self, resume: &ProtocolUdpFlowResume)")
+            && socks5_runtime.contains("fn supports_upstream_resume(&self, resume: &ManagedUdpFlowResume)")
             && socks5_runtime.contains("resume.as_ref::<socks5::Socks5UdpFlowResume>()")
             && managed.contains("fn forward_existing_flow")
             && managed_model.contains("trait ManagedDatagramFlowHandler")
             && managed_model.contains("trait ManagedStreamFlowHandler")
             && managed_model.contains("pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>")
-            && managed_model.contains("pub(crate) resume: ProtocolUdpFlowResume")
+            && managed_model.contains("pub(crate) resume: ManagedUdpFlowResume")
             && managed_datagram.contains("ManagedExistingSend")
             && managed_datagram.contains("send_managed_existing")
             && managed_datagram.contains("for handler in &mut self.handlers")
@@ -5691,10 +5690,10 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         "MieruSendExisting",
         "TrojanRelayExisting",
         "MieruRelayExisting",
-        "ProtocolUdpFlowResume::Shadowsocks",
-        "ProtocolUdpFlowResume::Hysteria2",
-        "ProtocolUdpFlowResume::Trojan",
-        "ProtocolUdpFlowResume::Mieru",
+        "ManagedUdpFlowResume::Shadowsocks",
+        "ManagedUdpFlowResume::Hysteria2",
+        "ManagedUdpFlowResume::Trojan",
+        "ManagedUdpFlowResume::Mieru",
     ] {
         assert!(
             !managed.contains(forbidden),
@@ -5816,8 +5815,8 @@ fn protocol_udp_packet_path_facade_lives_in_udp_dispatch_runtime() {
         "UDP packet-path facade should live in runtime/udp_dispatch/packet_path.rs"
     );
     for forbidden in [
-        "ProtocolUdpFlowSnapshot::Shadowsocks",
-        "ProtocolUdpFlowSnapshot",
+        "ManagedUdpFlowSnapshot::Shadowsocks",
+        "ManagedUdpFlowSnapshot",
         "password: datagram.password",
         "cipher_kind: datagram.cipher_kind",
         "datagram_cache_key: datagram.datagram_cache_key",
@@ -6406,7 +6405,7 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
 #[test]
 fn trojan_udp_flow_resume_is_protocol_owned() {
     let adapter = read("src/adapters/trojan/udp.rs");
-    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let snapshot = read("src/runtime/udp_flow/managed.rs");
     let forward = read("src/protocol_runtime/udp/state/managed/stream.rs");
     let start = read("src/protocol_runtime/udp/state/managed/stream.rs");
     let manager_send = read("src/adapters/trojan/udp/manager/send.rs");
@@ -6448,8 +6447,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         );
     }
     assert!(
-        snapshot.contains("resume: ProtocolUdpFlowResume")
-            && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+        snapshot.contains("resume: ManagedUdpFlowResume")
+            && snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
             && !snapshot.contains("Trojan(trojan::TrojanUdpFlowResume)")
             && !snapshot.contains("password: String")
             && !snapshot.contains("client_fingerprint: Option<String>")
@@ -6470,7 +6469,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         "existing Trojan UDP flow forwarding should pass the opaque resume descriptor without unpacking auth, TLS, or relay state"
     );
     assert!(
-        !start.contains("ProtocolUdpFlowResume::Trojan")
+        !start.contains("ManagedUdpFlowResume::Trojan")
             && start.contains("ManagedExistingSend::stream_packet")
             && start.contains("ManagedRelaySend::relay_stream")
             && !start.contains("resume.password()")
@@ -6592,7 +6591,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let manager = read("src/adapters/mieru/udp/manager.rs");
     let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
-    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let snapshot = read("src/runtime/udp_flow/managed.rs");
     let forward = read("src/protocol_runtime/udp/state/managed/stream.rs");
     let manager_send = read("src/adapters/mieru/udp/manager/send.rs");
     let manager_connect = read("src/adapters/mieru/udp/manager/connect.rs");
@@ -6697,8 +6696,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         );
     }
     assert!(
-        snapshot.contains("resume: ProtocolUdpFlowResume")
-            && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+        snapshot.contains("resume: ManagedUdpFlowResume")
+            && snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
             && !snapshot.contains("Mieru(mieru::MieruUdpFlowResume)")
             && !snapshot.contains("username: String")
             && !snapshot.contains("relay_chain: bool"),
@@ -6718,7 +6717,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     );
     let start = read("src/protocol_runtime/udp/state/managed/stream.rs");
     assert!(
-        !start.contains("ProtocolUdpFlowResume::Mieru")
+        !start.contains("ManagedUdpFlowResume::Mieru")
             && start.contains("ManagedExistingSend::stream_packet")
             && start.contains("ManagedRelaySend::relay_stream")
             && !start.contains("resume.username()")
@@ -7107,7 +7106,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
     let adapter = read("src/adapters/hysteria2/udp.rs");
-    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let snapshot = read("src/runtime/udp_flow/managed.rs");
     let forward = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
@@ -7202,15 +7201,15 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         );
     }
     let resume_model = snapshot
-        .split("pub(crate) struct ProtocolUdpFlowResume")
+        .split("pub(crate) struct ManagedUdpFlowResume")
         .nth(1)
-        .expect("ProtocolUdpFlowResume struct should exist")
-        .split("impl ProtocolUdpFlowSnapshot")
+        .expect("ManagedUdpFlowResume struct should exist")
+        .split("impl ManagedUdpFlowSnapshot")
         .next()
-        .expect("ProtocolUdpFlowSnapshot impl should follow ProtocolUdpFlowResume");
+        .expect("ManagedUdpFlowSnapshot impl should follow ManagedUdpFlowResume");
     assert!(
-        snapshot.contains("resume: ProtocolUdpFlowResume")
-            && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+        snapshot.contains("resume: ManagedUdpFlowResume")
+            && snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
             && !snapshot.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
             && !resume_model.contains("password: String")
             && !resume_model.contains("client_fingerprint: Option<String>"),
@@ -7691,7 +7690,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let flows = read("src/protocol_runtime/udp/flows.rs");
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
     let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
-    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+    let snapshot = read("src/runtime/udp_flow/managed.rs");
     let forward = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
@@ -7724,7 +7723,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !shadowsocks_flow_model.contains("password: &'a str")
             && !shadowsocks_flow_model.contains("cache_key: String")
             && !shadowsocks_flow_model.contains("DatagramCodec")
-            && shadowsocks_flow_model.contains("resume: ProtocolUdpFlowResume"),
+            && shadowsocks_flow_model.contains("resume: ManagedUdpFlowResume"),
         "ordinary Shadowsocks UDP flow model should carry only the unified resume descriptor"
     );
     assert!(
@@ -7753,8 +7752,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "Shadowsocks adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
     assert!(
-        snapshot.contains("resume: ProtocolUdpFlowResume")
-            && snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+        snapshot.contains("resume: ManagedUdpFlowResume")
+            && snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
             && !snapshot.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
             && !snapshot.contains("cipher_kind: shadowsocks::CipherKind")
             && !snapshot.contains("datagram_cache_key: String"),
@@ -7773,7 +7772,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     );
     let start = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     assert!(
-        !start.contains("ProtocolUdpFlowResume::Shadowsocks")
+        !start.contains("ManagedUdpFlowResume::Shadowsocks")
             && start.contains("ManagedExistingSend::datagram")
             && !start.contains("resume.cache_key()")
             && !start.contains("resume.codec()"),
@@ -7871,7 +7870,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && traits.contains("struct UdpDatagramDescriptor")
             && traits.contains("cache_key: String")
             && traits.contains("descriptor: UdpDatagramDescriptor<'a>")
-            && !traits.contains("ProtocolUdpFlowSnapshot")
+            && !traits.contains("ManagedUdpFlowSnapshot")
             && traits.contains("codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>"),
         "UdpDatagramSource should contain only neutral descriptor identity and adapter-provided packet-path datagram codec"
     );
@@ -8001,8 +8000,8 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         );
     }
     assert!(
-        !snapshot.contains("ProtocolUdpFlowSnapshot::shadowsocks(")
-            && !snapshot.contains("ProtocolUdpFlowSnapshot"),
+        !snapshot.contains("ManagedUdpFlowSnapshot::shadowsocks(")
+            && !snapshot.contains("ManagedUdpFlowSnapshot"),
         "packet-path snapshot helpers should not construct or name protocol flow snapshots"
     );
     assert!(
@@ -8010,7 +8009,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         "packet-path datagram source should not carry the protocol flow snapshot"
     );
     assert!(
-        !snapshot.contains("ProtocolUdpFlowSnapshot::Shadowsocks {"),
+        !snapshot.contains("ManagedUdpFlowSnapshot::Shadowsocks {"),
         "packet-path flow snapshot helper should not construct Shadowsocks snapshot fields directly"
     );
     for forbidden in [
@@ -8106,7 +8105,7 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
             "{source} should ask UdpDispatch bridges to start protocol state instead of borrowing protocol_parts()"
         );
         assert!(
-            !content.contains("ProtocolUdpFlowSnapshot"),
+            !content.contains("ManagedUdpFlowSnapshot"),
             "{source} should ask UdpDispatch bridges to describe protocol UDP flow snapshots"
         );
         if !matches!(
@@ -8141,11 +8140,11 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
             );
         }
         for forbidden in [
-            "ProtocolUdpFlowResume::Socks5",
-            "ProtocolUdpFlowResume::Shadowsocks",
-            "ProtocolUdpFlowResume::Hysteria2",
-            "ProtocolUdpFlowResume::Trojan",
-            "ProtocolUdpFlowResume::Mieru",
+            "ManagedUdpFlowResume::Socks5",
+            "ManagedUdpFlowResume::Shadowsocks",
+            "ManagedUdpFlowResume::Hysteria2",
+            "ManagedUdpFlowResume::Trojan",
+            "ManagedUdpFlowResume::Mieru",
             ".start_socks5_relay_flow",
             ".start_shadowsocks_datagram_flow",
             ".start_hysteria2_datagram_flow",
@@ -8207,17 +8206,24 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
 }
 
 #[test]
-fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
-    let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
+fn managed_udp_flow_snapshot_constructors_live_in_runtime_udp_flow() {
+    assert!(
+        !manifest_dir()
+            .join("src/protocol_runtime/udp/flow_snapshot.rs")
+            .exists(),
+        "managed UDP flow resume/snapshot state should live under runtime::udp_flow, not protocol_runtime::udp"
+    );
+
+    let snapshot = read("src/runtime/udp_flow/managed.rs");
     let snapshot_impl = snapshot
-        .split("impl ProtocolUdpFlowSnapshot")
+        .split("impl ManagedUdpFlowSnapshot")
         .nth(1)
-        .expect("ProtocolUdpFlowSnapshot impl should exist");
+        .expect("ManagedUdpFlowSnapshot impl should exist");
 
     for required in ["pub(crate) fn managed(", "pub(crate) fn resume("] {
         assert!(
             snapshot_impl.contains(required),
-            "protocol_runtime::udp::flow_snapshot should own protocol snapshot constructor `{required}`"
+            "runtime::udp_flow::managed should own protocol snapshot constructor `{required}`"
         );
     }
     for forbidden in [
@@ -8229,11 +8235,11 @@ fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
     ] {
         assert!(
             !snapshot_impl.contains(forbidden),
-            "protocol_runtime::udp::flow_snapshot should not keep protocol-specific snapshot constructor `{forbidden}`"
+            "runtime::udp_flow::managed should not keep protocol-specific snapshot constructor `{forbidden}`"
         );
     }
     assert!(
-        snapshot.contains("inner: Arc<dyn ProtocolUdpFlowResumeObject>")
+        snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
             && snapshot.contains("pub(crate) fn new<T>(")
             && snapshot.contains("pub(crate) fn as_ref<T>(")
             && !snapshot.contains("socks5::")
@@ -8243,7 +8249,7 @@ fn protocol_udp_flow_snapshot_constructors_live_in_protocol_runtime() {
             && !snapshot.contains("mieru::")
             && !snapshot.contains("Socks5(socks5::Socks5UdpFlowResume)")
             && snapshot.contains("Self::Managed {"),
-        "SOCKS5 UDP snapshot state should use the unified ProtocolUdpFlowResume wrapper"
+        "SOCKS5 UDP snapshot state should use the unified ManagedUdpFlowResume wrapper"
     );
 }
 
@@ -8271,14 +8277,14 @@ fn udp_dispatch_does_not_unpack_protocol_flow_resume() {
         ] {
             assert!(
                 !content.contains(forbidden),
-                "{source} should pass ProtocolUdpFlowResume through without unpacking `{forbidden}`"
+                "{source} should pass ManagedUdpFlowResume through without unpacking `{forbidden}`"
             );
         }
     }
     assert!(
-        managed.contains("resume: ProtocolUdpFlowResume")
+        managed.contains("resume: ManagedUdpFlowResume")
             && managed.contains("resume: request.resume"),
-        "managed UDP bridge should carry ProtocolUdpFlowResume without unpacking protocol internals"
+        "managed UDP bridge should carry ManagedUdpFlowResume without unpacking protocol internals"
     );
 }
 
@@ -8309,23 +8315,23 @@ fn adapters_do_not_import_protocol_udp_types_through_runtime_dispatch() {
 }
 
 #[test]
-fn protocol_udp_resume_variants_are_confined_to_flow_snapshot_model() {
+fn managed_udp_resume_variants_are_confined_to_managed_flow_model() {
     for path in rust_sources_under("src") {
         let source = relative(&path);
-        if source == "src/protocol_runtime/udp/flow_snapshot.rs" {
+        if source == "src/runtime/udp_flow/managed.rs" {
             continue;
         }
         let content = fs::read_to_string(&path).expect("read rust source");
         for forbidden in [
-            "ProtocolUdpFlowResume::Socks5",
-            "ProtocolUdpFlowResume::Shadowsocks",
-            "ProtocolUdpFlowResume::Hysteria2",
-            "ProtocolUdpFlowResume::Trojan",
-            "ProtocolUdpFlowResume::Mieru",
+            "ManagedUdpFlowResume::Socks5",
+            "ManagedUdpFlowResume::Shadowsocks",
+            "ManagedUdpFlowResume::Hysteria2",
+            "ManagedUdpFlowResume::Trojan",
+            "ManagedUdpFlowResume::Mieru",
         ] {
             assert!(
                 !content.contains(forbidden),
-                "{source} should use ProtocolUdpFlowResume constructors/accessors instead of matching variant `{forbidden}`"
+                "{source} should use ManagedUdpFlowResume constructors/accessors instead of matching variant `{forbidden}`"
             );
         }
     }

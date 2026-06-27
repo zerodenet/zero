@@ -1,7 +1,8 @@
 use crate::protocol_runtime::udp::flows::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
 };
-use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowSnapshot};
+use crate::protocol_runtime::udp::FlowFailure;
+use crate::runtime::udp_flow::managed::ManagedUdpFlowSnapshot;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use tokio::task::JoinSet;
 use zero_engine::EngineError;
@@ -77,7 +78,7 @@ impl ManagedProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         proxy: &Proxy,
         flow: &UdpFlowSnapshot,
-        snapshot: &ProtocolUdpFlowSnapshot,
+        snapshot: &ManagedUdpFlowSnapshot,
         payload: &[u8],
     ) -> Option<Result<usize, FlowFailure>> {
         if let Some(result) = self

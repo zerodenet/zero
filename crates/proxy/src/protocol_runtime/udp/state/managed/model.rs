@@ -4,7 +4,8 @@ use zero_core::{Address, Session};
 use crate::protocol_runtime::udp::flows::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
 };
-use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowResume};
+use crate::protocol_runtime::udp::FlowFailure;
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
@@ -17,7 +18,7 @@ pub(crate) struct ManagedExistingSend<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) resume: ManagedUdpFlowResume,
     pub(crate) target: &'a Address,
     pub(crate) target_port: u16,
     pub(crate) payload: &'a [u8],
@@ -25,7 +26,7 @@ pub(crate) struct ManagedExistingSend<'a> {
 
 #[async_trait::async_trait]
 pub(crate) trait ManagedDatagramFlowHandler: Send + Sync {
-    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool;
+    fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool;
 
     async fn send_managed_existing(
         &mut self,
@@ -35,9 +36,9 @@ pub(crate) trait ManagedDatagramFlowHandler: Send + Sync {
 
 #[async_trait::async_trait]
 pub(crate) trait ManagedStreamFlowHandler: Send + Sync {
-    fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool;
+    fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool;
 
-    fn supports_managed_relay_existing(&self, resume: &ProtocolUdpFlowResume) -> bool;
+    fn supports_managed_relay_existing(&self, resume: &ManagedUdpFlowResume) -> bool;
 
     async fn send_managed_existing(
         &mut self,
@@ -102,7 +103,7 @@ impl<'a> ManagedExistingSend<'a> {
         chain_tasks: &'a mut JoinSet<ChainTask>,
         proxy: &'a Proxy,
         flow: &'a UdpFlowSnapshot,
-        resume: ProtocolUdpFlowResume,
+        resume: ManagedUdpFlowResume,
         server: &'a str,
         port: u16,
         payload: &'a [u8],
@@ -131,7 +132,7 @@ pub(crate) struct ManagedRelaySend<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) resume: ManagedUdpFlowResume,
     pub(crate) target: &'a Address,
     pub(crate) target_port: u16,
     pub(crate) payload: &'a [u8],

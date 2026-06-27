@@ -1,7 +1,8 @@
 use crate::protocol_runtime::udp::state::managed::model::{
     ManagedDatagramFlowHandler, ManagedExistingSend,
 };
-use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowSnapshot};
+use crate::protocol_runtime::udp::FlowFailure;
+use crate::runtime::udp_flow::managed::ManagedUdpFlowSnapshot;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
@@ -43,7 +44,7 @@ impl ManagedDatagramState {
         chain_tasks: &mut JoinSet<ChainTask>,
         proxy: &Proxy,
         flow: &UdpFlowSnapshot,
-        snapshot: &ProtocolUdpFlowSnapshot,
+        snapshot: &ManagedUdpFlowSnapshot,
         payload: &[u8],
     ) -> Option<Result<usize, FlowFailure>> {
         let upstream = flow

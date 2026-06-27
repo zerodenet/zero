@@ -2,15 +2,15 @@ use std::any::Any;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
-pub(crate) enum ProtocolUdpFlowSnapshot {
-    Managed { resume: ProtocolUdpFlowResume },
+pub(crate) enum ManagedUdpFlowSnapshot {
+    Managed { resume: ManagedUdpFlowResume },
 }
 
-trait ProtocolUdpFlowResumeObject: Any + Send + Sync + std::fmt::Debug {
+trait ManagedUdpFlowResumeObject: Any + Send + Sync + std::fmt::Debug {
     fn as_any(&self) -> &dyn Any;
 }
 
-impl<T> ProtocolUdpFlowResumeObject for T
+impl<T> ManagedUdpFlowResumeObject for T
 where
     T: Any + Send + Sync + std::fmt::Debug,
 {
@@ -20,11 +20,11 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ProtocolUdpFlowResume {
-    inner: Arc<dyn ProtocolUdpFlowResumeObject>,
+pub(crate) struct ManagedUdpFlowResume {
+    inner: Arc<dyn ManagedUdpFlowResumeObject>,
 }
 
-impl ProtocolUdpFlowResume {
+impl ManagedUdpFlowResume {
     pub(crate) fn new<T>(resume: T) -> Self
     where
         T: Any + Send + Sync + std::fmt::Debug,
@@ -49,12 +49,12 @@ impl ProtocolUdpFlowResume {
     }
 }
 
-impl ProtocolUdpFlowSnapshot {
-    pub(crate) fn managed(resume: ProtocolUdpFlowResume) -> Self {
+impl ManagedUdpFlowSnapshot {
+    pub(crate) fn managed(resume: ManagedUdpFlowResume) -> Self {
         Self::Managed { resume }
     }
 
-    pub(crate) fn resume(&self) -> &ProtocolUdpFlowResume {
+    pub(crate) fn resume(&self) -> &ManagedUdpFlowResume {
         match self {
             Self::Managed { resume } => resume,
         }

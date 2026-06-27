@@ -1,7 +1,7 @@
 use crate::protocol_runtime::udp::{
     FlowFailure, ManagedCachedFlowSender, ManagedUdpFlowKind, ManagedUdpFlowRequest,
-    ProtocolUdpFlowResume,
 };
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::packet_path::ChainTask;
@@ -28,7 +28,7 @@ pub(crate) struct ManagedProtocolUdpSend<'a> {
     pub(crate) tls_server_name: Option<&'a str>,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) resume: ManagedUdpFlowResume,
     pub(crate) payload: &'a [u8],
     pub(crate) kind: ManagedUdpFlowKind,
     pub(crate) outbound: ManagedUdpOutboundKind,
@@ -58,7 +58,7 @@ impl UdpDispatch {
 
     pub(crate) fn register_managed_protocol_flow(
         &mut self,
-        resume: ProtocolUdpFlowResume,
+        resume: ManagedUdpFlowResume,
     ) -> ManagedUdpFlowRef {
         self.protocol_state.register_managed_flow(resume)
     }
@@ -66,7 +66,7 @@ impl UdpDispatch {
     pub(crate) fn managed_protocol_flow_resume(
         &self,
         flow_ref: ManagedUdpFlowRef,
-    ) -> Option<ProtocolUdpFlowResume> {
+    ) -> Option<ManagedUdpFlowResume> {
         self.protocol_state.managed_flow_resume(flow_ref)
     }
 
