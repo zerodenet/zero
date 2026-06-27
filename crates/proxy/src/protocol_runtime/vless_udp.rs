@@ -14,7 +14,9 @@ use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
-use crate::protocol_runtime::udp::ManagedCachedFlowSender;
+use crate::protocol_runtime::udp::{
+    CachedUdpFlowHandler, CachedUdpFlowStart, ManagedCachedFlowSender,
+};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -377,27 +379,6 @@ impl VlessUdpOutboundManager {
 }
 
 #[async_trait::async_trait]
-pub(crate) trait VlessCachedFlowHandler: ManagedCachedFlowSender {
-    async fn start_vless_flow(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        flow: VlessUdpStartFlow<'_>,
-    ) -> Result<(), EngineError>;
-
-    async fn start_vless_relay_two_stream(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        flow: VlessUdpRelayTwoStream<'_>,
-    ) -> Result<(), EngineError>;
-
-    async fn start_vless_relay_final_hop(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        flow: VlessUdpRelayFinalHopStart<'_>,
-    ) -> Result<(), EngineError>;
-}
-
-#[async_trait::async_trait]
 impl ManagedCachedFlowSender for VlessUdpOutboundManager {
     async fn send_existing(
         &mut self,
@@ -413,29 +394,27 @@ impl ManagedCachedFlowSender for VlessUdpOutboundManager {
 }
 
 #[async_trait::async_trait]
-impl VlessCachedFlowHandler for VlessUdpOutboundManager {
-    async fn start_vless_flow(
+impl CachedUdpFlowHandler for VlessUdpOutboundManager {
+    async fn try_start_cached_flow<'a>(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
-        flow: VlessUdpStartFlow<'_>,
-    ) -> Result<(), EngineError> {
-        VlessUdpOutboundManager::start_flow(self, chain_tasks, flow).await
-    }
-
-    async fn start_vless_relay_two_stream(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        flow: VlessUdpRelayTwoStream<'_>,
-    ) -> Result<(), EngineError> {
-        VlessUdpOutboundManager::start_relay_two_stream(self, chain_tasks, flow).await
-    }
-
-    async fn start_vless_relay_final_hop(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        flow: VlessUdpRelayFinalHopStart<'_>,
-    ) -> Result<(), EngineError> {
-        VlessUdpOutboundManager::start_relay_final_hop(self, chain_tasks, flow).await
+        request: CachedUdpFlowStart<'a>,
+    ) -> Result<Option<CachedUdpFlowStart<'a>>, EngineError> {
+        match request {
+            CachedUdpFlowStart::Vless(flow) => {
+                VlessUdpOutboundManager::start_flow(self, chain_tasks, flow).await?;
+                Ok(None)
+            }
+            CachedUdpFlowStart::VlessRelayTwoStream(flow) => {
+                VlessUdpOutboundManager::start_relay_two_stream(self, chain_tasks, flow).await?;
+                Ok(None)
+            }
+            CachedUdpFlowStart::VlessRelayFinalHop(flow) => {
+                VlessUdpOutboundManager::start_relay_final_hop(self, chain_tasks, flow).await?;
+                Ok(None)
+            }
+            other => Ok(Some(other)),
+        }
     }
 }
 

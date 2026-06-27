@@ -23,7 +23,10 @@ pub(crate) mod vmess_flow;
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
 pub(crate) use flow_snapshot::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
 pub(crate) use flows::{ManagedUdpFlowKind, ManagedUdpFlowRequest};
-pub(crate) use state::{CachedUdpHandlers, ProtocolUdpHandlers, ProtocolUdpState};
+pub(crate) use state::{
+    CachedUdpFlowHandler, CachedUdpFlowStart, CachedUdpHandlers, ProtocolUdpHandlers,
+    ProtocolUdpState,
+};
 pub(crate) use state::{
     ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedStreamFlowHandler,
     ManagedUdpHandlers,
@@ -49,13 +52,11 @@ pub(crate) fn trojan_stream_handler() -> Box<dyn ManagedStreamFlowHandler> {
     Box::new(trojan_manager::TrojanChainManager::new())
 }
 
-pub(crate) fn vless_cached_handler(
-) -> Box<dyn crate::protocol_runtime::vless_udp::VlessCachedFlowHandler> {
+pub(crate) fn vless_cached_handler() -> Box<dyn CachedUdpFlowHandler> {
     Box::new(crate::protocol_runtime::vless_udp::VlessUdpOutboundManager::new())
 }
 
 #[cfg(feature = "vmess")]
-pub(crate) fn vmess_cached_handler(
-) -> Box<dyn crate::protocol_runtime::vmess_udp::VmessCachedFlowHandler> {
+pub(crate) fn vmess_cached_handler() -> Box<dyn CachedUdpFlowHandler> {
     Box::new(crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager::new())
 }

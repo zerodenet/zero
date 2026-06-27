@@ -2,6 +2,7 @@ use tokio::task::JoinSet;
 
 use super::super::state::ProtocolUdpState;
 use super::super::FlowFailure;
+use crate::protocol_runtime::udp::CachedUdpFlowStart;
 use crate::protocol_runtime::vmess_udp::model::{VmessUdpFlow, VmessUdpRelayFlow};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 
@@ -17,19 +18,21 @@ impl ProtocolUdpState {
             grpc: flow.grpc,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.start_vmess_cached_flow(
+        self.start_cached_flow(
             chain_tasks,
-            crate::protocol_runtime::vmess_udp::model::VmessUdpStartFlow {
-                proxy: flow.proxy,
-                session: flow.session,
-                server: flow.server,
-                port: flow.port,
-                identity: flow.identity,
-                cipher_name: flow.cipher_name,
-                mux_concurrency: flow.mux_concurrency,
-                transport,
-                payload: flow.payload,
-            },
+            CachedUdpFlowStart::Vmess(
+                crate::protocol_runtime::vmess_udp::model::VmessUdpStartFlow {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    server: flow.server,
+                    port: flow.port,
+                    identity: flow.identity,
+                    cipher_name: flow.cipher_name,
+                    mux_concurrency: flow.mux_concurrency,
+                    transport,
+                    payload: flow.payload,
+                },
+            ),
         )
         .await
         .map_err(|error| FlowFailure {
@@ -51,16 +54,18 @@ impl ProtocolUdpState {
             grpc: flow.grpc,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.start_vmess_cached_relay_flow(
+        self.start_cached_flow(
             chain_tasks,
-            crate::protocol_runtime::vmess_udp::model::VmessUdpRelayFlowStart {
-                proxy: flow.proxy,
-                session: flow.session,
-                carrier: flow.carrier,
-                identity: flow.identity,
-                transport,
-                payload: flow.payload,
-            },
+            CachedUdpFlowStart::VmessRelay(
+                crate::protocol_runtime::vmess_udp::model::VmessUdpRelayFlowStart {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    carrier: flow.carrier,
+                    identity: flow.identity,
+                    transport,
+                    payload: flow.payload,
+                },
+            ),
         )
         .await
         .map_err(|error| FlowFailure {

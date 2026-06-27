@@ -15,7 +15,9 @@ use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
-use crate::protocol_runtime::udp::ManagedCachedFlowSender;
+use crate::protocol_runtime::udp::{
+    CachedUdpFlowHandler, CachedUdpFlowStart, ManagedCachedFlowSender,
+};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -316,21 +318,6 @@ impl VmessUdpOutboundManager {
 }
 
 #[async_trait::async_trait]
-pub(crate) trait VmessCachedFlowHandler: ManagedCachedFlowSender {
-    async fn start_vmess_flow(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        flow: VmessUdpStartFlow<'_>,
-    ) -> Result<(), EngineError>;
-
-    async fn start_vmess_relay_flow(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        flow: VmessUdpRelayFlowStart<'_>,
-    ) -> Result<(), EngineError>;
-}
-
-#[async_trait::async_trait]
 impl ManagedCachedFlowSender for VmessUdpOutboundManager {
     async fn send_existing(
         &mut self,
@@ -346,21 +333,23 @@ impl ManagedCachedFlowSender for VmessUdpOutboundManager {
 }
 
 #[async_trait::async_trait]
-impl VmessCachedFlowHandler for VmessUdpOutboundManager {
-    async fn start_vmess_flow(
+impl CachedUdpFlowHandler for VmessUdpOutboundManager {
+    async fn try_start_cached_flow<'a>(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
-        flow: VmessUdpStartFlow<'_>,
-    ) -> Result<(), EngineError> {
-        VmessUdpOutboundManager::start_flow(self, chain_tasks, flow).await
-    }
-
-    async fn start_vmess_relay_flow(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        flow: VmessUdpRelayFlowStart<'_>,
-    ) -> Result<(), EngineError> {
-        VmessUdpOutboundManager::start_relay_flow(self, chain_tasks, flow).await
+        request: CachedUdpFlowStart<'a>,
+    ) -> Result<Option<CachedUdpFlowStart<'a>>, EngineError> {
+        match request {
+            CachedUdpFlowStart::Vmess(flow) => {
+                VmessUdpOutboundManager::start_flow(self, chain_tasks, flow).await?;
+                Ok(None)
+            }
+            CachedUdpFlowStart::VmessRelay(flow) => {
+                VmessUdpOutboundManager::start_relay_flow(self, chain_tasks, flow).await?;
+                Ok(None)
+            }
+            other => Ok(Some(other)),
+        }
     }
 }
 

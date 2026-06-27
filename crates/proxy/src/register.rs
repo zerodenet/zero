@@ -53,9 +53,11 @@ pub(crate) fn protocol_registry() -> ProtocolRegistry {
 pub(crate) fn protocol_udp_handlers() -> ProtocolUdpHandlers {
     ProtocolUdpHandlers {
         cached: CachedUdpHandlers {
-            vless: crate::protocol_runtime::udp::vless_cached_handler(),
-            #[cfg(feature = "vmess")]
-            vmess: crate::protocol_runtime::udp::vmess_cached_handler(),
+            cached: vec![
+                crate::protocol_runtime::udp::vless_cached_handler(),
+                #[cfg(feature = "vmess")]
+                crate::protocol_runtime::udp::vmess_cached_handler(),
+            ],
         },
         managed: ManagedUdpHandlers {
             datagram: vec![

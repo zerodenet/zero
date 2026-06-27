@@ -2,6 +2,7 @@ use tokio::task::JoinSet;
 
 use super::super::state::ProtocolUdpState;
 use super::super::FlowFailure;
+use crate::protocol_runtime::udp::CachedUdpFlowStart;
 use crate::protocol_runtime::vless_udp::model::{
     VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream,
 };
@@ -24,18 +25,20 @@ impl ProtocolUdpState {
             quic: flow.quic,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.start_vless_cached_flow(
+        self.start_cached_flow(
             chain_tasks,
-            crate::protocol_runtime::vless_udp::model::VlessUdpStartFlow {
-                proxy: flow.proxy,
-                session: flow.session,
-                server: flow.server,
-                port: flow.port,
-                identity: flow.identity,
-                flow: flow.flow,
-                transport,
-                payload: flow.payload,
-            },
+            CachedUdpFlowStart::Vless(
+                crate::protocol_runtime::vless_udp::model::VlessUdpStartFlow {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    server: flow.server,
+                    port: flow.port,
+                    identity: flow.identity,
+                    flow: flow.flow,
+                    transport,
+                    payload: flow.payload,
+                },
+            ),
         )
         .await
         .map_err(|error| FlowFailure {
@@ -51,17 +54,19 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpRelayTwoStream<'_>,
     ) -> Result<(), FlowFailure> {
-        self.start_vless_cached_relay_two_stream(
+        self.start_cached_flow(
             chain_tasks,
-            crate::protocol_runtime::vless_udp::model::VlessUdpRelayTwoStream {
-                proxy: flow.proxy,
-                session: flow.session,
-                post_carrier: flow.post_carrier,
-                get_carrier: flow.get_carrier,
-                identity: flow.identity,
-                split_http: flow.split_http,
-                payload: flow.payload,
-            },
+            CachedUdpFlowStart::VlessRelayTwoStream(
+                crate::protocol_runtime::vless_udp::model::VlessUdpRelayTwoStream {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    post_carrier: flow.post_carrier,
+                    get_carrier: flow.get_carrier,
+                    identity: flow.identity,
+                    split_http: flow.split_http,
+                    payload: flow.payload,
+                },
+            ),
         )
         .await
         .map_err(|error| FlowFailure {
@@ -88,16 +93,18 @@ impl ProtocolUdpState {
             quic: None,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.start_vless_cached_relay_final_hop(
+        self.start_cached_flow(
             chain_tasks,
-            crate::protocol_runtime::vless_udp::model::VlessUdpRelayFinalHopStart {
-                proxy: flow.proxy,
-                session: flow.session,
-                carrier: flow.carrier,
-                identity: flow.identity,
-                transport,
-                payload: flow.payload,
-            },
+            CachedUdpFlowStart::VlessRelayFinalHop(
+                crate::protocol_runtime::vless_udp::model::VlessUdpRelayFinalHopStart {
+                    proxy: flow.proxy,
+                    session: flow.session,
+                    carrier: flow.carrier,
+                    identity: flow.identity,
+                    transport,
+                    payload: flow.payload,
+                },
+            ),
         )
         .await
         .map_err(|error| FlowFailure {

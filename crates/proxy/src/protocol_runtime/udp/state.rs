@@ -15,7 +15,7 @@ use super::{
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
 use cached::CachedProtocolUdpState;
-pub(crate) use cached::CachedUdpHandlers;
+pub(crate) use cached::{CachedUdpFlowHandler, CachedUdpFlowStart, CachedUdpHandlers};
 use managed::ManagedProtocolUdpState;
 pub(crate) use managed::{
     ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedStreamFlowHandler,
