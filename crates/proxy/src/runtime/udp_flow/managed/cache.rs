@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use zero_core::Address;
 
+use super::SharedManagedDatagramUdpConnection;
 use super::SharedManagedUdpConnection;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -89,6 +90,42 @@ impl ManagedStreamConnectionCache {
         key: ManagedStreamConnectionCacheKey,
         value: ManagedStreamConnection,
     ) -> Option<ManagedStreamConnection> {
+        self.entries.insert(key, value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct ManagedDatagramConnectionCacheKey(String);
+
+impl ManagedDatagramConnectionCacheKey {
+    pub(crate) fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+}
+
+pub(crate) struct ManagedDatagramConnectionCache {
+    entries: HashMap<ManagedDatagramConnectionCacheKey, SharedManagedDatagramUdpConnection>,
+}
+
+impl ManagedDatagramConnectionCache {
+    pub(crate) fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn get(
+        &self,
+        key: &ManagedDatagramConnectionCacheKey,
+    ) -> Option<&SharedManagedDatagramUdpConnection> {
+        self.entries.get(key)
+    }
+
+    pub(crate) fn insert(
+        &mut self,
+        key: ManagedDatagramConnectionCacheKey,
+        value: SharedManagedDatagramUdpConnection,
+    ) -> Option<SharedManagedDatagramUdpConnection> {
         self.entries.insert(key, value)
     }
 }

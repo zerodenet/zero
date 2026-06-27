@@ -3,16 +3,20 @@ use std::sync::Arc;
 
 use super::bridge::{self, BridgeWaiters};
 use super::model::SsUpstream;
-use crate::runtime::udp_flow::managed::SharedManagedDatagramUdpConnection;
+use crate::runtime::udp_flow::managed::{
+    ManagedDatagramConnectionCache, ManagedDatagramConnectionCacheKey,
+    SharedManagedDatagramUdpConnection,
+};
 use zero_engine::EngineError;
 use zero_transport::shadowsocks_transport;
 
 pub(super) async fn ensure(
-    upstreams: &mut shadowsocks::ShadowsocksUdpFlowEntries<SharedManagedDatagramUdpConnection>,
+    upstreams: &mut ManagedDatagramConnectionCache,
+    cache_key: ManagedDatagramConnectionCacheKey,
     resume: &shadowsocks::ShadowsocksUdpFlowResume,
     target_addr: SocketAddr,
 ) -> Result<SharedManagedDatagramUdpConnection, EngineError> {
-    if let Some(entry) = upstreams.get(resume) {
+    if let Some(entry) = upstreams.get(&cache_key) {
         return Ok(entry.clone());
     }
 
@@ -29,7 +33,7 @@ pub(super) async fn ensure(
         flow: flow.clone(),
         waiters,
     });
-    upstreams.insert(resume, entry.clone());
+    upstreams.insert(cache_key, entry.clone());
 
     bridge::spawn_upstream_response_pump(flow, response_waiters);
     Ok(entry)

@@ -1,6 +1,9 @@
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
+use crate::runtime::udp_flow::managed::{
+    ManagedDatagramConnectionCache, ManagedDatagramConnectionCacheKey,
+};
 use crate::runtime::udp_flow::managed::{ManagedDatagramFlowHandler, ManagedExistingSend};
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -12,15 +15,13 @@ pub(super) mod model;
 use model::SsSendExisting;
 
 pub(crate) struct SsChainManager {
-    upstreams: shadowsocks::ShadowsocksUdpFlowEntries<
-        crate::runtime::udp_flow::managed::SharedManagedDatagramUdpConnection,
-    >,
+    upstreams: ManagedDatagramConnectionCache,
 }
 
 impl SsChainManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: shadowsocks::ShadowsocksUdpFlowEntries::new(),
+            upstreams: ManagedDatagramConnectionCache::new(),
         }
     }
 
@@ -54,7 +55,8 @@ impl SsChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        let entry = entry::ensure(&mut self.upstreams, &resume, target_addr)
+        let cache_key = ManagedDatagramConnectionCacheKey::new(resume.flow_cache_key());
+        let entry = entry::ensure(&mut self.upstreams, cache_key, &resume, target_addr)
             .await
             .map_err(|error| FlowFailure {
                 stage: "ss_establish",

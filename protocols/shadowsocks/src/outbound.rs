@@ -536,6 +536,10 @@ impl ShadowsocksUdpFlowResume {
         }
     }
 
+    pub fn flow_cache_key(&self) -> alloc::string::String {
+        self.cache_key.clone()
+    }
+
     pub fn packet_path_cache_key(&self) -> alloc::string::String {
         self.cache_key.clone()
     }

@@ -8600,7 +8600,9 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let flows = read("src/runtime/udp_flow/managed/mod.rs");
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let manager_entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
     let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
+    let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let snapshot = read("src/runtime/udp_flow/managed/mod.rs");
     let forward = read("src/runtime/udp_flow/managed/datagram.rs");
     let protocol_outbound =
@@ -8646,10 +8648,16 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !shadowsocks_peer_model.contains("SsKey")
             && !shadowsocks_peer_model.contains("fn from_resume(")
             && !shadowsocks_peer_model.contains("socket_flow_cache_key()")
-            && manager.contains("shadowsocks::ShadowsocksUdpFlowEntries")
-            && manager.contains("SharedManagedDatagramUdpConnection")
+            && manager.contains("ManagedDatagramConnectionCache")
+            && manager.contains("ManagedDatagramConnectionCacheKey")
+            && manager.contains("resume.flow_cache_key()")
+            && manager_entry.contains("ManagedDatagramConnectionCache")
+            && managed_cache.contains("struct ManagedDatagramConnectionCache")
+            && !manager.contains("shadowsocks::ShadowsocksUdpFlowEntries")
+            && !manager_entry.contains("shadowsocks::ShadowsocksUdpFlowEntries")
+            && manager_entry.contains("SharedManagedDatagramUdpConnection")
             && !manager.contains("Arc<SsUpstream>")
-            && !manager.contains(".flow")
+            && !manager.contains(".flow.")
             && !manager.contains(".waiters")
             && !manager.contains("shadowsocks::ShadowsocksUdpFlowStore<Arc<SsUpstream>>")
             && !manager.contains("HashMap<shadowsocks::ShadowsocksUdpCacheKey"),
@@ -8667,6 +8675,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && protocol_outbound.contains("pub struct ShadowsocksUdpFlowStore")
             && protocol_outbound.contains("pub struct ShadowsocksUdpFlowEntries")
             && protocol_outbound.contains("fn socket_flow_cache_key(&self)")
+            && protocol_outbound.contains("pub fn flow_cache_key(&self)")
             && !protocol_outbound.contains("pub struct ShadowsocksUdpCacheKey")
             && !protocol_outbound.contains("pub fn socket_flow_cache_key(&self)")
             && protocol_outbound.contains("pub fn socket_flow_codec(&self)")
@@ -9027,7 +9036,7 @@ fn shadowsocks_udp_entry_cache_lives_outside_manager() {
     );
     assert!(
         manager.contains(".send_datagram(")
-            && !manager.contains(".flow")
+            && !manager.contains(".flow.")
             && !manager.contains(".waiters")
             && !manager.contains("BridgeWaiters")
             && model.contains("impl ManagedDatagramUdpConnection for SsUpstream")
