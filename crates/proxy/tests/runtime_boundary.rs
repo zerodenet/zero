@@ -3446,7 +3446,7 @@ fn udp_flow_outbound_snapshot_is_not_declared_in_session_bookkeeping() {
 #[test]
 fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
     let outbound = read("src/runtime/udp_flow/outbound.rs");
-    let snapshot = read("src/runtime/udp_flow/managed.rs");
+    let snapshot = read("src/runtime/udp_flow/managed/mod.rs");
     let state = read("src/protocol_runtime/udp/state.rs");
 
     for required in [
@@ -3723,7 +3723,7 @@ fn protocol_udp_flow_requests_do_not_extend_udp_dispatch() {
             .exists(),
         "managed UDP flow request models should not live under protocol_runtime::udp"
     );
-    let content = read("src/runtime/udp_flow/managed.rs");
+    let content = read("src/runtime/udp_flow/managed/mod.rs");
 
     for forbidden in [
         "VlessUdpFlow",
@@ -3745,6 +3745,24 @@ fn protocol_udp_flow_requests_do_not_extend_udp_dispatch() {
         assert!(
             !content.contains(forbidden),
             "runtime::udp_flow::managed should define request types, not extend runtime dispatcher; found `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_udp_runtime_no_longer_owns_managed_handler_state() {
+    let protocol_runtime_udp = manifest_dir().join("src/protocol_runtime/udp");
+    let runtime_managed = manifest_dir().join("src/runtime/udp_flow/managed");
+
+    assert!(
+        !protocol_runtime_udp.join("state/managed.rs").exists()
+            && !protocol_runtime_udp.join("state/managed").exists(),
+        "managed UDP handler state should live in runtime::udp_flow::managed, not protocol_runtime::udp"
+    );
+    for path in ["mod.rs", "state.rs", "datagram.rs", "stream.rs", "model.rs"] {
+        assert!(
+            runtime_managed.join(path).exists(),
+            "runtime::udp_flow::managed should own managed UDP handler module `{path}`"
         );
     }
 }
@@ -3813,8 +3831,8 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
 fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     let state = read("src/protocol_runtime/udp/state.rs");
     let datagram = read("src/protocol_runtime/udp/start/datagram.rs");
-    let managed = read("src/protocol_runtime/udp/state/managed.rs");
-    let managed_datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
+    let managed = read("src/runtime/udp_flow/managed/state.rs");
+    let managed_datagram = read("src/runtime/udp_flow/managed/datagram.rs");
     let register = read("src/register.rs");
 
     for forbidden in [
@@ -3917,8 +3935,8 @@ fn protocol_udp_upstream_start_dispatch_lives_behind_registered_handlers() {
 fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
     let state = read("src/protocol_runtime/udp/state.rs");
     let stream = read("src/protocol_runtime/udp/start/stream.rs");
-    let managed = read("src/protocol_runtime/udp/state/managed.rs");
-    let managed_stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
+    let managed = read("src/runtime/udp_flow/managed/state.rs");
+    let managed_stream = read("src/runtime/udp_flow/managed/stream.rs");
     let register = read("src/register.rs");
 
     for forbidden in [
@@ -5287,12 +5305,12 @@ fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
 #[test]
 fn protocol_udp_state_manager_fields_are_not_crate_public() {
     let content = read("src/protocol_runtime/udp/state.rs");
-    let managed = read("src/protocol_runtime/udp/state/managed.rs");
+    let managed = read("src/runtime/udp_flow/managed/state.rs");
     let cached = read("src/protocol_runtime/udp/state/cached.rs");
     let cached_model = read("src/protocol_runtime/udp/state/cached/model.rs");
     let cached_start = manifest_dir().join("src/protocol_runtime/udp/start/cached.rs");
-    let datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
-    let stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
+    let datagram = read("src/runtime/udp_flow/managed/datagram.rs");
+    let stream = read("src/runtime/udp_flow/managed/stream.rs");
     let register = read("src/register.rs");
 
     for field in [
@@ -5350,6 +5368,7 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
 #[test]
 fn protocol_udp_root_does_not_reexport_manager_internals() {
     let root = read("src/protocol_runtime/udp/mod.rs");
+    let managed = read("src/runtime/udp_flow/managed/mod.rs");
 
     for forbidden in [
         "H2SendExisting",
@@ -5373,6 +5392,13 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
         "hysteria2_datagram_handler",
         "trojan_stream_handler",
         "mieru_stream_handler",
+        "ManagedDatagramFlowHandler",
+        "ManagedStreamFlowHandler",
+        "ManagedCachedFlowSender",
+        "ManagedExistingSend",
+        "ManagedRelaySend",
+        "ManagedUdpHandlers",
+        "ManagedProtocolUdpState",
         "Box<dyn ManagedDatagramFlowHandler>",
         "Box<dyn ManagedStreamFlowHandler>",
     ] {
@@ -5386,9 +5412,9 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
             && !root.contains("mieru_manager")
             && !root.contains("ss_manager")
             && !root.contains("trojan_manager")
-            && root.contains("ManagedDatagramFlowHandler")
-            && root.contains("ManagedStreamFlowHandler"),
-        "UDP root should keep protocol UDP managers out of protocol_runtime::udp"
+            && managed.contains("ManagedDatagramFlowHandler")
+            && managed.contains("ManagedStreamFlowHandler"),
+        "UDP root should keep protocol UDP managers out of protocol_runtime::udp and expose managed handler traits from runtime::udp_flow::managed"
     );
 }
 
@@ -5642,10 +5668,10 @@ fn protocol_udp_existing_flow_forward_lives_outside_state_root() {
 fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     let forward = read("src/protocol_runtime/udp/state/forward.rs");
     let normalized_forward = forward.replace("\r\n", "\n");
-    let managed = read("src/protocol_runtime/udp/state/managed.rs");
-    let managed_datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
-    let managed_model = read("src/protocol_runtime/udp/state/managed/model.rs");
-    let managed_stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
+    let managed = read("src/runtime/udp_flow/managed/state.rs");
+    let managed_datagram = read("src/runtime/udp_flow/managed/datagram.rs");
+    let managed_model = read("src/runtime/udp_flow/managed/model.rs");
+    let managed_stream = read("src/runtime/udp_flow/managed/stream.rs");
     let upstream = read("src/protocol_runtime/udp/state/upstream.rs");
     let socks5_runtime = read("src/adapters/socks5/udp/runtime.rs");
 
@@ -5726,7 +5752,7 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
 fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let state = read("src/protocol_runtime/udp/state.rs");
     let cached = manifest_dir().join("src/protocol_runtime/udp/state/cached.rs");
-    let managed = read("src/protocol_runtime/udp/state/managed.rs");
+    let managed = read("src/runtime/udp_flow/managed/state.rs");
     let cached_state = read("src/protocol_runtime/udp/state/cached.rs");
     let cached_model = read("src/protocol_runtime/udp/state/cached/model.rs");
     let vless_flow = manifest_dir().join("src/protocol_runtime/udp/vless_flow.rs");
@@ -6410,9 +6436,9 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
 #[test]
 fn trojan_udp_flow_resume_is_protocol_owned() {
     let adapter = read("src/adapters/trojan/udp.rs");
-    let snapshot = read("src/runtime/udp_flow/managed.rs");
-    let forward = read("src/protocol_runtime/udp/state/managed/stream.rs");
-    let start = read("src/protocol_runtime/udp/state/managed/stream.rs");
+    let snapshot = read("src/runtime/udp_flow/managed/mod.rs");
+    let forward = read("src/runtime/udp_flow/managed/stream.rs");
+    let start = read("src/runtime/udp_flow/managed/stream.rs");
     let manager_send = read("src/adapters/trojan/udp/manager/send.rs");
     let manager_connect = read("src/adapters/trojan/udp/manager/connect.rs");
     let manager_establish = read("src/adapters/trojan/udp/manager/establish.rs");
@@ -6596,8 +6622,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let manager = read("src/adapters/mieru/udp/manager.rs");
     let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
-    let snapshot = read("src/runtime/udp_flow/managed.rs");
-    let forward = read("src/protocol_runtime/udp/state/managed/stream.rs");
+    let snapshot = read("src/runtime/udp_flow/managed/mod.rs");
+    let forward = read("src/runtime/udp_flow/managed/stream.rs");
     let manager_send = read("src/adapters/mieru/udp/manager/send.rs");
     let manager_connect = read("src/adapters/mieru/udp/manager/connect.rs");
     let manager_establish = read("src/adapters/mieru/udp/manager/establish.rs");
@@ -6720,7 +6746,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && !forward.contains("relay_chain: bool"),
         "existing Mieru UDP flow forwarding should pass the opaque resume descriptor without unpacking account or relay state"
     );
-    let start = read("src/protocol_runtime/udp/state/managed/stream.rs");
+    let start = read("src/runtime/udp_flow/managed/stream.rs");
     assert!(
         !start.contains("ManagedUdpFlowResume::Mieru")
             && start.contains("ManagedExistingSend::stream_packet")
@@ -7111,8 +7137,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
     let adapter = read("src/adapters/hysteria2/udp.rs");
-    let snapshot = read("src/runtime/udp_flow/managed.rs");
-    let forward = read("src/protocol_runtime/udp/state/managed/datagram.rs");
+    let snapshot = read("src/runtime/udp_flow/managed/mod.rs");
+    let forward = read("src/runtime/udp_flow/managed/datagram.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
 
@@ -7692,11 +7718,11 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
 #[test]
 fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
-    let flows = read("src/runtime/udp_flow/managed.rs");
+    let flows = read("src/runtime/udp_flow/managed/mod.rs");
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
     let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
-    let snapshot = read("src/runtime/udp_flow/managed.rs");
-    let forward = read("src/protocol_runtime/udp/state/managed/datagram.rs");
+    let snapshot = read("src/runtime/udp_flow/managed/mod.rs");
+    let forward = read("src/runtime/udp_flow/managed/datagram.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
@@ -7775,7 +7801,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !forward.contains("datagram_cache_key: &'a str"),
         "existing Shadowsocks UDP flow forwarding should pass the opaque resume descriptor without unpacking cache identity or codec state"
     );
-    let start = read("src/protocol_runtime/udp/state/managed/datagram.rs");
+    let start = read("src/runtime/udp_flow/managed/datagram.rs");
     assert!(
         !start.contains("ManagedUdpFlowResume::Shadowsocks")
             && start.contains("ManagedExistingSend::datagram")
@@ -7824,7 +7850,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let outbound = read("src/runtime/udp_flow/outbound.rs");
     let carrier_snapshot = read("src/runtime/udp_flow/packet_path.rs");
     let snapshot = read("src/runtime/udp_flow/packet_path_chain/snapshot.rs");
-    let forward = read("src/protocol_runtime/udp/state/managed/datagram.rs");
+    let forward = read("src/runtime/udp_flow/managed/datagram.rs");
 
     assert!(
         !adapter.contains("CipherKind::from_str") && adapter.contains("ShadowsocksUdpFlowResume::from_config"),
@@ -8219,7 +8245,7 @@ fn managed_udp_flow_snapshot_constructors_live_in_runtime_udp_flow() {
         "managed UDP flow resume/snapshot state should live under runtime::udp_flow, not protocol_runtime::udp"
     );
 
-    let snapshot = read("src/runtime/udp_flow/managed.rs");
+    let snapshot = read("src/runtime/udp_flow/managed/mod.rs");
     let snapshot_impl = snapshot
         .split("impl ManagedUdpFlowSnapshot")
         .nth(1)
@@ -8323,7 +8349,7 @@ fn adapters_do_not_import_protocol_udp_types_through_runtime_dispatch() {
 fn managed_udp_resume_variants_are_confined_to_managed_flow_model() {
     for path in rust_sources_under("src") {
         let source = relative(&path);
-        if source == "src/runtime/udp_flow/managed.rs" {
+        if source == "src/runtime/udp_flow/managed/mod.rs" {
             continue;
         }
         let content = fs::read_to_string(&path).expect("read rust source");

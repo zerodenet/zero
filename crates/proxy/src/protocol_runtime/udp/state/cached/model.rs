@@ -1,4 +1,4 @@
-use crate::protocol_runtime::udp::state::managed::model::ManagedCachedFlowSender;
+use crate::runtime::udp_flow::managed::ManagedCachedFlowSender;
 
 pub(crate) struct CachedUdpHandlers {
     pub(crate) cached: Vec<Box<dyn ManagedCachedFlowSender>>,

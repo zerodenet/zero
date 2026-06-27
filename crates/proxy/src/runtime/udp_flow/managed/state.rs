@@ -1,7 +1,7 @@
-use crate::protocol_runtime::udp::FlowFailure;
-use crate::runtime::udp_flow::managed::{
+use super::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowSnapshot,
 };
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use tokio::task::JoinSet;
 use zero_engine::EngineError;
@@ -9,36 +9,29 @@ use zero_engine::EngineError;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
-mod datagram;
-pub(in crate::protocol_runtime::udp) mod model;
-mod stream;
-
-use datagram::ManagedDatagramState;
-pub(crate) use model::{
-    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend,
-    ManagedStreamFlowHandler,
-};
-use stream::ManagedStreamState;
+use super::datagram::ManagedDatagramState;
+use super::model::{ManagedDatagramFlowHandler, ManagedStreamFlowHandler};
+use super::stream::ManagedStreamState;
 
 pub(crate) struct ManagedUdpHandlers {
     pub(crate) datagram: Vec<Box<dyn ManagedDatagramFlowHandler>>,
     pub(crate) stream: Vec<Box<dyn ManagedStreamFlowHandler>>,
 }
 
-pub(in crate::protocol_runtime::udp) struct ManagedProtocolUdpState {
+pub(crate) struct ManagedProtocolUdpState {
     datagram: ManagedDatagramState,
     stream: ManagedStreamState,
 }
 
 impl ManagedProtocolUdpState {
-    pub(super) fn new(handlers: ManagedUdpHandlers) -> Self {
+    pub(crate) fn new(handlers: ManagedUdpHandlers) -> Self {
         Self {
             datagram: ManagedDatagramState::new(handlers.datagram),
             stream: ManagedStreamState::new(handlers.stream),
         }
     }
 
-    pub(in crate::protocol_runtime::udp) async fn start_datagram_flow(
+    pub(crate) async fn start_datagram_flow(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: ManagedDatagramFlow<'_>,
@@ -58,21 +51,21 @@ impl ManagedProtocolUdpState {
             })?
     }
 
-    pub(in crate::protocol_runtime::udp) async fn start_stream_packet_flow(
+    pub(crate) async fn start_stream_packet_flow(
         &mut self,
         request: ManagedStreamPacketFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         self.stream.start_stream_packet_flow(request).await
     }
 
-    pub(in crate::protocol_runtime::udp) async fn start_relay_stream_flow(
+    pub(crate) async fn start_relay_stream_flow(
         &mut self,
         request: ManagedRelayStreamFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         self.stream.start_relay_stream_flow(request).await
     }
 
-    pub(in crate::protocol_runtime::udp) async fn forward_existing_flow(
+    pub(crate) async fn forward_existing_flow(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
         proxy: &Proxy,
@@ -93,7 +86,7 @@ impl ManagedProtocolUdpState {
     }
 }
 
-pub(in crate::protocol_runtime::udp::state::managed) fn flow_mismatch(
+pub(super) fn flow_mismatch(
     stage: &'static str,
     server: &str,
     port: u16,

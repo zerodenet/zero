@@ -15,7 +15,7 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
 use crate::adapters::vless::mux_pool::VlessMuxOpenRequest;
-use crate::protocol_runtime::udp::ManagedCachedFlowSender;
+use crate::runtime::udp_flow::managed::ManagedCachedFlowSender;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;

@@ -7,24 +7,19 @@ use zero_engine::EngineError;
 
 use super::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowKind,
-    ManagedUdpFlowRequest, ManagedUdpFlowResume, ManagedUdpFlowSnapshot,
+    ManagedDatagramFlow, ManagedProtocolUdpState, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume, ManagedUdpFlowSnapshot,
+    ManagedUdpHandlers,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
 use cached::CachedProtocolUdpState;
 pub(crate) use cached::CachedUdpHandlers;
-use managed::ManagedProtocolUdpState;
-pub(crate) use managed::{
-    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend,
-    ManagedStreamFlowHandler, ManagedUdpHandlers,
-};
 use upstream::UpstreamAssociationState;
 pub(crate) use upstream::{UpstreamAssociationHandler, UpstreamUdpHandlers};
 
 mod cached;
 mod forward;
-pub(in crate::protocol_runtime::udp) mod managed;
 mod upstream;
 
 pub(crate) struct ProtocolUpstreamAssociationView<'a> {

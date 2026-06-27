@@ -4,6 +4,17 @@ use std::sync::Arc;
 use crate::runtime::Proxy;
 use zero_core::Session;
 
+mod datagram;
+pub(crate) mod model;
+pub(crate) mod state;
+mod stream;
+
+pub(crate) use model::{
+    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend,
+    ManagedStreamFlowHandler,
+};
+pub(crate) use state::{ManagedProtocolUdpState, ManagedUdpHandlers};
+
 pub(crate) struct ManagedDatagramFlow<'a> {
     pub(crate) proxy: Option<&'a Proxy>,
     pub(crate) session: &'a Session,

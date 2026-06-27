@@ -9,7 +9,6 @@ mod state;
 
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
 pub(crate) use state::{
-    CachedUdpHandlers, ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend,
-    ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpHandlers, ProtocolUdpHandlers,
-    ProtocolUdpState, UpstreamAssociationHandler, UpstreamUdpHandlers,
+    CachedUdpHandlers, ProtocolUdpHandlers, ProtocolUdpState, UpstreamAssociationHandler,
+    UpstreamUdpHandlers,
 };

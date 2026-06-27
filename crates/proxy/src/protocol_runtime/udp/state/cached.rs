@@ -14,7 +14,7 @@ pub(crate) use model::CachedUdpHandlers;
 impl ProtocolUdpState {
     pub(crate) fn register_cached_flow_sender(
         &mut self,
-        sender: Box<dyn crate::protocol_runtime::udp::ManagedCachedFlowSender>,
+        sender: Box<dyn crate::runtime::udp_flow::managed::ManagedCachedFlowSender>,
     ) {
         self.cached.push_sender(sender);
     }

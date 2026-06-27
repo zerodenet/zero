@@ -1,7 +1,7 @@
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 
-use crate::protocol_runtime::udp::FlowFailure;
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowResume,
 };
@@ -63,7 +63,7 @@ pub(crate) trait ManagedCachedFlowSender: Send + Sync {
 }
 
 impl<'a> ManagedExistingSend<'a> {
-    pub(in crate::protocol_runtime::udp) fn datagram(
+    pub(crate) fn datagram(
         chain_tasks: &'a mut JoinSet<ChainTask>,
         flow: &ManagedDatagramFlow<'a>,
     ) -> Self {
@@ -81,9 +81,7 @@ impl<'a> ManagedExistingSend<'a> {
         }
     }
 
-    pub(in crate::protocol_runtime::udp) fn stream_packet(
-        request: ManagedStreamPacketFlow<'a>,
-    ) -> Self {
+    pub(crate) fn stream_packet(request: ManagedStreamPacketFlow<'a>) -> Self {
         Self {
             chain_tasks: request.chain_tasks,
             session_id: request.session.id,
@@ -98,7 +96,7 @@ impl<'a> ManagedExistingSend<'a> {
         }
     }
 
-    pub(in crate::protocol_runtime::udp) fn forwarded(
+    pub(crate) fn forwarded(
         chain_tasks: &'a mut JoinSet<ChainTask>,
         proxy: &'a Proxy,
         flow: &'a UdpFlowSnapshot,
@@ -138,9 +136,7 @@ pub(crate) struct ManagedRelaySend<'a> {
 }
 
 impl<'a> ManagedRelaySend<'a> {
-    pub(in crate::protocol_runtime::udp) fn relay_stream(
-        request: ManagedRelayStreamFlow<'a>,
-    ) -> Self {
+    pub(crate) fn relay_stream(request: ManagedRelayStreamFlow<'a>) -> Self {
         Self {
             chain_tasks: request.chain_tasks,
             session_id: request.session.id,

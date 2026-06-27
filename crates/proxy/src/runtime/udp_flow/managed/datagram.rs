@@ -1,25 +1,21 @@
-use crate::protocol_runtime::udp::state::managed::model::{
-    ManagedDatagramFlowHandler, ManagedExistingSend,
-};
-use crate::protocol_runtime::udp::FlowFailure;
+use super::model::{ManagedDatagramFlowHandler, ManagedExistingSend};
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{ManagedDatagramFlow, ManagedUdpFlowSnapshot};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 use tokio::task::JoinSet;
 
-pub(in crate::protocol_runtime::udp::state::managed) struct ManagedDatagramState {
+pub(super) struct ManagedDatagramState {
     handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>,
 }
 
 impl ManagedDatagramState {
-    pub(in crate::protocol_runtime::udp::state::managed) fn new(
-        handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>,
-    ) -> Self {
+    pub(super) fn new(handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>) -> Self {
         Self { handlers }
     }
 
-    pub(in crate::protocol_runtime::udp::state::managed) async fn start_datagram_flow(
+    pub(super) async fn start_datagram_flow(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: ManagedDatagramFlow<'_>,
@@ -37,7 +33,7 @@ impl ManagedDatagramState {
         None
     }
 
-    pub(in crate::protocol_runtime::udp::state::managed) async fn forward_existing_flow(
+    pub(super) async fn forward_existing_flow(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
         proxy: &Proxy,
