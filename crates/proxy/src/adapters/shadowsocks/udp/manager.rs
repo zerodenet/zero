@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::runtime::orchestration::OutboundEndpoint;
@@ -15,13 +14,13 @@ pub(super) mod model;
 use model::{SsSendExisting, SsUpstream};
 
 pub(crate) struct SsChainManager {
-    upstreams: HashMap<shadowsocks::ShadowsocksUdpCacheKey, Arc<SsUpstream>>,
+    upstreams: shadowsocks::ShadowsocksUdpFlowStore<Arc<SsUpstream>>,
 }
 
 impl SsChainManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: HashMap::new(),
+            upstreams: shadowsocks::ShadowsocksUdpFlowStore::new(),
         }
     }
 
@@ -55,7 +54,7 @@ impl SsChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        let entry = entry::ensure(&mut self.upstreams, resume, target_addr)
+        let entry = entry::ensure(&mut self.upstreams, &resume, target_addr)
             .await
             .map_err(|error| FlowFailure {
                 stage: "ss_establish",

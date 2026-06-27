@@ -8078,7 +8078,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !shadowsocks_peer_model.contains("SsKey")
             && !shadowsocks_peer_model.contains("fn from_resume(")
             && !shadowsocks_peer_model.contains("socket_flow_cache_key()")
-            && manager.contains("HashMap<shadowsocks::ShadowsocksUdpCacheKey, Arc<SsUpstream>>"),
+            && manager.contains("shadowsocks::ShadowsocksUdpFlowStore<Arc<SsUpstream>>")
+            && !manager.contains("HashMap<shadowsocks::ShadowsocksUdpCacheKey"),
         "ordinary Shadowsocks UDP peer model should carry only protocol-owned opaque cache identity"
     );
     assert!(
@@ -8086,7 +8087,10 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !adapter.contains("ShadowsocksUdpFlowResume::new")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowResume")
             && protocol_outbound.contains("struct ShadowsocksUdpCacheKey")
-            && protocol_outbound.contains("pub fn socket_flow_cache_key(&self)")
+            && protocol_outbound.contains("pub struct ShadowsocksUdpFlowStore")
+            && protocol_outbound.contains("fn socket_flow_cache_key(&self)")
+            && !protocol_outbound.contains("pub struct ShadowsocksUdpCacheKey")
+            && !protocol_outbound.contains("pub fn socket_flow_cache_key(&self)")
             && protocol_outbound.contains("pub fn socket_flow_codec(&self)")
             && protocol_outbound.contains("pub fn leaf_cache_key(&self)")
             && protocol_outbound.contains("struct ShadowsocksUdpLeafKey")

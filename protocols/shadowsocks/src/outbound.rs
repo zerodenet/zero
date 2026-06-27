@@ -419,8 +419,39 @@ pub fn udp_flow_codec(
 
 #[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ShadowsocksUdpCacheKey {
+struct ShadowsocksUdpCacheKey {
     cache_key: alloc::string::String,
+}
+
+#[cfg(feature = "crypto")]
+pub struct ShadowsocksUdpFlowStore<T> {
+    entries: std::collections::HashMap<ShadowsocksUdpCacheKey, T>,
+}
+
+#[cfg(feature = "crypto")]
+impl<T> Default for ShadowsocksUdpFlowStore<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "crypto")]
+impl<T> ShadowsocksUdpFlowStore<T> {
+    pub fn new() -> Self {
+        Self {
+            entries: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn get(&self, resume: &ShadowsocksUdpFlowResume) -> Option<&T> {
+        let key = resume.socket_flow_cache_key();
+        self.entries.get(&key)
+    }
+
+    pub fn insert(&mut self, resume: &ShadowsocksUdpFlowResume, value: T) -> Option<T> {
+        let key = resume.socket_flow_cache_key();
+        self.entries.insert(key, value)
+    }
 }
 
 #[cfg(feature = "crypto")]
@@ -470,7 +501,7 @@ impl ShadowsocksUdpFlowResume {
         }
     }
 
-    pub fn socket_flow_cache_key(&self) -> ShadowsocksUdpCacheKey {
+    fn socket_flow_cache_key(&self) -> ShadowsocksUdpCacheKey {
         ShadowsocksUdpCacheKey {
             cache_key: self.cache_key.clone(),
         }
