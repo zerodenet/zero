@@ -37,29 +37,49 @@ impl Hysteria2Connector {
         port: u16,
         profile: hysteria2::Hysteria2UdpConnectorProfile,
     ) -> Self {
-        Self::new(server, port, profile.password()).with_fingerprint(profile.client_fingerprint())
+        Self {
+            server: server.to_owned(),
+            port,
+            password: String::new(),
+            client_fingerprint: profile.client_fingerprint().map(ToOwned::to_owned),
+        }
     }
 
     pub(crate) async fn connect_raw(&self) -> Result<quinn::Connection, EngineError> {
-        let conn = crate::transport::open_hysteria2_quic_connection(QuicConnectionOptions {
+        let conn = self.open_quic_connection().await?;
+
+        let (send, recv) = conn.open_bi().await.map_err(|error| {
+            EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {error}")))
+        })?;
+        let mut stream = Hysteria2Stream::new(send, recv);
+        authenticate_with_password(&conn, &mut stream, &self.password).await?;
+
+        Ok(conn)
+    }
+
+    async fn open_quic_connection(&self) -> Result<quinn::Connection, EngineError> {
+        crate::transport::open_hysteria2_quic_connection(QuicConnectionOptions {
             server: &self.server,
             port: self.port,
             alpn: vec![b"hysteria2".to_vec()],
             client_fingerprint: self.client_fingerprint.as_deref(),
             datagram_receive_buffer_size: Some(65536),
         })
-        .await?;
+        .await
+    }
 
-        let mut salt = [0u8; 32];
-        conn.export_keying_material(&mut salt, b"hysteria2 auth", &[])
-            .map_err(|_| EngineError::Io(std::io::Error::other("hysteria2 key export failed")))?;
+    pub(crate) async fn connect_raw_with_udp_profile(
+        &self,
+        profile: &hysteria2::Hysteria2UdpConnectorProfile,
+    ) -> Result<quinn::Connection, EngineError> {
+        let conn = self.open_quic_connection().await?;
 
         let (send, recv) = conn.open_bi().await.map_err(|error| {
             EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {error}")))
         })?;
         let mut stream = Hysteria2Stream::new(send, recv);
-        hysteria2::Hysteria2Outbound
-            .authenticate_with_salt(&mut stream, &self.password, &salt)
+        profile
+            .authenticate_connection(&conn, &mut stream)
             .await
             .map_err(EngineError::Core)?;
 
@@ -84,6 +104,21 @@ impl Hysteria2Connector {
 
         Ok(stream)
     }
+}
+
+async fn authenticate_with_password(
+    conn: &quinn::Connection,
+    stream: &mut Hysteria2Stream,
+    password: &str,
+) -> Result<(), EngineError> {
+    let mut salt = [0u8; 32];
+    conn.export_keying_material(&mut salt, b"hysteria2 auth", &[])
+        .map_err(|_| EngineError::Io(std::io::Error::other("hysteria2 key export failed")))?;
+
+    hysteria2::Hysteria2Outbound
+        .authenticate_with_salt(stream, password, &salt)
+        .await
+        .map_err(EngineError::Core)
 }
 
 /// Establish a Hysteria2 TCP upstream via QUIC.

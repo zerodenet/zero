@@ -75,13 +75,14 @@ impl Hysteria2Adapter {
         );
         let packet_path = config.packet_path();
         let codec = std::sync::Arc::new(packet_path.codec());
+        let connector_profile = packet_path.connector_profile();
         let conn = std::sync::Arc::new(
             crate::outbound::hysteria2::Hysteria2Connector::from_udp_profile(
                 server,
                 *port,
-                packet_path.connector_profile(),
+                connector_profile.clone(),
             )
-            .connect_raw()
+            .connect_raw_with_udp_profile(&connector_profile)
             .await?,
         );
         crate::runtime::udp_flow::packet_path_chain::carriers::quic_datagram_carrier::build(

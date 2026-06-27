@@ -11,6 +11,8 @@ use zero_traits::DatagramCodec;
 use alloc::sync::Arc;
 #[cfg(feature = "tokio")]
 use tokio::sync::{broadcast, mpsc};
+#[cfg(all(feature = "tokio", feature = "crypto"))]
+use zero_traits::AsyncSocket;
 
 /// One plaintext UDP payload to encode into a Hysteria2 UDP datagram.
 #[derive(Debug, Clone, Copy)]
@@ -631,12 +633,26 @@ pub struct Hysteria2UdpConnectorProfile {
 }
 
 impl Hysteria2UdpConnectorProfile {
-    pub fn password(&self) -> &str {
-        &self.password
-    }
-
     pub fn client_fingerprint(&self) -> Option<&str> {
         self.client_fingerprint.as_deref()
+    }
+
+    #[cfg(all(feature = "tokio", feature = "crypto"))]
+    pub async fn authenticate_connection<S>(
+        &self,
+        conn: &quinn::Connection,
+        stream: &mut S,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let mut salt = [0u8; 32];
+        conn.export_keying_material(&mut salt, b"hysteria2 auth", &[])
+            .map_err(|_| Error::Io("hysteria2 key export failed"))?;
+
+        crate::Hysteria2Outbound
+            .authenticate_with_salt(stream, &self.password, &salt)
+            .await
     }
 }
 

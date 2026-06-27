@@ -2956,7 +2956,7 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
     assert!(
         stream.contains("hysteria2::start_udp_flow_with_initial_packet")
             && stream.contains("Hysteria2Connector::from_udp_profile")
-            && stream.contains("connect_raw"),
+            && stream.contains("connect_raw_with_udp_profile"),
         "Hysteria2 UDP stream glue should only connect QUIC and call the protocol-owned flow pump"
     );
     assert!(
@@ -7550,6 +7550,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     let stream = read("src/adapters/hysteria2/udp/manager/stream.rs");
     let manager_send = read("src/adapters/hysteria2/udp/manager/send.rs");
     let manager_model = read("src/adapters/hysteria2/udp/manager/model.rs");
+    let outbound = read("src/outbound/hysteria2.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
     let adapter = read("src/adapters/hysteria2/udp.rs");
@@ -7656,6 +7657,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub struct Hysteria2UdpFlowStore")
             && protocol_udp.contains("struct Hysteria2UdpConnectorProfile")
             && protocol_udp.contains("pub fn connector_profile(&self)")
+            && protocol_udp.contains("pub async fn authenticate_connection")
             && protocol_udp.contains("struct Hysteria2UdpLeafKey")
             && protocol_udp.contains("pub fn codec(&self)")
             && protocol_udp.contains("pub fn client_fingerprint(&self) -> Option<&str>"),
@@ -7723,8 +7725,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !manager_model.contains("H2UdpPeer")
             && stream.contains("Hysteria2Connector::from_udp_profile")
             && stream.contains("resume.connector_profile()")
+            && stream.contains("connect_raw_with_udp_profile")
+            && !outbound.contains("profile.password()")
             && !transport.contains("request.resume.connector_profile()"),
-        "Hysteria2 UDP manager should consume protocol-owned opaque cache keys through neutral endpoints and keep UDP connector profile use in proxy stream glue"
+        "Hysteria2 UDP manager should consume protocol-owned opaque cache keys through neutral endpoints and keep UDP profile auth in protocols/hysteria2"
     );
 }
 
@@ -7840,7 +7844,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
     }
     assert!(
         stream.contains("Hysteria2Connector::from_udp_profile")
-            && stream.contains("connect_raw")
+            && stream.contains("connect_raw_with_udp_profile")
             && stream.contains("hysteria2::start_udp_flow_with_initial_packet")
             && !stream.contains("hysteria2::spawn_udp_flow")
             && !stream.contains("hysteria2::Hysteria2UdpFlowSession::new")
@@ -7852,6 +7856,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && !stream.contains("flow_io.encode_packet")
             && !stream.contains("flow_io.decode_packet(&data)")
             && !protocol_udp.contains("pub fn open_udp_flow")
+            && protocol_udp.contains("pub async fn authenticate_connection")
             && protocol_udp.contains("struct Hysteria2UdpFlowSender")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowHandle")
@@ -7905,6 +7910,9 @@ fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
             && outbound.contains("struct Hysteria2Connector")
             && outbound.contains("open_hysteria2_quic_connection")
             && outbound.contains("hysteria2::Hysteria2Outbound")
+            && outbound.contains("authenticate_with_password")
+            && outbound.contains("connect_raw_with_udp_profile")
+            && !outbound.contains("profile.password()")
             && outbound.contains(".authenticate_with_salt(")
             && outbound.contains(".send_tcp_connect(")
             && outbound.contains(".read_connect_response(")
