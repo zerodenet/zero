@@ -455,3 +455,13 @@ pub fn udp_packet_path_spec_from_config(
 ) -> Socks5UdpPacketPathSpec {
     Socks5UdpFlowConfig::new(tag, server, port, username, password).packet_path_spec()
 }
+
+pub fn udp_flow_resume_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Socks5UdpFlowResume {
+    Socks5UdpFlowConfig::new(tag, server, port, username, password).flow_resume()
+}

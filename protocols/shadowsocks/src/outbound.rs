@@ -710,6 +710,17 @@ pub fn udp_packet_path_spec_from_config(
 }
 
 #[cfg(feature = "crypto")]
+pub fn udp_flow_resume_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    cipher: &str,
+    password: &str,
+) -> Result<ShadowsocksUdpFlowResume, Error> {
+    ShadowsocksUdpFlowConfig::new(tag, server, port, cipher, password).flow_resume()
+}
+
+#[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ShadowsocksUdpLeafKey {
     cache_key: alloc::string::String,

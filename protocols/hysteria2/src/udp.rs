@@ -410,6 +410,16 @@ pub fn udp_packet_path_spec_from_config(
     Hysteria2UdpFlowConfig::new(tag, server, port, password, client_fingerprint).packet_path_spec()
 }
 
+pub fn udp_flow_resume_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    password: &str,
+    client_fingerprint: Option<&str>,
+) -> Hysteria2UdpFlowResume {
+    Hysteria2UdpFlowConfig::new(tag, server, port, password, client_fingerprint).flow_resume()
+}
+
 /// Codec state for a Hysteria2 UDP datagram chain hop.
 ///
 /// Hysteria2 UDP flow framing has no negotiated per-flow crypto state once the
