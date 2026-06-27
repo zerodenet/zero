@@ -245,6 +245,104 @@ pub struct VmessInboundUdpPayload {
     pub payload: Vec<u8>,
 }
 
+/// Protocol-owned decoded inbound UDP request.
+///
+/// Proxy inbound glue submits this native datagram request to its UDP pipe
+/// without depending on VMess wire payload state or packet fields.
+pub struct VmessInboundUdpRequest {
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl VmessInboundUdpRequest {
+    fn from_payload(payload: VmessInboundUdpPayload) -> (Self, VmessUdpPayloadState) {
+        (
+            Self {
+                target: payload.target,
+                port: payload.port,
+                payload: payload.payload,
+            },
+            payload.state,
+        )
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+}
+
+/// Stateful inbound UDP codec wrapper for VMess packet/raw payload detection.
+#[derive(Debug, Clone)]
+pub struct VmessInboundUdpSession {
+    state: VmessUdpPayloadState,
+    default_target: Address,
+    default_port: u16,
+}
+
+impl VmessInboundUdpSession {
+    pub fn new(default_target: Address, default_port: u16) -> Self {
+        Self {
+            state: VmessUdpPayloadState::Unknown,
+            default_target,
+            default_port,
+        }
+    }
+
+    pub fn decode_request(&mut self, payload: &[u8]) -> Result<VmessInboundUdpRequest, Error> {
+        let decoded = VmessInboundUdpCodec.decode_datagram(
+            self.state,
+            &self.default_target,
+            self.default_port,
+            payload,
+        )?;
+        let (request, state) = VmessInboundUdpRequest::from_payload(decoded);
+        self.state = state;
+        Ok(request)
+    }
+
+    pub async fn write_response_tokio<W>(
+        &self,
+        writer: &mut W,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        VmessInboundUdpCodec
+            .write_response_tokio(writer, self.state, target, port, payload)
+            .await
+    }
+
+    pub fn send_mux_response(
+        &self,
+        write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+        mux_session_id: u16,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        VmessInboundUdpCodec.send_mux_response(
+            write_tx,
+            mux_session_id,
+            self.state,
+            target,
+            port,
+            payload,
+        )
+    }
+}
+
 impl VmessOutbound {
     pub async fn establish_udp_packet_session<S>(
         &self,

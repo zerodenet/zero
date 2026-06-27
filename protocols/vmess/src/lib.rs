@@ -36,8 +36,9 @@ pub use udp::{
     establish_udp_flow_with_initial_packet, establish_udp_outbound_stream, parse_udp_identity,
     parse_udp_packet, spawn_udp_flow, start_udp_flow_with_initial_packet, VmessEstablishedUdpFlow,
     VmessEstablishedUdpFlowHandle, VmessInboundUdpCodec, VmessInboundUdpPayload,
-    VmessInitialUdpFlowPacket, VmessUdpFlowCodec, VmessUdpFlowConfig, VmessUdpFlowConnection,
-    VmessUdpFlowHandle, VmessUdpFlowIo, VmessUdpFlowPacket, VmessUdpFlowResponse,
-    VmessUdpFlowResponseReceiver, VmessUdpFlowSession, VmessUdpIdentity, VmessUdpPacket,
-    VmessUdpPacketTarget, VmessUdpPacketTunnelTarget, VmessUdpPayloadMode, VmessUdpPayloadState,
+    VmessInboundUdpRequest, VmessInboundUdpSession, VmessInitialUdpFlowPacket, VmessUdpFlowCodec,
+    VmessUdpFlowConfig, VmessUdpFlowConnection, VmessUdpFlowHandle, VmessUdpFlowIo,
+    VmessUdpFlowPacket, VmessUdpFlowResponse, VmessUdpFlowResponseReceiver, VmessUdpFlowSession,
+    VmessUdpIdentity, VmessUdpPacket, VmessUdpPacketTarget, VmessUdpPacketTunnelTarget,
+    VmessUdpPayloadMode, VmessUdpPayloadState,
 };
