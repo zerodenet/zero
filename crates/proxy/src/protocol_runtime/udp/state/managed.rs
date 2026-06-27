@@ -5,11 +5,8 @@ use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowSnapshot};
 use crate::protocol_runtime::vless_udp::model::{
     VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow,
 };
-use crate::protocol_runtime::vless_udp::VlessUdpOutboundManager;
 #[cfg(feature = "vmess")]
 use crate::protocol_runtime::vmess_udp::model::{VmessUdpRelayFlowStart, VmessUdpStartFlow};
-#[cfg(feature = "vmess")]
-use crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use tokio::task::JoinSet;
 use zero_core::Address;
@@ -18,23 +15,27 @@ use zero_engine::EngineError;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
+pub(in crate::protocol_runtime::udp) mod cached;
 mod datagram;
 pub(in crate::protocol_runtime::udp) mod model;
 mod stream;
 
+pub(crate) use cached::ManagedCachedHandlers;
+use cached::ManagedCachedState;
 use datagram::ManagedDatagramState;
-pub(crate) use model::{ManagedDatagramFlowHandler, ManagedStreamFlowHandler};
+pub(crate) use model::{
+    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedStreamFlowHandler,
+};
 use stream::ManagedStreamState;
 
 pub(crate) struct ManagedUdpHandlers {
+    pub(crate) cached: ManagedCachedHandlers,
     pub(crate) datagram: Vec<Box<dyn ManagedDatagramFlowHandler>>,
     pub(crate) stream: Vec<Box<dyn ManagedStreamFlowHandler>>,
 }
 
 pub(in crate::protocol_runtime::udp) struct ManagedProtocolUdpState {
-    vless: VlessUdpOutboundManager,
-    #[cfg(feature = "vmess")]
-    vmess: VmessUdpOutboundManager,
+    cached: ManagedCachedState,
     datagram: ManagedDatagramState,
     stream: ManagedStreamState,
 }
@@ -42,9 +43,7 @@ pub(in crate::protocol_runtime::udp) struct ManagedProtocolUdpState {
 impl ManagedProtocolUdpState {
     pub(super) fn new(handlers: ManagedUdpHandlers) -> Self {
         Self {
-            vless: VlessUdpOutboundManager::new(),
-            #[cfg(feature = "vmess")]
-            vmess: VmessUdpOutboundManager::new(),
+            cached: ManagedCachedState::new(handlers.cached),
             datagram: ManagedDatagramState::new(handlers.datagram),
             stream: ManagedStreamState::new(handlers.stream),
         }
@@ -58,7 +57,7 @@ impl ManagedProtocolUdpState {
         port: u16,
         payload: &[u8],
     ) -> Result<Option<u64>, EngineError> {
-        self.vless
+        self.cached
             .send_existing(chain_tasks, proxy, target, port, payload)
             .await
     }
@@ -72,7 +71,7 @@ impl ManagedProtocolUdpState {
         port: u16,
         payload: &[u8],
     ) -> Result<Option<u64>, EngineError> {
-        self.vmess
+        self.cached
             .send_existing(chain_tasks, proxy, target, port, payload)
             .await
     }
@@ -82,7 +81,10 @@ impl ManagedProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpStartFlow<'_>,
     ) -> Result<(), EngineError> {
-        self.vless.start_flow(chain_tasks, flow).await
+        self.cached
+            .start_vless_flow(chain_tasks, flow)
+            .await
+            .expect("registered VLESS cached UDP handler")
     }
 
     pub(in crate::protocol_runtime::udp) async fn start_vless_relay_two_stream(
@@ -90,7 +92,10 @@ impl ManagedProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpRelayTwoStream<'_>,
     ) -> Result<(), EngineError> {
-        self.vless.start_relay_two_stream(chain_tasks, flow).await
+        self.cached
+            .start_vless_relay_two_stream(chain_tasks, flow)
+            .await
+            .expect("registered VLESS cached UDP handler")
     }
 
     pub(in crate::protocol_runtime::udp) async fn start_vless_relay_final_hop(
@@ -98,7 +103,10 @@ impl ManagedProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpRelayFinalHopStart<'_>,
     ) -> Result<(), EngineError> {
-        self.vless.start_relay_final_hop(chain_tasks, flow).await
+        self.cached
+            .start_vless_relay_final_hop(chain_tasks, flow)
+            .await
+            .expect("registered VLESS cached UDP handler")
     }
 
     #[cfg(feature = "vmess")]
@@ -107,7 +115,10 @@ impl ManagedProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VmessUdpStartFlow<'_>,
     ) -> Result<(), EngineError> {
-        self.vmess.start_flow(chain_tasks, flow).await
+        self.cached
+            .start_vmess_flow(chain_tasks, flow)
+            .await
+            .expect("registered VMess cached UDP handler")
     }
 
     #[cfg(feature = "vmess")]
@@ -116,7 +127,10 @@ impl ManagedProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VmessUdpRelayFlowStart<'_>,
     ) -> Result<(), EngineError> {
-        self.vmess.start_relay_flow(chain_tasks, flow).await
+        self.cached
+            .start_vmess_relay_flow(chain_tasks, flow)
+            .await
+            .expect("registered VMess cached UDP handler")
     }
 
     pub(in crate::protocol_runtime::udp) async fn start_datagram_flow(

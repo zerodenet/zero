@@ -22,7 +22,7 @@ use crate::adapters::VlessAdapter;
 #[cfg(feature = "vmess")]
 use crate::adapters::VmessAdapter;
 use crate::protocol_adapter::ProtocolRegistry;
-use crate::protocol_runtime::udp::ManagedUdpHandlers;
+use crate::protocol_runtime::udp::{ManagedCachedHandlers, ManagedUdpHandlers};
 
 pub(crate) fn protocol_registry() -> ProtocolRegistry {
     let mut registry = ProtocolRegistry::default();
@@ -52,6 +52,11 @@ pub(crate) fn protocol_registry() -> ProtocolRegistry {
 
 pub(crate) fn managed_udp_handlers() -> ManagedUdpHandlers {
     ManagedUdpHandlers {
+        cached: ManagedCachedHandlers {
+            vless: crate::protocol_runtime::udp::vless_cached_handler(),
+            #[cfg(feature = "vmess")]
+            vmess: crate::protocol_runtime::udp::vmess_cached_handler(),
+        },
         datagram: vec![
             #[cfg(feature = "shadowsocks")]
             crate::protocol_runtime::udp::shadowsocks_datagram_handler(),

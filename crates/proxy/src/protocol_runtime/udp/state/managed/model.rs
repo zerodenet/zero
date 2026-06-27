@@ -50,6 +50,18 @@ pub(crate) trait ManagedStreamFlowHandler: Send + Sync {
     ) -> Result<usize, FlowFailure>;
 }
 
+#[async_trait::async_trait]
+pub(crate) trait ManagedCachedFlowSender: Send + Sync {
+    async fn send_existing(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        proxy: &Proxy,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<u64>, zero_engine::EngineError>;
+}
+
 impl<'a> ManagedExistingSend<'a> {
     pub(in crate::protocol_runtime::udp) fn datagram(
         chain_tasks: &'a mut JoinSet<ChainTask>,

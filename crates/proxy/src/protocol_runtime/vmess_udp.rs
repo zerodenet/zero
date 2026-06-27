@@ -15,6 +15,8 @@ use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
+use crate::protocol_runtime::udp::ManagedCachedFlowSender;
+use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use model::{VmessUdpRelayFlowStart, VmessUdpStartFlow, VmessUdpUpstream, VmessUdpUpstreamRequest};
@@ -310,6 +312,55 @@ impl VmessUdpOutboundManager {
         self.upstreams.insert(key, (upstream, recv_tx));
         self.spawn_bridge(chain_tasks, request.target, request.port, session_id);
         Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+pub(crate) trait VmessCachedFlowHandler: ManagedCachedFlowSender {
+    async fn start_vmess_flow(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        flow: VmessUdpStartFlow<'_>,
+    ) -> Result<(), EngineError>;
+
+    async fn start_vmess_relay_flow(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        flow: VmessUdpRelayFlowStart<'_>,
+    ) -> Result<(), EngineError>;
+}
+
+#[async_trait::async_trait]
+impl ManagedCachedFlowSender for VmessUdpOutboundManager {
+    async fn send_existing(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        proxy: &Proxy,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<u64>, EngineError> {
+        VmessUdpOutboundManager::send_existing(self, chain_tasks, proxy, target, port, payload)
+            .await
+    }
+}
+
+#[async_trait::async_trait]
+impl VmessCachedFlowHandler for VmessUdpOutboundManager {
+    async fn start_vmess_flow(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        flow: VmessUdpStartFlow<'_>,
+    ) -> Result<(), EngineError> {
+        VmessUdpOutboundManager::start_flow(self, chain_tasks, flow).await
+    }
+
+    async fn start_vmess_relay_flow(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        flow: VmessUdpRelayFlowStart<'_>,
+    ) -> Result<(), EngineError> {
+        VmessUdpOutboundManager::start_relay_flow(self, chain_tasks, flow).await
     }
 }
 
