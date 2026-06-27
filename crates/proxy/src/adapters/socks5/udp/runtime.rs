@@ -6,8 +6,8 @@ use zero_engine::EngineError;
 
 use super::active::ActiveUpstreamSocks5UdpAssociation;
 use super::model::{
-    ClosedSocks5UdpAssociation, Socks5UdpAssociation, Socks5UdpAssociationView,
-    UpstreamAssociationCloseReason,
+    BoxedSocks5UdpAssociation, ClosedSocks5UdpAssociation, Socks5UdpAssociation,
+    Socks5UdpAssociationView, UpstreamAssociationCloseReason,
 };
 use super::send::{self, Socks5UdpSend};
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -16,7 +16,7 @@ use crate::runtime::udp_flow::protocol_state::UpstreamAssociationHandler;
 
 #[derive(Default)]
 pub(crate) struct Socks5UdpRuntime {
-    pub(super) upstream: Option<ActiveUpstreamSocks5UdpAssociation>,
+    pub(super) upstream: Option<BoxedSocks5UdpAssociation>,
     pub(super) idle_deadline: Option<TokioInstant>,
 }
 
@@ -33,7 +33,7 @@ impl Socks5UdpRuntime {
         self.idle_deadline = Some(TokioInstant::now() + timeout);
     }
 
-    fn take_upstream(&mut self) -> Option<ActiveUpstreamSocks5UdpAssociation> {
+    fn take_upstream(&mut self) -> Option<BoxedSocks5UdpAssociation> {
         self.idle_deadline = None;
         self.upstream.take()
     }
@@ -122,7 +122,7 @@ impl Socks5UdpRuntime {
             self.idle_deadline = None;
         }
 
-        match ActiveUpstreamSocks5UdpAssociation::establish(
+        match ActiveUpstreamSocks5UdpAssociation::establish_boxed(
             proxy,
             &association.outbound_tag,
             &association.server,

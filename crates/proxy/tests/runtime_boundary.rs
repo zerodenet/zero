@@ -1971,6 +1971,8 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         active.contains("struct ActiveUpstreamSocks5UdpAssociation")
             && active.contains("Socks5UdpAssociation<TokioSocket, TokioDatagramSocket>")
             && active.contains("Socks5UdpAssociation::from_relay_endpoint")
+            && active.contains("impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation")
+            && active.contains("impl Socks5UdpPacketPathAssociation for ActiveUpstreamSocks5UdpAssociation")
             && !active.contains("Socks5UdpAssociation::new")
             && !active.contains("Socks5UdpRelay,")
             && !active.contains("Socks5UdpRelayEndpoint")
@@ -1980,7 +1982,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && !active.contains("Socks5UdpRelayTarget")
             && !active.contains("Socks5OutboundAuth")
             && !active.contains(".establish_udp_relay("),
-        "SOCKS5 UDP active association wrapper should store a protocol-owned association handle"
+        "SOCKS5 UDP active association wrapper should store the protocol-owned association handle behind narrow proxy traits"
     );
     for source in [
         ("src/adapters/socks5/udp.rs", adapter.as_str()),
@@ -2009,8 +2011,12 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     }
     assert!(
         model.contains("enum UpstreamAssociationCloseReason")
-            && model.contains("struct Socks5UdpAssociation"),
-        "SOCKS5 UDP association model should live under adapters/socks5/udp/model.rs"
+            && model.contains("struct Socks5UdpAssociation")
+            && model.contains("trait Socks5UdpAssociationHandle")
+            && model.contains("type BoxedSocks5UdpAssociation")
+            && model.contains("trait Socks5UdpPacketPathAssociation")
+            && model.contains("type SharedSocks5UdpPacketPathAssociation"),
+        "SOCKS5 UDP association models and neutral handles should live under adapters/socks5/udp/model.rs"
     );
     assert!(
         !send_source.contains("send_socks5_udp_packet")
@@ -2019,14 +2025,19 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && !send_source.contains("runtime.idle_deadline")
             && runtime_source.contains("pub(super) async fn send_packet")
             && runtime_source.contains("async fn ensure_association")
-            && runtime_source.contains("fn drop_after_send_error"),
-        "SOCKS5 UDP upstream association lifecycle should be owned by runtime.rs, not send.rs"
+            && runtime_source.contains("fn drop_after_send_error")
+            && runtime_source.contains("upstream: Option<BoxedSocks5UdpAssociation>")
+            && !runtime_source.contains("Option<ActiveUpstreamSocks5UdpAssociation>")
+            && !runtime_source.contains("-> Option<ActiveUpstreamSocks5UdpAssociation>"),
+        "SOCKS5 UDP upstream association lifecycle should be owned by runtime.rs behind a neutral association handle"
     );
     assert!(
         !packet_path_source.contains("socks5::parse_udp_packet")
             && !packet_path_source.contains("socks5::decode_udp_associate_response")
+            && packet_path_source.contains("SharedSocks5UdpPacketPathAssociation")
+            && !packet_path_source.contains("Arc<ActiveUpstreamSocks5UdpAssociation>")
             && packet_path_source.contains(".recv_payload(buf).await"),
-        "SOCKS5 packet-path carrier should delegate protocol response decoding to protocols/socks5"
+        "SOCKS5 packet-path carrier should use a neutral association handle and delegate protocol response decoding to protocols/socks5"
     );
     assert!(
         !adapter.contains("Socks5UdpPacketSend")

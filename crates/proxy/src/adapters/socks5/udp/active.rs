@@ -6,7 +6,10 @@ use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
 
-use super::model::UpstreamAssociationCloseReason;
+use super::model::{
+    BoxedSocks5UdpAssociation, SharedSocks5UdpPacketPathAssociation, Socks5UdpAssociationHandle,
+    Socks5UdpPacketPathAssociation, UpstreamAssociationCloseReason,
+};
 use crate::runtime::Proxy;
 use crate::transport::MeteredStream;
 
@@ -21,6 +24,32 @@ pub(super) struct ActiveUpstreamSocks5UdpAssociation {
 }
 
 impl ActiveUpstreamSocks5UdpAssociation {
+    pub(super) async fn establish_boxed(
+        proxy: &Proxy,
+        outbound_tag: &str,
+        server: &str,
+        port: u16,
+        config: socks5::Socks5UdpAssociationConfig<'_>,
+        session_id: u64,
+    ) -> Result<BoxedSocks5UdpAssociation, EngineError> {
+        Ok(Box::new(
+            Self::establish(proxy, outbound_tag, server, port, config, session_id).await?,
+        ))
+    }
+
+    pub(super) async fn establish_shared(
+        proxy: &Proxy,
+        outbound_tag: &str,
+        server: &str,
+        port: u16,
+        config: socks5::Socks5UdpAssociationConfig<'_>,
+        session_id: u64,
+    ) -> Result<SharedSocks5UdpPacketPathAssociation, EngineError> {
+        Ok(std::sync::Arc::new(
+            Self::establish(proxy, outbound_tag, server, port, config, session_id).await?,
+        ))
+    }
+
     pub(super) async fn establish(
         proxy: &Proxy,
         outbound_tag: &str,
@@ -125,6 +154,54 @@ impl ActiveUpstreamSocks5UdpAssociation {
             Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
             Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation {
+    fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool {
+        self.matches(outbound_tag, server, port)
+    }
+
+    fn outbound_tag(&self) -> &str {
+        self.outbound_tag()
+    }
+
+    fn upstream_endpoint(&self) -> (&str, u16) {
+        self.upstream_endpoint()
+    }
+
+    fn close(self: Box<Self>, reason: UpstreamAssociationCloseReason) {
+        (*self).close(reason);
+    }
+
+    async fn send_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        self.send_packet(target, port, payload).await
+    }
+
+    async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        self.recv_packet(buf).await
+    }
+}
+
+#[async_trait::async_trait]
+impl Socks5UdpPacketPathAssociation for ActiveUpstreamSocks5UdpAssociation {
+    async fn send_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        self.send_packet(target, port, payload).await
+    }
+
+    async fn recv_payload(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        self.recv_payload(buf).await
     }
 }
 
