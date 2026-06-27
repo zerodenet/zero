@@ -25,6 +25,7 @@ pub use outbound::{
     ShadowsocksTcpTarget, ShadowsocksUdpDecodeContext, ShadowsocksUdpFlowConfig,
     ShadowsocksUdpFlowEntries, ShadowsocksUdpFlowPacket, ShadowsocksUdpFlowResume,
     ShadowsocksUdpFlowStore, ShadowsocksUdpLeafKey, ShadowsocksUdpPacket,
+    ShadowsocksUdpPacketPathCarrier, ShadowsocksUdpPacketPathDatagram,
     ShadowsocksUdpPacketPathSpec, ShadowsocksUdpPacketTarget,
 };
 #[cfg(feature = "crypto")]

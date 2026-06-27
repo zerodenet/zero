@@ -20,7 +20,8 @@ pub use outbound::{
 };
 pub use shared::{
     udp_flow_resume_from_config, udp_packet_path_spec_from_config, Socks5InboundUdpRequest,
-    Socks5InboundUdpResponse, Socks5Reply, Socks5UdpFlowConfig, Socks5UdpPacketPathSpec,
+    Socks5InboundUdpResponse, Socks5Reply, Socks5UdpFlowConfig, Socks5UdpPacketPathCarrier,
+    Socks5UdpPacketPathSpec,
 };
 pub use udp::{
     establish_udp_relay_with_control, Socks5EstablishedUdpAssociation, Socks5InboundUdpCodec,

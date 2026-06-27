@@ -386,6 +386,27 @@ pub struct Hysteria2UdpPacketPathSpec {
     resume: Hysteria2UdpFlowResume,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2UdpPacketPathCarrier {
+    cache_key: String,
+    connector_profile: Hysteria2UdpConnectorProfile,
+    codec: Hysteria2DatagramCodec,
+}
+
+impl Hysteria2UdpPacketPathCarrier {
+    pub fn cache_key(&self) -> String {
+        self.cache_key.clone()
+    }
+
+    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
+        self.connector_profile.clone()
+    }
+
+    pub fn codec(&self) -> Hysteria2DatagramCodec {
+        self.codec
+    }
+}
+
 impl Hysteria2UdpPacketPathSpec {
     pub fn cache_key(&self) -> String {
         self.cache_key.clone()
@@ -401,6 +422,14 @@ impl Hysteria2UdpPacketPathSpec {
 
     pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
         self.resume.connector_profile()
+    }
+
+    pub fn carrier(&self) -> Hysteria2UdpPacketPathCarrier {
+        Hysteria2UdpPacketPathCarrier {
+            cache_key: self.carrier_cache_key(),
+            connector_profile: self.connector_profile(),
+            codec: Hysteria2DatagramCodec,
+        }
     }
 }
 
@@ -428,7 +457,7 @@ pub fn udp_flow_resume_from_config(
 ///
 /// Hysteria2 UDP flow framing has no negotiated per-flow crypto state once the
 /// QUIC connection is established, so this codec is stateless.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Hysteria2DatagramCodec;
 
 pub(crate) fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
