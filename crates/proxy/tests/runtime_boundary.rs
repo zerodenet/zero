@@ -6079,8 +6079,15 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
             && trojan_manager_send.contains("resume.flow_cache_key(")
             && mieru_manager_send.contains(".send_or_insert(")
             && trojan_manager_send.contains(".send_or_insert(")
+            && mieru_manager_send.contains(".insert_and_send(")
+            && trojan_manager_send.contains(".insert_and_send(")
             && !mieru_manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
             && !trojan_manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
+            && !mieru_manager_send.contains("self.upstreams.insert(")
+            && !trojan_manager_send.contains("self.upstreams.insert(")
+            && !mieru_manager_send.contains("entry.spawn_response_bridge(")
+            && !trojan_manager_send.contains("entry.spawn_response_bridge(")
+            && managed_cache.contains("pub(crate) async fn insert_and_send")
             && managed_cache.contains("self.entries.get(&key)"),
         "stream UDP managers should ask protocol resumes for opaque cache identity instead of choosing protocol key variants"
     );
@@ -6986,7 +6993,9 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
     }
     assert!(
         !bridge.exists()
-            && send.contains(".spawn_response_bridge(")
+            && send.contains(".insert_and_send(")
+            && !send.contains(".spawn_response_bridge(")
+            && !send.contains("self.upstreams.insert(")
             && !send.contains("spawn_trojan_response_bridge")
             && !send.contains("spawn_response_bridge(\n")
             && establish.contains("impl ManagedUdpConnection for trojan::TrojanUdpFlowConnection")
@@ -7190,7 +7199,10 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     assert!(
         manager_send.contains("resume.flow_cache_key(")
             && manager_send.contains(".send_or_insert(")
+            && manager_send.contains(".insert_and_send(")
             && !manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
+            && !manager_send.contains("self.upstreams.insert(")
+            && !manager_send.contains("entry.spawn_response_bridge(")
             && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("TrojanUdpPeer")
@@ -7390,7 +7402,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && !manager_send.contains("MieruUdpFlowPacket::new")
             && !manager_send.contains("MieruUdpFlowIo")
             && !manager_send.contains(".sender")
-            && manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)"),
+            && manager_send.contains(".insert_and_send(")
+            && !manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)"),
         "Mieru UDP manager should hold protocol-owned flow sessions while protocols/mieru owns packet I/O helpers"
     );
     assert!(
@@ -7506,7 +7519,10 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     assert!(
         manager_send.contains("resume.flow_cache_key(")
             && manager_send.contains(".send_or_insert(")
+            && manager_send.contains(".insert_and_send(")
             && !manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
+            && !manager_send.contains("self.upstreams.insert(")
+            && !manager_send.contains("entry.spawn_response_bridge(")
             && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("MieruUdpPeer")
@@ -7541,7 +7557,9 @@ fn mieru_udp_response_bridge_lives_outside_manager() {
     }
     assert!(
         !bridge.exists()
-            && send.contains(".spawn_response_bridge(")
+            && send.contains(".insert_and_send(")
+            && !send.contains(".spawn_response_bridge(")
+            && !send.contains("self.upstreams.insert(")
             && !send.contains("spawn_tuple_response_bridge")
             && establish.contains("impl ManagedUdpConnection for mieru::MieruUdpFlowConnection")
             && establish.contains("spawn_tuple_response_bridge")
@@ -7878,7 +7896,8 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             && !manager_model.contains("MieruEntry")
             && !manager_send.contains(".sender")
             && !manager_send.contains(".recv_tx")
-            && manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
+            && manager_send.contains(".insert_and_send(")
+            && !manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
             && !manager_send.contains("UdpFlowPacket")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && protocol_outbound.contains("pub struct MieruUdpFlowHandle")
@@ -7983,7 +8002,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !establish.contains("zero_core::UdpFlowPacket::from_parts")
             && !establish.contains("let initial_packet = UdpFlowPacket::from_parts")
             && !establish.contains("hysteria2::Hysteria2InitialUdpFlowPacket::from_parts")
-            && manager_send.contains(".send_or_insert(")
+            && manager_send.contains(".send_or_insert_pre_sent(")
+            && !manager_send.contains(".send_or_insert(")
             && !manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
             && managed_cache.contains(".send(packet.target, packet.port, packet.payload)")
             && !establish.contains("mpsc::Sender<UdpFlowPacket>")
@@ -8118,7 +8138,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     assert!(
         manager_send.contains("resume.flow_cache_key(")
             && manager_send.contains("self.upstreams")
-            && manager_send.contains(".send_or_insert(")
+            && manager_send.contains(".send_or_insert_pre_sent(")
+            && !manager_send.contains(".send_or_insert(")
             && !manager_send.contains("self.upstreams.get(&cache_key)")
             && managed_cache.contains("self.entries.get(&key)")
             && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port)")
@@ -8439,11 +8460,12 @@ fn h2_udp_send_orchestration_lives_outside_manager() {
         "Hysteria2 UDP send orchestration should live in h2_manager/send.rs"
     );
     assert!(
-        send_source.contains(".send_or_insert(")
+        send_source.contains(".send_or_insert_pre_sent(")
+            && !send_source.contains(".send_or_insert(")
             && !send_source.contains(".spawn_response_bridge(")
             && !send_source.contains("self.upstreams.get(&cache_key)")
             && !send_source.contains("self.upstreams.insert(cache_key")
-            && managed_cache.contains("pub(crate) async fn send_or_insert")
+            && managed_cache.contains("pub(crate) async fn send_or_insert_pre_sent")
             && managed_cache.contains("connection.spawn_response_bridge(chain_tasks, session_id)")
             && !send_source.contains("subscribe_responses()")
             && !send_source.contains("spawn_tuple_response_bridge"),

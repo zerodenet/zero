@@ -27,7 +27,7 @@ impl H2ChainManager {
         );
 
         self.upstreams
-            .send_or_insert(
+            .send_or_insert_pre_sent(
                 cache_key,
                 ctx.chain_tasks,
                 ctx.session_id,

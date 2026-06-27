@@ -116,13 +116,14 @@ impl TrojanChainManager {
             upstream: Some((request.server.to_owned(), request.port)),
         })?;
 
-        entry.spawn_response_bridge(ctx.chain_tasks, session_id);
-        self.upstreams.insert(cache_key, entry.clone());
-        let _ = entry
-            .send(packet_ref.target, packet_ref.port, packet_ref.payload)
-            .await;
-
-        Ok(packet_ref.payload.len())
+        self.upstreams
+            .insert_and_send(cache_key, ctx.chain_tasks, session_id, packet_ref, entry)
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "trojan_relay_send",
+                error,
+                upstream: Some((request.server.to_owned(), request.port)),
+            })
     }
 
     async fn send_relay_existing(

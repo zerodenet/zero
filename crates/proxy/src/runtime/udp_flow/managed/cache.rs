@@ -29,15 +29,7 @@ impl ManagedUdpConnectionCache {
         }
     }
 
-    pub(crate) fn insert(
-        &mut self,
-        key: ManagedUdpConnectionCacheKey,
-        value: SharedManagedUdpConnection,
-    ) -> Option<SharedManagedUdpConnection> {
-        self.entries.insert(key, value)
-    }
-
-    pub(crate) async fn send_or_insert<Fut>(
+    pub(crate) async fn send_or_insert_pre_sent<Fut>(
         &mut self,
         key: ManagedUdpConnectionCacheKey,
         chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
@@ -61,6 +53,54 @@ impl ManagedUdpConnectionCache {
         self.entries.insert(key, connection);
         Ok(sent)
     }
+
+    pub(crate) async fn send_or_insert<Fut>(
+        &mut self,
+        key: ManagedUdpConnectionCacheKey,
+        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+        session_id: u64,
+        packet: UdpPacketRef<'_>,
+        establish: Fut,
+    ) -> Result<usize, EngineError>
+    where
+        Fut: Future<Output = Result<SharedManagedUdpConnection, EngineError>>,
+    {
+        if let Some(connection) = self.entries.get(&key) {
+            return send_managed_udp_connection(connection, chain_tasks, session_id, packet).await;
+        }
+
+        let connection = establish.await?;
+        let sent =
+            send_managed_udp_connection(&connection, chain_tasks, session_id, packet).await?;
+        self.entries.insert(key, connection);
+        Ok(sent)
+    }
+
+    pub(crate) async fn insert_and_send(
+        &mut self,
+        key: ManagedUdpConnectionCacheKey,
+        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+        session_id: u64,
+        packet: UdpPacketRef<'_>,
+        connection: SharedManagedUdpConnection,
+    ) -> Result<usize, EngineError> {
+        let sent =
+            send_managed_udp_connection(&connection, chain_tasks, session_id, packet).await?;
+        self.entries.insert(key, connection);
+        Ok(sent)
+    }
+}
+
+async fn send_managed_udp_connection(
+    connection: &SharedManagedUdpConnection,
+    chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+    session_id: u64,
+    packet: UdpPacketRef<'_>,
+) -> Result<usize, EngineError> {
+    connection.spawn_response_bridge(chain_tasks, session_id);
+    connection
+        .send(packet.target, packet.port, packet.payload)
+        .await
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

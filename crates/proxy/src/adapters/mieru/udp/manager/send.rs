@@ -111,19 +111,14 @@ impl MieruChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        entry.spawn_response_bridge(ctx.chain_tasks, session_id);
-        self.upstreams.insert(cache_key, entry.clone());
-
-        let sent = packet_ref.payload.len();
-        entry
-            .send(packet_ref.target, packet_ref.port, packet_ref.payload)
+        self.upstreams
+            .insert_and_send(cache_key, ctx.chain_tasks, session_id, packet_ref, entry)
             .await
             .map_err(|error| FlowFailure {
                 stage: "mieru_relay_send",
-                error: EngineError::Io(std::io::Error::other(format!("mieru udp send: {error}"))),
+                error,
                 upstream: Some(endpoint.upstream()),
-            })?;
-        Ok(sent)
+            })
     }
 
     async fn send_relay_existing(
