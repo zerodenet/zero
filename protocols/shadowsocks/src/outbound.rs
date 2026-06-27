@@ -515,6 +515,14 @@ impl ShadowsocksUdpFlowResume {
         self.codec()
     }
 
+    pub fn packet_path(&self) -> ShadowsocksUdpPacketPath {
+        ShadowsocksUdpPacketPath {
+            cache_key: self.cache_key.clone(),
+            cipher: self.cipher,
+            password: self.password.clone(),
+        }
+    }
+
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec(self.cipher, &self.password)
     }
@@ -543,6 +551,25 @@ impl ShadowsocksUdpFlowResume {
             port: decoded.port,
             payload: decoded.payload,
         })
+    }
+}
+
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksUdpPacketPath {
+    cache_key: alloc::string::String,
+    cipher: super::shared::CipherKind,
+    password: alloc::vec::Vec<u8>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpPacketPath {
+    pub fn cache_key(&self) -> alloc::string::String {
+        self.cache_key.clone()
+    }
+
+    pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        udp_flow_codec(self.cipher, &self.password)
     }
 }
 

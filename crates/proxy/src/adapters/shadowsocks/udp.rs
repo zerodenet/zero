@@ -38,9 +38,10 @@ impl ShadowsocksAdapter {
             tag, server, *port, cipher, password,
         )
         .ok()?;
+        let packet_path = resume.packet_path();
         Some(
             crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
-                resume.packet_path_cache_key(),
+                packet_path.cache_key(),
                 server,
                 *port,
             ),
@@ -66,7 +67,8 @@ impl ShadowsocksAdapter {
         let resume =
             shadowsocks::ShadowsocksUdpFlowResume::from_config("", server, *port, cipher, password)
                 .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
-        let codec = Arc::new(resume.packet_path_codec());
+        let packet_path = resume.packet_path();
+        let codec = Arc::new(packet_path.codec());
         crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
             proxy, server, *port, codec,
         )
@@ -92,12 +94,13 @@ impl ShadowsocksAdapter {
             tag, server, *port, cipher, password,
         )
         .ok()?;
-        let codec = Arc::new(resume.packet_path_codec());
+        let packet_path = resume.packet_path();
+        let codec = Arc::new(packet_path.codec());
         Some(crate::runtime::udp_flow::packet_path::udp_datagram_source(
             tag,
             server,
             *port,
-            resume.packet_path_cache_key(),
+            packet_path.cache_key(),
             codec,
         ))
     }
