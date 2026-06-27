@@ -276,6 +276,21 @@ pub struct Hysteria2UdpFlowSender {
 }
 
 #[cfg(feature = "tokio")]
+#[derive(Clone)]
+pub struct Hysteria2InitialUdpFlowPacket {
+    packet: UdpFlowPacket,
+}
+
+#[cfg(feature = "tokio")]
+impl Hysteria2InitialUdpFlowPacket {
+    pub fn from_parts(target: &Address, port: u16, payload: &[u8]) -> Self {
+        Self {
+            packet: UdpFlowPacket::from_parts(target, port, payload),
+        }
+    }
+}
+
+#[cfg(feature = "tokio")]
 pub struct Hysteria2UdpFlowHandle {
     pub sender: Hysteria2UdpFlowSender,
     pub responses: Hysteria2UdpFlowResponses,
@@ -297,7 +312,7 @@ impl Hysteria2UdpFlowSender {
 #[cfg(feature = "tokio")]
 pub fn spawn_udp_flow(
     conn: Arc<quinn::Connection>,
-    initial_packet: UdpFlowPacket,
+    initial_packet: Hysteria2InitialUdpFlowPacket,
     flow_io: Hysteria2UdpFlowIo,
 ) -> Hysteria2UdpFlowHandle {
     let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
@@ -315,12 +330,12 @@ pub fn spawn_udp_flow(
 #[cfg(feature = "tokio")]
 fn spawn_send_task(
     conn: Arc<quinn::Connection>,
-    initial_packet: UdpFlowPacket,
+    initial_packet: Hysteria2InitialUdpFlowPacket,
     flow_io: Hysteria2UdpFlowIo,
     mut send_rx: mpsc::Receiver<UdpFlowPacket>,
 ) {
     tokio::spawn(async move {
-        if let Ok(datagram) = flow_io.encode_packet(&initial_packet) {
+        if let Ok(datagram) = flow_io.encode_packet(&initial_packet.packet) {
             if conn.send_datagram(datagram.into()).is_err() {
                 return;
             }

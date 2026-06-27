@@ -3,7 +3,6 @@ use crate::outbound::hysteria2::Hysteria2Connector;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use std::sync::Arc;
-use zero_core::UdpFlowPacket;
 use zero_engine::EngineError;
 
 pub(super) struct PacketStream {
@@ -26,7 +25,7 @@ pub(super) async fn establish(
     );
     let hysteria2::Hysteria2UdpFlowHandle { sender, responses } = hysteria2::spawn_udp_flow(
         conn,
-        UdpFlowPacket::from_parts(
+        hysteria2::Hysteria2InitialUdpFlowPacket::from_parts(
             initial_packet.target,
             initial_packet.port,
             initial_packet.payload,
