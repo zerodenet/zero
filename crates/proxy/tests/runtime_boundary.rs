@@ -6352,27 +6352,30 @@ fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
+            .expect("read trojan protocol outbound source");
 
     for forbidden in ["struct ReadOnlySocket", "struct WriteOnlySocket"] {
         assert!(
-            !manager.contains(forbidden),
-            "trojan_manager.rs should keep stream socket adapters in trojan_manager/stream.rs; found `{forbidden}`"
+            !manager.contains(forbidden) && !stream.contains(forbidden),
+            "Trojan proxy glue should not own stream socket adapter `{forbidden}`"
         );
     }
     assert!(
         !socket.exists(),
-        "Trojan UDP stream half AsyncSocket adapters should stay with stream glue, not a separate proxy socket module"
+        "Trojan UDP stream half AsyncSocket adapters should not live in a separate proxy socket module"
     );
     assert!(
-        stream.contains("struct ReadOnlySocket")
-            && stream.contains("struct WriteOnlySocket")
-            && stream.contains("impl AsyncSocket for ReadOnlySocket")
-            && stream.contains("impl AsyncSocket for WriteOnlySocket")
+        protocol_outbound.contains("struct ReadOnlySocket")
+            && protocol_outbound.contains("struct WriteOnlySocket")
+            && protocol_outbound.contains("impl<S> AsyncSocket for ReadOnlySocket")
+            && protocol_outbound.contains("impl<S> AsyncSocket for WriteOnlySocket")
             && !transport.contains("struct ReadOnlySocket")
             && !transport.contains("struct WriteOnlySocket")
             && !transport.contains("impl AsyncSocket for ReadOnlySocket")
             && !transport.contains("impl AsyncSocket for WriteOnlySocket"),
-        "Trojan UDP stream half AsyncSocket adapters should live in proxy stream glue, not zero-transport"
+        "Trojan UDP stream half AsyncSocket adapters should live with protocols/trojan packet pump, not proxy or zero-transport"
     );
 }
 
@@ -6616,19 +6619,21 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "Trojan UDP manager stream should use flow-specific protocol helpers instead of generic UDP helpers"
     );
     assert!(
-        stream.contains("tokio::io::split")
-            && stream.contains("tokio::spawn")
-            && stream.contains("trojan::TrojanUdpFlowIo")
+        stream.contains("trojan::TrojanUdpFlowIo")
             && stream.contains(".establish_with_resume(")
-            && stream.contains(".write_flow_packet(")
+            && stream.contains("trojan::spawn_udp_flow")
+            && !stream.contains("tokio::io::split")
+            && !stream.contains("tokio::spawn")
+            && !stream.contains(".write_flow_packet(")
             && !stream.contains(".write_packet(")
-            && stream.contains("&mut send_stream")
-            && stream.contains(".read_flow_packet(")
-            && stream.contains("&mut recv_stream")
+            && !stream.contains("&mut send_stream")
+            && !stream.contains(".read_flow_packet(")
+            && !stream.contains("&mut recv_stream")
             && stream.contains("broadcast::Sender<UdpFlowPacket>")
-            && !protocol_outbound.contains("tokio::spawn")
-            && !protocol_outbound.contains("tokio::sync::mpsc::channel")
-            && !protocol_outbound.contains("tokio::sync::broadcast::channel")
+            && protocol_outbound.contains("pub fn spawn_udp_flow")
+            && protocol_outbound.contains("tokio::spawn")
+            && protocol_outbound.contains("mpsc::channel::<UdpFlowPacket>")
+            && protocol_outbound.contains("broadcast::channel::<UdpFlowPacket>")
             && !stream.contains(".write_stream_packet")
             && !stream.contains(".read_stream_packet")
             && !stream.contains(".read_packet(")
@@ -6636,7 +6641,7 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && !transport.contains("trojan::")
             && !stream.contains("packet.write_to")
             && !model.contains("struct TrojanPacket"),
-        "Trojan UDP packet stream tasks should stay in proxy runtime glue while packet framing stays behind protocols/trojan helpers"
+        "Trojan UDP packet stream tasks should live in protocols/trojan while proxy keeps handshake/cache bridge glue"
     );
 }
 
@@ -7017,12 +7022,14 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
         protocol_outbound.contains("pub fn udp_flow_packet")
             && protocol_outbound.contains("pub async fn read_flow_packet")
             && protocol_outbound.contains("pub async fn write_flow_packet")
+            && protocol_outbound.contains("pub fn spawn_udp_flow")
+            && protocol_outbound.contains("pub struct TrojanUdpFlowHandle")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
-            && !protocol_outbound.contains("pub struct TrojanUdpFlowSender")
             && !establish.contains("trojan::udp_flow_packet")
             && !establish.contains("trojan::TrojanUdpPacket::new")
             && stream.contains("mpsc::Sender<UdpFlowPacket>")
             && stream.contains("broadcast::Sender<UdpFlowPacket>")
+            && stream.contains("trojan::spawn_udp_flow")
             && !stream.contains("trojan::udp_flow_packet")
             && !stream.contains("trojan::TrojanUdpPacket")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
@@ -7032,17 +7039,18 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")
             && stream.contains(".establish_with_resume(")
-            && stream.contains(".write_flow_packet(")
+            && stream.contains("trojan::spawn_udp_flow")
+            && !stream.contains(".write_flow_packet(")
             && !stream.contains(".write_packet(")
-            && stream.contains("&mut send_stream")
-            && stream.contains(".read_flow_packet(")
-            && stream.contains("&mut recv_stream")
+            && !stream.contains("&mut send_stream")
+            && !stream.contains(".read_flow_packet(")
+            && !stream.contains("&mut recv_stream")
             && !stream.contains(".write_stream_packet")
             && !stream.contains(".read_stream_packet")
             && !stream.contains(".read_packet(")
             && !transport.contains("trojan::TrojanUdpFlowIo")
             && !stream.contains("trojan::establish_udp_packet_tunnel"),
-        "Trojan UDP packet stream should call protocols/trojan flow I/O helpers from proxy runtime glue"
+        "Trojan UDP packet stream should delegate protocol flow pumping to protocols/trojan"
     );
 }
 

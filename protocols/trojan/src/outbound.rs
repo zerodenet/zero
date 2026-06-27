@@ -1,5 +1,12 @@
 //! Trojan outbound protocol handler.
 
+#[cfg(feature = "tokio")]
+use std::io;
+
+#[cfg(feature = "tokio")]
+use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
+#[cfg(feature = "tokio")]
+use tokio::sync::{broadcast, mpsc};
 use zero_core::{Address, Error, ProtocolType, Session, UdpFlowPacket};
 use zero_traits::{
     AsyncSocket, TcpTunnelProtocol, UdpPacketStreamFraming, UdpPacketTunnelProtocol,
@@ -122,6 +129,12 @@ pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> TrojanUdp
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrojanUdpFlowIo;
 
+#[cfg(feature = "tokio")]
+pub struct TrojanUdpFlowHandle {
+    pub send_tx: mpsc::Sender<UdpFlowPacket>,
+    pub recv_tx: broadcast::Sender<UdpFlowPacket>,
+}
+
 impl TrojanUdpFlowIo {
     pub async fn establish<S>(
         &self,
@@ -204,6 +217,110 @@ impl TrojanUdpFlowIo {
         S: AsyncSocket,
     {
         self.read_packet(stream).await
+    }
+}
+
+#[cfg(feature = "tokio")]
+pub fn spawn_udp_flow<S>(stream: S) -> TrojanUdpFlowHandle
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    let (read_half, write_half) = tokio::io::split(stream);
+    let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
+    let (recv_tx, _) = broadcast::channel::<UdpFlowPacket>(32);
+
+    spawn_send_task(send_rx, WriteOnlySocket(write_half));
+    spawn_recv_task(ReadOnlySocket(read_half), recv_tx.clone());
+
+    TrojanUdpFlowHandle { send_tx, recv_tx }
+}
+
+#[cfg(feature = "tokio")]
+fn spawn_send_task<S>(
+    mut send_rx: mpsc::Receiver<UdpFlowPacket>,
+    mut send_stream: WriteOnlySocket<S>,
+) where
+    S: tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    tokio::spawn(async move {
+        let flow_io = TrojanUdpFlowIo;
+        while let Some(packet) = send_rx.recv().await {
+            if flow_io
+                .write_flow_packet(&mut send_stream, &packet)
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+}
+
+#[cfg(feature = "tokio")]
+fn spawn_recv_task<S>(mut recv_stream: ReadOnlySocket<S>, recv_tx: broadcast::Sender<UdpFlowPacket>)
+where
+    S: tokio::io::AsyncRead + Send + Sync + Unpin + 'static,
+{
+    tokio::spawn(async move {
+        let flow_io = TrojanUdpFlowIo;
+        while let Ok(packet) = flow_io.read_flow_packet(&mut recv_stream).await {
+            if recv_tx.send(packet).is_err() {
+                break;
+            }
+        }
+    });
+}
+
+#[cfg(feature = "tokio")]
+struct ReadOnlySocket<S>(ReadHalf<S>);
+
+#[cfg(feature = "tokio")]
+impl<S> AsyncSocket for ReadOnlySocket<S>
+where
+    S: tokio::io::AsyncRead + Send + Sync + Unpin,
+{
+    type Error = io::Error;
+
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        self.0.read(buf).await
+    }
+
+    async fn write_all(&mut self, _buf: &[u8]) -> Result<(), Self::Error> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "read-only socket cannot write",
+        ))
+    }
+
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+#[cfg(feature = "tokio")]
+struct WriteOnlySocket<S>(WriteHalf<S>);
+
+#[cfg(feature = "tokio")]
+impl<S> AsyncSocket for WriteOnlySocket<S>
+where
+    S: tokio::io::AsyncWrite + Send + Sync + Unpin,
+{
+    type Error = io::Error;
+
+    async fn read(&mut self, _buf: &mut [u8]) -> Result<usize, Self::Error> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "write-only socket cannot read",
+        ))
+    }
+
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        self.0.write_all(buf).await?;
+        self.0.flush().await
+    }
+
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        self.0.shutdown().await
     }
 }
 

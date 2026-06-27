@@ -50,6 +50,7 @@ trojan = [
     "dep:ring",
     "dep:trojan",
     "trojan/crypto",
+    "trojan/tokio",
     "dep:tokio-rustls",
 ]
 vmess = [

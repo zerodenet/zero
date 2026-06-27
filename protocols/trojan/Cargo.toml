@@ -11,10 +11,12 @@ homepage.workspace = true
 [features]
 default = []
 crypto = ["dep:ring", "dep:sha2"]
+tokio = ["dep:tokio"]
 
 [dependencies]
 ring = { version = "0.17", optional = true }
 sha2 = { version = "0.10", optional = true }
+tokio = { workspace = true, optional = true }
 zero-core = { path = "../../crates/core" }
 zero-traits = { path = "../../crates/traits" }
 
