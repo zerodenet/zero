@@ -6,8 +6,7 @@ use super::{establish, TrojanChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    spawn_response_bridge, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
-    ManagedUdpFlowResume,
+    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -37,7 +36,7 @@ impl TrojanChainManager {
             .upstreams
             .get(resume, endpoint.server, endpoint.port, session_id)
         {
-            spawn_trojan_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
+            entry.spawn_response_bridge(ctx.chain_tasks, session_id);
             let _ = entry
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
                 .await;
@@ -63,7 +62,7 @@ impl TrojanChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        spawn_trojan_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
+        entry.spawn_response_bridge(ctx.chain_tasks, session_id);
         self.upstreams.insert(
             resume,
             endpoint.server,
@@ -126,7 +125,7 @@ impl TrojanChainManager {
             upstream: Some((request.server.to_owned(), request.port)),
         })?;
 
-        spawn_trojan_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
+        entry.spawn_response_bridge(ctx.chain_tasks, session_id);
         self.upstreams.insert(
             request.resume,
             request.server,
@@ -275,18 +274,4 @@ fn managed_mismatch(
         error: EngineError::Io(std::io::Error::other(message)),
         upstream: Some((server.to_string(), port)),
     }
-}
-
-fn spawn_trojan_response_bridge(
-    chain_tasks: &mut tokio::task::JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
-    response_rx: trojan::TrojanUdpFlowResponseReceiver,
-    session_id: u64,
-) {
-    spawn_response_bridge(
-        chain_tasks,
-        response_rx,
-        session_id,
-        "trojan upstream closed",
-        |packet| (packet.target, packet.port, packet.payload),
-    );
 }

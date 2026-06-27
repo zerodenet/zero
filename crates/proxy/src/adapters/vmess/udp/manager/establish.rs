@@ -4,8 +4,10 @@ use zero_platform_tokio::TransportConnector;
 
 use super::model::{VmessUdpUpstream, VmessUdpUpstreamRequest};
 use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
-use crate::runtime::udp_flow::managed::ManagedStreamUdpConnection;
+use crate::runtime::udp_flow::managed::{spawn_tuple_response_bridge, ManagedStreamUdpConnection};
+use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::transport::TcpRelayStream;
+use std::sync::Arc;
 
 #[async_trait::async_trait]
 impl ManagedStreamUdpConnection for vmess::VmessUdpFlowConnection {
@@ -20,10 +22,17 @@ impl ManagedStreamUdpConnection for vmess::VmessUdpFlowConnection {
             .map_err(EngineError::from)
     }
 
-    fn subscribe_responses(
+    fn spawn_response_bridge(
         &self,
-    ) -> tokio::sync::broadcast::Receiver<(zero_core::Address, u16, Vec<u8>)> {
-        vmess::VmessUdpFlowConnection::subscribe_responses(self)
+        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+        session_id: u64,
+    ) {
+        spawn_tuple_response_bridge(
+            chain_tasks,
+            vmess::VmessUdpFlowConnection::subscribe_responses(self),
+            session_id,
+            "vmess upstream closed",
+        );
     }
 }
 
@@ -40,7 +49,7 @@ pub(super) async fn over_stream(
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
     Ok(VmessUdpUpstream {
         session_id: session.id,
-        connection: Box::new(established.into_connection()),
+        connection: Arc::new(established.into_connection()),
     })
 }
 
@@ -75,7 +84,7 @@ pub(super) async fn direct(
             .record_session_outbound_tx(request.session.id, established.initial_packet_len as u64);
         return Ok(VmessUdpUpstream {
             session_id: request.session.id,
-            connection: Box::new(established.into_connection()),
+            connection: Arc::new(established.into_connection()),
         });
     }
 

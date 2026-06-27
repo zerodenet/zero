@@ -1,7 +1,6 @@
 use std::any::Any;
 use std::sync::Arc;
 
-use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use zero_core::Address;
 
@@ -27,14 +26,14 @@ pub(crate) trait ManagedStreamUdpConnection: Send + Sync {
     async fn send(&self, target: &Address, port: u16, payload: &[u8])
         -> Result<usize, EngineError>;
 
-    fn subscribe_responses(&self) -> broadcast::Receiver<(Address, u16, Vec<u8>)>;
+    fn spawn_response_bridge(&self, chain_tasks: &mut JoinSet<ChainTask>, session_id: u64);
 }
 
-pub(crate) type BoxedManagedStreamUdpConnection = Box<dyn ManagedStreamUdpConnection>;
+pub(crate) type BoxedManagedStreamUdpConnection = Arc<dyn ManagedStreamUdpConnection>;
 
 pub(crate) fn spawn_response_bridge<T, F>(
     chain_tasks: &mut JoinSet<ChainTask>,
-    mut response_rx: broadcast::Receiver<T>,
+    mut response_rx: tokio::sync::broadcast::Receiver<T>,
     session_id: u64,
     closed_message: &'static str,
     mut into_packet: F,
@@ -54,7 +53,7 @@ pub(crate) fn spawn_response_bridge<T, F>(
 
 pub(crate) fn spawn_tuple_response_bridge(
     chain_tasks: &mut JoinSet<ChainTask>,
-    response_rx: broadcast::Receiver<(Address, u16, Vec<u8>)>,
+    response_rx: tokio::sync::broadcast::Receiver<(Address, u16, Vec<u8>)>,
     session_id: u64,
     closed_message: &'static str,
 ) {

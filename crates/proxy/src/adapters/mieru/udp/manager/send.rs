@@ -5,8 +5,7 @@ use super::{establish, MieruChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    spawn_tuple_response_bridge, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
-    ManagedUdpFlowResume,
+    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -37,12 +36,7 @@ impl MieruChainManager {
             .upstreams
             .get(resume, endpoint.server, endpoint.port, session_id)
         {
-            spawn_tuple_response_bridge(
-                ctx.chain_tasks,
-                entry.subscribe_responses(),
-                session_id,
-                "mieru upstream closed",
-            );
+            entry.spawn_response_bridge(ctx.chain_tasks, session_id);
             entry
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
                 .await
@@ -75,12 +69,7 @@ impl MieruChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        spawn_tuple_response_bridge(
-            ctx.chain_tasks,
-            entry.subscribe_responses(),
-            session_id,
-            "mieru upstream closed",
-        );
+        entry.spawn_response_bridge(ctx.chain_tasks, session_id);
         self.upstreams.insert(
             resume,
             endpoint.server,
@@ -142,12 +131,7 @@ impl MieruChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        spawn_tuple_response_bridge(
-            ctx.chain_tasks,
-            entry.subscribe_responses(),
-            session_id,
-            "mieru upstream closed",
-        );
+        entry.spawn_response_bridge(ctx.chain_tasks, session_id);
         self.upstreams.insert(
             resume,
             endpoint.server,

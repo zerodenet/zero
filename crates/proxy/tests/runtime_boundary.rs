@@ -5966,13 +5966,21 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
     let trojan_manager = read("src/adapters/trojan/udp/manager.rs");
     let trojan_manager_send = read("src/adapters/trojan/udp/manager/send.rs");
     assert!(
-        mieru_manager.contains("mieru::MieruUdpFlowSessions")
-            && trojan_manager.contains("trojan::TrojanUdpFlowSessions")
+        mieru_manager.contains("mieru::MieruUdpFlowStore")
+            && trojan_manager.contains("trojan::TrojanUdpFlowStore")
+            && mieru_manager.contains("BoxedManagedStreamUdpConnection")
+            && trojan_manager.contains("BoxedManagedStreamUdpConnection")
+            && !mieru_manager.contains("mieru::MieruUdpFlowSessions")
+            && !trojan_manager.contains("trojan::TrojanUdpFlowSessions")
+            && !mieru_manager.contains("mieru::MieruUdpFlowConnection")
+            && !trojan_manager.contains("trojan::TrojanUdpFlowConnection")
             && !mieru_manager.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>")
             && !trojan_manager.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>")
+            && !mieru_manager.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowConnection>")
+            && !trojan_manager.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowConnection>")
             && !mieru_manager.contains("HashMap<mieru::MieruUdpCacheKey")
             && !trojan_manager.contains("HashMap<trojan::TrojanUdpCacheKey"),
-        "stream UDP managers should store protocol-owned session caches without adapter-visible store/session generics or cache keys"
+        "stream UDP managers should reuse protocol cache-key stores while storing neutral proxy connection capabilities"
     );
     assert!(
         !mieru_manager_send.contains("MieruUdpCacheKey::relay")
@@ -6870,6 +6878,7 @@ fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
 fn trojan_udp_response_bridge_lives_outside_manager() {
     let manager = read("src/adapters/trojan/udp/manager.rs");
     let send = read("src/adapters/trojan/udp/manager/send.rs");
+    let establish = read("src/adapters/trojan/udp/manager/establish.rs");
     let managed = read("src/runtime/udp_flow/managed/mod.rs");
     let bridge = manifest_dir().join("src/adapters/trojan/udp/manager/bridge.rs");
 
@@ -6886,11 +6895,14 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
     }
     assert!(
         !bridge.exists()
-            && send.contains("spawn_trojan_response_bridge")
-            && send.contains("spawn_response_bridge")
+            && send.contains(".spawn_response_bridge(")
+            && !send.contains("spawn_trojan_response_bridge")
+            && !send.contains("spawn_response_bridge(\n")
+            && establish.contains("impl ManagedStreamUdpConnection for trojan::TrojanUdpFlowConnection")
+            && establish.contains("spawn_response_bridge")
             && managed.contains("pub(crate) fn spawn_response_bridge<T, F>")
             && managed.contains("FnMut(T) -> (Address, u16, Vec<u8>)"),
-        "Trojan UDP response bridge should use generic managed UDP response glue, not trojan_manager/bridge.rs"
+        "Trojan UDP response bridge should hang off the neutral stream connection bridge, not send orchestration"
     );
 }
 
@@ -7414,6 +7426,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
 fn mieru_udp_response_bridge_lives_outside_manager() {
     let manager = read("src/adapters/mieru/udp/manager.rs");
     let send = read("src/adapters/mieru/udp/manager/send.rs");
+    let establish = read("src/adapters/mieru/udp/manager/establish.rs");
     let managed = read("src/runtime/udp_flow/managed/mod.rs");
     let bridge = manifest_dir().join("src/adapters/mieru/udp/manager/bridge.rs");
 
@@ -7431,10 +7444,13 @@ fn mieru_udp_response_bridge_lives_outside_manager() {
     }
     assert!(
         !bridge.exists()
-            && send.contains("spawn_tuple_response_bridge")
+            && send.contains(".spawn_response_bridge(")
+            && !send.contains("spawn_tuple_response_bridge")
+            && establish.contains("impl ManagedStreamUdpConnection for mieru::MieruUdpFlowConnection")
+            && establish.contains("spawn_tuple_response_bridge")
             && managed.contains("pub(crate) fn spawn_tuple_response_bridge")
             && managed.contains("broadcast::Receiver<(Address, u16, Vec<u8>)>"),
-        "Mieru UDP response bridge should use generic managed UDP response glue, not mieru_manager/bridge.rs"
+        "Mieru UDP response bridge should hang off the neutral stream connection bridge, not send orchestration"
     );
 }
 
@@ -7698,7 +7714,8 @@ fn trojan_udp_send_orchestration_lives_outside_manager() {
     assert!(
         !send_source.contains(".sender")
             && !send_source.contains(".responses")
-            && send_source.contains("subscribe_responses()")
+            && send_source.contains(".spawn_response_bridge(")
+            && !send_source.contains("subscribe_responses()")
             && send_source.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
             && !send_source.contains("UdpFlowPacket::from_parts")
             && !send_source.contains(".send_tx")

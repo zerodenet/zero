@@ -1,7 +1,6 @@
 use zero_core::Address;
 
 use super::VlessUdpOutboundManager;
-use crate::runtime::udp_flow::managed::spawn_tuple_response_bridge;
 
 impl VlessUdpOutboundManager {
     pub(super) fn spawn_bridge(
@@ -12,12 +11,9 @@ impl VlessUdpOutboundManager {
         session_id: u64,
     ) {
         if let Some(upstream) = self.upstreams.get(&(target.clone(), port)) {
-            spawn_tuple_response_bridge(
-                chain_tasks,
-                upstream.connection.subscribe_responses(),
-                session_id,
-                "vless upstream closed",
-            );
+            upstream
+                .connection
+                .spawn_response_bridge(chain_tasks, session_id);
         }
     }
 }
