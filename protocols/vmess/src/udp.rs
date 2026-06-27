@@ -418,6 +418,27 @@ impl VmessUdpFlowSession {
     }
 }
 
+#[derive(Clone)]
+pub struct VmessUdpFlowConnection {
+    session: VmessUdpFlowSession,
+}
+
+impl VmessUdpFlowConnection {
+    pub fn new(handle: VmessUdpFlowHandle) -> Self {
+        Self {
+            session: VmessUdpFlowSession::new(handle),
+        }
+    }
+
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        self.session.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> VmessUdpFlowResponseReceiver {
+        self.session.subscribe_responses()
+    }
+}
+
 impl VmessUdpFlowSender {
     pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
         let packet = zero_core::UdpFlowPacket::from_parts(target, port, payload);

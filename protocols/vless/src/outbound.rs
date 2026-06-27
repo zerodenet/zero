@@ -390,6 +390,34 @@ impl VlessUdpFlowSession {
 }
 
 #[cfg(feature = "reality")]
+#[derive(Clone)]
+pub struct VlessUdpFlowConnection {
+    session: VlessUdpFlowSession,
+}
+
+#[cfg(feature = "reality")]
+impl VlessUdpFlowConnection {
+    pub fn new(handle: VlessUdpFlowHandle) -> Self {
+        Self {
+            session: VlessUdpFlowSession::new(handle),
+        }
+    }
+
+    pub async fn send(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.session.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> VlessUdpFlowResponseReceiver {
+        self.session.subscribe_responses()
+    }
+}
+
+#[cfg(feature = "reality")]
 impl VlessUdpFlowSender {
     pub async fn send(
         &self,

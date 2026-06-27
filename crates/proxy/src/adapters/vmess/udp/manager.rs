@@ -23,7 +23,7 @@ use model::{VmessUdpRelayFlowStart, VmessUdpStartFlow, VmessUdpUpstream, VmessUd
 fn upstream_from_stream(session_id: u64, flow: vmess::VmessUdpFlowHandle) -> VmessUdpUpstream {
     VmessUdpUpstream {
         session_id,
-        session: vmess::VmessUdpFlowSession::new(flow),
+        connection: vmess::VmessUdpFlowConnection::new(flow),
     }
 }
 
@@ -185,7 +185,7 @@ impl VmessUdpOutboundManager {
         };
 
         proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
-        let packet_len = upstream.session.send(target, port, payload).await? as u64;
+        let packet_len = upstream.connection.send(target, port, payload).await? as u64;
         proxy.record_session_outbound_tx(upstream.session_id, packet_len);
         self.spawn_bridge(chain_tasks, target.clone(), port, upstream.session_id);
         Ok(Some(upstream.session_id))
@@ -203,7 +203,7 @@ impl VmessUdpOutboundManager {
         session_id: u64,
     ) {
         if let Some(upstream) = self.upstreams.get(&(target.clone(), port)) {
-            let mut recv_rx = upstream.session.subscribe_responses();
+            let mut recv_rx = upstream.connection.subscribe_responses();
             chain_tasks.spawn(async move {
                 let packet = recv_rx
                     .recv()
@@ -226,7 +226,7 @@ impl VmessUdpOutboundManager {
                 request.initial_payload.len() as u64,
             );
             let packet_len = upstream
-                .session
+                .connection
                 .send(&request.target, request.port, request.initial_payload)
                 .await? as u64;
             request

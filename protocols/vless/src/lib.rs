@@ -44,7 +44,8 @@ pub use outbound::VlessFlowTcpTunnelTarget;
 pub use outbound::{
     establish_udp_flow, establish_udp_flow_with_initial_packet, spawn_udp_flow,
     VlessEstablishedUdpFlow, VlessEstablishedUdpFlowHandle, VlessInitialUdpFlowPacket,
-    VlessUdpFlowHandle, VlessUdpFlowResponse, VlessUdpFlowResponseReceiver, VlessUdpFlowSession,
+    VlessUdpFlowConnection, VlessUdpFlowHandle, VlessUdpFlowResponse, VlessUdpFlowResponseReceiver,
+    VlessUdpFlowSession,
 };
 pub use outbound::{
     establish_udp_flow_stream, establish_udp_packet_tunnel, parse_udp_identity, VlessOutbound,

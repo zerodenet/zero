@@ -7,7 +7,7 @@ use crate::runtime::Proxy;
 #[derive(Clone)]
 pub(super) struct VlessUdpUpstream {
     pub(super) session_id: u64,
-    pub(super) session: vless::VlessUdpFlowSession,
+    pub(super) connection: vless::VlessUdpFlowConnection,
 }
 
 pub(crate) struct VlessUdpStartFlow<'a> {
