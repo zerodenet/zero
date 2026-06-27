@@ -8,7 +8,6 @@ pub(crate) mod socks5_udp;
 pub(crate) mod socks5_udp_associate;
 pub(crate) mod udp;
 pub(crate) mod vless_mux_pool;
-pub(crate) mod vless_udp;
 
 #[cfg(feature = "vmess")]
 pub(crate) mod vmess_mux_pool;

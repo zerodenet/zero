@@ -1,7 +1,7 @@
-//! VLESS UDP types used by both inbound and outbound.
+//! VLESS UDP outbound manager.
 //!
-//! Moved from outbound/vless.rs so inbound can import them without
-//! depending on the outbound module.
+//! Protocol packet framing stays in `protocols/vless`; this module owns proxy
+//! transport opening, cached upstream streams, metering, and response bridges.
 
 pub(crate) mod model;
 

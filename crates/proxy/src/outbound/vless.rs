@@ -1,9 +1,8 @@
-//! VLESS outbound -?TCP connect and UDP types.
+//! VLESS outbound - TCP connect helpers.
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
-//! so the runtime dispatches via the `ProtocolAdapter` trait. The VLESS UDP
-//! types and manager live in `crate::protocol_runtime::vless_udp` so that inbound
-//! handlers can import them without depending on this module.
+//! so the runtime dispatches via the `ProtocolAdapter` trait. UDP flow manager
+//! glue lives under the VLESS adapter UDP module.
 
 #[cfg(feature = "vless")]
 use zero_config::{

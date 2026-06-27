@@ -4,13 +4,15 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::vless_udp::{
-    model::{VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow},
-    VlessUdpOutboundManager,
-};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
+use manager::{
+    model::{VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow},
+    VlessUdpOutboundManager,
+};
+
+mod manager;
 
 fn parse_vless_udp_identity(
     id: &str,
