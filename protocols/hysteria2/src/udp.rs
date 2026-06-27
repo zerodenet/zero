@@ -1,6 +1,8 @@
 // Hysteria2 UDP datagram — udp.rs
 
 use alloc::borrow::ToOwned;
+#[cfg(feature = "tokio")]
+use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -32,6 +34,90 @@ pub struct Hysteria2UdpPacket {
     pub target: Address,
     pub port: u16,
     pub payload: Vec<u8>,
+}
+
+/// Protocol-owned decoded inbound UDP request.
+pub struct Hysteria2InboundUdpRequest {
+    session_id: u16,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl Hysteria2InboundUdpRequest {
+    fn from_packet(packet: Hysteria2UdpPacket) -> Self {
+        Self {
+            session_id: packet.session_id,
+            target: packet.target,
+            port: packet.port,
+            payload: packet.payload,
+        }
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+}
+
+/// Stateful inbound UDP bridge for Hysteria2 datagram sessions.
+#[cfg(feature = "tokio")]
+pub struct Hysteria2InboundUdpSession {
+    h2_sessions_by_proxy_session: BTreeMap<u64, u16>,
+}
+
+#[cfg(feature = "tokio")]
+impl Hysteria2InboundUdpSession {
+    pub fn new() -> Self {
+        Self {
+            h2_sessions_by_proxy_session: BTreeMap::new(),
+        }
+    }
+
+    pub fn decode_request(&self, data: &[u8]) -> Result<Hysteria2InboundUdpRequest, Error> {
+        Hysteria2InboundUdpCodec
+            .decode_datagram(data)
+            .map(Hysteria2InboundUdpRequest::from_packet)
+    }
+
+    pub fn record_proxy_session(
+        &mut self,
+        proxy_session_id: u64,
+        request: &Hysteria2InboundUdpRequest,
+    ) {
+        self.h2_sessions_by_proxy_session
+            .insert(proxy_session_id, request.session_id);
+    }
+
+    pub fn send_response(
+        &self,
+        conn: &quinn::Connection,
+        proxy_session_id: u64,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        let Some(&h2_session_id) = self.h2_sessions_by_proxy_session.get(&proxy_session_id) else {
+            return Ok(None);
+        };
+        Hysteria2InboundUdpCodec
+            .send_datagram(conn, h2_session_id, target, port, payload)
+            .map(Some)
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl Default for Hysteria2InboundUdpSession {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Build a Hysteria2 UDP datagram.

@@ -1048,15 +1048,26 @@ fn hysteria2_inbound_uses_adapter_request_model() {
         );
     }
     assert!(
-        inbound.contains("hysteria2::Hysteria2InboundUdpCodec")
-            && inbound.contains("Hysteria2InboundUdpCodec.send_datagram")
+        inbound.contains("hysteria2::Hysteria2InboundUdpSession::new")
+            && inbound.contains("udp_session.decode_request")
+            && inbound.contains("udp_session.record_proxy_session")
+            && inbound.contains("udp_session.send_response")
+            && !inbound.contains("Hysteria2InboundUdpCodec")
+            && !inbound.contains("decode_datagram")
+            && !inbound.contains("send_datagram")
+            && !inbound.contains("h2_flows")
             && !inbound.contains("Hysteria2InboundUdpCodec.encode_datagram")
             && !inbound.contains("conn.send_datagram")
             && protocol_udp.contains("struct Hysteria2InboundUdpCodec")
+            && protocol_udp.contains("struct Hysteria2InboundUdpSession")
+            && protocol_udp.contains("struct Hysteria2InboundUdpRequest")
+            && protocol_udp.contains("fn decode_request")
+            && protocol_udp.contains("fn record_proxy_session")
+            && protocol_udp.contains("fn send_response")
             && protocol_udp.contains("fn decode_datagram")
             && protocol_udp.contains("fn encode_datagram")
             && protocol_udp.contains("fn send_datagram"),
-        "Hysteria2 inbound should delegate UDP datagram framing through the protocol-owned inbound codec"
+        "Hysteria2 inbound should delegate UDP datagram state and framing through the protocol-owned inbound UDP session"
     );
 }
 

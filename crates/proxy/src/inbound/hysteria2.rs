@@ -354,7 +354,7 @@ impl Proxy {
         proxy: Proxy,
     ) -> Result<(), EngineError> {
         let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(&inbound_tag).await?;
-        let mut h2_flows: std::collections::HashMap<u64, u16> = std::collections::HashMap::new();
+        let mut udp_session = hysteria2::Hysteria2InboundUdpSession::new();
 
         let mut direct_buf = [0u8; 65536];
 
@@ -365,18 +365,18 @@ impl Proxy {
                 dg = conn.read_datagram() => {
                     match dg {
                         Ok(data) => {
-                            if let Ok(pkt) = hysteria2::Hysteria2InboundUdpCodec.decode_datagram(&data) {
+                            if let Ok(request) = udp_session.decode_request(&data) {
                                 let _ = UdpPipe::new(&proxy, &mut dispatch)
                                     .dispatch(UdpPipeInput {
-                                        target: pkt.target.clone(),
-                                        port: pkt.port,
-                                        payload: &pkt.payload,
+                                        target: request.target().clone(),
+                                        port: request.port(),
+                                        payload: request.payload(),
                                         protocol: ProtocolType::Hysteria2,
                                         auth: None,
                                         client_session_id: None,
                                     })
                                     .await.inspect(|sid| {
-                                    h2_flows.insert(*sid, pkt.session_id);
+                                    udp_session.record_proxy_session(*sid, &request);
                                 }).inspect_err(|e| {
                                     warn!(error = %e, "h2 udp dispatch failed");
                                 });
@@ -392,20 +392,18 @@ impl Proxy {
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                        if let Some(&h2_sid) = h2_flows.get(&sid) {
-                            let ip = zero_platform_tokio::socket_addr_to_ip(sender);
-                            let target = match ip {
-                                zero_traits::IpAddress::V4(b) => Address::Ipv4(b),
-                                zero_traits::IpAddress::V6(b) => Address::Ipv6(b),
-                            };
-                            let _ = hysteria2::Hysteria2InboundUdpCodec.send_datagram(
-                                &conn,
-                                h2_sid,
-                                &target,
-                                sender.port(),
-                                &direct_buf[..n],
-                            );
-                        }
+                        let ip = zero_platform_tokio::socket_addr_to_ip(sender);
+                        let target = match ip {
+                            zero_traits::IpAddress::V4(b) => Address::Ipv4(b),
+                            zero_traits::IpAddress::V6(b) => Address::Ipv6(b),
+                        };
+                        let _ = udp_session.send_response(
+                            &conn,
+                            sid,
+                            &target,
+                            sender.port(),
+                            &direct_buf[..n],
+                        );
                     }
                 }
 
@@ -413,15 +411,7 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             if let Some(sid) = session_id {
-                                if let Some(&h2_sid) = h2_flows.get(&sid) {
-                                    let _ = hysteria2::Hysteria2InboundUdpCodec.send_datagram(
-                                        &conn,
-                                        h2_sid,
-                                        &target,
-                                        port,
-                                        &payload,
-                                    );
-                                }
+                                let _ = udp_session.send_response(&conn, sid, &target, port, &payload);
                             }
                         }
                         Ok(Err(error)) => warn!(error = %error, "h2 chain response error"),
