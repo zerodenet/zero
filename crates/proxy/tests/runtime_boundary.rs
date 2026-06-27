@@ -3029,8 +3029,10 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && protocol.contains("fn spawn_udp_flow_task")
             && protocol.contains("broadcast::channel")
             && protocol.contains("tokio::spawn")
-            && protocol.contains("pub fn encode_udp_flow_initial_packet")
+            && !protocol.contains("pub fn encode_udp_flow_initial_packet")
             && protocol.contains("pub struct VmessUdpFlowIo")
+            && protocol.contains("impl VmessUdpFlowIo")
+            && protocol.contains("pub fn encode_packet")
             && protocol.contains("pub struct VmessUdpFlowPacket")
             && protocol.contains("pub fn encode_udp_flow_packet")
             && protocol.contains("pub fn decode_udp_flow_packet"),
@@ -3639,6 +3641,25 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             "VMess inbound UDP helper `{private_helper}` should stay private to protocols/vmess::udp and should not be re-exported"
         );
     }
+    for root_private_helper in [
+        "build_udp_packet",
+        "parse_udp_packet",
+        "encode_udp_response",
+        "encode_mux_udp_response",
+        "encode_udp_flow_packet",
+        "decode_udp_flow_packet",
+    ] {
+        assert!(
+            protocol_udp.contains(&format!("pub fn {root_private_helper}"))
+                && !protocol_lib.contains(root_private_helper),
+            "VMess low-level UDP helper `{root_private_helper}` should not be re-exported from protocols/vmess crate root"
+        );
+    }
+    assert!(
+        !protocol_udp.contains("fn encode_udp_flow_initial_packet")
+            && !protocol_lib.contains("encode_udp_flow_initial_packet"),
+        "obsolete VMess initial UDP flow packet helper should stay deleted instead of being re-exported"
+    );
 }
 
 #[test]

@@ -150,14 +150,6 @@ impl VmessUdpFlowPacket {
     }
 }
 
-pub fn encode_udp_flow_initial_packet(
-    target: &Address,
-    port: u16,
-    payload: &[u8],
-) -> Result<Vec<u8>, Error> {
-    VmessUdpFlowIo.encode_packet(target, port, payload)
-}
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VmessUdpFlowIo;
 
