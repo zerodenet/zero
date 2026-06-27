@@ -8437,6 +8437,7 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
     let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
+    let bridge_source = read("src/adapters/shadowsocks/udp/manager/bridge.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/shadowsocks_transport.rs"))
             .expect("read shadowsocks transport source");
@@ -8485,7 +8486,9 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && !manager.contains("shadowsocks::udp_flow_packet")
             && !manager.contains("UdpFlowPacket::from_parts")
             && manager.contains(".send_datagram(")
-            && model.contains("self.flow.send_datagram(target, port, payload)")
+            && !model.contains("ShadowsocksUdpSocketFlow")
+            && !model.contains("BridgeWaiters")
+            && bridge_source.contains("self.flow.send_datagram(target, port, payload)")
             && transport.contains("send_packet(&self, packet: UdpFlowPacket)")
             && transport.contains("pub async fn send_datagram(")
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
@@ -9029,6 +9032,8 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
 fn shadowsocks_udp_entry_cache_lives_outside_manager() {
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
     let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
+    let entry_source = read("src/adapters/shadowsocks/udp/manager/entry.rs");
+    let bridge_source = read("src/adapters/shadowsocks/udp/manager/bridge.rs");
     let entry = manifest_dir().join("src/adapters/shadowsocks/udp/manager/entry.rs");
 
     for forbidden in [
@@ -9052,11 +9057,19 @@ fn shadowsocks_udp_entry_cache_lives_outside_manager() {
             && !manager.contains(".flow.")
             && !manager.contains(".waiters")
             && !manager.contains("BridgeWaiters")
-            && model.contains("impl ManagedDatagramUdpConnection for SsUpstream")
-            && model.contains("super::bridge::spawn_response_bridge")
-            && model.contains("self.waiters.register")
-            && model.contains("self.flow.send_datagram"),
-        "Shadowsocks UDP manager should send through a neutral datagram connection while SsUpstream owns waiter/flow details"
+            && !model.contains("impl ManagedDatagramUdpConnection")
+            && !model.contains("SsUpstream")
+            && !model.contains("self.waiters.register")
+            && !model.contains("self.flow.send_datagram")
+            && entry_source.contains("bridge::establish_datagram_connection")
+            && !entry_source.contains("ShadowsocksUdpSocketFlow")
+            && !entry_source.contains("BridgeWaiters")
+            && bridge_source.contains("struct SsDatagramConnection")
+            && bridge_source.contains("impl ManagedDatagramUdpConnection for SsDatagramConnection")
+            && bridge_source.contains("spawn_response_bridge(chain_tasks, response_rx, session_id)")
+            && bridge_source.contains("self.waiters.register")
+            && bridge_source.contains("self.flow.send_datagram"),
+        "Shadowsocks UDP manager should send through a neutral datagram connection while bridge owns waiter/flow details"
     );
 }
 
