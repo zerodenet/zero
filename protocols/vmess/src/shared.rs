@@ -15,7 +15,7 @@ pub const AUTH_ID_LEN: usize = 16;
 pub const GCM_TAG_LEN: usize = 16;
 
 /// AEAD cipher variants for VMess header encryption.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VmessCipher {
     Aes128Gcm,
     Chacha20Poly1305,

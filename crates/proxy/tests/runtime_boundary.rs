@@ -3101,6 +3101,8 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
 fn vmess_mux_pool_model_lives_outside_runtime_root() {
     let root = read("src/adapters/vmess/mux_pool.rs");
     let model = read("src/adapters/vmess/mux_pool/model.rs");
+    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
+        .expect("read protocols/vmess/src/mux.rs");
     let old_root = manifest_dir().join("src/protocol_runtime/vmess_mux_pool.rs");
     let old_dir = manifest_dir().join("src/protocol_runtime/vmess_mux_pool");
 
@@ -3117,15 +3119,31 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         );
     }
 
+    for forbidden in ["struct VmessMuxPoolKey", "enum VmessMuxTransportKey"] {
+        assert!(
+            !model.contains(forbidden),
+            "VMess mux cache identity should live in protocols/vmess, not adapter model; found `{forbidden}`"
+        );
+    }
+
     for required in [
-        "struct VmessMuxPoolKey",
-        "enum VmessMuxTransportKey",
         "struct VmessMuxOpenRequest",
         "struct VmessMuxConnectionPool",
     ] {
         assert!(
             model.contains(required),
-            "VMess MUX pool model should live in adapters/vmess/mux_pool/model.rs; missing `{required}`"
+            "VMess MUX proxy I/O request model should live in adapters/vmess/mux_pool/model.rs; missing `{required}`"
+        );
+    }
+    for required in [
+        "struct VmessMuxPoolKey",
+        "enum VmessMuxTransportKey",
+        "struct VmessMuxIdentity",
+        "impl VmessMuxPoolKey",
+    ] {
+        assert!(
+            protocol_mux.contains(required),
+            "VMess MUX protocol cache identity should live in protocols/vmess/src/mux.rs; missing `{required}`"
         );
     }
     assert!(
@@ -3392,8 +3410,11 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
         "VMess mux pool should receive parsed cipher values from adapter-owned paths"
     );
     assert!(
-        model.contains("cipher_name: String") && model.contains("cipher: vmess::VmessCipher"),
-        "VMess mux pool request should carry cipher_name for keying and parsed VmessCipher for session setup"
+        model.contains("cipher_name: String")
+            && model.contains("cipher: vmess::VmessCipher")
+            && root.contains("vmess::VmessMuxPoolKey::from_parts")
+            && !model.contains("struct VmessMuxPoolKey"),
+        "VMess mux pool request should carry parsed identity to a protocol-owned key builder"
     );
     assert!(
         !tcp_adapter.contains("VmessCipher::from_name")

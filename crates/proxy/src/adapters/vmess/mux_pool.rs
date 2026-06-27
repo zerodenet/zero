@@ -11,7 +11,6 @@ use zero_platform_tokio::TransportConnector;
 use crate::transport::{MeteredStream, TcpRelayStream, VmessTransportConnector};
 
 pub(crate) use model::{VmessMuxConnectionPool, VmessMuxOpenRequest};
-use model::{VmessMuxPoolKey, VmessMuxTransportKey};
 
 impl std::fmt::Debug for VmessMuxConnectionPool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -51,13 +50,14 @@ impl VmessMuxConnectionPool {
         request: VmessMuxOpenRequest<'_>,
         network: Network,
     ) -> Result<TcpRelayStream, EngineError> {
-        let key = VmessMuxPoolKey {
-            server: request.server.clone(),
-            port: request.port,
-            id: request.id,
-            cipher_name: request.cipher_name.clone(),
-            transport: transport_key(request.tls, request.ws, request.grpc)?,
-        };
+        let key = vmess::VmessMuxPoolKey::from_parts(
+            request.server.clone(),
+            request.port,
+            request.id,
+            request.cipher_name.clone(),
+            request.cipher,
+            transport_key(request.tls, request.ws, request.grpc)?,
+        );
 
         let conn = self.get_or_create_conn(&key, &request).await?;
         Ok(TcpRelayStream::new(conn.open_stream(
@@ -69,7 +69,7 @@ impl VmessMuxConnectionPool {
 
     async fn get_or_create_conn(
         &self,
-        key: &VmessMuxPoolKey,
+        key: &vmess::VmessMuxPoolKey,
         request: &VmessMuxOpenRequest<'_>,
     ) -> Result<Arc<vmess::VmessMuxConn>, EngineError> {
         let cached = self.pool.lock().unwrap().get(key).cloned();
@@ -85,7 +85,7 @@ impl VmessMuxConnectionPool {
     }
 
     async fn create_connection(
-        key: &VmessMuxPoolKey,
+        key: &vmess::VmessMuxPoolKey,
         request: &VmessMuxOpenRequest<'_>,
     ) -> Result<vmess::VmessMuxConn, EngineError> {
         let socket = request
@@ -105,7 +105,7 @@ impl VmessMuxConnectionPool {
 
         let metered = MeteredStream::new(stream);
         let stream = TcpRelayStream::new(
-            vmess::establish_mux_outbound_stream(metered, &key.id, request.cipher).await?,
+            vmess::establish_mux_outbound_stream(metered, key.uuid(), key.cipher()).await?,
         );
 
         Ok(vmess::VmessMuxConn::new(stream, request.max_concurrency))
@@ -116,17 +116,17 @@ fn transport_key(
     tls: Option<&ClientTlsConfig>,
     ws: Option<&WebSocketConfig>,
     grpc: Option<&GrpcConfig>,
-) -> Result<VmessMuxTransportKey, EngineError> {
+) -> Result<vmess::VmessMuxTransportKey, EngineError> {
     match (grpc, ws, tls) {
-        (Some(grpc), None, tls) => Ok(VmessMuxTransportKey::Grpc {
+        (Some(grpc), None, tls) => Ok(vmess::VmessMuxTransportKey::Grpc {
             server_name: tls.and_then(|tls| tls.server_name.clone()),
             service_names: grpc.service_names.clone(),
         }),
-        (None, Some(ws), tls) => Ok(VmessMuxTransportKey::Ws {
+        (None, Some(ws), tls) => Ok(vmess::VmessMuxTransportKey::Ws {
             server_name: tls.and_then(|tls| tls.server_name.clone()),
             path: ws.path.clone(),
         }),
-        (None, None, tls) => Ok(VmessMuxTransportKey::RawTls {
+        (None, None, tls) => Ok(vmess::VmessMuxTransportKey::RawTls {
             server_name: tls.and_then(|tls| tls.server_name.clone()),
         }),
         _ => Err(EngineError::Io(std::io::Error::new(

@@ -9,6 +9,7 @@ use zero_core::{Address, Error, Network, Session};
 use zero_traits::AsyncSocket;
 
 use crate::outbound::VmessOutbound;
+use crate::shared::VmessCipher;
 use crate::shared::{parse_address_from_bytes, read_exact, write_address};
 use crate::stream::VmessAeadStream;
 
@@ -22,6 +23,66 @@ pub const MUX_STATUS_END: u8 = 0x03;
 pub const MUX_STATUS_KEEP_ALIVE: u8 = 0x04;
 pub const MUX_OPTION_DATA: u8 = 0x01;
 pub const MUX_OPTION_ERROR: u8 = 0x02;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct VmessMuxPoolKey {
+    pub server: String,
+    pub port: u16,
+    identity: VmessMuxIdentity,
+    pub transport: VmessMuxTransportKey,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct VmessMuxIdentity {
+    uuid: [u8; 16],
+    cipher_name: String,
+    cipher: VmessCipher,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum VmessMuxTransportKey {
+    RawTls {
+        server_name: Option<String>,
+    },
+    Ws {
+        server_name: Option<String>,
+        path: String,
+    },
+    Grpc {
+        server_name: Option<String>,
+        service_names: Vec<String>,
+    },
+}
+
+impl VmessMuxPoolKey {
+    pub fn from_parts(
+        server: String,
+        port: u16,
+        id: [u8; 16],
+        cipher_name: String,
+        cipher: VmessCipher,
+        transport: VmessMuxTransportKey,
+    ) -> Self {
+        Self {
+            server,
+            port,
+            identity: VmessMuxIdentity {
+                uuid: id,
+                cipher_name,
+                cipher,
+            },
+            transport,
+        }
+    }
+
+    pub fn uuid(&self) -> &[u8; 16] {
+        &self.identity.uuid
+    }
+
+    pub fn cipher(&self) -> VmessCipher {
+        self.identity.cipher
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MuxFrame {

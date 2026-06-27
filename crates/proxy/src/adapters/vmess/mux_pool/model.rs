@@ -6,30 +6,6 @@ use zero_core::Session;
 
 use crate::runtime::Proxy;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct VmessMuxPoolKey {
-    pub(super) server: String,
-    pub(super) port: u16,
-    pub(super) id: [u8; 16],
-    pub(super) cipher_name: String,
-    pub(super) transport: VmessMuxTransportKey,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) enum VmessMuxTransportKey {
-    RawTls {
-        server_name: Option<String>,
-    },
-    Ws {
-        server_name: Option<String>,
-        path: String,
-    },
-    Grpc {
-        server_name: Option<String>,
-        service_names: Vec<String>,
-    },
-}
-
 pub(crate) struct VmessMuxOpenRequest<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) session: &'a Session,
@@ -46,5 +22,5 @@ pub(crate) struct VmessMuxOpenRequest<'a> {
 
 #[derive(Clone)]
 pub(crate) struct VmessMuxConnectionPool {
-    pub(super) pool: Arc<Mutex<HashMap<VmessMuxPoolKey, Arc<vmess::VmessMuxConn>>>>,
+    pub(super) pool: Arc<Mutex<HashMap<vmess::VmessMuxPoolKey, Arc<vmess::VmessMuxConn>>>>,
 }
