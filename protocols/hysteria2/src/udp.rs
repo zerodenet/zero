@@ -298,7 +298,21 @@ impl<'a> Hysteria2UdpPacketPathConfig<'a> {
     }
 
     pub fn cache_key(&self) -> String {
-        self.packet_path().cache_key()
+        udp_cache_key(
+            self.tag,
+            self.server,
+            self.port,
+            self.password,
+            self.client_fingerprint,
+        )
+    }
+
+    pub fn packet_path_cache_key(&self) -> String {
+        self.cache_key()
+    }
+
+    pub fn packet_path_codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        self.codec()
     }
 
     pub fn packet_path(&self) -> Hysteria2UdpPacketPath<'a> {

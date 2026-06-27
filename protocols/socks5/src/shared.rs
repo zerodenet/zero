@@ -329,7 +329,15 @@ impl<'a> Socks5UdpPacketPathConfig<'a> {
     }
 
     pub fn cache_key(&self) -> String {
-        self.packet_path().cache_key()
+        udp_cache_key(self.tag, self.server, self.port, self.username)
+    }
+
+    pub fn packet_path_cache_key(&self) -> String {
+        self.cache_key()
+    }
+
+    pub fn packet_path_association_config(&self) -> Socks5UdpAssociationConfig<'a> {
+        self.association_config()
     }
 }
 

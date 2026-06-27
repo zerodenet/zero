@@ -21,10 +21,10 @@ pub(super) fn carrier_descriptor(
     else {
         return None;
     };
-    let packet_path = packet_path_config(tag, server, *port, password, *client_fingerprint);
+    let config = packet_path_config(tag, server, *port, password, *client_fingerprint);
     Some(
         crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
-            packet_path.cache_key(),
+            config.packet_path_cache_key(),
             server,
             *port,
         ),
@@ -45,11 +45,15 @@ pub(super) async fn build(
     else {
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
-    let packet_path = packet_path_config("", server, *port, password, *client_fingerprint);
-    let codec = Arc::new(packet_path.codec());
+    let config = packet_path_config("", server, *port, password, *client_fingerprint);
+    let codec = Arc::new(config.packet_path_codec());
     let conn = Arc::new(
-        crate::outbound::hysteria2::open_udp_packet_path_connection(server, *port, packet_path)
-            .await?,
+        crate::outbound::hysteria2::open_udp_packet_path_connection(
+            server,
+            *port,
+            config.connector_profile(),
+        )
+        .await?,
     );
     crate::runtime::udp_flow::packet_path_chain::carriers::quic_datagram_carrier::build(conn, codec)
         .await
@@ -61,7 +65,6 @@ fn packet_path_config<'a>(
     port: u16,
     password: &'a str,
     client_fingerprint: Option<&'a str>,
-) -> hysteria2::Hysteria2UdpPacketPath<'a> {
+) -> hysteria2::Hysteria2UdpPacketPathConfig<'a> {
     hysteria2::Hysteria2UdpPacketPathConfig::new(tag, server, port, password, client_fingerprint)
-        .packet_path()
 }

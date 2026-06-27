@@ -45,10 +45,10 @@ pub(super) fn carrier_descriptor(
     else {
         return None;
     };
-    let packet_path = packet_path_config(tag, server, *port, *username, *password);
+    let config = packet_path_config(tag, server, *port, *username, *password);
     Some(
         crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
-            packet_path.cache_key(),
+            config.packet_path_cache_key(),
             server,
             *port,
         ),
@@ -76,7 +76,8 @@ pub(super) async fn build(
         tag,
         server,
         *port,
-        packet_path_config(tag, server, *port, *username, *password),
+        packet_path_config(tag, server, *port, *username, *password)
+            .packet_path_association_config(),
     )
     .await
 }
@@ -86,7 +87,7 @@ pub(crate) async fn build_socks5_packet_path(
     tag: &str,
     server: &str,
     port: u16,
-    packet_path: socks5::Socks5UdpPacketPath<'_>,
+    config: socks5::Socks5UdpAssociationConfig<'_>,
 ) -> Result<std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
 {
     let association =
@@ -95,7 +96,7 @@ pub(crate) async fn build_socks5_packet_path(
             outbound_tag: tag,
             server,
             port,
-            config: packet_path.association_config(),
+            config,
             session_id: 0,
         })
         .await?;
@@ -108,6 +109,6 @@ fn packet_path_config<'a>(
     port: u16,
     username: Option<&'a str>,
     password: Option<&'a str>,
-) -> socks5::Socks5UdpPacketPath<'a> {
-    socks5::Socks5UdpPacketPathConfig::new(tag, server, port, username, password).packet_path()
+) -> socks5::Socks5UdpPacketPathConfig<'a> {
+    socks5::Socks5UdpPacketPathConfig::new(tag, server, port, username, password)
 }

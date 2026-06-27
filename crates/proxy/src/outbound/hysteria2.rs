@@ -111,9 +111,8 @@ impl Hysteria2Connector {
 pub(crate) async fn open_udp_packet_path_connection(
     server: &str,
     port: u16,
-    packet_path: hysteria2::Hysteria2UdpPacketPath<'_>,
+    connector_profile: hysteria2::Hysteria2UdpConnectorProfile,
 ) -> Result<quinn::Connection, EngineError> {
-    let connector_profile = packet_path.connector_profile();
     Hysteria2Connector::from_udp_profile(server, port, connector_profile.clone())
         .connect_raw_with_udp_profile(&connector_profile)
         .await
