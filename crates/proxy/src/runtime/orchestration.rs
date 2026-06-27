@@ -34,6 +34,7 @@ pub(crate) enum UdpPathCategory {
     Relay,
     StreamPacket,
     Datagram,
+    Cached,
     PacketPathDatagram,
 }
 

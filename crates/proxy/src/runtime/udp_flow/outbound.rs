@@ -38,6 +38,11 @@ pub(crate) enum UdpFlowOutbound {
         port: u16,
         managed: ManagedUdpFlowRef,
     },
+    Cached {
+        tag: String,
+        server: String,
+        port: u16,
+    },
     PacketPathDatagram {
         tag: String,
         server: String,
@@ -68,6 +73,7 @@ impl UdpFlowOutbound {
             | Self::Relay { tag, .. }
             | Self::Datagram { tag, .. }
             | Self::StreamPacket { tag, .. }
+            | Self::Cached { tag, .. }
             | Self::PacketPathDatagram { tag, .. } => tag,
         }
     }
@@ -79,6 +85,7 @@ impl UdpFlowOutbound {
             Self::Relay { .. } => UdpPathCategory::Relay,
             Self::Datagram { .. } => UdpPathCategory::Datagram,
             Self::StreamPacket { .. } => UdpPathCategory::StreamPacket,
+            Self::Cached { .. } => UdpPathCategory::Cached,
             Self::PacketPathDatagram { .. } => UdpPathCategory::PacketPathDatagram,
         }
     }
@@ -89,6 +96,7 @@ impl UdpFlowOutbound {
             Self::Relay { .. }
             | Self::Datagram { .. }
             | Self::StreamPacket { .. }
+            | Self::Cached { .. }
             | Self::PacketPathDatagram { .. } => None,
         }
     }
@@ -99,6 +107,7 @@ impl UdpFlowOutbound {
             Self::Direct { .. }
             | Self::Datagram { .. }
             | Self::StreamPacket { .. }
+            | Self::Cached { .. }
             | Self::PacketPathDatagram { .. } => None,
         }
     }
@@ -106,7 +115,10 @@ impl UdpFlowOutbound {
     pub(crate) fn managed_flow(&self) -> Option<ManagedUdpFlowRef> {
         match self {
             Self::Datagram { managed, .. } | Self::StreamPacket { managed, .. } => Some(*managed),
-            Self::Direct { .. } | Self::Relay { .. } | Self::PacketPathDatagram { .. } => None,
+            Self::Direct { .. }
+            | Self::Relay { .. }
+            | Self::Cached { .. }
+            | Self::PacketPathDatagram { .. } => None,
         }
     }
 
@@ -118,7 +130,8 @@ impl UdpFlowOutbound {
             Self::Direct { .. }
             | Self::Relay { .. }
             | Self::Datagram { .. }
-            | Self::StreamPacket { .. } => None,
+            | Self::StreamPacket { .. }
+            | Self::Cached { .. } => None,
         }
     }
 
@@ -128,6 +141,7 @@ impl UdpFlowOutbound {
             Self::Relay { server, port, .. }
             | Self::Datagram { server, port, .. }
             | Self::StreamPacket { server, port, .. }
+            | Self::Cached { server, port, .. }
             | Self::PacketPathDatagram { server, port, .. } => Some(UdpFlowUpstream {
                 server,
                 port: *port,
@@ -148,6 +162,7 @@ impl UdpFlowOutbound {
             Self::Relay { tag, .. }
             | Self::Datagram { tag, .. }
             | Self::StreamPacket { tag, .. }
+            | Self::Cached { tag, .. }
             | Self::PacketPathDatagram { tag, .. } => Some(tag),
         }
     }
@@ -158,6 +173,7 @@ impl UdpFlowOutbound {
             Self::Relay { server, port, .. }
             | Self::Datagram { server, port, .. }
             | Self::StreamPacket { server, port, .. }
+            | Self::Cached { server, port, .. }
             | Self::PacketPathDatagram { server, port, .. } => Some((server.clone(), *port)),
         }
     }
@@ -168,6 +184,7 @@ impl UdpFlowOutbound {
             Self::Relay { .. }
             | Self::Datagram { .. }
             | Self::StreamPacket { .. }
+            | Self::Cached { .. }
             | Self::PacketPathDatagram { .. } => SessionOutcome::ChainedRelayed,
         }
     }

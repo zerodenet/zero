@@ -21,20 +21,6 @@ impl UdpDispatch {
         proxy: &Proxy,
         input: UdpPipeInput<'_>,
     ) -> Result<u64, EngineError> {
-        if let Some(session_id) = self
-            .protocol_state
-            .send_existing_cached_flow(
-                &mut self.chain_tasks,
-                proxy,
-                &input.target,
-                input.port,
-                input.payload,
-            )
-            .await?
-        {
-            return Ok(session_id);
-        }
-
         if let Some(flow) = self
             .flows
             .snapshot(&input.target, input.port, input.client_session_id)
@@ -102,13 +88,6 @@ impl UdpDispatch {
                     self.flows
                         .insert(session, session_handle, *outbound, input.client_session_id);
                     proxy.record_session_outbound_tx(session_id, tx_bytes);
-                    return Ok(session_id);
-                }
-                Ok(FlowStartResult::ManagedFlow { session_id, tag }) => {
-                    session.outbound_tag = Some(tag);
-                    proxy.set_session_outbound(&session);
-                    self.managed_flows.insert(session, session_handle);
-                    proxy.record_session_outbound_tx(session_id, input.payload.len() as u64);
                     return Ok(session_id);
                 }
                 Ok(FlowStartResult::Blocked { tag }) => {

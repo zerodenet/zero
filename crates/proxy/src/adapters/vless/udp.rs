@@ -8,6 +8,7 @@ use crate::protocol_runtime::udp::vless_flow::{
     self, VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream,
 };
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
 fn parse_vless_udp_identity(
@@ -53,7 +54,6 @@ impl VlessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let session_id = session.id;
         let tag_owned = (*tag).to_string();
         let identity =
             parse_vless_udp_identity(id, "udp_vless_parse_identity", Some((server, *port)))?;
@@ -85,9 +85,13 @@ impl VlessAdapter {
             upstream: error.upstream,
         })?;
 
-        Ok(FlowStartResult::ManagedFlow {
-            session_id,
-            tag: tag_owned,
+        Ok(FlowStartResult::Flow {
+            outbound: Box::new(UdpFlowOutbound::Cached {
+                tag: tag_owned,
+                server: (*server).to_string(),
+                port: *port,
+            }),
+            tx_bytes: 0,
         })
     }
 
@@ -131,8 +135,8 @@ impl VlessAdapter {
 
         let ResolvedLeafOutbound::Vless {
             tag,
-            server: _,
-            port: _,
+            server,
+            port,
             id,
             split_http,
             ..
@@ -140,7 +144,6 @@ impl VlessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), &final_hop));
         };
-        let session_id = session.id;
         let identity =
             parse_vless_udp_identity(id, "udp_vless_relay_two_stream_parse_identity", None)?;
         let split_http_cfg = split_http
@@ -160,9 +163,13 @@ impl VlessAdapter {
         )
         .await?;
 
-        Ok(FlowStartResult::ManagedFlow {
-            session_id,
-            tag: (*tag).to_string(),
+        Ok(FlowStartResult::Flow {
+            outbound: Box::new(UdpFlowOutbound::Cached {
+                tag: (*tag).to_string(),
+                server: (*server).to_string(),
+                port: *port,
+            }),
+            tx_bytes: 0,
         })
     }
 
@@ -177,8 +184,8 @@ impl VlessAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         let ResolvedLeafOutbound::Vless {
             tag,
-            server: _,
-            port: _,
+            server,
+            port,
             id,
             tls,
             reality,
@@ -193,7 +200,6 @@ impl VlessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let session_id = session.id;
         if quic.is_some() {
             return Err(FlowFailure {
                 stage: "udp_relay_final_transport",
@@ -227,9 +233,13 @@ impl VlessAdapter {
         )
         .await?;
 
-        Ok(FlowStartResult::ManagedFlow {
-            session_id,
-            tag: tag_owned,
+        Ok(FlowStartResult::Flow {
+            outbound: Box::new(UdpFlowOutbound::Cached {
+                tag: tag_owned,
+                server: (*server).to_string(),
+                port: *port,
+            }),
+            tx_bytes: 0,
         })
     }
 }

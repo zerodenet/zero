@@ -6,6 +6,7 @@ use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
 use crate::protocol_runtime::udp::vmess_flow::{self, VmessUdpFlow, VmessUdpRelayFlow};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 
 fn parse_vmess_udp_identity(
@@ -73,9 +74,13 @@ impl VmessAdapter {
         )
         .await?;
 
-        Ok(FlowStartResult::ManagedFlow {
-            session_id: session.id,
-            tag: tag_owned,
+        Ok(FlowStartResult::Flow {
+            outbound: Box::new(UdpFlowOutbound::Cached {
+                tag: tag_owned,
+                server: (*server).to_string(),
+                port: *port,
+            }),
+            tx_bytes: 0,
         })
     }
 
@@ -124,9 +129,13 @@ impl VmessAdapter {
         )
         .await?;
 
-        Ok(FlowStartResult::ManagedFlow {
-            session_id: session.id,
-            tag: tag_owned,
+        Ok(FlowStartResult::Flow {
+            outbound: Box::new(UdpFlowOutbound::Cached {
+                tag: tag_owned,
+                server: (*server).to_string(),
+                port: *port,
+            }),
+            tx_bytes: 0,
         })
     }
 }

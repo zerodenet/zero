@@ -1794,8 +1794,10 @@ fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
         }
     }
     assert!(
-        types.contains("ManagedFlow") && dispatch.contains("managed_flows"),
-        "UDP dispatch should track protocol-managed flows through neutral names"
+        !types.contains("ManagedFlow")
+            && !dispatch.contains("managed_flows")
+            && !dispatch.contains("send_existing_cached_flow"),
+        "UDP dispatch should track protocol-managed flows in UdpSessionFlows and avoid cached-manager pre-scans"
     );
 }
 
@@ -3838,25 +3840,29 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
 }
 
 #[test]
-fn udp_dispatch_keeps_managed_flow_handles_in_udp_flow_module() {
+fn udp_dispatch_does_not_keep_external_managed_flow_handles() {
     let dispatch = read("src/runtime/udp_dispatch/mod.rs");
     let lifecycle = read("src/runtime/udp_dispatch/lifecycle.rs");
-    let managed = read("src/runtime/udp_flow/managed.rs");
+    let types = read("src/runtime/udp_dispatch/types.rs");
+    let managed = manifest_dir().join("src/runtime/udp_flow/managed.rs");
 
     for source in [&dispatch, &lifecycle] {
-        for forbidden in ["HashMap<(Address, u16)", "SessionHandle", "managed_handles"] {
+        for forbidden in [
+            "HashMap<(Address, u16)",
+            "SessionHandle",
+            "managed_handles",
+            "ManagedUdpFlows",
+            "managed_flows",
+        ] {
             assert!(
                 !source.contains(forbidden),
-                "UDP dispatch should keep managed-flow handle storage behind runtime::udp_flow::managed; found `{forbidden}`"
+                "UDP dispatch should keep protocol-managed UDP flows in UdpSessionFlows; found external handle storage `{forbidden}`"
             );
         }
     }
     assert!(
-        dispatch.contains("managed_flows: ManagedUdpFlows")
-            && lifecycle.contains("ManagedUdpFlows::default()")
-            && managed.contains("struct ManagedUdpFlows")
-            && managed.contains("SessionHandle"),
-        "runtime::udp_flow::managed should own protocol-managed flow handles"
+        !managed.exists() && !types.contains("ManagedFlow"),
+        "runtime::udp_flow::managed and FlowStartResult::ManagedFlow should not preserve a second UDP lifecycle"
     );
 }
 
@@ -5327,21 +5333,25 @@ fn protocol_udp_manager_request_models_are_manager_private() {
 
 #[test]
 fn udp_dispatch_cached_flow_fast_path_delegates_to_protocol_state() {
-    let content = read("src/runtime/udp_dispatch/dispatch.rs");
+    let dispatch = read("src/runtime/udp_dispatch/dispatch.rs");
+    let forward = read("src/runtime/udp_dispatch/forward.rs");
+    let outbound = read("src/runtime/udp_flow/outbound.rs");
 
     assert!(
-        content.contains("send_existing_cached_flow"),
-        "UDP dispatch should delegate cached protocol flow handling to ProtocolUdpState"
+        !dispatch.contains("send_existing_cached_flow")
+            && forward.contains("send_existing_cached_flow")
+            && outbound.contains("Cached {"),
+        "UDP dispatch should drive cached protocol flow reuse from tracked flow snapshots, not by pre-scanning protocol managers"
     );
 
-    let normalized = content.replace("\r\n", "\n");
+    let normalized = forward.replace("\r\n", "\n");
     for forbidden in [
         ".protocol_state\n            .vless",
         ".protocol_state\n            .vmess",
     ] {
         assert!(
             !normalized.contains(forbidden),
-            "src/runtime/udp_dispatch/dispatch.rs should not reach into protocol manager `{forbidden}` directly"
+            "src/runtime/udp_dispatch/forward.rs should not reach into protocol manager `{forbidden}` directly"
         );
     }
 }
@@ -7885,7 +7895,12 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
             !content.contains("ProtocolUdpFlowSnapshot"),
             "{source} should ask UdpDispatch bridges to describe protocol UDP flow snapshots"
         );
-        if source != "src/adapters/direct/udp.rs" {
+        if !matches!(
+            source.as_str(),
+            "src/adapters/direct/udp.rs"
+                | "src/adapters/vless/udp.rs"
+                | "src/adapters/vmess/udp.rs"
+        ) {
             assert!(
                 !content.contains("FlowStartResult::Flow"),
                 "{source} should let UdpDispatch bridges build tracked protocol UDP flow results"
@@ -7930,6 +7945,14 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
                 "{source} should not call removed protocol-named UdpDispatch facade `{forbidden}`"
             );
         }
+    }
+
+    for source in ["src/adapters/vless/udp.rs", "src/adapters/vmess/udp.rs"] {
+        let adapter = read(source);
+        assert!(
+            adapter.contains("UdpFlowOutbound::Cached") && !adapter.contains("ManagedFlow"),
+            "{source} should track cached UDP flows through neutral flow snapshots, not external managed-flow handles"
+        );
     }
 
     for removed in [

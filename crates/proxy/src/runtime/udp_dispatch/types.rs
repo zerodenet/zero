@@ -9,8 +9,6 @@ pub(crate) enum FlowStartResult {
         outbound: Box<UdpFlowOutbound>,
         tx_bytes: u64,
     },
-    /// A protocol-managed flow was established outside `UdpSessionFlows`.
-    ManagedFlow { session_id: u64, tag: String },
     /// The target was blocked.
     Blocked { tag: String },
 }

@@ -8,7 +8,6 @@ use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::protocol_runtime::udp::ProtocolUdpState;
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::managed::ManagedUdpFlows;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::packet_path_chain::PacketPathManager;
 use crate::runtime::udp_flow::sessions::CompletedUdpFlow;
@@ -45,7 +44,6 @@ impl UdpDispatch {
             direct_socket,
             protocol_state: ProtocolUdpState::new(crate::register::protocol_udp_handlers()),
             packet_path: PacketPathManager::new(),
-            managed_flows: ManagedUdpFlows::default(),
             chain_tasks: JoinSet::new(),
         })
     }
@@ -59,7 +57,6 @@ impl UdpDispatch {
             direct_socket,
             protocol_state: ProtocolUdpState::new(crate::register::protocol_udp_handlers()),
             packet_path: PacketPathManager::new(),
-            managed_flows: ManagedUdpFlows::default(),
             chain_tasks: JoinSet::new(),
         }
     }
@@ -169,8 +166,6 @@ impl UdpDispatch {
     /// Finish all tracked flows and close upstreams.
     pub(crate) fn finish_all(mut self) -> Vec<CompletedUdpFlow> {
         self.protocol_state.close_all_upstreams();
-
-        self.managed_flows.finish_all();
 
         self.flows.finish_all()
     }

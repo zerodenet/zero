@@ -56,7 +56,6 @@ use std::time::Instant;
 use tokio::task::JoinSet;
 
 use crate::logging::log_session_failed;
-use crate::runtime::udp_flow::managed::ManagedUdpFlows;
 use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpSessionFlows};
 use zero_engine::{EngineError, SessionOutcome};
 use zero_platform_tokio::TokioDatagramSocket;
@@ -94,9 +93,6 @@ pub(crate) struct UdpDispatch {
     protocol_state: ProtocolUdpState,
     /// Generic datagram-over-packet-path manager for relay-chain UDP flows.
     packet_path: PacketPathManager,
-    /// Session handles for protocol-managed flows owned outside
-    /// [`UdpSessionFlows`].
-    managed_flows: ManagedUdpFlows,
     /// Unified JoinSet for chain-outbound (SS/H2/Trojan/Mieru/VLESS)
     /// response bridge tasks. Polled by [`poll_chain_response`].
     chain_tasks: JoinSet<ChainTask>,
