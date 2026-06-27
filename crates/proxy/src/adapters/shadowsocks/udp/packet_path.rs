@@ -77,7 +77,7 @@ pub(super) fn datagram_source<'a>(
         tag,
         server,
         *port,
-        spec.cache_key(),
+        spec.datagram_cache_key(),
         codec,
     ))
 }

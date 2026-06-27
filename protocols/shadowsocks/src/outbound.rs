@@ -654,6 +654,10 @@ impl ShadowsocksUdpPacketPathSpec {
         self.resume.flow_cache_key()
     }
 
+    pub fn datagram_cache_key(&self) -> alloc::string::String {
+        self.resume.flow_cache_key()
+    }
+
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         self.resume.codec()
     }
