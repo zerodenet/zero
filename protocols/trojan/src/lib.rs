@@ -11,7 +11,10 @@ mod metadata;
 mod outbound;
 pub mod shared;
 
-pub use inbound::{TrojanAccept, TrojanInbound, TrojanInboundUdpCodec};
+pub use inbound::{
+    TrojanAccept, TrojanInbound, TrojanInboundUdpCodec, TrojanInboundUdpRequest,
+    TrojanInboundUdpSession,
+};
 pub use metadata::TrojanProtocol;
 pub use outbound::{
     build_udp_request, establish_udp_packet_tunnel, read_inbound_udp_packet, read_udp_flow_packet,

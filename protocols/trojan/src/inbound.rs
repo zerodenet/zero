@@ -16,6 +16,71 @@ pub struct TrojanAccept {
     pub command: u8,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanInboundUdpRequest {
+    target: zero_core::Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl TrojanInboundUdpRequest {
+    fn from_packet(packet: TrojanUdpPacket) -> Self {
+        Self {
+            target: packet.target,
+            port: packet.port,
+            payload: packet.payload,
+        }
+    }
+
+    pub fn target(&self) -> &zero_core::Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct TrojanInboundUdpSession {
+    codec: TrojanInboundUdpCodec,
+}
+
+impl TrojanInboundUdpSession {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub async fn read_request<S>(&self, stream: &mut S) -> Result<TrojanInboundUdpRequest, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.codec
+            .read_packet(stream)
+            .await
+            .map(TrojanInboundUdpRequest::from_packet)
+    }
+
+    pub async fn write_response<S>(
+        &self,
+        stream: &mut S,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.codec
+            .write_response(stream, target, port, payload)
+            .await
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrojanInboundUdpCodec;
 

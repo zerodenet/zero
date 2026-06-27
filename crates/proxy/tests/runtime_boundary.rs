@@ -3286,10 +3286,15 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     );
 
     assert!(
-        inbound.contains("TrojanInboundUdpCodec")
-            && inbound.contains(".read_packet(&mut client)")
-            && inbound.contains(".write_response(&mut client")
+        inbound.contains("trojan::TrojanInboundUdpSession::new")
+            && inbound.contains("udp_session.read_request(&mut client)")
+            && inbound.contains("udp_session.write_response(&mut client")
+            && !inbound.contains("TrojanInboundUdpCodec")
+            && !inbound.contains(".read_packet(&mut client)")
             && protocol_inbound.contains("struct TrojanInboundUdpCodec")
+            && protocol_inbound.contains("struct TrojanInboundUdpSession")
+            && protocol_inbound.contains("struct TrojanInboundUdpRequest")
+            && protocol_inbound.contains("fn read_request")
             && protocol_inbound.contains("fn read_packet")
             && protocol_inbound.contains("fn write_response")
             && protocol_outbound.contains("read_udp_flow_packet")
