@@ -8,21 +8,10 @@ use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::packet_path::ChainTask;
-use crate::runtime::udp_flow::packet_path_chain::PacketPathManager;
-use crate::runtime::udp_flow::protocol_state::ProtocolUdpState;
 use crate::runtime::udp_flow::sessions::CompletedUdpFlow;
 use crate::runtime::udp_flow::sessions::UdpSessionFlows;
+use crate::runtime::udp_flow::state::{UdpFlowState, UpstreamUdpPoll};
 use crate::runtime::udp_helpers::send_direct_udp_packet;
-
-pub(crate) struct UpstreamUdpPoll<'a> {
-    protocol_state: &'a ProtocolUdpState,
-}
-
-impl UpstreamUdpPoll<'_> {
-    pub(crate) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.protocol_state.recv_upstream_packet(buf).await
-    }
-}
 
 pub(crate) struct UpstreamAssociationView<'a> {
     pub(crate) outbound_tag: &'a str,
@@ -42,9 +31,7 @@ impl UdpDispatch {
             inbound_tag: inbound_tag.to_owned(),
             flows: UdpSessionFlows::default(),
             direct_socket,
-            protocol_state: ProtocolUdpState::new(crate::register::protocol_udp_handlers()),
-            packet_path: PacketPathManager::new(),
-            chain_tasks: JoinSet::new(),
+            flow_state: UdpFlowState::default_registered(),
         })
     }
 
@@ -55,9 +42,7 @@ impl UdpDispatch {
             inbound_tag: inbound_tag.to_owned(),
             flows: UdpSessionFlows::default(),
             direct_socket,
-            protocol_state: ProtocolUdpState::new(crate::register::protocol_udp_handlers()),
-            packet_path: PacketPathManager::new(),
-            chain_tasks: JoinSet::new(),
+            flow_state: UdpFlowState::default_registered(),
         }
     }
 
@@ -79,7 +64,7 @@ impl UdpDispatch {
 
     /// Borrow direct socket and chain_tasks for `select!` polling.
     pub(crate) fn poll_sockets(&mut self) -> (&TokioDatagramSocket, &mut JoinSet<ChainTask>) {
-        (&self.direct_socket, &mut self.chain_tasks)
+        (&self.direct_socket, self.flow_state.chain_tasks())
     }
 
     /// Borrow all polling sources simultaneously for `select!` loops.
@@ -91,20 +76,14 @@ impl UdpDispatch {
         Option<TokioInstant>,
         &mut JoinSet<ChainTask>,
     ) {
-        (
-            &self.direct_socket,
-            UpstreamUdpPoll {
-                protocol_state: &self.protocol_state,
-            },
-            self.protocol_state.upstream_idle_deadline(),
-            &mut self.chain_tasks,
-        )
+        let (upstream_udp, socks5_idle, chain_tasks) = self.flow_state.poll_refs();
+        (&self.direct_socket, upstream_udp, socks5_idle, chain_tasks)
     }
 
     /// View of the SOCKS5 upstream association, if established.
     #[allow(dead_code)]
     pub(crate) fn upstream_association_view(&self) -> Option<UpstreamAssociationView<'_>> {
-        self.protocol_state
+        self.flow_state
             .upstream_association_view()
             .map(|association| UpstreamAssociationView {
                 outbound_tag: association.outbound_tag,
@@ -112,7 +91,7 @@ impl UdpDispatch {
     }
 
     pub(crate) fn touch_upstream_idle(&mut self, timeout: std::time::Duration) {
-        self.protocol_state.touch_upstream_idle(timeout);
+        self.flow_state.touch_upstream_idle(timeout);
     }
 
     /// Look up the session ID for a direct response sender.
@@ -144,7 +123,7 @@ impl UdpDispatch {
 
     /// Drop the SOCKS5 upstream association after a receive error.
     pub(crate) fn drop_upstream_association(&mut self) -> Option<ClosedUpstreamAssociation> {
-        self.protocol_state
+        self.flow_state
             .drop_upstream_association()
             .map(|closed| ClosedUpstreamAssociation {
                 outbound_tag: closed.outbound_tag,
@@ -154,7 +133,7 @@ impl UdpDispatch {
     }
 
     pub(crate) fn drop_idle_upstream_association(&mut self) -> Option<ClosedUpstreamAssociation> {
-        self.protocol_state
+        self.flow_state
             .close_idle_upstream()
             .map(|closed| ClosedUpstreamAssociation {
                 outbound_tag: closed.outbound_tag,
@@ -165,7 +144,7 @@ impl UdpDispatch {
 
     /// Finish all tracked flows and close upstreams.
     pub(crate) fn finish_all(mut self) -> Vec<CompletedUdpFlow> {
-        self.protocol_state.close_all_upstreams();
+        self.flow_state.close_all_upstreams();
 
         self.flows.finish_all()
     }

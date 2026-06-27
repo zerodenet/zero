@@ -37,24 +37,22 @@ pub(crate) struct ManagedProtocolUdpSend<'a> {
 
 impl UdpDispatch {
     pub(crate) fn protocol_udp_chain_tasks(&mut self) -> &mut JoinSet<ChainTask> {
-        &mut self.chain_tasks
+        self.flow_state.chain_tasks()
     }
 
     pub(crate) fn register_managed_stream_flow_sender(
         &mut self,
         sender: Box<dyn ManagedStreamFlowSender>,
     ) -> ManagedUdpFlowRef {
-        self.protocol_state
-            .register_managed_stream_flow_sender(sender)
+        self.flow_state.register_managed_stream_flow_sender(sender)
     }
 
     pub(crate) async fn start_managed_protocol_flow(
         &mut self,
-        mut request: ManagedUdpFlowRequest<'_>,
+        request: ManagedUdpFlowRequest<'_>,
     ) -> Result<usize, FlowFailure> {
-        request.chain_tasks = Some(&mut self.chain_tasks);
-        self.protocol_state
-            .start_managed_udp_flow(&self.inbound_tag, request)
+        self.flow_state
+            .start_managed_protocol_flow(&self.inbound_tag, request)
             .await
     }
 
@@ -62,14 +60,14 @@ impl UdpDispatch {
         &mut self,
         resume: ManagedUdpFlowResume,
     ) -> ManagedUdpFlowRef {
-        self.protocol_state.register_managed_flow(resume)
+        self.flow_state.register_managed_protocol_flow(resume)
     }
 
     pub(crate) fn managed_protocol_flow_resume(
         &self,
         flow_ref: ManagedUdpFlowRef,
     ) -> Option<ManagedUdpFlowResume> {
-        self.protocol_state.managed_flow_resume(flow_ref)
+        self.flow_state.managed_protocol_flow_resume(flow_ref)
     }
 
     pub(crate) async fn send_managed_protocol_udp(

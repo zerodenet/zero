@@ -3,7 +3,7 @@
 //! Handles re-dispatching packets on already-established UDP flows via
 //! [`UdpDispatch::forward_existing`]. First-level dispatch is by
 //! [`UdpPathCategory`]; per-protocol variants stay behind flow snapshot
-//! accessors or `ProtocolUdpState`.
+//! accessors or `UdpFlowState`.
 //!
 //! | Category | Variants | Transport |
 //! |----------|----------|-----------|
@@ -26,7 +26,7 @@ impl UdpDispatch {
     /// Forward a packet to an existing flow.
     ///
     /// Dispatches by [`UdpPathCategory`] first, then by protocol-neutral flow
-    /// accessors or `ProtocolUdpState`.
+    /// accessors or `UdpFlowState`.
     pub(super) async fn forward_existing(
         &mut self,
         proxy: &Proxy,
@@ -74,14 +74,17 @@ impl UdpDispatch {
 
             UdpPathCategory::Datagram | UdpPathCategory::StreamPacket => {
                 let result = self
-                    .protocol_state
-                    .forward_existing_protocol_flow(&mut self.chain_tasks, proxy, flow, payload)
+                    .flow_state
+                    .forward_existing_protocol_flow(proxy, flow, payload)
                     .await;
                 self.record_or_fail(flow, proxy, started_at, result)?;
             }
 
             UdpPathCategory::PacketPathDatagram => {
-                let result = self.forward_existing_packet_path_flow(flow, payload).await;
+                let result = self
+                    .flow_state
+                    .forward_existing_packet_path_flow(flow, payload)
+                    .await;
                 self.record_or_fail(flow, proxy, started_at, result)?;
             }
         }

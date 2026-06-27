@@ -2,9 +2,7 @@ use zero_engine::ResolvedLeafOutbound;
 
 use super::{FlowFailure, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
-use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpFlowContext, UdpPacketRef};
-use crate::runtime::udp_flow::packet_path_chain::SendWithSnapshotRequest;
-use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
+use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpPacketRef};
 use crate::runtime::Proxy;
 
 impl UdpDispatch {
@@ -33,42 +31,8 @@ impl UdpDispatch {
         datagram_leaf: &ResolvedLeafOutbound<'_>,
         packet: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.packet_path
-            .send(
-                UdpFlowContext {
-                    chain_tasks: &mut self.chain_tasks,
-                    session_id,
-                },
-                proxy,
-                carrier_leaf,
-                datagram_leaf,
-                packet,
-            )
-            .await
-    }
-
-    pub(super) async fn forward_existing_packet_path_flow(
-        &mut self,
-        flow: &UdpFlowSnapshot,
-        payload: &[u8],
-    ) -> Result<usize, FlowFailure> {
-        let snapshot = flow
-            .outbound
-            .packet_path_snapshot()
-            .expect("packet-path flow should expose packet-path snapshot");
-        self.packet_path
-            .send_with_snapshot(SendWithSnapshotRequest {
-                ctx: UdpFlowContext {
-                    chain_tasks: &mut self.chain_tasks,
-                    session_id: flow.session.id,
-                },
-                lookup_key: snapshot.lookup_key(),
-                packet_ref: UdpPacketRef {
-                    target: &flow.session.target,
-                    port: flow.session.port,
-                    payload,
-                },
-            })
+        self.flow_state
+            .send_packet_path_chain(session_id, proxy, carrier_leaf, datagram_leaf, packet)
             .await
     }
 }

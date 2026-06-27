@@ -53,10 +53,9 @@
 
 use std::time::Instant;
 
-use tokio::task::JoinSet;
-
 use crate::logging::log_session_failed;
 use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpSessionFlows};
+use crate::runtime::udp_flow::state::UdpFlowState;
 use zero_engine::{EngineError, SessionOutcome};
 use zero_platform_tokio::TokioDatagramSocket;
 
@@ -72,9 +71,6 @@ mod types;
 
 // Re-exports.
 
-use crate::runtime::udp_flow::packet_path::ChainTask;
-use crate::runtime::udp_flow::packet_path_chain::PacketPathManager;
-use crate::runtime::udp_flow::protocol_state::ProtocolUdpState;
 pub(crate) use managed::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
@@ -89,13 +85,8 @@ pub(crate) struct UdpDispatch {
     flows: UdpSessionFlows,
     /// Ephemeral UDP socket for direct outbound (sends to target, receives responses).
     direct_socket: TokioDatagramSocket,
-    /// Protocol-specific UDP managers.
-    protocol_state: ProtocolUdpState,
-    /// Generic datagram-over-packet-path manager for relay-chain UDP flows.
-    packet_path: PacketPathManager,
-    /// Unified JoinSet for chain-outbound (SS/H2/Trojan/Mieru/VLESS)
-    /// response bridge tasks. Polled by [`poll_chain_response`].
-    chain_tasks: JoinSet<ChainTask>,
+    /// Managed protocol, packet-path, and chain response state for this UDP session.
+    flow_state: UdpFlowState,
 }
 
 impl UdpDispatch {

@@ -3494,6 +3494,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
 #[test]
 fn udp_dispatch_poll_refs_does_not_expose_socks5_association_type() {
     let lifecycle = read("src/runtime/udp_dispatch/lifecycle.rs");
+    let flow_state = read("src/runtime/udp_flow/state.rs");
 
     for forbidden in [
         "Option<&crate::protocol_runtime::socks5_udp::ActiveUpstreamSocks5UdpAssociation>",
@@ -3515,14 +3516,14 @@ fn udp_dispatch_poll_refs_does_not_expose_socks5_association_type() {
     }
     assert!(
         lifecycle.contains("UpstreamUdpPoll")
-            && lifecycle.contains("recv_packet")
+            && flow_state.contains("recv_packet")
             && lifecycle.contains("UpstreamAssociationView")
             && lifecycle.contains("ClosedUpstreamAssociation")
             && lifecycle.contains("upstream_association_view")
             && lifecycle.contains("touch_upstream_idle")
             && lifecycle.contains("drop_upstream_association")
             && lifecycle.contains("drop_idle_upstream_association"),
-        "UdpDispatch lifecycle should expose neutral upstream UDP polling and association lifecycle models"
+        "UdpDispatch lifecycle should expose neutral upstream UDP polling and association lifecycle models through UdpFlowState"
     );
 }
 
@@ -3816,13 +3817,16 @@ fn generic_udp_dispatch_does_not_contain_protocol_manager_modules() {
 #[test]
 fn udp_dispatch_keeps_protocol_managers_behind_registered_udp_state() {
     let content = read("src/runtime/udp_dispatch/mod.rs");
+    let flow_state = read("src/runtime/udp_flow/state.rs");
     let state = read("src/runtime/udp_flow/protocol_state/mod.rs");
     let upstream = read("src/runtime/udp_flow/protocol_state/upstream.rs");
     let register = read("src/register.rs");
 
     assert!(
-        content.contains("protocol_state: ProtocolUdpState"),
-        "UdpDispatch should keep protocol-specific UDP handlers behind ProtocolUdpState"
+        content.contains("flow_state: UdpFlowState")
+            && !content.contains("protocol_state: ProtocolUdpState")
+            && flow_state.contains("protocol: ProtocolUdpState"),
+        "UdpDispatch should keep protocol-specific UDP handlers behind UdpFlowState, not direct ProtocolUdpState fields"
     );
     assert!(
         !content.contains("socks5: Socks5UdpRuntime"),
@@ -3864,8 +3868,9 @@ fn udp_dispatch_keeps_protocol_managers_behind_registered_udp_state() {
         "ProtocolUdpState should expose neutral upstream lifecycle methods"
     );
     assert!(
-        content.contains("packet_path: PacketPathManager"),
-        "UdpDispatch should own the generic packet-path manager"
+        !content.contains("packet_path: PacketPathManager")
+            && flow_state.contains("packet_path: PacketPathManager"),
+        "UdpDispatch should keep the packet-path manager behind UdpFlowState"
     );
     assert!(
         !state.contains("PacketPathManager") && !state.contains("packet_path:"),
@@ -3898,9 +3903,9 @@ fn udp_dispatch_internal_state_fields_are_not_crate_public() {
         "inbound_tag",
         "flows",
         "direct_socket",
+        "flow_state",
         "socks5",
         "protocol_state",
-        "chain_tasks",
     ] {
         assert!(
             !content.contains(&format!("pub(crate) {field}:")),
@@ -5797,16 +5802,20 @@ fn udp_relay_start_delegates_packet_path_chain_to_dispatch_runtime() {
     let content = read("src/runtime/udp_dispatch/start/relay.rs");
     let root = read("src/runtime/udp_dispatch/mod.rs");
     let packet_path = read("src/runtime/udp_dispatch/packet_path.rs");
+    let flow_state = read("src/runtime/udp_flow/state.rs");
 
     assert!(
         content.contains("send_packet_path_chain"),
         "UDP relay start should delegate packet-path manager work to UdpDispatch"
     );
     assert!(
-        packet_path.contains("self.packet_path")
-            && root.contains("packet_path: PacketPathManager")
-            && packet_path.contains("UdpFlowContext"),
-        "runtime udp_dispatch/packet_path.rs should own packet-path manager dispatch glue"
+        packet_path.contains("self.flow_state")
+            && root.contains("flow_state: UdpFlowState")
+            && !packet_path.contains("self.packet_path")
+            && !root.contains("packet_path: PacketPathManager")
+            && flow_state.contains("packet_path: PacketPathManager")
+            && flow_state.contains("UdpFlowContext"),
+        "runtime udp_dispatch/packet_path.rs should delegate packet-path manager work to UdpFlowState"
     );
     assert!(
         !content.contains(".protocol_state") && !content.contains(".packet_path"),
@@ -6052,6 +6061,7 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
 fn protocol_udp_packet_path_facade_lives_in_udp_dispatch_runtime() {
     let state = read("src/runtime/udp_flow/protocol_state/mod.rs");
     let packet_path_content = read("src/runtime/udp_dispatch/packet_path.rs");
+    let flow_state = read("src/runtime/udp_flow/state.rs");
     let protocol_state_packet_path =
         manifest_dir().join("src/runtime/udp_flow/protocol_state/packet_path.rs");
     let dispatch_packet_path = manifest_dir().join("src/runtime/udp_dispatch/packet_path.rs");
@@ -6077,6 +6087,15 @@ fn protocol_udp_packet_path_facade_lives_in_udp_dispatch_runtime() {
     assert!(
         dispatch_packet_path.exists(),
         "UDP packet-path facade should live in runtime/udp_dispatch/packet_path.rs"
+    );
+    assert!(
+        packet_path_content.contains("datagram_chain_flow_outbound")
+            && packet_path_content.contains("send_packet_path_chain")
+            && packet_path_content.contains("self.flow_state")
+            && !packet_path_content.contains("PacketPathManager")
+            && flow_state.contains("PacketPathManager")
+            && flow_state.contains("fn forward_existing_packet_path_flow"),
+        "udp_dispatch packet-path facade should expose orchestration helpers while UdpFlowState owns packet-path manager dispatch"
     );
     for forbidden in [
         "ManagedUdpFlowSnapshot::Shadowsocks",
@@ -6536,6 +6555,7 @@ fn packet_path_snapshot_lookup_lives_outside_chain_manager() {
 fn packet_path_snapshot_send_uses_request_model() {
     let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
     let packet_path = read("src/runtime/udp_dispatch/packet_path.rs");
+    let flow_state = read("src/runtime/udp_flow/state.rs");
 
     assert!(
         manager.contains("struct SendWithSnapshotRequest")
@@ -6544,12 +6564,14 @@ fn packet_path_snapshot_send_uses_request_model() {
         "packet-path snapshot send should use a request model"
     );
     assert!(
-        packet_path.contains("SendWithSnapshotRequest {")
-            && packet_path.contains("lookup_key: snapshot.lookup_key()")
-            && !packet_path.contains("carrier_cache_key: &snapshot.carrier_cache_key")
-            && !packet_path.contains("datagram_cache_key: &snapshot.datagram_cache_key")
-            && packet_path.contains("forward_existing_packet_path_flow"),
-        "packet-path snapshot forward path should convert snapshots into neutral lookup keys without unpacking cache fields"
+        packet_path.contains("self.flow_state")
+            && !packet_path.contains("SendWithSnapshotRequest {")
+            && flow_state.contains("SendWithSnapshotRequest {")
+            && flow_state.contains("lookup_key: snapshot.lookup_key()")
+            && !flow_state.contains("carrier_cache_key: &snapshot.carrier_cache_key")
+            && !flow_state.contains("datagram_cache_key: &snapshot.datagram_cache_key")
+            && flow_state.contains("forward_existing_packet_path_flow"),
+        "packet-path snapshot forward path should convert snapshots into neutral lookup keys behind UdpFlowState without unpacking cache fields in dispatch"
     );
 }
 
