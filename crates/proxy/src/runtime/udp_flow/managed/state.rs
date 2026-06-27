@@ -1,10 +1,12 @@
 use super::{
-    ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowSnapshot,
+    ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowResume,
+    ManagedUdpFlowSnapshot,
 };
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedStreamFlowSender;
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::packet_path::ChainTask;
+use std::collections::HashMap;
 use tokio::task::JoinSet;
 use zero_engine::EngineError;
 
@@ -23,6 +25,8 @@ pub(crate) struct ManagedUdpHandlers {
 pub(crate) struct ManagedProtocolUdpState {
     datagram: ManagedDatagramState,
     stream: ManagedStreamState,
+    flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>,
+    next_flow_id: u64,
 }
 
 impl ManagedProtocolUdpState {
@@ -30,7 +34,43 @@ impl ManagedProtocolUdpState {
         Self {
             datagram: ManagedDatagramState::new(handlers.datagram),
             stream: ManagedStreamState::new(handlers.stream),
+            flows: HashMap::new(),
+            next_flow_id: 1,
         }
+    }
+
+    pub(crate) fn register_flow(&mut self, resume: ManagedUdpFlowResume) -> ManagedUdpFlowRef {
+        let flow_ref = self.next_flow_ref();
+        self.flows
+            .insert(flow_ref, ManagedUdpFlowSnapshot::managed(resume));
+        flow_ref
+    }
+
+    pub(crate) fn register_stream_sender(
+        &mut self,
+        sender: Box<dyn ManagedStreamFlowSender>,
+    ) -> ManagedUdpFlowRef {
+        let flow_ref = self.next_flow_ref();
+        self.stream.register_sender(flow_ref, sender);
+        flow_ref
+    }
+
+    pub(crate) fn flow_snapshot(
+        &self,
+        flow_ref: ManagedUdpFlowRef,
+    ) -> Option<ManagedUdpFlowSnapshot> {
+        self.flows.get(&flow_ref).cloned()
+    }
+
+    pub(crate) fn flow_resume(&self, flow_ref: ManagedUdpFlowRef) -> Option<ManagedUdpFlowResume> {
+        self.flow_snapshot(flow_ref)
+            .map(|snapshot| snapshot.resume().clone())
+    }
+
+    fn next_flow_ref(&mut self) -> ManagedUdpFlowRef {
+        let flow_ref = ManagedUdpFlowRef::new(self.next_flow_id);
+        self.next_flow_id += 1;
+        flow_ref
     }
 
     pub(crate) async fn start_datagram_flow(
@@ -65,14 +105,6 @@ impl ManagedProtocolUdpState {
         request: ManagedRelayStreamFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         self.stream.start_relay_stream_flow(request).await
-    }
-
-    pub(crate) fn register_stream_sender(
-        &mut self,
-        flow_ref: ManagedUdpFlowRef,
-        sender: Box<dyn ManagedStreamFlowSender>,
-    ) {
-        self.stream.register_sender(flow_ref, sender);
     }
 
     pub(crate) async fn forward_registered_stream_sender(

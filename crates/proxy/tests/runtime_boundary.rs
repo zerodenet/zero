@@ -3637,6 +3637,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
     let outbound = read("src/runtime/udp_flow/outbound.rs");
     let snapshot = read("src/runtime/udp_flow/managed/mod.rs");
     let state = read("src/runtime/udp_flow/protocol_state/mod.rs");
+    let managed_state = read("src/runtime/udp_flow/managed/state.rs");
 
     for required in [
         "Direct {",
@@ -3737,10 +3738,13 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
         "runtime UDP outbound snapshot should store only opaque managed flow references"
     );
     assert!(
-        state.contains("HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>")
-            && state.contains("fn register_managed_flow")
-            && state.contains("fn managed_flow_snapshot"),
-        "ProtocolUdpState should own protocol UDP resume snapshots behind runtime opaque managed flow refs"
+        !state.contains("HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>")
+            && !state.contains("fn next_managed_flow_ref")
+            && managed_state.contains("flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>")
+            && managed_state.contains("next_flow_id: u64")
+            && managed_state.contains("fn register_flow")
+            && managed_state.contains("fn flow_snapshot"),
+        "ManagedProtocolUdpState should own protocol UDP resume snapshots behind runtime opaque managed flow refs"
     );
 }
 

@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use std::collections::HashMap;
 use tokio::time::Instant as TokioInstant;
 
 use zero_engine::EngineError;
@@ -34,8 +33,6 @@ pub(crate) struct ClosedProtocolUpstreamAssociation {
 pub(crate) struct ProtocolUdpState {
     pub(super) managed: ManagedProtocolUdpState,
     upstream: UpstreamAssociationState,
-    managed_flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>,
-    next_managed_flow_id: u64,
 }
 
 pub(crate) struct ProtocolUdpHandlers {
@@ -48,8 +45,6 @@ impl ProtocolUdpState {
         Self {
             managed: ManagedProtocolUdpState::new(handlers.managed),
             upstream: UpstreamAssociationState::new(handlers.upstream),
-            managed_flows: HashMap::new(),
-            next_managed_flow_id: 1,
         }
     }
 
@@ -57,40 +52,28 @@ impl ProtocolUdpState {
         &mut self,
         resume: ManagedUdpFlowResume,
     ) -> ManagedUdpFlowRef {
-        let flow_ref = self.next_managed_flow_ref();
-        self.managed_flows
-            .insert(flow_ref, ManagedUdpFlowSnapshot::managed(resume));
-        flow_ref
-    }
-
-    pub(super) fn next_managed_flow_ref(&mut self) -> ManagedUdpFlowRef {
-        let flow_ref = ManagedUdpFlowRef::new(self.next_managed_flow_id);
-        self.next_managed_flow_id += 1;
-        flow_ref
+        self.managed.register_flow(resume)
     }
 
     pub(crate) fn register_managed_stream_flow_sender(
         &mut self,
         sender: Box<dyn ManagedStreamFlowSender>,
     ) -> ManagedUdpFlowRef {
-        let flow_ref = self.next_managed_flow_ref();
-        self.managed.register_stream_sender(flow_ref, sender);
-        flow_ref
+        self.managed.register_stream_sender(sender)
     }
 
     pub(super) fn managed_flow_snapshot(
         &self,
         flow_ref: ManagedUdpFlowRef,
     ) -> Option<ManagedUdpFlowSnapshot> {
-        self.managed_flows.get(&flow_ref).cloned()
+        self.managed.flow_snapshot(flow_ref)
     }
 
     pub(crate) fn managed_flow_resume(
         &self,
         flow_ref: ManagedUdpFlowRef,
     ) -> Option<ManagedUdpFlowResume> {
-        self.managed_flow_snapshot(flow_ref)
-            .map(|snapshot| snapshot.resume().clone())
+        self.managed.flow_resume(flow_ref)
     }
 
     pub(crate) async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
