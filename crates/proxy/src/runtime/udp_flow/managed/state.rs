@@ -2,6 +2,8 @@ use super::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowSnapshot,
 };
 use crate::runtime::udp_dispatch::FlowFailure;
+use crate::runtime::udp_flow::managed::ManagedStreamFlowSender;
+use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use tokio::task::JoinSet;
 use zero_engine::EngineError;
@@ -63,6 +65,27 @@ impl ManagedProtocolUdpState {
         request: ManagedRelayStreamFlow<'_>,
     ) -> Result<usize, FlowFailure> {
         self.stream.start_relay_stream_flow(request).await
+    }
+
+    pub(crate) fn register_stream_sender(
+        &mut self,
+        flow_ref: ManagedUdpFlowRef,
+        sender: Box<dyn ManagedStreamFlowSender>,
+    ) {
+        self.stream.register_sender(flow_ref, sender);
+    }
+
+    pub(crate) async fn forward_registered_stream_sender(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        proxy: &Proxy,
+        flow_ref: ManagedUdpFlowRef,
+        flow: &UdpFlowSnapshot,
+        payload: &[u8],
+    ) -> Option<Result<usize, FlowFailure>> {
+        self.stream
+            .forward_registered_sender(chain_tasks, proxy, flow_ref, flow, payload)
+            .await
     }
 
     pub(crate) async fn forward_existing_flow(

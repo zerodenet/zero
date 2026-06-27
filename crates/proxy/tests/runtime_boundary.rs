@@ -3996,7 +3996,6 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
         "mod.rs",
         "datagram.rs",
         "stream.rs",
-        "stream_sender.rs",
         "upstream.rs",
         "forward.rs",
     ] {
@@ -4011,6 +4010,7 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
         "cached.rs",
         "cached_start.rs",
         "socks5.rs",
+        "stream_sender.rs",
     ] {
         assert!(
             !root.join(removed).exists(),
@@ -5495,8 +5495,7 @@ fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
 fn protocol_udp_state_manager_fields_are_not_crate_public() {
     let content = read("src/runtime/udp_flow/protocol_state/mod.rs");
     let managed = read("src/runtime/udp_flow/managed/state.rs");
-    let stream_sender = read("src/runtime/udp_flow/protocol_state/stream_sender.rs");
-    let stream_sender_model = read("src/runtime/udp_flow/protocol_state/stream_sender/model.rs");
+    let stream_sender = read("src/runtime/udp_flow/managed/stream_sender.rs");
     let cached_start = manifest_dir().join("src/runtime/udp_flow/protocol_state/cached_start.rs");
     let datagram = read("src/runtime/udp_flow/managed/datagram.rs");
     let stream = read("src/runtime/udp_flow/managed/stream.rs");
@@ -5524,20 +5523,18 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
         content.contains("managed: ManagedProtocolUdpState")
             && managed.contains("struct ManagedProtocolUdpState")
             && managed.contains("handlers: ManagedUdpHandlers")
-            && content.contains("stream_senders: ManagedStreamSenderState")
+            && !content.contains("stream_senders: ManagedStreamSenderState")
             && !managed.contains("cached: ManagedCachedState")
             && managed.contains("datagram: ManagedDatagramState")
             && managed.contains("stream: ManagedStreamState")
+            && stream.contains("senders: ManagedStreamSenderState")
             && !stream_sender.contains("start_cached_flow")
             && !cached_start.exists()
-            && stream_sender_model.contains("handlers: ManagedStreamSenderHandlers")
-            && stream_sender_model.contains("trait ManagedStreamFlowSender")
-            && stream_sender_model.contains("stream: Vec<Box<dyn ManagedStreamFlowSender>>")
-            && stream_sender_model
-                .contains("HashMap<ManagedUdpFlowRef, Box<dyn ManagedStreamFlowSender>>")
-            && stream_sender_model.contains("fn sender(")
+            && stream_sender.contains("trait ManagedStreamFlowSender")
+            && stream_sender.contains("HashMap<ManagedUdpFlowRef, Box<dyn ManagedStreamFlowSender>>")
+            && stream_sender.contains("fn sender(")
             && !managed.contains("ManagedCachedFlowSender")
-            && !stream_sender_model.contains("enum CachedUdpFlowStart")
+            && !stream_sender.contains("enum CachedUdpFlowStart")
             && datagram.contains("handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>")
             && stream.contains("handlers: Vec<Box<dyn ManagedStreamFlowHandler>>")
             && !managed.contains("pub(crate) vless:")
@@ -5959,10 +5956,12 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
 fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let state = read("src/runtime/udp_flow/protocol_state/mod.rs");
     let old_cached = manifest_dir().join("src/runtime/udp_flow/protocol_state/cached.rs");
-    let stream_sender = manifest_dir().join("src/runtime/udp_flow/protocol_state/stream_sender.rs");
+    let protocol_stream_sender =
+        manifest_dir().join("src/runtime/udp_flow/protocol_state/stream_sender.rs");
+    let stream_sender = manifest_dir().join("src/runtime/udp_flow/managed/stream_sender.rs");
     let managed = read("src/runtime/udp_flow/managed/state.rs");
-    let stream_sender_state = read("src/runtime/udp_flow/protocol_state/stream_sender.rs");
-    let stream_sender_model = read("src/runtime/udp_flow/protocol_state/stream_sender/model.rs");
+    let stream_sender_state = read("src/runtime/udp_flow/managed/stream_sender.rs");
+    let stream_state = read("src/runtime/udp_flow/managed/stream.rs");
     let protocol_forward = read("src/runtime/udp_flow/protocol_state/forward.rs");
     let vless_flow = manifest_dir().join("src/runtime/udp_flow/protocol_state/vless_flow.rs");
     let vmess_flow = manifest_dir().join("src/runtime/udp_flow/protocol_state/vmess_flow.rs");
@@ -5978,46 +5977,46 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     ] {
         assert!(
             !state.contains(forbidden),
-            "src/runtime/udp_flow/protocol_state/mod.rs should keep managed stream forwarding details in stream_sender.rs; found `{forbidden}`"
+            "src/runtime/udp_flow/protocol_state/mod.rs should keep managed stream forwarding details in managed/stream_sender.rs; found `{forbidden}`"
         );
     }
     assert!(
-        stream_sender.exists() && !old_cached.exists(),
-        "managed stream UDP sender forwarding should live under protocol_state/stream_sender.rs, not cached.rs"
+        stream_sender.exists() && !old_cached.exists() && !protocol_stream_sender.exists(),
+        "managed stream UDP sender forwarding should live under managed/stream_sender.rs, not protocol_state"
     );
     assert!(
-        state.contains("stream_senders: ManagedStreamSenderState")
+        !state.contains("stream_senders: ManagedStreamSenderState")
             && !managed.contains("cached: ManagedCachedState")
             && !managed.contains("vless: VlessUdpOutboundManager")
             && !managed.contains("vmess: VmessUdpOutboundManager")
+            && stream_state.contains("senders: ManagedStreamSenderState")
             && !stream_sender_state.contains("start_cached_flow")
             && !cached_start.exists()
-            && stream_sender_model.contains("struct ManagedStreamSenderState")
-            && stream_sender_model.contains("handlers: ManagedStreamSenderHandlers")
-            && stream_sender_model.contains("trait ManagedStreamFlowSender")
-            && stream_sender_model.contains("stream: Vec<Box<dyn ManagedStreamFlowSender>>")
-            && stream_sender_model
+            && stream_sender_state.contains("struct ManagedStreamSenderState")
+            && stream_sender_state.contains("trait ManagedStreamFlowSender")
+            && !stream_sender_state.contains("Vec<Box<dyn ManagedStreamFlowSender>>")
+            && stream_sender_state
                 .contains("HashMap<ManagedUdpFlowRef, Box<dyn ManagedStreamFlowSender>>")
-            && stream_sender_model.contains("fn sender(")
-            && stream_sender_model.contains("fn contains_sender(")
-            && protocol_forward.contains("has_stream_flow_sender")
-            && protocol_forward.contains("udp_cached_send")
+            && stream_sender_state.contains("fn sender(")
+            && !protocol_forward.contains("has_stream_flow_sender")
+            && !protocol_forward.contains("udp_cached_send")
+            && stream_state.contains("udp_stream_send")
             && !stream_sender_state.contains("fn send_existing_cached_flow")
             && !managed.contains("ManagedCachedFlowSender")
-            && !stream_sender_model.contains("enum CachedUdpFlowStart")
-            && !stream_sender_model.contains("VlessUdpStartFlow")
-            && !stream_sender_model.contains("VmessUdpStartFlow")
-            && !stream_sender_model.contains("VlessCachedFlowHandler")
-            && !stream_sender_model.contains("VmessCachedFlowHandler")
-            && !stream_sender_model.contains("vless: Box")
-            && !stream_sender_model.contains("vmess: Box")
+            && !stream_sender_state.contains("enum CachedUdpFlowStart")
+            && !stream_sender_state.contains("VlessUdpStartFlow")
+            && !stream_sender_state.contains("VmessUdpStartFlow")
+            && !stream_sender_state.contains("VlessCachedFlowHandler")
+            && !stream_sender_state.contains("VmessCachedFlowHandler")
+            && !stream_sender_state.contains("vless: Box")
+            && !stream_sender_state.contains("vmess: Box")
             && !stream_sender_state.contains(".get_mut(0)")
             && !stream_sender_state.contains(".get_mut(1)")
             && !stream_sender_state.contains("handlers.get_mut")
-            && !stream_sender_model.contains("fn senders(")
-            && !stream_sender_model.contains("std::any::Any")
-            && !stream_sender_model.contains("downcast")
-            && !stream_sender_model.contains("as_any")
+            && !stream_sender_state.contains("fn senders(")
+            && !stream_sender_state.contains("std::any::Any")
+            && !stream_sender_state.contains("downcast")
+            && !stream_sender_state.contains("as_any")
             && !state.contains("cached_handler_mut")
             && !vless_flow.exists()
             && !vmess_flow.exists()
@@ -6027,7 +6026,7 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && vmess_adapter.contains("VmessUdpOutboundManager")
             && vmess_adapter.contains("register_managed_stream_flow_sender")
             && !vmess_adapter.contains("cached_handler_mut")
-            && register.contains("ManagedStreamSenderHandlers { stream: Vec::new() }")
+            && !register.contains("ManagedStreamSenderHandlers")
             && !register.contains("vless_cached_handler")
             && !register.contains("vmess_cached_handler"),
         "managed stream UDP flow starts should live in adapters while generic state keeps only stream senders without Vec-order protocol identity or runtime downcasts"

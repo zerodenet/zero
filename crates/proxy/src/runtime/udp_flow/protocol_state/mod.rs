@@ -7,21 +7,18 @@ use zero_engine::EngineError;
 
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    ManagedDatagramFlow, ManagedProtocolUdpState, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
-    ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume, ManagedUdpFlowSnapshot,
-    ManagedUdpHandlers,
+    ManagedDatagramFlow, ManagedProtocolUdpState, ManagedRelayStreamFlow, ManagedStreamFlowSender,
+    ManagedStreamPacketFlow, ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume,
+    ManagedUdpFlowSnapshot, ManagedUdpHandlers,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
-use stream_sender::ManagedStreamSenderState;
-pub(crate) use stream_sender::{ManagedStreamFlowSender, ManagedStreamSenderHandlers};
 use upstream::UpstreamAssociationState;
 pub(crate) use upstream::{UpstreamAssociationHandler, UpstreamUdpHandlers};
 
 mod datagram;
 mod forward;
 mod stream;
-mod stream_sender;
 mod upstream;
 
 pub(crate) struct ProtocolUpstreamAssociationView<'a> {
@@ -35,7 +32,6 @@ pub(crate) struct ClosedProtocolUpstreamAssociation {
 }
 
 pub(crate) struct ProtocolUdpState {
-    stream_senders: ManagedStreamSenderState,
     pub(super) managed: ManagedProtocolUdpState,
     upstream: UpstreamAssociationState,
     managed_flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>,
@@ -43,7 +39,6 @@ pub(crate) struct ProtocolUdpState {
 }
 
 pub(crate) struct ProtocolUdpHandlers {
-    pub(crate) stream_senders: ManagedStreamSenderHandlers,
     pub(crate) managed: ManagedUdpHandlers,
     pub(crate) upstream: UpstreamUdpHandlers,
 }
@@ -51,7 +46,6 @@ pub(crate) struct ProtocolUdpHandlers {
 impl ProtocolUdpState {
     pub(crate) fn new(handlers: ProtocolUdpHandlers) -> Self {
         Self {
-            stream_senders: ManagedStreamSenderState::new(handlers.stream_senders),
             managed: ManagedProtocolUdpState::new(handlers.managed),
             upstream: UpstreamAssociationState::new(handlers.upstream),
             managed_flows: HashMap::new(),
@@ -72,6 +66,15 @@ impl ProtocolUdpState {
     pub(super) fn next_managed_flow_ref(&mut self) -> ManagedUdpFlowRef {
         let flow_ref = ManagedUdpFlowRef::new(self.next_managed_flow_id);
         self.next_managed_flow_id += 1;
+        flow_ref
+    }
+
+    pub(crate) fn register_managed_stream_flow_sender(
+        &mut self,
+        sender: Box<dyn ManagedStreamFlowSender>,
+    ) -> ManagedUdpFlowRef {
+        let flow_ref = self.next_managed_flow_ref();
+        self.managed.register_stream_sender(flow_ref, sender);
         flow_ref
     }
 

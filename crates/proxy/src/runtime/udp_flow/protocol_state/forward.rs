@@ -30,35 +30,12 @@ impl ProtocolUdpState {
             ));
         };
 
-        if self.has_stream_flow_sender(managed) {
-            let Some(sender) = self.stream_senders.sender(managed) else {
-                return Err(protocol_forward_unavailable(
-                    "udp_stream_forward",
-                    "managed stream UDP flow sender was dropped",
-                ));
-            };
-            return sender
-                .send_existing(
-                    chain_tasks,
-                    proxy,
-                    &flow.session.target,
-                    flow.session.port,
-                    payload,
-                )
-                .await
-                .map_err(|error| FlowFailure {
-                    stage: "udp_cached_send",
-                    error,
-                    upstream: None,
-                })
-                .and_then(|session_id| {
-                    session_id.map(|_| payload.len()).ok_or_else(|| {
-                        protocol_forward_unavailable(
-                            "udp_cached_send",
-                            "managed stream UDP flow was dropped",
-                        )
-                    })
-                });
+        if let Some(result) = self
+            .managed
+            .forward_registered_stream_sender(chain_tasks, proxy, managed, flow, payload)
+            .await
+        {
+            return result;
         }
 
         let Some(snapshot) = self.managed_flow_snapshot(managed) else {

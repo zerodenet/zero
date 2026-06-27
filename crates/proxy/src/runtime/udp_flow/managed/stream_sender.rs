@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use tokio::task::JoinSet;
 use zero_core::Address;
 
@@ -17,29 +19,18 @@ pub(crate) trait ManagedStreamFlowSender: Send + Sync {
     ) -> Result<Option<u64>, zero_engine::EngineError>;
 }
 
-pub(crate) struct ManagedStreamSenderHandlers {
-    pub(crate) stream: Vec<Box<dyn ManagedStreamFlowSender>>,
-}
-
-pub(in crate::runtime::udp_flow::protocol_state) struct ManagedStreamSenderState {
-    senders: std::collections::HashMap<ManagedUdpFlowRef, Box<dyn ManagedStreamFlowSender>>,
+pub(super) struct ManagedStreamSenderState {
+    senders: HashMap<ManagedUdpFlowRef, Box<dyn ManagedStreamFlowSender>>,
 }
 
 impl ManagedStreamSenderState {
-    pub(in crate::runtime::udp_flow::protocol_state) fn new(
-        mut handlers: ManagedStreamSenderHandlers,
-    ) -> Self {
-        debug_assert!(
-            handlers.stream.is_empty(),
-            "managed stream senders are registered after flow establishment"
-        );
-        handlers.stream.clear();
+    pub(super) fn new() -> Self {
         Self {
-            senders: std::collections::HashMap::new(),
+            senders: HashMap::new(),
         }
     }
 
-    pub(in crate::runtime::udp_flow::protocol_state) fn sender(
+    pub(super) fn sender(
         &mut self,
         flow_ref: ManagedUdpFlowRef,
     ) -> Option<&mut dyn ManagedStreamFlowSender> {
@@ -48,14 +39,7 @@ impl ManagedStreamSenderState {
             .map(|handler| handler.as_mut() as &mut dyn ManagedStreamFlowSender)
     }
 
-    pub(in crate::runtime::udp_flow::protocol_state) fn contains_sender(
-        &self,
-        flow_ref: ManagedUdpFlowRef,
-    ) -> bool {
-        self.senders.contains_key(&flow_ref)
-    }
-
-    pub(in crate::runtime::udp_flow::protocol_state) fn push_sender(
+    pub(super) fn push_sender(
         &mut self,
         flow_ref: ManagedUdpFlowRef,
         sender: Box<dyn ManagedStreamFlowSender>,

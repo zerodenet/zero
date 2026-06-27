@@ -1,11 +1,11 @@
 use crate::runtime::udp_dispatch::FlowFailure;
+use crate::runtime::udp_flow::managed::ManagedStreamFlowSender;
 use crate::runtime::udp_flow::managed::{
     ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::packet_path::ChainTask;
-use crate::runtime::udp_flow::protocol_state::ManagedStreamFlowSender;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 use tokio::task::JoinSet;
