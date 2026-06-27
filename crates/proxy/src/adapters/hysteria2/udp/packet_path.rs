@@ -22,9 +22,10 @@ pub(super) fn carrier_descriptor(
         return None;
     };
     let config = packet_path_config(tag, server, *port, password, *client_fingerprint);
+    let spec = config.packet_path_spec();
     Some(
         crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
-            config.packet_path_cache_key(),
+            spec.cache_key(),
             server,
             *port,
         ),
@@ -46,12 +47,13 @@ pub(super) async fn build(
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
     let config = packet_path_config("", server, *port, password, *client_fingerprint);
-    let codec = Arc::new(config.packet_path_codec());
+    let spec = config.packet_path_spec();
+    let codec = Arc::new(spec.codec());
     let conn = Arc::new(
         crate::outbound::hysteria2::open_udp_packet_path_connection(
             server,
             *port,
-            config.connector_profile(),
+            spec.connector_profile(),
         )
         .await?,
     );

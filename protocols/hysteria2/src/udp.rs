@@ -307,14 +307,6 @@ impl<'a> Hysteria2UdpFlowConfig<'a> {
         )
     }
 
-    pub fn packet_path_cache_key(&self) -> String {
-        self.cache_key()
-    }
-
-    pub fn packet_path_codec(&self) -> impl DatagramCodec<Address, Error = Error> {
-        self.codec()
-    }
-
     pub fn flow_resume(&self) -> Hysteria2UdpFlowResume {
         Hysteria2UdpFlowResume::new(self.password, self.client_fingerprint)
     }
@@ -323,8 +315,35 @@ impl<'a> Hysteria2UdpFlowConfig<'a> {
         self.flow_resume().connector_profile()
     }
 
+    pub fn packet_path_spec(&self) -> Hysteria2UdpPacketPathSpec {
+        Hysteria2UdpPacketPathSpec {
+            cache_key: self.cache_key(),
+            resume: self.flow_resume(),
+        }
+    }
+
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2UdpPacketPathSpec {
+    cache_key: String,
+    resume: Hysteria2UdpFlowResume,
+}
+
+impl Hysteria2UdpPacketPathSpec {
+    pub fn cache_key(&self) -> String {
+        self.cache_key.clone()
+    }
+
+    pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        self.resume.codec()
+    }
+
+    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
+        self.resume.connector_profile()
     }
 }
 

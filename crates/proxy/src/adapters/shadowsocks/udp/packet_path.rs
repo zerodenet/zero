@@ -25,8 +25,12 @@ pub(super) fn carrier_descriptor(
         return None;
     };
     let config = packet_path_config(tag, server, *port, cipher, password);
-    let cache_key = config.packet_path_cache_key().ok()?;
-    Some(packet_path_carrier_descriptor(cache_key, server, *port))
+    let spec = config.packet_path_spec().ok()?;
+    Some(packet_path_carrier_descriptor(
+        spec.cache_key(),
+        server,
+        *port,
+    ))
 }
 
 pub(super) async fn build(
@@ -45,11 +49,10 @@ pub(super) async fn build(
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
     let config = packet_path_config("", server, *port, cipher, password);
-    let codec = Arc::new(
-        config
-            .packet_path_codec()
-            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?,
-    );
+    let spec = config
+        .packet_path_spec()
+        .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
+    let codec = Arc::new(spec.codec());
     crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
         proxy, server, *port, codec,
     )
@@ -70,9 +73,15 @@ pub(super) fn datagram_source<'a>(
         return None;
     };
     let config = packet_path_config(tag, server, *port, cipher, password);
-    let cache_key = config.packet_path_cache_key().ok()?;
-    let codec = Arc::new(config.packet_path_codec().ok()?);
-    Some(udp_datagram_source(tag, server, *port, cache_key, codec))
+    let spec = config.packet_path_spec().ok()?;
+    let codec = Arc::new(spec.codec());
+    Some(udp_datagram_source(
+        tag,
+        server,
+        *port,
+        spec.cache_key(),
+        codec,
+    ))
 }
 
 fn packet_path_config<'a>(

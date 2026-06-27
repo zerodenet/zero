@@ -540,14 +540,6 @@ impl ShadowsocksUdpFlowResume {
         self.cache_key.clone()
     }
 
-    pub fn packet_path_cache_key(&self) -> alloc::string::String {
-        self.cache_key.clone()
-    }
-
-    pub fn packet_path_codec(&self) -> impl DatagramCodec<Address, Error = Error> {
-        self.codec()
-    }
-
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec(self.cipher, &self.password)
     }
@@ -576,6 +568,27 @@ impl ShadowsocksUdpFlowResume {
             port: decoded.port,
             payload: decoded.payload,
         })
+    }
+}
+
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksUdpPacketPathSpec {
+    resume: ShadowsocksUdpFlowResume,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpPacketPathSpec {
+    fn new(resume: ShadowsocksUdpFlowResume) -> Self {
+        Self { resume }
+    }
+
+    pub fn cache_key(&self) -> alloc::string::String {
+        self.resume.flow_cache_key()
+    }
+
+    pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
+        self.resume.codec()
     }
 }
 
@@ -617,12 +630,8 @@ impl<'a> ShadowsocksUdpFlowConfig<'a> {
         )
     }
 
-    pub fn packet_path_cache_key(&self) -> Result<alloc::string::String, Error> {
-        Ok(self.flow_resume()?.packet_path_cache_key())
-    }
-
-    pub fn packet_path_codec(&self) -> Result<impl DatagramCodec<Address, Error = Error>, Error> {
-        Ok(self.flow_resume()?.packet_path_codec())
+    pub fn packet_path_spec(&self) -> Result<ShadowsocksUdpPacketPathSpec, Error> {
+        Ok(ShadowsocksUdpPacketPathSpec::new(self.flow_resume()?))
     }
 }
 

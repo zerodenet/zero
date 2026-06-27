@@ -1267,9 +1267,10 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
     }
     for forbidden in [
         "ShadowsocksUdpFlowConfig::new",
-        "config.packet_path()",
         "packet_path.cache_key()",
         "packet_path.codec()",
+        ".packet_path_cache_key()",
+        ".packet_path_codec()",
         "ManagedUdpSend {",
         "ManagedUdpFlowResume::new",
     ] {
@@ -1280,11 +1281,11 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
     }
     assert!(
         packet_path.contains("ShadowsocksUdpFlowConfig::new")
-            && !packet_path.contains(".packet_path()")
-            && !packet_path.contains("packet_path.cache_key()")
-            && !packet_path.contains("packet_path.codec()")
-            && packet_path.contains(".packet_path_cache_key()")
-            && packet_path.contains(".packet_path_codec()")
+            && packet_path.contains(".packet_path_spec()")
+            && packet_path.contains("spec.cache_key()")
+            && packet_path.contains("spec.codec()")
+            && !packet_path.contains(".packet_path_cache_key()")
+            && !packet_path.contains(".packet_path_codec()")
             && flow.contains("ShadowsocksUdpFlowConfig::new")
             && flow.contains(".flow_resume()")
             && flow.contains("ManagedDatagramStart")
@@ -1309,9 +1310,10 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
     }
     for forbidden in [
         "Hysteria2UdpFlowConfig::new",
-        "config.packet_path()",
         "packet_path.cache_key()",
         "packet_path.codec()",
+        ".packet_path_cache_key()",
+        ".packet_path_codec()",
         "ManagedUdpSend {",
         "ManagedUdpFlowResume::new",
         "open_udp_packet_path_connection",
@@ -1323,11 +1325,11 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
     }
     assert!(
         packet_path.contains("Hysteria2UdpFlowConfig::new")
-            && !packet_path.contains(".packet_path()")
-            && !packet_path.contains("packet_path.cache_key()")
-            && !packet_path.contains("packet_path.codec()")
-            && packet_path.contains(".packet_path_cache_key()")
-            && packet_path.contains(".packet_path_codec()")
+            && packet_path.contains(".packet_path_spec()")
+            && packet_path.contains("spec.cache_key()")
+            && packet_path.contains("spec.codec()")
+            && !packet_path.contains(".packet_path_cache_key()")
+            && !packet_path.contains(".packet_path_codec()")
             && packet_path.contains("open_udp_packet_path_connection")
             && flow.contains("Hysteria2UdpFlowConfig::new")
             && flow.contains(".flow_resume()")
@@ -8132,18 +8134,23 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     assert!(
         !adapter.contains("Hysteria2UdpFlowResume::new")
             && !adapter.contains(".flow_resume()")
-            && !adapter.contains(".packet_path()")
+            && !adapter.contains(".packet_path_spec()")
             && adapter_flow.contains(".flow_resume()")
-            && !adapter_packet_path.contains(".packet_path()")
-            && adapter_packet_path.contains(".packet_path_cache_key()")
-            && adapter_packet_path.contains(".packet_path_codec()")
+            && adapter_packet_path.contains(".packet_path_spec()")
+            && adapter_packet_path.contains("spec.cache_key()")
+            && adapter_packet_path.contains("spec.codec()")
+            && !adapter_packet_path.contains(".packet_path_cache_key()")
+            && !adapter_packet_path.contains(".packet_path_codec()")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
-            && !protocol_udp.contains("pub struct Hysteria2UdpPacketPath {")
+            && protocol_udp.contains("pub struct Hysteria2UdpPacketPathSpec")
             && protocol_udp.contains("struct Hysteria2UdpFlowConfig")
             && protocol_udp.contains("pub fn new(")
             && protocol_udp.contains("pub fn flow_resume(&self)")
-            && protocol_udp.contains("pub fn packet_path_cache_key(&self)")
-            && protocol_udp.contains("pub fn packet_path_codec(&self)")
+            && protocol_udp.contains("pub fn packet_path_spec(&self)")
+            && protocol_udp.contains("pub fn cache_key(&self)")
+            && protocol_udp.contains("pub fn codec(&self)")
+            && !protocol_udp.contains("pub fn packet_path_cache_key(&self)")
+            && !protocol_udp.contains("pub fn packet_path_codec(&self)")
             && protocol_udp.contains("fn peer_config(&self)")
             && !protocol_udp.contains("pub fn peer_config(&self)")
             && protocol_udp.contains("fn flow_key(&self")
@@ -8630,19 +8637,24 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && !adapter.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter.contains(".flow_resume()")
-            && !adapter.contains(".packet_path()")
+            && !adapter.contains(".packet_path_spec()")
             && adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
             && adapter_flow.contains(".flow_resume()")
             && adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new")
-            && !adapter_packet_path.contains(".packet_path()")
-            && adapter_packet_path.contains(".packet_path_cache_key()")
-            && adapter_packet_path.contains(".packet_path_codec()")
+            && adapter_packet_path.contains(".packet_path_spec()")
+            && adapter_packet_path.contains("spec.cache_key()")
+            && adapter_packet_path.contains("spec.codec()")
+            && !adapter_packet_path.contains(".packet_path_cache_key()")
+            && !adapter_packet_path.contains(".packet_path_codec()")
             && protocol_outbound.contains("pub fn udp_flow_codec(")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self)")
-            && !protocol_outbound.contains("pub fn packet_path(&self)")
-            && protocol_outbound.contains("pub fn packet_path_cache_key(&self)")
-            && protocol_outbound.contains("pub fn packet_path_codec(&self)")
+            && protocol_outbound.contains("pub fn packet_path_spec(&self)")
+            && protocol_outbound.contains("pub struct ShadowsocksUdpPacketPathSpec")
+            && protocol_outbound.contains("pub fn cache_key(&self)")
+            && protocol_outbound.contains("pub fn codec(&self)")
+            && !protocol_outbound.contains("pub fn packet_path_cache_key(&self)")
+            && !protocol_outbound.contains("pub fn packet_path_codec(&self)")
             && protocol_outbound.contains("pub fn from_config(")
             && protocol_outbound
                 .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec")
@@ -8982,12 +8994,14 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter.contains("shadowsocks::udp_datagram_codec")
             && !adapter.contains("resume.codec()")
             && !adapter.contains("resume.packet_path_codec()")
-            && !adapter.contains("config.packet_path()")
-            && !adapter_packet_path.contains(".packet_path()")
+            && !adapter.contains("config.packet_path_spec()")
+            && adapter_packet_path.contains(".packet_path_spec()")
             && !adapter_packet_path.contains("packet_path.cache_key()")
             && !adapter_packet_path.contains("packet_path.codec()")
-            && adapter_packet_path.contains(".packet_path_cache_key()")
-            && adapter_packet_path.contains(".packet_path_codec()"),
+            && adapter_packet_path.contains("spec.cache_key()")
+            && adapter_packet_path.contains("spec.codec()")
+            && !adapter_packet_path.contains(".packet_path_cache_key()")
+            && !adapter_packet_path.contains(".packet_path_codec()"),
         "Shadowsocks adapter should request protocol-built packet-path bundles through explicit protocol packet-path helpers"
     );
     assert!(
@@ -9023,16 +9037,19 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter.contains("resume.packet_path_cache_key()")
             && !adapter.contains("packet_path.cache_key()")
             && !adapter_packet_path.contains("packet_path.cache_key()")
-            && adapter_packet_path.contains(".packet_path_cache_key()"),
+            && adapter_packet_path.contains("spec.cache_key()")
+            && !adapter_packet_path.contains(".packet_path_cache_key()"),
         "Shadowsocks adapter should receive opaque packet-path cache keys from protocols/shadowsocks resume config"
     );
     assert!(
         protocol_outbound.contains("fn udp_cache_key(")
             && !protocol_outbound.contains("pub fn udp_cache_key(")
-            && !protocol_outbound.contains("pub fn packet_path(&self)")
-            && !protocol_outbound.contains("pub struct ShadowsocksUdpPacketPath")
-            && protocol_outbound.contains("pub fn packet_path_cache_key(&self)")
-            && protocol_outbound.contains("pub fn packet_path_codec(&self)"),
+            && protocol_outbound.contains("pub fn packet_path_spec(&self)")
+            && protocol_outbound.contains("pub struct ShadowsocksUdpPacketPathSpec")
+            && protocol_outbound.contains("pub fn cache_key(&self)")
+            && protocol_outbound.contains("pub fn codec(&self)")
+            && !protocol_outbound.contains("pub fn packet_path_cache_key(&self)")
+            && !protocol_outbound.contains("pub fn packet_path_codec(&self)"),
         "protocols/shadowsocks should own Shadowsocks cache identity internally and expose packet-path helpers instead"
     );
     for source in [
@@ -9115,8 +9132,10 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         hysteria2_udp.contains("fn udp_cache_key(")
             && !hysteria2_udp.contains("pub fn udp_cache_key(")
             && hysteria2_udp.contains("hysteria2|")
-            && !hysteria2_udp.contains("pub fn packet_path(&self)")
-            && !hysteria2_udp.contains("pub struct Hysteria2UdpPacketPath {"),
+            && hysteria2_udp.contains("pub fn packet_path_spec(&self)")
+            && hysteria2_udp.contains("pub struct Hysteria2UdpPacketPathSpec")
+            && !hysteria2_udp.contains("pub fn packet_path_cache_key(&self)")
+            && !hysteria2_udp.contains("pub fn packet_path_codec(&self)"),
         "protocols/hysteria2 should own Hysteria2 cache identity construction internally"
     );
 }
