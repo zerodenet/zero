@@ -6708,6 +6708,7 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
     let manager = read("src/adapters/trojan/udp/manager.rs");
     let connect = read("src/adapters/trojan/udp/manager/connect.rs");
     let connect_path = manifest_dir().join("src/adapters/trojan/udp/manager/connect.rs");
+    let outbound = read("src/outbound/trojan.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
@@ -6716,11 +6717,14 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
         "ClientTlsConfig",
         "connect_tls_upstream",
         "connect_tls_stream",
+        "TrojanUdpTlsOptions",
+        "resume.tls_profile(",
+        "tls_profile.",
         ".connect_host(",
     ] {
         assert!(
-            !manager.contains(forbidden),
-            "trojan_manager.rs should keep TLS connect details in trojan_manager/connect.rs; found `{forbidden}`"
+            !manager.contains(forbidden) && !connect.contains(forbidden),
+            "Trojan UDP manager should keep TLS config/profile conversion out of manager glue; found `{forbidden}`"
         );
     }
     assert!(
@@ -6739,14 +6743,16 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
         );
     }
     assert!(
-        connect.contains("open_trojan_udp_tls_stream")
-            && connect.contains("open_trojan_udp_tls_relay_stream")
-            && connect.contains("TrojanUdpTlsOptions")
-            && connect.contains("fn tls_config(")
-            && connect.contains("ClientTlsConfig {")
-            && connect.contains("tls_profile.server_name()")
-            && connect.contains("tls_profile.insecure()")
-            && connect.contains("tls_profile.client_fingerprint()")
+        connect.contains("crate::outbound::trojan::open_udp_tls_stream")
+            && connect.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
+            && outbound.contains("open_trojan_udp_tls_stream")
+            && outbound.contains("open_trojan_udp_tls_relay_stream")
+            && outbound.contains("TrojanUdpTlsOptions")
+            && outbound.contains("fn udp_tls_config(")
+            && outbound.contains("ClientTlsConfig {")
+            && outbound.contains("tls_profile.server_name()")
+            && outbound.contains("tls_profile.insecure()")
+            && outbound.contains("tls_profile.client_fingerprint()")
             && transport.contains("pub struct TrojanUdpTlsOptions")
             && transport.contains("ClientTlsConfig")
             && transport.contains("tls_config: ClientTlsConfig")
@@ -6755,7 +6761,7 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
             && !transport.contains("trojan::")
             && !transport.contains("TrojanUdpTlsProfile")
             && !transport.contains("tls_profile."),
-        "zero-transport should own only neutral TLS stream opening; Trojan TLS profile conversion stays in proxy glue"
+        "zero-transport should own only neutral TLS stream opening; Trojan TLS profile conversion stays in outbound/trojan boundary"
     );
 }
 
@@ -6872,8 +6878,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("TrojanUdpPeer")
             && manager_send.contains("resume.flow_requires_relay_upstream()")
-            && manager_connect.contains("resume.tls_profile(")
-            && manager_connect.contains("TrojanUdpTlsOptions")
+            && !manager_connect.contains("resume.tls_profile(")
+            && !manager_connect.contains("TrojanUdpTlsOptions")
+            && manager_connect.contains("crate::outbound::trojan::open_udp_tls_stream")
             && manager_stream.contains("trojan::establish_udp_flow_with_resume")
             && !manager_stream.contains("trojan::TrojanUdpFlowIo")
             && !manager_stream.contains(".establish_with_resume(")
