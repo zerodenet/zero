@@ -20,8 +20,8 @@ pub use outbound::{
 };
 pub use shared::{
     build_udp_packet, decode_udp_associate_request, decode_udp_associate_response,
-    encode_udp_associate_response, parse_udp_packet, udp_cache_key, Socks5Reply, Socks5UdpPacket,
-    Socks5UdpPacketPathConfig,
+    encode_udp_associate_response, encode_udp_associate_response_to_client, parse_udp_packet,
+    udp_cache_key, Socks5Reply, Socks5UdpPacket, Socks5UdpPacketPathConfig,
 };
 pub use udp::{
     establish_udp_relay_with_control, Socks5UdpAssociation, Socks5UdpRelay, Socks5UdpRelayEndpoint,

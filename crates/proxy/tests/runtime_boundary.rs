@@ -3361,14 +3361,16 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("async fn forward_relay_socket_response")
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("direct_response_session_id")
-            && direct_response.contains("socks5::encode_udp_associate_response"),
+            && direct_response.contains("socks5::encode_udp_associate_response_to_client")
+            && !direct_response.contains("socks5::encode_udp_associate_response("),
         "SOCKS5 UDP direct response metering and framing should live in inbound/socks5/udp_associate/direct_response.rs"
     );
     assert!(
         chain_response.contains("async fn handle_chain_result")
             && chain_response.contains("pub(super) struct ChainResponseRequest")
             && chain_response.contains("struct ForwardChainResponseRequest")
-            && chain_response.contains("socks5::encode_udp_associate_response(request.target")
+            && chain_response.contains("socks5::encode_udp_associate_response_to_client")
+            && !chain_response.contains("socks5::encode_udp_associate_response(")
             && chain_response.contains("failed to send UDP chain response to client")
             && chain_response.contains("chain response task panicked"),
         "SOCKS5 UDP chain response result handling and framing should live in inbound/socks5/udp_associate/chain_response.rs"
@@ -3388,7 +3390,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     }
     assert!(
         dispatch.contains("socks5::decode_udp_associate_request")
-            && upstream_response.contains("socks5::decode_udp_associate_response"),
+            && upstream_response.contains("socks5::decode_udp_associate_response")
+            && direct_response.contains("socks5::encode_udp_associate_response_to_client")
+            && chain_response.contains("socks5::encode_udp_associate_response_to_client"),
         "SOCKS5 UDP associate dispatch/attribution should use semantic decode helpers"
     );
     assert!(

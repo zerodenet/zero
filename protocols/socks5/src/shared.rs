@@ -261,6 +261,14 @@ pub fn encode_udp_associate_response(
     build_udp_packet(address, port, payload)
 }
 
+pub fn encode_udp_associate_response_to_client(
+    upstream_address: &Address,
+    upstream_port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    encode_udp_associate_response(upstream_address, upstream_port, payload)
+}
+
 pub fn udp_cache_key(tag: &str, server: &str, port: u16, username: Option<&str>) -> String {
     let auth = username
         .map(|value| alloc::format!("|auth:{value}"))
