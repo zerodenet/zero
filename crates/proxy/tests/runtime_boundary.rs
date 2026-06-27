@@ -7367,6 +7367,7 @@ fn packet_path_traits_are_grouped_by_responsibility() {
         "trait PacketPathCarrier",
         "struct PacketPathCarrierDescriptor",
         "struct UdpDatagramSource",
+        "struct UdpDatagramSourceParts",
         "type ChainTask =",
         "struct UdpFlowContext",
         "struct UdpPacketRef",
@@ -9628,6 +9629,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter_packet_path.contains(".packet_path_spec()")
             && !adapter_packet_path.contains("packet_path.cache_key()")
             && !adapter_packet_path.contains("packet_path.codec()")
+            && adapter_packet_path.contains("UdpDatagramSourceParts")
             && adapter_packet_path.contains("spec.carrier_cache_key()")
             && adapter_packet_path.contains("spec.datagram_cache_key()")
             && !adapter_packet_path.contains("spec.cache_key()")

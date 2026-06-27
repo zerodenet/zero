@@ -108,21 +108,23 @@ pub(crate) struct UdpDatagramSource<'a> {
     pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 }
 
-pub(crate) fn udp_datagram_source<'a>(
-    tag: &'a str,
-    server: &'a str,
-    port: u16,
-    cache_key: String,
-    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
-) -> UdpDatagramSource<'a> {
+pub(crate) struct UdpDatagramSourceParts<'a> {
+    pub(crate) tag: &'a str,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) cache_key: String,
+    pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
+}
+
+pub(crate) fn udp_datagram_source<'a>(parts: UdpDatagramSourceParts<'a>) -> UdpDatagramSource<'a> {
     UdpDatagramSource {
         descriptor: UdpDatagramDescriptor {
-            tag,
-            server,
-            port,
-            cache_key,
+            tag: parts.tag,
+            server: parts.server,
+            port: parts.port,
+            cache_key: parts.cache_key,
         },
-        codec,
+        codec: parts.codec,
     }
 }
 

@@ -7,7 +7,7 @@ use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_flow::packet_path::{
     packet_path_carrier_descriptor, udp_datagram_source, PacketPathCarrier,
-    PacketPathCarrierDescriptor, UdpDatagramSource,
+    PacketPathCarrierDescriptor, UdpDatagramSource, UdpDatagramSourceParts,
 };
 use crate::runtime::Proxy;
 
@@ -73,11 +73,11 @@ pub(super) fn datagram_source<'a>(
     let spec =
         shadowsocks::udp_packet_path_spec_from_config(tag, server, *port, cipher, password).ok()?;
     let codec = Arc::new(spec.codec());
-    Some(udp_datagram_source(
+    Some(udp_datagram_source(UdpDatagramSourceParts {
         tag,
         server,
-        *port,
-        spec.datagram_cache_key(),
+        port: *port,
+        cache_key: spec.datagram_cache_key(),
         codec,
-    ))
+    }))
 }
