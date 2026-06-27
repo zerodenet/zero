@@ -5,8 +5,6 @@ mod establish;
 pub(super) mod model;
 #[cfg(feature = "trojan")]
 mod send;
-#[cfg(feature = "trojan")]
-mod stream;
 
 #[cfg(feature = "trojan")]
 pub(crate) struct TrojanChainManager {

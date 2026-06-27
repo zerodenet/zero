@@ -1,5 +1,4 @@
 use super::connect;
-use super::stream;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -18,6 +17,11 @@ pub(super) async fn packet_stream(
     stream: TcpRelayStream,
     resume: &mieru::MieruUdpFlowResume,
 ) -> Result<mieru::MieruUdpFlowSession, EngineError> {
-    let flow = stream::spawn_packet_stream(stream, resume).await?;
-    Ok(flow.session)
+    mieru::establish_udp_flow_with_resume(stream, resume)
+        .await
+        .map_err(|error| {
+            EngineError::Io(std::io::Error::other(format!(
+                "mieru udp associate: {error}"
+            )))
+        })
 }

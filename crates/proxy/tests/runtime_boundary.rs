@@ -2878,7 +2878,8 @@ fn runtime_protocol_state_consumes_managed_flow_models_without_legacy_facade() {
 
 #[test]
 fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
-    let stream = read("src/adapters/mieru/udp/manager/stream.rs");
+    let establish = read("src/adapters/mieru/udp/manager/establish.rs");
+    let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
     let protocol = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -2901,13 +2902,13 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
         "mieru::MieruUdpFlowSession::new",
     ] {
         assert!(
-            !stream.contains(forbidden),
-            "Mieru UDP stream glue should delegate protocol encode/decode and pump detail to protocols/mieru; found `{forbidden}`"
+            !establish.contains(forbidden),
+            "Mieru UDP establish glue should delegate protocol encode/decode and pump detail to protocols/mieru; found `{forbidden}`"
         );
     }
     assert!(
-        stream.contains("mieru::establish_udp_flow_with_resume"),
-        "Mieru UDP stream glue should call the protocol-owned established flow API"
+        !stream.exists() && establish.contains("mieru::establish_udp_flow_with_resume"),
+        "Mieru UDP establish glue should call the protocol-owned established flow API without a dedicated stream wrapper"
     );
     assert!(
         protocol.contains("pub async fn establish_udp_flow_with_resume")
@@ -6660,7 +6661,8 @@ fn feature_gated_udp_manager_modules_do_not_embed_disabled_stubs() {
 #[test]
 fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
     let manager = read("src/adapters/trojan/udp/manager.rs");
-    let stream = read("src/adapters/trojan/udp/manager/stream.rs");
+    let establish = read("src/adapters/trojan/udp/manager/establish.rs");
+    let stream = manifest_dir().join("src/adapters/trojan/udp/manager/stream.rs");
     let socket = manifest_dir().join("src/adapters/trojan/udp/manager/socket.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
@@ -6671,7 +6673,7 @@ fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
 
     for forbidden in ["struct ReadOnlySocket", "struct WriteOnlySocket"] {
         assert!(
-            !manager.contains(forbidden) && !stream.contains(forbidden),
+            !manager.contains(forbidden) && !establish.contains(forbidden) && !stream.exists(),
             "Trojan proxy glue should not own stream socket adapter `{forbidden}`"
         );
     }
@@ -6791,7 +6793,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     let manager_send = read("src/adapters/trojan/udp/manager/send.rs");
     let manager_connect = read("src/adapters/trojan/udp/manager/connect.rs");
     let manager_establish = read("src/adapters/trojan/udp/manager/establish.rs");
-    let manager_stream = read("src/adapters/trojan/udp/manager/stream.rs");
+    let manager_stream = manifest_dir().join("src/adapters/trojan/udp/manager/stream.rs");
     let manager_model = read("src/adapters/trojan/udp/manager/model.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
@@ -6849,7 +6851,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             !manager_send.contains(forbidden)
                 && !manager_connect.contains(forbidden)
                 && !manager_establish.contains(forbidden)
-                && !manager_stream.contains(forbidden)
+                && !manager_stream.exists()
                 && !manager_model.contains(forbidden),
             "Trojan UDP manager should not match or store protocol-private cache-key internals `{forbidden}`"
         );
@@ -6904,7 +6906,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             !manager_send.contains(forbidden)
                 && !manager_connect.contains(forbidden)
                 && !manager_establish.contains(forbidden)
-                && !manager_stream.contains(forbidden)
+                && !manager_stream.exists()
                 && !manager_model.contains(forbidden),
             "Trojan UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
         );
@@ -6918,9 +6920,10 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && !manager_connect.contains("resume.tls_profile(")
             && !manager_connect.contains("TrojanUdpTlsOptions")
             && manager_connect.contains("crate::outbound::trojan::open_udp_tls_stream")
-            && manager_stream.contains("trojan::establish_udp_flow_with_resume")
-            && !manager_stream.contains("trojan::TrojanUdpFlowIo")
-            && !manager_stream.contains(".establish_with_resume(")
+            && !manager_stream.exists()
+            && manager_establish.contains("trojan::establish_udp_flow_with_resume")
+            && !manager_establish.contains("trojan::TrojanUdpFlowIo")
+            && !manager_establish.contains(".establish_with_resume(")
             && protocol_outbound.contains("pub async fn establish_with_resume")
             && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
             && !transport.contains("trojan::"),
@@ -6931,7 +6934,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
 #[test]
 fn trojan_udp_packet_stream_tasks_live_outside_manager() {
     let manager = read("src/adapters/trojan/udp/manager.rs");
-    let stream = read("src/adapters/trojan/udp/manager/stream.rs");
+    let establish = read("src/adapters/trojan/udp/manager/establish.rs");
+    let stream = manifest_dir().join("src/adapters/trojan/udp/manager/stream.rs");
     let model = read("src/adapters/trojan/udp/manager/model.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
@@ -6963,8 +6967,8 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             "trojan_manager.rs should not own Trojan packet framing details; found `{forbidden}`"
         );
         assert!(
-            !stream.contains(forbidden),
-            "trojan_manager/stream.rs should delegate Trojan packet framing to protocols/trojan helpers; found `{forbidden}`"
+            !establish.contains(forbidden),
+            "trojan_manager/establish.rs should delegate Trojan packet framing to protocols/trojan helpers; found `{forbidden}`"
         );
     }
     for forbidden in ["TrojanUdpPacket {", "trojan::TrojanUdpPacket"] {
@@ -6974,24 +6978,25 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        !stream.contains("trojan::write_udp_response")
-            && !stream.contains("trojan::read_inbound_udp_packet"),
-        "Trojan UDP manager stream should use flow-specific protocol helpers instead of generic UDP helpers"
+        !stream.exists()
+            && !establish.contains("trojan::write_udp_response")
+            && !establish.contains("trojan::read_inbound_udp_packet"),
+        "Trojan UDP manager establish glue should use flow-specific protocol helpers instead of generic UDP helpers"
     );
     assert!(
-        stream.contains("trojan::establish_udp_flow_with_resume")
-            && !stream.contains("tokio::io::split")
-            && !stream.contains("tokio::spawn")
-            && !stream.contains(".write_flow_packet(")
-            && !stream.contains(".write_packet(")
-            && !stream.contains("&mut send_stream")
-            && !stream.contains(".read_flow_packet(")
-            && !stream.contains("&mut recv_stream")
-            && !stream.contains("trojan::TrojanUdpFlowSession::new")
-            && !stream.contains("trojan::TrojanUdpFlowSender")
-            && !stream.contains("trojan::TrojanUdpFlowResponses")
-            && !stream.contains("broadcast::Sender<UdpFlowPacket>")
-            && !stream.contains("mpsc::Sender<UdpFlowPacket>")
+        establish.contains("trojan::establish_udp_flow_with_resume")
+            && !establish.contains("tokio::io::split")
+            && !establish.contains("tokio::spawn")
+            && !establish.contains(".write_flow_packet(")
+            && !establish.contains(".write_packet(")
+            && !establish.contains("&mut send_stream")
+            && !establish.contains(".read_flow_packet(")
+            && !establish.contains("&mut recv_stream")
+            && !establish.contains("trojan::TrojanUdpFlowSession::new")
+            && !establish.contains("trojan::TrojanUdpFlowSender")
+            && !establish.contains("trojan::TrojanUdpFlowResponses")
+            && !establish.contains("broadcast::Sender<UdpFlowPacket>")
+            && !establish.contains("mpsc::Sender<UdpFlowPacket>")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
             && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
             && protocol_outbound.contains("struct TrojanUdpFlowSender")
@@ -7003,12 +7008,12 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_outbound.contains("tokio::spawn")
             && protocol_outbound.contains("mpsc::channel::<UdpFlowPacket>")
             && protocol_outbound.contains("broadcast::channel::<UdpFlowPacket>")
-            && !stream.contains(".write_stream_packet")
-            && !stream.contains(".read_stream_packet")
-            && !stream.contains(".read_packet(")
-            && !stream.contains("trojan::udp_flow_packet")
+            && !establish.contains(".write_stream_packet")
+            && !establish.contains(".read_stream_packet")
+            && !establish.contains(".read_packet(")
+            && !establish.contains("trojan::udp_flow_packet")
             && !transport.contains("trojan::")
-            && !stream.contains("packet.write_to")
+            && !establish.contains("packet.write_to")
             && !model.contains("struct TrojanPacket"),
         "Trojan UDP packet stream tasks should live in protocols/trojan while proxy keeps handshake/cache bridge glue"
     );
@@ -7055,8 +7060,9 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         "Mieru UDP manager should not keep a proxy-owned codec module"
     );
     assert!(
-        stream.exists(),
-        "Mieru UDP flow stream runtime glue should live in proxy mieru_manager/stream.rs"
+        !stream.exists()
+            && manager_establish.contains("mieru::establish_udp_flow_with_resume(stream, resume)"),
+        "Mieru UDP flow stream runtime glue should call protocols/mieru directly without proxy mieru_manager/stream.rs"
     );
     assert!(
         protocol_outbound.contains("struct MieruUdpFlowIo")
@@ -7221,7 +7227,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && !manager_model.contains("MieruUdpPeer")
             && manager_send.contains("request.resume.flow_requires_relay_upstream()")
             && !manager_connect.contains("MieruUdpFlowIo::establish_with_resume")
-            && manager_establish.contains("stream::spawn_packet_stream(stream, resume)")
+            && manager_establish.contains("mieru::establish_udp_flow_with_resume(stream, resume)")
             && protocol_outbound.contains("pub async fn establish_with_resume")
             && !protocol_outbound.contains("pub async fn open_udp_flow"),
         "Mieru UDP manager should consume protocol-owned opaque cache key through neutral endpoints and UDP establish helper"
@@ -7280,11 +7286,11 @@ fn mieru_udp_connect_handshake_lives_outside_manager() {
     assert!(
         !connect.contains("MieruUdpFlowIo::establish")
             && !establish.contains("MieruUdpFlowIo::establish")
-            && stream.exists()
+            && !stream.exists()
             && !connect.contains("MieruOutbound::connect")
             && !connect.contains("encrypt_client_data")
             && !connect.contains("decrypt_server_data")
-            && establish.contains("stream::spawn_packet_stream(stream, resume)")
+            && establish.contains("mieru::establish_udp_flow_with_resume(stream, resume)")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && protocol_outbound.contains("fn send_udp_associate_request")
             && protocol_outbound.contains("fn read_udp_associate_response"),
@@ -7397,7 +7403,7 @@ fn trojan_udp_state_model_lives_outside_manager() {
 fn trojan_udp_establish_logic_lives_outside_manager() {
     let manager = read("src/adapters/trojan/udp/manager.rs");
     let establish = read("src/adapters/trojan/udp/manager/establish.rs");
-    let stream = read("src/adapters/trojan/udp/manager/stream.rs");
+    let stream = manifest_dir().join("src/adapters/trojan/udp/manager/stream.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
@@ -7429,8 +7435,8 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             "trojan_manager/establish.rs should use protocol-owned packet helpers without rebuilding protocol packet internals; found `{forbidden}`"
         );
         assert!(
-            !stream.contains(forbidden),
-            "trojan_manager/stream.rs should delegate Trojan packet tunnel establishment to protocols/trojan helpers; found `{forbidden}`"
+            !stream.exists(),
+            "trojan_manager/stream.rs should not exist; packet tunnel establishment should delegate through establish.rs"
         );
     }
     let protocol_outbound =
@@ -7451,34 +7457,35 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && !establish.contains("trojan::udp_flow_packet")
             && !establish.contains("trojan::TrojanUdpPacket::new")
-            && stream.contains("trojan::establish_udp_flow_with_resume")
-            && !stream.contains("trojan::TrojanUdpFlowSession::new")
-            && !stream.contains("trojan::TrojanUdpFlowSender")
-            && !stream.contains("trojan::TrojanUdpFlowResponses")
-            && !stream.contains("mpsc::Sender<UdpFlowPacket>")
-            && !stream.contains("broadcast::Sender<UdpFlowPacket>")
-            && !stream.contains("trojan::spawn_udp_flow")
-            && !stream.contains("trojan::udp_flow_packet")
-            && !stream.contains("trojan::TrojanUdpPacket")
+            && !stream.exists()
+            && establish.contains("trojan::establish_udp_flow_with_resume")
+            && !establish.contains("trojan::TrojanUdpFlowSession::new")
+            && !establish.contains("trojan::TrojanUdpFlowSender")
+            && !establish.contains("trojan::TrojanUdpFlowResponses")
+            && !establish.contains("mpsc::Sender<UdpFlowPacket>")
+            && !establish.contains("broadcast::Sender<UdpFlowPacket>")
+            && !establish.contains("trojan::spawn_udp_flow")
+            && !establish.contains("trojan::udp_flow_packet")
+            && !establish.contains("trojan::TrojanUdpPacket")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("trojan::udp_flow_packet"),
         "Trojan UDP stream glue should carry protocol-owned flow handles while protocols/trojan owns packet conversion and flow channels"
     );
     assert!(
-        stream.contains("trojan::establish_udp_flow_with_resume")
-            && !stream.contains("trojan::TrojanUdpFlowIo")
-            && !stream.contains(".establish_with_resume(")
-            && !stream.contains("trojan::spawn_udp_flow")
-            && !stream.contains(".write_flow_packet(")
-            && !stream.contains(".write_packet(")
-            && !stream.contains("&mut send_stream")
-            && !stream.contains(".read_flow_packet(")
-            && !stream.contains("&mut recv_stream")
-            && !stream.contains(".write_stream_packet")
-            && !stream.contains(".read_stream_packet")
-            && !stream.contains(".read_packet(")
+        establish.contains("trojan::establish_udp_flow_with_resume")
+            && !establish.contains("trojan::TrojanUdpFlowIo")
+            && !establish.contains(".establish_with_resume(")
+            && !establish.contains("trojan::spawn_udp_flow")
+            && !establish.contains(".write_flow_packet(")
+            && !establish.contains(".write_packet(")
+            && !establish.contains("&mut send_stream")
+            && !establish.contains(".read_flow_packet(")
+            && !establish.contains("&mut recv_stream")
+            && !establish.contains(".write_stream_packet")
+            && !establish.contains(".read_stream_packet")
+            && !establish.contains(".read_packet(")
             && !transport.contains("trojan::TrojanUdpFlowIo")
-            && !stream.contains("trojan::establish_udp_packet_tunnel"),
+            && !establish.contains("trojan::establish_udp_packet_tunnel"),
         "Trojan UDP packet stream should delegate protocol flow pumping to protocols/trojan"
     );
 }
@@ -7562,10 +7569,10 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        stream.exists() && !socket.exists(),
-        "Mieru UDP stream task should live in proxy stream glue without a separate socket module"
+        !stream.exists() && !socket.exists(),
+        "Mieru UDP stream task should live in protocols/mieru without proxy stream/socket wrappers"
     );
-    let stream = read("src/adapters/mieru/udp/manager/stream.rs");
+    let establish = read("src/adapters/mieru/udp/manager/establish.rs");
     assert!(
         !repo_root()
             .join("crates/transport/src/mieru_transport.rs")
@@ -7591,19 +7598,19 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_outbound.contains("mpsc::channel::<zero_core::UdpFlowPacket>")
             && protocol_outbound.contains("tokio::spawn")
             && protocol_outbound.contains("tokio::select!")
-            && !stream.contains("mpsc::channel")
-            && !stream.contains("tokio::sync::broadcast::channel")
-            && !stream.contains("tokio::spawn")
-            && stream.contains("mieru::establish_udp_flow_with_resume")
-            && !stream.contains("mieru::MieruUdpFlowIo::establish_with_resume")
-            && !stream.contains("mieru::spawn_udp_flow")
-            && !stream.contains("mieru::MieruUdpFlowSession::new")
-            && !stream.contains("flow_io.write_flow_packet")
-            && !stream.contains("flow_io.decode_encrypted_response")
-            && !stream.contains("flow_io.read_flow_packets")
-            && !stream.contains("packet.encode_with(&mut flow_io)")
-            && !stream.contains("flow_io.push_encrypted_response")
-            && !stream.contains("flow_io.next_packet()")
+            && !establish.contains("mpsc::channel")
+            && !establish.contains("tokio::sync::broadcast::channel")
+            && !establish.contains("tokio::spawn")
+            && establish.contains("mieru::establish_udp_flow_with_resume")
+            && !establish.contains("mieru::MieruUdpFlowIo::establish_with_resume")
+            && !establish.contains("mieru::spawn_udp_flow")
+            && !establish.contains("mieru::MieruUdpFlowSession::new")
+            && !establish.contains("flow_io.write_flow_packet")
+            && !establish.contains("flow_io.decode_encrypted_response")
+            && !establish.contains("flow_io.read_flow_packets")
+            && !establish.contains("packet.encode_with(&mut flow_io)")
+            && !establish.contains("flow_io.push_encrypted_response")
+            && !establish.contains("flow_io.next_packet()")
             && protocol_outbound.contains("pub async fn write_packet")
             && protocol_outbound.contains("pub async fn read_packets")
             && protocol_outbound.contains("pub async fn write_flow_packet")

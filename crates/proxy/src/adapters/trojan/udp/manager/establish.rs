@@ -1,5 +1,4 @@
 use super::connect;
-use super::stream;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -14,7 +13,7 @@ pub(super) async fn direct(
 ) -> Result<trojan::TrojanUdpFlowSession, EngineError> {
     let tls_stream = connect::direct_tls_stream(proxy, endpoint, resume).await?;
 
-    packet_stream(proxy, session, tls_stream, resume).await
+    packet_stream(session, tls_stream, resume).await
 }
 
 pub(super) async fn over_relay_stream(
@@ -28,18 +27,15 @@ pub(super) async fn over_relay_stream(
     let tls_stream =
         connect::relay_tls_stream(stream, tls_server_name, proxy, endpoint, resume).await?;
 
-    packet_stream(proxy, session, tls_stream, resume).await
+    packet_stream(session, tls_stream, resume).await
 }
 
 async fn packet_stream(
-    proxy: &Proxy,
     session: &Session,
     stream: TcpRelayStream,
     resume: &trojan::TrojanUdpFlowResume,
 ) -> Result<trojan::TrojanUdpFlowSession, EngineError> {
-    let stream::PacketStream {
-        session: flow_session,
-    } = stream::spawn_packet_stream(proxy, session, stream, resume).await?;
-
-    Ok(flow_session)
+    trojan::establish_udp_flow_with_resume(stream, session, resume)
+        .await
+        .map_err(|error| EngineError::Io(std::io::Error::other(format!("{error}"))))
 }
