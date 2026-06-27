@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 
-use shadowsocks::{CipherKind, ShadowsocksInboundUdpCodec};
+use shadowsocks::{ShadowsocksInboundProfile, ShadowsocksInboundUdpCodec};
 use tokio::net::UdpSocket;
 use tracing::warn;
 use zero_core::{Address, ProtocolType};
@@ -20,11 +20,10 @@ impl Proxy {
         &self,
         udp_socket: Arc<UdpSocket>,
         inbound_tag: &str,
-        password: &str,
-        cipher: CipherKind,
+        profile: ShadowsocksInboundProfile,
     ) -> Result<(), EngineError> {
         let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(inbound_tag).await?;
-        let mut codec = ShadowsocksInboundUdpCodec::new(cipher, password.as_bytes());
+        let mut codec = profile.udp_codec();
         // Map session_id -> client_addr for response delivery.
         let mut client_sessions: HashMap<u64, SocketAddr> = HashMap::new();
         // For 2022 (blake3): map internal dispatch session_id -> the client's
@@ -51,7 +50,7 @@ impl Proxy {
                     };
 
                     let mut sa = zero_core::SessionAuth::new("shadowsocks");
-                    sa.principal_key = Some(password.to_owned());
+                    sa.principal_key = Some(profile.principal_key());
                     match UdpPipe::new(self, &mut dispatch)
                         .dispatch(UdpPipeInput {
                             target: request.target,

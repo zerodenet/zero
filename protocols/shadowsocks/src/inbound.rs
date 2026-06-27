@@ -1,6 +1,8 @@
 // Shadowsocks inbound protocol.
 
 #[cfg(feature = "crypto")]
+use alloc::string::String;
+#[cfg(feature = "crypto")]
 use alloc::vec::Vec;
 #[cfg(feature = "crypto")]
 use zero_core::Address;
@@ -29,6 +31,65 @@ pub struct ShadowsocksAccept {
     /// For 2022 edition: the client request salt, echoed back in the server
     /// response fixed header. Empty for legacy AEAD.
     pub request_salt: Vec<u8>,
+}
+
+/// Protocol-owned validated inbound profile.
+///
+/// Proxy runtime code keeps this as an opaque profile and delegates TCP/UDP
+/// Shadowsocks framing decisions back to the protocol crate.
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone)]
+pub struct ShadowsocksInboundProfile {
+    cipher_name: String,
+    cipher: super::shared::CipherKind,
+    password: Vec<u8>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksInboundProfile {
+    pub fn from_config(cipher_name: &str, password: &str) -> Result<Self, Error> {
+        let cipher = super::shared::CipherKind::from_str(cipher_name)
+            .ok_or(Error::Protocol("ss: unknown inbound cipher"))?;
+        Ok(Self {
+            cipher_name: String::from(cipher_name),
+            cipher,
+            password: password.as_bytes().to_vec(),
+        })
+    }
+
+    pub fn cipher_name(&self) -> &str {
+        &self.cipher_name
+    }
+
+    pub fn principal_key(&self) -> String {
+        String::from_utf8_lossy(&self.password).to_string()
+    }
+
+    pub fn is_2022(&self) -> bool {
+        self.cipher.is_blake3()
+    }
+
+    pub fn udp_codec(&self) -> ShadowsocksInboundUdpCodec {
+        ShadowsocksInboundUdpCodec::new(self.cipher, &self.password)
+    }
+
+    pub async fn accept_request<S: zero_traits::AsyncSocket>(
+        &self,
+        inbound: &ShadowsocksInbound,
+        stream: &mut S,
+    ) -> Result<ShadowsocksAccept, Error> {
+        inbound
+            .accept_request(stream, self.cipher, &self.password)
+            .await
+    }
+
+    pub fn into_aead_stream<S>(
+        &self,
+        accept: ShadowsocksAccept,
+        inner: S,
+    ) -> Result<super::stream::ShadowsocksAeadStream<S>, Error> {
+        accept.into_aead_stream(inner, &self.password)
+    }
 }
 
 /// Decoded Shadowsocks inbound UDP request.

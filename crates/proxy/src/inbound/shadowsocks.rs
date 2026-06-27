@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use shadowsocks::{CipherKind, ShadowsocksAeadStream, ShadowsocksInbound};
+use shadowsocks::{ShadowsocksAeadStream, ShadowsocksInbound, ShadowsocksInboundProfile};
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::watch;
@@ -24,16 +24,13 @@ mod udp;
 #[derive(Debug)]
 pub(crate) struct ShadowsocksInboundRequest {
     pub(crate) inbound: InboundConfig,
-    pub(crate) password: String,
-    pub(crate) cipher_name: String,
-    pub(crate) cipher: CipherKind,
+    pub(crate) profile: ShadowsocksInboundProfile,
 }
 
 #[derive(Clone)]
 pub(crate) struct ShadowsocksInboundHandler {
     ss_inbound: ShadowsocksInbound,
-    cipher: CipherKind,
-    password: Vec<u8>,
+    profile: ShadowsocksInboundProfile,
     /// SIP022 3.1.5 replay protection, shared across this listener's
     /// connections. Only exercised for 2022 (blake3) ciphers.
     replay_pool: Arc<shadowsocks::ReplaySaltPool>,
@@ -49,23 +46,25 @@ impl InboundProtocol for ShadowsocksInboundHandler {
     ) -> Result<(Session, Self::ClientStream), EngineError> {
         let mut metered = MeteredStream::new(stream);
         let accept = self
-            .ss_inbound
-            .accept_request(&mut metered, self.cipher, &self.password)
+            .profile
+            .accept_request(&self.ss_inbound, &mut metered)
             .await?;
 
         // SIP022 3.1.5: reject a request salt reused within the 60 s window.
         // The timestamp check (inside accept_request) is the primary replay
         // filter; this catches replays inside the 30 s window.
-        if self.cipher.is_blake3() && !accept.request_salt.is_empty() {
+        if self.profile.is_2022() && !accept.request_salt.is_empty() {
             self.replay_pool.check_and_insert(&accept.request_salt)?;
         }
 
         let mut session = accept.session.clone();
         let mut sa = zero_core::SessionAuth::new("shadowsocks");
-        sa.principal_key = Some(String::from_utf8_lossy(&self.password).to_string());
+        sa.principal_key = Some(self.profile.principal_key());
         session.apply_auth(sa);
 
-        let client = accept.into_aead_stream(metered.into_inner(), &self.password)?;
+        let client = self
+            .profile
+            .into_aead_stream(accept, metered.into_inner())?;
 
         Ok((session, client))
     }
@@ -92,12 +91,7 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
     listener: zero_platform_tokio::TokioListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let ShadowsocksInboundRequest {
-        inbound,
-        password,
-        cipher_name,
-        cipher,
-    } = request;
+    let ShadowsocksInboundRequest { inbound, profile } = request;
 
     let local_addr = listener.local_addr()?;
 
@@ -116,8 +110,7 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
 
     let handler = ShadowsocksInboundHandler {
         ss_inbound: ShadowsocksInbound,
-        cipher,
-        password: password.clone().into_bytes(),
+        profile: profile.clone(),
         replay_pool: Arc::new(shadowsocks::ReplaySaltPool::new()),
     };
 
@@ -126,7 +119,7 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
     info!(
         inbound_tag = %inbound.tag,
         protocol = "shadowsocks",
-        cipher = %cipher_name,
+        cipher = %profile.cipher_name(),
         listen = %local_addr,
         udp = udp_socket.is_some(),
         "inbound listener ready"
@@ -135,10 +128,9 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
     if let Some(udp) = udp_socket.as_ref() {
         let engine = proxy.clone();
         let tag = inbound.tag.clone();
-        let password = password.clone();
+        let profile = profile.clone();
         let udp = udp.clone();
-        connections
-            .spawn(async move { engine.ss_udp_relay_loop(udp, &tag, &password, cipher).await });
+        connections.spawn(async move { engine.ss_udp_relay_loop(udp, &tag, profile).await });
     }
 
     loop {

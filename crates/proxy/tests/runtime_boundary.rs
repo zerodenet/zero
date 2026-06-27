@@ -849,14 +849,16 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         "Shadowsocks adapter should extract Shadowsocks config and pass ShadowsocksInboundRequest"
     );
     assert!(
-        inbound.contains("pub(crate) cipher: CipherKind")
-            && inbound.contains("pub(crate) cipher_name: String")
+        inbound.contains("pub(crate) profile: ShadowsocksInboundProfile")
+            && !inbound.contains("pub(crate) cipher: CipherKind")
+            && !inbound.contains("pub(crate) password: String")
             && !inbound.contains("CipherKind::from_str"),
-        "Shadowsocks inbound listener should receive an adapter-parsed CipherKind plus display name"
+        "Shadowsocks inbound listener should receive a protocol-owned profile, not raw cipher/password"
     );
     assert!(
-        adapter.contains("CipherKind::from_str"),
-        "Shadowsocks adapter should parse Shadowsocks cipher config before calling the listener"
+        adapter.contains("ShadowsocksInboundProfile::from_config")
+            && !adapter.contains("CipherKind::from_str"),
+        "Shadowsocks adapter should delegate inbound profile validation to the protocol crate"
     );
     assert!(
         !inbound.contains("#[allow(clippy::too_many_lines)]"),
@@ -872,6 +874,15 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
             && udp.contains("struct SsProtocolResponse")
             && udp.contains("UdpPipe::new"),
         "Shadowsocks UDP relay should live in src/inbound/shadowsocks/udp.rs and route through UdpPipe"
+    );
+    assert!(
+        udp.contains("ShadowsocksInboundProfile")
+            && udp.contains("profile.udp_codec()")
+            && udp.contains("profile.principal_key()")
+            && !udp.contains("CipherKind")
+            && !udp.contains("password: &str")
+            && !udp.contains("ShadowsocksInboundUdpCodec::new"),
+        "Shadowsocks UDP relay should delegate protocol-private codec/auth construction to the profile"
     );
 }
 

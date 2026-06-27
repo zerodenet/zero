@@ -13,8 +13,8 @@ mod stream;
 pub use inbound::ShadowsocksInbound;
 #[cfg(feature = "crypto")]
 pub use inbound::{
-    ShadowsocksAccept, ShadowsocksInboundUdpCodec, ShadowsocksInboundUdpPacket,
-    ShadowsocksInboundUdpResponse,
+    ShadowsocksAccept, ShadowsocksInboundProfile, ShadowsocksInboundUdpCodec,
+    ShadowsocksInboundUdpPacket, ShadowsocksInboundUdpResponse,
 };
 pub use metadata::ShadowsocksProtocol;
 pub use outbound::ShadowsocksOutbound;
