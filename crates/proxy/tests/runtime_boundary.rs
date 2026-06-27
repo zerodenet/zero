@@ -2447,10 +2447,12 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
             && establish.contains("pub(super) async fn direct_flow")
             && establish.contains("impl ManagedTupleUdpSender for VlessManagedUdpSender")
             && managed.contains("ManagedStreamPacketSender")
+            && !managed.contains("VlessUdpOutboundManager")
             && !managed.contains("ManagedStreamConnectionCacheKey")
             && stream_packet_manager.contains(".send_existing_target(")
             && stream_packet_manager.contains(".send_or_insert_target(")
             && stream_packet_manager.contains(".insert_and_bridge_target(")
+            && stream_packet_manager.contains("impl super::stream_sender::ManagedStreamFlowSender")
             && !managed.contains("self.upstreams.get(")
             && !managed.contains("self.upstreams.insert(")
             && !managed.contains("self.spawn_bridge(")
@@ -2787,8 +2789,8 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
             && managed.contains("mod establish;")
             && managed.contains("mod model;")
             && managed.contains("ManagedStreamPacketSender")
+            && !managed.contains("VmessUdpOutboundManager")
             && !managed.contains("ManagedStreamConnectionCacheKey")
-            && managed.contains(".send_existing_target(")
             && managed.contains(".send_or_insert_target(")
             && managed.contains(".insert_and_bridge_target(")
             && !managed.contains("self.upstreams.get(")
@@ -2796,6 +2798,7 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
             && !managed.contains("self.spawn_bridge(")
             && !managed.contains(".spawn_response_bridge(")
             && stream_packet_manager.contains("struct ManagedStreamPacketSender")
+            && stream_packet_manager.contains("impl super::stream_sender::ManagedStreamFlowSender")
             && stream_packet_manager.contains("ManagedStreamConnectionCache")
             && stream_packet_manager.contains(".send_existing_target(")
             && stream_packet_manager.contains(".send_or_insert_target(")
@@ -7153,18 +7156,20 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !state.contains("cached_handler_mut")
             && !vless_flow.exists()
             && !vmess_flow.exists()
-            && vless_adapter.contains("VlessUdpOutboundManager")
+            && !vless_adapter.contains("VlessUdpOutboundManager")
+            && vless_adapter.contains("ManagedStreamPacketSender")
             && vless_adapter.contains("register_managed_stream_packet_flow")
             && !vless_adapter.contains("register_managed_stream_flow_sender")
             && !vless_adapter.contains("cached_handler_mut")
-            && vmess_adapter.contains("VmessUdpOutboundManager")
+            && !vmess_adapter.contains("VmessUdpOutboundManager")
+            && vmess_adapter.contains("ManagedStreamPacketSender")
             && vmess_adapter.contains("register_managed_stream_packet_flow")
             && !vmess_adapter.contains("register_managed_stream_flow_sender")
             && !vmess_adapter.contains("cached_handler_mut")
             && !register.contains("ManagedStreamSenderHandlers")
             && !register.contains("vless_cached_handler")
             && !register.contains("vmess_cached_handler"),
-        "managed stream UDP flow starts should live in adapters while generic state keeps only stream senders without Vec-order protocol identity or runtime downcasts"
+        "managed stream UDP flow starts should use generic stream packet senders while generic state keeps only stream senders without Vec-order protocol identity or runtime downcasts"
     );
 }
 
@@ -9986,16 +9991,24 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
     }
 
     for (source, manager) in [
-        ("src/adapters/vless/udp/flow.rs", "VlessUdpOutboundManager"),
-        ("src/adapters/vmess/udp/flow.rs", "VmessUdpOutboundManager"),
+        (
+            "src/adapters/vless/udp/flow.rs",
+            "ManagedStreamPacketSender",
+        ),
+        (
+            "src/adapters/vmess/udp/flow.rs",
+            "ManagedStreamPacketSender",
+        ),
     ] {
         let adapter = read(source);
         assert!(
             adapter.contains(manager)
                 && adapter.contains("managed_udp_chain_tasks")
                 && adapter.contains("register_managed_stream_packet_flow")
+                && !adapter.contains("VlessUdpOutboundManager")
+                && !adapter.contains("VmessUdpOutboundManager")
                 && !adapter.contains("register_managed_stream_flow_sender"),
-            "{source} should own managed stream UDP manager starts while UdpDispatch builds tracked flow results"
+            "{source} should own managed stream UDP flow starts through the generic stream packet sender while UdpDispatch builds tracked flow results"
         );
     }
 }

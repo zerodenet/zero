@@ -1,13 +1,12 @@
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
-use super::managed::{
-    VlessUdpOutboundManager, VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow,
-};
+use super::managed::{VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow};
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::managed::ManagedStreamPacketSender;
 use crate::runtime::Proxy;
 
 fn vless_udp_flow_config<'a>(
@@ -66,28 +65,28 @@ pub(super) async fn start(
         quic: *quic,
         source_dir: proxy.config.source_dir(),
     };
-    let mut manager = VlessUdpOutboundManager::new();
-    manager
-        .start_flow(
-            dispatch.managed_udp_chain_tasks(),
-            VlessUdpStartFlow {
-                proxy,
-                mux_pool: &adapter.mux_pool,
-                session,
-                server,
-                port: *port,
-                config,
-                transport,
-                payload,
-            },
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vless_upstream",
-            error,
-            upstream: Some((server.to_string(), *port)),
-        })?;
-    Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
+    let mut sender = ManagedStreamPacketSender::new();
+    super::managed::start_flow(
+        &mut sender,
+        dispatch.managed_udp_chain_tasks(),
+        VlessUdpStartFlow {
+            proxy,
+            mux_pool: &adapter.mux_pool,
+            session,
+            server,
+            port: *port,
+            config,
+            transport,
+            payload,
+        },
+    )
+    .await
+    .map_err(|error| FlowFailure {
+        stage: "udp_vless_upstream",
+        error,
+        upstream: Some((server.to_string(), *port)),
+    })?;
+    Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(sender)))
 }
 
 pub(super) async fn start_relay_two_stream(
@@ -132,27 +131,27 @@ pub(super) async fn start_relay_two_stream(
     let split_http_cfg = split_http
         .as_ref()
         .expect("udp_relay_needs_two_streams checked split_http is Some");
-    let mut manager = VlessUdpOutboundManager::new();
-    manager
-        .start_relay_two_stream(
-            dispatch.managed_udp_chain_tasks(),
-            VlessUdpRelayTwoStream {
-                proxy,
-                session,
-                post_carrier,
-                get_carrier,
-                config,
-                split_http: split_http_cfg,
-                payload,
-            },
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vless_relay_chain",
-            error,
-            upstream: None,
-        })?;
-    Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
+    let mut sender = ManagedStreamPacketSender::new();
+    super::managed::start_relay_two_stream(
+        &mut sender,
+        dispatch.managed_udp_chain_tasks(),
+        VlessUdpRelayTwoStream {
+            proxy,
+            session,
+            post_carrier,
+            get_carrier,
+            config,
+            split_http: split_http_cfg,
+            payload,
+        },
+    )
+    .await
+    .map_err(|error| FlowFailure {
+        stage: "udp_vless_relay_chain",
+        error,
+        upstream: None,
+    })?;
+    Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(sender)))
 }
 
 pub(super) async fn start_relay_final_hop(
@@ -205,24 +204,24 @@ pub(super) async fn start_relay_final_hop(
         quic: None,
         source_dir: proxy.config.source_dir(),
     };
-    let mut manager = VlessUdpOutboundManager::new();
-    manager
-        .start_relay_final_hop(
-            dispatch.managed_udp_chain_tasks(),
-            VlessUdpRelayFinalHopStart {
-                proxy,
-                session,
-                carrier,
-                config,
-                transport,
-                payload,
-            },
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vless_relay_chain",
-            error,
-            upstream: None,
-        })?;
-    Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
+    let mut sender = ManagedStreamPacketSender::new();
+    super::managed::start_relay_final_hop(
+        &mut sender,
+        dispatch.managed_udp_chain_tasks(),
+        VlessUdpRelayFinalHopStart {
+            proxy,
+            session,
+            carrier,
+            config,
+            transport,
+            payload,
+        },
+    )
+    .await
+    .map_err(|error| FlowFailure {
+        stage: "udp_vless_relay_chain",
+        error,
+        upstream: None,
+    })?;
+    Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(sender)))
 }

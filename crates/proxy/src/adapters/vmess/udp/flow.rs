@@ -1,11 +1,12 @@
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
-use super::managed::{VmessUdpOutboundManager, VmessUdpRelayFlowStart, VmessUdpStartFlow};
+use super::managed::{VmessUdpRelayFlowStart, VmessUdpStartFlow};
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::managed::ManagedStreamPacketSender;
 use crate::runtime::Proxy;
 
 fn vmess_udp_flow_config<'a>(
@@ -55,29 +56,29 @@ pub(super) async fn start(
         grpc: *grpc,
         source_dir: proxy.config.source_dir(),
     };
-    let mut manager = VmessUdpOutboundManager::new();
-    manager
-        .start_flow(
-            dispatch.managed_udp_chain_tasks(),
-            VmessUdpStartFlow {
-                proxy,
-                mux_pool: &adapter.mux_pool,
-                session,
-                server,
-                port: *port,
-                config,
-                mux_concurrency: *mux_concurrency,
-                transport,
-                payload,
-            },
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vmess_upstream",
-            error,
-            upstream: Some((server.to_string(), *port)),
-        })?;
-    Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
+    let mut sender = ManagedStreamPacketSender::new();
+    super::managed::start_flow(
+        &mut sender,
+        dispatch.managed_udp_chain_tasks(),
+        VmessUdpStartFlow {
+            proxy,
+            mux_pool: &adapter.mux_pool,
+            session,
+            server,
+            port: *port,
+            config,
+            mux_concurrency: *mux_concurrency,
+            transport,
+            payload,
+        },
+    )
+    .await
+    .map_err(|error| FlowFailure {
+        stage: "udp_vmess_upstream",
+        error,
+        upstream: Some((server.to_string(), *port)),
+    })?;
+    Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(sender)))
 }
 
 pub(super) async fn start_relay_final_hop(
@@ -115,24 +116,24 @@ pub(super) async fn start_relay_final_hop(
         grpc: *grpc,
         source_dir: proxy.config.source_dir(),
     };
-    let mut manager = VmessUdpOutboundManager::new();
-    manager
-        .start_relay_flow(
-            dispatch.managed_udp_chain_tasks(),
-            VmessUdpRelayFlowStart {
-                proxy,
-                session,
-                carrier,
-                config,
-                transport,
-                payload,
-            },
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vmess_relay_chain",
-            error,
-            upstream: None,
-        })?;
-    Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
+    let mut sender = ManagedStreamPacketSender::new();
+    super::managed::start_relay_flow(
+        &mut sender,
+        dispatch.managed_udp_chain_tasks(),
+        VmessUdpRelayFlowStart {
+            proxy,
+            session,
+            carrier,
+            config,
+            transport,
+            payload,
+        },
+    )
+    .await
+    .map_err(|error| FlowFailure {
+        stage: "udp_vmess_relay_chain",
+        error,
+        upstream: None,
+    })?;
+    Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(sender)))
 }

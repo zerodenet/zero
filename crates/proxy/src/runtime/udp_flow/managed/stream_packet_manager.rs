@@ -58,3 +58,18 @@ impl ManagedStreamPacketSender {
             .await
     }
 }
+
+#[async_trait::async_trait]
+impl super::stream_sender::ManagedStreamFlowSender for ManagedStreamPacketSender {
+    async fn send_existing(
+        &mut self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        proxy: &Proxy,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<u64>, EngineError> {
+        self.send_existing_target(target, port, chain_tasks, proxy, payload)
+            .await
+    }
+}
