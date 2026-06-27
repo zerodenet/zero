@@ -23,7 +23,8 @@ impl InboundUdpResponse {
 }
 
 pub(crate) fn decode_socks5_upstream_response(packet: &[u8]) -> Option<InboundUdpResponse> {
-    socks5::Socks5InboundUdpSession::new()
+    socks5::Socks5Inbound
+        .udp_session()
         .decode_response(packet)
         .ok()
         .map(|response| {

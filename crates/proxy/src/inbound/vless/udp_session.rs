@@ -39,7 +39,7 @@ impl Proxy {
         let mut udp_buffer = vec![0_u8; 64 * 1024];
         let mut upstream_buffer = vec![0_u8; 64 * 1024];
         let proxy = self.clone();
-        let udp_session = vless::VlessInboundUdpSession::new();
+        let udp_session = vless::VlessInbound.udp_session();
 
         loop {
             // Split dispatch into disjoint borrows so select! can pin
@@ -204,7 +204,7 @@ impl Proxy {
         packet: &[u8],
         auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError> {
-        let udp_session = vless::VlessInboundUdpSession::new();
+        let udp_session = vless::VlessInbound.udp_session();
         let request = udp_session.decode_request(packet)?;
         let (target, port, payload) = request.into_parts();
 

@@ -117,6 +117,10 @@ impl TrojanInbound {
         ProtocolType::Trojan
     }
 
+    pub fn udp_session(&self) -> TrojanInboundUdpSession {
+        TrojanInboundUdpSession::new()
+    }
+
     /// Accept a Trojan TCP connection.
     ///
     /// Reads password hash + command + target address from the stream.

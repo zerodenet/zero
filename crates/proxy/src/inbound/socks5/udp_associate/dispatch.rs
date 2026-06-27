@@ -15,7 +15,7 @@ pub(super) async fn dispatch_packet(
     dispatch: &mut UdpDispatch,
     pending_control_traffic: &mut StreamTraffic,
 ) -> Result<(), EngineError> {
-    let udp_session = socks5::Socks5InboundUdpSession::new();
+    let udp_session = socks5::Socks5Inbound.udp_session();
     let udp_packet = udp_session.decode_request(packet)?;
 
     // DNS interception.

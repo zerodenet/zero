@@ -4,7 +4,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use shadowsocks::{ShadowsocksAeadStream, ShadowsocksInbound, ShadowsocksInboundProfile};
+use shadowsocks::{
+    ShadowsocksAeadStream, ShadowsocksInbound, ShadowsocksInboundProfile,
+    ShadowsocksInboundTcpState,
+};
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::watch;
@@ -31,9 +34,7 @@ pub(crate) struct ShadowsocksInboundRequest {
 pub(crate) struct ShadowsocksInboundHandler {
     ss_inbound: ShadowsocksInbound,
     profile: ShadowsocksInboundProfile,
-    /// SIP022 3.1.5 replay protection, shared across this listener's
-    /// connections. Only exercised for 2022 (blake3) ciphers.
-    replay_pool: Arc<shadowsocks::ReplaySaltPool>,
+    tcp_state: ShadowsocksInboundTcpState,
 }
 
 #[async_trait]
@@ -50,12 +51,7 @@ impl InboundProtocol for ShadowsocksInboundHandler {
             .accept_request(&self.ss_inbound, &mut metered)
             .await?;
 
-        // SIP022 3.1.5: reject a request salt reused within the 60 s window.
-        // The timestamp check (inside accept_request) is the primary replay
-        // filter; this catches replays inside the 30 s window.
-        if self.profile.is_2022() && !accept.request_salt.is_empty() {
-            self.replay_pool.check_and_insert(&accept.request_salt)?;
-        }
+        self.tcp_state.check_accept_replay(&accept)?;
 
         let mut session = accept.session.clone();
         let mut sa = zero_core::SessionAuth::new("shadowsocks");
@@ -111,7 +107,7 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
     let handler = ShadowsocksInboundHandler {
         ss_inbound: ShadowsocksInbound,
         profile: profile.clone(),
-        replay_pool: Arc::new(shadowsocks::ReplaySaltPool::new()),
+        tcp_state: profile.tcp_state(),
     };
 
     let mut connections: JoinSet<Result<(), EngineError>> = JoinSet::new();

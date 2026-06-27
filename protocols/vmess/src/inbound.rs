@@ -77,6 +77,14 @@ impl VmessInbound {
         ProtocolType::Vmess
     }
 
+    pub fn udp_session(
+        &self,
+        default_target: zero_core::Address,
+        default_port: u16,
+    ) -> crate::udp::VmessInboundUdpSession {
+        crate::udp::VmessInboundUdpSession::new(default_target, default_port)
+    }
+
     /// Accept with a single known user.
     pub async fn accept_tcp_with_auth<S: AsyncSocket>(
         &self,

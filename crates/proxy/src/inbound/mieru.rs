@@ -256,7 +256,7 @@ impl Proxy {
 
         let mut read_buf = [0u8; 65536];
         let mut recv_buf = [0u8; 65536];
-        let mut udp_session = mieru::MieruInboundUdpSession::new();
+        let mut udp_session = mieru::MieruInbound.udp_session();
 
         loop {
             tokio::select! {

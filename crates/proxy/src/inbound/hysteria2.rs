@@ -354,7 +354,7 @@ impl Proxy {
         proxy: Proxy,
     ) -> Result<(), EngineError> {
         let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(&inbound_tag).await?;
-        let mut udp_session = hysteria2::Hysteria2InboundUdpSession::new();
+        let mut udp_session = hysteria2::Hysteria2Inbound.udp_session();
 
         let mut direct_buf = [0u8; 65536];
 

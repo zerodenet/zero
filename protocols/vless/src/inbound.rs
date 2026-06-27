@@ -100,6 +100,10 @@ impl VlessInbound {
         ProtocolType::Vless
     }
 
+    pub fn udp_session(&self) -> crate::shared::VlessInboundUdpSession {
+        crate::shared::VlessInboundUdpSession::new()
+    }
+
     /// Accept a VLESS connection, authenticate the user, and return both
     /// the session and the raw UUID (needed for MUX stream encryption).
     pub async fn accept_tcp_with_auth_and_id<S, A>(

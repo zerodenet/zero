@@ -254,7 +254,7 @@ impl Proxy {
         let mut last_activity = TokioInstant::now();
         let mut direct_buf = vec![0_u8; 64 * 1024];
         let mut upstream_buf = vec![0_u8; 64 * 1024];
-        let udp_session = vless::VlessInboundUdpSession::new();
+        let udp_session = vless::VlessInbound.udp_session();
 
         info!(
             inbound_tag = inbound_tag,

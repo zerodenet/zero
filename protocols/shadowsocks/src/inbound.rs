@@ -2,6 +2,8 @@
 
 #[cfg(feature = "crypto")]
 use alloc::string::String;
+#[cfg(all(feature = "crypto", feature = "blake3"))]
+use alloc::sync::Arc;
 #[cfg(feature = "crypto")]
 use alloc::vec::Vec;
 #[cfg(feature = "crypto")]
@@ -45,6 +47,43 @@ pub struct ShadowsocksInboundProfile {
     password: Vec<u8>,
 }
 
+/// Listener-scoped Shadowsocks TCP state.
+///
+/// The proxy keeps this value with its inbound handler and delegates
+/// protocol-private replay checks to it.
+#[cfg(feature = "crypto")]
+#[derive(Clone)]
+pub struct ShadowsocksInboundTcpState {
+    cipher: super::shared::CipherKind,
+    #[cfg(feature = "blake3")]
+    replay_pool: Arc<super::shared::ReplaySaltPool>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksInboundTcpState {
+    fn new(cipher: super::shared::CipherKind) -> Self {
+        Self {
+            cipher,
+            #[cfg(feature = "blake3")]
+            replay_pool: Arc::new(super::shared::ReplaySaltPool::new()),
+        }
+    }
+
+    pub fn check_accept_replay(&self, accept: &ShadowsocksAccept) -> Result<(), Error> {
+        #[cfg(feature = "blake3")]
+        {
+            if self.cipher.is_blake3() && !accept.request_salt.is_empty() {
+                self.replay_pool.check_and_insert(&accept.request_salt)?;
+            }
+        }
+        #[cfg(not(feature = "blake3"))]
+        {
+            let _ = accept;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(feature = "crypto")]
 impl ShadowsocksInboundProfile {
     pub fn from_config(cipher_name: &str, password: &str) -> Result<Self, Error> {
@@ -67,6 +106,10 @@ impl ShadowsocksInboundProfile {
 
     pub fn is_2022(&self) -> bool {
         self.cipher.is_blake3()
+    }
+
+    pub fn tcp_state(&self) -> ShadowsocksInboundTcpState {
+        ShadowsocksInboundTcpState::new(self.cipher)
     }
 
     pub fn udp_codec(&self) -> ShadowsocksInboundUdpCodec {

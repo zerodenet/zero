@@ -118,6 +118,10 @@ impl MieruInbound {
         ProtocolType::Mieru
     }
 
+    pub fn udp_session(&self) -> crate::udp::MieruInboundUdpSession {
+        crate::udp::MieruInboundUdpSession::new()
+    }
+
     /// Accept a mieru TCP connection — perform the mieru handshake only.
     ///
     /// Establishes the encrypted session and replies with openSessionResponse.

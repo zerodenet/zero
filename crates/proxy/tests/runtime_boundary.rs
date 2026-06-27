@@ -856,6 +856,15 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         "Shadowsocks inbound listener should receive a protocol-owned profile, not raw cipher/password"
     );
     assert!(
+        inbound.contains("ShadowsocksInboundTcpState")
+            && inbound.contains("profile.tcp_state()")
+            && inbound.contains("tcp_state.check_accept_replay(&accept)")
+            && !inbound.contains("ReplaySaltPool")
+            && !inbound.contains("request_salt")
+            && !inbound.contains("is_2022()"),
+        "Shadowsocks inbound listener should delegate TCP replay state and salt checks to the protocol crate"
+    );
+    assert!(
         adapter.contains("ShadowsocksInboundProfile::from_config")
             && !adapter.contains("CipherKind::from_str"),
         "Shadowsocks adapter should delegate inbound profile validation to the protocol crate"
@@ -1066,7 +1075,7 @@ fn hysteria2_inbound_uses_adapter_request_model() {
         );
     }
     assert!(
-        inbound.contains("hysteria2::Hysteria2InboundUdpSession::new")
+        inbound.contains("hysteria2::Hysteria2Inbound.udp_session()")
             && inbound.contains("udp_session.decode_request")
             && inbound.contains("udp_session.record_proxy_session")
             && inbound.contains("udp_session.send_response")
@@ -3896,7 +3905,7 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("input.state")
             && !mux.contains("VmessInboundUdpCodec.decode_datagram")
             && !mux.contains(".response_mode(payload_mode)")
-            && mux.contains("vmess::VmessInboundUdpSession::new")
+            && mux.contains("vmess::VmessInbound.udp_session")
             && mux.contains("udp_session.decode_request")
             && mux.contains("udp_session.write_response_tokio")
             && mux.contains("udp_session.send_mux_response")
@@ -4034,14 +4043,14 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !helper.contains("vless::VlessInboundUdpCodec")
             && !udp_session.contains("vless::VlessInboundUdpCodec")
             && !mux.contains("vless::VlessInboundUdpCodec")
-            && udp_session.contains("vless::VlessInboundUdpSession::new")
+            && udp_session.contains("vless::VlessInbound.udp_session()")
             && udp_session.contains("udp_session.decode_request")
             && udp_session.contains("udp_session.write_response_tokio")
             && udp_session.contains("request.into_parts()")
             && !udp_session.contains("request.target().clone()")
             && !udp_session.contains("request.payload()")
             && !udp_session.contains("VlessInboundUdpCodec.encode_response")
-            && mux.contains("vless::VlessInboundUdpSession::new")
+            && mux.contains("vless::VlessInbound.udp_session()")
             && mux.contains("udp_session.decode_request")
             && mux.contains("udp_session.send_mux_response")
             && mux.contains("request.into_parts()")
@@ -4128,7 +4137,8 @@ fn inbound_udp_socks5_response_decode_is_confined_to_bridge() {
         "SOCKS5 upstream response decoding should stay in SOCKS5 associate handling or the neutral inbound UDP response bridge",
     );
     assert!(
-        bridge.contains("socks5::Socks5InboundUdpSession::new")
+        bridge.contains("socks5::Socks5Inbound")
+            && bridge.contains(".udp_session()")
             && !bridge.contains("Socks5InboundUdpCodec"),
         "neutral inbound UDP response bridge should use the protocol-owned SOCKS5 inbound UDP session"
     );
@@ -4181,7 +4191,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     );
 
     assert!(
-        inbound.contains("trojan::TrojanInboundUdpSession::new")
+        inbound.contains("trojan::TrojanInbound.udp_session()")
             && inbound.contains("udp_session.read_request(&mut client)")
             && inbound.contains("udp_session.write_response(&mut client")
             && inbound.contains("request.into_parts()")
@@ -4275,7 +4285,7 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
     }
 
     assert!(
-        inbound.contains("mieru::MieruInboundUdpSession::new")
+        inbound.contains("mieru::MieruInbound.udp_session()")
             && inbound.contains("udp_session.decode_request")
             && inbound.contains("udp_session.record_target")
             && inbound.contains("request.target_endpoint()")
@@ -4501,7 +4511,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("async fn forward_relay_socket_response")
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("direct_response_session_id")
-            && direct_response.contains("socks5::Socks5InboundUdpSession::new")
+            && direct_response.contains("socks5::Socks5Inbound.udp_session()")
             && direct_response.contains("udp_session.encode_response_to_client")
             && !direct_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("socks5::encode_udp_associate_response("),
@@ -4511,7 +4521,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         chain_response.contains("async fn handle_chain_result")
             && chain_response.contains("pub(super) struct ChainResponseRequest")
             && chain_response.contains("struct ForwardChainResponseRequest")
-            && chain_response.contains("socks5::Socks5InboundUdpSession::new")
+            && chain_response.contains("socks5::Socks5Inbound.udp_session()")
             && chain_response.contains("udp_session.encode_response_to_client")
             && !chain_response.contains("Socks5InboundUdpCodec")
             && !chain_response.contains("socks5::encode_udp_associate_response(")
@@ -4550,13 +4560,13 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         }
     }
     assert!(
-        dispatch.contains("socks5::Socks5InboundUdpSession::new")
+        dispatch.contains("socks5::Socks5Inbound.udp_session()")
             && dispatch.contains("udp_session.decode_request")
-            && upstream_response.contains("socks5::Socks5InboundUdpSession::new")
+            && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
             && upstream_response.contains("udp_session.decode_response")
-            && direct_response.contains("socks5::Socks5InboundUdpSession::new")
+            && direct_response.contains("socks5::Socks5Inbound.udp_session()")
             && direct_response.contains("udp_session.encode_response_to_client")
-            && chain_response.contains("socks5::Socks5InboundUdpSession::new")
+            && chain_response.contains("socks5::Socks5Inbound.udp_session()")
             && chain_response.contains("udp_session.encode_response_to_client")
             && !dispatch.contains("Socks5InboundUdpCodec")
             && !upstream_response.contains("Socks5InboundUdpCodec")

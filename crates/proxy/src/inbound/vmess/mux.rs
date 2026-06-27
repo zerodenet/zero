@@ -220,7 +220,7 @@ impl Proxy {
         let proxy = self.clone();
         tasks.spawn(async move {
             let mut udp_session =
-                vmess::VmessInboundUdpSession::new(default_target, default_port);
+                vmess::VmessInbound.udp_session(default_target, default_port);
             let mut dispatch = match UdpDispatch::new(&inbound_tag).await {
                 Ok(dispatch) => dispatch,
                 Err(error) => {
@@ -383,8 +383,7 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let mut dispatch = UdpDispatch::new(inbound_tag).await?;
         let auth = session.auth.clone();
-        let mut udp_session =
-            vmess::VmessInboundUdpSession::new(session.target.clone(), session.port);
+        let mut udp_session = vmess::VmessInbound.udp_session(session.target.clone(), session.port);
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
 

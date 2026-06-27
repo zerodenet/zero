@@ -180,7 +180,7 @@ impl Proxy {
         let auth = session.auth.clone();
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
-        let udp_session = trojan::TrojanInboundUdpSession::new();
+        let udp_session = trojan::TrojanInbound.udp_session();
 
         info!(
             inbound_tag = inbound_tag,
