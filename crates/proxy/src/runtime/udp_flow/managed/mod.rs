@@ -6,6 +6,7 @@ mod flow;
 pub(crate) mod model;
 pub(crate) mod state;
 mod stream;
+mod stream_manager;
 mod stream_sender;
 
 pub(crate) use cache::{
@@ -26,4 +27,5 @@ pub(crate) use model::{
     ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
 };
 pub(crate) use state::{ManagedUdpHandlers, ManagedUdpState};
+pub(crate) use stream_manager::{ManagedStreamFlowConnector, ManagedStreamFlowManager};
 pub(crate) use stream_sender::ManagedStreamFlowSender;

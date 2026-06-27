@@ -3241,7 +3241,8 @@ fn runtime_registered_consumes_managed_flow_models_without_legacy_facade() {
 
 #[test]
 fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
-    let establish = read("src/adapters/mieru/udp/manager/establish.rs");
+    let managed = read("src/adapters/mieru/udp/managed.rs");
+    let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
     let protocol = manifest_dir()
         .parent()
@@ -3265,18 +3266,18 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
         "mieru::MieruUdpFlowSession::new",
     ] {
         assert!(
-            !establish.contains(forbidden),
-            "Mieru UDP establish glue should delegate protocol encode/decode and pump detail to protocols/mieru; found `{forbidden}`"
+            !managed.contains(forbidden) && !stream_manager.contains(forbidden),
+            "Mieru UDP managed glue should delegate protocol encode/decode and pump detail to protocols/mieru; found `{forbidden}`"
         );
     }
     assert!(
-        !stream.exists() && establish.contains("mieru::establish_udp_flow_with_resume"),
-        "Mieru UDP establish glue should call the protocol-owned established flow API without a dedicated stream wrapper"
+        !stream.exists() && managed.contains("mieru::establish_udp_flow_with_resume"),
+        "Mieru UDP managed glue should call the protocol-owned established flow API without a dedicated stream wrapper"
     );
     assert!(
-        establish.contains("mieru::MieruUdpFlowConnection")
-            && !establish.contains("mieru::MieruUdpFlowSession"),
-        "Mieru UDP establish glue should return the protocol-owned flow connection wrapper, not a raw flow session"
+        managed.contains("mieru::MieruUdpFlowConnection")
+            && !managed.contains("mieru::MieruUdpFlowSession"),
+        "Mieru UDP managed glue should return the protocol-owned flow connection wrapper, not a raw flow session"
     );
     assert!(
         protocol.contains("pub async fn establish_udp_flow_with_resume")
@@ -6205,11 +6206,10 @@ fn protocol_udp_manager_construction_is_adapter_registered() {
         "src/adapters/hysteria2/udp.rs",
         "src/adapters/hysteria2/udp/managed.rs",
         "src/adapters/mieru/udp.rs",
+        "src/adapters/mieru/udp/managed.rs",
         "src/adapters/shadowsocks/udp/managed.rs",
         "src/adapters/shadowsocks/udp.rs",
         "src/adapters/trojan/udp.rs",
-        "src/adapters/mieru/udp/manager.rs",
-        "src/adapters/mieru/udp/manager/",
         "src/adapters/trojan/udp/manager.rs",
         "src/adapters/trojan/udp/manager/",
     ];
@@ -6239,8 +6239,6 @@ fn protocol_udp_manager_construction_is_adapter_registered() {
 #[test]
 fn protocol_udp_manager_roots_do_not_reexport_request_models() {
     for (source, forbidden) in [
-        ("src/adapters/mieru/udp/manager.rs", "MieruSendExisting"),
-        ("src/adapters/mieru/udp/manager.rs", "MieruRelayExisting"),
         ("src/adapters/trojan/udp/manager.rs", "TrojanSendExisting"),
         ("src/adapters/trojan/udp/manager.rs", "TrojanRelayExisting"),
     ] {
@@ -6257,14 +6255,9 @@ fn protocol_udp_manager_roots_do_not_reexport_request_models() {
 
 #[test]
 fn protocol_udp_manager_request_models_are_manager_private() {
-    for source in [
-        "src/adapters/mieru/udp/manager/model.rs",
-        "src/adapters/trojan/udp/manager/model.rs",
-    ] {
+    for source in ["src/adapters/trojan/udp/manager/model.rs"] {
         let content = read(source);
         for forbidden in [
-            "pub(crate) struct MieruSendExisting",
-            "pub(crate) struct MieruRelayExisting",
             "pub(crate) struct TrojanSendExisting",
             "pub(crate) struct TrojanRelayExisting",
         ] {
@@ -6275,10 +6268,7 @@ fn protocol_udp_manager_request_models_are_manager_private() {
         }
     }
 
-    for source in [
-        "src/adapters/mieru/udp/manager/send.rs",
-        "src/adapters/trojan/udp/manager/send.rs",
-    ] {
+    for source in ["src/adapters/trojan/udp/manager/send.rs"] {
         let content = read(source);
         for forbidden in [
             "pub(crate) async fn send_existing",
@@ -6300,54 +6290,51 @@ fn protocol_udp_manager_request_models_are_manager_private() {
         "src/adapters/shadowsocks/udp/manager/model.rs",
         "src/adapters/shadowsocks/udp/manager/entry.rs",
         "src/adapters/shadowsocks/udp/manager/bridge.rs",
+        "src/adapters/mieru/udp/manager.rs",
+        "src/adapters/mieru/udp/manager/model.rs",
+        "src/adapters/mieru/udp/manager/send.rs",
+        "src/adapters/mieru/udp/manager/establish.rs",
+        "src/adapters/mieru/udp/manager/connect.rs",
     ] {
         assert!(
             !manifest_dir().join(removed).exists(),
-            "datagram UDP protocols should use generic managed datagram runtime glue instead of `{removed}`"
+            "managed UDP protocols should use generic runtime glue instead of `{removed}`"
         );
     }
 }
 
 #[test]
 fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
-    for (source, protocol_key, wrapper) in [
-        (
-            "src/adapters/mieru/udp/manager/model.rs",
-            "mieru::MieruUdpCacheKey",
-            "struct MieruKey",
-        ),
-        (
-            "src/adapters/trojan/udp/manager/model.rs",
-            "trojan::TrojanUdpCacheKey",
-            "struct TrojanKey",
-        ),
-    ] {
-        let content = read(source);
-        assert!(
-            !content.contains(wrapper) && !content.contains(protocol_key),
-            "{source} should not rebuild or wrap protocol cache identity `{protocol_key}`"
-        );
-    }
+    let (source, protocol_key, wrapper) = (
+        "src/adapters/trojan/udp/manager/model.rs",
+        "trojan::TrojanUdpCacheKey",
+        "struct TrojanKey",
+    );
+    let content = read(source);
+    assert!(
+        !content.contains(wrapper) && !content.contains(protocol_key),
+        "{source} should not rebuild or wrap protocol cache identity `{protocol_key}`"
+    );
 
-    let mieru_manager = read("src/adapters/mieru/udp/manager.rs");
-    let mieru_manager_send = read("src/adapters/mieru/udp/manager/send.rs");
+    let mieru_managed = read("src/adapters/mieru/udp/managed.rs");
+    let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let trojan_manager = read("src/adapters/trojan/udp/manager.rs");
     let trojan_manager_send = read("src/adapters/trojan/udp/manager/send.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     assert!(
-        mieru_manager.contains("ManagedUdpConnectionCache")
+        stream_manager.contains("ManagedUdpConnectionCache")
             && trojan_manager.contains("ManagedUdpConnectionCache")
-            && !mieru_manager.contains("mieru::MieruUdpFlowStore")
+            && !mieru_managed.contains("mieru::MieruUdpFlowStore")
             && !trojan_manager.contains("trojan::TrojanUdpFlowStore")
-            && !mieru_manager.contains("mieru::MieruUdpFlowSessions")
+            && !mieru_managed.contains("mieru::MieruUdpFlowSessions")
             && !trojan_manager.contains("trojan::TrojanUdpFlowSessions")
-            && !mieru_manager.contains("mieru::MieruUdpFlowConnection")
+            && mieru_managed.contains("mieru::MieruUdpFlowConnection")
             && !trojan_manager.contains("trojan::TrojanUdpFlowConnection")
-            && !mieru_manager.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>")
+            && !mieru_managed.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>")
             && !trojan_manager.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>")
-            && !mieru_manager.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowConnection>")
+            && !mieru_managed.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowConnection>")
             && !trojan_manager.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowConnection>")
-            && !mieru_manager.contains("HashMap<mieru::MieruUdpCacheKey")
+            && !mieru_managed.contains("HashMap<mieru::MieruUdpCacheKey")
             && !trojan_manager.contains("HashMap<trojan::TrojanUdpCacheKey")
             && managed_cache.contains("struct ManagedUdpConnectionCache")
             && managed_cache.contains("struct ManagedUdpConnectionCacheKey")
@@ -6355,23 +6342,23 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
         "stream UDP managers should cache neutral proxy connection capabilities without holding protocol flow stores"
     );
     assert!(
-        !mieru_manager_send.contains("MieruUdpCacheKey::relay")
+        !mieru_managed.contains("MieruUdpCacheKey::relay")
             && !trojan_manager_send.contains("TrojanUdpCacheKey::relay")
-            && !mieru_manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
+            && !mieru_managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !trojan_manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
-            && mieru_manager_send.contains("resume.flow_cache_key(")
+            && mieru_managed.contains("resume.flow_cache_key(")
             && trojan_manager_send.contains("resume.flow_cache_key(")
-            && !mieru_manager_send.contains("ManagedUdpConnectionCacheKey")
+            && !mieru_managed.contains("ManagedUdpConnectionCacheKey")
             && !trojan_manager_send.contains("ManagedUdpConnectionCacheKey")
-            && mieru_manager_send.contains(".send_or_insert_key(")
+            && stream_manager.contains(".send_or_insert_key(")
             && trojan_manager_send.contains(".send_or_insert_key(")
-            && mieru_manager_send.contains(".insert_and_send_key(")
+            && stream_manager.contains(".insert_and_send_key(")
             && trojan_manager_send.contains(".insert_and_send_key(")
-            && !mieru_manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
+            && !stream_manager.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
             && !trojan_manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
-            && !mieru_manager_send.contains("self.upstreams.insert(")
+            && !stream_manager.contains("self.upstreams.insert(")
             && !trojan_manager_send.contains("self.upstreams.insert(")
-            && !mieru_manager_send.contains("entry.spawn_response_bridge(")
+            && !stream_manager.contains("entry.spawn_response_bridge(")
             && !trojan_manager_send.contains("entry.spawn_response_bridge(")
             && managed_cache.contains("async fn insert_and_send")
             && !managed_cache.contains("pub(crate) async fn insert_and_send(")
@@ -6792,7 +6779,7 @@ fn packet_path_traits_are_grouped_by_responsibility() {
     let ss_managed = read("src/adapters/shadowsocks/udp/managed.rs");
     let h2_managed = read("src/adapters/hysteria2/udp/managed.rs");
     let trojan_model = read("src/adapters/trojan/udp/manager/model.rs");
-    let mieru_model = read("src/adapters/mieru/udp/manager/model.rs");
+    let mieru_managed = read("src/adapters/mieru/udp/managed.rs");
 
     for required in [
         "trait PacketPathCarrier",
@@ -6827,7 +6814,7 @@ fn packet_path_traits_are_grouped_by_responsibility() {
             && !ss_managed.contains("struct SsUdpPeer")
             && !h2_managed.contains("struct H2UdpPeer")
             && !trojan_model.contains("struct TrojanUdpPeer")
-            && !mieru_model.contains("struct MieruUdpPeer"),
+            && !mieru_managed.contains("struct MieruUdpPeer"),
         "protocol UDP peer models should not live under runtime packet-path helpers or protocol_runtime::udp root; stream/datagram managers should use neutral OutboundEndpoint directly"
     );
     assert!(
@@ -7224,7 +7211,7 @@ fn packet_path_snapshot_send_uses_request_model() {
 #[test]
 fn feature_gated_udp_manager_modules_do_not_embed_disabled_stubs() {
     for source in [
-        "src/adapters/mieru/udp/manager.rs",
+        "src/adapters/mieru/udp/managed.rs",
         "src/adapters/trojan/udp/manager.rs",
     ] {
         let content = read(source);
@@ -7618,17 +7605,13 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
 }
 
 #[test]
-fn mieru_udp_packet_codec_lives_outside_manager() {
-    let manager = read("src/adapters/mieru/udp/manager.rs");
-    let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
+fn mieru_udp_managed_connector_is_thin_protocol_glue() {
+    let managed = read("src/adapters/mieru/udp/managed.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
     let adapter_flow = read("src/adapters/mieru/udp/flow.rs");
     let snapshot = read("src/runtime/udp_flow/managed/flow.rs");
     let forward = read("src/runtime/udp_flow/managed/stream.rs");
-    let manager_send = read("src/adapters/mieru/udp/manager/send.rs");
-    let manager_connect = read("src/adapters/mieru/udp/manager/connect.rs");
-    let manager_establish = read("src/adapters/mieru/udp/manager/establish.rs");
-    let manager_model = read("src/adapters/mieru/udp/manager/model.rs");
+    let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let transport_manifest = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
         .expect("read zero-transport manifest");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/mieru/src/lib.rs"))
@@ -7638,6 +7621,23 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
         .expect("read mieru protocol outbound source");
 
+    for removed in [
+        "src/adapters/mieru/udp/manager.rs",
+        "src/adapters/mieru/udp/manager/connect.rs",
+        "src/adapters/mieru/udp/manager/establish.rs",
+        "src/adapters/mieru/udp/manager/model.rs",
+        "src/adapters/mieru/udp/manager/send.rs",
+        "src/adapters/mieru/udp/manager/codec.rs",
+        "src/adapters/mieru/udp/manager/stream.rs",
+        "src/adapters/mieru/udp/manager/socket.rs",
+        "src/adapters/mieru/udp/manager/bridge.rs",
+    ] {
+        assert!(
+            !manifest_dir().join(removed).exists(),
+            "Mieru UDP should use managed.rs plus generic stream manager instead of `{removed}`"
+        );
+    }
+
     for forbidden in [
         "UdpPacketFraming",
         "MieruUdpAssociatePacket",
@@ -7646,113 +7646,62 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         "fn decode_associate_packet",
         "socks5::build_udp_packet",
         "socks5::parse_udp_packet",
+        "MieruUdpFlowKey",
+        "MieruUdpLeafKey",
+        "MieruUdpPeerConfig",
+        "MieruUdpCacheKey",
+        "request.resume.username()",
+        "request.resume.password()",
+        "request.resume.relay_chain()",
+        ".peer_config()",
+        "MieruKey::Leaf {",
+        "username: String",
+        "password: String",
+        "ManagedUdpConnectionCacheKey",
+        "if let Some(entry) = self.upstreams.get(&cache_key)",
+        "self.upstreams.insert(",
+        "entry.spawn_response_bridge(",
+        "resume.cache_key(endpoint.server, endpoint.port, session_id)",
+        "peer.endpoint",
+        "UdpFlowContext",
+        "UdpPacketRef",
     ] {
         assert!(
-            !manager.contains(forbidden),
-            "mieru_manager.rs should not own Mieru associate packet codec details; found `{forbidden}`"
+            !managed.contains(forbidden),
+            "Mieru UDP managed connector should not own protocol-private/cache/runtime orchestration detail `{forbidden}`"
         );
     }
+
     assert!(
-        !manifest_dir()
-            .join("src/adapters/mieru/udp/manager/codec.rs")
-            .exists(),
-        "Mieru UDP manager should not keep a proxy-owned codec module"
+        managed.contains("ManagedStreamFlowManager::new")
+            && managed.contains("impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume>")
+            && managed.contains("resume.flow_cache_key(")
+            && managed.contains("resume.flow_requires_relay_upstream()")
+            && managed.contains("mieru::establish_udp_flow_with_resume(stream, &resume)")
+            && managed.contains("managed_tuple_udp_connection")
+            && managed.contains("impl ManagedTupleUdpSender for MieruManagedUdpSender")
+            && stream_manager.contains("ManagedUdpConnectionCache")
+            && stream_manager.contains(".send_or_insert_key(")
+            && stream_manager.contains(".insert_and_send_key("),
+        "Mieru managed.rs should adapt protocol flow establishment while generic stream_manager owns cache and send orchestration"
     );
-    assert!(
-        !stream.exists()
-            && manager_establish.contains("mieru::establish_udp_flow_with_resume(stream, resume)"),
-        "Mieru UDP flow stream runtime glue should call protocols/mieru directly without proxy mieru_manager/stream.rs"
-    );
-    assert!(
-        protocol_outbound.contains("struct MieruUdpFlowIo")
-            && protocol_outbound.contains("struct MieruUdpFlowPacket")
-            && protocol_outbound.contains("pub struct MieruUdpFlowHandle")
-            && protocol_outbound.contains("struct MieruUdpFlowSender")
-            && !protocol_outbound.contains("pub struct MieruUdpFlowSender")
-            && protocol_outbound.contains("pub struct MieruUdpFlowConnection")
-            && protocol_outbound.contains("pub struct MieruUdpFlowSession")
-            && protocol_outbound.contains("pub type MieruUdpFlowResponse")
-            && protocol_outbound.contains("pub type MieruUdpFlowResponseReceiver")
-            && protocol_outbound.contains("type MieruUdpFlowResponses")
-            && !protocol_outbound.contains("pub type MieruUdpFlowResponses")
-            && !protocol_outbound.contains("pub async fn open_udp_flow")
-            && protocol_outbound.contains("pub fn udp_flow_packet")
-            && protocol_outbound.contains("encode_udp_flow_packet")
-            && protocol_outbound.contains("decode_udp_flow_packet")
-            && protocol_outbound.contains("encrypt_payload")
-            && protocol_outbound.contains("next_packet")
-            && protocol_outbound.contains("pub async fn write_flow_packet")
-            && protocol_outbound.contains("pub async fn read_flow_packets")
-            && protocol_outbound.contains("pub async fn establish_with_resume")
-            && !protocol_outbound.contains("mpsc::channel::<MieruUdpFlowPacket>")
-            && protocol_outbound.contains("broadcast::channel::<MieruUdpFlowResponse>")
-            && protocol_outbound.contains("mpsc::channel::<zero_core::UdpFlowPacket>")
-            && protocol_outbound.contains("tokio::spawn")
-            && protocol_outbound.contains("tokio::select!")
-            && !repo_root()
-                .join("crates/transport/src/mieru_transport.rs")
-                .exists()
-            && !transport_manifest.contains("dep:mieru")
-            && !transport_manifest.contains("mieru/crypto"),
-        "Mieru UDP associate, encryption, packet codec, and stream pump should stay protocol-owned while proxy keeps runtime glue"
-    );
-    assert!(
-        !manager_model.contains("struct MieruPacket")
-            && !manager_model.contains("struct MieruEntry")
-            && !manager_model.contains("MieruFlowSender")
-            && !manager_model.contains("mieru::MieruUdpFlowSender")
-            && !manager_model.contains("recv_tx")
-            && !manager_model.contains("mpsc::Sender<UdpFlowPacket>")
-            && !manager_model.contains("UdpFlowPacket")
-            && !manager_send.contains("mieru::udp_flow_packet")
-            && !manager_send.contains("MieruUdpFlowPacket::new")
-            && !manager_send.contains("MieruUdpFlowIo")
-            && !manager_send.contains(".sender")
-            && manager_send.contains(".insert_and_send_key(")
-            && !manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)"),
-        "Mieru UDP manager should hold protocol-owned flow sessions while protocols/mieru owns packet I/O helpers"
-    );
+
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
             && protocol_udp.contains("impl DatagramCodec<Address> for MieruUdpFlowCodec")
-            && !adapter.contains("mieru::udp_flow_codec"),
-        "Mieru ordinary UDP flow codec should be protocol-owned and recovered from the resume descriptor, not carried by the adapter"
-    );
-    assert!(
-        !adapter.contains("MieruUdpFlowResume::new")
+            && !adapter.contains("mieru::udp_flow_codec")
+            && !adapter.contains("MieruUdpFlowResume::new")
             && !adapter.contains("MieruUdpFlowConfig::new")
-            && !adapter.contains(".flow_resume(false)")
-            && !adapter.contains(".flow_resume(true)")
             && adapter_flow.contains("MieruUdpFlowConfig::new")
             && adapter_flow.contains(".flow_resume(request.relay_chain)")
             && protocol_udp.contains("struct MieruUdpFlowResume")
-            && protocol_udp.contains("struct MieruUdpFlowConfig")
-            && protocol_udp.contains("pub fn flow_resume(&self, relay_chain: bool)")
-            && protocol_udp.contains("fn peer_config(&self)")
-            && !protocol_udp.contains("pub fn peer_config(&self)")
-            && protocol_udp.contains("fn flow_key(&self")
-            && !protocol_udp.contains("pub fn flow_key(&self")
-            && !protocol_udp.contains("pub fn username(&self)")
-            && !protocol_udp.contains("pub fn password(&self)")
-            && protocol_udp
-                .contains("fn cache_key(&self, server: &str, port: u16, session_id: u64)")
-            && !protocol_udp
-                .contains("pub fn cache_key(&self, server: &str, port: u16, session_id: u64)")
             && protocol_udp.contains("pub fn flow_cache_key(&self")
-            && protocol_udp.contains("enum MieruUdpFlowKey")
-            && !protocol_udp.contains("pub enum MieruUdpFlowKey")
-            && protocol_udp.contains("enum MieruUdpCacheKey")
-            && !protocol_udp.contains("pub enum MieruUdpCacheKey")
-            && protocol_udp.contains("pub struct MieruUdpFlowStore")
-            && protocol_udp.contains("struct MieruUdpPeerConfig")
-            && !protocol_udp.contains("pub struct MieruUdpPeerConfig")
-            && protocol_udp.contains("struct MieruUdpLeafKey")
-            && !protocol_udp.contains("pub struct MieruUdpLeafKey")
-            && protocol_udp.contains("pub fn codec(&self)")
             && protocol_udp.contains("pub fn flow_requires_relay_upstream(&self) -> bool")
-            && !protocol_udp.contains("pub fn relay_chain(&self) -> bool"),
-        "Mieru adapter should build an opaque protocol-owned UDP flow resume descriptor"
+            && !protocol_udp.contains("pub fn username(&self)")
+            && !protocol_udp.contains("pub fn password(&self)"),
+        "Mieru adapter should build and carry an opaque protocol-owned UDP flow resume descriptor"
     );
+
     for forbidden in [
         "MieruUdpFlowKey",
         "MieruUdpLeafKey",
@@ -7764,227 +7713,70 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             "protocols/mieru lib root should not re-export UDP cache-key internals `{forbidden}`"
         );
     }
-    for forbidden in ["MieruUdpFlowKey", "MieruUdpLeafKey", "fn from_flow_key("] {
-        assert!(
-            !manager_send.contains(forbidden)
-                && !manager_connect.contains(forbidden)
-                && !manager_establish.contains(forbidden)
-                && !manager_model.contains(forbidden),
-            "Mieru UDP manager should not match or store protocol-private cache-key internals `{forbidden}`"
-        );
-    }
+
     assert!(
         snapshot.contains("resume: ManagedUdpFlowResume")
             && snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
             && !snapshot.contains("Mieru(mieru::MieruUdpFlowResume)")
             && !snapshot.contains("username: String")
-            && !snapshot.contains("relay_chain: bool"),
-        "Mieru protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
-    );
-    assert!(
-        forward.contains("ManagedExistingSend")
+            && !snapshot.contains("relay_chain: bool")
+            && forward.contains("ManagedExistingSend")
             && forward.contains("ManagedExistingSend::forwarded")
             && !forward.contains("existing.resume.username()")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.relay_chain()")
-            && !forward.contains("existing.resume.codec()")
-            && !forward.contains("mieru::udp_flow_codec")
-            && !forward.contains("username: &'a str")
-            && !forward.contains("relay_chain: bool"),
-        "existing Mieru UDP flow forwarding should pass the opaque resume descriptor without unpacking account or relay state"
+            && !forward.contains("existing.resume.codec()"),
+        "Mieru managed UDP forwarding and snapshots should carry only the unified opaque resume wrapper"
     );
-    let start = read("src/runtime/udp_flow/managed/stream.rs");
+
     assert!(
-        !start.contains("ManagedUdpFlowResume::Mieru")
-            && start.contains("ManagedExistingSend::stream_packet")
-            && start.contains("ManagedRelaySend::relay_stream")
-            && !start.contains("resume.username()")
-            && !start.contains("resume.password()")
-            && !start.contains("resume.relay_chain()")
-            && !start.contains("resume.codec()"),
-        "new Mieru UDP flow start should pass the opaque resume descriptor without unpacking account or relay state"
-    );
-    for forbidden in [
-        "request.resume.username()",
-        "request.resume.password()",
-        "request.resume.relay_chain()",
-        ".peer_config()",
-        "peer_config.",
-        "peer_config:",
-        "MieruUdpPeerConfig",
-        "MieruKey::Leaf {",
-        "username: String",
-        "password: String",
-    ] {
-        assert!(
-            !manager_send.contains(forbidden)
-                && !manager_connect.contains(forbidden)
-                && !manager_establish.contains(forbidden)
-                && !manager_model.contains(forbidden),
-            "Mieru UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
-        );
-    }
-    assert!(
-        manager_send.contains("resume.flow_cache_key(")
-            && !manager_send.contains("ManagedUdpConnectionCacheKey")
-            && manager_send.contains(".send_or_insert_key(")
-            && manager_send.contains(".insert_and_send_key(")
-            && !manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
-            && !manager_send.contains("self.upstreams.insert(")
-            && !manager_send.contains("entry.spawn_response_bridge(")
-            && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
-            && !manager_send.contains("peer.endpoint")
-            && !manager_model.contains("MieruUdpPeer")
-            && manager_send.contains("request.resume.flow_requires_relay_upstream()")
-            && !manager_connect.contains("MieruUdpFlowIo::establish_with_resume")
-            && manager_establish.contains("mieru::establish_udp_flow_with_resume(stream, resume)")
+        protocol_outbound.contains("struct MieruUdpFlowIo")
+            && protocol_outbound.contains("struct MieruUdpFlowPacket")
+            && protocol_outbound.contains("pub struct MieruUdpFlowConnection")
+            && protocol_outbound.contains("pub type MieruUdpFlowResponseReceiver")
             && protocol_outbound.contains("pub async fn establish_with_resume")
-            && !protocol_outbound.contains("pub async fn open_udp_flow"),
-        "Mieru UDP manager should consume protocol-owned opaque cache key through neutral endpoints and UDP establish helper"
+            && protocol_outbound.contains("encode_udp_flow_packet")
+            && protocol_outbound.contains("decode_udp_flow_packet")
+            && protocol_outbound.contains("tokio::spawn")
+            && !protocol_outbound.contains("pub async fn open_udp_flow")
+            && !repo_root()
+                .join("crates/transport/src/mieru_transport.rs")
+                .exists()
+            && !transport_manifest.contains("dep:mieru")
+            && !transport_manifest.contains("mieru/crypto"),
+        "Mieru UDP associate, encryption, packet codec, and stream pump should stay protocol-owned"
     );
 }
 
 #[test]
-fn mieru_udp_response_bridge_lives_outside_manager() {
-    let manager = read("src/adapters/mieru/udp/manager.rs");
-    let send = read("src/adapters/mieru/udp/manager/send.rs");
-    let establish = read("src/adapters/mieru/udp/manager/establish.rs");
-    let managed = read("src/runtime/udp_flow/managed/connection.rs");
-    let bridge = manifest_dir().join("src/adapters/mieru/udp/manager/bridge.rs");
+fn mieru_udp_response_bridge_uses_generic_managed_tuple_connection() {
+    let managed = read("src/adapters/mieru/udp/managed.rs");
+    let connection = read("src/runtime/udp_flow/managed/connection.rs");
+    let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
 
     for forbidden in [
         "type RecvItem",
         "broadcast::channel",
         "recv_tx.subscribe",
         "fn spawn_bridge",
-        "mieru upstream closed",
+        "spawn_tuple_response_bridge",
+        ".spawn_response_bridge(",
+        "self.upstreams.insert(",
     ] {
         assert!(
-            !manager.contains(forbidden),
-            "mieru_manager.rs should not own response bridge details; found `{forbidden}`"
+            !managed.contains(forbidden),
+            "Mieru managed.rs should not own response bridge or cache details `{forbidden}`"
         );
     }
     assert!(
-        !bridge.exists()
-            && send.contains(".insert_and_send_key(")
-            && !send.contains(".spawn_response_bridge(")
-            && !send.contains("self.upstreams.insert(")
-            && !send.contains("spawn_tuple_response_bridge")
-            && !establish.contains("impl ManagedUdpConnection for mieru::MieruUdpFlowConnection")
-            && establish.contains("managed_tuple_udp_connection")
-            && !establish.contains("spawn_tuple_response_bridge")
-            && managed.contains("pub(crate) fn managed_tuple_udp_connection")
-            && managed.contains("pub(crate) fn spawn_tuple_response_bridge")
-            && managed.contains("broadcast::Receiver<(Address, u16, Vec<u8>)>"),
-        "Mieru UDP response bridge should hang off the neutral managed tuple connection bridge, not adapter send orchestration"
-    );
-}
-
-#[test]
-fn mieru_udp_connect_handshake_lives_outside_manager() {
-    let manager = read("src/adapters/mieru/udp/manager.rs");
-    let connect = read("src/adapters/mieru/udp/manager/connect.rs");
-    let establish = read("src/adapters/mieru/udp/manager/establish.rs");
-    let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
-    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
-        .expect("read mieru protocol outbound source");
-
-    for forbidden in [
-        "MieruOutbound::connect",
-        ".connect_host(",
-        "ASSOCIATE",
-        "encrypt_client_data(&assoc_req)",
-        "mieru udp assoc",
-    ] {
-        assert!(
-            !manager.contains(forbidden),
-            "mieru_manager.rs should keep connect and UDP associate handshake details in mieru_manager/connect.rs; found `{forbidden}`"
-        );
-    }
-    assert!(
-        !connect.contains("MieruUdpFlowIo::establish")
-            && !establish.contains("MieruUdpFlowIo::establish")
-            && !stream.exists()
-            && !connect.contains("MieruOutbound::connect")
-            && !connect.contains("encrypt_client_data")
-            && !connect.contains("decrypt_server_data")
-            && establish.contains("mieru::establish_udp_flow_with_resume(stream, resume)")
-            && !protocol_outbound.contains("pub async fn open_udp_flow")
-            && protocol_outbound.contains("fn send_udp_associate_request")
-            && protocol_outbound.contains("fn read_udp_associate_response"),
-        "Mieru UDP associate handshake should live behind protocols/mieru flow I/O"
-    );
-}
-
-#[test]
-fn mieru_udp_state_model_lives_outside_manager() {
-    let manager = read("src/adapters/mieru/udp/manager.rs");
-    let model = manifest_dir().join("src/adapters/mieru/udp/manager/model.rs");
-
-    for forbidden in [
-        "enum MieruKey",
-        "struct MieruEntry",
-        "struct MieruSendExisting",
-        "struct MieruRelayExisting",
-    ] {
-        assert!(
-            !manager.contains(forbidden),
-            "mieru_manager.rs should keep state/request models in mieru_manager/model.rs; found `{forbidden}`"
-        );
-    }
-    assert!(
-        model.exists(),
-        "Mieru UDP state/request models should live in mieru_manager/model.rs"
-    );
-}
-
-#[test]
-fn mieru_udp_establish_logic_lives_outside_manager() {
-    let manager = read("src/adapters/mieru/udp/manager.rs");
-    let establish = manifest_dir().join("src/adapters/mieru/udp/manager/establish.rs");
-
-    for forbidden in [
-        "fn establish_direct",
-        "fn establish_packet_stream",
-        "connect::direct_stream",
-        "connect::open_udp_flow",
-        "spawn_packet_stream",
-    ] {
-        assert!(
-            !manager.contains(forbidden),
-            "mieru_manager.rs should keep UDP establish glue in mieru_manager/establish.rs; found `{forbidden}`"
-        );
-    }
-    assert!(
-        establish.exists(),
-        "Mieru UDP establish glue should live in mieru_manager/establish.rs"
-    );
-}
-
-#[test]
-fn mieru_udp_send_orchestration_lives_outside_manager() {
-    let manager = read("src/adapters/mieru/udp/manager.rs");
-    let send = manifest_dir().join("src/adapters/mieru/udp/manager/send.rs");
-
-    for forbidden in [
-        "async fn send(",
-        "fn send_relay",
-        "send_existing(",
-        "send_relay_existing(",
-        "mieru_relay_upstream",
-        "mieru_establish",
-        "mieru_relay_establish",
-        "UdpFlowContext",
-        "UdpPacketRef",
-    ] {
-        assert!(
-            !manager.contains(forbidden),
-            "mieru_manager.rs should keep send orchestration in mieru_manager/send.rs; found `{forbidden}`"
-        );
-    }
-    assert!(
-        send.exists(),
-        "Mieru UDP send orchestration should live in mieru_manager/send.rs"
+        managed.contains("managed_tuple_udp_connection")
+            && managed.contains("fn subscribe_responses")
+            && managed.contains("mieru upstream closed")
+            && connection.contains("pub(crate) fn managed_tuple_udp_connection")
+            && connection.contains("pub(crate) fn spawn_tuple_response_bridge")
+            && connection.contains("broadcast::Receiver<(Address, u16, Vec<u8>)>")
+            && stream_manager.contains(".insert_and_send_key("),
+        "Mieru UDP response bridge should hang off the neutral managed tuple connection bridge"
     );
 }
 
@@ -8154,9 +7946,8 @@ fn trojan_udp_send_orchestration_lives_outside_manager() {
 
 #[test]
 fn mieru_udp_packet_stream_tasks_live_outside_manager() {
-    let manager = read("src/adapters/mieru/udp/manager.rs");
-    let manager_send = read("src/adapters/mieru/udp/manager/send.rs");
-    let manager_model = read("src/adapters/mieru/udp/manager/model.rs");
+    let managed = read("src/adapters/mieru/udp/managed.rs");
+    let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
     let socket = manifest_dir().join("src/adapters/mieru/udp/manager/socket.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
@@ -8172,9 +7963,7 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
         "parse_udp_packet",
     ] {
         assert!(
-            !manager.contains(forbidden)
-                && !manager_send.contains(forbidden)
-                && !manager_model.contains(forbidden),
+            !managed.contains(forbidden) && !stream_manager.contains(forbidden),
             "Mieru UDP proxy glue should delegate protocol packet details to protocols/mieru; found `{forbidden}`"
         );
     }
@@ -8186,9 +7975,7 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
         "struct WriteOnlySocket",
     ] {
         assert!(
-            !manager.contains(forbidden)
-                && !manager_send.contains(forbidden)
-                && !manager_model.contains(forbidden),
+            !managed.contains(forbidden) && !stream_manager.contains(forbidden),
             "Mieru UDP proxy manager should not own protocol flow runtime detail `{forbidden}`"
         );
     }
@@ -8196,20 +7983,19 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
         !stream.exists() && !socket.exists(),
         "Mieru UDP stream task should live in protocols/mieru without proxy stream/socket wrappers"
     );
-    let establish = read("src/adapters/mieru/udp/manager/establish.rs");
     assert!(
         !repo_root()
             .join("crates/transport/src/mieru_transport.rs")
             .exists()
             && !transport.contains("dep:mieru")
             && !transport.contains("mieru/crypto")
-            && !manager_model.contains("MieruFlowSender")
-            && !manager_model.contains("MieruEntry")
-            && !manager_send.contains(".sender")
-            && !manager_send.contains(".recv_tx")
-            && manager_send.contains(".insert_and_send_key(")
-            && !manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
-            && !manager_send.contains("UdpFlowPacket")
+            && !managed.contains("MieruFlowSender")
+            && !managed.contains("MieruEntry")
+            && !managed.contains(".sender")
+            && !managed.contains(".recv_tx")
+            && stream_manager.contains(".insert_and_send_key(")
+            && !managed.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
+            && !managed.contains("UdpFlowPacket")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && protocol_outbound.contains("pub struct MieruUdpFlowHandle")
             && protocol_outbound.contains("struct MieruUdpFlowSender")
@@ -8224,19 +8010,19 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_outbound.contains("mpsc::channel::<zero_core::UdpFlowPacket>")
             && protocol_outbound.contains("tokio::spawn")
             && protocol_outbound.contains("tokio::select!")
-            && !establish.contains("mpsc::channel")
-            && !establish.contains("tokio::sync::broadcast::channel")
-            && !establish.contains("tokio::spawn")
-            && establish.contains("mieru::establish_udp_flow_with_resume")
-            && !establish.contains("mieru::MieruUdpFlowIo::establish_with_resume")
-            && !establish.contains("mieru::spawn_udp_flow")
-            && !establish.contains("mieru::MieruUdpFlowSession::new")
-            && !establish.contains("flow_io.write_flow_packet")
-            && !establish.contains("flow_io.decode_encrypted_response")
-            && !establish.contains("flow_io.read_flow_packets")
-            && !establish.contains("packet.encode_with(&mut flow_io)")
-            && !establish.contains("flow_io.push_encrypted_response")
-            && !establish.contains("flow_io.next_packet()")
+            && !managed.contains("mpsc::channel")
+            && !managed.contains("tokio::sync::broadcast::channel")
+            && !managed.contains("tokio::spawn")
+            && managed.contains("mieru::establish_udp_flow_with_resume")
+            && !managed.contains("mieru::MieruUdpFlowIo::establish_with_resume")
+            && !managed.contains("mieru::spawn_udp_flow")
+            && !managed.contains("mieru::MieruUdpFlowSession::new")
+            && !managed.contains("flow_io.write_flow_packet")
+            && !managed.contains("flow_io.decode_encrypted_response")
+            && !managed.contains("flow_io.read_flow_packets")
+            && !managed.contains("packet.encode_with(&mut flow_io)")
+            && !managed.contains("flow_io.push_encrypted_response")
+            && !managed.contains("flow_io.next_packet()")
             && protocol_outbound.contains("pub async fn write_packet")
             && protocol_outbound.contains("pub async fn read_packets")
             && protocol_outbound.contains("pub async fn write_flow_packet")
