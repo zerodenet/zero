@@ -2281,6 +2281,8 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
 #[test]
 fn vless_udp_state_model_lives_outside_runtime_root() {
     let managed = read("src/adapters/vless/udp/managed.rs");
+    let model = read("src/adapters/vless/udp/managed/model.rs");
+    let establish = read("src/adapters/vless/udp/managed/establish.rs");
     let stream_packet_manager = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let old_runtime = manifest_dir().join("src/protocol_runtime/vless_udp.rs");
@@ -2309,13 +2311,22 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
         "struct VlessUdpRelayFinalHopStart",
     ] {
         assert!(
-            managed.contains(required),
-            "VLESS UDP request model should live in adapters/vless/udp/managed.rs; missing `{required}`"
+            model.contains(required) && !managed.contains(required),
+            "VLESS UDP request model should live in adapters/vless/udp/managed/model.rs, not the manager root; missing `{required}`"
         );
     }
     assert!(
         !managed.contains("struct VlessUdpUpstream {")
             && !managed.contains("VlessUdpUpstream {")
+            && managed.contains("pub(crate) use model::{")
+            && managed.contains("mod establish;")
+            && managed.contains("mod model;")
+            && !managed.contains("fn over_stream")
+            && !managed.contains("fn direct")
+            && !managed.contains("impl ManagedTupleUdpSender")
+            && establish.contains("pub(super) async fn over_stream")
+            && establish.contains("pub(super) async fn direct_flow")
+            && establish.contains("impl ManagedTupleUdpSender for VlessManagedUdpSender")
             && managed.contains("ManagedStreamPacketSender")
             && !managed.contains("ManagedStreamConnectionCacheKey")
             && stream_packet_manager.contains(".send_existing_target(")
@@ -2342,6 +2353,7 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
 #[test]
 fn vless_udp_transport_opening_lives_in_transport_crate() {
     let managed = read("src/adapters/vless/udp/managed.rs");
+    let establish = read("src/adapters/vless/udp/managed/establish.rs");
     let flow = read("src/adapters/vless/udp/flow.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read crates/transport/src/vless_transport.rs");
@@ -2360,7 +2372,7 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
 
     assert!(
         flow.contains("crate::transport::VlessUdpTransportOptions")
-            && managed.contains("crate::transport::VlessUdpTransportConnector")
+            && establish.contains("crate::transport::VlessUdpTransportConnector")
             && managed.contains("crate::transport::build_vless_outbound_transport_over_stream"),
         "VLESS UDP adapter/runtime should request VLESS transport helpers instead of opening QUIC/TCP transports directly"
     );
@@ -2384,6 +2396,7 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
 #[test]
 fn vless_udp_identity_is_protocol_parsed() {
     let managed = read("src/adapters/vless/udp/managed.rs");
+    let model = read("src/adapters/vless/udp/managed/model.rs");
     let adapter = read("src/adapters/vless/udp.rs");
     let flow = read("src/adapters/vless/udp/flow.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
@@ -2394,7 +2407,7 @@ fn vless_udp_identity_is_protocol_parsed() {
         "VLESS UDP runtime should receive protocol-parsed UUIDs"
     );
     assert!(
-        !managed.contains("id: &'a str") && managed.contains("vless::VlessUdpFlowConfig"),
+        !model.contains("id: &'a str") && model.contains("vless::VlessUdpFlowConfig"),
         "VLESS UDP request models should carry protocol-owned flow config instead of raw config IDs"
     );
     for forbidden in [
@@ -2404,7 +2417,7 @@ fn vless_udp_identity_is_protocol_parsed() {
         "pub(super) uuid: [u8; 16]",
     ] {
         assert!(
-            !managed.contains(forbidden),
+            !model.contains(forbidden),
             "VLESS UDP request models should not carry raw config IDs or UUID fields; found `{forbidden}`"
         );
     }
@@ -2452,6 +2465,7 @@ fn vless_udp_adapter_delegates_packet_framing_to_protocol_helpers() {
 #[test]
 fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = read("src/adapters/vless/udp/managed.rs");
+    let establish = read("src/adapters/vless/udp/managed/establish.rs");
     let model = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let proxy_transport = read("src/transport/mod.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
@@ -2493,28 +2507,39 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "tokio::spawn",
     ] {
         assert!(
-            !runtime.contains(forbidden) && !model.contains(forbidden),
+            !runtime.contains(forbidden) && !establish.contains(forbidden) && !model.contains(forbidden),
             "VLESS UDP runtime should avoid raw packet framing and use protocols/vless flow helpers; found `{forbidden}`"
         );
     }
     assert!(
         !runtime.contains("use zero_core::{Address, Session, UdpFlowPacket}")
+            && !establish.contains("use zero_core::{Address, Session, UdpFlowPacket}")
             && !runtime.contains("zero_core::UdpFlowPacket::from_parts")
+            && !establish.contains("zero_core::UdpFlowPacket::from_parts")
             && !runtime.contains("let initial_packet = UdpFlowPacket::from_parts")
+            && !establish.contains("let initial_packet = UdpFlowPacket::from_parts")
             && !model.contains("UdpFlowPacket::from_parts"),
         "VLESS UDP runtime should not construct core UDP flow packets directly"
     );
     assert!(
         !runtime.contains("vless::open_udp_flow")
             && !runtime.contains("vless::open_mux_udp_flow")
-            && runtime.contains(".establish_flow_with_initial_packet(")
+            && !establish.contains("vless::open_udp_flow")
+            && !establish.contains("vless::open_mux_udp_flow")
+            && establish.contains(".establish_flow_with_initial_packet(")
             && !runtime.contains("vless::establish_udp_flow_with_initial_packet")
-            && runtime.contains(".encode_initial_flow_packet(")
+            && !establish.contains("vless::establish_udp_flow_with_initial_packet")
+            && establish.contains(".encode_initial_flow_packet(")
             && !runtime.contains("vless::encode_udp_flow_initial_packet")
+            && !establish.contains("vless::encode_udp_flow_initial_packet")
             && !runtime.contains("vless::establish_udp_flow_stream")
+            && !establish.contains("vless::establish_udp_flow_stream")
             && !runtime.contains("vless::VlessUdpIdentity")
+            && !establish.contains("vless::VlessUdpIdentity")
             && !runtime.contains("vless::VlessUdpFlowIo")
+            && !establish.contains("vless::VlessUdpFlowIo")
             && !runtime.contains("broadcast::channel::<VlessFlowResponse>")
+            && !establish.contains("broadcast::channel::<VlessFlowResponse>")
             && !model.contains("SharedManagedUdpConnection")
             && read("src/runtime/udp_flow/managed/cache.rs").contains("ManagedStreamConnection")
             && !model.contains("vless::VlessUdpFlowConnection")
@@ -2522,7 +2547,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !model.contains("vless::VlessUdpFlowSender")
             && !runtime.contains("VlessUdpFlowConnection::new")
             && !runtime.contains("VlessUdpFlowHandle")
-            && runtime.contains("managed_tuple_udp_connection")
+            && !runtime.contains("managed_tuple_udp_connection")
+            && establish.contains("managed_tuple_udp_connection")
             && !runtime.contains("impl ManagedUdpConnection for vless::VlessUdpFlowConnection")
             && !runtime.contains("spawn_tuple_response_bridge")
             && !runtime.contains(".recv().await")
@@ -2597,6 +2623,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
 #[test]
 fn vmess_udp_state_model_lives_outside_runtime_root() {
     let managed = read("src/adapters/vmess/udp/managed.rs");
+    let model = read("src/adapters/vmess/udp/managed/model.rs");
+    let establish = read("src/adapters/vmess/udp/managed/establish.rs");
     let stream_packet_manager = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let old_runtime = manifest_dir().join("src/protocol_runtime/vmess_udp.rs");
@@ -2615,18 +2643,21 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
         );
     }
 
-    for required in [
-        "struct VmessUdpStartFlow",
-        "struct VmessUdpRelayFlowStart",
-        "struct VmessUdpUpstreamRequest",
-    ] {
+    for required in ["struct VmessUdpStartFlow", "struct VmessUdpRelayFlowStart"] {
         assert!(
-            managed.contains(required),
-            "VMess UDP protocol request model should live in adapters/vmess/udp/managed.rs; missing `{required}`"
+            model.contains(required) && !managed.contains(required),
+            "VMess UDP protocol request model should live in adapters/vmess/udp/managed/model.rs, not the manager root; missing `{required}`"
         );
     }
     assert!(
         !managed.contains("struct VmessUdpUpstream {")
+            && !managed.contains("struct VmessUdpUpstreamRequest")
+            && establish.contains("pub(super) async fn over_stream")
+            && establish.contains("pub(super) async fn direct_flow")
+            && establish.contains("impl ManagedTupleUdpSender for VmessManagedUdpSender")
+            && managed.contains("pub(crate) use model::{")
+            && managed.contains("mod establish;")
+            && managed.contains("mod model;")
             && managed.contains("ManagedStreamPacketSender")
             && !managed.contains("ManagedStreamConnectionCacheKey")
             && managed.contains(".send_existing_target(")
@@ -2658,6 +2689,7 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
 #[test]
 fn vmess_udp_transport_opening_lives_in_transport_crate() {
     let managed = read("src/adapters/vmess/udp/managed.rs");
+    let establish = read("src/adapters/vmess/udp/managed/establish.rs");
     let flow = read("src/adapters/vmess/udp/flow.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
         .expect("read crates/transport/src/vmess_transport.rs");
@@ -2677,7 +2709,7 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
 
     assert!(
         flow.contains("crate::transport::VmessTransportOptions")
-            && managed.contains("crate::transport::VmessTransportConnector")
+            && establish.contains("crate::transport::VmessTransportConnector")
             && managed.contains("crate::transport::build_vmess_outbound_transport_over_stream"),
         "VMess UDP adapter/runtime should request VMess transport helpers instead of opening TLS/WS/gRPC directly"
     );
@@ -2704,6 +2736,7 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
 #[test]
 fn vmess_udp_identity_is_protocol_parsed() {
     let managed = read("src/adapters/vmess/udp/managed.rs");
+    let model = read("src/adapters/vmess/udp/managed/model.rs");
     let adapter = read("src/adapters/vmess/udp.rs");
     let flow = read("src/adapters/vmess/udp/flow.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
@@ -2711,7 +2744,7 @@ fn vmess_udp_identity_is_protocol_parsed() {
 
     for forbidden in ["parse_uuid", "VmessCipher::from_name"] {
         assert!(
-            !managed.contains(forbidden),
+            !managed.contains(forbidden) && !model.contains(forbidden),
             "VMess UDP runtime should receive protocol-parsed identity; found `{forbidden}`"
         );
         assert!(
@@ -2750,12 +2783,12 @@ fn vmess_udp_identity_is_protocol_parsed() {
         "cipher_name: &'a str",
     ] {
         assert!(
-            !managed.contains(forbidden),
+            !model.contains(forbidden),
             "VMess UDP request models should carry protocol-owned flow config only; found `{forbidden}`"
         );
     }
     assert!(
-        managed.contains("vmess::VmessUdpFlowConfig") && !managed.contains("vmess::VmessUdpIdentity"),
+        model.contains("vmess::VmessUdpFlowConfig") && !model.contains("vmess::VmessUdpIdentity"),
         "VMess UDP request models should carry protocol-owned flow config for identity and mux keying"
     );
 }
@@ -2763,6 +2796,7 @@ fn vmess_udp_identity_is_protocol_parsed() {
 #[test]
 fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = read("src/adapters/vmess/udp/managed.rs");
+    let establish = read("src/adapters/vmess/udp/managed/establish.rs");
     let model = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let proxy_transport = read("src/transport/mod.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
@@ -2802,29 +2836,41 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "initial_packet.encoded_len(&flow_io)",
     ] {
         assert!(
-            !runtime.contains(forbidden) && !model.contains(forbidden),
+            !runtime.contains(forbidden) && !establish.contains(forbidden) && !model.contains(forbidden),
             "VMess UDP runtime should avoid raw packet framing and use protocols/vmess flow helpers; found `{forbidden}`"
         );
     }
     assert!(
         !runtime.contains("use zero_core::{Address, Session, UdpFlowPacket}")
+            && !establish.contains("use zero_core::{Address, Session, UdpFlowPacket}")
             && !runtime.contains("zero_core::UdpFlowPacket::from_parts")
+            && !establish.contains("zero_core::UdpFlowPacket::from_parts")
             && !runtime.contains("let initial_packet = UdpFlowPacket::from_parts")
+            && !establish.contains("let initial_packet = UdpFlowPacket::from_parts")
             && !model.contains("UdpFlowPacket::from_parts"),
         "VMess UDP runtime should not construct core UDP flow packets directly"
     );
     assert!(
         !runtime.contains("vmess::open_udp_flow")
             && !runtime.contains("vmess::open_mux_udp_flow")
-            && runtime.contains(".establish_flow_with_initial_packet(")
+            && !establish.contains("vmess::open_udp_flow")
+            && !establish.contains("vmess::open_mux_udp_flow")
+            && establish.contains(".establish_flow_with_initial_packet(")
             && !runtime.contains("vmess::establish_udp_flow_with_initial_packet")
-            && runtime.contains(".start_flow_with_initial_packet(")
+            && !establish.contains("vmess::establish_udp_flow_with_initial_packet")
+            && establish.contains(".start_flow_with_initial_packet(")
             && !runtime.contains("vmess::start_udp_flow_with_initial_packet")
+            && !establish.contains("vmess::start_udp_flow_with_initial_packet")
             && !runtime.contains("vmess::establish_udp_flow_stream")
+            && !establish.contains("vmess::establish_udp_flow_stream")
             && !runtime.contains("vmess::encode_udp_flow_initial_packet")
+            && !establish.contains("vmess::encode_udp_flow_initial_packet")
             && !runtime.contains("vmess::VmessUdpIdentity")
+            && !establish.contains("vmess::VmessUdpIdentity")
             && !runtime.contains("vmess::VmessUdpFlowIo")
+            && !establish.contains("vmess::VmessUdpFlowIo")
             && !runtime.contains("broadcast::channel::<VmessFlowResponse>")
+            && !establish.contains("broadcast::channel::<VmessFlowResponse>")
             && !model.contains("SharedManagedUdpConnection")
             && read("src/runtime/udp_flow/managed/cache.rs").contains("ManagedStreamConnection")
             && !model.contains("vmess::VmessUdpFlowConnection")
@@ -2832,7 +2878,8 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !model.contains("vmess::VmessUdpFlowSender")
             && !runtime.contains("VmessUdpFlowConnection::new")
             && !runtime.contains("VmessUdpFlowHandle")
-            && runtime.contains("managed_tuple_udp_connection")
+            && !runtime.contains("managed_tuple_udp_connection")
+            && establish.contains("managed_tuple_udp_connection")
             && !runtime.contains("impl ManagedUdpConnection for vmess::VmessUdpFlowConnection")
             && !runtime.contains("spawn_tuple_response_bridge")
             && !runtime.contains(".recv().await")
@@ -3172,28 +3219,16 @@ fn protocol_mux_pools_are_adapter_owned_not_proxy_fields() {
 #[test]
 fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
     for (source, forbidden) in [
-        ("src/adapters/vless/udp/managed.rs", "VlessUdpStartFlow"),
-        (
-            "src/adapters/vless/udp/managed.rs",
-            "VlessUdpRelayTwoStream",
-        ),
-        (
-            "src/adapters/vless/udp/managed.rs",
-            "VlessUdpRelayFinalHopStart",
-        ),
-        ("src/adapters/vless/udp/managed.rs", "VlessUdpTransport"),
-        ("src/adapters/vmess/udp/managed.rs", "VmessUdpStartFlow"),
-        (
-            "src/adapters/vmess/udp/managed.rs",
-            "VmessUdpRelayFlowStart",
-        ),
+        ("src/adapters/vless/udp.rs", "VlessUdpStartFlow"),
+        ("src/adapters/vless/udp.rs", "VlessUdpRelayTwoStream"),
+        ("src/adapters/vless/udp.rs", "VlessUdpRelayFinalHopStart"),
+        ("src/adapters/vless/udp.rs", "VlessUdpTransport"),
+        ("src/adapters/vmess/udp.rs", "VmessUdpStartFlow"),
+        ("src/adapters/vmess/udp.rs", "VmessUdpRelayFlowStart"),
     ] {
         let content = read(source);
         assert!(
-            !content.lines().any(
-                |line| line.trim_start().starts_with("pub(crate) use model::")
-                    && line.contains(forbidden)
-            ),
+            !content.contains(forbidden),
             "{source} should not re-export request model `{forbidden}`"
         );
     }
@@ -6825,8 +6860,8 @@ fn packet_path_traits_are_grouped_by_responsibility() {
 
 #[test]
 fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
-    let vless_runtime = read("src/adapters/vless/udp/managed.rs");
-    let vmess_runtime = read("src/adapters/vmess/udp/managed.rs");
+    let vless_runtime = read("src/adapters/vless/udp/managed/establish.rs");
+    let vmess_runtime = read("src/adapters/vmess/udp/managed/establish.rs");
     let vless_shared = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
         .expect("read VLESS protocol shared source");
     let vless_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
@@ -6836,7 +6871,7 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
 
     for (source, content, flow_helper) in [
         (
-            "src/adapters/vless/udp/manager",
+            "src/adapters/vless/udp/managed/establish.rs",
             &vless_runtime,
             "establish_flow_with_initial_packet",
         ),
