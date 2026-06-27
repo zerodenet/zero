@@ -7,11 +7,15 @@ use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
-fn parse_shadowsocks_cipher(cipher: &str) -> Result<shadowsocks::CipherKind, EngineError> {
-    shadowsocks::CipherKind::from_str(cipher).ok_or_else(|| {
+fn tcp_config(
+    cipher: &str,
+    password: &str,
+    stage: &'static str,
+) -> Result<shadowsocks::ShadowsocksTcpConnectConfig, EngineError> {
+    shadowsocks::ShadowsocksTcpConnectConfig::from_config(cipher, password).map_err(|error| {
         EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("unknown shadowsocks cipher: {cipher}"),
+            format!("{stage}: {error}"),
         ))
     })
 }
@@ -33,19 +37,21 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        let cipher_kind = parse_shadowsocks_cipher(cipher).map_err(|error| TcpOutboundFailure {
-            stage: "connect_upstream_shadowsocks",
-            error,
-            upstream_endpoint: Some(((*server).to_string(), *port)),
-        })?;
+        let config =
+            tcp_config(cipher, password, "invalid shadowsocks tcp config").map_err(|error| {
+                TcpOutboundFailure {
+                    stage: "connect_upstream_shadowsocks",
+                    error,
+                    upstream_endpoint: Some(((*server).to_string(), *port)),
+                }
+            })?;
         match crate::outbound::shadowsocks::connect_tcp(
             crate::outbound::shadowsocks::ShadowsocksTcpConnectRequest {
                 proxy,
                 session,
                 server,
                 port: *port,
-                password,
-                cipher: cipher_kind,
+                config,
             },
         )
         .await
@@ -76,7 +82,7 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let cipher = parse_shadowsocks_cipher(cipher)?;
-        crate::outbound::shadowsocks::apply_tcp_hop(stream, session, password, cipher).await
+        let config = tcp_config(cipher, password, "invalid shadowsocks tcp relay config")?;
+        crate::outbound::shadowsocks::apply_tcp_hop(stream, session, config).await
     }
 }

@@ -162,6 +162,38 @@ pub struct ShadowsocksTcpTarget<'a> {
     pub password: &'a [u8],
 }
 
+/// Parsed Shadowsocks TCP connect settings built from external config.
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksTcpConnectConfig {
+    cipher: super::shared::CipherKind,
+    password: alloc::vec::Vec<u8>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksTcpConnectConfig {
+    pub fn from_config(cipher: &str, password: &str) -> Result<Self, Error> {
+        let cipher = super::shared::CipherKind::from_str(cipher)
+            .ok_or(Error::Protocol("ss: unknown tcp cipher"))?;
+        Ok(Self {
+            cipher,
+            password: password.as_bytes().to_vec(),
+        })
+    }
+
+    pub fn tcp_target<'a>(&'a self, session: &'a Session) -> ShadowsocksTcpTarget<'a> {
+        ShadowsocksTcpTarget {
+            session,
+            cipher: self.cipher,
+            password: &self.password,
+        }
+    }
+
+    pub fn password_bytes(&self) -> &[u8] {
+        &self.password
+    }
+}
+
 #[cfg(feature = "crypto")]
 impl<'a> TcpSessionProtocol<ShadowsocksTcpTarget<'a>> for ShadowsocksOutbound {
     type Error = Error;

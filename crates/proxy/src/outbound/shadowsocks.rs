@@ -24,8 +24,7 @@ pub(crate) async fn connect_tcp(
         session,
         server,
         port,
-        password,
-        cipher,
+        config,
     } = request;
 
     let upstream = proxy
@@ -34,24 +33,19 @@ pub(crate) async fn connect_tcp(
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
     let mut metered = MeteredStream::new(upstream);
-    let password_bytes = password.as_bytes().to_vec();
     let ss_session = <shadowsocks::ShadowsocksOutbound as TcpSessionProtocol<
         shadowsocks::ShadowsocksTcpTarget,
     >>::establish_tcp_session(
         &shadowsocks::ShadowsocksOutbound,
         &mut metered,
-        &shadowsocks::ShadowsocksTcpTarget {
-            session,
-            cipher,
-            password: &password_bytes,
-        },
+        &config.tcp_target(session),
     )
     .await?;
     proxy.record_session_outbound_traffic(session.id, metered.drain_traffic());
     Ok(wrap_outbound_stream(
         metered.into_inner().into(),
         ss_session,
-        password_bytes,
+        config.password_bytes().to_vec(),
     ))
 }
 
@@ -60,8 +54,7 @@ pub(crate) struct ShadowsocksTcpConnectRequest<'a> {
     pub session: &'a Session,
     pub server: &'a str,
     pub port: u16,
-    pub password: &'a str,
-    pub cipher: shadowsocks::CipherKind,
+    pub config: shadowsocks::ShadowsocksTcpConnectConfig,
 }
 
 /// Wrap a relay stream with the Shadowsocks AEAD outbound codec.
@@ -84,25 +77,20 @@ pub(crate) fn wrap_outbound_stream(
 pub(crate) async fn apply_tcp_hop(
     mut stream: TcpRelayStream,
     session: &Session,
-    password: &str,
-    cipher: shadowsocks::CipherKind,
+    config: shadowsocks::ShadowsocksTcpConnectConfig,
 ) -> Result<TcpRelayStream, EngineError> {
     let ss_session = <shadowsocks::ShadowsocksOutbound as TcpSessionProtocol<
         shadowsocks::ShadowsocksTcpTarget,
     >>::establish_tcp_session(
         &shadowsocks::ShadowsocksOutbound,
         &mut stream,
-        &shadowsocks::ShadowsocksTcpTarget {
-            session,
-            cipher,
-            password: password.as_bytes(),
-        },
+        &config.tcp_target(session),
     )
     .await
     .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
     Ok(wrap_outbound_stream(
         stream,
         ss_session,
-        password.as_bytes().to_vec(),
+        config.password_bytes().to_vec(),
     ))
 }

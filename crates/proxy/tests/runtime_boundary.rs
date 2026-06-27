@@ -1687,6 +1687,9 @@ fn trojan_tcp_connect_uses_request_model() {
 fn shadowsocks_tcp_connect_uses_request_model() {
     let outbound = read("src/outbound/shadowsocks.rs");
     let adapter = read("src/adapters/shadowsocks/tcp.rs");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
+            .expect("read shadowsocks protocol outbound source");
 
     assert!(
         !outbound.contains("#[allow(clippy::too_many_arguments)]"),
@@ -1703,11 +1706,21 @@ fn shadowsocks_tcp_connect_uses_request_model() {
     );
     assert!(
         !outbound.contains("CipherKind::from_str"),
-        "Shadowsocks outbound TCP helper should receive an adapter-parsed cipher"
+        "Shadowsocks outbound TCP helper should receive a protocol-built TCP config"
     );
     assert!(
-        adapter.contains("CipherKind::from_str"),
-        "Shadowsocks adapter TCP module should own outbound cipher parsing"
+        !adapter.contains("CipherKind::from_str")
+            && !adapter.contains("shadowsocks::CipherKind")
+            && adapter.contains("ShadowsocksTcpConnectConfig::from_config")
+            && outbound.contains("config: shadowsocks::ShadowsocksTcpConnectConfig")
+            && !outbound.contains("cipher: shadowsocks::CipherKind")
+            && !outbound.contains("ShadowsocksTcpTarget {")
+            && outbound.contains("config.tcp_target(session)")
+            && protocol_outbound.contains("pub struct ShadowsocksTcpConnectConfig")
+            && protocol_outbound.contains("pub fn from_config")
+            && protocol_outbound.contains("CipherKind::from_str")
+            && protocol_outbound.contains("pub fn tcp_target"),
+        "Shadowsocks TCP adapter should ask protocols/shadowsocks to parse cipher config and proxy outbound should consume the protocol-built config"
     );
 }
 
