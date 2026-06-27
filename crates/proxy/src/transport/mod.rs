@@ -55,8 +55,9 @@ pub(crate) use zero_transport::vless_transport::{
 };
 #[cfg(feature = "vmess")]
 pub(crate) use zero_transport::vmess_transport::{
-    build_vmess_outbound_transport_over_stream, VmessFinalHopTransportRequest,
-    VmessTransportConnector, VmessTransportOptions,
+    build_vmess_outbound_transport, build_vmess_outbound_transport_over_stream,
+    VmessFinalHopTransportRequest, VmessOutboundTransportRequest, VmessTransportConnector,
+    VmessTransportOptions,
 };
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::ws::accept_ws;

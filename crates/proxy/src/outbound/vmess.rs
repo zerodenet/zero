@@ -4,7 +4,6 @@
 //! so the runtime dispatches via registered TCP outbound capabilities. UDP management
 //! glue lives under the VMess adapter UDP module.
 
-use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::Session;
 use zero_engine::EngineError;
 
@@ -43,56 +42,20 @@ pub(crate) async fn connect_tcp(
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
 
-    // Transport stack: gRPC > WS > TLS > raw
-    let stream: TcpRelayStream = match (grpc, ws, tls) {
-        (Some(grpc_cfg), None, Some(tls_cfg)) => {
-            let tls_stream = zero_transport::tls::connect_tls_upstream(
-                socket,
-                tls_cfg,
-                proxy.config.source_dir(),
-                server,
-            )
-            .await?;
-            TcpRelayStream::new(
-                zero_transport::grpc::connect_grpc(tls_stream, &grpc_cfg.service_names).await?,
-            )
-        }
-        (Some(grpc_cfg), None, None) => TcpRelayStream::new(
-            zero_transport::grpc::connect_grpc(socket, &grpc_cfg.service_names).await?,
-        ),
-        (None, Some(ws_cfg), Some(tls_cfg)) => {
-            let tls_stream = zero_transport::tls::connect_tls_upstream(
-                socket,
-                tls_cfg,
-                proxy.config.source_dir(),
-                server,
-            )
-            .await?;
-            TcpRelayStream::new(
-                zero_transport::ws::connect_ws(tls_stream, ws_cfg, server, port).await?,
-            )
-        }
-        (None, Some(ws_cfg), None) => {
-            TcpRelayStream::new(zero_transport::ws::connect_ws(socket, ws_cfg, server, port).await?)
-        }
-        (None, None, Some(tls_cfg)) => {
-            let tls_stream = zero_transport::tls::connect_tls_upstream(
-                socket,
-                tls_cfg,
-                proxy.config.source_dir(),
-                server,
-            )
-            .await?;
-            TcpRelayStream::new(tls_stream)
-        }
-        (None, None, None) => TcpRelayStream::new(socket),
-        _ => {
-            return Err(EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "vmess: ws and grpc are mutually exclusive",
-            )))
-        }
-    };
+    let stream = crate::transport::build_vmess_outbound_transport(
+        crate::transport::VmessOutboundTransportRequest {
+            socket,
+            options: crate::transport::VmessTransportOptions {
+                tls,
+                ws,
+                grpc,
+                source_dir: proxy.config.source_dir(),
+            },
+            server,
+            port,
+        },
+    )
+    .await?;
 
     let mut sock = MeteredStream::new(stream);
     let vmess_session =
@@ -113,9 +76,9 @@ pub(crate) struct VmessTcpConnectRequest<'a> {
     pub cipher: vmess::VmessCipher,
     pub mux_concurrency: Option<u32>,
     pub mux_idle_timeout_secs: Option<u64>,
-    pub tls: Option<&'a ClientTlsConfig>,
-    pub ws: Option<&'a WebSocketConfig>,
-    pub grpc: Option<&'a GrpcConfig>,
+    pub tls: Option<&'a zero_config::ClientTlsConfig>,
+    pub ws: Option<&'a zero_config::WebSocketConfig>,
+    pub grpc: Option<&'a zero_config::GrpcConfig>,
 }
 
 /// Apply a VMess AEAD session handshake over an existing stream (relay hop).

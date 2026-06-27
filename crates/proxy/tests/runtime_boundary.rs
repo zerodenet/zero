@@ -1675,10 +1675,13 @@ fn vmess_tcp_connect_uses_request_model() {
         "VmessAeadStream::outbound",
         "TcpSessionProtocol",
         "VmessTcpSessionTarget",
+        "zero_transport::tls::connect_tls_upstream",
+        "zero_transport::grpc::connect_grpc",
+        "zero_transport::ws::connect_ws",
     ] {
         assert!(
             !outbound.contains(forbidden),
-            "VMess outbound TCP helper should receive adapter-parsed identity; found `{forbidden}`"
+            "VMess outbound TCP helper should receive adapter-parsed identity and transport-built streams; found `{forbidden}`"
         );
     }
     for adapter_owned in [
@@ -1694,6 +1697,12 @@ fn vmess_tcp_connect_uses_request_model() {
     assert!(
         outbound.contains("vmess::establish_tcp_outbound_stream"),
         "VMess outbound TCP helper should delegate VMess session and AEAD setup to protocols/vmess"
+    );
+    assert!(
+        outbound.contains("crate::transport::build_vmess_outbound_transport")
+            && outbound.contains("crate::transport::VmessOutboundTransportRequest")
+            && outbound.contains("crate::transport::VmessTransportOptions"),
+        "VMess outbound TCP helper should request VMess transport building through zero-transport"
     );
 }
 
