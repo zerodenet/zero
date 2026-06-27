@@ -7,7 +7,9 @@ use super::model::{
 };
 use super::{establish, VlessUdpOutboundManager};
 use crate::adapters::vless::mux_pool::VlessMuxOpenRequest;
-use crate::runtime::udp_flow::managed::ManagedStreamFlowSender;
+use crate::runtime::udp_flow::managed::{
+    ManagedStreamConnection, ManagedStreamConnectionCacheKey, ManagedStreamFlowSender,
+};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 
@@ -84,7 +86,10 @@ impl VlessUdpOutboundManager {
         )
         .await?;
         self.insert_upstream(
-            (request.session.target.clone(), request.session.port),
+            ManagedStreamConnectionCacheKey::new(
+                request.session.target.clone(),
+                request.session.port,
+            ),
             upstream,
         );
         self.spawn_bridge(
@@ -126,7 +131,10 @@ impl VlessUdpOutboundManager {
         )
         .await?;
         self.insert_upstream(
-            (request.session.target.clone(), request.session.port),
+            ManagedStreamConnectionCacheKey::new(
+                request.session.target.clone(),
+                request.session.port,
+            ),
             upstream,
         );
         self.spawn_bridge(
@@ -146,7 +154,8 @@ impl VlessUdpOutboundManager {
         port: u16,
         payload: &[u8],
     ) -> Result<Option<u64>, EngineError> {
-        let Some(upstream) = self.upstreams.get(&(target.clone(), port)) else {
+        let key = ManagedStreamConnectionCacheKey::new(target.clone(), port);
+        let Some(upstream) = self.upstreams.get(&key) else {
             return Ok(None);
         };
 
@@ -157,7 +166,11 @@ impl VlessUdpOutboundManager {
         Ok(Some(upstream.session_id))
     }
 
-    fn insert_upstream(&mut self, key: (Address, u16), upstream: super::model::VlessUdpUpstream) {
+    fn insert_upstream(
+        &mut self,
+        key: ManagedStreamConnectionCacheKey,
+        upstream: ManagedStreamConnection,
+    ) {
         self.upstreams.insert(key, upstream);
     }
 
@@ -166,7 +179,7 @@ impl VlessUdpOutboundManager {
         chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VlessUdpUpstreamRequest<'_>,
     ) -> Result<(), EngineError> {
-        let key = (request.target.clone(), request.port);
+        let key = ManagedStreamConnectionCacheKey::new(request.target.clone(), request.port);
 
         if let Some(upstream) = self.upstreams.get(&key) {
             request.proxy.record_session_inbound_rx(

@@ -9,20 +9,16 @@ mod establish;
 pub(crate) mod model;
 mod send;
 
-use std::collections::HashMap;
-
-use zero_core::Address;
-
-use model::VmessUdpUpstream;
+use crate::runtime::udp_flow::managed::ManagedStreamConnectionCache;
 
 pub(crate) struct VmessUdpOutboundManager {
-    upstreams: HashMap<(Address, u16), VmessUdpUpstream>,
+    upstreams: ManagedStreamConnectionCache,
 }
 
 impl VmessUdpOutboundManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: HashMap::new(),
+            upstreams: ManagedStreamConnectionCache::new(),
         }
     }
 }

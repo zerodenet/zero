@@ -4,7 +4,9 @@ use zero_engine::EngineError;
 
 use super::model::{VmessUdpRelayFlowStart, VmessUdpStartFlow, VmessUdpUpstreamRequest};
 use super::{establish, VmessUdpOutboundManager};
-use crate::runtime::udp_flow::managed::ManagedStreamFlowSender;
+use crate::runtime::udp_flow::managed::{
+    ManagedStreamConnection, ManagedStreamConnectionCacheKey, ManagedStreamFlowSender,
+};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 
@@ -54,7 +56,10 @@ impl VmessUdpOutboundManager {
         )
         .await?;
         self.insert_upstream(
-            (request.session.target.clone(), request.session.port),
+            ManagedStreamConnectionCacheKey::new(
+                request.session.target.clone(),
+                request.session.port,
+            ),
             upstream,
         );
         self.spawn_bridge(
@@ -74,7 +79,8 @@ impl VmessUdpOutboundManager {
         port: u16,
         payload: &[u8],
     ) -> Result<Option<u64>, EngineError> {
-        let Some(upstream) = self.upstreams.get(&(target.clone(), port)) else {
+        let key = ManagedStreamConnectionCacheKey::new(target.clone(), port);
+        let Some(upstream) = self.upstreams.get(&key) else {
             return Ok(None);
         };
 
@@ -85,7 +91,11 @@ impl VmessUdpOutboundManager {
         Ok(Some(upstream.session_id))
     }
 
-    fn insert_upstream(&mut self, key: (Address, u16), upstream: super::model::VmessUdpUpstream) {
+    fn insert_upstream(
+        &mut self,
+        key: ManagedStreamConnectionCacheKey,
+        upstream: ManagedStreamConnection,
+    ) {
         self.upstreams.insert(key, upstream);
     }
 
@@ -94,7 +104,7 @@ impl VmessUdpOutboundManager {
         chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VmessUdpUpstreamRequest<'_>,
     ) -> Result<(), EngineError> {
-        let key = (request.target.clone(), request.port);
+        let key = ManagedStreamConnectionCacheKey::new(request.target.clone(), request.port);
         if let Some(upstream) = self.upstreams.get(&key) {
             request.proxy.record_session_inbound_rx(
                 upstream.session_id,

@@ -1,6 +1,7 @@
 use zero_core::Address;
 
 use super::VmessUdpOutboundManager;
+use crate::runtime::udp_flow::managed::ManagedStreamConnectionCacheKey;
 
 impl VmessUdpOutboundManager {
     pub(super) fn spawn_bridge(
@@ -10,7 +11,8 @@ impl VmessUdpOutboundManager {
         port: u16,
         session_id: u64,
     ) {
-        if let Some(upstream) = self.upstreams.get(&(target.clone(), port)) {
+        let key = ManagedStreamConnectionCacheKey::new(target, port);
+        if let Some(upstream) = self.upstreams.get(&key) {
             upstream
                 .connection
                 .spawn_response_bridge(chain_tasks, session_id);

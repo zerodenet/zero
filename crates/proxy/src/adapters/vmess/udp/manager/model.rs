@@ -1,13 +1,7 @@
 use zero_core::{Address, Session};
 
 use crate::adapters::vmess::mux_pool::VmessMuxConnectionPool;
-use crate::runtime::udp_flow::managed::SharedManagedUdpConnection;
 use crate::runtime::Proxy;
-
-pub(super) struct VmessUdpUpstream {
-    pub(super) session_id: u64,
-    pub(super) connection: SharedManagedUdpConnection,
-}
 
 pub(crate) struct VmessUdpStartFlow<'a> {
     pub(crate) proxy: &'a Proxy,

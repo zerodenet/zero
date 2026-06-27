@@ -2058,6 +2058,9 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
 fn vless_udp_state_model_lives_outside_runtime_root() {
     let root = read("src/adapters/vless/udp/manager.rs");
     let model = read("src/adapters/vless/udp/manager/model.rs");
+    let establish = read("src/adapters/vless/udp/manager/establish.rs");
+    let send = read("src/adapters/vless/udp/manager/send.rs");
+    let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let old_runtime = manifest_dir().join("src/protocol_runtime/vless_udp.rs");
     let old_runtime_dir = manifest_dir().join("src/protocol_runtime/vless_udp");
 
@@ -2080,7 +2083,6 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
     }
 
     for required in [
-        "struct VlessUdpUpstream",
         "struct VlessUdpStartFlow",
         "struct VlessUdpRelayTwoStream",
         "struct VlessUdpRelayFinalHopStart",
@@ -2091,6 +2093,17 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
             "VLESS UDP state/request model should live in adapters/vless/udp/manager/model.rs; missing `{required}`"
         );
     }
+    assert!(
+        !model.contains("struct VlessUdpUpstream {")
+            && !establish.contains("VlessUdpUpstream {")
+            && !send.contains("VlessUdpUpstream {")
+            && (root.contains("ManagedStreamConnectionCache")
+                || send.contains("ManagedStreamConnectionCacheKey"))
+            && send.contains("ManagedStreamConnectionCacheKey")
+            && managed_cache.contains("struct ManagedStreamConnection")
+            && managed_cache.contains("struct ManagedStreamConnectionCache"),
+        "VLESS UDP manager should use neutral managed stream connection cache instead of a protocol-named upstream model"
+    );
 }
 
 #[test]
@@ -2283,7 +2296,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vless::VlessUdpIdentity")
             && !runtime.contains("vless::VlessUdpFlowIo")
             && !runtime.contains("broadcast::channel::<VlessFlowResponse>")
-            && model.contains("SharedManagedUdpConnection")
+            && !model.contains("SharedManagedUdpConnection")
+            && read("src/runtime/udp_flow/managed/cache.rs").contains("ManagedStreamConnection")
             && !model.contains("vless::VlessUdpFlowConnection")
             && !model.contains("vless::VlessUdpFlowSession")
             && !model.contains("vless::VlessUdpFlowSender")
@@ -2309,7 +2323,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "VLESS UDP runtime should keep protocol flow I/O inside protocols/vless and leave proxy manager as cache/bridge glue"
     );
     assert!(
-        model.contains("SharedManagedUdpConnection")
+        read("src/runtime/udp_flow/managed/cache.rs").contains("SharedManagedUdpConnection")
+            && !model.contains("SharedManagedUdpConnection")
             && !model.contains("vless::VlessUdpFlowConnection"),
         "VLESS UDP manager cache should store a neutral stream UDP connection object"
     );
@@ -2362,6 +2377,9 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
 fn vmess_udp_state_model_lives_outside_runtime_root() {
     let root = read("src/adapters/vmess/udp/manager.rs");
     let model = read("src/adapters/vmess/udp/manager/model.rs");
+    let establish = read("src/adapters/vmess/udp/manager/establish.rs");
+    let send = read("src/adapters/vmess/udp/manager/send.rs");
+    let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let old_runtime = manifest_dir().join("src/protocol_runtime/vmess_udp.rs");
     let old_runtime_dir = manifest_dir().join("src/protocol_runtime/vmess_udp");
 
@@ -2384,7 +2402,6 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
     }
 
     for required in [
-        "struct VmessUdpUpstream",
         "struct VmessUdpStartFlow",
         "struct VmessUdpRelayFlowStart",
         "struct VmessUdpUpstreamRequest",
@@ -2394,6 +2411,17 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
             "VMess UDP state/request model should live in adapters/vmess/udp/manager/model.rs; missing `{required}`"
         );
     }
+    assert!(
+        !model.contains("struct VmessUdpUpstream {")
+            && !establish.contains("VmessUdpUpstream {")
+            && !send.contains("VmessUdpUpstream {")
+            && (root.contains("ManagedStreamConnectionCache")
+                || send.contains("ManagedStreamConnectionCacheKey"))
+            && send.contains("ManagedStreamConnectionCacheKey")
+            && managed_cache.contains("struct ManagedStreamConnection")
+            && managed_cache.contains("struct ManagedStreamConnectionCache"),
+        "VMess UDP manager should use neutral managed stream connection cache instead of a protocol-named upstream model"
+    );
 }
 
 #[test]
@@ -2580,7 +2608,8 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vmess::VmessUdpIdentity")
             && !runtime.contains("vmess::VmessUdpFlowIo")
             && !runtime.contains("broadcast::channel::<VmessFlowResponse>")
-            && model.contains("SharedManagedUdpConnection")
+            && !model.contains("SharedManagedUdpConnection")
+            && read("src/runtime/udp_flow/managed/cache.rs").contains("ManagedStreamConnection")
             && !model.contains("vmess::VmessUdpFlowConnection")
             && !model.contains("vmess::VmessUdpFlowSession")
             && !model.contains("vmess::VmessUdpFlowSender")
@@ -2606,7 +2635,8 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "VMess UDP runtime should keep protocol flow I/O inside protocols/vmess and leave proxy manager as cache/bridge glue"
     );
     assert!(
-        model.contains("SharedManagedUdpConnection")
+        read("src/runtime/udp_flow/managed/cache.rs").contains("SharedManagedUdpConnection")
+            && !model.contains("SharedManagedUdpConnection")
             && !model.contains("vmess::VmessUdpFlowConnection"),
         "VMess UDP manager cache should store a neutral stream UDP connection object"
     );

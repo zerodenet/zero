@@ -2,9 +2,11 @@ use zero_core::Session;
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
-use super::model::{VmessUdpUpstream, VmessUdpUpstreamRequest};
+use super::model::VmessUdpUpstreamRequest;
 use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
-use crate::runtime::udp_flow::managed::{spawn_tuple_response_bridge, ManagedUdpConnection};
+use crate::runtime::udp_flow::managed::{
+    spawn_tuple_response_bridge, ManagedStreamConnection, ManagedUdpConnection,
+};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::transport::TcpRelayStream;
 use std::sync::Arc;
@@ -42,20 +44,20 @@ pub(super) async fn over_stream(
     config: vmess::VmessUdpFlowConfig<'_>,
     initial_payload: &[u8],
     stream: TcpRelayStream,
-) -> Result<VmessUdpUpstream, EngineError> {
+) -> Result<ManagedStreamConnection, EngineError> {
     let established = config
         .establish_flow_with_initial_packet(stream, session, initial_payload)
         .await?;
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
-    Ok(VmessUdpUpstream {
-        session_id: session.id,
-        connection: Arc::new(established.into_connection()),
-    })
+    Ok(ManagedStreamConnection::new(
+        session.id,
+        Arc::new(established.into_connection()),
+    ))
 }
 
 pub(super) async fn direct(
     request: &VmessUdpUpstreamRequest<'_>,
-) -> Result<VmessUdpUpstream, EngineError> {
+) -> Result<ManagedStreamConnection, EngineError> {
     if let Some(max_concurrency) = request.mux_concurrency {
         let mux_stream = request
             .mux_pool
@@ -82,10 +84,10 @@ pub(super) async fn direct(
         request
             .proxy
             .record_session_outbound_tx(request.session.id, established.initial_packet_len as u64);
-        return Ok(VmessUdpUpstream {
-            session_id: request.session.id,
-            connection: Arc::new(established.into_connection()),
-        });
+        return Ok(ManagedStreamConnection::new(
+            request.session.id,
+            Arc::new(established.into_connection()),
+        ));
     }
 
     let socket = request

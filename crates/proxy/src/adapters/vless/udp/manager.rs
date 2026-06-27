@@ -8,24 +8,20 @@ mod establish;
 pub(crate) mod model;
 mod send;
 
-use std::collections::HashMap;
-
-use zero_core::Address;
-
-use model::VlessUdpUpstream;
+use crate::runtime::udp_flow::managed::ManagedStreamConnectionCache;
 
 /// VLESS UDP outbound manager.
 ///
 /// Response bridge tasks are spawned into the shared `chain_tasks` JoinSet
 /// in [`UdpDispatch`], so all chain outbound responses are polled uniformly.
 pub(crate) struct VlessUdpOutboundManager {
-    upstreams: HashMap<(Address, u16), VlessUdpUpstream>,
+    upstreams: ManagedStreamConnectionCache,
 }
 
 impl VlessUdpOutboundManager {
     pub fn new() -> Self {
         Self {
-            upstreams: HashMap::new(),
+            upstreams: ManagedStreamConnectionCache::new(),
         }
     }
 }

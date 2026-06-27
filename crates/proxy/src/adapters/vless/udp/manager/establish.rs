@@ -2,8 +2,9 @@ use zero_core::Session;
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
-use super::model::VlessUdpUpstream;
-use crate::runtime::udp_flow::managed::{spawn_tuple_response_bridge, ManagedUdpConnection};
+use crate::runtime::udp_flow::managed::{
+    spawn_tuple_response_bridge, ManagedStreamConnection, ManagedUdpConnection,
+};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -42,15 +43,15 @@ pub(super) async fn over_stream(
     config: vless::VlessUdpFlowConfig<'_>,
     initial_payload: &[u8],
     stream: TcpRelayStream,
-) -> Result<VlessUdpUpstream, EngineError> {
+) -> Result<ManagedStreamConnection, EngineError> {
     let established = config
         .establish_flow_with_initial_packet(stream, session, initial_payload)
         .await?;
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
-    Ok(VlessUdpUpstream {
-        session_id: session.id,
-        connection: Arc::new(established.into_connection()),
-    })
+    Ok(ManagedStreamConnection::new(
+        session.id,
+        Arc::new(established.into_connection()),
+    ))
 }
 
 pub(super) async fn direct(
@@ -61,7 +62,7 @@ pub(super) async fn direct(
     config: vless::VlessUdpFlowConfig<'_>,
     initial_payload: &[u8],
     transport: Option<&crate::transport::VlessUdpTransportOptions<'_>>,
-) -> Result<VlessUdpUpstream, EngineError> {
+) -> Result<ManagedStreamConnection, EngineError> {
     let socket = proxy
         .protocols
         .direct_connector()
