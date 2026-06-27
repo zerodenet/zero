@@ -28,13 +28,6 @@ impl ManagedUdpConnectionCache {
         }
     }
 
-    pub(crate) fn get(
-        &self,
-        key: &ManagedUdpConnectionCacheKey,
-    ) -> Option<&SharedManagedUdpConnection> {
-        self.entries.get(key)
-    }
-
     pub(crate) fn insert(
         &mut self,
         key: ManagedUdpConnectionCacheKey,
