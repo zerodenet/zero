@@ -7374,8 +7374,11 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     assert!(
         !adapter.contains("hysteria2::udp_flow_codec")
             && adapter.contains("Hysteria2UdpPacketPathConfig")
+            && adapter.contains("Hysteria2UdpPacketPathConfig::new")
+            && !adapter.contains("Hysteria2UdpPacketPathConfig {")
             && protocol_udp.contains("pub fn udp_flow_codec(")
             && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
+            && protocol_udp.contains("pub fn new(")
             && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec")
             && protocol_udp.contains("pub fn udp_flow_packet")
             && protocol_udp.contains("pub fn encode_packet(")
@@ -7432,6 +7435,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     assert!(
         adapter.contains("Hysteria2UdpFlowResume::new")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
+            && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
+            && protocol_udp.contains("pub fn new(")
             && protocol_udp.contains("pub fn peer_config(&self)")
             && protocol_udp.contains("pub fn flow_key(&self")
             && protocol_udp.contains("pub fn cache_key(&self")

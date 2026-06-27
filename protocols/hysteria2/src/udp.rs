@@ -185,14 +185,30 @@ pub fn udp_cache_key(
 }
 
 pub struct Hysteria2UdpPacketPathConfig<'a> {
-    pub tag: &'a str,
-    pub server: &'a str,
-    pub port: u16,
-    pub password: &'a str,
-    pub client_fingerprint: Option<&'a str>,
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    password: &'a str,
+    client_fingerprint: Option<&'a str>,
 }
 
-impl Hysteria2UdpPacketPathConfig<'_> {
+impl<'a> Hysteria2UdpPacketPathConfig<'a> {
+    pub fn new(
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        password: &'a str,
+        client_fingerprint: Option<&'a str>,
+    ) -> Self {
+        Self {
+            tag,
+            server,
+            port,
+            password,
+            client_fingerprint,
+        }
+    }
+
     pub fn cache_key(&self) -> String {
         udp_cache_key(
             self.tag,

@@ -32,13 +32,13 @@ impl Hysteria2Adapter {
         else {
             return None;
         };
-        let packet_path = hysteria2::Hysteria2UdpPacketPathConfig {
+        let packet_path = hysteria2::Hysteria2UdpPacketPathConfig::new(
             tag,
             server,
-            port: *port,
+            *port,
             password,
-            client_fingerprint: *client_fingerprint,
-        };
+            *client_fingerprint,
+        );
         Some(
             crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
                 packet_path.cache_key(),
@@ -65,13 +65,13 @@ impl Hysteria2Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let packet_path = hysteria2::Hysteria2UdpPacketPathConfig {
-            tag: "",
+        let packet_path = hysteria2::Hysteria2UdpPacketPathConfig::new(
+            "",
             server,
-            port: *port,
+            *port,
             password,
-            client_fingerprint: *client_fingerprint,
-        };
+            *client_fingerprint,
+        );
         let codec = std::sync::Arc::new(packet_path.codec());
         let conn = std::sync::Arc::new(
             crate::outbound::hysteria2::Hysteria2Connector::new(server, *port, password)
