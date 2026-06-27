@@ -913,6 +913,8 @@ fn vmess_inbound_uses_adapter_request_model() {
     let model = read("src/inbound/vmess/model.rs");
     let root = read("src/inbound/vmess/mod.rs");
     let adapter = read("src/adapters/vmess/inbound.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vmess/src/inbound.rs"))
+        .expect("read vmess protocol inbound source");
 
     assert!(
         model.contains("struct VmessInboundRequest")
@@ -938,10 +940,15 @@ fn vmess_inbound_uses_adapter_request_model() {
             "VMess inbound listener/model should receive adapter-parsed users; found `{forbidden}`"
         );
         assert!(
-            adapter.contains(forbidden),
-            "VMess adapter should own user parsing detail `{forbidden}`"
+            !adapter.contains(forbidden) && protocol_inbound.contains(forbidden),
+            "VMess user parsing detail `{forbidden}` should live in protocols/vmess"
         );
     }
+    assert!(
+        adapter.contains("vmess::VmessUser::from_config")
+            && protocol_inbound.contains("pub fn from_config"),
+        "VMess adapter should ask protocols/vmess to build parsed inbound users"
+    );
     assert!(
         !inbound.contains("VmessUserConfig") && !model.contains("VmessUserConfig"),
         "VMess inbound listener/model should not carry raw config user records"
@@ -955,6 +962,8 @@ fn vless_inbound_users_are_adapter_parsed() {
     let session = read("src/inbound/vless/session.rs");
     let helpers = read("src/inbound/vless/helpers.rs");
     let adapter = read("src/adapters/vless/inbound.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
+        .expect("read vless protocol inbound source");
 
     for forbidden in [
         "VlessUserConfig",
@@ -969,17 +978,24 @@ fn vless_inbound_users_are_adapter_parsed() {
             "VLESS inbound listener/session/user store should receive adapter-parsed users; found `{forbidden}`"
         );
     }
-    for required in [
-        "parse_inbound_users",
-        "parse_uuid",
-        "parse_flow",
-        "VlessUser {",
-    ] {
+    for required in ["parse_inbound_users", "VlessConfiguredUser::from_config"] {
         assert!(
             adapter.contains(required),
-            "VLESS adapter inbound module should own parsed user construction detail `{required}`"
+            "VLESS adapter inbound module should ask protocols/vless for parsed users through `{required}`"
         );
     }
+    for private_detail in ["parse_uuid", "parse_flow"] {
+        assert!(
+            !adapter.contains(private_detail) && protocol_inbound.contains(private_detail),
+            "VLESS user construction detail `{private_detail}` should live in protocols/vless"
+        );
+    }
+    assert!(
+        !adapter.contains("vless::VlessUser {")
+            && protocol_inbound.contains("pub fn from_config")
+            && protocol_inbound.contains("VlessUser::from_config"),
+        "VLESS adapter should not hand-build protocol users"
+    );
     assert!(
         helpers.contains("struct ConfiguredVlessUser")
             && helpers.contains("user: VlessUser")
@@ -1728,6 +1744,8 @@ fn shadowsocks_tcp_connect_uses_request_model() {
 fn vmess_tcp_connect_uses_request_model() {
     let outbound = read("src/outbound/vmess.rs");
     let adapter = read("src/adapters/vmess/tcp.rs");
+    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vmess/src/outbound.rs"))
+        .expect("read vmess protocol outbound source");
 
     assert!(
         !outbound.contains("#[allow(clippy::too_many_arguments)]"),
@@ -1764,10 +1782,17 @@ fn vmess_tcp_connect_uses_request_model() {
         "vmess unknown cipher",
     ] {
         assert!(
-            adapter.contains(adapter_owned),
-            "VMess adapter TCP module should own outbound identity parsing detail `{adapter_owned}`"
+            !adapter.contains(adapter_owned) && protocol_outbound.contains(adapter_owned),
+            "VMess outbound identity parsing detail `{adapter_owned}` should live in protocols/vmess"
         );
     }
+    assert!(
+        adapter.contains("VmessTcpConnectConfig::from_config")
+            && outbound.contains("config: vmess::VmessTcpConnectConfig")
+            && protocol_outbound.contains("pub struct VmessTcpConnectConfig")
+            && protocol_outbound.contains("pub fn from_config"),
+        "VMess adapter should ask protocols/vmess to parse TCP identity config"
+    );
     assert!(
         outbound.contains("vmess::establish_tcp_outbound_stream"),
         "VMess outbound TCP helper should delegate VMess session and AEAD setup to protocols/vmess"
@@ -1784,6 +1809,8 @@ fn vmess_tcp_connect_uses_request_model() {
 fn vless_tcp_connect_uses_request_model() {
     let outbound = read("src/outbound/vless.rs");
     let adapter = read("src/adapters/vless/tcp.rs");
+    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
+        .expect("read vless protocol outbound source");
 
     assert!(
         !outbound.contains("#[allow(clippy::too_many_arguments)]"),
@@ -1799,12 +1826,17 @@ fn vless_tcp_connect_uses_request_model() {
         "VLESS adapter TCP module should pass VlessTcpConnectRequest"
     );
     assert!(
-        !outbound.contains("parse_uuid"),
-        "VLESS outbound TCP helper should receive adapter-parsed identity"
+        !outbound.contains("parse_uuid") && !adapter.contains("parse_uuid"),
+        "VLESS outbound TCP helper and adapter should receive protocol-parsed identity"
     );
     assert!(
-        adapter.contains("parse_uuid"),
-        "VLESS adapter TCP module should own outbound identity parsing"
+        adapter.contains("VlessTcpConnectConfig::from_config")
+            && outbound.contains("config: vless::VlessTcpConnectConfig")
+            && protocol_outbound.contains("pub struct VlessTcpConnectConfig")
+            && protocol_outbound.contains("pub fn from_config")
+            && protocol_outbound.contains("parse_uuid")
+            && protocol_outbound.contains("parse_flow"),
+        "VLESS adapter should ask protocols/vless to parse outbound identity and flow config"
     );
 }
 
@@ -3132,6 +3164,8 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
     let tcp_adapter = read("src/adapters/vmess/tcp.rs");
     let udp_root = read("src/adapters/vmess/udp.rs");
     let udp_flow = read("src/adapters/vmess/udp/flow.rs");
+    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vmess/src/outbound.rs"))
+        .expect("read vmess protocol outbound source");
 
     assert!(
         !root.contains("VmessCipher::from_name"),
@@ -3142,12 +3176,14 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
         "VMess mux pool request should carry cipher_name for keying and parsed VmessCipher for session setup"
     );
     assert!(
-        tcp_adapter.contains("VmessCipher::from_name")
+        !tcp_adapter.contains("VmessCipher::from_name")
+            && tcp_adapter.contains("VmessTcpConnectConfig::from_config")
+            && protocol_outbound.contains("VmessCipher::from_name")
             && udp_flow.contains("vmess::VmessUdpFlowConfig::new")
             && !udp_root.contains("vmess::parse_udp_identity")
             && !udp_root.contains("VmessCipher::from_name")
             && !udp_root.contains("VmessUdpFlowConfig::new"),
-        "VMess TCP adapter still parses cipher locally, while UDP flow glue delegates cipher parsing to protocols/vmess flow config and the root stays a facade"
+        "VMess TCP and UDP adapters should delegate cipher parsing to protocols/vmess config builders while adapter roots stay facades"
     );
 }
 

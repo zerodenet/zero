@@ -24,8 +24,7 @@ pub(crate) async fn connect_tcp(
         session,
         server,
         port,
-        uuid,
-        cipher,
+        config,
         mux_concurrency,
         mux_idle_timeout_secs,
         tls,
@@ -59,7 +58,8 @@ pub(crate) async fn connect_tcp(
 
     let mut sock = MeteredStream::new(stream);
     let vmess_session =
-        vmess::establish_tcp_outbound_session(&mut sock, session, &uuid, cipher).await?;
+        vmess::establish_tcp_outbound_session(&mut sock, session, &config.uuid(), config.cipher())
+            .await?;
     proxy.record_session_outbound_traffic(session.id, sock.drain_traffic());
     Ok(TcpRelayStream::new(vmess::wrap_tcp_outbound_stream(
         sock.into_inner(),
@@ -72,8 +72,7 @@ pub(crate) struct VmessTcpConnectRequest<'a> {
     pub session: &'a Session,
     pub server: &'a str,
     pub port: u16,
-    pub uuid: [u8; 16],
-    pub cipher: vmess::VmessCipher,
+    pub config: vmess::VmessTcpConnectConfig,
     pub mux_concurrency: Option<u32>,
     pub mux_idle_timeout_secs: Option<u64>,
     pub tls: Option<&'a zero_config::ClientTlsConfig>,
@@ -86,11 +85,10 @@ pub(crate) struct VmessTcpConnectRequest<'a> {
 pub(crate) async fn apply_tcp_hop(
     stream: TcpRelayStream,
     session: &Session,
-    uuid: [u8; 16],
-    cipher: vmess::VmessCipher,
+    config: vmess::VmessTcpConnectConfig,
 ) -> Result<TcpRelayStream, EngineError> {
     Ok(TcpRelayStream::new(
-        vmess::establish_tcp_outbound_stream(stream, session, &uuid, cipher)
+        vmess::establish_tcp_outbound_stream(stream, session, &config.uuid(), config.cipher())
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e)))?,
     ))

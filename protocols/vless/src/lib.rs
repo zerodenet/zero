@@ -26,7 +26,7 @@ pub use flow::{
     flow_build_request, flow_byte, flow_from_byte, parse_flow, FLOW_XTLS_RPRX_VISION,
     FLOW_XTLS_RPRX_VISION_UDP,
 };
-pub use inbound::{VlessInbound, VlessUser, VlessUserStore};
+pub use inbound::{VlessConfiguredUser, VlessInbound, VlessUser, VlessUserStore};
 pub use metadata::VlessProtocol;
 pub use mux::{
     encode_data_frame, encode_end_frame, encode_frame, encode_keepalive, encode_new_stream,
@@ -49,8 +49,8 @@ pub use outbound::{
 };
 pub use outbound::{
     establish_udp_flow_stream, establish_udp_packet_tunnel, parse_udp_identity, VlessOutbound,
-    VlessTcpTunnelTarget, VlessUdpFlowConfig, VlessUdpIdentity, VlessUdpMuxOpenIdentity,
-    VlessUdpPacketTarget, VlessUdpPacketTunnelTarget,
+    VlessTcpConnectConfig, VlessTcpTunnelTarget, VlessUdpFlowConfig, VlessUdpIdentity,
+    VlessUdpMuxOpenIdentity, VlessUdpPacketTarget, VlessUdpPacketTunnelTarget,
 };
 #[cfg(feature = "reality")]
 pub use reality::{

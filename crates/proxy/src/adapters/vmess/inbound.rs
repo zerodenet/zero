@@ -33,25 +33,19 @@ impl VmessAdapter {
             let users = users
                 .iter()
                 .map(|user| {
-                    let id = vmess::parse_uuid(&user.id).map_err(|error| {
+                    vmess::VmessUser::from_config(
+                        &user.id,
+                        &user.cipher,
+                        user.credential_id.clone(),
+                        user.principal_key.clone(),
+                        user.up_bps,
+                        user.down_bps,
+                    )
+                    .map_err(|error| {
                         EngineError::Io(std::io::Error::new(
                             std::io::ErrorKind::InvalidInput,
                             error,
                         ))
-                    })?;
-                    let cipher = vmess::VmessCipher::from_name(&user.cipher).ok_or_else(|| {
-                        EngineError::Io(std::io::Error::new(
-                            std::io::ErrorKind::InvalidInput,
-                            format!("vmess unknown cipher: {}", user.cipher),
-                        ))
-                    })?;
-                    Ok(vmess::VmessUser {
-                        id,
-                        cipher,
-                        credential_id: user.credential_id.clone(),
-                        principal_key: user.principal_key.clone(),
-                        up_bps: user.up_bps,
-                        down_bps: user.down_bps,
                     })
                 })
                 .collect::<Result<Vec<_>, EngineError>>()?;

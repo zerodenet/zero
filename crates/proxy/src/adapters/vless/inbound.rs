@@ -2,38 +2,31 @@ use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
 use crate::adapters::vless::VlessAdapter;
-use crate::inbound::vless::ConfiguredVlessUser;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 use crate::transport::QuicInbound;
 
 fn parse_inbound_users(
     inbound: &InboundConfig,
-) -> Result<std::sync::Arc<[ConfiguredVlessUser]>, EngineError> {
+) -> Result<std::sync::Arc<[crate::inbound::vless::ConfiguredVlessUser]>, EngineError> {
     inbound
         .protocol
         .vless_users()
         .iter()
         .map(|user| {
-            let id = vless::parse_uuid(&user.id).map_err(|error| {
-                EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
-            })?;
-            let flow = user
-                .flow
-                .as_deref()
-                .map(vless::parse_flow)
-                .transpose()
-                .map_err(EngineError::from)?;
-            Ok(ConfiguredVlessUser {
-                id,
-                user: vless::VlessUser {
-                    credential_id: user.credential_id.clone(),
-                    principal_key: user.principal_key.clone(),
-                    up_bps: user.up_bps,
-                    down_bps: user.down_bps,
-                    flow,
-                },
+            vless::VlessConfiguredUser::from_config(
+                &user.id,
+                user.flow.as_deref(),
+                user.credential_id.clone(),
+                user.principal_key.clone(),
+                user.up_bps,
+                user.down_bps,
+            )
+            .map(|user| crate::inbound::vless::ConfiguredVlessUser {
+                id: user.id,
+                user: user.user,
             })
+            .map_err(EngineError::from)
         })
         .collect::<Result<Vec<_>, EngineError>>()
         .map(Into::into)

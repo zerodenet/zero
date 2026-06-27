@@ -6,7 +6,8 @@ use crate::crypto::{
     seal_xray_response_header, GCM_TAG_LEN,
 };
 use crate::shared::{
-    parse_address_from_bytes, read_exact, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP, VERSION,
+    parse_address_from_bytes, parse_uuid, read_exact, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP,
+    VERSION,
 };
 
 #[derive(Clone)]
@@ -17,6 +18,29 @@ pub struct VmessUser {
     pub principal_key: Option<String>,
     pub up_bps: Option<u64>,
     pub down_bps: Option<u64>,
+}
+
+impl VmessUser {
+    pub fn from_config(
+        id: &str,
+        cipher: &str,
+        credential_id: Option<String>,
+        principal_key: Option<String>,
+        up_bps: Option<u64>,
+        down_bps: Option<u64>,
+    ) -> Result<Self, Error> {
+        let id = parse_uuid(id)?;
+        let cipher =
+            VmessCipher::from_name(cipher).ok_or(Error::Protocol("vmess unknown cipher"))?;
+        Ok(Self {
+            id,
+            cipher,
+            credential_id,
+            principal_key,
+            up_bps,
+            down_bps,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

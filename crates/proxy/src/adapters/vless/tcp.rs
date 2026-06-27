@@ -8,8 +8,11 @@ use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
-fn parse_vless_identity(id: &str) -> Result<[u8; 16], EngineError> {
-    vless::parse_uuid(id).map_err(|error| {
+fn vless_tcp_config(
+    id: &str,
+    flow: Option<&str>,
+) -> Result<vless::VlessTcpConnectConfig, EngineError> {
+    vless::VlessTcpConnectConfig::from_config(id, flow).map_err(|error| {
         EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
     })
 }
@@ -41,7 +44,7 @@ impl VlessAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        let uuid = parse_vless_identity(id).map_err(|error| TcpOutboundFailure {
+        let config = vless_tcp_config(id, *flow).map_err(|error| TcpOutboundFailure {
             stage: "connect_upstream_vless",
             error,
             upstream_endpoint: Some(((*server).to_string(), *port)),
@@ -54,7 +57,7 @@ impl VlessAdapter {
                     session: Some(session),
                     server,
                     port: *port,
-                    id: &uuid,
+                    id: config.id_ref(),
                     tls: *tls,
                     reality: *reality,
                     max_concurrency: mux_concurrency.unwrap_or(8),
@@ -77,8 +80,7 @@ impl VlessAdapter {
             session,
             server,
             port: *port,
-            uuid,
-            flow: *flow,
+            config,
             mux_concurrency: *mux_concurrency,
             mux_idle_timeout_secs: *mux_idle_timeout_secs,
             tls: *tls,
@@ -116,7 +118,7 @@ impl VlessAdapter {
         let ResolvedLeafOutbound::Vless { id, flow, .. } = leaf else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let uuid = parse_vless_identity(id)?;
-        crate::outbound::vless::apply_tcp_hop(proxy, stream, session, uuid, *flow).await
+        let config = vless_tcp_config(id, *flow)?;
+        crate::outbound::vless::apply_tcp_hop(proxy, stream, session, config).await
     }
 }

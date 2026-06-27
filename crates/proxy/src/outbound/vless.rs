@@ -34,8 +34,7 @@ pub(crate) async fn connect_tcp(
         session,
         server,
         port,
-        uuid,
-        flow,
+        config,
         mux_concurrency,
         mux_idle_timeout_secs,
         tls,
@@ -83,14 +82,7 @@ pub(crate) async fn connect_tcp(
     if is_reality {
         use zero_traits::DeferredTcpTunnelProtocol;
         vless::VlessOutbound
-            .send_deferred_tcp_tunnel_request(
-                &mut metered,
-                &vless::VlessFlowTcpTunnelTarget {
-                    session,
-                    id: &uuid,
-                    flow,
-                },
-            )
+            .send_deferred_tcp_tunnel_request(&mut metered, &config.flow_tcp_target(session))
             .await?;
         proxy.record_session_outbound_traffic(session.id, metered.drain_traffic());
 
@@ -102,11 +94,7 @@ pub(crate) async fn connect_tcp(
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessFlowTcpTunnelTarget>>::establish_tcp_tunnel(
             &vless::VlessOutbound,
             &mut metered,
-            &vless::VlessFlowTcpTunnelTarget {
-                session,
-                id: &uuid,
-                flow,
-            },
+            &config.flow_tcp_target(session),
         )
         .await?;
         proxy.record_session_outbound_traffic(session.id, metered.drain_traffic());
@@ -121,8 +109,7 @@ pub(crate) struct VlessTcpConnectRequest<'a> {
     pub session: &'a Session,
     pub server: &'a str,
     pub port: u16,
-    pub uuid: [u8; 16],
-    pub flow: Option<&'a str>,
+    pub config: vless::VlessTcpConnectConfig,
     pub mux_concurrency: Option<u32>,
     pub mux_idle_timeout_secs: Option<u64>,
     pub tls: Option<&'a ClientTlsConfig>,
@@ -143,19 +130,14 @@ pub(crate) async fn apply_tcp_hop(
     _proxy: &Proxy,
     mut stream: TcpRelayStream,
     session: &Session,
-    uuid: [u8; 16],
-    flow: Option<&str>,
+    config: vless::VlessTcpConnectConfig,
 ) -> Result<TcpRelayStream, EngineError> {
     use zero_traits::TcpTunnelProtocol;
-    if flow.is_some() {
+    if config.flow().is_some() {
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessFlowTcpTunnelTarget>>::establish_tcp_tunnel(
             &vless::VlessOutbound,
             &mut stream,
-            &vless::VlessFlowTcpTunnelTarget {
-                session,
-                id: &uuid,
-                flow,
-            },
+            &config.flow_tcp_target(session),
         )
         .await
         .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
@@ -163,10 +145,7 @@ pub(crate) async fn apply_tcp_hop(
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessTcpTunnelTarget>>::establish_tcp_tunnel(
             &vless::VlessOutbound,
             &mut stream,
-            &vless::VlessTcpTunnelTarget {
-                session,
-                id: &uuid,
-            },
+            &config.tcp_target(session),
         )
         .await
         .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;

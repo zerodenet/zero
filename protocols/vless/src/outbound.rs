@@ -11,7 +11,7 @@ use zero_traits::{AsyncSocket, TcpTunnelProtocol, UdpPacketFraming, UdpPacketTun
 use crate::flow::flow_build_request;
 use crate::mux::MuxClient;
 use crate::shared::{
-    build_udp_packet, parse_udp_packet, read_addon, read_exact, write_address, CMD_MUX,
+    build_udp_packet, parse_udp_packet, parse_uuid, read_addon, read_exact, write_address, CMD_MUX,
     VLESS_VERSION,
 };
 #[cfg(feature = "reality")]
@@ -151,6 +151,61 @@ impl VlessOutbound {
 pub struct VlessTcpTunnelTarget<'a> {
     pub session: &'a Session,
     pub id: &'a [u8; 16],
+}
+
+/// Parsed VLESS identity and flow settings built from external config.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VlessTcpConnectConfig {
+    id: [u8; 16],
+    flow: Option<&'static str>,
+}
+
+impl VlessTcpConnectConfig {
+    pub fn from_config(id: &str, flow: Option<&str>) -> Result<Self, Error> {
+        #[cfg(feature = "reality")]
+        let flow = flow.map(crate::flow::parse_flow).transpose()?;
+        #[cfg(not(feature = "reality"))]
+        let flow = {
+            if flow.is_some() {
+                return Err(Error::Unsupported(
+                    "VLESS flow requires the `reality` feature",
+                ));
+            }
+            None
+        };
+        Ok(Self {
+            id: parse_uuid(id)?,
+            flow,
+        })
+    }
+
+    pub fn id(&self) -> [u8; 16] {
+        self.id
+    }
+
+    pub fn id_ref(&self) -> &[u8; 16] {
+        &self.id
+    }
+
+    pub fn flow(&self) -> Option<&'static str> {
+        self.flow
+    }
+
+    pub fn tcp_target<'a>(&'a self, session: &'a Session) -> VlessTcpTunnelTarget<'a> {
+        VlessTcpTunnelTarget {
+            session,
+            id: &self.id,
+        }
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn flow_tcp_target<'a>(&'a self, session: &'a Session) -> VlessFlowTcpTunnelTarget<'a> {
+        VlessFlowTcpTunnelTarget {
+            session,
+            id: &self.id,
+            flow: self.flow,
+        }
+    }
 }
 
 impl<'a> TcpTunnelProtocol<VlessTcpTunnelTarget<'a>> for VlessOutbound {

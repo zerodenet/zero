@@ -8,20 +8,10 @@ use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
-fn parse_vmess_identity(
-    id: &str,
-    cipher: &str,
-) -> Result<([u8; 16], vmess::VmessCipher), EngineError> {
-    let uuid = vmess::parse_uuid(id).map_err(|error| {
+fn vmess_tcp_config(id: &str, cipher: &str) -> Result<vmess::VmessTcpConnectConfig, EngineError> {
+    vmess::VmessTcpConnectConfig::from_config(id, cipher).map_err(|error| {
         EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
-    })?;
-    let cipher = vmess::VmessCipher::from_name(cipher).ok_or_else(|| {
-        EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("vmess unknown cipher: {cipher}"),
-        ))
-    })?;
-    Ok((uuid, cipher))
+    })
 }
 
 impl VmessAdapter {
@@ -46,12 +36,11 @@ impl VmessAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        let (uuid, vmess_cipher) =
-            parse_vmess_identity(id, cipher).map_err(|error| TcpOutboundFailure {
-                stage: "connect_upstream_vmess",
-                error,
-                upstream_endpoint: Some(((*server).to_string(), *port)),
-            })?;
+        let config = vmess_tcp_config(id, cipher).map_err(|error| TcpOutboundFailure {
+            stage: "connect_upstream_vmess",
+            error,
+            upstream_endpoint: Some(((*server).to_string(), *port)),
+        })?;
         if let Some(max_concurrency) = mux_concurrency {
             return self
                 .mux_pool
@@ -60,9 +49,9 @@ impl VmessAdapter {
                     session,
                     server: (*server).to_owned(),
                     port: *port,
-                    id: uuid,
+                    id: config.uuid(),
                     cipher_name: (*cipher).to_owned(),
-                    cipher: vmess_cipher,
+                    cipher: config.cipher(),
                     tls: *tls,
                     ws: *ws,
                     grpc: *grpc,
@@ -86,8 +75,7 @@ impl VmessAdapter {
             session,
             server,
             port: *port,
-            uuid,
-            cipher: vmess_cipher,
+            config,
             mux_concurrency: *mux_concurrency,
             mux_idle_timeout_secs: *mux_idle_timeout_secs,
             tls: *tls,
@@ -119,7 +107,7 @@ impl VmessAdapter {
         let ResolvedLeafOutbound::Vmess { id, cipher, .. } = leaf else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let (uuid, vmess_cipher) = parse_vmess_identity(id, cipher)?;
-        crate::outbound::vmess::apply_tcp_hop(stream, session, uuid, vmess_cipher).await
+        let config = vmess_tcp_config(id, cipher)?;
+        crate::outbound::vmess::apply_tcp_hop(stream, session, config).await
     }
 }

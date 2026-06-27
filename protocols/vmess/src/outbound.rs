@@ -5,7 +5,7 @@ use zero_traits::{AsyncSocket, TcpSessionProtocol};
 use crate::crypto::{
     create_xray_auth_id, current_timestamp, derive_xray_cmd_key, seal_xray_aead_header,
 };
-use crate::shared::{VmessCipher, CMD_TCP, VERSION};
+use crate::shared::{parse_uuid, VmessCipher, CMD_TCP, VERSION};
 use crate::stream::VmessAeadStream;
 
 #[derive(Debug, Clone, Copy)]
@@ -104,6 +104,38 @@ pub struct VmessTcpSessionTarget<'a> {
     pub session: &'a Session,
     pub uuid: &'a [u8; 16],
     pub cipher: VmessCipher,
+}
+
+/// Parsed VMess identity settings built from external config.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VmessTcpConnectConfig {
+    uuid: [u8; 16],
+    cipher: VmessCipher,
+}
+
+impl VmessTcpConnectConfig {
+    pub fn from_config(id: &str, cipher: &str) -> Result<Self, Error> {
+        let uuid = parse_uuid(id)?;
+        let cipher =
+            VmessCipher::from_name(cipher).ok_or(Error::Protocol("vmess unknown cipher"))?;
+        Ok(Self { uuid, cipher })
+    }
+
+    pub fn uuid(&self) -> [u8; 16] {
+        self.uuid
+    }
+
+    pub fn cipher(&self) -> VmessCipher {
+        self.cipher
+    }
+
+    pub fn tcp_target<'a>(&'a self, session: &'a Session) -> VmessTcpSessionTarget<'a> {
+        VmessTcpSessionTarget {
+            session,
+            uuid: &self.uuid,
+            cipher: self.cipher,
+        }
+    }
 }
 
 impl<'a> TcpSessionProtocol<VmessTcpSessionTarget<'a>> for VmessOutbound {

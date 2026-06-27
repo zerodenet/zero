@@ -8,7 +8,9 @@ use crate::flow::{flow_from_byte, flow_read_request, is_aead_flow};
 use crate::mux::MuxServer;
 #[cfg(not(feature = "reality"))]
 use crate::shared::read_addon;
-use crate::shared::{read_address, read_exact, CMD_MUX, CMD_TCP, CMD_UDP, VLESS_VERSION};
+use crate::shared::{
+    parse_uuid, read_address, read_exact, CMD_MUX, CMD_TCP, CMD_UDP, VLESS_VERSION,
+};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VlessInbound;
@@ -32,6 +34,33 @@ impl VlessUser {
             flow: None,
         }
     }
+
+    pub fn from_config(
+        flow: Option<&str>,
+        credential_id: Option<String>,
+        principal_key: Option<String>,
+        up_bps: Option<u64>,
+        down_bps: Option<u64>,
+    ) -> Result<Self, Error> {
+        #[cfg(feature = "reality")]
+        let flow = flow.map(crate::flow::parse_flow).transpose()?;
+        #[cfg(not(feature = "reality"))]
+        let flow = {
+            if flow.is_some() {
+                return Err(Error::Unsupported(
+                    "VLESS flow requires the `reality` feature",
+                ));
+            }
+            None
+        };
+        Ok(Self {
+            credential_id,
+            principal_key,
+            up_bps,
+            down_bps,
+            flow,
+        })
+    }
 }
 
 impl Default for VlessUser {
@@ -42,6 +71,28 @@ impl Default for VlessUser {
 
 pub trait VlessUserStore {
     fn find_user(&self, id: &[u8; 16]) -> Option<VlessUser>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VlessConfiguredUser {
+    pub id: [u8; 16],
+    pub user: VlessUser,
+}
+
+impl VlessConfiguredUser {
+    pub fn from_config(
+        id: &str,
+        flow: Option<&str>,
+        credential_id: Option<String>,
+        principal_key: Option<String>,
+        up_bps: Option<u64>,
+        down_bps: Option<u64>,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            id: parse_uuid(id)?,
+            user: VlessUser::from_config(flow, credential_id, principal_key, up_bps, down_bps)?,
+        })
+    }
 }
 
 impl VlessInbound {
