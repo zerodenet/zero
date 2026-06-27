@@ -486,6 +486,19 @@ impl TrojanUdpFlowResume {
         )
     }
 
+    pub fn flow(&self, server: &str, port: u16, session_id: u64) -> TrojanUdpFlowSpec {
+        TrojanUdpFlowSpec {
+            cache_key: self.flow_cache_key(server, port, session_id),
+            requires_relay_upstream: self.flow_requires_relay_upstream(),
+        }
+    }
+
+    pub fn flow_requirement(&self) -> TrojanUdpFlowRequirement {
+        TrojanUdpFlowRequirement {
+            requires_relay_upstream: self.flow_requires_relay_upstream(),
+        }
+    }
+
     pub fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
         TrojanUdpTlsProfile {
             server_name: self
@@ -508,6 +521,33 @@ impl TrojanUdpFlowResume {
         S: AsyncSocket,
     {
         flow_io.establish(stream, session, &self.password).await
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanUdpFlowSpec {
+    cache_key: String,
+    requires_relay_upstream: bool,
+}
+
+impl TrojanUdpFlowSpec {
+    pub fn cache_key(&self) -> String {
+        self.cache_key.clone()
+    }
+
+    pub fn requires_relay_upstream(&self) -> bool {
+        self.requires_relay_upstream
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TrojanUdpFlowRequirement {
+    requires_relay_upstream: bool,
+}
+
+impl TrojanUdpFlowRequirement {
+    pub fn requires_relay_upstream(&self) -> bool {
+        self.requires_relay_upstream
     }
 }
 

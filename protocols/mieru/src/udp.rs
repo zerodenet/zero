@@ -323,6 +323,19 @@ impl MieruUdpFlowResume {
         )
     }
 
+    pub fn flow(&self, server: &str, port: u16, session_id: u64) -> MieruUdpFlowSpec {
+        MieruUdpFlowSpec {
+            cache_key: self.flow_cache_key(server, port, session_id),
+            requires_relay_upstream: self.flow_requires_relay_upstream(),
+        }
+    }
+
+    pub fn flow_requirement(&self) -> MieruUdpFlowRequirement {
+        MieruUdpFlowRequirement {
+            requires_relay_upstream: self.flow_requires_relay_upstream(),
+        }
+    }
+
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec()
     }
@@ -332,6 +345,33 @@ impl MieruUdpFlowResume {
             username: &self.username,
             password: &self.password,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MieruUdpFlowSpec {
+    cache_key: alloc::string::String,
+    requires_relay_upstream: bool,
+}
+
+impl MieruUdpFlowSpec {
+    pub fn cache_key(&self) -> alloc::string::String {
+        self.cache_key.clone()
+    }
+
+    pub fn requires_relay_upstream(&self) -> bool {
+        self.requires_relay_upstream
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MieruUdpFlowRequirement {
+    requires_relay_upstream: bool,
+}
+
+impl MieruUdpFlowRequirement {
+    pub fn requires_relay_upstream(&self) -> bool {
+        self.requires_relay_upstream
     }
 }
 

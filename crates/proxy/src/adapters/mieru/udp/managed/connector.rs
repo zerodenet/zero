@@ -20,11 +20,13 @@ impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume> for MieruManagedStrea
         endpoint: OutboundEndpoint<'_>,
         session_id: u64,
     ) -> String {
-        resume.flow_cache_key(endpoint.server, endpoint.port, session_id)
+        resume
+            .flow(endpoint.server, endpoint.port, session_id)
+            .cache_key()
     }
 
     fn requires_relay_upstream(&self, resume: &mieru::MieruUdpFlowResume) -> bool {
-        resume.flow_requires_relay_upstream()
+        resume.flow_requirement().requires_relay_upstream()
     }
 
     async fn establish_direct(
