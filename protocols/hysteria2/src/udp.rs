@@ -505,26 +505,17 @@ impl Hysteria2UdpFlowResume {
         }
     }
 
-    pub fn password(&self) -> &str {
-        &self.password
-    }
-
-    pub fn client_fingerprint(&self) -> Option<&str> {
-        self.client_fingerprint.as_deref()
-    }
-
-    pub fn peer_config(&self) -> Hysteria2UdpPeerConfig<'_> {
+    fn peer_config(&self) -> Hysteria2UdpPeerConfig<'_> {
         Hysteria2UdpPeerConfig {
             password: &self.password,
-            client_fingerprint: self.client_fingerprint.as_deref(),
         }
     }
 
-    pub fn leaf_cache_key(&self, server: &str, port: u16) -> Hysteria2UdpLeafKey {
+    fn leaf_cache_key(&self, server: &str, port: u16) -> Hysteria2UdpLeafKey {
         self.peer_config().leaf_cache_key(server, port)
     }
 
-    pub fn flow_key(&self, server: &str, port: u16) -> Hysteria2UdpFlowKey {
+    fn flow_key(&self, server: &str, port: u16) -> Hysteria2UdpFlowKey {
         Hysteria2UdpFlowKey::Leaf(self.leaf_cache_key(server, port))
     }
 
@@ -577,7 +568,7 @@ impl Hysteria2UdpFlowResume {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Hysteria2UdpFlowKey {
+enum Hysteria2UdpFlowKey {
     Leaf(Hysteria2UdpLeafKey),
 }
 
@@ -657,21 +648,12 @@ impl Hysteria2UdpConnectorProfile {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Hysteria2UdpPeerConfig<'a> {
+struct Hysteria2UdpPeerConfig<'a> {
     password: &'a str,
-    client_fingerprint: Option<&'a str>,
 }
 
 impl<'a> Hysteria2UdpPeerConfig<'a> {
-    pub fn password(&self) -> &'a str {
-        self.password
-    }
-
-    pub fn client_fingerprint(&self) -> Option<&'a str> {
-        self.client_fingerprint
-    }
-
-    pub fn leaf_cache_key(&self, server: &str, port: u16) -> Hysteria2UdpLeafKey {
+    fn leaf_cache_key(&self, server: &str, port: u16) -> Hysteria2UdpLeafKey {
         Hysteria2UdpLeafKey {
             server: server.to_owned(),
             port,
@@ -681,20 +663,10 @@ impl<'a> Hysteria2UdpPeerConfig<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Hysteria2UdpLeafKey {
+struct Hysteria2UdpLeafKey {
     server: String,
     port: u16,
     password: String,
-}
-
-impl Hysteria2UdpLeafKey {
-    pub fn server(&self) -> &str {
-        &self.server
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
 }
 
 impl DatagramCodec<Address> for Hysteria2DatagramCodec {

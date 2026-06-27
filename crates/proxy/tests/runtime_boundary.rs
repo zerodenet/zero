@@ -6790,6 +6790,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/trojan/src/lib.rs"))
+        .expect("read trojan protocol lib source");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
             .expect("read trojan protocol outbound source");
@@ -6802,22 +6804,40 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && protocol_outbound.contains("struct TrojanUdpFlowResume")
             && protocol_outbound.contains("struct TrojanUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self, relay_chain: bool)")
-            && protocol_outbound.contains("pub fn peer_config(&self)")
-            && protocol_outbound.contains("pub fn flow_key(&self")
+            && protocol_outbound.contains("fn peer_config(&self)")
+            && !protocol_outbound.contains("pub fn peer_config(&self)")
+            && protocol_outbound.contains("fn flow_key(&self")
+            && !protocol_outbound.contains("pub fn flow_key(&self")
             && protocol_outbound.contains("fn cache_key(&self")
             && !protocol_outbound.contains("pub fn cache_key(&self")
+            && protocol_outbound.contains("enum TrojanUdpFlowKey")
+            && !protocol_outbound.contains("pub enum TrojanUdpFlowKey")
             && protocol_outbound.contains("enum TrojanUdpCacheKey")
             && !protocol_outbound.contains("pub enum TrojanUdpCacheKey")
             && protocol_outbound.contains("pub struct TrojanUdpFlowStore")
+            && protocol_outbound.contains("struct TrojanUdpPeerConfig")
+            && !protocol_outbound.contains("pub struct TrojanUdpPeerConfig")
             && protocol_outbound.contains("struct TrojanUdpTlsProfile")
             && protocol_outbound.contains("pub fn tls_profile(&self")
             && protocol_outbound.contains("pub async fn establish_udp_tunnel")
             && protocol_outbound.contains("struct TrojanUdpLeafKey")
+            && !protocol_outbound.contains("pub struct TrojanUdpLeafKey")
             && protocol_outbound.contains("pub fn client_fingerprint(&self) -> Option<&str>")
             && protocol_outbound.contains("pub fn flow_requires_relay_upstream(&self) -> bool")
-            && protocol_outbound.contains("pub fn relay_chain(&self) -> bool"),
+            && !protocol_outbound.contains("pub fn relay_chain(&self) -> bool"),
         "Trojan adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
+    for forbidden in [
+        "TrojanUdpFlowKey",
+        "TrojanUdpLeafKey",
+        "TrojanUdpPeerConfig",
+        "TrojanUdpCacheKey",
+    ] {
+        assert!(
+            !protocol_lib.contains(forbidden),
+            "protocols/trojan lib root should not re-export UDP cache-key internals `{forbidden}`"
+        );
+    }
     for forbidden in ["TrojanUdpFlowKey", "TrojanUdpLeafKey", "fn from_flow_key("] {
         assert!(
             !manager_send.contains(forbidden)
@@ -7001,6 +7021,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     let manager_model = read("src/adapters/mieru/udp/manager/model.rs");
     let transport_manifest = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
         .expect("read zero-transport manifest");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/mieru/src/lib.rs"))
+        .expect("read mieru protocol lib source");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
         .expect("read mieru protocol udp source");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
@@ -7091,22 +7113,41 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && protocol_udp.contains("struct MieruUdpFlowResume")
             && protocol_udp.contains("struct MieruUdpFlowConfig")
             && protocol_udp.contains("pub fn flow_resume(&self, relay_chain: bool)")
-            && protocol_udp.contains("pub fn peer_config(&self)")
-            && protocol_udp.contains("pub fn flow_key(&self")
+            && protocol_udp.contains("fn peer_config(&self)")
+            && !protocol_udp.contains("pub fn peer_config(&self)")
+            && protocol_udp.contains("fn flow_key(&self")
+            && !protocol_udp.contains("pub fn flow_key(&self")
+            && !protocol_udp.contains("pub fn username(&self)")
+            && !protocol_udp.contains("pub fn password(&self)")
             && protocol_udp
                 .contains("fn cache_key(&self, server: &str, port: u16, session_id: u64)")
             && !protocol_udp
                 .contains("pub fn cache_key(&self, server: &str, port: u16, session_id: u64)")
             && protocol_udp.contains("enum MieruUdpFlowKey")
+            && !protocol_udp.contains("pub enum MieruUdpFlowKey")
             && protocol_udp.contains("enum MieruUdpCacheKey")
             && !protocol_udp.contains("pub enum MieruUdpCacheKey")
             && protocol_udp.contains("pub struct MieruUdpFlowStore")
+            && protocol_udp.contains("struct MieruUdpPeerConfig")
+            && !protocol_udp.contains("pub struct MieruUdpPeerConfig")
             && protocol_udp.contains("struct MieruUdpLeafKey")
+            && !protocol_udp.contains("pub struct MieruUdpLeafKey")
             && protocol_udp.contains("pub fn codec(&self)")
             && protocol_udp.contains("pub fn flow_requires_relay_upstream(&self) -> bool")
-            && protocol_udp.contains("pub fn relay_chain(&self) -> bool"),
+            && !protocol_udp.contains("pub fn relay_chain(&self) -> bool"),
         "Mieru adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
+    for forbidden in [
+        "MieruUdpFlowKey",
+        "MieruUdpLeafKey",
+        "MieruUdpPeerConfig",
+        "MieruUdpCacheKey",
+    ] {
+        assert!(
+            !protocol_lib.contains(forbidden),
+            "protocols/mieru lib root should not re-export UDP cache-key internals `{forbidden}`"
+        );
+    }
     for forbidden in ["MieruUdpFlowKey", "MieruUdpLeafKey", "fn from_flow_key("] {
         assert!(
             !manager_send.contains(forbidden)
@@ -7576,6 +7617,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     let forward = read("src/runtime/udp_flow/managed/datagram.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
+        .expect("read hysteria2 protocol lib source");
 
     for forbidden in [
         "UdpDatagramFraming",
@@ -7665,22 +7708,39 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn new(")
             && protocol_udp.contains("pub fn flow_resume(&self)")
             && protocol_udp.contains("pub fn packet_path(&self)")
-            && protocol_udp.contains("pub fn peer_config(&self)")
-            && protocol_udp.contains("pub fn flow_key(&self")
+            && protocol_udp.contains("fn peer_config(&self)")
+            && !protocol_udp.contains("pub fn peer_config(&self)")
+            && protocol_udp.contains("fn flow_key(&self")
+            && !protocol_udp.contains("pub fn flow_key(&self")
             && protocol_udp.contains("fn cache_key(&self, server: &str, port: u16)")
             && !protocol_udp.contains("pub fn cache_key(&self, server: &str, port: u16)")
             && protocol_udp.contains("enum Hysteria2UdpFlowKey")
+            && !protocol_udp.contains("pub enum Hysteria2UdpFlowKey")
             && protocol_udp.contains("struct Hysteria2UdpCacheKey")
             && !protocol_udp.contains("pub struct Hysteria2UdpCacheKey")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowStore")
+            && protocol_udp.contains("struct Hysteria2UdpPeerConfig")
+            && !protocol_udp.contains("pub struct Hysteria2UdpPeerConfig")
             && protocol_udp.contains("struct Hysteria2UdpConnectorProfile")
             && protocol_udp.contains("pub fn connector_profile(&self)")
             && protocol_udp.contains("pub async fn authenticate_connection")
             && protocol_udp.contains("struct Hysteria2UdpLeafKey")
+            && !protocol_udp.contains("pub struct Hysteria2UdpLeafKey")
             && protocol_udp.contains("pub fn codec(&self)")
             && protocol_udp.contains("pub fn client_fingerprint(&self) -> Option<&str>"),
         "Hysteria2 adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
+    for forbidden in [
+        "Hysteria2UdpFlowKey",
+        "Hysteria2UdpLeafKey",
+        "Hysteria2UdpPeerConfig",
+        "Hysteria2UdpCacheKey",
+    ] {
+        assert!(
+            !protocol_lib.contains(forbidden),
+            "protocols/hysteria2 lib root should not re-export UDP cache-key internals `{forbidden}`"
+        );
+    }
     for forbidden in [
         "Hysteria2UdpFlowKey",
         "Hysteria2UdpLeafKey",

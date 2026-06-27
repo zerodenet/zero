@@ -156,27 +156,23 @@ impl MieruUdpFlowResume {
         }
     }
 
-    pub fn username(&self) -> &str {
+    pub(crate) fn username(&self) -> &str {
         &self.username
     }
 
-    pub fn password(&self) -> &str {
+    pub(crate) fn password(&self) -> &str {
         &self.password
-    }
-
-    pub fn relay_chain(&self) -> bool {
-        self.relay_chain
     }
 
     pub fn flow_requires_relay_upstream(&self) -> bool {
         self.relay_chain
     }
 
-    pub fn leaf_cache_key(&self, server: &str, port: u16) -> MieruUdpLeafKey {
+    fn leaf_cache_key(&self, server: &str, port: u16) -> MieruUdpLeafKey {
         self.peer_config().leaf_cache_key(server, port)
     }
 
-    pub fn flow_key(&self, server: &str, port: u16) -> MieruUdpFlowKey {
+    fn flow_key(&self, server: &str, port: u16) -> MieruUdpFlowKey {
         if self.relay_chain {
             MieruUdpFlowKey::Relay
         } else {
@@ -192,11 +188,10 @@ impl MieruUdpFlowResume {
         udp_flow_codec()
     }
 
-    pub fn peer_config(&self) -> MieruUdpPeerConfig<'_> {
+    fn peer_config(&self) -> MieruUdpPeerConfig<'_> {
         MieruUdpPeerConfig {
             username: &self.username,
             password: &self.password,
-            relay_chain: self.relay_chain,
         }
     }
 }
@@ -218,15 +213,9 @@ impl<'a> MieruUdpFlowConfig<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum MieruUdpFlowKey {
+enum MieruUdpFlowKey {
     Leaf(MieruUdpLeafKey),
     Relay,
-}
-
-impl MieruUdpFlowKey {
-    pub fn is_relay(&self) -> bool {
-        matches!(self, Self::Relay)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -286,26 +275,13 @@ impl<T> MieruUdpFlowStore<T> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct MieruUdpPeerConfig<'a> {
+struct MieruUdpPeerConfig<'a> {
     username: &'a str,
     password: &'a str,
-    relay_chain: bool,
 }
 
 impl<'a> MieruUdpPeerConfig<'a> {
-    pub fn username(&self) -> &'a str {
-        self.username
-    }
-
-    pub fn password(&self) -> &'a str {
-        self.password
-    }
-
-    pub fn relay_chain(&self) -> bool {
-        self.relay_chain
-    }
-
-    pub fn leaf_cache_key(&self, server: &str, port: u16) -> MieruUdpLeafKey {
+    fn leaf_cache_key(&self, server: &str, port: u16) -> MieruUdpLeafKey {
         MieruUdpLeafKey {
             server: server.to_owned(),
             port,
@@ -316,21 +292,11 @@ impl<'a> MieruUdpPeerConfig<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MieruUdpLeafKey {
+struct MieruUdpLeafKey {
     server: String,
     port: u16,
     username: String,
     password: String,
-}
-
-impl MieruUdpLeafKey {
-    pub fn server(&self) -> &str {
-        &self.server
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
 }
 
 impl DatagramCodec<Address> for MieruUdpFlowCodec {
