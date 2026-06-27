@@ -2801,6 +2801,7 @@ fn runtime_protocol_state_owns_upstream_views_outside_protocol_runtime() {
 fn runtime_protocol_state_consumes_managed_flow_models_without_legacy_facade() {
     let old_root = manifest_dir().join("src/protocol_runtime/udp");
     let state = read("src/runtime/udp_flow/protocol_state/mod.rs");
+    let managed = read("src/runtime/udp_flow/managed/state.rs");
 
     for forbidden in ["mod flows", "pub(crate) use flows::"] {
         assert!(
@@ -2815,10 +2816,10 @@ fn runtime_protocol_state_consumes_managed_flow_models_without_legacy_facade() {
                 .exists()
             && state.contains("ManagedUdpFlowRequest")
             && state.contains("ManagedUdpFlowKind")
-            && state.contains("ManagedDatagramFlow")
-            && state.contains("ManagedStreamPacketFlow")
-            && state.contains("ManagedRelayStreamFlow"),
-        "managed UDP flow request models should live under runtime::udp_flow::managed and be consumed by protocol_state, not protocol_runtime::udp"
+            && managed.contains("ManagedDatagramFlow")
+            && managed.contains("ManagedStreamPacketFlow")
+            && managed.contains("ManagedRelayStreamFlow"),
+        "managed UDP flow request models should live under runtime::udp_flow::managed; protocol_state should only consume the neutral request"
     );
 }
 
@@ -3996,19 +3997,15 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
         "protocol UDP start logic should live under runtime::udp_flow::protocol_state, not protocol_runtime::udp or a monolithic start.rs"
     );
 
-    for path in [
-        "mod.rs",
-        "datagram.rs",
-        "stream.rs",
-        "upstream.rs",
-        "forward.rs",
-    ] {
+    for path in ["mod.rs", "upstream.rs", "forward.rs"] {
         assert!(
             root.join(path).exists(),
             "runtime UDP protocol-state glue should keep neutral module `{path}`"
         );
     }
     for removed in [
+        "datagram.rs",
+        "stream.rs",
         "vless.rs",
         "vmess.rs",
         "cached.rs",
@@ -4026,7 +4023,6 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
 #[test]
 fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     let state = read("src/runtime/udp_flow/protocol_state/mod.rs");
-    let datagram = read("src/runtime/udp_flow/protocol_state/datagram.rs");
     let managed = read("src/runtime/udp_flow/managed/state.rs");
     let managed_datagram = read("src/runtime/udp_flow/managed/datagram.rs");
     let register = read("src/register.rs");
@@ -4040,14 +4036,17 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
         "MieruSendExisting",
     ] {
         assert!(
-            !datagram.contains(forbidden),
-            "start/datagram.rs should keep Trojan and Mieru start facades in protocol modules; found `{forbidden}`"
+            !state.contains(forbidden) && !managed.contains(forbidden),
+            "runtime UDP managed start glue should keep Trojan and Mieru start facades in protocol modules; found `{forbidden}`"
         );
     }
     assert!(
         !manifest_dir()
-            .join("src/runtime/udp_flow/protocol_state/trojan.rs")
+            .join("src/runtime/udp_flow/protocol_state/datagram.rs")
             .exists()
+            && !manifest_dir()
+                .join("src/runtime/udp_flow/protocol_state/trojan.rs")
+                .exists()
             && !manifest_dir()
                 .join("src/runtime/udp_flow/protocol_state/mieru.rs")
                 .exists(),
@@ -4072,9 +4071,11 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
         );
     }
     assert!(
-        state.contains("ManagedUdpFlowKind::Datagram")
-            && state.contains("start_managed_datagram_flow")
-            && datagram.contains("self.managed.start_datagram_flow")
+        !state.contains("ManagedUdpFlowKind::Datagram")
+            && !state.contains("start_managed_datagram_flow")
+            && managed.contains("ManagedUdpFlowKind::Datagram")
+            && managed.contains("ManagedDatagramFlow {")
+            && managed.contains("self.start_datagram_flow(")
             && managed.contains("ManagedDatagramState")
             && managed.contains("ManagedUdpHandlers")
             && managed_datagram.contains("handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>")
@@ -4130,7 +4131,6 @@ fn protocol_udp_upstream_start_dispatch_lives_behind_registered_handlers() {
 #[test]
 fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
     let state = read("src/runtime/udp_flow/protocol_state/mod.rs");
-    let stream = read("src/runtime/udp_flow/protocol_state/stream.rs");
     let managed = read("src/runtime/udp_flow/managed/state.rs");
     let managed_stream = read("src/runtime/udp_flow/managed/stream.rs");
     let register = read("src/register.rs");
@@ -4158,12 +4158,20 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
         );
     }
     assert!(
-        state.contains("ManagedUdpFlowKind::StreamPacket")
+        !manifest_dir()
+            .join("src/runtime/udp_flow/protocol_state/stream.rs")
+            .exists()
+            && !state.contains("ManagedUdpFlowKind::StreamPacket")
             && state.contains("ManagedUdpFlowKind::RelayStream")
-            && state.contains("start_managed_stream_packet_flow")
-            && state.contains("start_managed_relay_stream_flow")
-            && stream.contains("self.managed.start_stream_packet_flow")
-            && stream.contains("self.managed.start_relay_stream_flow")
+            && state.contains("start_upstream_flow(inbound_tag, request)")
+            && !state.contains("start_managed_stream_packet_flow")
+            && !state.contains("start_managed_relay_stream_flow")
+            && managed.contains("ManagedUdpFlowKind::StreamPacket")
+            && managed.contains("ManagedUdpFlowKind::RelayStream")
+            && managed.contains("ManagedStreamPacketFlow {")
+            && managed.contains("ManagedRelayStreamFlow {")
+            && managed.contains("self.start_stream_packet_flow(")
+            && managed.contains("self.start_relay_stream_flow(")
             && managed.contains("ManagedStreamState")
             && managed.contains("ManagedUdpHandlers")
             && managed_stream.contains("handlers: Vec<Box<dyn ManagedStreamFlowHandler>>")
