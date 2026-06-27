@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use async_trait::async_trait;
 use tokio::time::Instant as TokioInstant;
 use zero_engine::EngineError;
 
@@ -8,7 +9,9 @@ use super::model::{
     ClosedSocks5UdpAssociation, Socks5UdpAssociationView, UpstreamAssociationCloseReason,
 };
 use super::send::{self, Socks5UdpSend};
-use crate::protocol_runtime::udp::{FlowFailure, ManagedUdpFlowRequest, ProtocolUdpFlowResume};
+use crate::protocol_runtime::udp::{
+    FlowFailure, ManagedUdpFlowRequest, ProtocolUdpFlowResume, UpstreamAssociationHandler,
+};
 
 #[derive(Default)]
 pub(crate) struct Socks5UdpRuntime {
@@ -120,19 +123,66 @@ impl Socks5UdpRuntime {
         })
     }
 
-    pub(crate) fn close_all(mut self) {
-        if let Some(association) = self.upstream.take() {
-            association.close(UpstreamAssociationCloseReason::Closed);
-        }
-        self.idle_deadline = None;
-    }
-
     pub(crate) async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
         match self.upstream.as_ref() {
             Some(association) => association.recv_packet(buf).await,
             None => std::future::pending::<Result<usize, EngineError>>().await,
         }
     }
+}
+
+#[async_trait]
+impl UpstreamAssociationHandler for Socks5UdpRuntime {
+    fn supports_upstream_resume(&self, resume: &ProtocolUdpFlowResume) -> bool {
+        self.handles_resume(resume)
+    }
+
+    async fn send_upstream(
+        &mut self,
+        inbound_tag: &str,
+        request: ManagedUdpFlowRequest<'_>,
+    ) -> Result<usize, FlowFailure> {
+        self.start_relay_flow(inbound_tag, request).await
+    }
+
+    async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        self.recv_upstream_packet(buf).await
+    }
+
+    fn upstream_outbound_tag(&self) -> Option<&str> {
+        self.upstream_view()
+            .map(|association| association.outbound_tag)
+    }
+
+    fn upstream_idle_deadline(&self) -> Option<TokioInstant> {
+        self.idle_deadline()
+    }
+
+    fn touch_upstream_idle(&mut self, timeout: Duration) {
+        self.touch_idle(timeout);
+    }
+
+    fn drop_upstream_association(&mut self) -> Option<(String, String, u16)> {
+        self.close_dropped()
+            .map(closed_protocol_upstream_association)
+    }
+
+    fn close_idle_upstream(&mut self) -> Option<(String, String, u16)> {
+        self.close_idle().map(closed_protocol_upstream_association)
+    }
+
+    fn close_all_upstreams(&mut self) {
+        if let Some(association) = self.upstream.take() {
+            association.close(UpstreamAssociationCloseReason::Closed);
+        }
+        self.idle_deadline = None;
+    }
+}
+
+fn closed_protocol_upstream_association(
+    closed: ClosedSocks5UdpAssociation,
+) -> (String, String, u16) {
+    (closed.outbound_tag, closed.server, closed.port)
 }
 
 fn socks5_flow_mismatch(

@@ -22,7 +22,9 @@ use crate::adapters::VlessAdapter;
 #[cfg(feature = "vmess")]
 use crate::adapters::VmessAdapter;
 use crate::protocol_adapter::ProtocolRegistry;
-use crate::protocol_runtime::udp::{CachedUdpHandlers, ManagedUdpHandlers, ProtocolUdpHandlers};
+use crate::protocol_runtime::udp::{
+    CachedUdpHandlers, ManagedUdpHandlers, ProtocolUdpHandlers, UpstreamUdpHandlers,
+};
 
 pub(crate) fn protocol_registry() -> ProtocolRegistry {
     let mut registry = ProtocolRegistry::default();
@@ -65,6 +67,12 @@ pub(crate) fn protocol_udp_handlers() -> ProtocolUdpHandlers {
                 crate::adapters::trojan_udp_stream_handler(),
                 #[cfg(feature = "mieru")]
                 crate::adapters::mieru_udp_stream_handler(),
+            ],
+        },
+        upstream: UpstreamUdpHandlers {
+            upstream: vec![
+                #[cfg(feature = "socks5")]
+                crate::adapters::socks5_upstream_association_handler(),
             ],
         },
     }

@@ -11,8 +11,8 @@ mod state;
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
 pub(crate) use flow_snapshot::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
 pub(crate) use flows::{ManagedUdpFlowKind, ManagedUdpFlowRequest};
-pub(crate) use state::{CachedUdpHandlers, ProtocolUdpHandlers, ProtocolUdpState};
 pub(crate) use state::{
-    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend,
-    ManagedStreamFlowHandler, ManagedUdpHandlers,
+    CachedUdpHandlers, ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend,
+    ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpHandlers, ProtocolUdpHandlers,
+    ProtocolUdpState, UpstreamAssociationHandler, UpstreamUdpHandlers,
 };

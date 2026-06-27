@@ -6,10 +6,22 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::socks5::Socks5Adapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::{ManagedUdpFlowKind, ProtocolUdpFlowResume};
+use crate::protocol_runtime::udp::{
+    ManagedUdpFlowKind, ProtocolUdpFlowResume, UpstreamAssociationHandler,
+};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 use crate::runtime::Proxy;
+
+mod active;
+mod model;
+mod packet_path;
+mod runtime;
+mod send;
+
+pub(crate) fn upstream_association_handler() -> Box<dyn UpstreamAssociationHandler> {
+    Box::<runtime::Socks5UdpRuntime>::default()
+}
 
 impl Socks5Adapter {
     pub(super) fn udp_packet_path_carrier_descriptor_impl(
@@ -59,14 +71,8 @@ impl Socks5Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        crate::protocol_runtime::socks5_udp::build_socks5_packet_path(
-            proxy,
-            tag,
-            server,
-            *port,
-            username.zip(*password),
-        )
-        .await
+        packet_path::build_socks5_packet_path(proxy, tag, server, *port, username.zip(*password))
+            .await
     }
 
     pub(super) async fn start_udp_flow_impl(

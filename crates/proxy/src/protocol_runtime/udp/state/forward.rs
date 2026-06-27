@@ -36,10 +36,10 @@ impl ProtocolUdpState {
             ));
         };
 
-        if self.socks5.handles_resume(snapshot.resume()) {
+        if self.upstream.handles_resume(snapshot.resume()) {
             return Err(protocol_forward_unavailable(
                 "udp_protocol_forward",
-                "SOCKS5 relay flows are handled by generic UDP dispatch",
+                "upstream association flows are handled by generic UDP dispatch",
             ));
         }
 

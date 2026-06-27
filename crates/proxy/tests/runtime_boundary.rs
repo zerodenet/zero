@@ -1875,14 +1875,16 @@ fn inventory_does_not_expose_concrete_protocol_accessors() {
 #[test]
 fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let outbound = read("src/outbound/socks5.rs");
-    let root = read("src/protocol_runtime/socks5_udp.rs");
-    let active = read("src/protocol_runtime/socks5_udp/active.rs");
-    let model = read("src/protocol_runtime/socks5_udp/model.rs");
-    let packet_path_source = read("src/protocol_runtime/socks5_udp/packet_path.rs");
-    let send_source = read("src/protocol_runtime/socks5_udp/send.rs");
-    let send = manifest_dir().join("src/protocol_runtime/socks5_udp/send.rs");
-    let runtime = manifest_dir().join("src/protocol_runtime/socks5_udp/runtime.rs");
-    let packet_path = manifest_dir().join("src/protocol_runtime/socks5_udp/packet_path.rs");
+    let adapter = read("src/adapters/socks5/udp.rs");
+    let active = read("src/adapters/socks5/udp/active.rs");
+    let model = read("src/adapters/socks5/udp/model.rs");
+    let packet_path_source = read("src/adapters/socks5/udp/packet_path.rs");
+    let send_source = read("src/adapters/socks5/udp/send.rs");
+    let send = manifest_dir().join("src/adapters/socks5/udp/send.rs");
+    let runtime = manifest_dir().join("src/adapters/socks5/udp/runtime.rs");
+    let packet_path = manifest_dir().join("src/adapters/socks5/udp/packet_path.rs");
+    let old_protocol_runtime = manifest_dir().join("src/protocol_runtime/socks5_udp.rs");
+    let old_protocol_runtime_dir = manifest_dir().join("src/protocol_runtime/socks5_udp");
 
     for forbidden in [
         "ActiveUpstreamSocks5UdpAssociation",
@@ -1907,8 +1909,8 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         "ensure_socks5_udp_association",
     ] {
         assert!(
-            !root.contains(forbidden),
-            "src/protocol_runtime/socks5_udp.rs should stay a thin facade; found `{forbidden}`"
+            !adapter.contains(forbidden),
+            "src/adapters/socks5/udp.rs should stay a thin adapter facade; found `{forbidden}`"
         );
     }
 
@@ -1928,12 +1930,12 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     assert!(
         model.contains("enum UpstreamAssociationCloseReason")
             && model.contains("struct Socks5UdpAssociation"),
-        "SOCKS5 UDP association model should live in protocol_runtime/socks5_udp/model.rs"
+        "SOCKS5 UDP association model should live under adapters/socks5/udp/model.rs"
     );
     assert!(
         send_source.contains("async fn send_socks5_udp_packet")
             && send_source.contains("async fn ensure_socks5_udp_association"),
-        "SOCKS5 UDP send orchestration should live in protocol_runtime/socks5_udp/send.rs"
+        "SOCKS5 UDP send orchestration should live under adapters/socks5/udp/send.rs"
     );
     assert!(
         !packet_path_source.contains("socks5::parse_udp_packet")
@@ -1942,13 +1944,17 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         "SOCKS5 packet-path carrier should delegate protocol response decoding to protocols/socks5"
     );
     assert!(
-        !root.contains("Socks5UdpPacketSend")
-            && !root.contains("pub(crate) use send::Socks5UdpSend"),
-        "SOCKS5 UDP facade should not expose packet-send request models"
+        !adapter.contains("Socks5UdpPacketSend")
+            && !adapter.contains("pub(crate) use send::Socks5UdpSend"),
+        "SOCKS5 UDP adapter facade should not expose packet-send request models"
     );
     assert!(
         send.exists() && runtime.exists() && packet_path.exists(),
         "SOCKS5 UDP runtime should be split into send.rs, runtime.rs, and packet_path.rs"
+    );
+    assert!(
+        !old_protocol_runtime.exists() && !old_protocol_runtime_dir.exists(),
+        "SOCKS5 UDP runtime manager should not live under protocol_runtime"
     );
 }
 
@@ -3013,7 +3019,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
     ] {
         assert!(
             !managed.contains(forbidden) && !socks5_adapter.contains(forbidden),
-            "managed UDP bridge and SOCKS5 adapter should delegate packet send details to protocol_runtime::socks5_udp; found `{forbidden}`"
+            "managed UDP bridge and SOCKS5 adapter facade should delegate packet send details to adapter-owned SOCKS5 UDP runtime; found `{forbidden}`"
         );
     }
     for source in [&forward, &socks5_adapter] {
@@ -3040,10 +3046,10 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
 
 #[test]
 fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
-    let model = read("src/protocol_runtime/socks5_udp/model.rs");
-    let send = read("src/protocol_runtime/socks5_udp/send.rs");
-    let runtime = read("src/protocol_runtime/socks5_udp/runtime.rs");
-    let start = read("src/protocol_runtime/udp/start/socks5.rs");
+    let model = read("src/adapters/socks5/udp/model.rs");
+    let send = read("src/adapters/socks5/udp/send.rs");
+    let runtime = read("src/adapters/socks5/udp/runtime.rs");
+    let upstream = read("src/protocol_runtime/udp/state/upstream.rs");
     let response = read("src/protocol_runtime/socks5_udp_associate/upstream_response.rs");
 
     assert!(
@@ -3056,11 +3062,11 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
         "SOCKS5 UDP association identity should be named outbound_tag, not a generic tag"
     );
     assert!(
-        start.contains("start_relay_flow(inbound_tag, request)")
+        upstream.contains("send_upstream(inbound_tag, request)")
             && runtime.contains("let Some(outbound_tag) = request.outbound_tag")
             && runtime.contains("tag: outbound_tag")
-            && !start.contains("tag: inbound_tag"),
-        "SOCKS5 UDP runtime must pass the outbound tag into the upstream association without exposing it through start glue"
+            && !upstream.contains("tag: inbound_tag"),
+        "SOCKS5 UDP runtime must pass the outbound tag into the upstream association through neutral upstream dispatch"
     );
     assert!(
         send.contains("outbound_tag: request.tag.to_owned()")
@@ -3553,21 +3559,30 @@ fn generic_udp_dispatch_does_not_contain_protocol_manager_modules() {
 }
 
 #[test]
-fn udp_dispatch_keeps_protocol_managers_in_protocol_runtime_state() {
+fn udp_dispatch_keeps_protocol_managers_behind_registered_udp_state() {
     let content = read("src/runtime/udp_dispatch/mod.rs");
     let state = read("src/protocol_runtime/udp/state.rs");
+    let upstream = read("src/protocol_runtime/udp/state/upstream.rs");
+    let register = read("src/register.rs");
 
     assert!(
         content.contains("protocol_state: ProtocolUdpState"),
-        "UdpDispatch should keep protocol-specific managers behind ProtocolUdpState"
+        "UdpDispatch should keep protocol-specific UDP handlers behind ProtocolUdpState"
     );
     assert!(
         !content.contains("socks5: Socks5UdpRuntime"),
-        "UdpDispatch should keep SOCKS5 UDP association state inside ProtocolUdpState"
+        "UdpDispatch should not hold SOCKS5 UDP association state directly"
     );
     assert!(
-        state.contains("socks5: Socks5UdpRuntime"),
-        "ProtocolUdpState should own the SOCKS5 UDP association facade"
+        !state.contains("Socks5UdpRuntime") && !state.contains("socks5:"),
+        "ProtocolUdpState should not own a SOCKS5-named upstream association field"
+    );
+    assert!(
+        state.contains("upstream: UpstreamAssociationState")
+            && upstream.contains("trait UpstreamAssociationHandler")
+            && upstream.contains("handlers: UpstreamUdpHandlers")
+            && register.contains("socks5_upstream_association_handler"),
+        "ProtocolUdpState should drive upstream UDP associations through registered neutral handlers"
     );
     for forbidden in [
         "pub(crate) fn socks5_runtime",
@@ -3706,18 +3721,23 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
     for path in [
         "start/mod.rs",
         "start/datagram.rs",
-        "start/socks5.rs",
         "start/stream.rs",
+        "state/upstream.rs",
     ] {
         assert!(
             root.join(path).exists(),
-            "protocol UDP start logic should keep protocol-family module `{path}`"
+            "protocol UDP start logic should keep neutral module `{path}`"
         );
     }
-    for removed in ["start/vless.rs", "start/vmess.rs", "start/cached.rs"] {
+    for removed in [
+        "start/vless.rs",
+        "start/vmess.rs",
+        "start/cached.rs",
+        "start/socks5.rs",
+    ] {
         assert!(
             !root.join(removed).exists(),
-            "protocol-specific cached UDP start logic should live in protocol flow bridges, not `{removed}`"
+            "protocol-specific UDP start logic should live behind registered handlers, not `{removed}`"
         );
     }
 }
@@ -3794,22 +3814,35 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
 }
 
 #[test]
-fn protocol_udp_socks5_start_dispatch_lives_outside_state_root() {
+fn protocol_udp_upstream_start_dispatch_lives_behind_registered_handlers() {
     let state = read("src/protocol_runtime/udp/state.rs");
-    let socks5 = read("src/protocol_runtime/udp/start/socks5.rs");
+    let upstream = read("src/protocol_runtime/udp/state/upstream.rs");
+    let register = read("src/register.rs");
+    let socks5 = read("src/adapters/socks5/udp.rs");
+    let socks5_runtime = read("src/adapters/socks5/udp/runtime.rs");
 
-    for forbidden in ["ProtocolUdpFlowResume::Socks5", "Socks5UdpPacketSend"] {
+    for forbidden in [
+        "ProtocolUdpFlowResume::Socks5",
+        "Socks5UdpPacketSend",
+        "start_socks5_relay_flow",
+        "Socks5UdpRuntime",
+    ] {
         assert!(
-            !state.contains(forbidden) && !socks5.contains(forbidden),
-            "state.rs and start/socks5.rs should delegate SOCKS5 relay details to protocol_runtime::socks5_udp; found `{forbidden}`"
+            !state.contains(forbidden),
+            "state.rs should delegate upstream UDP relay details to registered handlers; found `{forbidden}`"
         );
     }
     assert!(
         state.contains("ManagedUdpFlowKind::RelayStream")
-            && state.contains("start_socks5_relay_flow")
-            && socks5.contains("start_relay_flow(inbound_tag, request)")
-            && !socks5.contains("ProtocolUdpFlowResume::Socks5"),
-        "SOCKS5 relay start should stay as UDP orchestration glue and delegate packet construction to socks5_udp"
+            && state.contains("self.upstream")
+            && state.contains("start_upstream_flow(inbound_tag, request)")
+            && upstream.contains("fn supports_upstream_resume")
+            && upstream.contains("async fn send_upstream")
+            && register.contains("socks5_upstream_association_handler")
+            && socks5.contains("pub(crate) fn upstream_association_handler")
+            && socks5_runtime.contains("impl UpstreamAssociationHandler for Socks5UdpRuntime")
+            && socks5_runtime.contains("self.start_relay_flow(inbound_tag, request).await"),
+        "upstream UDP relay start should dispatch through a registered neutral upstream association handler"
     );
 }
 
@@ -5545,7 +5578,8 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     let managed_datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     let managed_model = read("src/protocol_runtime/udp/state/managed/model.rs");
     let managed_stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
-    let socks5_runtime = read("src/protocol_runtime/socks5_udp/runtime.rs");
+    let upstream = read("src/protocol_runtime/udp/state/upstream.rs");
+    let socks5_runtime = read("src/adapters/socks5/udp/runtime.rs");
 
     for forbidden in [
         "SsSendExisting",
@@ -5568,8 +5602,10 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     }
     assert!(
         normalized_forward.contains("self\n            .managed\n            .forward_existing_flow")
-            && forward.contains("self.socks5.handles_resume(snapshot.resume())")
-            && socks5_runtime.contains("fn handles_resume(&self, resume: &ProtocolUdpFlowResume)")
+            && forward.contains("self.upstream.handles_resume(snapshot.resume())")
+            && upstream.contains("fn handles_resume")
+            && upstream.contains("handler.supports_upstream_resume(resume)")
+            && socks5_runtime.contains("fn supports_upstream_resume(&self, resume: &ProtocolUdpFlowResume)")
             && socks5_runtime.contains("resume.as_ref::<socks5::Socks5UdpFlowResume>()")
             && managed.contains("fn forward_existing_flow")
             && managed_model.contains("trait ManagedDatagramFlowHandler")

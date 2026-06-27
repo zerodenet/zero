@@ -3,8 +3,6 @@ use std::time::Duration;
 use std::collections::HashMap;
 use tokio::time::Instant as TokioInstant;
 
-use crate::protocol_runtime::socks5_udp::model::ClosedSocks5UdpAssociation;
-use crate::protocol_runtime::socks5_udp::Socks5UdpRuntime;
 use zero_engine::EngineError;
 
 use super::flows::{ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow};
@@ -21,10 +19,13 @@ pub(crate) use managed::{
     ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend,
     ManagedStreamFlowHandler, ManagedUdpHandlers,
 };
+use upstream::UpstreamAssociationState;
+pub(crate) use upstream::{UpstreamAssociationHandler, UpstreamUdpHandlers};
 
 mod cached;
 mod forward;
 pub(in crate::protocol_runtime::udp) mod managed;
+mod upstream;
 
 pub(crate) struct ProtocolUpstreamAssociationView<'a> {
     pub(crate) outbound_tag: &'a str,
@@ -37,9 +38,9 @@ pub(crate) struct ClosedProtocolUpstreamAssociation {
 }
 
 pub(crate) struct ProtocolUdpState {
-    pub(super) socks5: Socks5UdpRuntime,
     cached: CachedProtocolUdpState,
     pub(super) managed: ManagedProtocolUdpState,
+    upstream: UpstreamAssociationState,
     managed_flows: HashMap<ManagedUdpFlowRef, ProtocolUdpFlowSnapshot>,
     next_managed_flow_id: u64,
 }
@@ -47,14 +48,15 @@ pub(crate) struct ProtocolUdpState {
 pub(crate) struct ProtocolUdpHandlers {
     pub(crate) cached: CachedUdpHandlers,
     pub(crate) managed: ManagedUdpHandlers,
+    pub(crate) upstream: UpstreamUdpHandlers,
 }
 
 impl ProtocolUdpState {
     pub(crate) fn new(handlers: ProtocolUdpHandlers) -> Self {
         Self {
-            socks5: Socks5UdpRuntime::default(),
             cached: CachedProtocolUdpState::new(handlers.cached),
             managed: ManagedProtocolUdpState::new(handlers.managed),
+            upstream: UpstreamAssociationState::new(handlers.upstream),
             managed_flows: HashMap::new(),
             next_managed_flow_id: 1,
         }
@@ -87,41 +89,39 @@ impl ProtocolUdpState {
     }
 
     pub(crate) async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.socks5.recv_upstream_packet(buf).await
+        self.upstream.recv_upstream_packet(buf).await
     }
 
     pub(crate) fn upstream_association_view(&self) -> Option<ProtocolUpstreamAssociationView<'_>> {
-        self.socks5
-            .upstream_view()
-            .map(|association| ProtocolUpstreamAssociationView {
-                outbound_tag: association.outbound_tag,
-            })
+        self.upstream
+            .upstream_outbound_tag()
+            .map(|outbound_tag| ProtocolUpstreamAssociationView { outbound_tag })
     }
 
     pub(crate) fn upstream_idle_deadline(&self) -> Option<TokioInstant> {
-        self.socks5.idle_deadline()
+        self.upstream.upstream_idle_deadline()
     }
 
     pub(crate) fn touch_upstream_idle(&mut self, timeout: Duration) {
-        self.socks5.touch_idle(timeout);
+        self.upstream.touch_upstream_idle(timeout);
     }
 
     pub(crate) fn drop_upstream_association(
         &mut self,
     ) -> Option<ClosedProtocolUpstreamAssociation> {
-        self.socks5
-            .close_dropped()
+        self.upstream
+            .drop_upstream_association()
             .map(closed_protocol_upstream_association)
     }
 
     pub(crate) fn close_idle_upstream(&mut self) -> Option<ClosedProtocolUpstreamAssociation> {
-        self.socks5
-            .close_idle()
+        self.upstream
+            .close_idle_upstream()
             .map(closed_protocol_upstream_association)
     }
 
-    pub(crate) fn close_all_upstreams(self) {
-        self.socks5.close_all();
+    pub(crate) fn close_all_upstreams(mut self) {
+        self.upstream.close_all_upstreams();
     }
 
     pub(crate) async fn start_managed_udp_flow(
@@ -204,19 +204,21 @@ impl ProtocolUdpState {
                         })
                         .await;
                 }
-                self.start_socks5_relay_flow(inbound_tag, request).await
+                self.upstream
+                    .start_upstream_flow(inbound_tag, request)
+                    .await
             }
         }
     }
 }
 
 fn closed_protocol_upstream_association(
-    closed: ClosedSocks5UdpAssociation,
+    (outbound_tag, server, port): (String, String, u16),
 ) -> ClosedProtocolUpstreamAssociation {
     ClosedProtocolUpstreamAssociation {
-        outbound_tag: closed.outbound_tag,
-        server: closed.server,
-        port: closed.port,
+        outbound_tag,
+        server,
+        port,
     }
 }
 

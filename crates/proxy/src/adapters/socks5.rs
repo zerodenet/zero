@@ -22,7 +22,7 @@ mod inbound;
 #[cfg(feature = "socks5")]
 mod tcp;
 #[cfg(feature = "socks5")]
-mod udp;
+pub(crate) mod udp;
 
 #[cfg(feature = "socks5")]
 #[derive(Debug)]

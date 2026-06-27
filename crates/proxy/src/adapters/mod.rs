@@ -39,6 +39,8 @@ pub(crate) use shadowsocks::udp::managed_datagram_handler as shadowsocks_udp_dat
 #[cfg(feature = "shadowsocks")]
 pub(crate) use shadowsocks::ShadowsocksAdapter;
 #[cfg(feature = "socks5")]
+pub(crate) use socks5::udp::upstream_association_handler as socks5_upstream_association_handler;
+#[cfg(feature = "socks5")]
 pub(crate) use socks5::Socks5Adapter;
 #[cfg(feature = "trojan")]
 pub(crate) use trojan::udp::managed_stream_handler as trojan_udp_stream_handler;
