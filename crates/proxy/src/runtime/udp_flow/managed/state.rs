@@ -22,14 +22,14 @@ pub(crate) struct ManagedUdpHandlers {
     pub(crate) stream: Vec<Box<dyn ManagedStreamFlowHandler>>,
 }
 
-pub(crate) struct ManagedProtocolUdpState {
+pub(crate) struct ManagedUdpState {
     datagram: ManagedDatagramState,
     stream: ManagedStreamState,
     flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>,
     next_flow_id: u64,
 }
 
-impl ManagedProtocolUdpState {
+impl ManagedUdpState {
     pub(crate) fn new(handlers: ManagedUdpHandlers) -> Self {
         Self {
             datagram: ManagedDatagramState::new(handlers.datagram),

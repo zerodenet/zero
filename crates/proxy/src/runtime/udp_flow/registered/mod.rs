@@ -6,8 +6,8 @@ use zero_engine::EngineError;
 
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    ManagedProtocolUdpState, ManagedStreamFlowSender, ManagedUdpFlowKind, ManagedUdpFlowRequest,
-    ManagedUdpFlowResume, ManagedUdpHandlers,
+    ManagedStreamFlowSender, ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume,
+    ManagedUdpHandlers, ManagedUdpState,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
@@ -28,7 +28,7 @@ pub(crate) struct ClosedRegisteredUpstreamAssociation {
 }
 
 pub(crate) struct RegisteredUdpState {
-    pub(super) managed: ManagedProtocolUdpState,
+    pub(super) managed: ManagedUdpState,
     upstream: UpstreamAssociationState,
 }
 
@@ -40,7 +40,7 @@ pub(crate) struct RegisteredUdpHandlers {
 impl RegisteredUdpState {
     pub(crate) fn new(handlers: RegisteredUdpHandlers) -> Self {
         Self {
-            managed: ManagedProtocolUdpState::new(handlers.managed),
+            managed: ManagedUdpState::new(handlers.managed),
             upstream: UpstreamAssociationState::new(handlers.upstream),
         }
     }

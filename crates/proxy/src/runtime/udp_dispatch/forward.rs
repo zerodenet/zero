@@ -75,7 +75,7 @@ impl UdpDispatch {
             UdpPathCategory::Datagram | UdpPathCategory::StreamPacket => {
                 let result = self
                     .flow_state
-                    .forward_existing_protocol_flow(proxy, flow, payload)
+                    .forward_existing_managed_flow(proxy, flow, payload)
                     .await;
                 self.record_or_fail(flow, proxy, started_at, result)?;
             }

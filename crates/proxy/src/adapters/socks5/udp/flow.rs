@@ -5,7 +5,7 @@ use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::socks5::Socks5Adapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{
-    FlowFailure, FlowStartResult, ManagedProtocolUdpSend, ManagedUdpOutboundKind, UdpDispatch,
+    FlowFailure, FlowStartResult, ManagedUdpOutboundKind, ManagedUdpSend, UdpDispatch,
 };
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowKind, ManagedUdpFlowResume};
 use crate::runtime::Proxy;
@@ -30,7 +30,7 @@ pub(super) async fn start(
     };
     let config = socks5::Socks5UdpPacketPathConfig::new(tag, server, *port, *username, *password);
     dispatch
-        .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
+        .start_tracked_managed_udp(ManagedUdpSend {
             proxy: Some(proxy),
             tag,
             session,

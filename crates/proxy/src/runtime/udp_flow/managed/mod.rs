@@ -20,5 +20,5 @@ pub(crate) use flow::{ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowR
 pub(crate) use model::{
     ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
 };
-pub(crate) use state::{ManagedProtocolUdpState, ManagedUdpHandlers};
+pub(crate) use state::{ManagedUdpHandlers, ManagedUdpState};
 pub(crate) use stream_sender::ManagedStreamFlowSender;

@@ -96,7 +96,7 @@ impl UdpFlowState {
         self.registered.register_managed_stream_flow_sender(sender)
     }
 
-    pub(crate) async fn start_managed_protocol_flow(
+    pub(crate) async fn start_managed_flow(
         &mut self,
         inbound_tag: &str,
         mut request: ManagedUdpFlowRequest<'_>,
@@ -107,28 +107,28 @@ impl UdpFlowState {
             .await
     }
 
-    pub(crate) fn register_managed_protocol_flow(
+    pub(crate) fn register_managed_flow(
         &mut self,
         resume: ManagedUdpFlowResume,
     ) -> ManagedUdpFlowRef {
         self.registered.register_managed_flow(resume)
     }
 
-    pub(crate) fn managed_protocol_flow_resume(
+    pub(crate) fn managed_flow_resume(
         &self,
         flow_ref: ManagedUdpFlowRef,
     ) -> Option<ManagedUdpFlowResume> {
         self.registered.managed_flow_resume(flow_ref)
     }
 
-    pub(crate) async fn forward_existing_protocol_flow(
+    pub(crate) async fn forward_existing_managed_flow(
         &mut self,
         proxy: &Proxy,
         flow: &UdpFlowSnapshot,
         payload: &[u8],
     ) -> Result<usize, FlowFailure> {
         self.registered
-            .forward_existing_protocol_flow(&mut self.chain_tasks, proxy, flow, payload)
+            .forward_existing_managed_flow(&mut self.chain_tasks, proxy, flow, payload)
             .await
     }
 

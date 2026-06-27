@@ -66,7 +66,7 @@ impl VmessAdapter {
         let mut manager = VmessUdpOutboundManager::new();
         manager
             .start_flow(
-                dispatch.protocol_udp_chain_tasks(),
+                dispatch.managed_udp_chain_tasks(),
                 VmessUdpStartFlow {
                     proxy,
                     mux_pool: &self.mux_pool,
@@ -137,7 +137,7 @@ impl VmessAdapter {
         let mut manager = VmessUdpOutboundManager::new();
         manager
             .start_relay_flow(
-                dispatch.protocol_udp_chain_tasks(),
+                dispatch.managed_udp_chain_tasks(),
                 VmessUdpRelayFlowStart {
                     proxy,
                     session,

@@ -71,7 +71,7 @@ mod types;
 
 // Re-exports.
 
-pub(crate) use managed::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
+pub(crate) use managed::{ManagedUdpOutboundKind, ManagedUdpSend};
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 
 // UdpDispatch.

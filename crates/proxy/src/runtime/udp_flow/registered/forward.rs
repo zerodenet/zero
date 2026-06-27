@@ -6,7 +6,7 @@ use crate::runtime::Proxy;
 use tokio::task::JoinSet;
 
 impl RegisteredUdpState {
-    pub(crate) async fn forward_existing_protocol_flow(
+    pub(crate) async fn forward_existing_managed_flow(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
         proxy: &Proxy,

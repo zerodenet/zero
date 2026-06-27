@@ -5,7 +5,7 @@ use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::trojan::TrojanAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{
-    FlowFailure, FlowStartResult, ManagedProtocolUdpSend, ManagedUdpOutboundKind, UdpDispatch,
+    FlowFailure, FlowStartResult, ManagedUdpOutboundKind, ManagedUdpSend, UdpDispatch,
 };
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowKind, ManagedUdpFlowResume};
 use crate::runtime::Proxy;
@@ -82,7 +82,7 @@ async fn start_with_carrier(
     let config = trojan::TrojanUdpFlowConfig::new(password, *sni, *insecure, *client_fingerprint);
     request
         .dispatch
-        .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
+        .start_tracked_managed_udp(ManagedUdpSend {
             proxy: Some(request.proxy),
             tag,
             session: request.session,

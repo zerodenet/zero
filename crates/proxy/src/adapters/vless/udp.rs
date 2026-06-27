@@ -76,7 +76,7 @@ impl VlessAdapter {
         let mut manager = VlessUdpOutboundManager::new();
         manager
             .start_flow(
-                dispatch.protocol_udp_chain_tasks(),
+                dispatch.managed_udp_chain_tasks(),
                 VlessUdpStartFlow {
                     proxy,
                     mux_pool: &self.mux_pool,
@@ -164,7 +164,7 @@ impl VlessAdapter {
         let mut manager = VlessUdpOutboundManager::new();
         manager
             .start_relay_two_stream(
-                dispatch.protocol_udp_chain_tasks(),
+                dispatch.managed_udp_chain_tasks(),
                 VlessUdpRelayTwoStream {
                     proxy,
                     session,
@@ -249,7 +249,7 @@ impl VlessAdapter {
         let mut manager = VlessUdpOutboundManager::new();
         manager
             .start_relay_final_hop(
-                dispatch.protocol_udp_chain_tasks(),
+                dispatch.managed_udp_chain_tasks(),
                 VlessUdpRelayFinalHopStart {
                     proxy,
                     session,

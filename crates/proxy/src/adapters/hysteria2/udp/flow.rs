@@ -5,7 +5,7 @@ use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{
-    FlowFailure, FlowStartResult, ManagedProtocolUdpSend, ManagedUdpOutboundKind, UdpDispatch,
+    FlowFailure, FlowStartResult, ManagedUdpOutboundKind, ManagedUdpSend, UdpDispatch,
 };
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowKind, ManagedUdpFlowResume};
 
@@ -35,7 +35,7 @@ pub(super) async fn start(
         *client_fingerprint,
     );
     dispatch
-        .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
+        .start_tracked_managed_udp(ManagedUdpSend {
             proxy: None,
             tag,
             session,

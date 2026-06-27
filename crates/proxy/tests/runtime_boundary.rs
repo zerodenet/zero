@@ -1270,7 +1270,7 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
         "config.packet_path()",
         "packet_path.cache_key()",
         "packet_path.codec()",
-        "ManagedProtocolUdpSend {",
+        "ManagedUdpSend {",
         "ManagedUdpFlowResume::new",
     ] {
         assert!(
@@ -1285,7 +1285,7 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
             && packet_path.contains("packet_path.codec()")
             && flow.contains("ShadowsocksUdpFlowConfig::new")
             && flow.contains(".flow_resume()")
-            && flow.contains("ManagedProtocolUdpSend {")
+            && flow.contains("ManagedUdpSend {")
             && flow.contains("ManagedUdpFlowResume::new"),
         "Shadowsocks packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
     );
@@ -1308,7 +1308,7 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
         "config.packet_path()",
         "packet_path.cache_key()",
         "packet_path.codec()",
-        "ManagedProtocolUdpSend {",
+        "ManagedUdpSend {",
         "ManagedUdpFlowResume::new",
         "open_udp_packet_path_connection",
     ] {
@@ -1325,7 +1325,7 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
             && packet_path.contains("open_udp_packet_path_connection")
             && flow.contains("Hysteria2UdpPacketPathConfig::new")
             && flow.contains(".flow_resume()")
-            && flow.contains("ManagedProtocolUdpSend {")
+            && flow.contains("ManagedUdpSend {")
             && flow.contains("ManagedUdpFlowResume::new"),
         "Hysteria2 packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
     );
@@ -1356,7 +1356,7 @@ fn stream_udp_roots_delegate_flow_building() {
             config,
             ".flow_resume(false)",
             ".flow_resume(true)",
-            "ManagedProtocolUdpSend {",
+            "ManagedUdpSend {",
             "ManagedUdpFlowResume::new",
         ] {
             assert!(
@@ -1367,7 +1367,7 @@ fn stream_udp_roots_delegate_flow_building() {
         assert!(
             flow.contains(config)
                 && flow.contains(".flow_resume(request.relay_chain)")
-                && flow.contains("ManagedProtocolUdpSend {")
+                && flow.contains("ManagedUdpSend {")
                 && flow.contains("ManagedUdpFlowResume::new"),
             "{flow_path} should own stream UDP flow and relay-final-hop resume construction"
         );
@@ -1390,7 +1390,7 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
         "Socks5UdpPacketPathConfig::new",
         "config.packet_path()",
         "packet_path.cache_key()",
-        "ManagedProtocolUdpSend {",
+        "ManagedUdpSend {",
         "ManagedUdpFlowResume::new",
     ] {
         assert!(
@@ -1404,7 +1404,7 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
             && packet_path.contains("packet_path.cache_key()")
             && flow.contains("Socks5UdpPacketPathConfig::new")
             && flow.contains(".flow_resume()")
-            && flow.contains("ManagedProtocolUdpSend {")
+            && flow.contains("ManagedUdpSend {")
             && flow.contains("ManagedUdpFlowResume::new"),
         "SOCKS5 packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
     );
@@ -3738,8 +3738,8 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
         );
     }
     assert!(
-        managed.contains("send_managed_protocol_udp")
-            && managed.contains("start_tracked_managed_protocol_udp")
+        managed.contains("send_managed_udp")
+            && managed.contains("start_tracked_managed_udp")
             && managed.contains("forward_managed_relay_flow")
             && socks5_flow.contains("ManagedUdpFlowKind::RelayStream")
             && socks5_flow.contains("ManagedUdpFlowResume::new")
@@ -4221,7 +4221,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && managed_state.contains("next_flow_id: u64")
             && managed_state.contains("fn register_flow")
             && managed_state.contains("fn flow_snapshot"),
-        "ManagedProtocolUdpState should own protocol UDP resume snapshots behind runtime opaque managed flow refs"
+        "ManagedUdpState should own protocol UDP resume snapshots behind runtime opaque managed flow refs"
     );
 }
 
@@ -4627,7 +4627,7 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
             && !manifest_dir()
                 .join("src/runtime/udp_flow/registered/mieru.rs")
                 .exists(),
-        "Trojan and Mieru UDP start dispatch should be centralized in ManagedProtocolUdpState"
+        "Trojan and Mieru UDP start dispatch should be centralized in ManagedUdpState"
     );
     for forbidden in [
         "ManagedUdpFlowResume::Shadowsocks(_)",
@@ -4644,7 +4644,7 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     ] {
         assert!(
             !managed.contains(forbidden),
-            "ManagedProtocolUdpState should delegate datagram resume recognition to protocol managers; found `{forbidden}`"
+            "ManagedUdpState should delegate datagram resume recognition to protocol managers; found `{forbidden}`"
         );
     }
     assert!(
@@ -4731,7 +4731,7 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
     ] {
         assert!(
             !managed.contains(forbidden),
-            "ManagedProtocolUdpState should delegate stream resume recognition to protocol managers; found `{forbidden}`"
+            "ManagedUdpState should delegate stream resume recognition to protocol managers; found `{forbidden}`"
         );
     }
     assert!(
@@ -6057,9 +6057,9 @@ fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
 
     let managed = read("src/runtime/udp_dispatch/managed.rs");
     assert!(
-        managed.contains("start_managed_protocol_flow")
-            && managed.contains("register_managed_protocol_flow")
-            && managed.contains("managed_protocol_flow_resume"),
+        managed.contains("start_managed_flow")
+            && managed.contains("register_managed_flow")
+            && managed.contains("managed_flow_resume"),
         "runtime UDP managed bridge should expose only narrow protocol-state helpers"
     );
     for forbidden in [
@@ -6105,12 +6105,12 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
         );
         assert!(
             !content.contains(&format!("pub(super) {field}:")),
-            "RegisteredUdpState should collapse protocol manager field `{field}` behind ManagedProtocolUdpState"
+            "RegisteredUdpState should collapse protocol manager field `{field}` behind ManagedUdpState"
         );
     }
     assert!(
-        content.contains("managed: ManagedProtocolUdpState")
-            && managed.contains("struct ManagedProtocolUdpState")
+        content.contains("managed: ManagedUdpState")
+            && managed.contains("struct ManagedUdpState")
             && managed.contains("handlers: ManagedUdpHandlers")
             && !content.contains("stream_senders: ManagedStreamSenderState")
             && !managed.contains("cached: ManagedCachedState")
@@ -6385,7 +6385,7 @@ fn udp_dispatch_cached_flow_fast_path_delegates_to_registered() {
         !dispatch.contains("send_existing_cached_flow")
             && !forward.contains("send_existing_cached_flow")
             && forward.contains("UdpPathCategory::Datagram | UdpPathCategory::StreamPacket")
-            && forward.contains("forward_existing_protocol_flow")
+            && forward.contains("forward_existing_managed_flow")
             && !outbound.contains("Cached {")
             && !outbound.contains("UdpPathCategory::Cached"),
         "UDP dispatch should delegate cached protocol flow reuse to protocol state without exposing a cached path category"
@@ -6438,7 +6438,7 @@ fn udp_forward_stays_protocol_neutral_and_does_not_construct_peer_types() {
     let content = read("src/runtime/udp_dispatch/forward.rs");
 
     assert!(
-        content.contains("forward_existing_protocol_flow"),
+        content.contains("forward_existing_managed_flow"),
         "src/runtime/udp_dispatch/forward.rs should delegate protocol manager forwarding to RegisteredUdpState"
     );
 
@@ -6476,7 +6476,7 @@ fn protocol_udp_existing_flow_forward_lives_outside_state_root() {
     let forward = manifest_dir().join("src/runtime/udp_flow/registered/forward.rs");
 
     for forbidden in [
-        "fn forward_existing_protocol_flow",
+        "async fn forward_existing_managed_flow",
         "UdpFlowOutbound::Hysteria2",
         "UdpFlowOutbound::Trojan",
         "UdpFlowOutbound::Mieru",
@@ -6490,8 +6490,10 @@ fn protocol_udp_existing_flow_forward_lives_outside_state_root() {
         );
     }
     assert!(
-        forward.exists(),
-        "existing UDP protocol-flow forwarding should live in protocol_runtime/udp/state/forward.rs"
+        forward.exists()
+            && read("src/runtime/udp_flow/registered/forward.rs")
+                .contains("async fn forward_existing_managed_flow"),
+        "existing UDP managed-flow forwarding should live in runtime/udp_flow/registered/forward.rs"
     );
 }
 
@@ -6562,7 +6564,7 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     ] {
         assert!(
             !managed.contains(forbidden),
-            "ManagedProtocolUdpState should not construct protocol manager request model `{forbidden}`"
+            "ManagedUdpState should not construct protocol manager request model `{forbidden}`"
         );
     }
     for forbidden in [
@@ -9554,9 +9556,9 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
     ] {
         let adapter = read(source);
         for required in [
-            "ManagedProtocolUdpSend",
+            "ManagedUdpSend",
             "ManagedUdpOutboundKind",
-            "start_tracked_managed_protocol_udp",
+            "start_tracked_managed_udp",
         ] {
             assert!(
                 adapter.contains(required),
@@ -9611,11 +9613,27 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
 
     let managed = read("src/runtime/udp_dispatch/managed.rs");
     assert!(
-        managed.contains("protocol_udp_chain_tasks")
+        managed.contains("managed_udp_chain_tasks")
             && managed.contains("register_managed_stream_flow_sender")
             && !managed.contains("protocol_udp_state_and_chain_tasks"),
         "runtime UDP dispatch should expose only narrow managed stream-flow registration glue, not protocol flow bridges"
     );
+    for forbidden in [
+        "ManagedProtocolUdpSend",
+        "ManagedProtocolUdpState",
+        "send_managed_protocol_udp",
+        "start_tracked_managed_protocol_udp",
+        "start_managed_protocol_flow",
+        "register_managed_protocol_flow",
+        "managed_protocol_flow_resume",
+        "forward_existing_protocol_flow",
+        "protocol_udp_chain_tasks",
+    ] {
+        assert!(
+            !managed.contains(forbidden),
+            "runtime UDP managed bridge should use neutral managed UDP names, not `{forbidden}`"
+        );
+    }
 
     for (source, manager) in [
         ("src/adapters/vless/udp.rs", "VlessUdpOutboundManager"),
@@ -9624,7 +9642,7 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
         let adapter = read(source);
         assert!(
             adapter.contains(manager)
-                && adapter.contains("protocol_udp_chain_tasks")
+                && adapter.contains("managed_udp_chain_tasks")
                 && adapter.contains("register_managed_stream_flow_sender"),
             "{source} should own managed stream UDP manager starts and use only narrow UdpDispatch glue"
         );

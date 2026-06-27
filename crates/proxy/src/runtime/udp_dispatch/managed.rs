@@ -21,7 +21,7 @@ pub(crate) enum ManagedUdpOutboundKind {
     StreamPacket,
 }
 
-pub(crate) struct ManagedProtocolUdpSend<'a> {
+pub(crate) struct ManagedUdpSend<'a> {
     pub(crate) proxy: Option<&'a Proxy>,
     pub(crate) tag: &'a str,
     pub(crate) session: &'a Session,
@@ -36,7 +36,7 @@ pub(crate) struct ManagedProtocolUdpSend<'a> {
 }
 
 impl UdpDispatch {
-    pub(crate) fn protocol_udp_chain_tasks(&mut self) -> &mut JoinSet<ChainTask> {
+    pub(crate) fn managed_udp_chain_tasks(&mut self) -> &mut JoinSet<ChainTask> {
         self.flow_state.chain_tasks()
     }
 
@@ -47,34 +47,34 @@ impl UdpDispatch {
         self.flow_state.register_managed_stream_flow_sender(sender)
     }
 
-    pub(crate) async fn start_managed_protocol_flow(
+    pub(crate) async fn start_managed_flow(
         &mut self,
         request: ManagedUdpFlowRequest<'_>,
     ) -> Result<usize, FlowFailure> {
         self.flow_state
-            .start_managed_protocol_flow(&self.inbound_tag, request)
+            .start_managed_flow(&self.inbound_tag, request)
             .await
     }
 
-    pub(crate) fn register_managed_protocol_flow(
+    pub(crate) fn register_managed_flow(
         &mut self,
         resume: ManagedUdpFlowResume,
     ) -> ManagedUdpFlowRef {
-        self.flow_state.register_managed_protocol_flow(resume)
+        self.flow_state.register_managed_flow(resume)
     }
 
-    pub(crate) fn managed_protocol_flow_resume(
+    pub(crate) fn managed_flow_resume(
         &self,
         flow_ref: ManagedUdpFlowRef,
     ) -> Option<ManagedUdpFlowResume> {
-        self.flow_state.managed_protocol_flow_resume(flow_ref)
+        self.flow_state.managed_flow_resume(flow_ref)
     }
 
-    pub(crate) async fn send_managed_protocol_udp(
+    pub(crate) async fn send_managed_udp(
         &mut self,
-        request: ManagedProtocolUdpSend<'_>,
+        request: ManagedUdpSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.start_managed_protocol_flow(ManagedUdpFlowRequest {
+        self.start_managed_flow(ManagedUdpFlowRequest {
             chain_tasks: None,
             proxy: request.proxy,
             kind: request.kind,
@@ -90,17 +90,17 @@ impl UdpDispatch {
         .await
     }
 
-    pub(crate) async fn start_tracked_managed_protocol_udp(
+    pub(crate) async fn start_tracked_managed_udp(
         &mut self,
-        request: ManagedProtocolUdpSend<'_>,
+        request: ManagedUdpSend<'_>,
     ) -> Result<FlowStartResult, FlowFailure> {
         let resume = request.resume.clone();
         let tag = request.tag.to_string();
         let server = request.server.to_string();
         let port = request.port;
         let outbound = request.outbound;
-        let sent = self.send_managed_protocol_udp(request).await?;
-        let managed = self.register_managed_protocol_flow(resume);
+        let sent = self.send_managed_udp(request).await?;
+        let managed = self.register_managed_flow(resume);
         let outbound = match outbound {
             ManagedUdpOutboundKind::Relay => UdpFlowOutbound::Relay {
                 tag,
@@ -139,9 +139,9 @@ impl UdpDispatch {
             .upstream()
             .expect("relay flow should expose upstream endpoint");
         let resume = self
-            .managed_protocol_flow_resume(managed)
+            .managed_flow_resume(managed)
             .expect("managed relay flow should have protocol resume");
-        self.send_managed_protocol_udp(ManagedProtocolUdpSend {
+        self.send_managed_udp(ManagedUdpSend {
             proxy: Some(proxy),
             tag: flow.outbound.tag(),
             session: &flow.session,
