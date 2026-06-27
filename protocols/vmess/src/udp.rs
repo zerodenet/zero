@@ -760,7 +760,11 @@ where
     })
 }
 
-pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
+pub(crate) fn build_udp_packet(
+    address: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
     let mut body = Vec::with_capacity(8 + payload.len());
     write_address(&mut body, address)?;
     body.extend_from_slice(&port.to_be_bytes());
@@ -776,7 +780,7 @@ pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<
     Ok(packet)
 }
 
-pub fn encode_udp_response(
+pub(crate) fn encode_udp_response(
     mode: VmessUdpPayloadMode,
     target: &Address,
     port: u16,
@@ -788,7 +792,7 @@ pub fn encode_udp_response(
     }
 }
 
-pub fn encode_udp_flow_packet(
+pub(crate) fn encode_udp_flow_packet(
     target: &Address,
     port: u16,
     payload: &[u8],
@@ -796,11 +800,11 @@ pub fn encode_udp_flow_packet(
     build_udp_packet(target, port, payload)
 }
 
-pub fn decode_udp_flow_packet(packet: &[u8]) -> Result<VmessUdpPacket, Error> {
+pub(crate) fn decode_udp_flow_packet(packet: &[u8]) -> Result<VmessUdpPacket, Error> {
     parse_udp_packet(packet)
 }
 
-pub fn encode_mux_udp_response(
+pub(crate) fn encode_mux_udp_response(
     mux_session_id: u16,
     mode: VmessUdpPayloadMode,
     target: &Address,
@@ -830,7 +834,7 @@ fn encode_inbound_mux_udp_response(
     encode_mux_udp_response(mux_session_id, mode, target, port, payload)
 }
 
-pub fn decode_inbound_udp_payload(
+fn decode_inbound_udp_payload(
     state: VmessUdpPayloadState,
     default_target: &Address,
     default_port: u16,
@@ -992,7 +996,7 @@ impl VmessInboundUdpCodec {
     }
 }
 
-pub fn parse_udp_packet(packet: &[u8]) -> Result<VmessUdpPacket, Error> {
+pub(crate) fn parse_udp_packet(packet: &[u8]) -> Result<VmessUdpPacket, Error> {
     if packet.len() < 2 {
         return Err(Error::Protocol("vmess udp packet too short"));
     }

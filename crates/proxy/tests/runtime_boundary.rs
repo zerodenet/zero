@@ -2699,8 +2699,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !protocol_lib.contains("encode_udp_flow_initial_packet")
             && protocol_shared.contains("pub struct VlessUdpFlowIo")
             && protocol_shared.contains("pub struct VlessUdpFlowPacket")
-            && protocol_shared.contains("pub fn encode_udp_flow_packet")
-            && protocol_shared.contains("pub fn decode_udp_flow_packet"),
+            && protocol_shared.contains("pub(crate) fn encode_udp_flow_packet")
+            && protocol_shared.contains("pub(crate) fn decode_udp_flow_packet"),
         "protocols/vless should own VLESS UDP packet IO helpers and protocol flow pump handles"
     );
 }
@@ -3037,8 +3037,8 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && protocol.contains("impl VmessUdpFlowIo")
             && protocol.contains("pub fn encode_packet")
             && protocol.contains("pub struct VmessUdpFlowPacket")
-            && protocol.contains("pub fn encode_udp_flow_packet")
-            && protocol.contains("pub fn decode_udp_flow_packet"),
+            && protocol.contains("pub(crate) fn encode_udp_flow_packet")
+            && protocol.contains("pub(crate) fn decode_udp_flow_packet"),
         "protocols/vmess should own VMess UDP packet IO helpers and protocol flow pump handles"
     );
 }
@@ -3653,9 +3653,9 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
         "decode_udp_flow_packet",
     ] {
         assert!(
-            protocol_udp.contains(&format!("pub fn {root_private_helper}"))
+            protocol_udp.contains(&format!("pub(crate) fn {root_private_helper}"))
                 && !protocol_lib.contains(root_private_helper),
-            "VMess low-level UDP helper `{root_private_helper}` should not be re-exported from protocols/vmess crate root"
+            "VMess low-level UDP helper `{root_private_helper}` should stay crate-private and should not be re-exported from protocols/vmess crate root"
         );
     }
     assert!(
@@ -3790,6 +3790,29 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             "VLESS low-level UDP helper `{root_private_helper}` should not be re-exported from protocols/vless crate root"
         );
     }
+    for crate_private_helper in [
+        "build_udp_packet",
+        "parse_udp_packet",
+        "decode_inbound_udp_packet",
+        "encode_udp_response",
+        "encode_mux_udp_response",
+        "encode_udp_flow_packet",
+        "decode_udp_flow_packet",
+    ] {
+        assert!(
+            protocol_shared.contains(&format!("pub(crate) fn {crate_private_helper}")),
+            "VLESS low-level UDP helper `{crate_private_helper}` should stay crate-private"
+        );
+    }
+    assert!(
+        protocol_shared.contains("pub struct VlessUdpPacketV2Codec")
+            && protocol_shared.contains("pub(crate) fn build_udp_packet_v2")
+            && protocol_shared.contains("pub(crate) fn parse_udp_packet_v2")
+            && !protocol_lib.contains("build_udp_packet_v2")
+            && !protocol_lib.contains("parse_udp_packet_v2")
+            && protocol_lib.contains("VlessUdpPacketV2Codec"),
+        "VLESS v2 UDP packet helpers should be exposed through VlessUdpPacketV2Codec, not raw root functions"
+    );
 }
 
 #[test]

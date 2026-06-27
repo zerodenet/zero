@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
 
 use vless::{
-    build_udp_packet_v2, format_uuid, parse_udp_packet_v2, parse_uuid, VlessInbound,
-    VlessInboundUdpCodec, VlessInboundUdpSession, VlessOutbound, VlessUdpPacketTarget, VlessUser,
-    VlessUserStore,
+    format_uuid, parse_uuid, VlessInbound, VlessInboundUdpCodec, VlessInboundUdpSession,
+    VlessOutbound, VlessUdpPacketTarget, VlessUdpPacketV2Codec, VlessUser, VlessUserStore,
 };
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
@@ -361,7 +360,9 @@ fn parse_udp_v2_with_address() {
     ];
     packet.extend_from_slice(b"dns query v2");
 
-    let parsed = parse_udp_packet_v2(&packet, None, None).expect("parse v2");
+    let parsed = VlessUdpPacketV2Codec
+        .decode_packet(&packet, None, None)
+        .expect("parse v2");
     assert_eq!(parsed.target, Address::Ipv4([8, 8, 8, 8]));
     assert_eq!(parsed.port, 53);
     assert_eq!(parsed.payload, b"dns query v2");
@@ -377,7 +378,9 @@ fn parse_udp_v2_without_address_reuse_cache() {
     packet.extend_from_slice(b"reuse address");
 
     let cached = Address::Domain("example.com".into());
-    let parsed = parse_udp_packet_v2(&packet, Some(&cached), Some(443)).expect("parse v2 reuse");
+    let parsed = VlessUdpPacketV2Codec
+        .decode_packet(&packet, Some(&cached), Some(443))
+        .expect("parse v2 reuse");
     assert_eq!(parsed.target, cached);
     assert_eq!(parsed.port, 443);
     assert_eq!(parsed.payload, b"reuse address");
@@ -386,7 +389,9 @@ fn parse_udp_v2_without_address_reuse_cache() {
 #[test]
 fn parse_udp_v2_without_address_fails_without_cache() {
     let packet = vec![0x00, 0x00, 0x00, b'x'];
-    let err = parse_udp_packet_v2(&packet, None, None).unwrap_err();
+    let err = VlessUdpPacketV2Codec
+        .decode_packet(&packet, None, None)
+        .unwrap_err();
     assert!(
         err.to_string().contains("cached"),
         "expected cache error, got: {err}"
@@ -399,7 +404,9 @@ fn parse_udp_v2_falls_back_to_v1() {
     let mut packet = vec![0x00, 0x35, 0x01, 8, 8, 8, 8];
     packet.extend_from_slice(b"v1 fallback");
 
-    let parsed = parse_udp_packet_v2(&packet, None, None).expect("v1 fallback");
+    let parsed = VlessUdpPacketV2Codec
+        .decode_packet(&packet, None, None)
+        .expect("v1 fallback");
     assert_eq!(parsed.target, Address::Ipv4([8, 8, 8, 8]));
     assert_eq!(parsed.port, 53);
     assert_eq!(parsed.payload, b"v1 fallback");
@@ -407,19 +414,22 @@ fn parse_udp_v2_falls_back_to_v1() {
 
 #[test]
 fn build_udp_v2_with_address() {
-    let packet = build_udp_packet_v2(
-        &Address::Ipv4([1, 1, 1, 1]),
-        8080,
-        b"hello",
-        false, // include address
-    )
-    .expect("build v2");
+    let packet = VlessUdpPacketV2Codec
+        .encode_packet(
+            &Address::Ipv4([1, 1, 1, 1]),
+            8080,
+            b"hello",
+            false, // include address
+        )
+        .expect("build v2");
     assert_eq!(&packet[..2], &[0x00, 0x00]); // marker
     assert_eq!(packet[2], 0x01); // flags: has address
     assert_eq!(u16::from_be_bytes([packet[3], packet[4]]), 8080);
     assert_eq!(packet[5], 0x01); // ipv4
 
-    let parsed = parse_udp_packet_v2(&packet, None, None).expect("roundtrip");
+    let parsed = VlessUdpPacketV2Codec
+        .decode_packet(&packet, None, None)
+        .expect("roundtrip");
     assert_eq!(parsed.target, Address::Ipv4([1, 1, 1, 1]));
     assert_eq!(parsed.port, 8080);
     assert_eq!(parsed.payload, b"hello");
@@ -427,13 +437,14 @@ fn build_udp_v2_with_address() {
 
 #[test]
 fn build_udp_v2_omit_address() {
-    let packet = build_udp_packet_v2(
-        &Address::Ipv4([0, 0, 0, 0]), // unused when omitting
-        0,                            // unused when omitting
-        b"streaming",
-        true, // omit address
-    )
-    .expect("build v2 omit");
+    let packet = VlessUdpPacketV2Codec
+        .encode_packet(
+            &Address::Ipv4([0, 0, 0, 0]), // unused when omitting
+            0,                            // unused when omitting
+            b"streaming",
+            true, // omit address
+        )
+        .expect("build v2 omit");
     assert_eq!(&packet[..2], &[0x00, 0x00]); // marker
     assert_eq!(packet[2], 0x00); // flags: no address
     assert_eq!(&packet[3..], b"streaming"); // payload starts after flags

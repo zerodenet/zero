@@ -361,7 +361,7 @@ impl VlessUdpFlowCodec {
     }
 }
 
-pub fn parse_udp_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
+pub(crate) fn parse_udp_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
     if packet.len() < 3 {
         return Err(Error::Protocol("VLESS UDP packet is too short"));
     }
@@ -420,7 +420,11 @@ pub fn parse_udp_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
     })
 }
 
-pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
+pub(crate) fn build_udp_packet(
+    address: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
     let mut packet = Vec::with_capacity(2 + 1 + payload.len());
     packet.extend_from_slice(&port.to_be_bytes());
     write_address(&mut packet, address)?;
@@ -444,7 +448,7 @@ const UDP_V2_MARKER: [u8; 2] = [0x00, 0x00];
 ///
 /// When `flags & 1 == 0` (no address in v2), the caller must provide the
 /// previously resolved `cached_target` / `cached_port`.
-pub fn parse_udp_packet_v2(
+pub(crate) fn parse_udp_packet_v2(
     packet: &[u8],
     cached_target: Option<&Address>,
     cached_port: Option<u16>,
@@ -537,7 +541,7 @@ fn parse_addr_from_packet(atyp: u8, data: &[u8]) -> Result<(Address, usize), Err
 ///
 /// When `omit_address` is true and a valid `cached` address/port would be
 /// reused by the peer, the address section is omitted, saving 3–21 bytes.
-pub fn build_udp_packet_v2(
+pub(crate) fn build_udp_packet_v2(
     address: &Address,
     port: u16,
     payload: &[u8],
@@ -570,11 +574,15 @@ fn hex_char(value: u8) -> char {
     }
 }
 
-pub fn decode_inbound_udp_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
+pub(crate) fn decode_inbound_udp_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
     parse_udp_packet(packet)
 }
 
-pub fn encode_udp_response(target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_udp_response(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
     build_udp_packet(target, port, payload)
 }
 
@@ -714,11 +722,11 @@ impl VlessInboundUdpSession {
     }
 }
 
-pub fn decode_udp_flow_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
+pub(crate) fn decode_udp_flow_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
     parse_udp_packet(packet)
 }
 
-pub fn encode_udp_flow_packet(
+pub(crate) fn encode_udp_flow_packet(
     target: &Address,
     port: u16,
     payload: &[u8],
@@ -726,7 +734,7 @@ pub fn encode_udp_flow_packet(
     build_udp_packet(target, port, payload)
 }
 
-pub fn encode_mux_udp_response(
+pub(crate) fn encode_mux_udp_response(
     mux_session_id: u16,
     target: &Address,
     port: u16,
@@ -734,4 +742,28 @@ pub fn encode_mux_udp_response(
 ) -> Result<Vec<u8>, Error> {
     let udp_packet = encode_udp_response(target, port, payload)?;
     Ok(crate::mux::encode_data_frame(mux_session_id, &udp_packet))
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct VlessUdpPacketV2Codec;
+
+impl VlessUdpPacketV2Codec {
+    pub fn decode_packet(
+        &self,
+        packet: &[u8],
+        cached_target: Option<&Address>,
+        cached_port: Option<u16>,
+    ) -> Result<VlessUdpPacket, Error> {
+        parse_udp_packet_v2(packet, cached_target, cached_port)
+    }
+
+    pub fn encode_packet(
+        &self,
+        address: &Address,
+        port: u16,
+        payload: &[u8],
+        omit_address: bool,
+    ) -> Result<Vec<u8>, Error> {
+        build_udp_packet_v2(address, port, payload, omit_address)
+    }
 }
