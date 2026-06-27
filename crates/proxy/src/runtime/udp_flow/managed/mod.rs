@@ -2,7 +2,7 @@ use std::any::Any;
 use std::sync::Arc;
 
 use tokio::task::JoinSet;
-use zero_core::Address;
+use zero_core::{Address, UdpFlowPacket};
 
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
@@ -37,6 +37,89 @@ pub(crate) trait ManagedUdpConnection: Send + Sync {
 }
 
 pub(crate) type SharedManagedUdpConnection = Arc<dyn ManagedUdpConnection>;
+
+#[async_trait::async_trait]
+pub(crate) trait ManagedTupleUdpSender: Send + Sync {
+    async fn send(&self, target: &Address, port: u16, payload: &[u8])
+        -> Result<usize, EngineError>;
+
+    fn subscribe_responses(&self) -> tokio::sync::broadcast::Receiver<(Address, u16, Vec<u8>)>;
+
+    fn closed_message(&self) -> &'static str;
+}
+
+struct ManagedTupleUdpConnection {
+    sender: Arc<dyn ManagedTupleUdpSender>,
+}
+
+#[async_trait::async_trait]
+impl ManagedUdpConnection for ManagedTupleUdpConnection {
+    async fn send(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        self.sender.send(target, port, payload).await
+    }
+
+    fn spawn_response_bridge(&self, chain_tasks: &mut JoinSet<ChainTask>, session_id: u64) {
+        spawn_tuple_response_bridge(
+            chain_tasks,
+            self.sender.subscribe_responses(),
+            session_id,
+            self.sender.closed_message(),
+        );
+    }
+}
+
+pub(crate) fn managed_tuple_udp_connection(
+    sender: Arc<dyn ManagedTupleUdpSender>,
+) -> SharedManagedUdpConnection {
+    Arc::new(ManagedTupleUdpConnection { sender })
+}
+
+#[async_trait::async_trait]
+pub(crate) trait ManagedPacketUdpSender: Send + Sync {
+    async fn send(&self, target: &Address, port: u16, payload: &[u8])
+        -> Result<usize, EngineError>;
+
+    fn subscribe_responses(&self) -> tokio::sync::broadcast::Receiver<UdpFlowPacket>;
+
+    fn closed_message(&self) -> &'static str;
+}
+
+struct ManagedPacketUdpConnection {
+    sender: Arc<dyn ManagedPacketUdpSender>,
+}
+
+#[async_trait::async_trait]
+impl ManagedUdpConnection for ManagedPacketUdpConnection {
+    async fn send(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        self.sender.send(target, port, payload).await
+    }
+
+    fn spawn_response_bridge(&self, chain_tasks: &mut JoinSet<ChainTask>, session_id: u64) {
+        spawn_response_bridge(
+            chain_tasks,
+            self.sender.subscribe_responses(),
+            session_id,
+            self.sender.closed_message(),
+            |packet| (packet.target, packet.port, packet.payload),
+        );
+    }
+}
+
+pub(crate) fn managed_packet_udp_connection(
+    sender: Arc<dyn ManagedPacketUdpSender>,
+) -> SharedManagedUdpConnection {
+    Arc::new(ManagedPacketUdpConnection { sender })
+}
 
 #[async_trait::async_trait]
 pub(crate) trait ManagedDatagramUdpConnection: Send + Sync {

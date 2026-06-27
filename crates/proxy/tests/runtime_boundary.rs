@@ -2328,7 +2328,9 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !model.contains("vless::VlessUdpFlowSender")
             && !runtime.contains("VlessUdpFlowConnection::new")
             && !runtime.contains("VlessUdpFlowHandle")
-            && runtime.contains("spawn_tuple_response_bridge")
+            && runtime.contains("managed_tuple_udp_connection")
+            && !runtime.contains("impl ManagedUdpConnection for vless::VlessUdpFlowConnection")
+            && !runtime.contains("spawn_tuple_response_bridge")
             && !runtime.contains(".recv().await")
             && !runtime.contains("EngineError::Io")
             && protocol_outbound.contains("pub async fn establish_udp_flow_with_initial_packet")
@@ -2652,7 +2654,9 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !model.contains("vmess::VmessUdpFlowSender")
             && !runtime.contains("VmessUdpFlowConnection::new")
             && !runtime.contains("VmessUdpFlowHandle")
-            && runtime.contains("spawn_tuple_response_bridge")
+            && runtime.contains("managed_tuple_udp_connection")
+            && !runtime.contains("impl ManagedUdpConnection for vmess::VmessUdpFlowConnection")
+            && !runtime.contains("spawn_tuple_response_bridge")
             && !runtime.contains(".recv().await")
             && !runtime.contains("EngineError::Io")
             && protocol.contains("pub async fn establish_udp_flow_with_initial_packet")
@@ -3164,10 +3168,12 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         "Hysteria2 UDP establish glue should delegate QUIC/profile setup and protocol flow pumping to outbound/hysteria2"
     );
     assert!(
-        establish.contains("impl ManagedUdpConnection for hysteria2::Hysteria2UdpFlowConnection")
+        !establish
+            .contains("impl ManagedUdpConnection for hysteria2::Hysteria2UdpFlowConnection")
+            && establish.contains("managed_tuple_udp_connection")
             && establish.contains("SharedManagedUdpConnection")
             && !establish.contains("hysteria2::Hysteria2UdpFlowSession"),
-        "Hysteria2 UDP establish glue should expose a neutral proxy connection capability, not a raw flow session"
+        "Hysteria2 UDP establish glue should expose a neutral managed connection wrapper, not implement runtime traits on the raw flow session"
     );
     assert!(
         protocol.contains("struct Hysteria2UdpFlowIo")
@@ -6998,11 +7004,13 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
             && !send.contains("self.upstreams.insert(")
             && !send.contains("spawn_trojan_response_bridge")
             && !send.contains("spawn_response_bridge(\n")
-            && establish.contains("impl ManagedUdpConnection for trojan::TrojanUdpFlowConnection")
-            && establish.contains("spawn_response_bridge")
+            && !establish.contains("impl ManagedUdpConnection for trojan::TrojanUdpFlowConnection")
+            && establish.contains("managed_packet_udp_connection")
+            && !establish.contains("spawn_response_bridge")
+            && managed.contains("pub(crate) fn managed_packet_udp_connection")
             && managed.contains("pub(crate) fn spawn_response_bridge<T, F>")
             && managed.contains("FnMut(T) -> (Address, u16, Vec<u8>)"),
-        "Trojan UDP response bridge should hang off the neutral stream connection bridge, not send orchestration"
+        "Trojan UDP response bridge should hang off the neutral managed packet connection bridge, not adapter send orchestration"
     );
 }
 
@@ -7561,11 +7569,13 @@ fn mieru_udp_response_bridge_lives_outside_manager() {
             && !send.contains(".spawn_response_bridge(")
             && !send.contains("self.upstreams.insert(")
             && !send.contains("spawn_tuple_response_bridge")
-            && establish.contains("impl ManagedUdpConnection for mieru::MieruUdpFlowConnection")
-            && establish.contains("spawn_tuple_response_bridge")
+            && !establish.contains("impl ManagedUdpConnection for mieru::MieruUdpFlowConnection")
+            && establish.contains("managed_tuple_udp_connection")
+            && !establish.contains("spawn_tuple_response_bridge")
+            && managed.contains("pub(crate) fn managed_tuple_udp_connection")
             && managed.contains("pub(crate) fn spawn_tuple_response_bridge")
             && managed.contains("broadcast::Receiver<(Address, u16, Vec<u8>)>"),
-        "Mieru UDP response bridge should hang off the neutral stream connection bridge, not send orchestration"
+        "Mieru UDP response bridge should hang off the neutral managed tuple connection bridge, not adapter send orchestration"
     );
 }
 
@@ -8226,11 +8236,14 @@ fn h2_udp_response_bridge_lives_outside_manager() {
     }
     assert!(
         !bridge.exists()
-            && establish.contains("spawn_tuple_response_bridge")
+            && !establish.contains("impl ManagedUdpConnection for hysteria2::Hysteria2UdpFlowConnection")
+            && establish.contains("managed_tuple_udp_connection")
+            && !establish.contains("spawn_tuple_response_bridge")
+            && managed.contains("pub(crate) fn managed_tuple_udp_connection")
             && managed.contains("pub(crate) fn spawn_tuple_response_bridge")
             && managed.contains("broadcast::Receiver<(Address, u16, Vec<u8>)>")
             && managed.contains("closed_message"),
-        "Hysteria2 UDP response bridge should use generic managed UDP response glue, not h2_manager/bridge.rs"
+        "Hysteria2 UDP response bridge should use generic managed tuple connection glue, not h2_manager/bridge.rs"
     );
 }
 

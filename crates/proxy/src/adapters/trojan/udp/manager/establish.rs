@@ -1,40 +1,38 @@
 use super::connect;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
-    spawn_response_bridge, ManagedUdpConnection, SharedManagedUdpConnection,
+    managed_packet_udp_connection, ManagedPacketUdpSender, SharedManagedUdpConnection,
 };
-use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use std::sync::Arc;
 use zero_core::Session;
 use zero_engine::EngineError;
 
+struct TrojanManagedUdpSender {
+    connection: trojan::TrojanUdpFlowConnection,
+}
+
 #[async_trait::async_trait]
-impl ManagedUdpConnection for trojan::TrojanUdpFlowConnection {
+impl ManagedPacketUdpSender for TrojanManagedUdpSender {
     async fn send(
         &self,
         target: &zero_core::Address,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        trojan::TrojanUdpFlowConnection::send(self, target, port, payload)
+        self.connection
+            .send(target, port, payload)
             .await
             .map_err(|error| EngineError::Io(std::io::Error::other(format!("{error}"))))
     }
 
-    fn spawn_response_bridge(
-        &self,
-        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
-        session_id: u64,
-    ) {
-        spawn_response_bridge(
-            chain_tasks,
-            trojan::TrojanUdpFlowConnection::subscribe_responses(self),
-            session_id,
-            "trojan upstream closed",
-            |packet| (packet.target, packet.port, packet.payload),
-        );
+    fn subscribe_responses(&self) -> trojan::TrojanUdpFlowResponseReceiver {
+        self.connection.subscribe_responses()
+    }
+
+    fn closed_message(&self) -> &'static str {
+        "trojan upstream closed"
     }
 }
 
@@ -71,5 +69,7 @@ async fn packet_stream(
     let connection = trojan::establish_udp_flow_with_resume(stream, session, resume)
         .await
         .map_err(|error| EngineError::Io(std::io::Error::other(format!("{error}"))))?;
-    Ok(Arc::new(connection))
+    Ok(managed_packet_udp_connection(Arc::new(
+        TrojanManagedUdpSender { connection },
+    )))
 }

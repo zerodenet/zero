@@ -3,37 +3,36 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
 use crate::runtime::udp_flow::managed::{
-    spawn_tuple_response_bridge, ManagedStreamConnection, ManagedUdpConnection,
+    managed_tuple_udp_connection, ManagedStreamConnection, ManagedTupleUdpSender,
 };
-use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use std::sync::Arc;
 
+struct VlessManagedUdpSender {
+    connection: vless::VlessUdpFlowConnection,
+}
+
 #[async_trait::async_trait]
-impl ManagedUdpConnection for vless::VlessUdpFlowConnection {
+impl ManagedTupleUdpSender for VlessManagedUdpSender {
     async fn send(
         &self,
         target: &zero_core::Address,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        vless::VlessUdpFlowConnection::send(self, target, port, payload)
+        self.connection
+            .send(target, port, payload)
             .await
             .map_err(EngineError::from)
     }
 
-    fn spawn_response_bridge(
-        &self,
-        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
-        session_id: u64,
-    ) {
-        spawn_tuple_response_bridge(
-            chain_tasks,
-            vless::VlessUdpFlowConnection::subscribe_responses(self),
-            session_id,
-            "vless upstream closed",
-        );
+    fn subscribe_responses(&self) -> vless::VlessUdpFlowResponseReceiver {
+        self.connection.subscribe_responses()
+    }
+
+    fn closed_message(&self) -> &'static str {
+        "vless upstream closed"
     }
 }
 
@@ -50,7 +49,9 @@ pub(super) async fn over_stream(
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
     Ok(ManagedStreamConnection::new(
         session.id,
-        Arc::new(established.into_connection()),
+        managed_tuple_udp_connection(Arc::new(VlessManagedUdpSender {
+            connection: established.into_connection(),
+        })),
     ))
 }
 

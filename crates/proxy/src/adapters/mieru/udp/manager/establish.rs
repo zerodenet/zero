@@ -1,40 +1,39 @@
 use super::connect;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
-    spawn_tuple_response_bridge, ManagedUdpConnection, SharedManagedUdpConnection,
+    managed_tuple_udp_connection, ManagedTupleUdpSender, SharedManagedUdpConnection,
 };
-use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use std::sync::Arc;
 use zero_engine::EngineError;
 
+struct MieruManagedUdpSender {
+    connection: mieru::MieruUdpFlowConnection,
+}
+
 #[async_trait::async_trait]
-impl ManagedUdpConnection for mieru::MieruUdpFlowConnection {
+impl ManagedTupleUdpSender for MieruManagedUdpSender {
     async fn send(
         &self,
         target: &zero_core::Address,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        mieru::MieruUdpFlowConnection::send(self, target, port, payload)
+        self.connection
+            .send(target, port, payload)
             .await
             .map_err(|error| {
                 EngineError::Io(std::io::Error::other(format!("mieru udp send: {error}")))
             })
     }
 
-    fn spawn_response_bridge(
-        &self,
-        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
-        session_id: u64,
-    ) {
-        spawn_tuple_response_bridge(
-            chain_tasks,
-            mieru::MieruUdpFlowConnection::subscribe_responses(self),
-            session_id,
-            "mieru upstream closed",
-        );
+    fn subscribe_responses(&self) -> mieru::MieruUdpFlowResponseReceiver {
+        self.connection.subscribe_responses()
+    }
+
+    fn closed_message(&self) -> &'static str {
+        "mieru upstream closed"
     }
 }
 
@@ -58,5 +57,7 @@ pub(super) async fn packet_stream(
                 "mieru udp associate: {error}"
             )))
         })?;
-    Ok(Arc::new(connection))
+    Ok(managed_tuple_udp_connection(Arc::new(
+        MieruManagedUdpSender { connection },
+    )))
 }

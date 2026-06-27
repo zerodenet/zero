@@ -1,33 +1,35 @@
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
-    spawn_tuple_response_bridge, ManagedUdpConnection, SharedManagedUdpConnection,
+    managed_tuple_udp_connection, ManagedTupleUdpSender, SharedManagedUdpConnection,
 };
-use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use std::sync::Arc;
-use tokio::task::JoinSet;
 use zero_engine::EngineError;
 
+struct Hysteria2ManagedUdpSender {
+    connection: hysteria2::Hysteria2UdpFlowConnection,
+}
+
 #[async_trait::async_trait]
-impl ManagedUdpConnection for hysteria2::Hysteria2UdpFlowConnection {
+impl ManagedTupleUdpSender for Hysteria2ManagedUdpSender {
     async fn send(
         &self,
         target: &zero_core::Address,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        hysteria2::Hysteria2UdpFlowConnection::send(self, target, port, payload)
+        self.connection
+            .send(target, port, payload)
             .await
             .map_err(|error| EngineError::Io(std::io::Error::other(format!("{error}"))))
     }
 
-    fn spawn_response_bridge(&self, chain_tasks: &mut JoinSet<ChainTask>, session_id: u64) {
-        spawn_tuple_response_bridge(
-            chain_tasks,
-            hysteria2::Hysteria2UdpFlowConnection::subscribe_responses(self),
-            session_id,
-            "h2 upstream closed",
-        );
+    fn subscribe_responses(&self) -> hysteria2::Hysteria2UdpFlowResponseReceiver {
+        self.connection.subscribe_responses()
+    }
+
+    fn closed_message(&self) -> &'static str {
+        "h2 upstream closed"
     }
 }
 
@@ -40,5 +42,9 @@ pub(super) async fn upstream(
         crate::outbound::hysteria2::establish_udp_flow_session(endpoint, initial_packet, resume)
             .await?;
 
-    Ok(Arc::new(session))
+    Ok(managed_tuple_udp_connection(Arc::new(
+        Hysteria2ManagedUdpSender {
+            connection: session,
+        },
+    )))
 }
