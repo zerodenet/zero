@@ -262,10 +262,13 @@ pub struct VlessEstablishedUdpFlow {
 pub type VlessUdpFlowResponse = (zero_core::Address, u16, Vec<u8>);
 
 #[cfg(feature = "reality")]
-pub type VlessUdpFlowResponses = broadcast::Sender<VlessUdpFlowResponse>;
+type VlessUdpFlowResponses = broadcast::Sender<VlessUdpFlowResponse>;
 
 #[cfg(feature = "reality")]
-pub struct VlessUdpFlowSend {
+pub type VlessUdpFlowResponseReceiver = broadcast::Receiver<VlessUdpFlowResponse>;
+
+#[cfg(feature = "reality")]
+struct VlessUdpFlowSend {
     packet: zero_core::UdpFlowPacket,
     result_tx: oneshot::Sender<Result<usize, Error>>,
 }
@@ -299,14 +302,44 @@ impl VlessInitialUdpFlowPacket {
 
 #[cfg(feature = "reality")]
 #[derive(Clone)]
-pub struct VlessUdpFlowSender {
+struct VlessUdpFlowSender {
     send_tx: mpsc::Sender<VlessUdpFlowSend>,
 }
 
 #[cfg(feature = "reality")]
 pub struct VlessUdpFlowHandle {
-    pub sender: VlessUdpFlowSender,
-    pub responses: VlessUdpFlowResponses,
+    sender: VlessUdpFlowSender,
+    responses: VlessUdpFlowResponses,
+}
+
+#[cfg(feature = "reality")]
+#[derive(Clone)]
+pub struct VlessUdpFlowSession {
+    sender: VlessUdpFlowSender,
+    responses: VlessUdpFlowResponses,
+}
+
+#[cfg(feature = "reality")]
+impl VlessUdpFlowSession {
+    pub fn new(handle: VlessUdpFlowHandle) -> Self {
+        Self {
+            sender: handle.sender,
+            responses: handle.responses,
+        }
+    }
+
+    pub async fn send(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.sender.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> VlessUdpFlowResponseReceiver {
+        self.responses.subscribe()
+    }
 }
 
 #[cfg(feature = "reality")]

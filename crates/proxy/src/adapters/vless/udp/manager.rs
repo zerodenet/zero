@@ -7,7 +7,6 @@ pub(crate) mod model;
 
 use std::collections::HashMap;
 
-use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
@@ -23,20 +22,11 @@ use model::{
     VlessUdpUpstreamRequest,
 };
 
-type VlessFlowResponse = (Address, u16, Vec<u8>);
-type VlessResponseSender = broadcast::Sender<VlessFlowResponse>;
-
-fn upstream_from_stream(
-    session_id: u64,
-    flow: vless::VlessUdpFlowHandle,
-) -> (VlessUdpUpstream, VlessResponseSender) {
-    (
-        VlessUdpUpstream {
-            session_id,
-            sender: flow.sender,
-        },
-        flow.responses,
-    )
+fn upstream_from_stream(session_id: u64, flow: vless::VlessUdpFlowHandle) -> VlessUdpUpstream {
+    VlessUdpUpstream {
+        session_id,
+        session: vless::VlessUdpFlowSession::new(flow),
+    }
 }
 
 /// Establishes a VLESS UDP upstream over an already connected stream.
@@ -46,7 +36,7 @@ async fn establish_vless_udp_upstream_over_stream(
     identity: vless::VlessUdpIdentity,
     initial_payload: &[u8],
     mut stream: TcpRelayStream,
-) -> Result<(VlessUdpUpstream, VlessResponseSender), EngineError> {
+) -> Result<VlessUdpUpstream, EngineError> {
     let flow_io = vless::establish_udp_flow(&mut stream, session, identity).await?;
     let initial_packet = vless::VlessInitialUdpFlowPacket::from_parts(
         &session.target,
@@ -70,7 +60,7 @@ async fn establish_vless_udp_upstream(
     identity: vless::VlessUdpIdentity,
     initial_payload: &[u8],
     transport: Option<&crate::transport::VlessUdpTransportOptions<'_>>,
-) -> Result<(VlessUdpUpstream, VlessResponseSender), EngineError> {
+) -> Result<VlessUdpUpstream, EngineError> {
     let socket = proxy
         .protocols
         .direct_connector()
@@ -94,7 +84,7 @@ async fn establish_vless_udp_upstream(
 /// Response bridge tasks are spawned into the shared `chain_tasks` JoinSet
 /// in [`UdpDispatch`], so all chain outbound responses are polled uniformly.
 pub(crate) struct VlessUdpOutboundManager {
-    upstreams: HashMap<(Address, u16), (VlessUdpUpstream, VlessResponseSender)>,
+    upstreams: HashMap<(Address, u16), VlessUdpUpstream>,
 }
 
 impl VlessUdpOutboundManager {
@@ -171,7 +161,7 @@ impl VlessUdpOutboundManager {
             request.split_http,
         )
         .await?;
-        let (upstream, recv_tx) = establish_vless_udp_upstream_over_stream(
+        let upstream = establish_vless_udp_upstream_over_stream(
             request.proxy,
             request.session,
             request.identity,
@@ -182,7 +172,6 @@ impl VlessUdpOutboundManager {
         self.insert_upstream(
             (request.session.target.clone(), request.session.port),
             upstream,
-            recv_tx,
         );
         self.spawn_bridge(
             chain_tasks,
@@ -214,7 +203,7 @@ impl VlessUdpOutboundManager {
             },
         )
         .await?;
-        let (upstream, recv_tx) = establish_vless_udp_upstream_over_stream(
+        let upstream = establish_vless_udp_upstream_over_stream(
             request.proxy,
             request.session,
             request.identity,
@@ -225,7 +214,6 @@ impl VlessUdpOutboundManager {
         self.insert_upstream(
             (request.session.target.clone(), request.session.port),
             upstream,
-            recv_tx,
         );
         self.spawn_bridge(
             chain_tasks,
@@ -245,24 +233,19 @@ impl VlessUdpOutboundManager {
         port: u16,
         payload: &[u8],
     ) -> Result<Option<u64>, EngineError> {
-        let Some((upstream, _)) = self.upstreams.get(&(target.clone(), port)) else {
+        let Some(upstream) = self.upstreams.get(&(target.clone(), port)) else {
             return Ok(None);
         };
 
         proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
-        let packet_len = upstream.sender.send(target, port, payload).await? as u64;
+        let packet_len = upstream.session.send(target, port, payload).await? as u64;
         proxy.record_session_outbound_tx(upstream.session_id, packet_len);
         self.spawn_bridge(chain_tasks, target.clone(), port, upstream.session_id);
         Ok(Some(upstream.session_id))
     }
 
-    fn insert_upstream(
-        &mut self,
-        key: (Address, u16),
-        upstream: VlessUdpUpstream,
-        recv_tx: VlessResponseSender,
-    ) {
-        self.upstreams.insert(key, (upstream, recv_tx));
+    fn insert_upstream(&mut self, key: (Address, u16), upstream: VlessUdpUpstream) {
+        self.upstreams.insert(key, upstream);
     }
 
     /// Spawn a one-shot bridge task for a cached upstream.
@@ -273,8 +256,8 @@ impl VlessUdpOutboundManager {
         port: u16,
         session_id: u64,
     ) {
-        if let Some((_, recv_tx)) = self.upstreams.get(&(target.clone(), port)) {
-            let mut recv_rx = recv_tx.subscribe();
+        if let Some(upstream) = self.upstreams.get(&(target.clone(), port)) {
+            let mut recv_rx = upstream.session.subscribe_responses();
             chain_tasks.spawn(async move {
                 let packet = recv_rx
                     .recv()
@@ -294,13 +277,13 @@ impl VlessUdpOutboundManager {
     ) -> Result<(), EngineError> {
         let key = (request.target.clone(), request.port);
 
-        if let Some((upstream, _)) = self.upstreams.get(&key) {
+        if let Some(upstream) = self.upstreams.get(&key) {
             request.proxy.record_session_inbound_rx(
                 upstream.session_id,
                 request.initial_payload.len() as u64,
             );
             let packet_len = upstream
-                .sender
+                .session
                 .send(&request.target, request.port, request.initial_payload)
                 .await? as u64;
             request
@@ -327,9 +310,9 @@ impl VlessUdpOutboundManager {
         )
         .await
         {
-            Ok((upstream, recv_tx)) => {
+            Ok(upstream) => {
                 let session_id = upstream.session_id;
-                self.upstreams.insert(key, (upstream, recv_tx));
+                self.upstreams.insert(key, upstream);
                 // Spawn bridge for the first response
                 self.spawn_bridge(chain_tasks, request.target, request.port, session_id);
                 Ok(())

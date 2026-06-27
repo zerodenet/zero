@@ -2170,10 +2170,15 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && runtime.contains("vless::VlessInitialUdpFlowPacket::from_parts")
             && runtime.contains(".encoded_len(&flow_io)")
             && !runtime.contains("broadcast::channel::<VlessFlowResponse>")
-            && model.contains("vless::VlessUdpFlowSender")
+            && model.contains("vless::VlessUdpFlowSession")
+            && !model.contains("vless::VlessUdpFlowSender")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
             && protocol_outbound.contains("tokio::select!")
-            && protocol_outbound.contains("VlessUdpFlowSender")
+            && protocol_outbound.contains("struct VlessUdpFlowSender")
+            && !protocol_outbound.contains("pub struct VlessUdpFlowSender")
+            && protocol_outbound.contains("pub struct VlessUdpFlowSession")
+            && protocol_outbound.contains("pub type VlessUdpFlowResponseReceiver")
+            && !protocol_outbound.contains("pub type VlessUdpFlowResponses")
             && protocol_outbound.contains("pub struct VlessInitialUdpFlowPacket"),
         "VLESS UDP runtime should keep protocol flow I/O inside protocols/vless and leave proxy manager as cache/bridge glue"
     );
@@ -2197,9 +2202,14 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     }
     assert!(
         protocol_outbound.contains("pub struct VlessUdpFlowHandle")
-            && protocol_outbound.contains("pub struct VlessUdpFlowSender")
+            && protocol_outbound.contains("struct VlessUdpFlowSender")
+            && !protocol_outbound.contains("pub struct VlessUdpFlowSender")
+            && protocol_outbound.contains("pub struct VlessUdpFlowSession")
             && protocol_outbound.contains("pub struct VlessInitialUdpFlowPacket")
             && protocol_outbound.contains("pub type VlessUdpFlowResponse")
+            && protocol_outbound.contains("pub type VlessUdpFlowResponseReceiver")
+            && !protocol_outbound.contains("pub type VlessUdpFlowResponses")
+            && !protocol_outbound.contains("pub struct VlessUdpFlowSend")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && !protocol_outbound.contains("pub fn open_mux_udp_flow")
             && !protocol_outbound.contains("mpsc::channel::<VlessUdpFlowPacket>")
