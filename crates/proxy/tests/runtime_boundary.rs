@@ -2424,10 +2424,15 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && runtime.contains("vmess::VmessInitialUdpFlowPacket::from_parts")
             && runtime.contains("initial_packet.encoded_len(&flow_io)")
             && !runtime.contains("broadcast::channel::<VmessFlowResponse>")
-            && model.contains("vmess::VmessUdpFlowSender")
+            && model.contains("vmess::VmessUdpFlowSession")
+            && !model.contains("vmess::VmessUdpFlowSender")
             && protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("tokio::select!")
-            && protocol.contains("VmessUdpFlowSender")
+            && protocol.contains("struct VmessUdpFlowSender")
+            && !protocol.contains("pub struct VmessUdpFlowSender")
+            && protocol.contains("pub struct VmessUdpFlowSession")
+            && protocol.contains("pub type VmessUdpFlowResponseReceiver")
+            && !protocol.contains("pub type VmessUdpFlowResponses")
             && protocol.contains("pub struct VmessInitialUdpFlowPacket"),
         "VMess UDP runtime should keep protocol flow I/O inside protocols/vmess and leave proxy manager as cache/bridge glue"
     );
@@ -2451,9 +2456,14 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     }
     assert!(
         protocol.contains("pub struct VmessUdpFlowHandle")
-            && protocol.contains("pub struct VmessUdpFlowSender")
+            && protocol.contains("struct VmessUdpFlowSender")
+            && !protocol.contains("pub struct VmessUdpFlowSender")
+            && protocol.contains("pub struct VmessUdpFlowSession")
             && protocol.contains("pub struct VmessInitialUdpFlowPacket")
             && protocol.contains("pub type VmessUdpFlowResponse")
+            && protocol.contains("pub type VmessUdpFlowResponseReceiver")
+            && !protocol.contains("pub type VmessUdpFlowResponses")
+            && !protocol.contains("pub struct VmessUdpFlowSend")
             && !protocol.contains("pub async fn open_udp_flow")
             && !protocol.contains("pub fn open_mux_udp_flow")
             && !protocol.contains("mpsc::channel::<VmessUdpFlowPacket>")

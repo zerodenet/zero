@@ -6,7 +6,7 @@ use crate::runtime::Proxy;
 #[derive(Clone)]
 pub(super) struct VmessUdpUpstream {
     pub(super) session_id: u64,
-    pub(super) sender: vmess::VmessUdpFlowSender,
+    pub(super) session: vmess::VmessUdpFlowSession,
 }
 
 pub(crate) struct VmessUdpStartFlow<'a> {

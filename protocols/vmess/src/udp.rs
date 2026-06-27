@@ -302,9 +302,11 @@ pub struct VmessEstablishedUdpFlow {
 
 pub type VmessUdpFlowResponse = (Address, u16, Vec<u8>);
 
-pub type VmessUdpFlowResponses = broadcast::Sender<VmessUdpFlowResponse>;
+type VmessUdpFlowResponses = broadcast::Sender<VmessUdpFlowResponse>;
 
-pub struct VmessUdpFlowSend {
+pub type VmessUdpFlowResponseReceiver = broadcast::Receiver<VmessUdpFlowResponse>;
+
+struct VmessUdpFlowSend {
     packet: zero_core::UdpFlowPacket,
     result_tx: oneshot::Sender<Result<usize, Error>>,
 }
@@ -335,13 +337,36 @@ impl VmessInitialUdpFlowPacket {
 }
 
 #[derive(Clone)]
-pub struct VmessUdpFlowSender {
+struct VmessUdpFlowSender {
     send_tx: mpsc::Sender<VmessUdpFlowSend>,
 }
 
 pub struct VmessUdpFlowHandle {
-    pub sender: VmessUdpFlowSender,
-    pub responses: VmessUdpFlowResponses,
+    sender: VmessUdpFlowSender,
+    responses: VmessUdpFlowResponses,
+}
+
+#[derive(Clone)]
+pub struct VmessUdpFlowSession {
+    sender: VmessUdpFlowSender,
+    responses: VmessUdpFlowResponses,
+}
+
+impl VmessUdpFlowSession {
+    pub fn new(handle: VmessUdpFlowHandle) -> Self {
+        Self {
+            sender: handle.sender,
+            responses: handle.responses,
+        }
+    }
+
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        self.sender.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> VmessUdpFlowResponseReceiver {
+        self.responses.subscribe()
+    }
 }
 
 impl VmessUdpFlowSender {

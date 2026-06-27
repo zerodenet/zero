@@ -8,7 +8,6 @@ pub(crate) mod model;
 
 use std::collections::HashMap;
 
-use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 use zero_engine::EngineError;
@@ -21,20 +20,11 @@ use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use model::{VmessUdpRelayFlowStart, VmessUdpStartFlow, VmessUdpUpstream, VmessUdpUpstreamRequest};
 
-type VmessFlowResponse = (Address, u16, Vec<u8>);
-type VmessResponseSender = broadcast::Sender<VmessFlowResponse>;
-
-fn upstream_from_stream(
-    session_id: u64,
-    flow: vmess::VmessUdpFlowHandle,
-) -> (VmessUdpUpstream, VmessResponseSender) {
-    (
-        VmessUdpUpstream {
-            session_id,
-            sender: flow.sender,
-        },
-        flow.responses,
-    )
+fn upstream_from_stream(session_id: u64, flow: vmess::VmessUdpFlowHandle) -> VmessUdpUpstream {
+    VmessUdpUpstream {
+        session_id,
+        session: vmess::VmessUdpFlowSession::new(flow),
+    }
 }
 
 async fn establish_vmess_udp_upstream_over_stream(
@@ -43,7 +33,7 @@ async fn establish_vmess_udp_upstream_over_stream(
     identity: vmess::VmessUdpIdentity,
     initial_payload: &[u8],
     stream: TcpRelayStream,
-) -> Result<(VmessUdpUpstream, VmessResponseSender), EngineError> {
+) -> Result<VmessUdpUpstream, EngineError> {
     let (stream, flow_io) = vmess::establish_udp_flow(stream, session, identity).await?;
     let initial_packet = vmess::VmessInitialUdpFlowPacket::from_parts(
         &session.target,
@@ -60,7 +50,7 @@ async fn establish_vmess_udp_upstream_over_stream(
 
 async fn establish_vmess_udp_upstream(
     request: &VmessUdpUpstreamRequest<'_>,
-) -> Result<(VmessUdpUpstream, VmessResponseSender), EngineError> {
+) -> Result<VmessUdpUpstream, EngineError> {
     let flow_io = vmess::VmessEstablishedUdpFlow::default();
     let initial_packet = vmess::VmessInitialUdpFlowPacket::from_parts(
         &request.session.target,
@@ -125,7 +115,7 @@ async fn establish_vmess_udp_upstream(
 }
 
 pub(crate) struct VmessUdpOutboundManager {
-    upstreams: HashMap<(Address, u16), (VmessUdpUpstream, VmessResponseSender)>,
+    upstreams: HashMap<(Address, u16), VmessUdpUpstream>,
 }
 
 impl VmessUdpOutboundManager {
@@ -172,7 +162,7 @@ impl VmessUdpOutboundManager {
             },
         )
         .await?;
-        let (upstream, recv_tx) = establish_vmess_udp_upstream_over_stream(
+        let upstream = establish_vmess_udp_upstream_over_stream(
             request.proxy,
             request.session,
             request.identity,
@@ -183,7 +173,6 @@ impl VmessUdpOutboundManager {
         self.insert_upstream(
             (request.session.target.clone(), request.session.port),
             upstream,
-            recv_tx,
         );
         self.spawn_bridge(
             chain_tasks,
@@ -202,24 +191,19 @@ impl VmessUdpOutboundManager {
         port: u16,
         payload: &[u8],
     ) -> Result<Option<u64>, EngineError> {
-        let Some((upstream, _)) = self.upstreams.get(&(target.clone(), port)) else {
+        let Some(upstream) = self.upstreams.get(&(target.clone(), port)) else {
             return Ok(None);
         };
 
         proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
-        let packet_len = upstream.sender.send(target, port, payload).await? as u64;
+        let packet_len = upstream.session.send(target, port, payload).await? as u64;
         proxy.record_session_outbound_tx(upstream.session_id, packet_len);
         self.spawn_bridge(chain_tasks, target.clone(), port, upstream.session_id);
         Ok(Some(upstream.session_id))
     }
 
-    fn insert_upstream(
-        &mut self,
-        key: (Address, u16),
-        upstream: VmessUdpUpstream,
-        recv_tx: VmessResponseSender,
-    ) {
-        self.upstreams.insert(key, (upstream, recv_tx));
+    fn insert_upstream(&mut self, key: (Address, u16), upstream: VmessUdpUpstream) {
+        self.upstreams.insert(key, upstream);
     }
 
     pub(super) fn spawn_bridge(
@@ -229,8 +213,8 @@ impl VmessUdpOutboundManager {
         port: u16,
         session_id: u64,
     ) {
-        if let Some((_, recv_tx)) = self.upstreams.get(&(target.clone(), port)) {
-            let mut recv_rx = recv_tx.subscribe();
+        if let Some(upstream) = self.upstreams.get(&(target.clone(), port)) {
+            let mut recv_rx = upstream.session.subscribe_responses();
             chain_tasks.spawn(async move {
                 let packet = recv_rx
                     .recv()
@@ -247,13 +231,13 @@ impl VmessUdpOutboundManager {
         request: VmessUdpUpstreamRequest<'_>,
     ) -> Result<(), EngineError> {
         let key = (request.target.clone(), request.port);
-        if let Some((upstream, _)) = self.upstreams.get(&key) {
+        if let Some(upstream) = self.upstreams.get(&key) {
             request.proxy.record_session_inbound_rx(
                 upstream.session_id,
                 request.initial_payload.len() as u64,
             );
             let packet_len = upstream
-                .sender
+                .session
                 .send(&request.target, request.port, request.initial_payload)
                 .await? as u64;
             request
@@ -268,9 +252,9 @@ impl VmessUdpOutboundManager {
             return Ok(());
         }
 
-        let (upstream, recv_tx) = establish_vmess_udp_upstream(&request).await?;
+        let upstream = establish_vmess_udp_upstream(&request).await?;
         let session_id = upstream.session_id;
-        self.upstreams.insert(key, (upstream, recv_tx));
+        self.upstreams.insert(key, upstream);
         self.spawn_bridge(chain_tasks, request.target, request.port, session_id);
         Ok(())
     }
