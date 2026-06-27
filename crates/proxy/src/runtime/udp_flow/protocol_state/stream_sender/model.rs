@@ -6,7 +6,7 @@ use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 
 #[async_trait::async_trait]
-pub(crate) trait CachedProtocolFlowSender: Send + Sync {
+pub(crate) trait ManagedStreamFlowSender: Send + Sync {
     async fn send_existing(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
@@ -17,23 +17,23 @@ pub(crate) trait CachedProtocolFlowSender: Send + Sync {
     ) -> Result<Option<u64>, zero_engine::EngineError>;
 }
 
-pub(crate) struct CachedUdpHandlers {
-    pub(crate) cached: Vec<Box<dyn CachedProtocolFlowSender>>,
+pub(crate) struct ManagedStreamSenderHandlers {
+    pub(crate) stream: Vec<Box<dyn ManagedStreamFlowSender>>,
 }
 
-pub(in crate::runtime::udp_flow::protocol_state) struct CachedProtocolUdpState {
-    senders: std::collections::HashMap<ManagedUdpFlowRef, Box<dyn CachedProtocolFlowSender>>,
+pub(in crate::runtime::udp_flow::protocol_state) struct ManagedStreamSenderState {
+    senders: std::collections::HashMap<ManagedUdpFlowRef, Box<dyn ManagedStreamFlowSender>>,
 }
 
-impl CachedProtocolUdpState {
+impl ManagedStreamSenderState {
     pub(in crate::runtime::udp_flow::protocol_state) fn new(
-        mut handlers: CachedUdpHandlers,
+        mut handlers: ManagedStreamSenderHandlers,
     ) -> Self {
         debug_assert!(
-            handlers.cached.is_empty(),
-            "cached flow senders are registered after flow establishment"
+            handlers.stream.is_empty(),
+            "managed stream senders are registered after flow establishment"
         );
-        handlers.cached.clear();
+        handlers.stream.clear();
         Self {
             senders: std::collections::HashMap::new(),
         }
@@ -42,10 +42,10 @@ impl CachedProtocolUdpState {
     pub(in crate::runtime::udp_flow::protocol_state) fn sender(
         &mut self,
         flow_ref: ManagedUdpFlowRef,
-    ) -> Option<&mut dyn CachedProtocolFlowSender> {
+    ) -> Option<&mut dyn ManagedStreamFlowSender> {
         self.senders
             .get_mut(&flow_ref)
-            .map(|handler| handler.as_mut() as &mut dyn CachedProtocolFlowSender)
+            .map(|handler| handler.as_mut() as &mut dyn ManagedStreamFlowSender)
     }
 
     pub(in crate::runtime::udp_flow::protocol_state) fn contains_sender(
@@ -58,7 +58,7 @@ impl CachedProtocolUdpState {
     pub(in crate::runtime::udp_flow::protocol_state) fn push_sender(
         &mut self,
         flow_ref: ManagedUdpFlowRef,
-        sender: Box<dyn CachedProtocolFlowSender>,
+        sender: Box<dyn ManagedStreamFlowSender>,
     ) {
         self.senders.insert(flow_ref, sender);
     }

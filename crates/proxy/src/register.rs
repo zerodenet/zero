@@ -24,7 +24,7 @@ use crate::adapters::VmessAdapter;
 use crate::protocol_registry::ProtocolRegistry;
 use crate::runtime::udp_flow::managed::ManagedUdpHandlers;
 use crate::runtime::udp_flow::protocol_state::{
-    CachedUdpHandlers, ProtocolUdpHandlers, UpstreamUdpHandlers,
+    ManagedStreamSenderHandlers, ProtocolUdpHandlers, UpstreamUdpHandlers,
 };
 
 pub(crate) fn protocol_registry() -> ProtocolRegistry {
@@ -55,7 +55,7 @@ pub(crate) fn protocol_registry() -> ProtocolRegistry {
 
 pub(crate) fn protocol_udp_handlers() -> ProtocolUdpHandlers {
     ProtocolUdpHandlers {
-        cached: CachedUdpHandlers { cached: Vec::new() },
+        stream_senders: ManagedStreamSenderHandlers { stream: Vec::new() },
         managed: ManagedUdpHandlers {
             datagram: vec![
                 #[cfg(feature = "shadowsocks")]

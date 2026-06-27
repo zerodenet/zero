@@ -5,7 +5,7 @@ use crate::runtime::udp_flow::managed::{
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::packet_path::ChainTask;
-use crate::runtime::udp_flow::protocol_state::CachedProtocolFlowSender;
+use crate::runtime::udp_flow::protocol_state::ManagedStreamFlowSender;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 use tokio::task::JoinSet;
@@ -40,11 +40,12 @@ impl UdpDispatch {
         &mut self.chain_tasks
     }
 
-    pub(crate) fn register_cached_protocol_flow_sender(
+    pub(crate) fn register_managed_stream_flow_sender(
         &mut self,
-        sender: Box<dyn CachedProtocolFlowSender>,
+        sender: Box<dyn ManagedStreamFlowSender>,
     ) -> ManagedUdpFlowRef {
-        self.protocol_state.register_cached_flow_sender(sender)
+        self.protocol_state
+            .register_managed_stream_flow_sender(sender)
     }
 
     pub(crate) async fn start_managed_protocol_flow(

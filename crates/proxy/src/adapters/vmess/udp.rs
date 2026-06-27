@@ -90,7 +90,7 @@ impl VmessAdapter {
                 error,
                 upstream: Some((server.to_string(), *port)),
             })?;
-        let managed = dispatch.register_cached_protocol_flow_sender(Box::new(manager));
+        let managed = dispatch.register_managed_stream_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::StreamPacket {
@@ -158,7 +158,7 @@ impl VmessAdapter {
                 error,
                 upstream: None,
             })?;
-        let managed = dispatch.register_cached_protocol_flow_sender(Box::new(manager));
+        let managed = dispatch.register_managed_stream_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::StreamPacket {

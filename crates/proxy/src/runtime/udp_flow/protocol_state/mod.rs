@@ -13,15 +13,15 @@ use crate::runtime::udp_flow::managed::{
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
-use cached::CachedProtocolUdpState;
-pub(crate) use cached::{CachedProtocolFlowSender, CachedUdpHandlers};
+use stream_sender::ManagedStreamSenderState;
+pub(crate) use stream_sender::{ManagedStreamFlowSender, ManagedStreamSenderHandlers};
 use upstream::UpstreamAssociationState;
 pub(crate) use upstream::{UpstreamAssociationHandler, UpstreamUdpHandlers};
 
-mod cached;
 mod datagram;
 mod forward;
 mod stream;
+mod stream_sender;
 mod upstream;
 
 pub(crate) struct ProtocolUpstreamAssociationView<'a> {
@@ -35,7 +35,7 @@ pub(crate) struct ClosedProtocolUpstreamAssociation {
 }
 
 pub(crate) struct ProtocolUdpState {
-    cached: CachedProtocolUdpState,
+    stream_senders: ManagedStreamSenderState,
     pub(super) managed: ManagedProtocolUdpState,
     upstream: UpstreamAssociationState,
     managed_flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>,
@@ -43,7 +43,7 @@ pub(crate) struct ProtocolUdpState {
 }
 
 pub(crate) struct ProtocolUdpHandlers {
-    pub(crate) cached: CachedUdpHandlers,
+    pub(crate) stream_senders: ManagedStreamSenderHandlers,
     pub(crate) managed: ManagedUdpHandlers,
     pub(crate) upstream: UpstreamUdpHandlers,
 }
@@ -51,7 +51,7 @@ pub(crate) struct ProtocolUdpHandlers {
 impl ProtocolUdpState {
     pub(crate) fn new(handlers: ProtocolUdpHandlers) -> Self {
         Self {
-            cached: CachedProtocolUdpState::new(handlers.cached),
+            stream_senders: ManagedStreamSenderState::new(handlers.stream_senders),
             managed: ManagedProtocolUdpState::new(handlers.managed),
             upstream: UpstreamAssociationState::new(handlers.upstream),
             managed_flows: HashMap::new(),

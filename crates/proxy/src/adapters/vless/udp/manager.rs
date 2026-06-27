@@ -14,7 +14,7 @@ use zero_platform_tokio::TransportConnector;
 
 use crate::adapters::vless::mux_pool::VlessMuxOpenRequest;
 use crate::runtime::udp_flow::packet_path::ChainTask;
-use crate::runtime::udp_flow::protocol_state::CachedProtocolFlowSender;
+use crate::runtime::udp_flow::protocol_state::ManagedStreamFlowSender;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use model::{
@@ -323,7 +323,7 @@ impl VlessUdpOutboundManager {
 }
 
 #[async_trait::async_trait]
-impl CachedProtocolFlowSender for VlessUdpOutboundManager {
+impl ManagedStreamFlowSender for VlessUdpOutboundManager {
     async fn send_existing(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
