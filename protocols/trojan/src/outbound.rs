@@ -289,6 +289,22 @@ where
 }
 
 #[cfg(feature = "tokio")]
+pub async fn establish_udp_flow_with_resume<S>(
+    mut stream: S,
+    session: &Session,
+    resume: &TrojanUdpFlowResume,
+) -> Result<TrojanUdpFlowSession, Error>
+where
+    S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+{
+    let flow_io = TrojanUdpFlowIo;
+    flow_io
+        .establish_with_resume(&mut stream, session, resume)
+        .await?;
+    Ok(TrojanUdpFlowSession::new(spawn_udp_flow(stream)))
+}
+
+#[cfg(feature = "tokio")]
 fn spawn_send_task<S>(
     mut send_rx: mpsc::Receiver<UdpFlowPacket>,
     mut send_stream: WriteOnlySocket<S>,

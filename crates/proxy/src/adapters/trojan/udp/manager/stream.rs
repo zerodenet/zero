@@ -10,15 +10,10 @@ pub(super) struct PacketStream {
 pub(super) async fn spawn_packet_stream(
     _proxy: &Proxy,
     session: &Session,
-    mut stream: TcpRelayStream,
+    stream: TcpRelayStream,
     resume: &trojan::TrojanUdpFlowResume,
 ) -> Result<PacketStream, EngineError> {
-    let flow_io = trojan::TrojanUdpFlowIo;
-    flow_io
-        .establish_with_resume(&mut stream, session, resume)
-        .await?;
-
-    let session = trojan::TrojanUdpFlowSession::new(trojan::spawn_udp_flow(stream));
+    let session = trojan::establish_udp_flow_with_resume(stream, session, resume).await?;
 
     Ok(PacketStream { session })
 }

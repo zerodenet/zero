@@ -6831,9 +6831,11 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && manager_send.contains("resume.flow_requires_relay_upstream()")
             && manager_connect.contains("resume.tls_profile(")
             && manager_connect.contains("TrojanUdpTlsOptions")
-            && manager_stream.contains("trojan::TrojanUdpFlowIo")
-            && manager_stream.contains(".establish_with_resume(")
+            && manager_stream.contains("trojan::establish_udp_flow_with_resume")
+            && !manager_stream.contains("trojan::TrojanUdpFlowIo")
+            && !manager_stream.contains(".establish_with_resume(")
             && protocol_outbound.contains("pub async fn establish_with_resume")
+            && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
             && !transport.contains("trojan::"),
         "Trojan UDP manager should consume protocol-owned cache key and TLS profile through neutral endpoints without putting protocol calls in zero-transport"
     );
@@ -6863,6 +6865,9 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "establish_udp_packet_tunnel",
         "read_udp_flow_packet",
         "write_udp_flow_packet",
+        "TrojanUdpFlowIo",
+        ".establish_with_resume(",
+        "trojan::spawn_udp_flow",
         "TrojanUdpPacket {",
         "trojan::TrojanUdpPacket",
     ] {
@@ -6887,9 +6892,7 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "Trojan UDP manager stream should use flow-specific protocol helpers instead of generic UDP helpers"
     );
     assert!(
-        stream.contains("trojan::TrojanUdpFlowIo")
-            && stream.contains(".establish_with_resume(")
-            && stream.contains("trojan::spawn_udp_flow")
+        stream.contains("trojan::establish_udp_flow_with_resume")
             && !stream.contains("tokio::io::split")
             && !stream.contains("tokio::spawn")
             && !stream.contains(".write_flow_packet(")
@@ -6897,12 +6900,13 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && !stream.contains("&mut send_stream")
             && !stream.contains(".read_flow_packet(")
             && !stream.contains("&mut recv_stream")
-            && stream.contains("trojan::TrojanUdpFlowSession::new")
+            && !stream.contains("trojan::TrojanUdpFlowSession::new")
             && !stream.contains("trojan::TrojanUdpFlowSender")
             && !stream.contains("trojan::TrojanUdpFlowResponses")
             && !stream.contains("broadcast::Sender<UdpFlowPacket>")
             && !stream.contains("mpsc::Sender<UdpFlowPacket>")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
+            && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
             && protocol_outbound.contains("struct TrojanUdpFlowSender")
             && !protocol_outbound.contains("pub struct TrojanUdpFlowSender")
             && protocol_outbound.contains("pub struct TrojanUdpFlowSession")
@@ -7319,6 +7323,7 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             && protocol_outbound.contains("pub async fn read_flow_packet")
             && protocol_outbound.contains("pub async fn write_flow_packet")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
+            && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
             && protocol_outbound.contains("pub struct TrojanUdpFlowHandle")
             && protocol_outbound.contains("struct TrojanUdpFlowSender")
             && !protocol_outbound.contains("pub struct TrojanUdpFlowSender")
@@ -7328,12 +7333,13 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && !establish.contains("trojan::udp_flow_packet")
             && !establish.contains("trojan::TrojanUdpPacket::new")
-            && stream.contains("trojan::TrojanUdpFlowSession::new")
+            && stream.contains("trojan::establish_udp_flow_with_resume")
+            && !stream.contains("trojan::TrojanUdpFlowSession::new")
             && !stream.contains("trojan::TrojanUdpFlowSender")
             && !stream.contains("trojan::TrojanUdpFlowResponses")
             && !stream.contains("mpsc::Sender<UdpFlowPacket>")
             && !stream.contains("broadcast::Sender<UdpFlowPacket>")
-            && stream.contains("trojan::spawn_udp_flow")
+            && !stream.contains("trojan::spawn_udp_flow")
             && !stream.contains("trojan::udp_flow_packet")
             && !stream.contains("trojan::TrojanUdpPacket")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
@@ -7341,9 +7347,10 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
         "Trojan UDP stream glue should carry protocol-owned flow handles while protocols/trojan owns packet conversion and flow channels"
     );
     assert!(
-        stream.contains("trojan::TrojanUdpFlowIo")
-            && stream.contains(".establish_with_resume(")
-            && stream.contains("trojan::spawn_udp_flow")
+        stream.contains("trojan::establish_udp_flow_with_resume")
+            && !stream.contains("trojan::TrojanUdpFlowIo")
+            && !stream.contains(".establish_with_resume(")
+            && !stream.contains("trojan::spawn_udp_flow")
             && !stream.contains(".write_flow_packet(")
             && !stream.contains(".write_packet(")
             && !stream.contains("&mut send_stream")
