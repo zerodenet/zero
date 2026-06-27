@@ -93,7 +93,7 @@ impl VmessAdapter {
         let managed = dispatch.register_cached_protocol_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Cached {
+            outbound: Box::new(UdpFlowOutbound::StreamPacket {
                 tag: tag_owned,
                 server: (*server).to_string(),
                 port: *port,
@@ -161,7 +161,7 @@ impl VmessAdapter {
         let managed = dispatch.register_cached_protocol_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::Cached {
+            outbound: Box::new(UdpFlowOutbound::StreamPacket {
                 tag: tag_owned,
                 server: (*server).to_string(),
                 port: *port,

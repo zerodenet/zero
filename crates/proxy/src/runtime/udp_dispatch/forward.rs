@@ -10,7 +10,7 @@
 //! | `Direct` | `Direct` | Raw socket, no upstream manager |
 //! | `Relay` | `Socks5` | UDP ASSOCIATE relay through control stream |
 //! | `Datagram` | `Shadowsocks`, `Hysteria2` | Datagram encode/decode over socket or QUIC |
-//! | `StreamPacket` | `Trojan`, `Mieru` | UDP packets over established stream |
+//! | `StreamPacket` | `Trojan`, `Mieru`, adapter-cached stream flows | UDP packets over established stream |
 //! | `PacketPathDatagram` | adapter-built packet-path snapshot | Datagram-over-carrier chain |
 
 use std::time::Instant;
@@ -72,7 +72,7 @@ impl UdpDispatch {
                 }
             }
 
-            UdpPathCategory::Datagram | UdpPathCategory::StreamPacket | UdpPathCategory::Cached => {
+            UdpPathCategory::Datagram | UdpPathCategory::StreamPacket => {
                 let result = self
                     .protocol_state
                     .forward_existing_protocol_flow(&mut self.chain_tasks, proxy, flow, payload)

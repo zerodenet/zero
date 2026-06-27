@@ -5758,12 +5758,11 @@ fn udp_dispatch_cached_flow_fast_path_delegates_to_protocol_state() {
     assert!(
         !dispatch.contains("send_existing_cached_flow")
             && !forward.contains("send_existing_cached_flow")
-            && forward.contains(
-                "UdpPathCategory::Datagram | UdpPathCategory::StreamPacket | UdpPathCategory::Cached"
-            )
+            && forward.contains("UdpPathCategory::Datagram | UdpPathCategory::StreamPacket")
             && forward.contains("forward_existing_protocol_flow")
-            && outbound.contains("Cached {"),
-        "UDP dispatch should delegate cached protocol flow reuse to protocol state instead of special-casing cached senders"
+            && !outbound.contains("Cached {")
+            && !outbound.contains("UdpPathCategory::Cached"),
+        "UDP dispatch should delegate cached protocol flow reuse to protocol state without exposing a cached path category"
     );
 
     let normalized = forward.replace("\r\n", "\n");
@@ -8567,10 +8566,10 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
     for source in ["src/adapters/vless/udp.rs", "src/adapters/vmess/udp.rs"] {
         let adapter = read(source);
         assert!(
-            adapter.contains("UdpFlowOutbound::Cached")
+            adapter.contains("UdpFlowOutbound::StreamPacket")
                 && adapter.contains("let managed = dispatch.register_cached_protocol_flow_sender")
                 && adapter.contains("managed,"),
-            "{source} should track cached UDP flows through neutral managed flow refs, not Vec-order cached handlers"
+            "{source} should track cached UDP flows through neutral stream managed flow refs, not a runtime cached variant"
         );
     }
 
