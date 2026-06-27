@@ -15,7 +15,7 @@ pub(super) async fn dispatch_packet(
     dispatch: &mut UdpDispatch,
     pending_control_traffic: &mut StreamTraffic,
 ) -> Result<(), EngineError> {
-    let udp_packet = socks5::decode_udp_associate_request(packet)?;
+    let udp_packet = socks5::Socks5InboundUdpCodec.decode_request(packet)?;
 
     // DNS interception.
     // Intercept UDP packets to port 53 with a domain target.

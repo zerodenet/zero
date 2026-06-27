@@ -4,7 +4,10 @@ use zero_traits::{AsyncSocket, DatagramSocket, IpAddress, UdpRelayProtocol};
 use crate::outbound::{
     Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth, Socks5UdpRelayTarget,
 };
-use crate::shared::{build_udp_packet, decode_udp_associate_response};
+use crate::shared::{
+    build_udp_packet, decode_udp_associate_request, decode_udp_associate_response,
+    encode_udp_associate_response_to_client, Socks5UdpPacket,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Socks5UdpRelayEndpoint {
@@ -64,6 +67,28 @@ pub struct Socks5UdpRelay<S> {
 pub struct Socks5UdpAssociation<C, S> {
     _control: C,
     relay: Socks5UdpRelay<S>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Socks5InboundUdpCodec;
+
+impl Socks5InboundUdpCodec {
+    pub fn decode_request(&self, packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+        decode_udp_associate_request(packet)
+    }
+
+    pub fn decode_response(&self, packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+        decode_udp_associate_response(packet)
+    }
+
+    pub fn encode_response_to_client(
+        &self,
+        upstream_address: &Address,
+        upstream_port: u16,
+        payload: &[u8],
+    ) -> Result<alloc::vec::Vec<u8>, Error> {
+        encode_udp_associate_response_to_client(upstream_address, upstream_port, payload)
+    }
 }
 
 impl<C, S> Socks5UdpAssociation<C, S> {

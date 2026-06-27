@@ -5,7 +5,8 @@ pub(crate) struct InboundUdpResponse {
 }
 
 pub(crate) fn decode_socks5_upstream_response(packet: &[u8]) -> Option<InboundUdpResponse> {
-    socks5::decode_udp_associate_response(packet)
+    socks5::Socks5InboundUdpCodec
+        .decode_response(packet)
         .ok()
         .map(|response| InboundUdpResponse {
             target: response.target,

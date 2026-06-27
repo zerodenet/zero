@@ -3872,7 +3872,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("async fn forward_relay_socket_response")
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("direct_response_session_id")
-            && direct_response.contains("socks5::encode_udp_associate_response_to_client")
+            && direct_response.contains("socks5::Socks5InboundUdpCodec.encode_response_to_client")
             && !direct_response.contains("socks5::encode_udp_associate_response("),
         "SOCKS5 UDP direct response metering and framing should live in inbound/socks5/udp_associate/direct_response.rs"
     );
@@ -3880,7 +3880,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         chain_response.contains("async fn handle_chain_result")
             && chain_response.contains("pub(super) struct ChainResponseRequest")
             && chain_response.contains("struct ForwardChainResponseRequest")
-            && chain_response.contains("socks5::encode_udp_associate_response_to_client")
+            && chain_response.contains("socks5::Socks5InboundUdpCodec.encode_response_to_client")
             && !chain_response.contains("socks5::encode_udp_associate_response(")
             && chain_response.contains("failed to send UDP chain response to client")
             && chain_response.contains("chain response task panicked"),
@@ -3899,12 +3899,29 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             );
         }
     }
+    for (path, source) in [
+        ("dispatch.rs", &dispatch),
+        ("direct_response.rs", &direct_response),
+        ("chain_response.rs", &chain_response),
+        ("upstream_response.rs", &upstream_response),
+    ] {
+        for forbidden in [
+            "socks5::decode_udp_associate_request",
+            "socks5::decode_udp_associate_response",
+            "socks5::encode_udp_associate_response_to_client",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "SOCKS5 UDP associate {path} should call Socks5InboundUdpCodec instead of raw helper `{forbidden}`"
+            );
+        }
+    }
     assert!(
-        dispatch.contains("socks5::decode_udp_associate_request")
-            && upstream_response.contains("socks5::decode_udp_associate_response")
-            && direct_response.contains("socks5::encode_udp_associate_response_to_client")
-            && chain_response.contains("socks5::encode_udp_associate_response_to_client"),
-        "SOCKS5 UDP associate dispatch/attribution should use semantic decode helpers"
+        dispatch.contains("socks5::Socks5InboundUdpCodec.decode_request")
+            && upstream_response.contains("socks5::Socks5InboundUdpCodec.decode_response")
+            && direct_response.contains("socks5::Socks5InboundUdpCodec.encode_response_to_client")
+            && chain_response.contains("socks5::Socks5InboundUdpCodec.encode_response_to_client"),
+        "SOCKS5 UDP associate dispatch/attribution should use the protocol-owned inbound UDP codec"
     );
     assert!(
         upstream_response.contains("async fn handle_upstream_response")

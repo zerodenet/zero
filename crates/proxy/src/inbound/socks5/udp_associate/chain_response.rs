@@ -63,7 +63,7 @@ async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
         return;
     };
 
-    match socks5::encode_udp_associate_response_to_client(
+    match socks5::Socks5InboundUdpCodec.encode_response_to_client(
         request.target,
         request.port,
         request.payload,

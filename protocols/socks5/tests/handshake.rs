@@ -2,8 +2,9 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use socks5::{
-    build_udp_packet, parse_udp_packet, Socks5Inbound, Socks5Outbound, Socks5OutboundAuth,
-    Socks5PasswordAuth, Socks5Request, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError,
+    build_udp_packet, parse_udp_packet, Socks5Inbound, Socks5InboundUdpCodec, Socks5Outbound,
+    Socks5OutboundAuth, Socks5PasswordAuth, Socks5Request, Socks5UdpRelay, Socks5UdpRelayEndpoint,
+    Socks5UdpRelayError,
 };
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, DatagramSocket, IpAddress};
@@ -418,6 +419,27 @@ fn builds_and_parses_udp_packet() {
     assert_eq!(parsed.target, Address::Domain("example.com".into()));
     assert_eq!(parsed.port, 5353);
     assert_eq!(parsed.payload, b"ping");
+}
+
+#[test]
+fn inbound_udp_codec_decodes_requests_and_encodes_responses() {
+    let codec = Socks5InboundUdpCodec;
+    let request = build_udp_packet(&Address::Domain("example.com".into()), 5353, b"ping")
+        .expect("build request");
+    let decoded = codec.decode_request(&request).expect("decode request");
+
+    assert_eq!(decoded.target, Address::Domain("example.com".into()));
+    assert_eq!(decoded.port, 5353);
+    assert_eq!(decoded.payload, b"ping");
+
+    let response = codec
+        .encode_response_to_client(&Address::Ipv4([1, 1, 1, 1]), 53, b"pong")
+        .expect("encode response");
+    let decoded_response = codec.decode_response(&response).expect("decode response");
+
+    assert_eq!(decoded_response.target, Address::Ipv4([1, 1, 1, 1]));
+    assert_eq!(decoded_response.port, 53);
+    assert_eq!(decoded_response.payload, b"pong");
 }
 
 #[tokio::test]
