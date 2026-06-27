@@ -33,6 +33,13 @@ pub struct VmessUdpIdentity {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VmessUdpMuxOpenIdentity<'a> {
+    pub id: [u8; 16],
+    pub cipher_name: &'a str,
+    pub cipher: VmessCipher,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VmessUdpFlowConfig<'a> {
     identity: VmessUdpIdentity,
     cipher_name: &'a str,
@@ -60,6 +67,14 @@ impl<'a> VmessUdpFlowConfig<'a> {
 
     pub fn cipher(&self) -> VmessCipher {
         self.identity.cipher
+    }
+
+    pub fn mux_open_identity(&self) -> VmessUdpMuxOpenIdentity<'a> {
+        VmessUdpMuxOpenIdentity {
+            id: self.identity.uuid,
+            cipher_name: self.cipher_name,
+            cipher: self.identity.cipher,
+        }
     }
 
     pub async fn establish_flow_with_initial_packet<S>(

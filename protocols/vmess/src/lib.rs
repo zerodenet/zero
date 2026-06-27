@@ -39,6 +39,6 @@ pub use udp::{
     VmessInboundUdpRequest, VmessInboundUdpSession, VmessInitialUdpFlowPacket, VmessUdpFlowCodec,
     VmessUdpFlowConfig, VmessUdpFlowConnection, VmessUdpFlowHandle, VmessUdpFlowIo,
     VmessUdpFlowPacket, VmessUdpFlowResponse, VmessUdpFlowResponseReceiver, VmessUdpFlowSession,
-    VmessUdpIdentity, VmessUdpPacket, VmessUdpPacketTarget, VmessUdpPacketTunnelTarget,
-    VmessUdpPayloadMode, VmessUdpPayloadState,
+    VmessUdpIdentity, VmessUdpMuxOpenIdentity, VmessUdpPacket, VmessUdpPacketTarget,
+    VmessUdpPacketTunnelTarget, VmessUdpPayloadMode, VmessUdpPayloadState,
 };

@@ -44,13 +44,13 @@ pub use outbound::VlessFlowTcpTunnelTarget;
 pub use outbound::{
     establish_udp_flow, establish_udp_flow_with_initial_packet, spawn_udp_flow,
     VlessEstablishedUdpFlow, VlessEstablishedUdpFlowHandle, VlessInitialUdpFlowPacket,
-    VlessUdpFlowConnection, VlessUdpFlowHandle, VlessUdpFlowResponse, VlessUdpFlowResponseReceiver,
-    VlessUdpFlowSession,
+    VlessMuxInitialUdpFlowPacket, VlessUdpFlowConnection, VlessUdpFlowHandle, VlessUdpFlowResponse,
+    VlessUdpFlowResponseReceiver, VlessUdpFlowSession,
 };
 pub use outbound::{
     establish_udp_flow_stream, establish_udp_packet_tunnel, parse_udp_identity, VlessOutbound,
-    VlessTcpTunnelTarget, VlessUdpFlowConfig, VlessUdpIdentity, VlessUdpPacketTarget,
-    VlessUdpPacketTunnelTarget,
+    VlessTcpTunnelTarget, VlessUdpFlowConfig, VlessUdpIdentity, VlessUdpMuxOpenIdentity,
+    VlessUdpPacketTarget, VlessUdpPacketTunnelTarget,
 };
 #[cfg(feature = "reality")]
 pub use reality::{

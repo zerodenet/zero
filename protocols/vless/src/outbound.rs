@@ -238,6 +238,11 @@ pub struct VlessUdpIdentity {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VlessUdpMuxOpenIdentity {
+    pub id: [u8; 16],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VlessUdpFlowConfig<'a> {
     identity: VlessUdpIdentity,
     flow: Option<&'a str>,
@@ -263,6 +268,12 @@ impl<'a> VlessUdpFlowConfig<'a> {
         self.flow == Some("xtls-rprx-vision") || self.flow == Some("xtls-rprx-vision-udp443")
     }
 
+    pub fn mux_open_identity(&self) -> VlessUdpMuxOpenIdentity {
+        VlessUdpMuxOpenIdentity {
+            id: self.identity.uuid,
+        }
+    }
+
     #[cfg(feature = "reality")]
     pub fn encode_initial_flow_packet(
         &self,
@@ -271,6 +282,18 @@ impl<'a> VlessUdpFlowConfig<'a> {
         payload: &[u8],
     ) -> Result<Vec<u8>, Error> {
         crate::shared::encode_udp_flow_initial_packet(target, port, payload)
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn mux_initial_flow_packet(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<VlessMuxInitialUdpFlowPacket, Error> {
+        Ok(VlessMuxInitialUdpFlowPacket {
+            packet: self.encode_initial_flow_packet(target, port, payload)?,
+        })
     }
 
     #[cfg(feature = "reality")]
@@ -367,6 +390,22 @@ pub struct VlessUdpFlowHandle {
 pub struct VlessEstablishedUdpFlowHandle {
     pub handle: VlessUdpFlowHandle,
     pub initial_packet_len: usize,
+}
+
+#[cfg(feature = "reality")]
+pub struct VlessMuxInitialUdpFlowPacket {
+    packet: Vec<u8>,
+}
+
+#[cfg(feature = "reality")]
+impl VlessMuxInitialUdpFlowPacket {
+    pub fn encoded_len(&self) -> usize {
+        self.packet.len()
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.packet
+    }
 }
 
 #[cfg(feature = "reality")]
