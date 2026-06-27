@@ -3755,7 +3755,7 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
         "managed datagram UDP flow kind should dispatch through registered datagram handlers"
     );
     assert!(
-        register.contains("managed_udp_handlers")
+        register.contains("protocol_udp_handlers")
             && register.contains("shadowsocks_datagram_handler")
             && register.contains("hysteria2_datagram_handler"),
         "datagram UDP handler collection should live at the compiled registration boundary"
@@ -3830,7 +3830,7 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
         "stream-packet and relay-stream UDP flow kinds should dispatch through registered stream handlers"
     );
     assert!(
-        register.contains("managed_udp_handlers")
+        register.contains("protocol_udp_handlers")
             && register.contains("trojan_stream_handler")
             && register.contains("mieru_stream_handler"),
         "stream UDP handler collection should live at the compiled registration boundary"
@@ -5150,7 +5150,8 @@ fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
 fn protocol_udp_state_manager_fields_are_not_crate_public() {
     let content = read("src/protocol_runtime/udp/state.rs");
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
-    let managed_cached = read("src/protocol_runtime/udp/state/managed/cached.rs");
+    let cached = read("src/protocol_runtime/udp/state/cached.rs");
+    let cached_model = read("src/protocol_runtime/udp/state/cached/model.rs");
     let datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     let stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
     let register = read("src/register.rs");
@@ -5177,10 +5178,12 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
         content.contains("managed: ManagedProtocolUdpState")
             && managed.contains("struct ManagedProtocolUdpState")
             && managed.contains("handlers: ManagedUdpHandlers")
-            && managed.contains("cached: ManagedCachedState")
+            && content.contains("cached: CachedProtocolUdpState")
+            && !managed.contains("cached: ManagedCachedState")
             && managed.contains("datagram: ManagedDatagramState")
             && managed.contains("stream: ManagedStreamState")
-            && managed_cached.contains("handlers: ManagedCachedHandlers")
+            && cached.contains("start_vless_cached_flow")
+            && cached_model.contains("handlers: CachedUdpHandlers")
             && datagram.contains("handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>")
             && stream.contains("handlers: Vec<Box<dyn ManagedStreamFlowHandler>>")
             && !managed.contains("pub(crate) vless:")
@@ -5193,12 +5196,12 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
             && !datagram.contains("hysteria2: H2ChainManager")
             && !stream.contains("trojan: TrojanChainManager")
             && !stream.contains("mieru: MieruChainManager"),
-        "ProtocolUdpState should expose one managed UDP sub-state instead of protocol manager fields"
+        "ProtocolUdpState should expose neutral cached/managed UDP sub-states instead of protocol manager fields"
     );
     assert!(
-        register.contains("managed_udp_handlers")
+        register.contains("protocol_udp_handlers")
             && !register.contains("ProtocolUdpState::new(crate::register::managed_udp_handlers())"),
-        "register should collect managed UDP handlers without owning protocol state construction"
+        "register should collect protocol UDP handlers without owning protocol state construction"
     );
 }
 
@@ -5510,7 +5513,8 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let state = read("src/protocol_runtime/udp/state.rs");
     let cached = manifest_dir().join("src/protocol_runtime/udp/state/cached.rs");
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
-    let managed_cached = read("src/protocol_runtime/udp/state/managed/cached.rs");
+    let cached_state = read("src/protocol_runtime/udp/state/cached.rs");
+    let cached_model = read("src/protocol_runtime/udp/state/cached/model.rs");
     let register = read("src/register.rs");
 
     for forbidden in [
@@ -5528,17 +5532,19 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
         "cached UDP flow forwarding should live in protocol_runtime/udp/state/cached.rs"
     );
     assert!(
-        managed.contains("cached: ManagedCachedState")
+        state.contains("cached: CachedProtocolUdpState")
+            && !managed.contains("cached: ManagedCachedState")
             && !managed.contains("vless: VlessUdpOutboundManager")
             && !managed.contains("vmess: VmessUdpOutboundManager")
-            && managed_cached.contains("struct ManagedCachedState")
-            && managed_cached.contains("handlers: ManagedCachedHandlers")
-            && !managed_cached.contains(".get_mut(0)")
-            && !managed_cached.contains(".get_mut(1)")
-            && !managed_cached.contains("handlers.get_mut")
+            && cached_state.contains("start_vless_cached_flow")
+            && cached_model.contains("struct CachedProtocolUdpState")
+            && cached_model.contains("handlers: CachedUdpHandlers")
+            && !cached_state.contains(".get_mut(0)")
+            && !cached_state.contains(".get_mut(1)")
+            && !cached_state.contains("handlers.get_mut")
             && register.contains("vless_cached_handler")
             && register.contains("vmess_cached_handler"),
-        "cached UDP flow managers should be collected as registered handlers without encoding protocol identity as Vec order"
+        "cached UDP flow handlers should live outside generic managed state and avoid Vec-order protocol identity"
     );
 }
 

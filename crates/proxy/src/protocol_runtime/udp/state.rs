@@ -14,10 +14,12 @@ use super::{
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
+use cached::CachedProtocolUdpState;
+pub(crate) use cached::CachedUdpHandlers;
 use managed::ManagedProtocolUdpState;
 pub(crate) use managed::{
-    ManagedCachedFlowSender, ManagedCachedHandlers, ManagedDatagramFlowHandler,
-    ManagedStreamFlowHandler, ManagedUdpHandlers,
+    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedStreamFlowHandler,
+    ManagedUdpHandlers,
 };
 
 mod cached;
@@ -36,16 +38,23 @@ pub(crate) struct ClosedProtocolUpstreamAssociation {
 
 pub(crate) struct ProtocolUdpState {
     pub(super) socks5: Socks5UdpRuntime,
+    cached: CachedProtocolUdpState,
     pub(super) managed: ManagedProtocolUdpState,
     managed_flows: HashMap<ManagedUdpFlowRef, ProtocolUdpFlowSnapshot>,
     next_managed_flow_id: u64,
 }
 
+pub(crate) struct ProtocolUdpHandlers {
+    pub(crate) cached: CachedUdpHandlers,
+    pub(crate) managed: ManagedUdpHandlers,
+}
+
 impl ProtocolUdpState {
-    pub(crate) fn new(handlers: ManagedUdpHandlers) -> Self {
+    pub(crate) fn new(handlers: ProtocolUdpHandlers) -> Self {
         Self {
             socks5: Socks5UdpRuntime::default(),
-            managed: ManagedProtocolUdpState::new(handlers),
+            cached: CachedProtocolUdpState::new(handlers.cached),
+            managed: ManagedProtocolUdpState::new(handlers.managed),
             managed_flows: HashMap::new(),
             next_managed_flow_id: 1,
         }

@@ -24,26 +24,25 @@ impl ProtocolUdpState {
             quic: flow.quic,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.managed
-            .start_vless_flow(
-                chain_tasks,
-                crate::protocol_runtime::vless_udp::model::VlessUdpStartFlow {
-                    proxy: flow.proxy,
-                    session: flow.session,
-                    server: flow.server,
-                    port: flow.port,
-                    identity: flow.identity,
-                    flow: flow.flow,
-                    transport,
-                    payload: flow.payload,
-                },
-            )
-            .await
-            .map_err(|error| FlowFailure {
-                stage: "udp_vless_upstream",
-                error,
-                upstream: Some((flow.server.to_string(), flow.port)),
-            })?;
+        self.start_vless_cached_flow(
+            chain_tasks,
+            crate::protocol_runtime::vless_udp::model::VlessUdpStartFlow {
+                proxy: flow.proxy,
+                session: flow.session,
+                server: flow.server,
+                port: flow.port,
+                identity: flow.identity,
+                flow: flow.flow,
+                transport,
+                payload: flow.payload,
+            },
+        )
+        .await
+        .map_err(|error| FlowFailure {
+            stage: "udp_vless_upstream",
+            error,
+            upstream: Some((flow.server.to_string(), flow.port)),
+        })?;
         Ok(())
     }
 
@@ -52,25 +51,24 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpRelayTwoStream<'_>,
     ) -> Result<(), FlowFailure> {
-        self.managed
-            .start_vless_relay_two_stream(
-                chain_tasks,
-                crate::protocol_runtime::vless_udp::model::VlessUdpRelayTwoStream {
-                    proxy: flow.proxy,
-                    session: flow.session,
-                    post_carrier: flow.post_carrier,
-                    get_carrier: flow.get_carrier,
-                    identity: flow.identity,
-                    split_http: flow.split_http,
-                    payload: flow.payload,
-                },
-            )
-            .await
-            .map_err(|error| FlowFailure {
-                stage: "udp_vless_relay_chain",
-                error,
-                upstream: None,
-            })?;
+        self.start_vless_cached_relay_two_stream(
+            chain_tasks,
+            crate::protocol_runtime::vless_udp::model::VlessUdpRelayTwoStream {
+                proxy: flow.proxy,
+                session: flow.session,
+                post_carrier: flow.post_carrier,
+                get_carrier: flow.get_carrier,
+                identity: flow.identity,
+                split_http: flow.split_http,
+                payload: flow.payload,
+            },
+        )
+        .await
+        .map_err(|error| FlowFailure {
+            stage: "udp_vless_relay_chain",
+            error,
+            upstream: None,
+        })?;
         Ok(())
     }
 
@@ -90,24 +88,23 @@ impl ProtocolUdpState {
             quic: None,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.managed
-            .start_vless_relay_final_hop(
-                chain_tasks,
-                crate::protocol_runtime::vless_udp::model::VlessUdpRelayFinalHopStart {
-                    proxy: flow.proxy,
-                    session: flow.session,
-                    carrier: flow.carrier,
-                    identity: flow.identity,
-                    transport,
-                    payload: flow.payload,
-                },
-            )
-            .await
-            .map_err(|error| FlowFailure {
-                stage: "udp_vless_relay_chain",
-                error,
-                upstream: None,
-            })?;
+        self.start_vless_cached_relay_final_hop(
+            chain_tasks,
+            crate::protocol_runtime::vless_udp::model::VlessUdpRelayFinalHopStart {
+                proxy: flow.proxy,
+                session: flow.session,
+                carrier: flow.carrier,
+                identity: flow.identity,
+                transport,
+                payload: flow.payload,
+            },
+        )
+        .await
+        .map_err(|error| FlowFailure {
+            stage: "udp_vless_relay_chain",
+            error,
+            upstream: None,
+        })?;
         Ok(())
     }
 }
