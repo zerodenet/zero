@@ -2,7 +2,7 @@
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
 //! so the runtime dispatches via the `ProtocolAdapter` trait. UDP management
-//! lives in `crate::protocol_runtime::vmess_udp`.
+//! glue lives under the VMess adapter UDP module.
 
 use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::Session;

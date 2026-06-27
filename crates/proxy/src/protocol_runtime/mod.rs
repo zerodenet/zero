@@ -11,5 +11,3 @@ pub(crate) mod vless_mux_pool;
 
 #[cfg(feature = "vmess")]
 pub(crate) mod vmess_mux_pool;
-#[cfg(feature = "vmess")]
-pub(crate) mod vmess_udp;
