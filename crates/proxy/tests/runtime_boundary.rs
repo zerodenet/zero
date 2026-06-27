@@ -1341,16 +1341,30 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
 
 #[test]
 fn stream_udp_roots_delegate_flow_building() {
-    for (root_path, flow_path, config) in [
+    for (root_path, flow_path, config, start_bridge) in [
         (
             "src/adapters/trojan/udp.rs",
             "src/adapters/trojan/udp/flow.rs",
             "TrojanUdpFlowConfig::new",
+            ".start_tracked_managed_stream_packet(",
         ),
         (
             "src/adapters/mieru/udp.rs",
             "src/adapters/mieru/udp/flow.rs",
             "MieruUdpFlowConfig::new",
+            ".start_tracked_managed_stream_packet(",
+        ),
+        (
+            "src/adapters/vless/udp.rs",
+            "src/adapters/vless/udp/flow.rs",
+            "vless_udp_flow_config",
+            "register_managed_stream_packet_flow",
+        ),
+        (
+            "src/adapters/vmess/udp.rs",
+            "src/adapters/vmess/udp/flow.rs",
+            "vmess_udp_flow_config",
+            "register_managed_stream_packet_flow",
         ),
     ] {
         let root = read(root_path);
@@ -1361,11 +1375,17 @@ fn stream_udp_roots_delegate_flow_building() {
             "{root_path} should wire flow as protocol-local UDP glue"
         );
         for forbidden in [
-            config,
             ".flow_resume(false)",
             ".flow_resume(true)",
             "ManagedUdpSend {",
             "ManagedUdpFlowResume::new",
+            "register_managed_stream_packet_flow",
+            "VlessUdpOutboundManager::new",
+            "VmessUdpOutboundManager::new",
+            "VlessUdpStartFlow {",
+            "VmessUdpStartFlow {",
+            "VlessUdpRelayFinalHopStart {",
+            "VmessUdpRelayFlowStart {",
         ] {
             assert!(
                 !root.contains(forbidden),
@@ -1374,9 +1394,7 @@ fn stream_udp_roots_delegate_flow_building() {
         }
         assert!(
             flow.contains(config)
-                && flow.contains(".flow_resume(request.relay_chain)")
-                && flow.contains("ManagedStreamPacketStart")
-                && flow.contains(".start_tracked_managed_stream_packet(")
+                && flow.contains(start_bridge)
                 && !flow.contains("ManagedUdpSend {")
                 && !flow.contains("ManagedUdpFlowResume::new"),
             "{flow_path} should own stream UDP flow and relay-final-hop resume construction"
@@ -2322,7 +2340,7 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
 #[test]
 fn vless_udp_transport_opening_lives_in_transport_crate() {
     let managed = read("src/adapters/vless/udp/managed.rs");
-    let adapter = read("src/adapters/vless/udp.rs");
+    let flow = read("src/adapters/vless/udp/flow.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read crates/transport/src/vless_transport.rs");
 
@@ -2339,7 +2357,7 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
     }
 
     assert!(
-        adapter.contains("crate::transport::VlessUdpTransportOptions")
+        flow.contains("crate::transport::VlessUdpTransportOptions")
             && managed.contains("crate::transport::VlessUdpTransportConnector")
             && managed.contains("crate::transport::build_vless_outbound_transport_over_stream"),
         "VLESS UDP adapter/runtime should request VLESS transport helpers instead of opening QUIC/TCP transports directly"
@@ -2365,6 +2383,7 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
 fn vless_udp_identity_is_protocol_parsed() {
     let managed = read("src/adapters/vless/udp/managed.rs");
     let adapter = read("src/adapters/vless/udp.rs");
+    let flow = read("src/adapters/vless/udp/flow.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
         .expect("read protocols/vless/src/outbound.rs");
 
@@ -2390,6 +2409,7 @@ fn vless_udp_identity_is_protocol_parsed() {
     assert!(
         !adapter.contains("parse_uuid")
             && !adapter.contains("vless::parse_udp_identity")
+            && flow.contains("vless_udp_flow_config")
             && adapter.contains("vless::VlessUdpFlowConfig::new"),
         "VLESS UDP adapter should use the protocol-owned flow config parser"
     );
@@ -2635,7 +2655,7 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
 #[test]
 fn vmess_udp_transport_opening_lives_in_transport_crate() {
     let managed = read("src/adapters/vmess/udp/managed.rs");
-    let adapter = read("src/adapters/vmess/udp.rs");
+    let flow = read("src/adapters/vmess/udp/flow.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
         .expect("read crates/transport/src/vmess_transport.rs");
 
@@ -2653,7 +2673,7 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
     }
 
     assert!(
-        adapter.contains("crate::transport::VmessTransportOptions")
+        flow.contains("crate::transport::VmessTransportOptions")
             && managed.contains("crate::transport::VmessTransportConnector")
             && managed.contains("crate::transport::build_vmess_outbound_transport_over_stream"),
         "VMess UDP adapter/runtime should request VMess transport helpers instead of opening TLS/WS/gRPC directly"
@@ -2682,6 +2702,7 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
 fn vmess_udp_identity_is_protocol_parsed() {
     let managed = read("src/adapters/vmess/udp/managed.rs");
     let adapter = read("src/adapters/vmess/udp.rs");
+    let flow = read("src/adapters/vmess/udp/flow.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read protocols/vmess/src/udp.rs");
 
@@ -2697,6 +2718,7 @@ fn vmess_udp_identity_is_protocol_parsed() {
     }
     assert!(
         !adapter.contains("vmess::parse_udp_identity")
+            && flow.contains("vmess_udp_flow_config")
             && adapter.contains("vmess::VmessUdpFlowConfig::new"),
         "VMess UDP adapter should use the protocol-owned flow config parser"
     );
@@ -3103,8 +3125,8 @@ fn protocol_mux_pools_are_adapter_owned_not_proxy_fields() {
     let vmess_adapter = read("src/adapters/vmess.rs");
     let vless_tcp = read("src/adapters/vless/tcp.rs");
     let vmess_tcp = read("src/adapters/vmess/tcp.rs");
-    let vless_udp = read("src/adapters/vless/udp.rs");
-    let vmess_udp = read("src/adapters/vmess/udp.rs");
+    let vless_udp = read("src/adapters/vless/udp/flow.rs");
+    let vmess_udp = read("src/adapters/vmess/udp/flow.rs");
 
     for forbidden in [
         "mux_pool: MuxConnectionPool",
@@ -3127,7 +3149,7 @@ fn protocol_mux_pools_are_adapter_owned_not_proxy_fields() {
             && vless_adapter.contains("self.mux_pool.evict_all()")
             && vless_tcp.contains("VlessMuxOpenRequest")
             && vless_tcp.contains(".mux_pool")
-            && vless_udp.contains("mux_pool: &self.mux_pool"),
+            && vless_udp.contains("mux_pool: &adapter.mux_pool"),
         "VLESS MUX pool should be owned by VlessAdapter and shared by its TCP/UDP paths"
     );
     assert!(
@@ -3136,7 +3158,7 @@ fn protocol_mux_pools_are_adapter_owned_not_proxy_fields() {
             && vmess_adapter.contains("self.mux_pool.evict_all()")
             && vmess_tcp.contains("VmessMuxOpenRequest")
             && vmess_tcp.contains(".mux_pool")
-            && vmess_udp.contains("mux_pool: &self.mux_pool"),
+            && vmess_udp.contains("mux_pool: &adapter.mux_pool"),
         "VMess MUX pool should be owned by VmessAdapter and shared by its TCP/UDP paths"
     );
 }
@@ -6556,8 +6578,8 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let protocol_forward = read("src/runtime/udp_flow/registered/forward.rs");
     let vless_flow = manifest_dir().join("src/runtime/udp_flow/registered/vless_flow.rs");
     let vmess_flow = manifest_dir().join("src/runtime/udp_flow/registered/vmess_flow.rs");
-    let vless_adapter = read("src/adapters/vless/udp.rs");
-    let vmess_adapter = read("src/adapters/vmess/udp.rs");
+    let vless_adapter = read("src/adapters/vless/udp/flow.rs");
+    let vmess_adapter = read("src/adapters/vmess/udp/flow.rs");
     let cached_start = manifest_dir().join("src/runtime/udp_flow/registered/cached_start.rs");
     let register = read("src/register.rs");
 
@@ -9219,7 +9241,10 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
         }
     }
 
-    for source in ["src/adapters/vless/udp.rs", "src/adapters/vmess/udp.rs"] {
+    for source in [
+        "src/adapters/vless/udp/flow.rs",
+        "src/adapters/vmess/udp/flow.rs",
+    ] {
         let adapter = read(source);
         assert!(
             adapter.contains("register_managed_stream_packet_flow")
@@ -9270,8 +9295,8 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
     }
 
     for (source, manager) in [
-        ("src/adapters/vless/udp.rs", "VlessUdpOutboundManager"),
-        ("src/adapters/vmess/udp.rs", "VmessUdpOutboundManager"),
+        ("src/adapters/vless/udp/flow.rs", "VlessUdpOutboundManager"),
+        ("src/adapters/vmess/udp/flow.rs", "VmessUdpOutboundManager"),
     ] {
         let adapter = read(source);
         assert!(

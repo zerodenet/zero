@@ -1,16 +1,14 @@
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
-use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vmess::VmessAdapter;
-use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
-use managed::{VmessUdpOutboundManager, VmessUdpRelayFlowStart, VmessUdpStartFlow};
 
+mod flow;
 mod managed;
 
-fn vmess_udp_flow_config<'a>(
+pub(super) fn vmess_udp_flow_config<'a>(
     id: &str,
     cipher: &'a str,
     stage: &'static str,
@@ -35,52 +33,7 @@ impl VmessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Vmess {
-            tag,
-            server,
-            port,
-            id,
-            cipher,
-            mux_concurrency,
-            mux_idle_timeout_secs: _,
-            tls,
-            ws,
-            grpc,
-        } = leaf
-        else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let config =
-            vmess_udp_flow_config(id, cipher, "udp_vmess_parse_config", Some((server, *port)))?;
-        let transport = crate::transport::VmessTransportOptions {
-            tls: *tls,
-            ws: *ws,
-            grpc: *grpc,
-            source_dir: proxy.config.source_dir(),
-        };
-        let mut manager = VmessUdpOutboundManager::new();
-        manager
-            .start_flow(
-                dispatch.managed_udp_chain_tasks(),
-                VmessUdpStartFlow {
-                    proxy,
-                    mux_pool: &self.mux_pool,
-                    session,
-                    server,
-                    port: *port,
-                    config,
-                    mux_concurrency: *mux_concurrency,
-                    transport,
-                    payload,
-                },
-            )
-            .await
-            .map_err(|error| FlowFailure {
-                stage: "udp_vmess_upstream",
-                error,
-                upstream: Some((server.to_string(), *port)),
-            })?;
-        Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
+        flow::start(self, dispatch, proxy, session, leaf, payload).await
     }
 
     pub(super) async fn start_udp_relay_final_hop_impl(
@@ -92,51 +45,6 @@ impl VmessAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Vmess {
-            tag,
-            server,
-            port,
-            id,
-            cipher,
-            tls,
-            ws,
-            grpc,
-            ..
-        } = leaf
-        else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let config = vmess_udp_flow_config(
-            id,
-            cipher,
-            "udp_vmess_relay_final_hop_parse_config",
-            Some((server, *port)),
-        )?;
-        let transport = crate::transport::VmessTransportOptions {
-            tls: *tls,
-            ws: *ws,
-            grpc: *grpc,
-            source_dir: proxy.config.source_dir(),
-        };
-        let mut manager = VmessUdpOutboundManager::new();
-        manager
-            .start_relay_flow(
-                dispatch.managed_udp_chain_tasks(),
-                VmessUdpRelayFlowStart {
-                    proxy,
-                    session,
-                    carrier,
-                    config,
-                    transport,
-                    payload,
-                },
-            )
-            .await
-            .map_err(|error| FlowFailure {
-                stage: "udp_vmess_relay_chain",
-                error,
-                upstream: None,
-            })?;
-        Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
+        flow::start_relay_final_hop(self, dispatch, proxy, session, carrier, leaf, payload).await
     }
 }
