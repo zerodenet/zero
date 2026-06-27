@@ -388,6 +388,19 @@ pub fn spawn_udp_flow(
 }
 
 #[cfg(feature = "tokio")]
+pub fn start_udp_flow_with_initial_packet(
+    conn: Arc<quinn::Connection>,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+    resume: Hysteria2UdpFlowResume,
+) -> Hysteria2UdpFlowSession {
+    let flow_io = resume.flow_io();
+    let initial_packet = Hysteria2InitialUdpFlowPacket::from_parts(target, port, payload);
+    Hysteria2UdpFlowSession::new(spawn_udp_flow(conn, initial_packet, flow_io))
+}
+
+#[cfg(feature = "tokio")]
 fn spawn_send_task(
     conn: Arc<quinn::Connection>,
     initial_packet: Hysteria2InitialUdpFlowPacket,

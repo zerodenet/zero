@@ -2907,6 +2907,9 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         "read_datagram",
         "tokio::spawn",
         "mpsc::channel::<UdpFlowPacket>",
+        "hysteria2::Hysteria2InitialUdpFlowPacket::from_parts",
+        "hysteria2::spawn_udp_flow",
+        "hysteria2::Hysteria2UdpFlowSession::new",
     ] {
         assert!(
             !stream.contains(forbidden),
@@ -2914,8 +2917,7 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         );
     }
     assert!(
-        stream.contains("hysteria2::spawn_udp_flow")
-            && stream.contains("hysteria2::Hysteria2UdpFlowSession::new")
+        stream.contains("hysteria2::start_udp_flow_with_initial_packet")
             && stream.contains("Hysteria2Connector::new")
             && stream.contains("connect_raw"),
         "Hysteria2 UDP stream glue should only connect QUIC and call the protocol-owned flow pump"
@@ -2924,6 +2926,7 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         protocol.contains("struct Hysteria2UdpFlowIo")
             && protocol.contains("pub fn encode_packet(&self")
             && protocol.contains("pub fn decode_packet(&self")
+            && protocol.contains("pub fn start_udp_flow_with_initial_packet")
             && protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("pub struct Hysteria2UdpFlowHandle")
             && protocol.contains("struct Hysteria2UdpFlowSender")
@@ -7555,7 +7558,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !manager_send.contains("UdpFlowPacket::from_parts")
             && !stream.contains("zero_core::UdpFlowPacket::from_parts")
             && !stream.contains("let initial_packet = UdpFlowPacket::from_parts")
-            && stream.contains("hysteria2::Hysteria2InitialUdpFlowPacket::from_parts")
+            && !stream.contains("hysteria2::Hysteria2InitialUdpFlowPacket::from_parts")
             && manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
             && !stream.contains("mpsc::Sender<UdpFlowPacket>")
             && !stream.contains("mpsc::channel::<UdpFlowPacket>")
@@ -7563,12 +7566,14 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !stream.contains("packet.encode_with(&resume)")
             && !stream.contains("hysteria2::udp_flow_packet")
             && !stream.contains("flow_io.decode_packet(&data)")
-            && stream.contains("hysteria2::spawn_udp_flow")
+            && stream.contains("hysteria2::start_udp_flow_with_initial_packet")
+            && !stream.contains("hysteria2::spawn_udp_flow")
             && protocol_udp.contains("struct Hysteria2UdpFlowSender")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowSession")
             && protocol_udp.contains("pub fn subscribe_responses(&self)")
             && protocol_udp.contains("pub struct Hysteria2InitialUdpFlowPacket")
+            && protocol_udp.contains("pub fn start_udp_flow_with_initial_packet")
             && protocol_udp.contains("mpsc::channel::<UdpFlowPacket>")
             && protocol_udp.contains("Hysteria2InitialUdpFlowPacket")
             && protocol_udp.contains("flow_io.encode_packet")
@@ -7784,8 +7789,9 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
     assert!(
         stream.contains("Hysteria2Connector::new")
             && stream.contains("connect_raw")
-            && stream.contains("hysteria2::spawn_udp_flow")
-            && stream.contains("hysteria2::Hysteria2UdpFlowSession::new")
+            && stream.contains("hysteria2::start_udp_flow_with_initial_packet")
+            && !stream.contains("hysteria2::spawn_udp_flow")
+            && !stream.contains("hysteria2::Hysteria2UdpFlowSession::new")
             && !stream.contains("send_datagram")
             && !stream.contains("read_datagram")
             && !stream.contains("tokio::spawn")
@@ -7798,6 +7804,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowHandle")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowSession")
+            && protocol_udp.contains("pub fn start_udp_flow_with_initial_packet")
             && protocol_udp.contains("broadcast::channel::<Hysteria2UdpFlowResponse>")
             && protocol_udp.contains("mpsc::channel::<UdpFlowPacket>")
             && protocol_udp.contains("tokio::spawn")

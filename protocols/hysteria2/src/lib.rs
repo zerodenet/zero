@@ -30,6 +30,7 @@ pub use udp::{
 };
 #[cfg(feature = "tokio")]
 pub use udp::{
-    spawn_udp_flow, Hysteria2InitialUdpFlowPacket, Hysteria2UdpFlowHandle,
-    Hysteria2UdpFlowResponse, Hysteria2UdpFlowResponseReceiver, Hysteria2UdpFlowSession,
+    spawn_udp_flow, start_udp_flow_with_initial_packet, Hysteria2InitialUdpFlowPacket,
+    Hysteria2UdpFlowHandle, Hysteria2UdpFlowResponse, Hysteria2UdpFlowResponseReceiver,
+    Hysteria2UdpFlowSession,
 };
