@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
@@ -11,10 +9,12 @@ mod bridge;
 mod entry;
 pub(super) mod model;
 
-use model::{SsSendExisting, SsUpstream};
+use model::SsSendExisting;
 
 pub(crate) struct SsChainManager {
-    upstreams: shadowsocks::ShadowsocksUdpFlowEntries<Arc<SsUpstream>>,
+    upstreams: shadowsocks::ShadowsocksUdpFlowEntries<
+        crate::runtime::udp_flow::managed::SharedManagedDatagramUdpConnection,
+    >,
 }
 
 impl SsChainManager {
@@ -62,23 +62,20 @@ impl SsChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        let response_rx = entry.waiters.register(packet_ref.target, packet_ref.port);
-        if let Err(e) = entry
-            .flow
-            .send_datagram(packet_ref.target, packet_ref.port, packet_ref.payload)
+        entry
+            .send_datagram(
+                ctx.chain_tasks,
+                ctx.session_id,
+                packet_ref.target,
+                packet_ref.port,
+                packet_ref.payload,
+            )
             .await
-        {
-            entry.waiters.remove(packet_ref.target, packet_ref.port);
-            return Err(FlowFailure {
+            .map_err(|e| FlowFailure {
                 stage: "ss_send",
                 error: e,
                 upstream: Some(endpoint.upstream()),
-            });
-        }
-
-        bridge::spawn_response_bridge(ctx.chain_tasks, response_rx, ctx.session_id);
-
-        Ok(packet_ref.payload.len())
+            })
     }
 
     async fn send_existing(&mut self, request: SsSendExisting<'_>) -> Result<usize, FlowFailure> {

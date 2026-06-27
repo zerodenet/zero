@@ -8363,6 +8363,7 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
+    let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/shadowsocks_transport.rs"))
             .expect("read shadowsocks transport source");
@@ -8410,7 +8411,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && protocol_outbound.contains("pub fn udp_flow_packet")
             && !manager.contains("shadowsocks::udp_flow_packet")
             && !manager.contains("UdpFlowPacket::from_parts")
-            && manager.contains(".send_datagram(packet_ref.target, packet_ref.port, packet_ref.payload)")
+            && manager.contains(".send_datagram(")
+            && model.contains("self.flow.send_datagram(target, port, payload)")
             && transport.contains("send_packet(&self, packet: UdpFlowPacket)")
             && transport.contains("pub async fn send_datagram(")
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
@@ -8584,10 +8586,14 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !shadowsocks_peer_model.contains("SsKey")
             && !shadowsocks_peer_model.contains("fn from_resume(")
             && !shadowsocks_peer_model.contains("socket_flow_cache_key()")
-            && manager.contains("shadowsocks::ShadowsocksUdpFlowEntries<Arc<SsUpstream>>")
+            && manager.contains("shadowsocks::ShadowsocksUdpFlowEntries")
+            && manager.contains("SharedManagedDatagramUdpConnection")
+            && !manager.contains("Arc<SsUpstream>")
+            && !manager.contains(".flow")
+            && !manager.contains(".waiters")
             && !manager.contains("shadowsocks::ShadowsocksUdpFlowStore<Arc<SsUpstream>>")
             && !manager.contains("HashMap<shadowsocks::ShadowsocksUdpCacheKey"),
-        "ordinary Shadowsocks UDP peer model should carry only protocol-owned opaque cache identity"
+        "ordinary Shadowsocks UDP peer model should carry only protocol-owned opaque cache identity and a neutral datagram connection"
     );
     assert!(
         !adapter.contains("ShadowsocksUdpFlowResume::from_config")
@@ -8940,6 +8946,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
 #[test]
 fn shadowsocks_udp_entry_cache_lives_outside_manager() {
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
     let entry = manifest_dir().join("src/adapters/shadowsocks/udp/manager/entry.rs");
 
     for forbidden in [
@@ -8957,6 +8964,17 @@ fn shadowsocks_udp_entry_cache_lives_outside_manager() {
     assert!(
         entry.exists(),
         "Shadowsocks UDP entry/cache construction should live in ss_manager/entry.rs"
+    );
+    assert!(
+        manager.contains(".send_datagram(")
+            && !manager.contains(".flow")
+            && !manager.contains(".waiters")
+            && !manager.contains("BridgeWaiters")
+            && model.contains("impl ManagedDatagramUdpConnection for SsUpstream")
+            && model.contains("super::bridge::spawn_response_bridge")
+            && model.contains("self.waiters.register")
+            && model.contains("self.flow.send_datagram"),
+        "Shadowsocks UDP manager should send through a neutral datagram connection while SsUpstream owns waiter/flow details"
     );
 }
 

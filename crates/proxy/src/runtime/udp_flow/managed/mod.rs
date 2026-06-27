@@ -31,6 +31,20 @@ pub(crate) trait ManagedUdpConnection: Send + Sync {
 
 pub(crate) type SharedManagedUdpConnection = Arc<dyn ManagedUdpConnection>;
 
+#[async_trait::async_trait]
+pub(crate) trait ManagedDatagramUdpConnection: Send + Sync {
+    async fn send_datagram(
+        &self,
+        chain_tasks: &mut JoinSet<ChainTask>,
+        session_id: u64,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError>;
+}
+
+pub(crate) type SharedManagedDatagramUdpConnection = Arc<dyn ManagedDatagramUdpConnection>;
+
 pub(crate) fn spawn_response_bridge<T, F>(
     chain_tasks: &mut JoinSet<ChainTask>,
     mut response_rx: tokio::sync::broadcast::Receiver<T>,
