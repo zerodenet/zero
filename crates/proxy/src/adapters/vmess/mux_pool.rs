@@ -50,12 +50,10 @@ impl VmessMuxConnectionPool {
         request: VmessMuxOpenRequest<'_>,
         network: Network,
     ) -> Result<TcpRelayStream, EngineError> {
-        let key = vmess::VmessMuxPoolKey::from_parts(
+        let key = vmess::VmessMuxPoolKey::from_identity(
             request.server.clone(),
             request.port,
-            request.id,
-            request.cipher_name.clone(),
-            request.cipher,
+            request.identity.clone(),
             transport_key(request.tls, request.ws, request.grpc)?,
         );
 

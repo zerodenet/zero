@@ -54,7 +54,39 @@ pub enum VmessMuxTransportKey {
     },
 }
 
+impl VmessMuxIdentity {
+    pub fn from_parts(id: [u8; 16], cipher_name: String, cipher: VmessCipher) -> Self {
+        Self {
+            uuid: id,
+            cipher_name,
+            cipher,
+        }
+    }
+
+    pub fn uuid(&self) -> &[u8; 16] {
+        &self.uuid
+    }
+
+    pub fn cipher(&self) -> VmessCipher {
+        self.cipher
+    }
+}
+
 impl VmessMuxPoolKey {
+    pub fn from_identity(
+        server: String,
+        port: u16,
+        identity: VmessMuxIdentity,
+        transport: VmessMuxTransportKey,
+    ) -> Self {
+        Self {
+            server,
+            port,
+            identity,
+            transport,
+        }
+    }
+
     pub fn from_parts(
         server: String,
         port: u16,
@@ -63,24 +95,20 @@ impl VmessMuxPoolKey {
         cipher: VmessCipher,
         transport: VmessMuxTransportKey,
     ) -> Self {
-        Self {
+        Self::from_identity(
             server,
             port,
-            identity: VmessMuxIdentity {
-                uuid: id,
-                cipher_name,
-                cipher,
-            },
+            VmessMuxIdentity::from_parts(id, cipher_name, cipher),
             transport,
-        }
+        )
     }
 
     pub fn uuid(&self) -> &[u8; 16] {
-        &self.identity.uuid
+        self.identity.uuid()
     }
 
     pub fn cipher(&self) -> VmessCipher {
-        self.identity.cipher
+        self.identity.cipher()
     }
 }
 

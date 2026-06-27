@@ -3125,10 +3125,21 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
             "VMess mux cache identity should live in protocols/vmess, not adapter model; found `{forbidden}`"
         );
     }
+    for forbidden in [
+        "id: [u8; 16]",
+        "cipher_name: String",
+        "cipher: vmess::VmessCipher",
+    ] {
+        assert!(
+            !model.contains(forbidden),
+            "VMess mux open request should carry protocol-owned identity, not `{forbidden}`"
+        );
+    }
 
     for required in [
         "struct VmessMuxOpenRequest",
         "struct VmessMuxConnectionPool",
+        "identity: vmess::VmessMuxIdentity",
     ] {
         assert!(
             model.contains(required),
@@ -3410,9 +3421,8 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
         "VMess mux pool should receive parsed cipher values from adapter-owned paths"
     );
     assert!(
-        model.contains("cipher_name: String")
-            && model.contains("cipher: vmess::VmessCipher")
-            && root.contains("vmess::VmessMuxPoolKey::from_parts")
+        model.contains("identity: vmess::VmessMuxIdentity")
+            && root.contains("vmess::VmessMuxPoolKey::from_identity")
             && !model.contains("struct VmessMuxPoolKey"),
         "VMess mux pool request should carry parsed identity to a protocol-owned key builder"
     );
