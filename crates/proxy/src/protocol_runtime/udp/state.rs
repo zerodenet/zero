@@ -15,6 +15,9 @@ use super::{
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
 use managed::ManagedProtocolUdpState;
+pub(crate) use managed::{
+    ManagedDatagramFlowHandler, ManagedStreamFlowHandler, ManagedUdpHandlers,
+};
 
 mod cached;
 mod forward;
@@ -38,10 +41,10 @@ pub(crate) struct ProtocolUdpState {
 }
 
 impl ProtocolUdpState {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(handlers: ManagedUdpHandlers) -> Self {
         Self {
             socks5: Socks5UdpRuntime::default(),
-            managed: ManagedProtocolUdpState::new(),
+            managed: ManagedProtocolUdpState::new(handlers),
             managed_flows: HashMap::new(),
             next_managed_flow_id: 1,
         }

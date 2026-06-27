@@ -10,7 +10,7 @@ use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
-pub(in crate::protocol_runtime::udp) struct ManagedExistingSend<'a> {
+pub(crate) struct ManagedExistingSend<'a> {
     pub(in crate::protocol_runtime::udp) chain_tasks: &'a mut JoinSet<ChainTask>,
     pub(in crate::protocol_runtime::udp) session_id: u64,
     pub(in crate::protocol_runtime::udp) proxy: Option<&'a Proxy>,
@@ -24,9 +24,7 @@ pub(in crate::protocol_runtime::udp) struct ManagedExistingSend<'a> {
 }
 
 #[async_trait::async_trait]
-pub(in crate::protocol_runtime::udp) trait ManagedDatagramFlowHandler:
-    Send + Sync
-{
+pub(crate) trait ManagedDatagramFlowHandler: Send + Sync {
     fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool;
 
     async fn send_managed_existing(
@@ -36,9 +34,7 @@ pub(in crate::protocol_runtime::udp) trait ManagedDatagramFlowHandler:
 }
 
 #[async_trait::async_trait]
-pub(in crate::protocol_runtime::udp) trait ManagedStreamFlowHandler:
-    Send + Sync
-{
+pub(crate) trait ManagedStreamFlowHandler: Send + Sync {
     fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool;
 
     fn supports_managed_relay_existing(&self, resume: &ProtocolUdpFlowResume) -> bool;
@@ -114,7 +110,7 @@ impl<'a> ManagedExistingSend<'a> {
     }
 }
 
-pub(in crate::protocol_runtime::udp) struct ManagedRelaySend<'a> {
+pub(crate) struct ManagedRelaySend<'a> {
     pub(in crate::protocol_runtime::udp) chain_tasks: &'a mut JoinSet<ChainTask>,
     pub(in crate::protocol_runtime::udp) session_id: u64,
     pub(in crate::protocol_runtime::udp) stream: TcpRelayStream,

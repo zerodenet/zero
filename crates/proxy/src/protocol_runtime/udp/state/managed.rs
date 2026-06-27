@@ -23,7 +23,13 @@ pub(in crate::protocol_runtime::udp) mod model;
 mod stream;
 
 use datagram::ManagedDatagramState;
+pub(crate) use model::{ManagedDatagramFlowHandler, ManagedStreamFlowHandler};
 use stream::ManagedStreamState;
+
+pub(crate) struct ManagedUdpHandlers {
+    pub(crate) datagram: Vec<Box<dyn ManagedDatagramFlowHandler>>,
+    pub(crate) stream: Vec<Box<dyn ManagedStreamFlowHandler>>,
+}
 
 pub(in crate::protocol_runtime::udp) struct ManagedProtocolUdpState {
     vless: VlessUdpOutboundManager,
@@ -34,13 +40,13 @@ pub(in crate::protocol_runtime::udp) struct ManagedProtocolUdpState {
 }
 
 impl ManagedProtocolUdpState {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(handlers: ManagedUdpHandlers) -> Self {
         Self {
             vless: VlessUdpOutboundManager::new(),
             #[cfg(feature = "vmess")]
             vmess: VmessUdpOutboundManager::new(),
-            datagram: ManagedDatagramState::new(),
-            stream: ManagedStreamState::new(),
+            datagram: ManagedDatagramState::new(handlers.datagram),
+            stream: ManagedStreamState::new(handlers.stream),
         }
     }
 

@@ -2625,6 +2625,11 @@ fn protocol_runtime_udp_root_does_not_reexport_upstream_poll_details() {
 #[test]
 fn protocol_runtime_udp_root_does_not_reexport_internal_managed_flow_models() {
     let root = read("src/protocol_runtime/udp/mod.rs");
+    let flow_reexports = root
+        .lines()
+        .filter(|line| line.contains("pub(crate) use flows::"))
+        .collect::<Vec<_>>()
+        .join("\n");
 
     for forbidden in [
         "ManagedDatagramFlow",
@@ -2632,7 +2637,7 @@ fn protocol_runtime_udp_root_does_not_reexport_internal_managed_flow_models() {
         "ManagedRelayStreamFlow",
     ] {
         assert!(
-            !root.contains(forbidden),
+            !flow_reexports.contains(forbidden),
             "protocol_runtime::udp root should not re-export internal managed flow model `{forbidden}`"
         );
     }
@@ -3694,6 +3699,7 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
     let datagram = read("src/protocol_runtime/udp/start/datagram.rs");
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
     let managed_datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
+    let register = read("src/register.rs");
 
     for forbidden in [
         "TrojanUdpFlowRequest",
@@ -3740,10 +3746,19 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
             && state.contains("start_managed_datagram_flow")
             && datagram.contains("self.managed.start_datagram_flow")
             && managed.contains("ManagedDatagramState")
+            && managed.contains("ManagedUdpHandlers")
             && managed_datagram.contains("handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>")
+            && !managed_datagram.contains("SsChainManager")
+            && !managed_datagram.contains("H2ChainManager")
             && managed_datagram.contains("for handler in &mut self.handlers")
             && managed_datagram.contains("ManagedExistingSend::datagram"),
         "managed datagram UDP flow kind should dispatch through registered datagram handlers"
+    );
+    assert!(
+        register.contains("managed_udp_handlers")
+            && register.contains("shadowsocks_datagram_handler")
+            && register.contains("hysteria2_datagram_handler"),
+        "datagram UDP handler collection should live at the compiled registration boundary"
     );
 }
 
@@ -3773,6 +3788,7 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
     let stream = read("src/protocol_runtime/udp/start/stream.rs");
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
     let managed_stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
+    let register = read("src/register.rs");
 
     for forbidden in [
         "ProtocolUdpFlowResume::Trojan(_)",
@@ -3804,11 +3820,20 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
             && stream.contains("self.managed.start_stream_packet_flow")
             && stream.contains("self.managed.start_relay_stream_flow")
             && managed.contains("ManagedStreamState")
+            && managed.contains("ManagedUdpHandlers")
             && managed_stream.contains("handlers: Vec<Box<dyn ManagedStreamFlowHandler>>")
+            && !managed_stream.contains("TrojanChainManager")
+            && !managed_stream.contains("MieruChainManager")
             && managed_stream.contains("for handler in &mut self.handlers")
             && managed_stream.contains("ManagedExistingSend::stream_packet")
             && managed_stream.contains("ManagedRelaySend::relay_stream"),
         "stream-packet and relay-stream UDP flow kinds should dispatch through registered stream handlers"
+    );
+    assert!(
+        register.contains("managed_udp_handlers")
+            && register.contains("trojan_stream_handler")
+            && register.contains("mieru_stream_handler"),
+        "stream UDP handler collection should live at the compiled registration boundary"
     );
 }
 
@@ -5127,6 +5152,7 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
     let datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     let stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
+    let register = read("src/register.rs");
 
     for field in [
         "vless",
@@ -5149,6 +5175,7 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
     assert!(
         content.contains("managed: ManagedProtocolUdpState")
             && managed.contains("struct ManagedProtocolUdpState")
+            && managed.contains("handlers: ManagedUdpHandlers")
             && managed.contains("vless: VlessUdpOutboundManager")
             && managed.contains("datagram: ManagedDatagramState")
             && managed.contains("stream: ManagedStreamState")
@@ -5164,6 +5191,11 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
             && !stream.contains("mieru: MieruChainManager"),
         "ProtocolUdpState should expose one managed UDP sub-state instead of protocol manager fields"
     );
+    assert!(
+        register.contains("managed_udp_handlers")
+            && !register.contains("ProtocolUdpState::new(crate::register::managed_udp_handlers())"),
+        "register should collect managed UDP handlers without owning protocol state construction"
+    );
 }
 
 #[test]
@@ -5171,16 +5203,16 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
     let root = read("src/protocol_runtime/udp/mod.rs");
 
     for forbidden in [
-        "H2ChainManager",
         "H2SendExisting",
-        "MieruChainManager",
         "MieruSendExisting",
         "MieruRelayExisting",
-        "SsChainManager",
         "SsSendExisting",
-        "TrojanChainManager",
         "TrojanSendExisting",
         "TrojanRelayExisting",
+        "pub(crate) use h2_manager::",
+        "pub(crate) use mieru_manager::",
+        "pub(crate) use ss_manager::",
+        "pub(crate) use trojan_manager::",
         "pub(crate) use peer::",
         "mod peer;",
         "SsUdpPeer",
@@ -5194,6 +5226,15 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
             "src/protocol_runtime/udp/mod.rs should expose protocol UDP facades, not manager internals; found `{forbidden}`"
         );
     }
+    assert!(
+        root.contains("shadowsocks_datagram_handler")
+            && root.contains("hysteria2_datagram_handler")
+            && root.contains("trojan_stream_handler")
+            && root.contains("mieru_stream_handler")
+            && root.contains("Box<dyn ManagedDatagramFlowHandler>")
+            && root.contains("Box<dyn ManagedStreamFlowHandler>"),
+        "UDP root should expose only opaque managed UDP handler factories for the registration boundary"
+    );
 }
 
 #[test]

@@ -1,11 +1,7 @@
-#[cfg(feature = "mieru")]
-use crate::protocol_runtime::udp::mieru_manager::MieruChainManager;
 use crate::protocol_runtime::udp::state::managed::flow_mismatch;
 use crate::protocol_runtime::udp::state::managed::model::{
     ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
 };
-#[cfg(feature = "trojan")]
-use crate::protocol_runtime::udp::trojan_manager::TrojanChainManager;
 use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowSnapshot};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
@@ -19,13 +15,9 @@ pub(in crate::protocol_runtime::udp::state::managed) struct ManagedStreamState {
 }
 
 impl ManagedStreamState {
-    pub(in crate::protocol_runtime::udp::state::managed) fn new() -> Self {
-        let handlers: Vec<Box<dyn ManagedStreamFlowHandler>> = vec![
-            #[cfg(feature = "trojan")]
-            (Box::new(TrojanChainManager::new()) as Box<dyn ManagedStreamFlowHandler>),
-            #[cfg(feature = "mieru")]
-            (Box::new(MieruChainManager::new()) as Box<dyn ManagedStreamFlowHandler>),
-        ];
+    pub(in crate::protocol_runtime::udp::state::managed) fn new(
+        handlers: Vec<Box<dyn ManagedStreamFlowHandler>>,
+    ) -> Self {
         Self { handlers }
     }
 

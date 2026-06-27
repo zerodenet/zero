@@ -22,6 +22,7 @@ use crate::adapters::VlessAdapter;
 #[cfg(feature = "vmess")]
 use crate::adapters::VmessAdapter;
 use crate::protocol_adapter::ProtocolRegistry;
+use crate::protocol_runtime::udp::ManagedUdpHandlers;
 
 pub(crate) fn protocol_registry() -> ProtocolRegistry {
     let mut registry = ProtocolRegistry::default();
@@ -47,4 +48,21 @@ pub(crate) fn protocol_registry() -> ProtocolRegistry {
     registry.register(Arc::new(DirectAdapter));
 
     registry
+}
+
+pub(crate) fn managed_udp_handlers() -> ManagedUdpHandlers {
+    ManagedUdpHandlers {
+        datagram: vec![
+            #[cfg(feature = "shadowsocks")]
+            crate::protocol_runtime::udp::shadowsocks_datagram_handler(),
+            #[cfg(feature = "hysteria2")]
+            crate::protocol_runtime::udp::hysteria2_datagram_handler(),
+        ],
+        stream: vec![
+            #[cfg(feature = "trojan")]
+            crate::protocol_runtime::udp::trojan_stream_handler(),
+            #[cfg(feature = "mieru")]
+            crate::protocol_runtime::udp::mieru_stream_handler(),
+        ],
+    }
 }

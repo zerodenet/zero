@@ -1,7 +1,3 @@
-#[cfg(feature = "hysteria2")]
-use crate::protocol_runtime::udp::h2_manager::H2ChainManager;
-#[cfg(feature = "shadowsocks")]
-use crate::protocol_runtime::udp::ss_manager::SsChainManager;
 use crate::protocol_runtime::udp::state::managed::model::{
     ManagedDatagramFlowHandler, ManagedExistingSend,
 };
@@ -18,13 +14,9 @@ pub(in crate::protocol_runtime::udp::state::managed) struct ManagedDatagramState
 }
 
 impl ManagedDatagramState {
-    pub(in crate::protocol_runtime::udp::state::managed) fn new() -> Self {
-        let handlers: Vec<Box<dyn ManagedDatagramFlowHandler>> = vec![
-            #[cfg(feature = "shadowsocks")]
-            (Box::new(SsChainManager::new()) as Box<dyn ManagedDatagramFlowHandler>),
-            #[cfg(feature = "hysteria2")]
-            (Box::new(H2ChainManager::new()) as Box<dyn ManagedDatagramFlowHandler>),
-        ];
+    pub(in crate::protocol_runtime::udp::state::managed) fn new(
+        handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>,
+    ) -> Self {
         Self { handlers }
     }
 
