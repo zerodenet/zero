@@ -16,10 +16,18 @@ use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 use super::model::{VmessMuxTcpStreamTask, VmessMuxUdpStreamTask};
-use super::{
-    decode_vmess_udp_payload, encode_vmess_mux_udp_response, encode_vmess_udp_response,
-    VmessUdpPayloadMode,
-};
+
+fn vmess_udp_response_mode(state: vmess::VmessUdpPayloadState) -> vmess::VmessUdpPayloadMode {
+    match state {
+        vmess::VmessUdpPayloadState::Unknown
+        | vmess::VmessUdpPayloadState::Mode(vmess::VmessUdpPayloadMode::VmessPacket) => {
+            vmess::VmessUdpPayloadMode::VmessPacket
+        }
+        vmess::VmessUdpPayloadState::Mode(vmess::VmessUdpPayloadMode::RawDatagram) => {
+            vmess::VmessUdpPayloadMode::RawDatagram
+        }
+    }
+}
 
 impl Proxy {
     pub(crate) async fn run_vmess_mux_session(
@@ -222,7 +230,7 @@ impl Proxy {
         let mut up_rx = up_rx;
         let proxy = self.clone();
         tasks.spawn(async move {
-            let mut payload_mode = VmessUdpPayloadMode::unknown();
+            let mut payload_mode = vmess::VmessUdpPayloadState::Unknown;
             let mut dispatch = match UdpDispatch::new(&inbound_tag).await {
                 Ok(dispatch) => dispatch,
                 Err(error) => {
@@ -248,8 +256,8 @@ impl Proxy {
                             break;
                         }
                         last_activity = TokioInstant::now();
-                        let input = match decode_vmess_udp_payload(
-                            &mut payload_mode,
+                        let input = match vmess::VmessInboundUdpCodec.decode_datagram(
+                            payload_mode,
                             &default_target,
                             default_port,
                             &payload,
@@ -260,6 +268,7 @@ impl Proxy {
                                 break;
                             }
                         };
+                        payload_mode = input.state;
                         if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
                             .dispatch(UdpPipeInput {
                                 target: input.target,
@@ -285,9 +294,9 @@ impl Proxy {
                                 if let Some(sid) = dispatch.direct_response_session_id(sender) {
                                     proxy.record_session_outbound_rx(sid, n as u64);
                                 }
-                                let encoded = encode_vmess_mux_udp_response(
+                                let encoded = vmess::VmessInboundUdpCodec.encode_mux_response(
                                     mux_session_id,
-                                    payload_mode,
+                                    vmess_udp_response_mode(payload_mode),
                                     &target,
                                     sender.port(),
                                     &direct_buf[..n],
@@ -324,9 +333,9 @@ impl Proxy {
                                     if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                         proxy.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                     }
-                                    match encode_vmess_mux_udp_response(
+                                    match vmess::VmessInboundUdpCodec.encode_mux_response(
                                         mux_session_id,
-                                        payload_mode,
+                                        vmess_udp_response_mode(payload_mode),
                                         &pkt.target,
                                         pkt.port,
                                         &pkt.payload,
@@ -358,9 +367,9 @@ impl Proxy {
                                 if let Some(sid) = session_id {
                                     proxy.record_session_outbound_rx(sid, payload.len() as u64);
                                 }
-                                match encode_vmess_mux_udp_response(
+                                match vmess::VmessInboundUdpCodec.encode_mux_response(
                                     mux_session_id,
-                                    payload_mode,
+                                    vmess_udp_response_mode(payload_mode),
                                     &target,
                                     port,
                                     &payload,
@@ -404,7 +413,7 @@ impl Proxy {
         let auth = session.auth.clone();
         let default_target = session.target.clone();
         let default_port = session.port;
-        let mut payload_mode = VmessUdpPayloadMode::unknown();
+        let mut payload_mode = vmess::VmessUdpPayloadState::Unknown;
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
 
@@ -435,8 +444,8 @@ impl Proxy {
                         Ok(0) => break,
                         Ok(n) => {
                             last_activity = TokioInstant::now();
-                            let input = match decode_vmess_udp_payload(
-                                &mut payload_mode,
+                            let input = match vmess::VmessInboundUdpCodec.decode_datagram(
+                                payload_mode,
                                 &default_target,
                                 default_port,
                                 &client_buf[..n],
@@ -447,6 +456,7 @@ impl Proxy {
                                     break;
                                 }
                             };
+                            payload_mode = input.state;
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
                                     target: input.target,
@@ -478,8 +488,8 @@ impl Proxy {
                     if let Some(sid) = session_id {
                         self.record_session_outbound_rx(sid, n as u64);
                     }
-                    let packet = encode_vmess_udp_response(
-                        payload_mode,
+                    let packet = vmess::VmessInboundUdpCodec.encode_response(
+                        vmess_udp_response_mode(payload_mode),
                         &target,
                         sender.port(),
                         &direct_buf[..n],
@@ -499,8 +509,8 @@ impl Proxy {
                                 if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                     self.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                 }
-                                let packet = encode_vmess_udp_response(
-                                    payload_mode,
+                                let packet = vmess::VmessInboundUdpCodec.encode_response(
+                                    vmess_udp_response_mode(payload_mode),
                                     &pkt.target,
                                     pkt.port,
                                     &pkt.payload,
@@ -524,8 +534,8 @@ impl Proxy {
                             if let Some(sid) = session_id {
                                 self.record_session_outbound_rx(sid, payload.len() as u64);
                             }
-                            let packet = encode_vmess_udp_response(
-                                payload_mode,
+                            let packet = vmess::VmessInboundUdpCodec.encode_response(
+                                vmess_udp_response_mode(payload_mode),
                                 &target,
                                 port,
                                 &payload,

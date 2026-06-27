@@ -116,9 +116,6 @@ pub(crate) mod model;
 mod mux;
 mod transport;
 
-pub(crate) use helpers::{
-    decode_vmess_udp_payload, encode_vmess_mux_udp_response, encode_vmess_udp_response,
-    remote_addr_to_socket, wrap_vmess_client, VmessUdpPayloadMode,
-};
+pub(crate) use helpers::{remote_addr_to_socket, wrap_vmess_client};
 pub(crate) use listener::run_vmess_listener_with_bound;
 pub(crate) use transport::{handle_vmess_grpc, handle_vmess_raw, handle_vmess_ws};

@@ -2866,12 +2866,21 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
         );
     }
     assert!(
-        helper.contains("vmess::VmessInboundUdpCodec")
+        !helper.contains("VmessInboundUdpPayload")
+            && !helper.contains("VmessUdpPayloadMode")
+            && !helper.contains("decode_vmess_udp_payload")
+            && !helper.contains("encode_vmess_udp_response")
+            && !helper.contains("encode_vmess_mux_udp_response")
+            && !helper.contains("vmess::VmessInboundUdpCodec")
+            && mux.contains("vmess::VmessInboundUdpCodec.decode_datagram")
+            && mux.contains("vmess::VmessInboundUdpCodec.encode_response")
+            && mux.contains("vmess::VmessInboundUdpCodec.encode_mux_response")
+            && mux.contains("vmess::VmessUdpPayloadState::Unknown")
             && protocol_udp.contains("struct VmessInboundUdpCodec")
             && protocol_udp.contains("fn encode_response")
             && protocol_udp.contains("fn encode_mux_response")
             && protocol_udp.contains("fn decode_datagram"),
-        "VMess inbound UDP packet framing should go through the protocols/vmess inbound codec wrapper"
+        "VMess inbound UDP packet framing should go directly through the protocols/vmess inbound codec from inbound glue"
     );
 }
 
