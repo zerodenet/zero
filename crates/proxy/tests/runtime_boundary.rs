@@ -1292,6 +1292,46 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
 }
 
 #[test]
+fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
+    let root = read("src/adapters/hysteria2/udp.rs");
+    let packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
+    let flow = read("src/adapters/hysteria2/udp/flow.rs");
+
+    for required in ["mod packet_path;", "mod flow;"] {
+        assert!(
+            root.contains(required),
+            "src/adapters/hysteria2/udp.rs should wire `{required}` as protocol-local UDP glue"
+        );
+    }
+    for forbidden in [
+        "Hysteria2UdpPacketPathConfig::new",
+        "config.packet_path()",
+        "packet_path.cache_key()",
+        "packet_path.codec()",
+        "ManagedProtocolUdpSend {",
+        "ManagedUdpFlowResume::new",
+        "open_udp_packet_path_connection",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/adapters/hysteria2/udp.rs should be a UDP capability facade and not own `{forbidden}`"
+        );
+    }
+    assert!(
+        packet_path.contains("Hysteria2UdpPacketPathConfig::new")
+            && packet_path.contains(".packet_path()")
+            && packet_path.contains("packet_path.cache_key()")
+            && packet_path.contains("packet_path.codec()")
+            && packet_path.contains("open_udp_packet_path_connection")
+            && flow.contains("Hysteria2UdpPacketPathConfig::new")
+            && flow.contains(".flow_resume()")
+            && flow.contains("ManagedProtocolUdpSend {")
+            && flow.contains("ManagedUdpFlowResume::new"),
+        "Hysteria2 packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
+    );
+}
+
+#[test]
 fn adapter_root_is_facade_only() {
     let adapters = read("src/adapters/mod.rs");
 
@@ -6886,7 +6926,7 @@ fn packet_path_chain_root_does_not_reexport_protocol_carrier_builders() {
 
     for source in [
         "src/adapters/shadowsocks/udp/packet_path.rs",
-        "src/adapters/hysteria2/udp.rs",
+        "src/adapters/hysteria2/udp/packet_path.rs",
     ] {
         let content = read(source);
         assert!(
@@ -8116,6 +8156,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .expect("read hysteria2 protocol udp source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
         .expect("read hysteria2 protocol lib source");
+    let adapter_flow = read("src/adapters/hysteria2/udp/flow.rs");
+    let adapter_packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
 
     for forbidden in [
         "UdpDatagramFraming",
@@ -8139,9 +8181,11 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     );
     assert!(
         !adapter.contains("hysteria2::udp_flow_codec")
-            && adapter.contains("Hysteria2UdpPacketPathConfig")
-            && adapter.contains("Hysteria2UdpPacketPathConfig::new")
+            && !adapter.contains("Hysteria2UdpPacketPathConfig")
+            && !adapter.contains("Hysteria2UdpPacketPathConfig::new")
             && !adapter.contains("Hysteria2UdpPacketPathConfig {")
+            && adapter_flow.contains("Hysteria2UdpPacketPathConfig::new")
+            && adapter_packet_path.contains("Hysteria2UdpPacketPathConfig::new")
             && protocol_udp.contains("pub fn udp_flow_codec(")
             && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
             && protocol_udp.contains("pub fn new(")
@@ -8201,8 +8245,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     );
     assert!(
         !adapter.contains("Hysteria2UdpFlowResume::new")
-            && adapter.contains(".flow_resume()")
-            && adapter.contains(".packet_path()")
+            && !adapter.contains(".flow_resume()")
+            && !adapter.contains(".packet_path()")
+            && adapter_flow.contains(".flow_resume()")
+            && adapter_packet_path.contains(".packet_path()")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
             && protocol_udp.contains("pub struct Hysteria2UdpPacketPath")
             && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
@@ -8323,6 +8369,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
 #[test]
 fn h2_packet_path_carrier_uses_protocol_built_codec() {
     let adapter = read("src/adapters/hysteria2/udp.rs");
+    let adapter_packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
     let carrier = read("src/runtime/udp_flow/packet_path_chain/carriers/quic_datagram_carrier.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/udp_packet_path.rs"))
         .expect("read zero-transport udp packet path source");
@@ -8332,8 +8379,9 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
     assert!(
         !adapter.contains("hysteria2::udp_flow_codec")
             && !adapter.contains("hysteria2::udp_cache_key")
-            && adapter.contains("Hysteria2UdpPacketPathConfig"),
-        "Hysteria2 adapter should request protocol-built packet-path cache identity and codec through a protocol config helper"
+            && !adapter.contains("Hysteria2UdpPacketPathConfig")
+            && adapter_packet_path.contains("Hysteria2UdpPacketPathConfig"),
+        "Hysteria2 packet-path adapter submodule should request protocol-built packet-path cache identity and codec through a protocol config helper"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
@@ -8362,10 +8410,13 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
             && carrier.contains("PacketPathCarrierAdapter")
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
             && transport.contains("conn: Arc<quinn::Connection>")
-            && adapter.contains("outbound::hysteria2::open_udp_packet_path_connection")
+            && !adapter.contains("outbound::hysteria2::open_udp_packet_path_connection")
+            && adapter_packet_path.contains("outbound::hysteria2::open_udp_packet_path_connection")
             && !adapter.contains("Hysteria2Connector")
-            && !adapter.contains("connect_raw"),
-        "Hysteria2 adapter should request protocol-specific QUIC connection setup from outbound/hysteria2 while zero-transport owns connection lifecycle and codec use"
+            && !adapter.contains("connect_raw")
+            && !adapter_packet_path.contains("Hysteria2Connector")
+            && !adapter_packet_path.contains("connect_raw"),
+        "Hysteria2 packet-path adapter submodule should request protocol-specific QUIC connection setup from outbound/hysteria2 while zero-transport owns connection lifecycle and codec use"
     );
 }
 
@@ -9290,7 +9341,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
     }
     for source in [
         "src/adapters/shadowsocks/udp/packet_path.rs",
-        "src/adapters/hysteria2/udp.rs",
+        "src/adapters/hysteria2/udp/packet_path.rs",
     ] {
         let content = read(source);
         assert!(
@@ -9402,7 +9453,7 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
     for source in [
         "src/adapters/socks5/udp.rs",
         "src/adapters/shadowsocks/udp/flow.rs",
-        "src/adapters/hysteria2/udp.rs",
+        "src/adapters/hysteria2/udp/flow.rs",
         "src/adapters/trojan/udp.rs",
         "src/adapters/mieru/udp.rs",
     ] {
@@ -9538,7 +9589,7 @@ fn udp_dispatch_does_not_unpack_protocol_flow_resume() {
     let managed = read("src/runtime/udp_dispatch/managed.rs");
     for source in [
         "src/runtime/udp_dispatch/managed.rs",
-        "src/adapters/hysteria2/udp.rs",
+        "src/adapters/hysteria2/udp/flow.rs",
         "src/adapters/mieru/udp.rs",
         "src/adapters/shadowsocks/udp.rs",
         "src/adapters/trojan/udp.rs",
