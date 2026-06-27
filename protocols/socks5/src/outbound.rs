@@ -11,7 +11,7 @@ use crate::shared::{
     REP_CONNECTION_NOT_ALLOWED, REP_GENERAL_FAILURE, REP_HOST_UNREACHABLE, REP_SUCCEEDED,
     SOCKS5_VERSION, USERPASS_STATUS_SUCCESS, USERPASS_VERSION,
 };
-use crate::udp::Socks5OwnedUdpAssociationConfig;
+use crate::udp::{Socks5OwnedUdpAssociationConfig, Socks5UdpAssociationTarget};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Socks5Outbound;
@@ -62,6 +62,15 @@ impl Socks5UdpFlowResume {
 
     pub fn owned_association_config(&self) -> Socks5OwnedUdpAssociationConfig {
         Socks5OwnedUdpAssociationConfig::new(self.auth.clone())
+    }
+
+    pub fn association_target(
+        &self,
+        outbound_tag: impl Into<alloc::string::String>,
+        server: impl Into<alloc::string::String>,
+        port: u16,
+    ) -> Socks5UdpAssociationTarget {
+        Socks5UdpAssociationTarget::new(outbound_tag, server, port, self.owned_association_config())
     }
 }
 

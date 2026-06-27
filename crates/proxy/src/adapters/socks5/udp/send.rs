@@ -1,7 +1,6 @@
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use super::model::Socks5UdpAssociation;
 use super::runtime::Socks5UdpRuntime;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::Proxy;
@@ -26,12 +25,11 @@ pub(crate) async fn send(
             "expected SOCKS5 UDP flow resume",
         )));
     };
-    let association = Socks5UdpAssociation {
-        outbound_tag: request.tag.to_owned(),
-        server: request.server.to_owned(),
-        port: request.port,
-        config: resume.owned_association_config(),
-    };
+    let association = resume.association_target(
+        request.tag.to_owned(),
+        request.server.to_owned(),
+        request.port,
+    );
 
     match runtime
         .send_packet(

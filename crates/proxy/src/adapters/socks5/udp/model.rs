@@ -21,19 +21,8 @@ pub(crate) struct ClosedSocks5UdpAssociation {
     pub(crate) port: u16,
 }
 
-/// SOCKS5 UDP association context.
-#[derive(Clone)]
-pub(super) struct Socks5UdpAssociation {
-    pub(super) outbound_tag: String,
-    pub(super) server: String,
-    pub(super) port: u16,
-    pub(super) config: socks5::Socks5OwnedUdpAssociationConfig,
-}
-
 #[async_trait::async_trait]
 pub(super) trait Socks5UdpAssociationHandle: Send + Sync {
-    fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool;
-
     fn outbound_tag(&self) -> &str;
 
     fn upstream_endpoint(&self) -> (&str, u16);

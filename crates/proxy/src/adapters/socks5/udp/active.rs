@@ -72,10 +72,6 @@ impl ActiveUpstreamSocks5UdpAssociation {
         })
     }
 
-    pub(super) fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool {
-        self.outbound_tag == outbound_tag && self.server == server && self.port == port
-    }
-
     pub(super) fn outbound_tag(&self) -> &str {
         &self.outbound_tag
     }
@@ -132,10 +128,6 @@ impl ActiveUpstreamSocks5UdpAssociation {
 
 #[async_trait::async_trait]
 impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation {
-    fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool {
-        self.matches(outbound_tag, server, port)
-    }
-
     fn outbound_tag(&self) -> &str {
         self.outbound_tag()
     }

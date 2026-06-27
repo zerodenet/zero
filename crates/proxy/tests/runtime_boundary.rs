@@ -2142,6 +2142,8 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let active = read("src/adapters/socks5/udp/active.rs");
     let establish = read("src/adapters/socks5/udp/establish.rs");
     let model = read("src/adapters/socks5/udp/model.rs");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/socks5/src/udp.rs"))
+        .expect("read socks5 udp");
     let packet_path_source = read("src/adapters/socks5/udp/packet_path.rs");
     let send_source = read("src/adapters/socks5/udp/send.rs");
     let send = manifest_dir().join("src/adapters/socks5/udp/send.rs");
@@ -2235,12 +2237,17 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     }
     assert!(
         model.contains("enum UpstreamAssociationCloseReason")
-            && model.contains("struct Socks5UdpAssociation")
+            && !model
+                .lines()
+                .any(|line| line.trim() == "pub(super) struct Socks5UdpAssociation {")
             && model.contains("trait Socks5UdpAssociationHandle")
             && model.contains("type BoxedSocks5UdpAssociation")
             && model.contains("trait Socks5UdpPacketPathAssociation")
-            && model.contains("type SharedSocks5UdpPacketPathAssociation"),
-        "SOCKS5 UDP association models and neutral handles should live under adapters/socks5/udp/model.rs"
+            && model.contains("type SharedSocks5UdpPacketPathAssociation")
+            && protocol_udp.contains("struct Socks5UdpAssociationTarget")
+            && protocol_udp.contains("outbound_tag: alloc::string::String")
+            && protocol_udp.contains("pub fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool"),
+        "SOCKS5 UDP association handles should live under adapters/socks5/udp/model.rs while protocol association targets stay in protocols/socks5"
     );
     assert!(
         !send_source.contains("send_socks5_udp_packet")
@@ -3821,13 +3828,18 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
     let model = read("src/adapters/socks5/udp/model.rs");
     let send = read("src/adapters/socks5/udp/send.rs");
     let runtime = read("src/adapters/socks5/udp/runtime.rs");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/socks5/src/udp.rs"))
+        .expect("read socks5 udp");
     let upstream = read("src/runtime/udp_flow/registered/upstream.rs");
     let response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
 
     assert!(
-        model
-            .lines()
-            .any(|line| line.contains("outbound_tag: String"))
+        send.contains("resume.association_target(")
+            && protocol_udp.contains("struct Socks5UdpAssociationTarget")
+            && protocol_udp.contains("outbound_tag: alloc::string::String")
+            && !model
+                .lines()
+                .any(|line| line.trim() == "pub(super) struct Socks5UdpAssociation {")
             && !model
                 .lines()
                 .any(|line| line.trim() == "pub(super) tag: String,"),
@@ -3841,8 +3853,8 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
         "SOCKS5 UDP runtime must pass the outbound tag into the upstream association through neutral upstream dispatch"
     );
     assert!(
-        send.contains("outbound_tag: request.tag.to_owned()")
-            && runtime.contains("&association.outbound_tag")
+        send.contains("resume.association_target(")
+            && runtime.contains("association.outbound_tag()")
             && !send.contains("association.tag"),
         "SOCKS5 UDP runtime state should store and match the relay outbound tag"
     );

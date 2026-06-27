@@ -52,6 +52,50 @@ impl Socks5OwnedUdpAssociationConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpAssociationTarget {
+    outbound_tag: alloc::string::String,
+    server: alloc::string::String,
+    port: u16,
+    config: Socks5OwnedUdpAssociationConfig,
+}
+
+impl Socks5UdpAssociationTarget {
+    pub fn new(
+        outbound_tag: impl Into<alloc::string::String>,
+        server: impl Into<alloc::string::String>,
+        port: u16,
+        config: Socks5OwnedUdpAssociationConfig,
+    ) -> Self {
+        Self {
+            outbound_tag: outbound_tag.into(),
+            server: server.into(),
+            port,
+            config,
+        }
+    }
+
+    pub fn outbound_tag(&self) -> &str {
+        &self.outbound_tag
+    }
+
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn association_config(&self) -> Socks5UdpAssociationConfig<'_> {
+        self.config.as_ref()
+    }
+
+    pub fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool {
+        self.outbound_tag == outbound_tag && self.server == server && self.port == port
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Socks5UdpRelayError<E> {
     Socket(E),
     Protocol(Error),
