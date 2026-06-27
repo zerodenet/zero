@@ -207,11 +207,12 @@ impl Proxy {
                     match packet {
                         Ok(request) => {
                             last_activity = TokioInstant::now();
+                            let (target, port, payload) = request.into_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target: request.target().clone(),
-                                    port: request.port(),
-                                    payload: request.payload(),
+                                    target,
+                                    port,
+                                    payload: &payload,
                                     protocol: zero_core::ProtocolType::Trojan,
                                     auth: auth.as_ref(),
                                     client_session_id: None,

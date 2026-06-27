@@ -65,6 +65,14 @@ impl Hysteria2InboundUdpRequest {
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
+
+    pub fn session_id(&self) -> u16 {
+        self.session_id
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 /// Stateful inbound UDP bridge for Hysteria2 datagram sessions.
@@ -87,13 +95,9 @@ impl Hysteria2InboundUdpSession {
             .map(Hysteria2InboundUdpRequest::from_packet)
     }
 
-    pub fn record_proxy_session(
-        &mut self,
-        proxy_session_id: u64,
-        request: &Hysteria2InboundUdpRequest,
-    ) {
+    pub fn record_proxy_session(&mut self, proxy_session_id: u64, request_session_id: u16) {
         self.h2_sessions_by_proxy_session
-            .insert(proxy_session_id, request.session_id);
+            .insert(proxy_session_id, request_session_id);
     }
 
     pub fn send_response(

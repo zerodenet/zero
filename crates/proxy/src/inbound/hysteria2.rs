@@ -366,17 +366,19 @@ impl Proxy {
                     match dg {
                         Ok(data) => {
                             if let Ok(request) = udp_session.decode_request(&data) {
+                                let request_session_id = request.session_id();
+                                let (target, port, payload) = request.into_parts();
                                 let _ = UdpPipe::new(&proxy, &mut dispatch)
                                     .dispatch(UdpPipeInput {
-                                        target: request.target().clone(),
-                                        port: request.port(),
-                                        payload: request.payload(),
+                                        target,
+                                        port,
+                                        payload: &payload,
                                         protocol: ProtocolType::Hysteria2,
                                         auth: None,
                                         client_session_id: None,
                                     })
                                     .await.inspect(|sid| {
-                                    udp_session.record_proxy_session(*sid, &request);
+                                    udp_session.record_proxy_session(*sid, request_session_id);
                                 }).inspect_err(|e| {
                                     warn!(error = %e, "h2 udp dispatch failed");
                                 });

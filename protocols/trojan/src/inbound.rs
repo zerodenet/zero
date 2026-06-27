@@ -43,6 +43,10 @@ impl TrojanInboundUdpRequest {
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
+
+    pub fn into_parts(self) -> (zero_core::Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
