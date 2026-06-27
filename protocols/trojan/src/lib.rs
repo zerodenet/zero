@@ -27,8 +27,8 @@ pub use outbound::{
     TrojanUdpFlowResponseReceiver, TrojanUdpFlowSession, TrojanUdpFlowSessions,
 };
 pub use shared::{
-    build_udp_packet, read_password, read_request, read_udp_packet, write_password, write_request,
-    write_udp_packet, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, CMD_TCP, CMD_UDP, CRLF, PASSWORD_HASH_LEN,
+    read_password, read_request, write_password, write_request, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6,
+    CMD_TCP, CMD_UDP, CRLF, PASSWORD_HASH_LEN,
 };
 
 #[cfg(feature = "crypto")]

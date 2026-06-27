@@ -7817,6 +7817,17 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && !managed.contains("trojan::read_inbound_udp_packet"),
         "Trojan UDP managed glue should use flow-specific protocol helpers instead of generic UDP helpers"
     );
+    let protocol_shared = fs::read_to_string(repo_root().join("protocols/trojan/src/shared.rs"))
+        .expect("read trojan protocol shared source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/trojan/src/lib.rs"))
+        .expect("read trojan protocol lib source");
+    for private_helper in ["build_udp_packet", "read_udp_packet", "write_udp_packet"] {
+        assert!(
+            protocol_shared.contains(&format!("pub(crate) {} {private_helper}", if private_helper == "build_udp_packet" { "fn" } else { "async fn" }))
+                && !protocol_lib.contains(private_helper),
+            "Trojan low-level UDP stream helper `{private_helper}` should stay crate-private and should not be re-exported"
+        );
+    }
     assert!(
         !managed.contains("trojan::establish_udp_flow_with_resume")
             && connector.contains("trojan::establish_udp_flow_with_resume")

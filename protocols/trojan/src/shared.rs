@@ -75,7 +75,7 @@ pub async fn read_request<S: AsyncSocket>(stream: &mut S) -> Result<(u8, Address
 ///
 /// Format: `[2 bytes length BE][ATYP][ADDR][PORT][payload]`
 /// The length covers everything after the length field itself.
-pub async fn write_udp_packet<S: AsyncSocket>(
+pub(crate) async fn write_udp_packet<S: AsyncSocket>(
     stream: &mut S,
     addr: &Address,
     port: u16,
@@ -89,7 +89,7 @@ pub async fn write_udp_packet<S: AsyncSocket>(
 }
 
 /// Build a Trojan UDP packet in memory.
-pub fn build_udp_packet(addr: &Address, port: u16, payload: &[u8]) -> Vec<u8> {
+pub(crate) fn build_udp_packet(addr: &Address, port: u16, payload: &[u8]) -> Vec<u8> {
     // Body = ATYP + ADDR + PORT + payload
     let body = build_address_body(addr, port, payload);
     let mut packet = Vec::with_capacity(2 + body.len());
@@ -101,7 +101,7 @@ pub fn build_udp_packet(addr: &Address, port: u16, payload: &[u8]) -> Vec<u8> {
 /// Read a Trojan UDP packet from a TCP stream.
 ///
 /// Returns (address, port, payload) on success.
-pub async fn read_udp_packet<S: AsyncSocket>(
+pub(crate) async fn read_udp_packet<S: AsyncSocket>(
     stream: &mut S,
 ) -> Result<(Address, u16, Vec<u8>), Error> {
     // Read 2-byte length header
