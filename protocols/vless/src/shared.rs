@@ -578,11 +578,11 @@ pub fn encode_udp_response(target: &Address, port: u16, payload: &[u8]) -> Resul
     build_udp_packet(target, port, payload)
 }
 
-pub fn decode_inbound_udp_datagram(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
+fn decode_inbound_udp_datagram(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
     decode_inbound_udp_packet(packet)
 }
 
-pub fn encode_inbound_udp_response(
+fn encode_inbound_udp_response(
     target: &Address,
     port: u16,
     payload: &[u8],
@@ -590,7 +590,7 @@ pub fn encode_inbound_udp_response(
     encode_udp_response(target, port, payload)
 }
 
-pub fn encode_inbound_mux_udp_response(
+fn encode_inbound_mux_udp_response(
     mux_session_id: u16,
     target: &Address,
     port: u16,

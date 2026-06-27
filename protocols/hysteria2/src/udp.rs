@@ -211,11 +211,11 @@ pub fn decode_udp_flow_packet(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> 
     parse_udp_datagram(data)
 }
 
-pub fn decode_inbound_udp_datagram(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
+fn decode_inbound_udp_datagram(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
     parse_udp_datagram(data)
 }
 
-pub fn encode_inbound_udp_datagram(
+fn encode_inbound_udp_datagram(
     session_id: u16,
     target: &Address,
     port: u16,

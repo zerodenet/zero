@@ -999,6 +999,8 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     let adapter = read("src/adapters/hysteria2/inbound.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
+        .expect("read hysteria2 protocol lib source");
 
     assert!(
         inbound.contains("struct Hysteria2InboundRequest")
@@ -1069,6 +1071,14 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && protocol_udp.contains("fn send_datagram"),
         "Hysteria2 inbound should delegate UDP datagram state and framing through the protocol-owned inbound UDP session"
     );
+    for private_helper in ["decode_inbound_udp_datagram", "encode_inbound_udp_datagram"] {
+        assert!(
+            !protocol_udp.contains(&format!("pub fn {private_helper}"))
+                && protocol_udp.contains(&format!("fn {private_helper}"))
+                && !protocol_lib.contains(private_helper),
+            "Hysteria2 inbound UDP helper `{private_helper}` should stay private to protocols/hysteria2::udp and should not be re-exported"
+        );
+    }
 }
 
 #[test]
@@ -3504,6 +3514,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
         .expect("workspace root")
         .join("protocols/vmess/src/udp.rs");
     let protocol_udp = fs::read_to_string(protocol_udp).expect("read vmess protocol udp source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/vmess/src/lib.rs"))
+        .expect("read vmess protocol lib source");
 
     assert!(
         !helper.contains("vmess::build_udp_packet"),
@@ -3566,6 +3578,18 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && protocol_udp.contains("fn decode_datagram"),
         "VMess inbound UDP packet framing and response mode selection should go through protocols/vmess inbound codec"
     );
+    for private_helper in [
+        "decode_inbound_udp_datagram",
+        "encode_inbound_udp_response",
+        "encode_inbound_mux_udp_response",
+    ] {
+        assert!(
+            !protocol_udp.contains(&format!("pub fn {private_helper}"))
+                && protocol_udp.contains(&format!("fn {private_helper}"))
+                && !protocol_lib.contains(private_helper),
+            "VMess inbound UDP helper `{private_helper}` should stay private to protocols/vmess::udp and should not be re-exported"
+        );
+    }
 }
 
 #[test]
@@ -3596,6 +3620,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         .join("protocols/vless/src/shared.rs");
     let protocol_shared =
         fs::read_to_string(protocol_shared).expect("read vless protocol shared source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/vless/src/lib.rs"))
+        .expect("read vless protocol lib source");
 
     for (source_name, source) in [
         ("inbound/vless/helpers.rs", helper.as_str()),
@@ -3663,6 +3689,18 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_shared.contains("fn send_mux_response"),
         "VLESS inbound UDP packet framing should go directly through the protocols/vless inbound codec from inbound glue"
     );
+    for private_helper in [
+        "decode_inbound_udp_datagram",
+        "encode_inbound_udp_response",
+        "encode_inbound_mux_udp_response",
+    ] {
+        assert!(
+            !protocol_shared.contains(&format!("pub fn {private_helper}"))
+                && protocol_shared.contains(&format!("fn {private_helper}"))
+                && !protocol_lib.contains(private_helper),
+            "VLESS inbound UDP helper `{private_helper}` should stay private to protocols/vless::shared and should not be re-exported"
+        );
+    }
 }
 
 #[test]
