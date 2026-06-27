@@ -41,19 +41,13 @@ pub(crate) async fn connect_tcp(
         .direct_connector()
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
-    let tls_config = ClientTlsConfig {
-        server_name: sni.map(|s| s.to_owned()),
-        disable_sni: false,
-        ca_cert_path: None,
-        insecure,
-        alpn: Vec::new(),
-        client_fingerprint: client_fingerprint.map(|s| s.to_owned()),
-    };
-    let tls_stream = zero_transport::tls::connect_tls_upstream(
+    let tls_stream = open_trojan_udp_tls_stream(
         upstream,
-        &tls_config,
-        proxy.config.source_dir(),
-        server,
+        trojan_tls_options(
+            proxy,
+            server,
+            trojan_tcp_tls_config(sni, insecure, client_fingerprint),
+        ),
     )
     .await?;
     let mut metered = MeteredStream::new(tls_stream);
@@ -124,10 +118,33 @@ fn udp_tls_options<'a>(
     endpoint: OutboundEndpoint<'a>,
     tls_profile: trojan::TrojanUdpTlsProfile,
 ) -> TrojanUdpTlsOptions<'a> {
+    trojan_tls_options(proxy, endpoint.server, udp_tls_config(tls_profile))
+}
+
+fn trojan_tls_options<'a>(
+    proxy: &'a Proxy,
+    server: &'a str,
+    tls_config: ClientTlsConfig,
+) -> TrojanUdpTlsOptions<'a> {
     TrojanUdpTlsOptions {
-        tls_config: udp_tls_config(tls_profile),
+        tls_config,
         source_dir: proxy.config.source_dir(),
-        server: endpoint.server,
+        server,
+    }
+}
+
+fn trojan_tcp_tls_config(
+    sni: Option<&str>,
+    insecure: bool,
+    client_fingerprint: Option<&str>,
+) -> ClientTlsConfig {
+    ClientTlsConfig {
+        server_name: sni.map(ToOwned::to_owned),
+        disable_sni: false,
+        ca_cert_path: None,
+        insecure,
+        alpn: Vec::new(),
+        client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
     }
 }
 

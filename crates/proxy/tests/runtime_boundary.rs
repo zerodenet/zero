@@ -1620,6 +1620,17 @@ fn trojan_tcp_connect_uses_request_model() {
         adapter.contains("TrojanTcpConnectRequest {"),
         "Trojan adapter TCP module should pass TrojanTcpConnectRequest"
     );
+    let forbidden = "zero_transport::tls::connect_tls_upstream";
+    assert!(
+        !outbound.contains(forbidden),
+        "Trojan TCP connect should request TLS stream opening through the transport facade; found `{forbidden}`"
+    );
+    assert!(
+        outbound.contains("open_trojan_udp_tls_stream")
+            && outbound.contains("trojan_tcp_tls_config(")
+            && outbound.contains("trojan_tls_options("),
+        "Trojan TCP connect should share the Trojan transport TLS opening path with UDP while keeping config/profile conversion in outbound/trojan.rs"
+    );
 }
 
 #[test]
