@@ -25,7 +25,7 @@ pub(super) async fn start(
     else {
         return Err(unreachable_udp_leaf(adapter.name(), leaf));
     };
-    let config = socks5::Socks5UdpPacketPathConfig::new(tag, server, *port, *username, *password);
+    let config = socks5::Socks5UdpFlowConfig::new(tag, server, *port, *username, *password);
     dispatch
         .start_tracked_managed_relay(ManagedRelayStart {
             proxy: Some(proxy),

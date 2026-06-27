@@ -65,6 +65,6 @@ fn packet_path_config<'a>(
     port: u16,
     password: &'a str,
     client_fingerprint: Option<&'a str>,
-) -> hysteria2::Hysteria2UdpPacketPathConfig<'a> {
-    hysteria2::Hysteria2UdpPacketPathConfig::new(tag, server, port, password, client_fingerprint)
+) -> hysteria2::Hysteria2UdpFlowConfig<'a> {
+    hysteria2::Hysteria2UdpFlowConfig::new(tag, server, port, password, client_fingerprint)
 }

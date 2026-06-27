@@ -272,7 +272,7 @@ fn udp_cache_key(
     alloc::format!("hysteria2|{tag}|{server}:{port}|{password}{fingerprint}")
 }
 
-pub struct Hysteria2UdpPacketPathConfig<'a> {
+pub struct Hysteria2UdpFlowConfig<'a> {
     tag: &'a str,
     server: &'a str,
     port: u16,
@@ -280,7 +280,7 @@ pub struct Hysteria2UdpPacketPathConfig<'a> {
     client_fingerprint: Option<&'a str>,
 }
 
-impl<'a> Hysteria2UdpPacketPathConfig<'a> {
+impl<'a> Hysteria2UdpFlowConfig<'a> {
     pub fn new(
         tag: &'a str,
         server: &'a str,

@@ -109,6 +109,6 @@ fn packet_path_config<'a>(
     port: u16,
     username: Option<&'a str>,
     password: Option<&'a str>,
-) -> socks5::Socks5UdpPacketPathConfig<'a> {
-    socks5::Socks5UdpPacketPathConfig::new(tag, server, port, username, password)
+) -> socks5::Socks5UdpFlowConfig<'a> {
+    socks5::Socks5UdpFlowConfig::new(tag, server, port, username, password)
 }

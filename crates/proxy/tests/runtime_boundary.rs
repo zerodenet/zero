@@ -1308,7 +1308,7 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     for forbidden in [
-        "Hysteria2UdpPacketPathConfig::new",
+        "Hysteria2UdpFlowConfig::new",
         "config.packet_path()",
         "packet_path.cache_key()",
         "packet_path.codec()",
@@ -1322,14 +1322,14 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     assert!(
-        packet_path.contains("Hysteria2UdpPacketPathConfig::new")
+        packet_path.contains("Hysteria2UdpFlowConfig::new")
             && !packet_path.contains(".packet_path()")
             && !packet_path.contains("packet_path.cache_key()")
             && !packet_path.contains("packet_path.codec()")
             && packet_path.contains(".packet_path_cache_key()")
             && packet_path.contains(".packet_path_codec()")
             && packet_path.contains("open_udp_packet_path_connection")
-            && flow.contains("Hysteria2UdpPacketPathConfig::new")
+            && flow.contains("Hysteria2UdpFlowConfig::new")
             && flow.contains(".flow_resume()")
             && flow.contains("ManagedDatagramStart")
             && flow.contains(".start_tracked_managed_datagram(")
@@ -1397,7 +1397,7 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     for forbidden in [
-        "Socks5UdpPacketPathConfig::new",
+        "Socks5UdpFlowConfig::new",
         "config.packet_path()",
         "packet_path.cache_key()",
         "ManagedUdpSend {",
@@ -1409,12 +1409,12 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     assert!(
-        packet_path.contains("Socks5UdpPacketPathConfig::new")
+        packet_path.contains("Socks5UdpFlowConfig::new")
             && !packet_path.contains(".packet_path()")
             && !packet_path.contains("packet_path.cache_key()")
             && packet_path.contains(".packet_path_cache_key()")
             && packet_path.contains(".packet_path_association_config()")
-            && flow.contains("Socks5UdpPacketPathConfig::new")
+            && flow.contains("Socks5UdpFlowConfig::new")
             && flow.contains(".flow_resume()")
             && flow.contains("ManagedRelayStart")
             && flow.contains(".start_tracked_managed_relay(")
@@ -7937,13 +7937,13 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     }
     assert!(
         !adapter.contains("hysteria2::udp_flow_codec")
-            && !adapter.contains("Hysteria2UdpPacketPathConfig")
-            && !adapter.contains("Hysteria2UdpPacketPathConfig::new")
-            && !adapter.contains("Hysteria2UdpPacketPathConfig {")
-            && adapter_flow.contains("Hysteria2UdpPacketPathConfig::new")
-            && adapter_packet_path.contains("Hysteria2UdpPacketPathConfig::new")
+            && !adapter.contains("Hysteria2UdpFlowConfig")
+            && !adapter.contains("Hysteria2UdpFlowConfig::new")
+            && !adapter.contains("Hysteria2UdpFlowConfig {")
+            && adapter_flow.contains("Hysteria2UdpFlowConfig::new")
+            && adapter_packet_path.contains("Hysteria2UdpFlowConfig::new")
             && protocol_udp.contains("pub fn udp_flow_codec(")
-            && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
+            && protocol_udp.contains("struct Hysteria2UdpFlowConfig")
             && protocol_udp.contains("pub fn new(")
             && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec")
             && protocol_udp.contains("pub fn udp_flow_packet")
@@ -8007,7 +8007,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && adapter_packet_path.contains(".packet_path_codec()")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
             && !protocol_udp.contains("pub struct Hysteria2UdpPacketPath {")
-            && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
+            && protocol_udp.contains("struct Hysteria2UdpFlowConfig")
             && protocol_udp.contains("pub fn new(")
             && protocol_udp.contains("pub fn flow_resume(&self)")
             && protocol_udp.contains("pub fn packet_path_cache_key(&self)")
@@ -8134,13 +8134,13 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
     assert!(
         !adapter.contains("hysteria2::udp_flow_codec")
             && !adapter.contains("hysteria2::udp_cache_key")
-            && !adapter.contains("Hysteria2UdpPacketPathConfig")
-            && adapter_packet_path.contains("Hysteria2UdpPacketPathConfig"),
+            && !adapter.contains("Hysteria2UdpFlowConfig")
+            && adapter_packet_path.contains("Hysteria2UdpFlowConfig"),
         "Hysteria2 packet-path adapter submodule should request protocol-built packet-path cache identity and codec through a protocol config helper"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
-            && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
+            && protocol_udp.contains("struct Hysteria2UdpFlowConfig")
             && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec"),
         "protocols/hysteria2 should own Hysteria2 UDP flow codec construction"
     );
@@ -8971,11 +8971,11 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
     assert!(
         !socks5_adapter.contains("socks5::udp_cache_key")
-            && !socks5_adapter.contains("Socks5UdpPacketPathConfig::new")
-            && socks5_packet_path.contains("Socks5UdpPacketPathConfig::new")
-            && !socks5_adapter.contains("Socks5UdpPacketPathConfig {")
-            && !socks5_packet_path.contains("Socks5UdpPacketPathConfig {")
-            && socks5_shared.contains("struct Socks5UdpPacketPathConfig")
+            && !socks5_adapter.contains("Socks5UdpFlowConfig::new")
+            && socks5_packet_path.contains("Socks5UdpFlowConfig::new")
+            && !socks5_adapter.contains("Socks5UdpFlowConfig {")
+            && !socks5_packet_path.contains("Socks5UdpFlowConfig {")
+            && socks5_shared.contains("struct Socks5UdpFlowConfig")
             && socks5_shared.contains("pub fn new("),
         "SOCKS5 adapter should request packet-path cache identity through a protocol-owned config helper"
     );
