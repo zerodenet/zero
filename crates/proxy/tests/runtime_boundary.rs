@@ -1254,6 +1254,44 @@ fn adapter_root_does_not_import_protocol_udp_request_types() {
 }
 
 #[test]
+fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
+    let root = read("src/adapters/shadowsocks/udp.rs");
+    let packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
+    let flow = read("src/adapters/shadowsocks/udp/flow.rs");
+
+    for required in ["mod packet_path;", "mod flow;"] {
+        assert!(
+            root.contains(required),
+            "src/adapters/shadowsocks/udp.rs should wire `{required}` as protocol-local UDP glue"
+        );
+    }
+    for forbidden in [
+        "ShadowsocksUdpFlowConfig::new",
+        "config.packet_path()",
+        "packet_path.cache_key()",
+        "packet_path.codec()",
+        "ManagedProtocolUdpSend {",
+        "ManagedUdpFlowResume::new",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/adapters/shadowsocks/udp.rs should be a UDP capability facade and not own `{forbidden}`"
+        );
+    }
+    assert!(
+        packet_path.contains("ShadowsocksUdpFlowConfig::new")
+            && packet_path.contains(".packet_path()")
+            && packet_path.contains("packet_path.cache_key()")
+            && packet_path.contains("packet_path.codec()")
+            && flow.contains("ShadowsocksUdpFlowConfig::new")
+            && flow.contains(".flow_resume()")
+            && flow.contains("ManagedProtocolUdpSend {")
+            && flow.contains("ManagedUdpFlowResume::new"),
+        "Shadowsocks packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
+    );
+}
+
+#[test]
 fn adapter_root_is_facade_only() {
     let adapters = read("src/adapters/mod.rs");
 
@@ -6847,7 +6885,7 @@ fn packet_path_chain_root_does_not_reexport_protocol_carrier_builders() {
     );
 
     for source in [
-        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/shadowsocks/udp/packet_path.rs",
         "src/adapters/hysteria2/udp.rs",
     ] {
         let content = read(source);
@@ -8629,6 +8667,8 @@ fn h2_udp_establish_logic_lives_outside_manager() {
 fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
     let adapter = read("src/adapters/shadowsocks/udp.rs");
+    let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
+    let adapter_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
     let entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
     let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
     let bridge_source = read("src/adapters/shadowsocks/udp/manager/bridge.rs");
@@ -8665,9 +8705,13 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     assert!(
         !adapter.contains("shadowsocks::udp_flow_codec")
             && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
-            && adapter.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter.contains(".flow_resume()")
-            && adapter.contains(".packet_path()")
+            && !adapter.contains("ShadowsocksUdpFlowConfig::new")
+            && !adapter.contains(".flow_resume()")
+            && !adapter.contains(".packet_path()")
+            && adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
+            && adapter_flow.contains(".flow_resume()")
+            && adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new")
+            && adapter_packet_path.contains(".packet_path()")
             && protocol_outbound.contains("pub fn udp_flow_codec(")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self)")
@@ -8825,6 +8869,7 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
 #[test]
 fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
+    let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let flows = read("src/runtime/udp_flow/managed/flow.rs");
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
     let manager_entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
@@ -8839,7 +8884,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     assert!(
         !adapter.contains("CipherKind::from_str")
             && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
-            && adapter.contains("ShadowsocksUdpFlowConfig::new")
+            && !adapter.contains("ShadowsocksUdpFlowConfig::new")
+            && adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
             && protocol_outbound.contains("pub fn parse_udp_cipher("),
         "Shadowsocks UDP adapter should ask protocols/shadowsocks to parse ordinary UDP flow cipher config"
     );
@@ -8899,8 +8945,10 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     );
     assert!(
         !adapter.contains("ShadowsocksUdpFlowResume::from_config")
-            && adapter.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter.contains(".flow_resume()")
+            && !adapter.contains("ShadowsocksUdpFlowConfig::new")
+            && !adapter.contains(".flow_resume()")
+            && adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
+            && adapter_flow.contains(".flow_resume()")
             && !adapter.contains("ShadowsocksUdpFlowResume::new")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self)")
@@ -8970,6 +9018,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
 #[test]
 fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
+    let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
+    let adapter_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
     let protocol_outbound = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -8993,7 +9043,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     assert!(
         !adapter.contains("CipherKind::from_str")
             && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
-            && adapter.contains("ShadowsocksUdpFlowConfig::new"),
+            && !adapter.contains("ShadowsocksUdpFlowConfig::new")
+            && adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
+            && adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new"),
         "Shadowsocks adapter should ask protocols/shadowsocks to parse packet-path carrier/datagram cipher config"
     );
     for forbidden in ["ShadowsocksDatagramCodec", "shadowsocks::"] {
@@ -9016,7 +9068,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter.contains("shadowsocks::udp_datagram_codec")
             && !adapter.contains("resume.codec()")
             && !adapter.contains("resume.packet_path_codec()")
-            && adapter.contains("config.packet_path()"),
+            && !adapter.contains("config.packet_path()")
+            && adapter_packet_path.contains(".packet_path()"),
         "Shadowsocks adapter should request protocol-built packet-path bundles through explicit protocol packet-path helpers"
     );
     assert!(
@@ -9050,7 +9103,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         !adapter.contains("shadowsocks::udp_cache_key")
             && !adapter.contains("resume.cache_key()")
             && !adapter.contains("resume.packet_path_cache_key()")
-            && adapter.contains("packet_path.cache_key()"),
+            && !adapter.contains("packet_path.cache_key()")
+            && adapter_packet_path.contains("packet_path.cache_key()"),
         "Shadowsocks adapter should receive opaque packet-path cache keys from protocols/shadowsocks resume config"
     );
     assert!(
@@ -9086,7 +9140,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
 fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     for source in [
         "src/adapters/socks5/udp.rs",
-        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/shadowsocks/udp/packet_path.rs",
         "src/adapters/hysteria2/udp.rs",
     ] {
         let content = read(source);
@@ -9235,7 +9289,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         );
     }
     for source in [
-        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/shadowsocks/udp/packet_path.rs",
         "src/adapters/hysteria2/udp.rs",
     ] {
         let content = read(source);
@@ -9347,7 +9401,7 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
 
     for source in [
         "src/adapters/socks5/udp.rs",
-        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/shadowsocks/udp/flow.rs",
         "src/adapters/hysteria2/udp.rs",
         "src/adapters/trojan/udp.rs",
         "src/adapters/mieru/udp.rs",

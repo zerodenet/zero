@@ -1,18 +1,14 @@
-use std::sync::Arc;
-
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
-use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
-use crate::runtime::udp_flow::managed::{ManagedUdpFlowKind, ManagedUdpFlowResume};
 use crate::runtime::Proxy;
 
+mod flow;
 mod manager;
+mod packet_path;
 
 pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> {
     Box::new(manager::SsChainManager::new())
@@ -23,83 +19,25 @@ impl ShadowsocksAdapter {
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
-        let _ = self;
-        let ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-        } = leaf
-        else {
-            return None;
-        };
-        let config =
-            shadowsocks::ShadowsocksUdpFlowConfig::new(tag, server, *port, cipher, password);
-        let packet_path = config.packet_path().ok()?;
-        Some(
-            crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
-                packet_path.cache_key(),
-                server,
-                *port,
-            ),
-        )
+        packet_path::carrier_descriptor(leaf)
     }
 
     pub(super) async fn build_udp_packet_path_impl(
         &self,
         proxy: &Proxy,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
-    {
-        let ResolvedLeafOutbound::Shadowsocks {
-            server,
-            port,
-            password,
-            cipher,
-            ..
-        } = leaf
-        else {
-            return Err(unreachable_leaf(self.name(), leaf).error);
-        };
-        let config =
-            shadowsocks::ShadowsocksUdpFlowConfig::new("", server, *port, cipher, password);
-        let packet_path = config
-            .packet_path()
-            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
-        let codec = Arc::new(packet_path.codec());
-        crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
-            proxy, server, *port, codec,
-        )
-        .await
+    ) -> Result<
+        std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>,
+        EngineError,
+    > {
+        packet_path::build(self, proxy, leaf).await
     }
 
     pub(super) fn udp_datagram_source_impl<'a>(
         &self,
         leaf: &ResolvedLeafOutbound<'a>,
     ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource<'a>> {
-        let _ = self;
-        let ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-        } = leaf
-        else {
-            return None;
-        };
-        let config =
-            shadowsocks::ShadowsocksUdpFlowConfig::new(tag, server, *port, cipher, password);
-        let packet_path = config.packet_path().ok()?;
-        let codec = Arc::new(packet_path.codec());
-        Some(crate::runtime::udp_flow::packet_path::udp_datagram_source(
-            tag,
-            server,
-            *port,
-            packet_path.cache_key(),
-            codec,
-        ))
+        packet_path::datagram_source(leaf)
     }
 
     pub(super) async fn start_udp_flow_impl(
@@ -110,38 +48,6 @@ impl ShadowsocksAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-            ..
-        } = leaf
-        else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
-        };
-        let config =
-            shadowsocks::ShadowsocksUdpFlowConfig::new(tag, server, *port, cipher, password);
-        let resume = config.flow_resume().map_err(|error| FlowFailure {
-            stage: "udp_shadowsocks_resume",
-            error: zero_engine::EngineError::Io(std::io::Error::other(error.to_string())),
-            upstream: Some((server.to_string(), *port)),
-        })?;
-        dispatch
-            .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
-                proxy: Some(proxy),
-                tag,
-                session,
-                carrier: None,
-                tls_server_name: None,
-                server,
-                port: *port,
-                resume: ManagedUdpFlowResume::new(resume),
-                payload,
-                kind: ManagedUdpFlowKind::Datagram,
-                outbound: ManagedUdpOutboundKind::Datagram,
-            })
-            .await
+        flow::start(self, dispatch, proxy, session, leaf, payload).await
     }
 }
