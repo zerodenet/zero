@@ -269,7 +269,7 @@ pub fn encode_udp_associate_response_to_client(
     encode_udp_associate_response(upstream_address, upstream_port, payload)
 }
 
-pub fn udp_cache_key(tag: &str, server: &str, port: u16, username: Option<&str>) -> String {
+fn udp_cache_key(tag: &str, server: &str, port: u16, username: Option<&str>) -> String {
     let auth = username
         .map(|value| alloc::format!("|auth:{value}"))
         .unwrap_or_default();

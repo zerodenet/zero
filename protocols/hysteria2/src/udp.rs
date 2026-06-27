@@ -171,7 +171,7 @@ impl Hysteria2InboundUdpCodec {
     }
 }
 
-pub fn udp_cache_key(
+fn udp_cache_key(
     tag: &str,
     server: &str,
     port: u16,

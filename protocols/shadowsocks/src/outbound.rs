@@ -376,7 +376,7 @@ pub fn decode_udp_flow_packet(
 }
 
 #[cfg(feature = "crypto")]
-pub fn udp_cache_key(tag: &str, server: &str, port: u16, cipher: &str, password: &str) -> String {
+fn udp_cache_key(tag: &str, server: &str, port: u16, cipher: &str, password: &str) -> String {
     alloc::format!("shadowsocks|{tag}|{server}:{port}|{cipher}|{password}")
 }
 

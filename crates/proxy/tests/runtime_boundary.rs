@@ -8174,9 +8174,10 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     );
     assert!(
         protocol_outbound.contains("fn udp_cache_key(")
+            && !protocol_outbound.contains("pub fn udp_cache_key(")
             && protocol_outbound.contains("pub fn packet_path_cache_key(&self)")
             && protocol_outbound.contains("pub fn packet_path_codec(&self)"),
-        "protocols/shadowsocks should own Shadowsocks cache identity and packet-path codec construction"
+        "protocols/shadowsocks should own Shadowsocks cache identity internally and expose packet-path helpers instead"
     );
     for source in [
         &traits,
@@ -8223,14 +8224,23 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         .join("protocols/socks5/src/shared.rs");
     let socks5_shared =
         fs::read_to_string(socks5_shared).expect("read socks5 protocol shared source");
+    let hysteria2_udp = manifest_dir()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root")
+        .join("protocols/hysteria2/src/udp.rs");
+    let hysteria2_udp =
+        fs::read_to_string(hysteria2_udp).expect("read hysteria2 protocol udp source");
     assert!(
         !udp_root.contains("mod cache_key")
             && !packet_path_snapshot.contains("socks5_udp_cache_key"),
         "protocol_runtime::udp should not own packet-path cache identity helpers"
     );
     assert!(
-        socks5_shared.contains("fn udp_cache_key(") && socks5_shared.contains("socks5|"),
-        "protocols/socks5 should own SOCKS5 cache identity construction"
+        socks5_shared.contains("fn udp_cache_key(")
+            && !socks5_shared.contains("pub fn udp_cache_key(")
+            && socks5_shared.contains("socks5|"),
+        "protocols/socks5 should own SOCKS5 cache identity construction internally"
     );
     let socks5_adapter = read("src/adapters/socks5/udp.rs");
     assert!(
@@ -8240,6 +8250,12 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
             && socks5_shared.contains("struct Socks5UdpPacketPathConfig")
             && socks5_shared.contains("pub fn new("),
         "SOCKS5 adapter should request packet-path cache identity through a protocol-owned config helper"
+    );
+    assert!(
+        hysteria2_udp.contains("fn udp_cache_key(")
+            && !hysteria2_udp.contains("pub fn udp_cache_key(")
+            && hysteria2_udp.contains("hysteria2|"),
+        "protocols/hysteria2 should own Hysteria2 cache identity construction internally"
     );
 }
 
