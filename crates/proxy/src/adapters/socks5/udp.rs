@@ -38,13 +38,8 @@ impl Socks5Adapter {
         else {
             return None;
         };
-        let packet_path = socks5::Socks5UdpPacketPathConfig {
-            tag,
-            server,
-            port: *port,
-            username: *username,
-            password: *password,
-        };
+        let packet_path =
+            socks5::Socks5UdpPacketPathConfig::new(tag, server, *port, *username, *password);
         Some(
             crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
                 packet_path.cache_key(),

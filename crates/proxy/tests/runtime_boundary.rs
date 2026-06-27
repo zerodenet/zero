@@ -8235,7 +8235,10 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     let socks5_adapter = read("src/adapters/socks5/udp.rs");
     assert!(
         !socks5_adapter.contains("socks5::udp_cache_key")
-            && socks5_adapter.contains("Socks5UdpPacketPathConfig"),
+            && socks5_adapter.contains("Socks5UdpPacketPathConfig::new")
+            && !socks5_adapter.contains("Socks5UdpPacketPathConfig {")
+            && socks5_shared.contains("struct Socks5UdpPacketPathConfig")
+            && socks5_shared.contains("pub fn new("),
         "SOCKS5 adapter should request packet-path cache identity through a protocol-owned config helper"
     );
 }

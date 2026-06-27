@@ -278,14 +278,30 @@ pub fn udp_cache_key(tag: &str, server: &str, port: u16, username: Option<&str>)
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Socks5UdpPacketPathConfig<'a> {
-    pub tag: &'a str,
-    pub server: &'a str,
-    pub port: u16,
-    pub username: Option<&'a str>,
-    pub password: Option<&'a str>,
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    username: Option<&'a str>,
+    password: Option<&'a str>,
 }
 
-impl Socks5UdpPacketPathConfig<'_> {
+impl<'a> Socks5UdpPacketPathConfig<'a> {
+    pub fn new(
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        username: Option<&'a str>,
+        password: Option<&'a str>,
+    ) -> Self {
+        Self {
+            tag,
+            server,
+            port,
+            username,
+            password,
+        }
+    }
+
     pub fn cache_key(&self) -> String {
         udp_cache_key(
             self.tag,
