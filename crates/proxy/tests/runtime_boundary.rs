@@ -8585,6 +8585,7 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
     let entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
     let bridge_source = read("src/adapters/shadowsocks/udp/manager/bridge.rs");
+    let managed_datagram = read("src/runtime/udp_flow/managed/datagram.rs");
     let bridge = manifest_dir().join("src/adapters/shadowsocks/udp/manager/bridge.rs");
 
     for forbidden in [
@@ -8594,8 +8595,8 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
         "fn remove_waiter",
     ] {
         assert!(
-            !manager.contains(forbidden),
-            "ss_manager.rs should keep response waiter bridge details in ss_manager/bridge.rs; found `{forbidden}`"
+            !manager.contains(forbidden) && !bridge_source.contains(forbidden),
+            "Shadowsocks UDP manager glue should use neutral managed datagram waiter helpers instead of owning `{forbidden}`"
         );
     }
     for forbidden in [
@@ -8610,10 +8611,16 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
     }
     assert!(
         bridge.exists()
+            && bridge_source.contains("ManagedDatagramResponseWaiters")
+            && bridge_source.contains("spawn_datagram_response_bridge")
             && bridge_source.contains("pub(super) fn spawn_upstream_response_pump")
             && bridge_source.contains("flow.subscribe()")
-            && bridge_source.contains("tokio::spawn"),
-        "Shadowsocks UDP response waiter bridge and upstream response pump should live in ss_manager/bridge.rs"
+            && bridge_source.contains("tokio::spawn")
+            && managed_datagram.contains("pub(crate) struct ManagedDatagramResponseWaiters")
+            && managed_datagram.contains("pub(crate) fn spawn_datagram_response_bridge")
+            && managed_datagram.contains("oneshot::channel")
+            && managed_datagram.contains("VecDeque"),
+        "Shadowsocks UDP response waiter bridge should use neutral managed datagram helpers while the protocol bridge keeps only the upstream response pump"
     );
 }
 
@@ -9108,6 +9115,7 @@ fn shadowsocks_udp_entry_cache_lives_outside_manager() {
         "SsKey::new",
         "socket::bind_for_target",
         "BridgeWaiters::new",
+        "ManagedDatagramResponseWaiters::new",
         "socket::spawn_recv_loop",
     ] {
         assert!(
@@ -9133,7 +9141,7 @@ fn shadowsocks_udp_entry_cache_lives_outside_manager() {
             && !entry_source.contains("BridgeWaiters")
             && bridge_source.contains("struct SsDatagramConnection")
             && bridge_source.contains("impl ManagedDatagramUdpConnection for SsDatagramConnection")
-            && bridge_source.contains("spawn_response_bridge(chain_tasks, response_rx, session_id)")
+            && bridge_source.contains("spawn_datagram_response_bridge(chain_tasks, response_rx, session_id")
             && bridge_source.contains("self.waiters.register")
             && bridge_source.contains("self.flow.send_datagram"),
         "Shadowsocks UDP manager should send through a neutral datagram connection while bridge owns waiter/flow details"

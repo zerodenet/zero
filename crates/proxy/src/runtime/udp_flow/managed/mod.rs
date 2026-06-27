@@ -21,6 +21,7 @@ pub(crate) use cache::{
     ManagedStreamConnectionCache, ManagedStreamConnectionCacheKey, ManagedStreamConnectionSend,
     ManagedUdpConnectionCache, ManagedUdpConnectionCacheKey,
 };
+pub(crate) use datagram::{spawn_datagram_response_bridge, ManagedDatagramResponseWaiters};
 pub(crate) use model::{
     ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
 };
