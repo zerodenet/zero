@@ -5941,11 +5941,11 @@ fn packet_path_traits_are_grouped_by_responsibility() {
     assert!(
         !peer.exists()
             && !runtime_root.join("peer.rs").exists()
-            && ss_model.contains("struct SsUdpPeer")
+            && !ss_model.contains("struct SsUdpPeer")
             && !h2_model.contains("struct H2UdpPeer")
             && !trojan_model.contains("struct TrojanUdpPeer")
             && !mieru_model.contains("struct MieruUdpPeer"),
-        "protocol UDP peer models should not live under runtime packet-path helpers or protocol_runtime::udp root; Hysteria2, Trojan, and Mieru should use neutral OutboundEndpoint directly"
+        "protocol UDP peer models should not live under runtime packet-path helpers or protocol_runtime::udp root; stream/datagram managers should use neutral OutboundEndpoint directly"
     );
     assert!(
         !packet_path.contains("ProtocolAdapter::"),

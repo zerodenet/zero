@@ -13,7 +13,7 @@ mod bridge;
 mod entry;
 pub(super) mod model;
 
-use model::{SsSendExisting, SsUdpPeer, SsUpstream};
+use model::{SsSendExisting, SsUpstream};
 
 pub(crate) struct SsChainManager {
     upstreams: HashMap<shadowsocks::ShadowsocksUdpCacheKey, Arc<SsUpstream>>,
@@ -36,7 +36,7 @@ impl SsChainManager {
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
-        peer: SsUdpPeer<'_>,
+        endpoint: OutboundEndpoint<'_>,
         resume: shadowsocks::ShadowsocksUdpFlowResume,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
@@ -44,8 +44,8 @@ impl SsChainManager {
             .protocols
             .direct_connector()
             .resolve_address(
-                &peer.endpoint.address(),
-                peer.endpoint.port,
+                &endpoint.address(),
+                endpoint.port,
                 proxy.resolver.as_ref(),
                 "failed to resolve shadowsocks udp upstream",
             )
@@ -53,7 +53,7 @@ impl SsChainManager {
             .map_err(|error| FlowFailure {
                 stage: "ss_resolve_addr",
                 error: error.into(),
-                upstream: Some(peer.endpoint.upstream()),
+                upstream: Some(endpoint.upstream()),
             })?;
 
         let entry = entry::ensure(&mut self.upstreams, resume, target_addr)
@@ -61,7 +61,7 @@ impl SsChainManager {
             .map_err(|error| FlowFailure {
                 stage: "ss_establish",
                 error,
-                upstream: Some(peer.endpoint.upstream()),
+                upstream: Some(endpoint.upstream()),
             })?;
 
         let packet =
@@ -73,7 +73,7 @@ impl SsChainManager {
             return Err(FlowFailure {
                 stage: "ss_send",
                 error: e,
-                upstream: Some(peer.endpoint.upstream()),
+                upstream: Some(endpoint.upstream()),
             });
         }
 
@@ -89,11 +89,9 @@ impl SsChainManager {
                 session_id: request.session_id,
             },
             request.proxy,
-            SsUdpPeer {
-                endpoint: OutboundEndpoint {
-                    server: request.server,
-                    port: request.port,
-                },
+            OutboundEndpoint {
+                server: request.server,
+                port: request.port,
             },
             request.resume,
             UdpPacketRef {

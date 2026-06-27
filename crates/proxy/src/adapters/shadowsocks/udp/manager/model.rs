@@ -4,16 +4,11 @@ use zero_core::Address;
 use zero_transport::shadowsocks_transport::ShadowsocksUdpSocketFlow;
 
 use super::bridge::BridgeWaiters;
-use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::Proxy;
 
 pub(super) struct SsUpstream {
     pub(super) flow: Arc<ShadowsocksUdpSocketFlow>,
     pub(super) waiters: BridgeWaiters,
-}
-
-pub(super) struct SsUdpPeer<'a> {
-    pub(super) endpoint: OutboundEndpoint<'a>,
 }
 
 pub(super) struct SsSendExisting<'a> {
