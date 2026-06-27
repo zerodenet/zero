@@ -656,6 +656,25 @@ impl VmessInboundUdpCodec {
         self.encode_response(self.response_mode(state), target, port, payload)
     }
 
+    pub async fn write_response_tokio<W>(
+        &self,
+        writer: &mut W,
+        state: VmessUdpPayloadState,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        let packet = self.encode_response_for_state(state, target, port, payload)?;
+        let len = packet.len();
+        tokio::io::AsyncWriteExt::write_all(writer, &packet)
+            .await
+            .map_err(|_| Error::Io("failed to write VMess UDP response"))?;
+        Ok(len)
+    }
+
     pub fn encode_mux_response(
         &self,
         mux_session_id: u16,
@@ -682,6 +701,24 @@ impl VmessInboundUdpCodec {
             port,
             payload,
         )
+    }
+
+    pub fn send_mux_response(
+        &self,
+        write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+        mux_session_id: u16,
+        state: VmessUdpPayloadState,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        let frame =
+            self.encode_mux_response_for_state(mux_session_id, state, target, port, payload)?;
+        let len = frame.len();
+        write_tx
+            .send(frame)
+            .map_err(|_| Error::Io("failed to queue VMess MUX UDP response"))?;
+        Ok(len)
     }
 
     pub fn decode_datagram(

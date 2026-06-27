@@ -282,25 +282,21 @@ impl Proxy {
                                 if let Some(sid) = dispatch.direct_response_session_id(sender) {
                                     proxy.record_session_outbound_rx(sid, n as u64);
                                 }
-                                let encoded = vmess::VmessInboundUdpCodec.encode_mux_response_for_state(
+                                match vmess::VmessInboundUdpCodec.send_mux_response(
+                                    &write_tx,
                                     mux_session_id,
                                     payload_mode,
                                     &target,
                                     sender.port(),
                                     &direct_buf[..n],
-                                );
-                                match encoded {
-                                    Ok(frame) => {
-                                        let frame_len = frame.len() as u64;
-                                        if write_tx.send(frame).is_err() {
-                                            break;
-                                        }
+                                ) {
+                                    Ok(frame_len) => {
                                         if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                                            proxy.record_session_inbound_tx(sid, frame_len);
+                                            proxy.record_session_inbound_tx(sid, frame_len as u64);
                                         }
                                     }
                                     Err(error) => {
-                                        warn!(%error, mux_session_id, "vmess mux udp direct response encode failed");
+                                        warn!(%error, mux_session_id, "vmess mux udp direct response send failed");
                                         break;
                                     }
                                 }
@@ -321,24 +317,21 @@ impl Proxy {
                                     if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                         proxy.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                     }
-                                    match vmess::VmessInboundUdpCodec.encode_mux_response_for_state(
+                                    match vmess::VmessInboundUdpCodec.send_mux_response(
+                                        &write_tx,
                                         mux_session_id,
                                         payload_mode,
                                         &pkt.target,
                                         pkt.port,
                                         &pkt.payload,
                                     ) {
-                                        Ok(frame) => {
-                                            let frame_len = frame.len() as u64;
-                                            if write_tx.send(frame).is_err() {
-                                                break;
-                                            }
+                                        Ok(frame_len) => {
                                             if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
-                                                proxy.record_session_inbound_tx(sid, frame_len);
+                                                proxy.record_session_inbound_tx(sid, frame_len as u64);
                                             }
                                         }
                                         Err(error) => {
-                                            warn!(%error, mux_session_id, "vmess mux udp upstream response encode failed");
+                                            warn!(%error, mux_session_id, "vmess mux udp upstream response send failed");
                                             break;
                                         }
                                     }
@@ -355,24 +348,21 @@ impl Proxy {
                                 if let Some(sid) = session_id {
                                     proxy.record_session_outbound_rx(sid, payload.len() as u64);
                                 }
-                                match vmess::VmessInboundUdpCodec.encode_mux_response_for_state(
+                                match vmess::VmessInboundUdpCodec.send_mux_response(
+                                    &write_tx,
                                     mux_session_id,
                                     payload_mode,
                                     &target,
                                     port,
                                     &payload,
                                 ) {
-                                    Ok(frame) => {
-                                        let frame_len = frame.len() as u64;
-                                        if write_tx.send(frame).is_err() {
-                                            break;
-                                        }
+                                    Ok(frame_len) => {
                                         if let Some(sid) = session_id {
-                                            proxy.record_session_inbound_tx(sid, frame_len);
+                                            proxy.record_session_inbound_tx(sid, frame_len as u64);
                                         }
                                     }
                                     Err(error) => {
-                                        warn!(%error, mux_session_id, "vmess mux udp chain response encode failed");
+                                        warn!(%error, mux_session_id, "vmess mux udp chain response send failed");
                                         break;
                                     }
                                 }
@@ -476,15 +466,15 @@ impl Proxy {
                     if let Some(sid) = session_id {
                         self.record_session_outbound_rx(sid, n as u64);
                     }
-                    let packet = vmess::VmessInboundUdpCodec.encode_response_for_state(
+                    let written = vmess::VmessInboundUdpCodec.write_response_tokio(
+                        &mut client,
                         payload_mode,
                         &target,
                         sender.port(),
                         &direct_buf[..n],
-                    )?;
-                    client.write_all(&packet).await?;
+                    ).await?;
                     if let Some(sid) = session_id {
-                        self.record_session_inbound_tx(sid, packet.len() as u64);
+                        self.record_session_inbound_tx(sid, written as u64);
                     }
                 }
                 upstream = upstream_udp.recv_packet(&mut upstream_buf) => {
@@ -497,15 +487,15 @@ impl Proxy {
                                 if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                     self.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                 }
-                                let packet = vmess::VmessInboundUdpCodec.encode_response_for_state(
+                                let written = vmess::VmessInboundUdpCodec.write_response_tokio(
+                                    &mut client,
                                     payload_mode,
                                     &pkt.target,
                                     pkt.port,
                                     &pkt.payload,
-                                )?;
-                                client.write_all(&packet).await?;
+                                ).await?;
                                 if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
-                                    self.record_session_inbound_tx(sid, packet.len() as u64);
+                                    self.record_session_inbound_tx(sid, written as u64);
                                 }
                             }
                         }
@@ -522,15 +512,15 @@ impl Proxy {
                             if let Some(sid) = session_id {
                                 self.record_session_outbound_rx(sid, payload.len() as u64);
                             }
-                            let packet = vmess::VmessInboundUdpCodec.encode_response_for_state(
+                            let written = vmess::VmessInboundUdpCodec.write_response_tokio(
+                                &mut client,
                                 payload_mode,
                                 &target,
                                 port,
                                 &payload,
-                            )?;
-                            client.write_all(&packet).await?;
+                            ).await?;
                             if let Some(sid) = session_id {
-                                self.record_session_inbound_tx(sid, packet.len() as u64);
+                                self.record_session_inbound_tx(sid, written as u64);
                             }
                         }
                         Ok(Err(error)) => warn!(error = %error, "vmess udp chain response error"),
