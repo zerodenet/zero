@@ -294,10 +294,41 @@ impl VmessUdpFlowCodec {
 }
 
 pub struct VmessInboundUdpPayload {
-    pub state: VmessUdpPayloadState,
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    state: VmessUdpPayloadState,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl VmessInboundUdpPayload {
+    fn new(state: VmessUdpPayloadState, target: Address, port: u16, payload: Vec<u8>) -> Self {
+        Self {
+            state,
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn state(&self) -> VmessUdpPayloadState {
+        self.state
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    fn into_parts(self) -> (VmessUdpPayloadState, Address, u16, Vec<u8>) {
+        (self.state, self.target, self.port, self.payload)
+    }
 }
 
 /// Protocol-owned decoded inbound UDP request.
@@ -312,13 +343,14 @@ pub struct VmessInboundUdpRequest {
 
 impl VmessInboundUdpRequest {
     fn from_payload(payload: VmessInboundUdpPayload) -> (Self, VmessUdpPayloadState) {
+        let (state, target, port, payload) = payload.into_parts();
         (
             Self {
-                target: payload.target,
-                port: payload.port,
-                payload: payload.payload,
+                target,
+                port,
+                payload,
             },
-            payload.state,
+            state,
         )
     }
 
@@ -879,37 +911,32 @@ fn decode_inbound_udp_payload(
         VmessUdpPayloadState::Unknown => match parse_udp_packet(payload) {
             Ok(packet) => {
                 let (target, port, payload) = packet.into_parts();
-                Ok(VmessInboundUdpPayload {
-                    state: VmessUdpPayloadState::Mode(VmessUdpPayloadMode::VmessPacket),
+                Ok(VmessInboundUdpPayload::new(
+                    VmessUdpPayloadState::Mode(VmessUdpPayloadMode::VmessPacket),
                     target,
                     port,
                     payload,
-                })
+                ))
             }
-            Err(_) => Ok(VmessInboundUdpPayload {
-                state: VmessUdpPayloadState::Mode(VmessUdpPayloadMode::RawDatagram),
-                target: default_target.clone(),
-                port: default_port,
-                payload: payload.to_vec(),
-            }),
+            Err(_) => Ok(VmessInboundUdpPayload::new(
+                VmessUdpPayloadState::Mode(VmessUdpPayloadMode::RawDatagram),
+                default_target.clone(),
+                default_port,
+                payload.to_vec(),
+            )),
         },
         VmessUdpPayloadState::Mode(VmessUdpPayloadMode::VmessPacket) => {
             let packet = parse_udp_packet(payload)?;
             let (target, port, payload) = packet.into_parts();
-            Ok(VmessInboundUdpPayload {
-                state,
-                target,
-                port,
-                payload,
-            })
+            Ok(VmessInboundUdpPayload::new(state, target, port, payload))
         }
         VmessUdpPayloadState::Mode(VmessUdpPayloadMode::RawDatagram) => {
-            Ok(VmessInboundUdpPayload {
+            Ok(VmessInboundUdpPayload::new(
                 state,
-                target: default_target.clone(),
-                port: default_port,
-                payload: payload.to_vec(),
-            })
+                default_target.clone(),
+                default_port,
+                payload.to_vec(),
+            ))
         }
     }
 }

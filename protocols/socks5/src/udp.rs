@@ -376,8 +376,8 @@ where
         let read = self.recv_packet(buf).await?;
         let packet =
             decode_udp_associate_response(&buf[..read]).map_err(Socks5UdpRelayError::Protocol)?;
-        let payload_len = packet.payload.len();
-        buf[..payload_len].copy_from_slice(&packet.payload);
+        let payload_len = packet.payload().len();
+        buf[..payload_len].copy_from_slice(packet.payload());
         Ok(payload_len)
     }
 }

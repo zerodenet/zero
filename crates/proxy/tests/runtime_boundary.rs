@@ -3177,6 +3177,8 @@ fn vless_vmess_udp_packet_models_do_not_expose_raw_fields() {
         .expect("read protocols/vless/src/shared.rs");
     let vmess_udp = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read protocols/vmess/src/udp.rs");
+    let socks5_shared = fs::read_to_string(repo_root().join("protocols/socks5/src/shared.rs"))
+        .expect("read protocols/socks5/src/shared.rs");
 
     for (source_name, source, struct_name) in [
         (
@@ -3199,10 +3201,24 @@ fn vless_vmess_udp_packet_models_do_not_expose_raw_fields() {
             vmess_udp.as_str(),
             "VmessUdpFlowPacket",
         ),
+        (
+            "protocols/vmess/src/udp.rs",
+            vmess_udp.as_str(),
+            "VmessInboundUdpPayload",
+        ),
+        (
+            "protocols/socks5/src/shared.rs",
+            socks5_shared.as_str(),
+            "Socks5UdpPacket",
+        ),
     ] {
-        let struct_body = source
-            .split(&format!("pub struct {struct_name} {{"))
-            .nth(1)
+        let struct_body = ["pub struct", "pub(crate) struct"]
+            .iter()
+            .find_map(|visibility| {
+                source
+                    .split(&format!("{visibility} {struct_name} {{"))
+                    .nth(1)
+            })
             .and_then(|tail| tail.split("}\n").next())
             .unwrap_or_else(|| panic!("{source_name} should define {struct_name}"));
         for forbidden in [

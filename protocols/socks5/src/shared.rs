@@ -166,9 +166,27 @@ pub(crate) fn write_address(buf: &mut Vec<u8>, address: &Address) -> Result<(), 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Socks5UdpPacket {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl Socks5UdpPacket {
+    pub(crate) fn new(target: Address, port: u16, payload: Vec<u8>) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub(crate) fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub(crate) fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -180,10 +198,11 @@ pub struct Socks5InboundUdpRequest {
 
 impl Socks5InboundUdpRequest {
     pub(crate) fn from_packet(packet: Socks5UdpPacket) -> Self {
+        let (target, port, payload) = packet.into_parts();
         Self {
-            target: packet.target,
-            port: packet.port,
-            payload: packet.payload,
+            target,
+            port,
+            payload,
         }
     }
 
@@ -213,10 +232,11 @@ pub struct Socks5InboundUdpResponse {
 
 impl Socks5InboundUdpResponse {
     pub(crate) fn from_packet(packet: Socks5UdpPacket) -> Self {
+        let (target, port, payload) = packet.into_parts();
         Self {
-            target: packet.target,
-            port: packet.port,
-            payload: packet.payload,
+            target,
+            port,
+            payload,
         }
     }
 
@@ -300,11 +320,11 @@ pub(crate) fn parse_udp_packet(packet: &[u8]) -> Result<Socks5UdpPacket, Error> 
     let port = u16::from_be_bytes([packet[offset], packet[offset + 1]]);
     offset += 2;
 
-    Ok(Socks5UdpPacket {
+    Ok(Socks5UdpPacket::new(
         target,
         port,
-        payload: packet[offset..].to_vec(),
-    })
+        packet[offset..].to_vec(),
+    ))
 }
 
 pub(crate) fn build_udp_packet(
