@@ -4,7 +4,28 @@ use zero_platform_tokio::TransportConnector;
 
 use super::model::{VmessUdpUpstream, VmessUdpUpstreamRequest};
 use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
+use crate::runtime::udp_flow::managed::ManagedStreamUdpConnection;
 use crate::transport::TcpRelayStream;
+
+#[async_trait::async_trait]
+impl ManagedStreamUdpConnection for vmess::VmessUdpFlowConnection {
+    async fn send(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        vmess::VmessUdpFlowConnection::send(self, target, port, payload)
+            .await
+            .map_err(EngineError::from)
+    }
+
+    fn subscribe_responses(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<(zero_core::Address, u16, Vec<u8>)> {
+        vmess::VmessUdpFlowConnection::subscribe_responses(self)
+    }
+}
 
 pub(super) async fn over_stream(
     proxy: &crate::runtime::Proxy,
@@ -19,7 +40,7 @@ pub(super) async fn over_stream(
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
     Ok(VmessUdpUpstream {
         session_id: session.id,
-        connection: established.into_connection(),
+        connection: Box::new(established.into_connection()),
     })
 }
 
@@ -54,7 +75,7 @@ pub(super) async fn direct(
             .record_session_outbound_tx(request.session.id, established.initial_packet_len as u64);
         return Ok(VmessUdpUpstream {
             session_id: request.session.id,
-            connection: established.into_connection(),
+            connection: Box::new(established.into_connection()),
         });
     }
 

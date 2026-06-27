@@ -1,13 +1,13 @@
 use zero_core::{Address, Session};
 
 use crate::adapters::vless::mux_pool::MuxConnectionPool;
+use crate::runtime::udp_flow::managed::BoxedManagedStreamUdpConnection;
 use crate::runtime::Proxy;
 
 /// Handle to an established VLESS UDP upstream connection.
-#[derive(Clone)]
 pub(super) struct VlessUdpUpstream {
     pub(super) session_id: u64,
-    pub(super) connection: vless::VlessUdpFlowConnection,
+    pub(super) connection: BoxedManagedStreamUdpConnection,
 }
 
 pub(crate) struct VlessUdpStartFlow<'a> {

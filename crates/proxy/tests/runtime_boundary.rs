@@ -2266,7 +2266,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vless::VlessUdpIdentity")
             && !runtime.contains("vless::VlessUdpFlowIo")
             && !runtime.contains("broadcast::channel::<VlessFlowResponse>")
-            && model.contains("vless::VlessUdpFlowConnection")
+            && model.contains("BoxedManagedStreamUdpConnection")
+            && !model.contains("vless::VlessUdpFlowConnection")
             && !model.contains("vless::VlessUdpFlowSession")
             && !model.contains("vless::VlessUdpFlowSender")
             && !runtime.contains("VlessUdpFlowConnection::new")
@@ -2289,6 +2290,11 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !protocol_outbound.contains("pub type VlessUdpFlowResponses")
             && protocol_outbound.contains("pub struct VlessInitialUdpFlowPacket"),
         "VLESS UDP runtime should keep protocol flow I/O inside protocols/vless and leave proxy manager as cache/bridge glue"
+    );
+    assert!(
+        model.contains("BoxedManagedStreamUdpConnection")
+            && !model.contains("vless::VlessUdpFlowConnection"),
+        "VLESS UDP manager cache should store a neutral stream UDP connection object"
     );
     for forbidden in [
         "VlessUdpFlowStream",
@@ -2557,7 +2563,8 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vmess::VmessUdpIdentity")
             && !runtime.contains("vmess::VmessUdpFlowIo")
             && !runtime.contains("broadcast::channel::<VmessFlowResponse>")
-            && model.contains("vmess::VmessUdpFlowConnection")
+            && model.contains("BoxedManagedStreamUdpConnection")
+            && !model.contains("vmess::VmessUdpFlowConnection")
             && !model.contains("vmess::VmessUdpFlowSession")
             && !model.contains("vmess::VmessUdpFlowSender")
             && !runtime.contains("VmessUdpFlowConnection::new")
@@ -2580,6 +2587,11 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !protocol.contains("pub type VmessUdpFlowResponses")
             && protocol.contains("pub struct VmessInitialUdpFlowPacket"),
         "VMess UDP runtime should keep protocol flow I/O inside protocols/vmess and leave proxy manager as cache/bridge glue"
+    );
+    assert!(
+        model.contains("BoxedManagedStreamUdpConnection")
+            && !model.contains("vmess::VmessUdpFlowConnection"),
+        "VMess UDP manager cache should store a neutral stream UDP connection object"
     );
     for forbidden in [
         "VmessUdpFlowStream",
