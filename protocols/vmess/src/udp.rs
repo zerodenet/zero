@@ -120,16 +120,42 @@ pub struct VmessUdpPacketTarget<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VmessUdpPacket {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl VmessUdpPacket {
+    pub fn new(target: Address, port: u16, payload: Vec<u8>) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VmessUdpFlowPacket {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
 }
 
 impl VmessUdpFlowPacket {
@@ -143,6 +169,18 @@ impl VmessUdpFlowPacket {
 
     pub fn encode(&self) -> Result<Vec<u8>, Error> {
         encode_udp_flow_packet(&self.target, self.port, &self.payload)
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
     }
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
@@ -165,11 +203,8 @@ impl VmessUdpFlowIo {
 
     pub fn decode_packet(&self, packet: &[u8]) -> Result<VmessUdpFlowPacket, Error> {
         let packet = decode_udp_flow_packet(packet)?;
-        Ok(VmessUdpFlowPacket::new(
-            packet.target,
-            packet.port,
-            packet.payload,
-        ))
+        let (target, port, payload) = packet.into_parts();
+        Ok(VmessUdpFlowPacket::new(target, port, payload))
     }
 
     pub fn encoded_packet_len(
@@ -700,13 +735,9 @@ fn spawn_udp_flow_task<S>(
                 to_send = send_rx.recv() => {
                     match to_send {
                         Some(request) => {
+                            let (target, port, payload) = request.packet.into_parts();
                             let result = flow_io
-                                .write_packet_tokio(
-                                    &mut stream,
-                                    &request.packet.target,
-                                    request.packet.port,
-                                    &request.packet.payload,
-                                )
+                                .write_packet_tokio(&mut stream, &target, port, &payload)
                                 .await;
                             let should_break = result.is_err();
                             let _ = request.result_tx.send(result);
@@ -846,12 +877,15 @@ fn decode_inbound_udp_payload(
 ) -> Result<VmessInboundUdpPayload, Error> {
     match state {
         VmessUdpPayloadState::Unknown => match parse_udp_packet(payload) {
-            Ok(packet) => Ok(VmessInboundUdpPayload {
-                state: VmessUdpPayloadState::Mode(VmessUdpPayloadMode::VmessPacket),
-                target: packet.target,
-                port: packet.port,
-                payload: packet.payload,
-            }),
+            Ok(packet) => {
+                let (target, port, payload) = packet.into_parts();
+                Ok(VmessInboundUdpPayload {
+                    state: VmessUdpPayloadState::Mode(VmessUdpPayloadMode::VmessPacket),
+                    target,
+                    port,
+                    payload,
+                })
+            }
             Err(_) => Ok(VmessInboundUdpPayload {
                 state: VmessUdpPayloadState::Mode(VmessUdpPayloadMode::RawDatagram),
                 target: default_target.clone(),
@@ -861,11 +895,12 @@ fn decode_inbound_udp_payload(
         },
         VmessUdpPayloadState::Mode(VmessUdpPayloadMode::VmessPacket) => {
             let packet = parse_udp_packet(payload)?;
+            let (target, port, payload) = packet.into_parts();
             Ok(VmessInboundUdpPayload {
                 state,
-                target: packet.target,
-                port: packet.port,
-                payload: packet.payload,
+                target,
+                port,
+                payload,
             })
         }
         VmessUdpPayloadState::Mode(VmessUdpPayloadMode::RawDatagram) => {

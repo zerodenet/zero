@@ -110,9 +110,9 @@ fn udp_packet_framing_roundtrips_domain_target() {
         )
         .expect("decode vmess udp packet");
 
-    assert_eq!(decoded.target, target);
-    assert_eq!(decoded.port, 53);
-    assert_eq!(decoded.payload, payload);
+    assert_eq!(decoded.target(), &target);
+    assert_eq!(decoded.port(), 53);
+    assert_eq!(decoded.payload(), payload);
 }
 
 #[tokio::test]
@@ -149,9 +149,9 @@ async fn udp_response_encoding_wraps_packet_mode_and_preserves_raw_mode() {
         &packet,
     )
     .expect("decode packet response");
-    assert_eq!(decoded.target, target);
-    assert_eq!(decoded.port, 5353);
-    assert_eq!(decoded.payload, b"dns");
+    assert_eq!(decoded.target(), &target);
+    assert_eq!(decoded.port(), 5353);
+    assert_eq!(decoded.payload(), b"dns");
 
     let mut raw_session = VmessInboundUdpSession::new(Address::Ipv4([127, 0, 0, 1]), 53);
     raw_session
@@ -246,9 +246,9 @@ async fn mux_udp_response_encoding_wraps_packet_mode_before_mux_frame() {
         &decoded.payload,
     )
     .expect("decode mux udp payload");
-    assert_eq!(packet.target, target);
-    assert_eq!(packet.port, 53);
-    assert_eq!(packet.payload, b"query");
+    assert_eq!(packet.target(), &target);
+    assert_eq!(packet.port(), 53);
+    assert_eq!(packet.payload(), b"query");
 }
 
 async fn roundtrip_cipher(cipher: VmessCipher) {

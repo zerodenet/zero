@@ -3172,6 +3172,53 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
 }
 
 #[test]
+fn vless_vmess_udp_packet_models_do_not_expose_raw_fields() {
+    let vless_shared = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
+        .expect("read protocols/vless/src/shared.rs");
+    let vmess_udp = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
+        .expect("read protocols/vmess/src/udp.rs");
+
+    for (source_name, source, struct_name) in [
+        (
+            "protocols/vless/src/shared.rs",
+            vless_shared.as_str(),
+            "VlessUdpPacket",
+        ),
+        (
+            "protocols/vless/src/shared.rs",
+            vless_shared.as_str(),
+            "VlessUdpFlowPacket",
+        ),
+        (
+            "protocols/vmess/src/udp.rs",
+            vmess_udp.as_str(),
+            "VmessUdpPacket",
+        ),
+        (
+            "protocols/vmess/src/udp.rs",
+            vmess_udp.as_str(),
+            "VmessUdpFlowPacket",
+        ),
+    ] {
+        let struct_body = source
+            .split(&format!("pub struct {struct_name} {{"))
+            .nth(1)
+            .and_then(|tail| tail.split("}\n").next())
+            .unwrap_or_else(|| panic!("{source_name} should define {struct_name}"));
+        for forbidden in [
+            "pub target: Address",
+            "pub port: u16",
+            "pub payload: Vec<u8>",
+        ] {
+            assert!(
+                !struct_body.contains(forbidden),
+                "{source_name} {struct_name} should expose UDP packet contents through methods, not raw field `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn vmess_mux_pool_transport_opening_lives_in_transport_crate() {
     let root = read("src/adapters/vmess/mux_pool.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))

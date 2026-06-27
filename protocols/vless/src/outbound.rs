@@ -672,13 +672,9 @@ fn spawn_udp_flow_task<S>(
                 to_send = send_rx.recv() => {
                     match to_send {
                         Some(request) => {
+                            let (target, port, payload) = request.packet.into_parts();
                             let result = flow_io
-                                .write_packet_tokio(
-                                    &mut stream,
-                                    &request.packet.target,
-                                    request.packet.port,
-                                    &request.packet.payload,
-                                )
+                                .write_packet_tokio(&mut stream, &target, port, &payload)
                                 .await;
                             let should_break = result.is_err();
                             let _ = request.result_tx.send(result);

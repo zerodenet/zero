@@ -179,9 +179,35 @@ fn hex_nibble(byte: u8) -> Option<u8> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessUdpPacket {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl VlessUdpPacket {
+    pub fn new(target: Address, port: u16, payload: Vec<u8>) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 /// Protocol-owned decoded inbound UDP request.
@@ -197,10 +223,11 @@ pub struct VlessInboundUdpRequest {
 
 impl VlessInboundUdpRequest {
     fn from_packet(packet: VlessUdpPacket) -> Self {
+        let (target, port, payload) = packet.into_parts();
         Self {
-            target: packet.target,
-            port: packet.port,
-            payload: packet.payload,
+            target,
+            port,
+            payload,
         }
     }
 
@@ -223,9 +250,9 @@ impl VlessInboundUdpRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessUdpFlowPacket {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
 }
 
 impl VlessUdpFlowPacket {
@@ -239,6 +266,18 @@ impl VlessUdpFlowPacket {
 
     pub fn encode(&self) -> Result<Vec<u8>, Error> {
         encode_udp_flow_packet(&self.target, self.port, &self.payload)
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
     }
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
@@ -270,11 +309,8 @@ impl VlessUdpFlowIo {
 
     pub fn decode_packet(&self, packet: &[u8]) -> Result<VlessUdpFlowPacket, Error> {
         let packet = decode_udp_flow_packet(packet)?;
-        Ok(VlessUdpFlowPacket::new(
-            packet.target,
-            packet.port,
-            packet.payload,
-        ))
+        let (target, port, payload) = packet.into_parts();
+        Ok(VlessUdpFlowPacket::new(target, port, payload))
     }
 
     pub fn encoded_packet_len(

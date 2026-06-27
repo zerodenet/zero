@@ -293,9 +293,9 @@ fn parse_udp_packet_with_ipv4() {
         &packet,
     )
     .expect("parse");
-    assert_eq!(parsed.target, Address::Ipv4([8, 8, 8, 8]));
-    assert_eq!(parsed.port, 53);
-    assert_eq!(parsed.payload, b"dns query");
+    assert_eq!(parsed.target(), &Address::Ipv4([8, 8, 8, 8]));
+    assert_eq!(parsed.port(), 53);
+    assert_eq!(parsed.payload(), b"dns query");
 }
 
 #[test]
@@ -314,9 +314,9 @@ fn parse_udp_packet_with_domain() {
         &packet,
     )
     .expect("parse");
-    assert_eq!(parsed.target, Address::Domain("example.com".into()));
-    assert_eq!(parsed.port, 443);
-    assert_eq!(parsed.payload, b"udp payload");
+    assert_eq!(parsed.target(), &Address::Domain("example.com".into()));
+    assert_eq!(parsed.port(), 443);
+    assert_eq!(parsed.payload(), b"udp payload");
 }
 
 #[test]
@@ -339,11 +339,11 @@ fn build_udp_packet_with_ipv6() {
     )
     .expect("parse");
     assert_eq!(
-        parsed.target,
-        Address::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+        parsed.target(),
+        &Address::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
     );
-    assert_eq!(parsed.port, 53);
-    assert_eq!(parsed.payload, payload);
+    assert_eq!(parsed.port(), 53);
+    assert_eq!(parsed.payload(), payload);
 }
 
 // ── v2 auto-detect tests ──
@@ -363,9 +363,9 @@ fn parse_udp_v2_with_address() {
     let parsed = VlessUdpPacketV2Codec
         .decode_packet(&packet, None, None)
         .expect("parse v2");
-    assert_eq!(parsed.target, Address::Ipv4([8, 8, 8, 8]));
-    assert_eq!(parsed.port, 53);
-    assert_eq!(parsed.payload, b"dns query v2");
+    assert_eq!(parsed.target(), &Address::Ipv4([8, 8, 8, 8]));
+    assert_eq!(parsed.port(), 53);
+    assert_eq!(parsed.payload(), b"dns query v2");
 }
 
 #[test]
@@ -381,9 +381,9 @@ fn parse_udp_v2_without_address_reuse_cache() {
     let parsed = VlessUdpPacketV2Codec
         .decode_packet(&packet, Some(&cached), Some(443))
         .expect("parse v2 reuse");
-    assert_eq!(parsed.target, cached);
-    assert_eq!(parsed.port, 443);
-    assert_eq!(parsed.payload, b"reuse address");
+    assert_eq!(parsed.target(), &cached);
+    assert_eq!(parsed.port(), 443);
+    assert_eq!(parsed.payload(), b"reuse address");
 }
 
 #[test]
@@ -407,9 +407,9 @@ fn parse_udp_v2_falls_back_to_v1() {
     let parsed = VlessUdpPacketV2Codec
         .decode_packet(&packet, None, None)
         .expect("v1 fallback");
-    assert_eq!(parsed.target, Address::Ipv4([8, 8, 8, 8]));
-    assert_eq!(parsed.port, 53);
-    assert_eq!(parsed.payload, b"v1 fallback");
+    assert_eq!(parsed.target(), &Address::Ipv4([8, 8, 8, 8]));
+    assert_eq!(parsed.port(), 53);
+    assert_eq!(parsed.payload(), b"v1 fallback");
 }
 
 #[test]
@@ -430,9 +430,9 @@ fn build_udp_v2_with_address() {
     let parsed = VlessUdpPacketV2Codec
         .decode_packet(&packet, None, None)
         .expect("roundtrip");
-    assert_eq!(parsed.target, Address::Ipv4([1, 1, 1, 1]));
-    assert_eq!(parsed.port, 8080);
-    assert_eq!(parsed.payload, b"hello");
+    assert_eq!(parsed.target(), &Address::Ipv4([1, 1, 1, 1]));
+    assert_eq!(parsed.port(), 8080);
+    assert_eq!(parsed.payload(), b"hello");
 }
 
 #[test]
@@ -482,9 +482,9 @@ fn udp_response_encoder_builds_response_packet() {
         &packet,
     )
     .expect("parse response packet");
-    assert_eq!(parsed.target, Address::Ipv4([1, 1, 1, 1]));
-    assert_eq!(parsed.port, 53);
-    assert_eq!(parsed.payload, b"answer");
+    assert_eq!(parsed.target(), &Address::Ipv4([1, 1, 1, 1]));
+    assert_eq!(parsed.port(), 53);
+    assert_eq!(parsed.payload(), b"answer");
 }
 
 #[test]
@@ -503,7 +503,7 @@ fn mux_udp_response_encoder_wraps_vless_packet() {
         &frame[6..],
     )
     .expect("parse mux payload");
-    assert_eq!(parsed.target, Address::Ipv4([8, 8, 8, 8]));
-    assert_eq!(parsed.port, 53);
-    assert_eq!(parsed.payload, b"dns");
+    assert_eq!(parsed.target(), &Address::Ipv4([8, 8, 8, 8]));
+    assert_eq!(parsed.port(), 53);
+    assert_eq!(parsed.payload(), b"dns");
 }
