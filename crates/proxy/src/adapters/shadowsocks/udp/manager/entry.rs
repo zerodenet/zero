@@ -13,12 +13,10 @@ pub(super) async fn ensure(
     resume: &shadowsocks::ShadowsocksUdpFlowResume,
     target_addr: SocketAddr,
 ) -> Result<SharedManagedDatagramUdpConnection, EngineError> {
-    if let Some(entry) = upstreams.get(&cache_key) {
-        return Ok(entry.clone());
-    }
-
-    let entry = bridge::establish_datagram_connection(target_addr, resume).await?;
-    upstreams.insert(cache_key, entry.clone());
-
-    Ok(entry)
+    upstreams
+        .get_or_insert_with(
+            cache_key,
+            bridge::establish_datagram_connection(target_addr, resume),
+        )
+        .await
 }

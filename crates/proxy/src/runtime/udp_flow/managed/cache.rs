@@ -243,18 +243,20 @@ impl ManagedDatagramConnectionCache {
         }
     }
 
-    pub(crate) fn get(
-        &self,
-        key: &ManagedDatagramConnectionCacheKey,
-    ) -> Option<&SharedManagedDatagramUdpConnection> {
-        self.entries.get(key)
-    }
-
-    pub(crate) fn insert(
+    pub(crate) async fn get_or_insert_with<Fut>(
         &mut self,
         key: ManagedDatagramConnectionCacheKey,
-        value: SharedManagedDatagramUdpConnection,
-    ) -> Option<SharedManagedDatagramUdpConnection> {
-        self.entries.insert(key, value)
+        establish: Fut,
+    ) -> Result<SharedManagedDatagramUdpConnection, EngineError>
+    where
+        Fut: Future<Output = Result<SharedManagedDatagramUdpConnection, EngineError>>,
+    {
+        if let Some(connection) = self.entries.get(&key) {
+            return Ok(connection.clone());
+        }
+
+        let connection = establish.await?;
+        self.entries.insert(key, connection.clone());
+        Ok(connection)
     }
 }
