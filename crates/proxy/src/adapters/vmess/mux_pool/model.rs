@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::mpsc;
 use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::Session;
 
@@ -31,14 +30,6 @@ pub(super) enum VmessMuxTransportKey {
     },
 }
 
-pub(super) struct VmessMuxConn {
-    pub(super) write_tx: mpsc::UnboundedSender<Vec<u8>>,
-    pub(super) streams: Arc<Mutex<HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>>>,
-    pub(super) next_id: Mutex<u16>,
-    pub(super) active: Arc<Mutex<usize>>,
-    pub(super) max_concurrency: u32,
-}
-
 pub(crate) struct VmessMuxOpenRequest<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) session: &'a Session,
@@ -55,5 +46,5 @@ pub(crate) struct VmessMuxOpenRequest<'a> {
 
 #[derive(Clone)]
 pub(crate) struct VmessMuxConnectionPool {
-    pub(super) pool: Arc<Mutex<HashMap<VmessMuxPoolKey, Arc<VmessMuxConn>>>>,
+    pub(super) pool: Arc<Mutex<HashMap<VmessMuxPoolKey, Arc<vmess::VmessMuxConn>>>>,
 }

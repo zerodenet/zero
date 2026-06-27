@@ -2472,7 +2472,6 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
     for required in [
         "struct VmessMuxPoolKey",
         "enum VmessMuxTransportKey",
-        "struct VmessMuxConn",
         "struct VmessMuxOpenRequest",
         "struct VmessMuxConnectionPool",
     ] {
@@ -2490,20 +2489,23 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         !root.contains("VmessMuxStream::new_with_network"),
         "VMess mux pool runtime should use the protocol mux stream helper instead of constructing VmessMuxStream directly"
     );
-    assert!(
-        root.contains("vmess::mux_stream_with_network"),
-        "VMess mux pool runtime should call the protocol mux stream helper"
-    );
     for forbidden in [
         "vmess::mux_cool_session",
         "vmess::VmessOutbound",
         "VmessAeadStream::outbound",
         "establish_tcp_session",
         "read_mux_frame_from_tokio",
+        "vmess::mux_stream_with_network",
+        "vmess::read_mux_stream_frame",
+        "tokio::spawn",
+        "write_all(&frame)",
+        "mpsc::unbounded_channel::<Vec<u8>>()",
+        "struct VmessMuxConn",
+        "read_mux_stream_frame(&mut reader)",
     ] {
         assert!(
             !root.contains(forbidden),
-            "VMess mux pool runtime should use the protocol mux connection helper instead of `{forbidden}`"
+            "VMess adapter mux pool should not own protocol MUX connection or pump detail `{forbidden}`"
         );
     }
     assert!(
@@ -2511,9 +2513,25 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         "VMess mux pool runtime should call the protocol mux connection helper"
     );
     assert!(
-        root.contains("vmess::read_mux_stream_frame"),
-        "VMess mux pool runtime should call the protocol mux frame reader helper"
+        root.contains("vmess::VmessMuxConn::new") && root.contains(".open_stream("),
+        "VMess adapter mux pool should hand established streams to protocol-owned mux connection helpers"
     );
+    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
+        .expect("read protocols/vmess mux source");
+    for required in [
+        "pub struct VmessMuxConn",
+        "pub fn new<S>",
+        "pub fn open_stream",
+        "fn spawn_mux_write_relay",
+        "fn spawn_mux_read_relay",
+        "tokio::spawn",
+        "read_mux_stream_frame(&mut reader)",
+    ] {
+        assert!(
+            protocol_mux.contains(required),
+            "protocols/vmess should own VMess MUX connection mechanics through `{required}`"
+        );
+    }
 }
 
 #[test]

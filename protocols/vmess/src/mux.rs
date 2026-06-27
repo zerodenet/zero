@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
 use zero_core::{Address, Error, Network, Session};
 use zero_traits::AsyncSocket;
@@ -250,6 +250,115 @@ pub struct VmessMuxStream {
     opened: bool,
     ended: bool,
     active: Option<Arc<Mutex<usize>>>,
+}
+
+pub struct VmessMuxConn {
+    write_tx: mpsc::UnboundedSender<Vec<u8>>,
+    streams: Arc<Mutex<std::collections::HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>>>,
+    next_id: Mutex<u16>,
+    active: Arc<Mutex<usize>>,
+    max_concurrency: u32,
+}
+
+impl VmessMuxConn {
+    pub fn new<S>(stream: S, max_concurrency: u32) -> Self
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        let (reader, writer) = tokio::io::split(stream);
+        let (write_tx, write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let streams = Arc::new(Mutex::new(std::collections::HashMap::new()));
+
+        spawn_mux_write_relay(writer, write_rx);
+        spawn_mux_read_relay(reader, streams.clone());
+
+        Self {
+            write_tx,
+            streams,
+            next_id: Mutex::new(1),
+            active: Arc::new(Mutex::new(0)),
+            max_concurrency,
+        }
+    }
+
+    pub fn has_capacity(&self) -> bool {
+        *self.active.lock().unwrap() < self.max_concurrency as usize
+    }
+
+    pub fn open_stream(&self, target: Address, port: u16, network: Network) -> VmessMuxStream {
+        let session_id = self.allocate_stream_id();
+        let (down_tx, down_rx) = mpsc::unbounded_channel();
+        self.streams.lock().unwrap().insert(session_id, down_tx);
+
+        VmessMuxStream::new_with_network(
+            session_id,
+            target,
+            port,
+            network,
+            self.write_tx.clone(),
+            down_rx,
+            self.active.clone(),
+        )
+    }
+
+    fn allocate_stream_id(&self) -> u16 {
+        let session_id = {
+            let mut next = self.next_id.lock().unwrap();
+            let id = *next;
+            *next = next.wrapping_add(1);
+            if *next == 0 {
+                *next = 1;
+            }
+            id
+        };
+        *self.active.lock().unwrap() += 1;
+        session_id
+    }
+}
+
+fn spawn_mux_write_relay<W>(mut writer: W, mut write_rx: mpsc::UnboundedReceiver<Vec<u8>>)
+where
+    W: AsyncWrite + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        while let Some(frame) = write_rx.recv().await {
+            if writer.write_all(&frame).await.is_err() {
+                break;
+            }
+            if writer.flush().await.is_err() {
+                break;
+            }
+        }
+        let _ = writer.shutdown().await;
+    });
+}
+
+fn spawn_mux_read_relay<R>(
+    mut reader: R,
+    streams: Arc<Mutex<std::collections::HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>>>,
+) where
+    R: AsyncRead + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        loop {
+            let frame = match read_mux_stream_frame(&mut reader).await {
+                Ok(frame) => frame,
+                Err(_) => break,
+            };
+            if frame.status == MUX_STATUS_KEEP_ALIVE {
+                continue;
+            }
+            let tx = streams.lock().unwrap().get(&frame.session_id).cloned();
+            if let Some(tx) = tx {
+                if frame.status == MUX_STATUS_END {
+                    let _ = tx.send(Vec::new());
+                    streams.lock().unwrap().remove(&frame.session_id);
+                } else if !frame.payload.is_empty() {
+                    let _ = tx.send(frame.payload);
+                }
+            }
+        }
+    });
 }
 
 impl VmessMuxStream {
