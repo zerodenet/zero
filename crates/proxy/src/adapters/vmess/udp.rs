@@ -7,12 +7,9 @@ use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
-use manager::{
-    model::{VmessUdpRelayFlowStart, VmessUdpStartFlow},
-    VmessUdpOutboundManager,
-};
+use managed::{VmessUdpOutboundManager, VmessUdpRelayFlowStart, VmessUdpStartFlow};
 
-mod manager;
+mod managed;
 
 fn vmess_udp_flow_config<'a>(
     id: &str,
