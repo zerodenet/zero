@@ -1,8 +1,8 @@
-use super::super::state::managed::model::{ManagedDatagramFlowHandler, ManagedExistingSend};
-use super::super::FlowFailure;
-use super::super::ProtocolUdpFlowResume;
 use super::model::{H2Entry, H2Key, H2SendExisting, H2UdpPeer};
 use super::{establish, H2ChainManager};
+use crate::protocol_runtime::udp::{
+    FlowFailure, ManagedDatagramFlowHandler, ManagedExistingSend, ProtocolUdpFlowResume,
+};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use zero_core::UdpFlowPacket;

@@ -11,16 +11,16 @@ use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 pub(crate) struct ManagedExistingSend<'a> {
-    pub(in crate::protocol_runtime::udp) chain_tasks: &'a mut JoinSet<ChainTask>,
-    pub(in crate::protocol_runtime::udp) session_id: u64,
-    pub(in crate::protocol_runtime::udp) proxy: Option<&'a Proxy>,
-    pub(in crate::protocol_runtime::udp) session: &'a Session,
-    pub(in crate::protocol_runtime::udp) server: &'a str,
-    pub(in crate::protocol_runtime::udp) port: u16,
-    pub(in crate::protocol_runtime::udp) resume: ProtocolUdpFlowResume,
-    pub(in crate::protocol_runtime::udp) target: &'a Address,
-    pub(in crate::protocol_runtime::udp) target_port: u16,
-    pub(in crate::protocol_runtime::udp) payload: &'a [u8],
+    pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
+    pub(crate) session_id: u64,
+    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) session: &'a Session,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) resume: ProtocolUdpFlowResume,
+    pub(crate) target: &'a Address,
+    pub(crate) target_port: u16,
+    pub(crate) payload: &'a [u8],
 }
 
 #[async_trait::async_trait]

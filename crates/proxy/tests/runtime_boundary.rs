@@ -2696,7 +2696,7 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
 
 #[test]
 fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
-    let stream = read("src/protocol_runtime/udp/h2_manager/stream.rs");
+    let stream = read("src/adapters/hysteria2/udp/manager/stream.rs");
     let protocol = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -5267,13 +5267,13 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
         );
     }
     assert!(
-        root.contains("pub(crate) mod h2_manager")
+        !root.contains("h2_manager")
             && root.contains("pub(crate) mod mieru_manager")
-            && root.contains("pub(crate) mod ss_manager")
+            && !root.contains("ss_manager")
             && root.contains("pub(crate) mod trojan_manager")
             && root.contains("ManagedDatagramFlowHandler")
             && root.contains("ManagedStreamFlowHandler"),
-        "UDP root should expose manager modules without protocol-named handler factories"
+        "UDP root should keep migrated datagram managers out of protocol_runtime::udp while stream managers are still pending migration"
     );
 }
 
@@ -5284,12 +5284,12 @@ fn protocol_udp_manager_construction_is_adapter_registered() {
         "src/adapters/mieru/udp.rs",
         "src/adapters/shadowsocks/udp.rs",
         "src/adapters/trojan/udp.rs",
-        "src/protocol_runtime/udp/h2_manager.rs",
-        "src/protocol_runtime/udp/h2_manager/",
+        "src/adapters/hysteria2/udp/manager.rs",
+        "src/adapters/hysteria2/udp/manager/",
         "src/protocol_runtime/udp/mieru_manager.rs",
         "src/protocol_runtime/udp/mieru_manager/",
-        "src/protocol_runtime/udp/ss_manager.rs",
-        "src/protocol_runtime/udp/ss_manager/",
+        "src/adapters/shadowsocks/udp/manager.rs",
+        "src/adapters/shadowsocks/udp/manager/",
         "src/protocol_runtime/udp/trojan_manager.rs",
         "src/protocol_runtime/udp/trojan_manager/",
     ];
@@ -5319,7 +5319,7 @@ fn protocol_udp_manager_construction_is_adapter_registered() {
 #[test]
 fn protocol_udp_manager_roots_do_not_reexport_request_models() {
     for (source, forbidden) in [
-        ("src/protocol_runtime/udp/h2_manager.rs", "H2SendExisting"),
+        ("src/adapters/hysteria2/udp/manager.rs", "H2SendExisting"),
         (
             "src/protocol_runtime/udp/mieru_manager.rs",
             "MieruSendExisting",
@@ -5328,7 +5328,7 @@ fn protocol_udp_manager_roots_do_not_reexport_request_models() {
             "src/protocol_runtime/udp/mieru_manager.rs",
             "MieruRelayExisting",
         ),
-        ("src/protocol_runtime/udp/ss_manager.rs", "SsSendExisting"),
+        ("src/adapters/shadowsocks/udp/manager.rs", "SsSendExisting"),
         (
             "src/protocol_runtime/udp/trojan_manager.rs",
             "TrojanSendExisting",
@@ -5352,9 +5352,9 @@ fn protocol_udp_manager_roots_do_not_reexport_request_models() {
 #[test]
 fn protocol_udp_manager_request_models_are_manager_private() {
     for source in [
-        "src/protocol_runtime/udp/h2_manager/model.rs",
+        "src/adapters/hysteria2/udp/manager/model.rs",
         "src/protocol_runtime/udp/mieru_manager/model.rs",
-        "src/protocol_runtime/udp/ss_manager/model.rs",
+        "src/adapters/shadowsocks/udp/manager/model.rs",
         "src/protocol_runtime/udp/trojan_manager/model.rs",
     ] {
         let content = read(source);
@@ -5374,9 +5374,9 @@ fn protocol_udp_manager_request_models_are_manager_private() {
     }
 
     for source in [
-        "src/protocol_runtime/udp/h2_manager/send.rs",
+        "src/adapters/hysteria2/udp/manager/send.rs",
         "src/protocol_runtime/udp/mieru_manager/send.rs",
-        "src/protocol_runtime/udp/ss_manager.rs",
+        "src/adapters/shadowsocks/udp/manager.rs",
         "src/protocol_runtime/udp/trojan_manager/send.rs",
     ] {
         let content = read(source);
@@ -5542,6 +5542,8 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
             && managed.contains("fn forward_existing_flow")
             && managed_model.contains("trait ManagedDatagramFlowHandler")
             && managed_model.contains("trait ManagedStreamFlowHandler")
+            && managed_model.contains("pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>")
+            && managed_model.contains("pub(crate) resume: ProtocolUdpFlowResume")
             && managed_datagram.contains("ManagedExistingSend")
             && managed_datagram.contains("send_managed_existing")
             && managed_datagram.contains("for handler in &mut self.handlers")
@@ -5707,6 +5709,9 @@ fn protocol_udp_packet_path_facade_lives_in_udp_dispatch_runtime() {
 fn adapters_do_not_construct_udp_dispatch_peer_helpers() {
     for path in rust_sources_under("src/adapters") {
         let source = relative(&path);
+        if source.contains("/udp/manager") || source.contains("\\udp\\manager") {
+            continue;
+        }
         let content = fs::read_to_string(&path).expect("read rust source");
         for forbidden in [
             "SsUdpPeer",
@@ -5746,8 +5751,8 @@ fn packet_path_traits_are_grouped_by_responsibility() {
     let protocol_udp_root = read("src/protocol_runtime/udp/mod.rs");
     let runtime_root = manifest_dir().join("src/runtime/udp_flow");
     let peer = manifest_dir().join("src/protocol_runtime/udp/peer.rs");
-    let ss_model = read("src/protocol_runtime/udp/ss_manager/model.rs");
-    let h2_model = read("src/protocol_runtime/udp/h2_manager/model.rs");
+    let ss_model = read("src/adapters/shadowsocks/udp/manager/model.rs");
+    let h2_model = read("src/adapters/hysteria2/udp/manager/model.rs");
     let trojan_model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
     let mieru_model = read("src/protocol_runtime/udp/mieru_manager/model.rs");
 
@@ -6144,7 +6149,7 @@ fn packet_path_snapshot_send_uses_request_model() {
 #[test]
 fn feature_gated_udp_manager_modules_do_not_embed_disabled_stubs() {
     for source in [
-        "src/protocol_runtime/udp/h2_manager.rs",
+        "src/adapters/hysteria2/udp/manager.rs",
         "src/protocol_runtime/udp/mieru_manager.rs",
         "src/protocol_runtime/udp/trojan_manager.rs",
     ] {
@@ -6963,10 +6968,10 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
 
 #[test]
 fn h2_udp_datagram_codec_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/h2_manager.rs");
-    let stream = read("src/protocol_runtime/udp/h2_manager/stream.rs");
-    let manager_send = read("src/protocol_runtime/udp/h2_manager/send.rs");
-    let manager_model = read("src/protocol_runtime/udp/h2_manager/model.rs");
+    let manager = read("src/adapters/hysteria2/udp/manager.rs");
+    let stream = read("src/adapters/hysteria2/udp/manager/stream.rs");
+    let manager_send = read("src/adapters/hysteria2/udp/manager/send.rs");
+    let manager_model = read("src/adapters/hysteria2/udp/manager/model.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
     let adapter = read("src/adapters/hysteria2/udp.rs");
@@ -6991,7 +6996,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     }
     assert!(
         !manifest_dir()
-            .join("src/protocol_runtime/udp/h2_manager/codec.rs")
+            .join("src/adapters/hysteria2/udp/manager/codec.rs")
             .exists(),
         "Hysteria2 UDP manager should not keep a proxy-owned codec module"
     );
@@ -7168,8 +7173,8 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
 
 #[test]
 fn h2_udp_response_bridge_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/h2_manager.rs");
-    let bridge = manifest_dir().join("src/protocol_runtime/udp/h2_manager/bridge.rs");
+    let manager = read("src/adapters/hysteria2/udp/manager.rs");
+    let bridge = manifest_dir().join("src/adapters/hysteria2/udp/manager/bridge.rs");
 
     for forbidden in [
         "type RecvItem",
@@ -7190,9 +7195,9 @@ fn h2_udp_response_bridge_lives_outside_manager() {
 
 #[test]
 fn h2_udp_packet_stream_tasks_live_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/h2_manager.rs");
-    let stream = read("src/protocol_runtime/udp/h2_manager/stream.rs");
-    let stream_path = manifest_dir().join("src/protocol_runtime/udp/h2_manager/stream.rs");
+    let manager = read("src/adapters/hysteria2/udp/manager.rs");
+    let stream = read("src/adapters/hysteria2/udp/manager/stream.rs");
+    let stream_path = manifest_dir().join("src/adapters/hysteria2/udp/manager/stream.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
@@ -7298,8 +7303,8 @@ fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
 
 #[test]
 fn h2_udp_state_model_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/h2_manager.rs");
-    let model = manifest_dir().join("src/protocol_runtime/udp/h2_manager/model.rs");
+    let manager = read("src/adapters/hysteria2/udp/manager.rs");
+    let model = manifest_dir().join("src/adapters/hysteria2/udp/manager/model.rs");
 
     for forbidden in [
         "struct H2Entry",
@@ -7320,8 +7325,8 @@ fn h2_udp_state_model_lives_outside_manager() {
 
 #[test]
 fn h2_udp_model_details_live_outside_manager_root() {
-    let manager = read("src/protocol_runtime/udp/h2_manager.rs");
-    let model = read("src/protocol_runtime/udp/h2_manager/model.rs");
+    let manager = read("src/adapters/hysteria2/udp/manager.rs");
+    let model = read("src/adapters/hysteria2/udp/manager/model.rs");
 
     for forbidden in [
         "struct H2Entry",
@@ -7345,8 +7350,8 @@ fn h2_udp_model_details_live_outside_manager_root() {
 
 #[test]
 fn h2_udp_send_orchestration_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/h2_manager.rs");
-    let send = manifest_dir().join("src/protocol_runtime/udp/h2_manager/send.rs");
+    let manager = read("src/adapters/hysteria2/udp/manager.rs");
+    let send = manifest_dir().join("src/adapters/hysteria2/udp/manager/send.rs");
 
     for forbidden in [
         "async fn send(",
@@ -7368,8 +7373,8 @@ fn h2_udp_send_orchestration_lives_outside_manager() {
 
 #[test]
 fn h2_udp_establish_logic_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/h2_manager.rs");
-    let establish = manifest_dir().join("src/protocol_runtime/udp/h2_manager/establish.rs");
+    let manager = read("src/adapters/hysteria2/udp/manager.rs");
+    let establish = manifest_dir().join("src/adapters/hysteria2/udp/manager/establish.rs");
 
     for forbidden in [
         "async fn establish",
@@ -7389,9 +7394,9 @@ fn h2_udp_establish_logic_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/ss_manager.rs");
+    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
     let adapter = read("src/adapters/shadowsocks/udp.rs");
-    let entry = read("src/protocol_runtime/udp/ss_manager/entry.rs");
+    let entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/shadowsocks_transport.rs"))
             .expect("read shadowsocks transport source");
@@ -7418,7 +7423,7 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     }
     assert!(
         !manifest_dir()
-            .join("src/protocol_runtime/udp/ss_manager/codec.rs")
+            .join("src/adapters/shadowsocks/udp/manager/codec.rs")
             .exists(),
         "Shadowsocks UDP manager should not keep a proxy-owned codec module"
     );
@@ -7462,8 +7467,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_response_bridge_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/ss_manager.rs");
-    let bridge = manifest_dir().join("src/protocol_runtime/udp/ss_manager/bridge.rs");
+    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let bridge = manifest_dir().join("src/adapters/shadowsocks/udp/manager/bridge.rs");
 
     for forbidden in [
         "oneshot::channel",
@@ -7484,8 +7489,8 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_socket_runtime_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/ss_manager.rs");
-    let entry = read("src/protocol_runtime/udp/ss_manager/entry.rs");
+    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let entry = read("src/adapters/shadowsocks/udp/manager/entry.rs");
     let transport_path = repo_root().join("crates/transport/src/shadowsocks_transport.rs");
     let transport = fs::read_to_string(&transport_path).expect("read shadowsocks transport source");
 
@@ -7503,7 +7508,7 @@ fn shadowsocks_udp_socket_runtime_lives_outside_manager() {
     }
     assert!(
         !manifest_dir()
-            .join("src/protocol_runtime/udp/ss_manager/socket.rs")
+            .join("src/adapters/shadowsocks/udp/manager/socket.rs")
             .exists(),
         "Shadowsocks UDP socket runtime should not live in zero-proxy ss_manager/socket.rs"
     );
@@ -7518,8 +7523,8 @@ fn shadowsocks_udp_socket_runtime_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_state_model_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/ss_manager.rs");
-    let model = manifest_dir().join("src/protocol_runtime/udp/ss_manager/model.rs");
+    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let model = manifest_dir().join("src/adapters/shadowsocks/udp/manager/model.rs");
 
     for forbidden in [
         "struct SsUpstream",
@@ -7542,8 +7547,8 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
 fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let flows = read("src/protocol_runtime/udp/flows.rs");
-    let manager = read("src/protocol_runtime/udp/ss_manager.rs");
-    let model = read("src/protocol_runtime/udp/ss_manager/model.rs");
+    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     let protocol_outbound =
@@ -7631,8 +7636,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !start.contains("resume.codec()"),
         "new Shadowsocks UDP flow start should pass the unified resume descriptor without unpacking cache identity or codec state"
     );
-    let manager = read("src/protocol_runtime/udp/ss_manager.rs");
-    let manager_model = read("src/protocol_runtime/udp/ss_manager/model.rs");
+    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let manager_model = read("src/adapters/shadowsocks/udp/manager/model.rs");
     for forbidden in [
         "ShadowsocksUdpLeafKey",
         "leaf_cache_key",
@@ -7904,8 +7909,8 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
 
 #[test]
 fn shadowsocks_udp_entry_cache_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/ss_manager.rs");
-    let entry = manifest_dir().join("src/protocol_runtime/udp/ss_manager/entry.rs");
+    let manager = read("src/adapters/shadowsocks/udp/manager.rs");
+    let entry = manifest_dir().join("src/adapters/shadowsocks/udp/manager/entry.rs");
 
     for forbidden in [
         "fn ensure_entry",

@@ -5,12 +5,8 @@
 
 mod flow_snapshot;
 mod flows;
-#[cfg(feature = "hysteria2")]
-pub(crate) mod h2_manager;
 #[cfg(feature = "mieru")]
 pub(crate) mod mieru_manager;
-#[cfg(feature = "shadowsocks")]
-pub(crate) mod ss_manager;
 mod start;
 mod state;
 #[cfg(feature = "trojan")]
@@ -21,6 +17,6 @@ pub(crate) use flow_snapshot::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
 pub(crate) use flows::{ManagedUdpFlowKind, ManagedUdpFlowRequest};
 pub(crate) use state::{CachedUdpHandlers, ProtocolUdpHandlers, ProtocolUdpState};
 pub(crate) use state::{
-    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedStreamFlowHandler,
-    ManagedUdpHandlers,
+    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend,
+    ManagedStreamFlowHandler, ManagedUdpHandlers,
 };

@@ -2,7 +2,7 @@
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
 //! so the runtime dispatches via the `ProtocolAdapter` trait. UDP datagram
-//! management lives in `crate::runtime::udp_dispatch::h2_manager`.
+//! management lives in the Hysteria2 adapter UDP module.
 
 use zero_core::Session;
 use zero_engine::EngineError;

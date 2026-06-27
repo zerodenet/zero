@@ -15,7 +15,8 @@ mod stream;
 
 use datagram::ManagedDatagramState;
 pub(crate) use model::{
-    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedStreamFlowHandler,
+    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend,
+    ManagedStreamFlowHandler,
 };
 use stream::ManagedStreamState;
 

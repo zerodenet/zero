@@ -10,8 +10,10 @@ use crate::protocol_runtime::udp::{
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 
+mod manager;
+
 pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> {
-    Box::new(crate::protocol_runtime::udp::h2_manager::H2ChainManager::new())
+    Box::new(manager::H2ChainManager::new())
 }
 
 impl Hysteria2Adapter {

@@ -18,8 +18,8 @@ use cached::CachedProtocolUdpState;
 pub(crate) use cached::CachedUdpHandlers;
 use managed::ManagedProtocolUdpState;
 pub(crate) use managed::{
-    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedStreamFlowHandler,
-    ManagedUdpHandlers,
+    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend,
+    ManagedStreamFlowHandler, ManagedUdpHandlers,
 };
 
 mod cached;

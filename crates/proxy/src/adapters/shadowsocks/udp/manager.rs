@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::state::managed::model::{ManagedDatagramFlowHandler, ManagedExistingSend};
-use super::FlowFailure;
+use crate::protocol_runtime::udp::{
+    FlowFailure, ManagedDatagramFlowHandler, ManagedExistingSend, ProtocolUdpFlowResume,
+};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -155,8 +156,6 @@ impl ManagedDatagramFlowHandler for SsChainManager {
         SsChainManager::send_managed_existing(self, request).await
     }
 }
-
-use super::ProtocolUdpFlowResume;
 
 fn managed_mismatch(
     stage: &'static str,
