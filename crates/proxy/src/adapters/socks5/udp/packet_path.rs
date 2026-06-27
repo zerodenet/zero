@@ -33,10 +33,18 @@ pub(crate) async fn build_socks5_packet_path(
     tag: &str,
     server: &str,
     port: u16,
-    auth: Option<(&str, &str)>,
+    packet_path: socks5::Socks5UdpPacketPath<'_>,
 ) -> Result<Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError> {
     let association = Arc::new(
-        ActiveUpstreamSocks5UdpAssociation::establish(proxy, tag, server, port, auth, 0).await?,
+        ActiveUpstreamSocks5UdpAssociation::establish(
+            proxy,
+            tag,
+            server,
+            port,
+            packet_path.association_config(),
+            0,
+        )
+        .await?,
     );
     Ok(Arc::new(Socks5PacketPath { association }))
 }

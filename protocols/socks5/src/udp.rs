@@ -1,7 +1,9 @@
 use zero_core::{Address, Error};
 use zero_traits::{AsyncSocket, DatagramSocket, IpAddress, UdpRelayProtocol};
 
-use crate::outbound::{Socks5Outbound, Socks5OutboundAuth, Socks5UdpRelayTarget};
+use crate::outbound::{
+    Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth, Socks5UdpRelayTarget,
+};
 use crate::shared::{build_udp_packet, decode_udp_associate_response};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,6 +16,36 @@ pub struct Socks5UdpRelayEndpoint {
 pub struct Socks5UdpRelayTargetAddress {
     pub address: Address,
     pub port: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Socks5UdpAssociationConfig<'a> {
+    auth: Option<Socks5OutboundAuth<'a>>,
+}
+
+impl<'a> Socks5UdpAssociationConfig<'a> {
+    pub fn new(auth: Option<Socks5OutboundAuth<'a>>) -> Self {
+        Self { auth }
+    }
+
+    pub fn auth(&self) -> Option<Socks5OutboundAuth<'a>> {
+        self.auth
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5OwnedUdpAssociationConfig {
+    auth: Option<Socks5OwnedOutboundAuth>,
+}
+
+impl Socks5OwnedUdpAssociationConfig {
+    pub fn new(auth: Option<Socks5OwnedOutboundAuth>) -> Self {
+        Self { auth }
+    }
+
+    pub fn as_ref(&self) -> Socks5UdpAssociationConfig<'_> {
+        Socks5UdpAssociationConfig::new(self.auth.as_ref().map(|auth| auth.as_ref()))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,7 +131,7 @@ where
 
 pub async fn establish_udp_relay_with_control<S>(
     control_stream: &mut S,
-    auth: Option<(&str, &str)>,
+    config: Socks5UdpAssociationConfig<'_>,
 ) -> Result<Socks5UdpRelayTargetAddress, Error>
 where
     S: AsyncSocket,
@@ -108,7 +140,7 @@ where
         .establish_udp_relay(
             control_stream,
             &Socks5UdpRelayTarget {
-                auth: auth.map(|(username, password)| Socks5OutboundAuth { username, password }),
+                auth: config.auth(),
             },
         )
         .await?;

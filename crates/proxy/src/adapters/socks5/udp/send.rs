@@ -37,10 +37,7 @@ pub(crate) async fn send(
         outbound_tag: request.tag.to_owned(),
         server: request.server.to_owned(),
         port: request.port,
-        auth: resume
-            .username()
-            .zip(resume.password())
-            .map(|(u, p)| (u.to_owned(), p.to_owned())),
+        config: resume.owned_association_config(),
     };
 
     match send_socks5_udp_packet(
@@ -116,10 +113,7 @@ async fn ensure_socks5_udp_association(
         &association.outbound_tag,
         &association.server,
         association.port,
-        association
-            .auth
-            .as_ref()
-            .map(|(u, p)| (u.as_str(), p.as_str())),
+        association.config.as_ref(),
         session_id,
     )
     .await

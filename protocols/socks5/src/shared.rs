@@ -5,6 +5,9 @@ use alloc::vec::Vec;
 use zero_core::{Address, Error};
 use zero_traits::AsyncSocket;
 
+use crate::outbound::{Socks5OutboundAuth, Socks5UdpFlowResume};
+use crate::udp::Socks5UdpAssociationConfig;
+
 pub(crate) const SOCKS5_VERSION: u8 = 0x05;
 pub(crate) const METHOD_NO_AUTH: u8 = 0x00;
 pub(crate) const METHOD_USERNAME_PASSWORD: u8 = 0x02;
@@ -302,12 +305,57 @@ impl<'a> Socks5UdpPacketPathConfig<'a> {
         }
     }
 
+    pub fn packet_path(&self) -> Socks5UdpPacketPath<'a> {
+        Socks5UdpPacketPath {
+            tag: self.tag,
+            server: self.server,
+            port: self.port,
+            auth: self.auth(),
+        }
+    }
+
+    pub fn flow_resume(&self) -> Socks5UdpFlowResume {
+        Socks5UdpFlowResume::new(self.auth())
+    }
+
+    pub fn auth(&self) -> Option<Socks5OutboundAuth<'a>> {
+        self.username
+            .zip(self.password)
+            .map(|(username, password)| Socks5OutboundAuth { username, password })
+    }
+
+    pub fn association_config(&self) -> Socks5UdpAssociationConfig<'a> {
+        Socks5UdpAssociationConfig::new(self.auth())
+    }
+
+    pub fn cache_key(&self) -> String {
+        self.packet_path().cache_key()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Socks5UdpPacketPath<'a> {
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    auth: Option<Socks5OutboundAuth<'a>>,
+}
+
+impl<'a> Socks5UdpPacketPath<'a> {
     pub fn cache_key(&self) -> String {
         udp_cache_key(
             self.tag,
             self.server,
             self.port,
-            self.username.zip(self.password).map(|(user, _)| user),
+            self.auth.map(|auth| auth.username),
         )
+    }
+
+    pub fn auth(&self) -> Option<Socks5OutboundAuth<'a>> {
+        self.auth
+    }
+
+    pub fn association_config(&self) -> Socks5UdpAssociationConfig<'a> {
+        Socks5UdpAssociationConfig::new(self.auth)
     }
 }

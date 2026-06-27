@@ -22,5 +22,5 @@ pub(super) struct Socks5UdpAssociation {
     pub(super) outbound_tag: String,
     pub(super) server: String,
     pub(super) port: u16,
-    pub(super) auth: Option<(String, String)>,
+    pub(super) config: socks5::Socks5OwnedUdpAssociationConfig,
 }

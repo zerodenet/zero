@@ -11,6 +11,7 @@ use crate::shared::{
     REP_CONNECTION_NOT_ALLOWED, REP_GENERAL_FAILURE, REP_HOST_UNREACHABLE, REP_SUCCEEDED,
     SOCKS5_VERSION, USERPASS_STATUS_SUCCESS, USERPASS_VERSION,
 };
+use crate::udp::Socks5OwnedUdpAssociationConfig;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Socks5Outbound;
@@ -22,25 +23,45 @@ pub struct Socks5OutboundAuth<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Socks5UdpFlowResume {
-    username: Option<alloc::string::String>,
-    password: Option<alloc::string::String>,
+pub struct Socks5OwnedOutboundAuth {
+    username: alloc::string::String,
+    password: alloc::string::String,
 }
 
-impl Socks5UdpFlowResume {
-    pub fn new(username: Option<&str>, password: Option<&str>) -> Self {
+impl Socks5OwnedOutboundAuth {
+    pub fn new(auth: Socks5OutboundAuth<'_>) -> Self {
         Self {
-            username: username.map(ToOwned::to_owned),
-            password: password.map(ToOwned::to_owned),
+            username: auth.username.to_owned(),
+            password: auth.password.to_owned(),
         }
     }
 
-    pub fn username(&self) -> Option<&str> {
-        self.username.as_deref()
+    pub fn as_ref(&self) -> Socks5OutboundAuth<'_> {
+        Socks5OutboundAuth {
+            username: &self.username,
+            password: &self.password,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpFlowResume {
+    auth: Option<Socks5OwnedOutboundAuth>,
+}
+
+impl Socks5UdpFlowResume {
+    pub fn new(auth: Option<Socks5OutboundAuth<'_>>) -> Self {
+        Self {
+            auth: auth.map(Socks5OwnedOutboundAuth::new),
+        }
     }
 
-    pub fn password(&self) -> Option<&str> {
-        self.password.as_deref()
+    pub fn auth(&self) -> Option<Socks5OutboundAuth<'_>> {
+        self.auth.as_ref().map(Socks5OwnedOutboundAuth::as_ref)
+    }
+
+    pub fn owned_association_config(&self) -> Socks5OwnedUdpAssociationConfig {
+        Socks5OwnedUdpAssociationConfig::new(self.auth.clone())
     }
 }
 

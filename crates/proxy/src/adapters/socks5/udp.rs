@@ -38,8 +38,9 @@ impl Socks5Adapter {
         else {
             return None;
         };
-        let packet_path =
+        let config =
             socks5::Socks5UdpPacketPathConfig::new(tag, server, *port, *username, *password);
+        let packet_path = config.packet_path();
         Some(
             crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
                 packet_path.cache_key(),
@@ -65,8 +66,9 @@ impl Socks5Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        packet_path::build_socks5_packet_path(proxy, tag, server, *port, username.zip(*password))
-            .await
+        let config =
+            socks5::Socks5UdpPacketPathConfig::new(tag, server, *port, *username, *password);
+        packet_path::build_socks5_packet_path(proxy, tag, server, *port, config.packet_path()).await
     }
 
     pub(super) async fn start_udp_flow_impl(
@@ -87,6 +89,8 @@ impl Socks5Adapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
+        let config =
+            socks5::Socks5UdpPacketPathConfig::new(tag, server, *port, *username, *password);
         dispatch
             .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
                 proxy: Some(proxy),
@@ -96,9 +100,7 @@ impl Socks5Adapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ManagedUdpFlowResume::new(socks5::Socks5UdpFlowResume::new(
-                    *username, *password,
-                )),
+                resume: ManagedUdpFlowResume::new(config.flow_resume()),
                 payload,
                 kind: ManagedUdpFlowKind::RelayStream,
                 outbound: ManagedUdpOutboundKind::Relay,

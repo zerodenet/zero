@@ -26,7 +26,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
         outbound_tag: &str,
         server: &str,
         port: u16,
-        auth: Option<(&str, &str)>,
+        config: socks5::Socks5UdpAssociationConfig<'_>,
         session_id: u64,
     ) -> Result<Self, EngineError> {
         let control = proxy
@@ -35,7 +35,7 @@ impl ActiveUpstreamSocks5UdpAssociation {
             .connect_host(server, port, proxy.resolver.as_ref())
             .await?;
         let mut control = MeteredStream::new(control);
-        let relay_target = socks5::establish_udp_relay_with_control(&mut control, auth).await?;
+        let relay_target = socks5::establish_udp_relay_with_control(&mut control, config).await?;
         proxy.record_session_outbound_traffic(session_id, control.drain_traffic());
         let control = control.into_inner();
         let relay_addr = proxy

@@ -1937,6 +1937,31 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && !active.contains(".establish_udp_relay("),
         "SOCKS5 UDP active association wrapper should store a protocol-owned association handle"
     );
+    for source in [
+        ("src/adapters/socks5/udp.rs", adapter.as_str()),
+        ("src/adapters/socks5/udp/active.rs", active.as_str()),
+        ("src/adapters/socks5/udp/model.rs", model.as_str()),
+        (
+            "src/adapters/socks5/udp/packet_path.rs",
+            packet_path_source.as_str(),
+        ),
+        ("src/adapters/socks5/udp/send.rs", send_source.as_str()),
+    ] {
+        for forbidden in [
+            "Socks5OutboundAuth",
+            "Socks5OwnedOutboundAuth",
+            "username().zip",
+            "username.zip",
+            "password()",
+            "Option<(&str, &str)>",
+        ] {
+            assert!(
+                !source.1.contains(forbidden),
+                "{} should use protocol-owned SOCKS5 UDP association config instead of `{forbidden}`",
+                source.0
+            );
+        }
+    }
     assert!(
         model.contains("enum UpstreamAssociationCloseReason")
             && model.contains("struct Socks5UdpAssociation"),
