@@ -57,7 +57,7 @@ impl VlessAdapter {
                     session: Some(session),
                     server,
                     port: *port,
-                    id: config.id_ref(),
+                    identity: vless::mux_pool::MuxIdentity::from_uuid(config.id()),
                     tls: *tls,
                     reality: *reality,
                     max_concurrency: mux_concurrency.unwrap_or(8),

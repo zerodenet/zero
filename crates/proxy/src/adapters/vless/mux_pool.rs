@@ -64,12 +64,12 @@ impl MuxConnectionPool {
             _ => TransportKey::Raw,
         };
 
-        let key = PoolKey {
-            server: request.server.to_owned(),
-            port: request.port,
-            uuid: *request.id,
+        let key = PoolKey::from_identity(
+            request.server.to_owned(),
+            request.port,
+            request.identity.clone(),
             transport,
-        };
+        );
 
         let conn = {
             let pool = self.pool.lock().unwrap();
@@ -178,13 +178,13 @@ impl MuxConnectionPool {
 
         let mut metered = MeteredStream::new(stream);
         let _mux = vless::VlessOutbound
-            .establish_mux(&mut metered, &key.uuid)
+            .establish_mux(&mut metered, key.uuid())
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
 
         Ok(MuxPoolConn::new(
             metered.into_inner(),
-            &key.uuid,
+            key.uuid(),
             request.max_concurrency,
         ))
     }

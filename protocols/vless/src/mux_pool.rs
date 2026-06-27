@@ -23,8 +23,13 @@ use crate::MuxCrypto;
 pub struct PoolKey {
     pub server: String,
     pub port: u16,
-    pub uuid: [u8; 16],
+    identity: MuxIdentity,
     pub transport: TransportKey,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct MuxIdentity {
+    uuid: [u8; 16],
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -37,6 +42,36 @@ pub enum TransportKey {
         public_key: String,
         server_name: String,
     },
+}
+
+impl MuxIdentity {
+    pub fn from_uuid(uuid: [u8; 16]) -> Self {
+        Self { uuid }
+    }
+
+    pub fn uuid(&self) -> &[u8; 16] {
+        &self.uuid
+    }
+}
+
+impl PoolKey {
+    pub fn from_identity(
+        server: String,
+        port: u16,
+        identity: MuxIdentity,
+        transport: TransportKey,
+    ) -> Self {
+        Self {
+            server,
+            port,
+            identity,
+            transport,
+        }
+    }
+
+    pub fn uuid(&self) -> &[u8; 16] {
+        self.identity.uuid()
+    }
 }
 
 // ── Pool connection ──

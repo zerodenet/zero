@@ -3443,6 +3443,8 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
 fn vless_mux_pool_model_lives_outside_runtime_root() {
     let root = read("src/adapters/vless/mux_pool.rs");
     let model = read("src/adapters/vless/mux_pool/model.rs");
+    let protocol_mux_pool = fs::read_to_string(repo_root().join("protocols/vless/src/mux_pool.rs"))
+        .expect("read protocols/vless/src/mux_pool.rs");
     let old_root = manifest_dir().join("src/protocol_runtime/vless_mux_pool.rs");
     let old_dir = manifest_dir().join("src/protocol_runtime/vless_mux_pool");
 
@@ -3453,10 +3455,32 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         );
     }
 
-    for required in ["struct MuxConnectionPool", "struct VlessMuxOpenRequest"] {
+    for forbidden in ["id: &'a [u8; 16]", "uuid: [u8; 16]"] {
+        assert!(
+            !model.contains(forbidden),
+            "VLESS mux open request should carry protocol-owned identity, not `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "struct MuxConnectionPool",
+        "struct VlessMuxOpenRequest",
+        "identity: vless::mux_pool::MuxIdentity",
+    ] {
         assert!(
             model.contains(required),
             "VLESS MUX pool model should live in adapters/vless/mux_pool/model.rs; missing `{required}`"
+        );
+    }
+    for required in [
+        "pub struct MuxIdentity",
+        "impl MuxIdentity",
+        "impl PoolKey",
+        "pub fn from_identity",
+    ] {
+        assert!(
+            protocol_mux_pool.contains(required),
+            "VLESS mux protocol identity should live in protocols/vless/src/mux_pool.rs; missing `{required}`"
         );
     }
     assert!(

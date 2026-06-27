@@ -28,7 +28,7 @@ pub(super) async fn start_mux_fast_path(
             session: None,
             server: request.server,
             port: request.port,
-            id: &mux_identity.id,
+            identity: vless::mux_pool::MuxIdentity::from_uuid(mux_identity.id),
             tls: request.transport.tls,
             reality: request.transport.reality,
             max_concurrency,

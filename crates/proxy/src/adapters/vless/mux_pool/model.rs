@@ -17,7 +17,7 @@ pub(crate) struct VlessMuxOpenRequest<'a> {
     pub(crate) session: Option<&'a Session>,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) id: &'a [u8; 16],
+    pub(crate) identity: vless::mux_pool::MuxIdentity,
     pub(crate) tls: Option<&'a ClientTlsConfig>,
     pub(crate) reality: Option<&'a RealityConfig>,
     pub(crate) max_concurrency: u32,
