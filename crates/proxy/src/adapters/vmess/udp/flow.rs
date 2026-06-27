@@ -2,12 +2,27 @@ use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
 use super::managed::{VmessUdpOutboundManager, VmessUdpRelayFlowStart, VmessUdpStartFlow};
-use super::vmess_udp_flow_config;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
+
+fn vmess_udp_flow_config<'a>(
+    id: &str,
+    cipher: &'a str,
+    stage: &'static str,
+    upstream: Option<(&str, u16)>,
+) -> Result<vmess::VmessUdpFlowConfig<'a>, FlowFailure> {
+    vmess::VmessUdpFlowConfig::new(id, cipher).map_err(|error| FlowFailure {
+        stage,
+        error: zero_engine::EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid VMess UDP config: {error}"),
+        )),
+        upstream: upstream.map(|(server, port)| (server.to_string(), port)),
+    })
+}
 
 pub(super) async fn start(
     adapter: &VmessAdapter,

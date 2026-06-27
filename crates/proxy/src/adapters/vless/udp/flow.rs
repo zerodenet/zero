@@ -4,12 +4,27 @@ use zero_engine::ResolvedLeafOutbound;
 use super::managed::{
     VlessUdpOutboundManager, VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow,
 };
-use super::vless_udp_flow_config;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::Proxy;
+
+fn vless_udp_flow_config<'a>(
+    id: &str,
+    flow: Option<&'a str>,
+    stage: &'static str,
+    upstream: Option<(&str, u16)>,
+) -> Result<vless::VlessUdpFlowConfig<'a>, FlowFailure> {
+    vless::VlessUdpFlowConfig::new(id, flow).map_err(|error| FlowFailure {
+        stage,
+        error: zero_engine::EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid VLESS UDP config: {error}"),
+        )),
+        upstream: upstream.map(|(server, port)| (server.to_string(), port)),
+    })
+}
 
 pub(super) async fn start(
     adapter: &VlessAdapter,

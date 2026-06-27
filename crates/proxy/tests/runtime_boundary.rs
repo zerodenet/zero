@@ -1386,6 +1386,8 @@ fn stream_udp_roots_delegate_flow_building() {
             "VmessUdpStartFlow {",
             "VlessUdpRelayFinalHopStart {",
             "VmessUdpRelayFlowStart {",
+            "VlessUdpFlowConfig::new",
+            "VmessUdpFlowConfig::new",
         ] {
             assert!(
                 !root.contains(forbidden),
@@ -2409,9 +2411,10 @@ fn vless_udp_identity_is_protocol_parsed() {
     assert!(
         !adapter.contains("parse_uuid")
             && !adapter.contains("vless::parse_udp_identity")
+            && !adapter.contains("VlessUdpFlowConfig::new")
             && flow.contains("vless_udp_flow_config")
-            && adapter.contains("vless::VlessUdpFlowConfig::new"),
-        "VLESS UDP adapter should use the protocol-owned flow config parser"
+            && flow.contains("vless::VlessUdpFlowConfig::new"),
+        "VLESS UDP flow glue should use the protocol-owned flow config parser while the root stays a facade"
     );
     assert!(
         protocol.contains("struct VlessUdpIdentity")
@@ -2718,9 +2721,10 @@ fn vmess_udp_identity_is_protocol_parsed() {
     }
     assert!(
         !adapter.contains("vmess::parse_udp_identity")
+            && !adapter.contains("VmessUdpFlowConfig::new")
             && flow.contains("vmess_udp_flow_config")
-            && adapter.contains("vmess::VmessUdpFlowConfig::new"),
-        "VMess UDP adapter should use the protocol-owned flow config parser"
+            && flow.contains("vmess::VmessUdpFlowConfig::new"),
+        "VMess UDP flow glue should use the protocol-owned flow config parser while the root stays a facade"
     );
     assert!(
         protocol.contains("struct VmessUdpIdentity")
@@ -3023,7 +3027,8 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
     let root = read("src/adapters/vmess/mux_pool.rs");
     let model = read("src/adapters/vmess/mux_pool/model.rs");
     let tcp_adapter = read("src/adapters/vmess/tcp.rs");
-    let udp_adapter = read("src/adapters/vmess/udp.rs");
+    let udp_root = read("src/adapters/vmess/udp.rs");
+    let udp_flow = read("src/adapters/vmess/udp/flow.rs");
 
     assert!(
         !root.contains("VmessCipher::from_name"),
@@ -3035,10 +3040,11 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
     );
     assert!(
         tcp_adapter.contains("VmessCipher::from_name")
-            && udp_adapter.contains("vmess::VmessUdpFlowConfig::new")
-            && !udp_adapter.contains("vmess::parse_udp_identity")
-            && !udp_adapter.contains("VmessCipher::from_name"),
-        "VMess TCP adapter still parses cipher locally, while UDP adapter delegates cipher parsing to protocols/vmess flow config"
+            && udp_flow.contains("vmess::VmessUdpFlowConfig::new")
+            && !udp_root.contains("vmess::parse_udp_identity")
+            && !udp_root.contains("VmessCipher::from_name")
+            && !udp_root.contains("VmessUdpFlowConfig::new"),
+        "VMess TCP adapter still parses cipher locally, while UDP flow glue delegates cipher parsing to protocols/vmess flow config and the root stays a facade"
     );
 }
 
