@@ -351,6 +351,14 @@ impl<'a> MieruUdpFlowConfig<'a> {
     }
 }
 
+pub fn udp_flow_resume_from_config(
+    username: &str,
+    password: &str,
+    relay_chain: bool,
+) -> MieruUdpFlowResume {
+    MieruUdpFlowConfig::new(username, password).flow_resume(relay_chain)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum MieruUdpFlowKey {
     Leaf(MieruUdpLeafKey),

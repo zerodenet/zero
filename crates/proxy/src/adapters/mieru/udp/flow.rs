@@ -75,7 +75,7 @@ async fn start_with_carrier(
     else {
         return Err(unreachable_udp_leaf(request.adapter.name(), request.leaf));
     };
-    let config = mieru::MieruUdpFlowConfig::new(username, password);
+    let resume = mieru::udp_flow_resume_from_config(username, password, request.relay_chain);
     request
         .dispatch
         .start_tracked_managed_stream_packet(ManagedStreamPacketStart {
@@ -86,7 +86,7 @@ async fn start_with_carrier(
             tls_server_name: None,
             server,
             port: *port,
-            resume: config.flow_resume(request.relay_chain),
+            resume,
             payload: request.payload,
             relay_chain: request.relay_chain,
         })

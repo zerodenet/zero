@@ -17,9 +17,9 @@ pub use inbound::{
 };
 pub use metadata::TrojanProtocol;
 pub use outbound::{
-    build_udp_request, establish_udp_packet_tunnel, TrojanOutbound, TrojanTcpTunnelTarget,
-    TrojanUdpFlowConfig, TrojanUdpFlowIo, TrojanUdpFlowResume, TrojanUdpFlowStore, TrojanUdpPacket,
-    TrojanUdpPacketTunnelTarget, TrojanUdpTlsProfile,
+    build_udp_request, establish_udp_packet_tunnel, udp_flow_resume_from_config, TrojanOutbound,
+    TrojanTcpTunnelTarget, TrojanUdpFlowConfig, TrojanUdpFlowIo, TrojanUdpFlowResume,
+    TrojanUdpFlowStore, TrojanUdpPacket, TrojanUdpPacketTunnelTarget, TrojanUdpTlsProfile,
 };
 #[cfg(feature = "tokio")]
 pub use outbound::{

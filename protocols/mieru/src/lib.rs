@@ -55,7 +55,7 @@ pub use udp::MieruInboundUdpSession;
 #[cfg(feature = "crypto")]
 pub use udp::MieruUdpFlowSessions;
 pub use udp::{
-    MieruInboundUdpPacket, MieruInboundUdpRequest, MieruUdpAssociatePacket,
-    MieruUdpAssociatePayload, MieruUdpFlowCodec, MieruUdpFlowConfig, MieruUdpFlowResume,
-    MieruUdpFlowStore,
+    udp_flow_resume_from_config, MieruInboundUdpPacket, MieruInboundUdpRequest,
+    MieruUdpAssociatePacket, MieruUdpAssociatePayload, MieruUdpFlowCodec, MieruUdpFlowConfig,
+    MieruUdpFlowResume, MieruUdpFlowStore,
 };

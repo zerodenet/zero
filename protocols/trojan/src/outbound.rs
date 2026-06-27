@@ -545,6 +545,16 @@ impl<'a> TrojanUdpFlowConfig<'a> {
     }
 }
 
+pub fn udp_flow_resume_from_config(
+    password: &str,
+    sni: Option<&str>,
+    insecure: bool,
+    client_fingerprint: Option<&str>,
+    relay_chain: bool,
+) -> TrojanUdpFlowResume {
+    TrojanUdpFlowConfig::new(password, sni, insecure, client_fingerprint).flow_resume(relay_chain)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum TrojanUdpFlowKey {
     Leaf(TrojanUdpLeafKey),

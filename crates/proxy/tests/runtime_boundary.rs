@@ -1382,13 +1382,13 @@ fn stream_udp_roots_delegate_flow_building() {
         (
             "src/adapters/trojan/udp.rs",
             "src/adapters/trojan/udp/flow.rs",
-            "TrojanUdpFlowConfig::new",
+            "trojan::udp_flow_resume_from_config",
             ".start_tracked_managed_stream_packet(",
         ),
         (
             "src/adapters/mieru/udp.rs",
             "src/adapters/mieru/udp/flow.rs",
-            "MieruUdpFlowConfig::new",
+            "mieru::udp_flow_resume_from_config",
             ".start_tracked_managed_stream_packet(",
         ),
         (
@@ -7886,11 +7886,13 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && !adapter.contains("TrojanUdpFlowConfig::new")
             && !adapter.contains(".flow_resume(false)")
             && !adapter.contains(".flow_resume(true)")
-            && adapter_flow.contains("TrojanUdpFlowConfig::new")
-            && adapter_flow.contains(".flow_resume(request.relay_chain)")
+            && adapter_flow.contains("trojan::udp_flow_resume_from_config")
+            && !adapter_flow.contains("TrojanUdpFlowConfig::new")
+            && !adapter_flow.contains(".flow_resume(request.relay_chain)")
             && protocol_outbound.contains("struct TrojanUdpFlowResume")
             && protocol_outbound.contains("struct TrojanUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self, relay_chain: bool)")
+            && protocol_outbound.contains("pub fn udp_flow_resume_from_config(")
             && protocol_outbound.contains("fn peer_config(&self)")
             && !protocol_outbound.contains("pub fn peer_config(&self)")
             && protocol_outbound.contains("fn flow_key(&self")
@@ -8213,9 +8215,11 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
             && !adapter.contains("mieru::udp_flow_codec")
             && !adapter.contains("MieruUdpFlowResume::new")
             && !adapter.contains("MieruUdpFlowConfig::new")
-            && adapter_flow.contains("MieruUdpFlowConfig::new")
-            && adapter_flow.contains(".flow_resume(request.relay_chain)")
+            && adapter_flow.contains("mieru::udp_flow_resume_from_config")
+            && !adapter_flow.contains("MieruUdpFlowConfig::new")
+            && !adapter_flow.contains(".flow_resume(request.relay_chain)")
             && protocol_udp.contains("struct MieruUdpFlowResume")
+            && protocol_udp.contains("pub fn udp_flow_resume_from_config(")
             && protocol_udp.contains("pub fn flow_cache_key(&self")
             && protocol_udp.contains("pub fn flow_requires_relay_upstream(&self) -> bool")
             && !protocol_udp.contains("pub fn username(&self)")
