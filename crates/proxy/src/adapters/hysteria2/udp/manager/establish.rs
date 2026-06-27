@@ -11,11 +11,11 @@ pub(super) async fn upstream(
     endpoint: OutboundEndpoint<'_>,
     resume: hysteria2::Hysteria2UdpFlowResume,
     initial_packet: UdpPacketRef<'_>,
-) -> Result<hysteria2::Hysteria2UdpFlowSender, EngineError> {
-    let stream::PacketStream { sender, recv_tx } =
+) -> Result<hysteria2::Hysteria2UdpFlowSession, EngineError> {
+    let stream::PacketStream { session } =
         stream::establish(endpoint, initial_packet, resume).await?;
 
-    bridge::spawn_response_bridge(chain_tasks, recv_tx, session_id);
+    bridge::spawn_response_bridge(chain_tasks, session.subscribe_responses(), session_id);
 
-    Ok(sender)
+    Ok(session)
 }

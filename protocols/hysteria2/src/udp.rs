@@ -299,11 +299,14 @@ impl Hysteria2UdpFlowIo {
 pub type Hysteria2UdpFlowResponse = (Address, u16, Vec<u8>);
 
 #[cfg(feature = "tokio")]
-pub type Hysteria2UdpFlowResponses = broadcast::Sender<Hysteria2UdpFlowResponse>;
+type Hysteria2UdpFlowResponses = broadcast::Sender<Hysteria2UdpFlowResponse>;
+
+#[cfg(feature = "tokio")]
+pub type Hysteria2UdpFlowResponseReceiver = broadcast::Receiver<Hysteria2UdpFlowResponse>;
 
 #[cfg(feature = "tokio")]
 #[derive(Clone)]
-pub struct Hysteria2UdpFlowSender {
+struct Hysteria2UdpFlowSender {
     send_tx: mpsc::Sender<UdpFlowPacket>,
 }
 
@@ -324,8 +327,33 @@ impl Hysteria2InitialUdpFlowPacket {
 
 #[cfg(feature = "tokio")]
 pub struct Hysteria2UdpFlowHandle {
-    pub sender: Hysteria2UdpFlowSender,
-    pub responses: Hysteria2UdpFlowResponses,
+    sender: Hysteria2UdpFlowSender,
+    responses: Hysteria2UdpFlowResponses,
+}
+
+#[cfg(feature = "tokio")]
+#[derive(Clone)]
+pub struct Hysteria2UdpFlowSession {
+    sender: Hysteria2UdpFlowSender,
+    responses: Hysteria2UdpFlowResponses,
+}
+
+#[cfg(feature = "tokio")]
+impl Hysteria2UdpFlowSession {
+    pub fn new(handle: Hysteria2UdpFlowHandle) -> Self {
+        Self {
+            sender: handle.sender,
+            responses: handle.responses,
+        }
+    }
+
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        self.sender.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> Hysteria2UdpFlowResponseReceiver {
+        self.responses.subscribe()
+    }
 }
 
 #[cfg(feature = "tokio")]

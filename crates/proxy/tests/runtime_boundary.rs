@@ -2882,7 +2882,7 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
     }
     assert!(
         stream.contains("hysteria2::spawn_udp_flow")
-            && stream.contains("hysteria2::Hysteria2UdpFlowHandle")
+            && stream.contains("hysteria2::Hysteria2UdpFlowSession::new")
             && stream.contains("Hysteria2Connector::new")
             && stream.contains("connect_raw"),
         "Hysteria2 UDP stream glue should only connect QUIC and call the protocol-owned flow pump"
@@ -2893,7 +2893,12 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
             && protocol.contains("pub fn decode_packet(&self")
             && protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("pub struct Hysteria2UdpFlowHandle")
-            && protocol.contains("pub struct Hysteria2UdpFlowSender")
+            && protocol.contains("struct Hysteria2UdpFlowSender")
+            && !protocol.contains("pub struct Hysteria2UdpFlowSender")
+            && protocol.contains("pub struct Hysteria2UdpFlowSession")
+            && protocol.contains("pub type Hysteria2UdpFlowResponseReceiver")
+            && protocol.contains("type Hysteria2UdpFlowResponses")
+            && !protocol.contains("pub type Hysteria2UdpFlowResponses")
             && protocol.contains("broadcast::channel::<Hysteria2UdpFlowResponse>")
             && protocol.contains("mpsc::channel::<UdpFlowPacket>")
             && protocol.contains("send_datagram")
@@ -7388,16 +7393,9 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn decode_packet(&self"),
         "Hysteria2 adapter and UDP manager should consume protocol-owned UDP flow packet helpers"
     );
-    let h2_entry_model = manager_model
-        .split("pub(super) struct H2Entry")
-        .nth(1)
-        .expect("H2Entry model should exist")
-        .split("pub(super) struct H2SendExisting")
-        .next()
-        .expect("H2SendExisting should follow H2Entry");
     assert!(
-        h2_entry_model.contains("hysteria2::Hysteria2UdpFlowSender")
-            && !h2_entry_model.contains("resume: hysteria2::Hysteria2UdpFlowResume")
+        !manager_model.contains("struct H2Entry")
+            && !manager_model.contains("hysteria2::Hysteria2UdpFlowSender")
             && !manager_send.contains("hysteria2::udp_flow_packet")
             && !manager_send.contains("Hysteria2UdpFlowPacket::from_parts")
             && !stream.contains("Hysteria2UdpFlowPacket::from_parts")
@@ -7406,7 +7404,6 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !stream.contains("zero_core::UdpFlowPacket::from_parts")
             && !stream.contains("let initial_packet = UdpFlowPacket::from_parts")
             && stream.contains("hysteria2::Hysteria2InitialUdpFlowPacket::from_parts")
-            && manager_send.contains(".sender")
             && manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
             && !stream.contains("mpsc::Sender<UdpFlowPacket>")
             && !stream.contains("mpsc::channel::<UdpFlowPacket>")
@@ -7415,7 +7412,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !stream.contains("hysteria2::udp_flow_packet")
             && !stream.contains("flow_io.decode_packet(&data)")
             && stream.contains("hysteria2::spawn_udp_flow")
-            && protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
+            && protocol_udp.contains("struct Hysteria2UdpFlowSender")
+            && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
+            && protocol_udp.contains("pub struct Hysteria2UdpFlowSession")
+            && protocol_udp.contains("pub fn subscribe_responses(&self)")
             && protocol_udp.contains("pub struct Hysteria2InitialUdpFlowPacket")
             && protocol_udp.contains("mpsc::channel::<UdpFlowPacket>")
             && protocol_udp.contains("Hysteria2InitialUdpFlowPacket")
@@ -7430,7 +7430,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !transport.contains("resume.decode_flow_packet(&data)")
             && !manager_send.contains(".encode_packet(")
             && !stream.contains("mpsc::Sender<Vec<u8>>"),
-        "Hysteria2 UDP manager should store protocol-owned flow senders while protocols/hysteria2 owns packet encode/decode and flow pump"
+        "Hysteria2 UDP manager should store protocol-owned flow sessions while protocols/hysteria2 owns packet encode/decode and flow pump"
     );
     assert!(
         adapter.contains("Hysteria2UdpFlowResume::new")
@@ -7629,7 +7629,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         stream.contains("Hysteria2Connector::new")
             && stream.contains("connect_raw")
             && stream.contains("hysteria2::spawn_udp_flow")
-            && stream.contains("hysteria2::Hysteria2UdpFlowHandle")
+            && stream.contains("hysteria2::Hysteria2UdpFlowSession::new")
             && !stream.contains("send_datagram")
             && !stream.contains("read_datagram")
             && !stream.contains("tokio::spawn")
@@ -7638,8 +7638,10 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && !stream.contains("flow_io.encode_packet")
             && !stream.contains("flow_io.decode_packet(&data)")
             && !protocol_udp.contains("pub fn open_udp_flow")
-            && protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
+            && protocol_udp.contains("struct Hysteria2UdpFlowSender")
+            && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowHandle")
+            && protocol_udp.contains("pub struct Hysteria2UdpFlowSession")
             && protocol_udp.contains("broadcast::channel::<Hysteria2UdpFlowResponse>")
             && protocol_udp.contains("mpsc::channel::<UdpFlowPacket>")
             && protocol_udp.contains("tokio::spawn")
@@ -7744,7 +7746,7 @@ fn h2_udp_model_details_live_outside_manager_root() {
         );
     }
 
-    for required in ["struct H2Entry", "struct H2SendExisting"] {
+    for required in ["struct H2SendExisting"] {
         assert!(
             model.contains(required),
             "h2_manager model details should live in h2_manager/model.rs; missing `{required}`"
@@ -7757,8 +7759,8 @@ fn h2_udp_model_details_live_outside_manager_root() {
             && establish.contains("endpoint: OutboundEndpoint")
             && stream.contains("endpoint: OutboundEndpoint")
             && read("src/adapters/hysteria2/udp/manager.rs")
-                .contains("HashMap<hysteria2::Hysteria2UdpCacheKey, H2Entry>"),
-        "h2_manager should store protocol-owned opaque cache keys without adapter-local H2Key or H2UdpPeer wrappers"
+                .contains("HashMap<hysteria2::Hysteria2UdpCacheKey, hysteria2::Hysteria2UdpFlowSession>"),
+        "h2_manager should store protocol-owned opaque cache keys and sessions without adapter-local H2Key or H2UdpPeer wrappers"
     );
 }
 

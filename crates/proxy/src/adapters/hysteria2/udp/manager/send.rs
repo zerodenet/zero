@@ -1,4 +1,4 @@
-use super::model::{H2Entry, H2SendExisting};
+use super::model::H2SendExisting;
 use super::{establish, H2ChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -25,7 +25,6 @@ impl H2ChainManager {
 
         if let Some(entry) = self.upstreams.get(&key) {
             return entry
-                .sender
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
                 .await
                 .map_err(|error| FlowFailure {
@@ -35,7 +34,7 @@ impl H2ChainManager {
                 });
         }
 
-        let sender = establish::upstream(
+        let session = establish::upstream(
             ctx.chain_tasks,
             ctx.session_id,
             endpoint,
@@ -49,12 +48,7 @@ impl H2ChainManager {
             upstream: Some(endpoint.upstream()),
         })?;
 
-        self.upstreams.insert(
-            key,
-            H2Entry {
-                sender: sender.clone(),
-            },
-        );
+        self.upstreams.insert(key, session);
 
         Ok(sent)
     }
