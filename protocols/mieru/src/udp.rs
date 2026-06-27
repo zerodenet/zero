@@ -112,6 +112,28 @@ impl MieruUdpFlowCodec {
     pub fn decode_packet(&self, data: &[u8]) -> Result<MieruInboundUdpPacket, Error> {
         decode_udp_flow_packet(data)
     }
+
+    #[cfg(feature = "crypto")]
+    pub async fn write_response_tokio<W>(
+        &self,
+        writer: &mut W,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        let frame = self.encode_packet(target, port, payload)?;
+        let len = frame.len();
+        tokio::io::AsyncWriteExt::write_all(writer, &frame)
+            .await
+            .map_err(|_| Error::Io("failed to write Mieru UDP response"))?;
+        tokio::io::AsyncWriteExt::flush(writer)
+            .await
+            .map_err(|_| Error::Io("failed to flush Mieru UDP response"))?;
+        Ok(len)
+    }
 }
 
 pub fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {

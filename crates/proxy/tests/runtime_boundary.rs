@@ -3180,8 +3180,12 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
 
     assert!(
         inbound.contains("mieru::MieruUdpFlowCodec")
+            && inbound.contains("write_response_tokio")
+            && !inbound.contains(".encode_packet(")
+            && !inbound.contains("write_all(&frame)")
             && protocol_udp.contains("struct MieruUdpFlowCodec")
             && protocol_udp.contains("fn encode_packet")
+            && protocol_udp.contains("fn write_response_tokio")
             && protocol_udp.contains("fn decode_packet"),
         "Mieru inbound UDP packet framing should go through the protocols/mieru flow codec wrapper"
     );

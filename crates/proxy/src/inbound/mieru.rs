@@ -319,21 +319,14 @@ impl Proxy {
                     match recv {
                         Ok((n, sender)) => {
                             if let Some((target, port)) = session_map.get(&sender) {
-                                if let Ok(frame) = mieru::MieruUdpFlowCodec.encode_packet(
-                                    target, *port, &recv_buf[..n],
-                                ) {
-                                    if let Err(e) = client.write_all(&frame).await {
-                                        tracing::warn!(
-                                            error = %e, "mieru udp write error"
-                                        );
-                                        break;
-                                    }
-                                    if let Err(e) = client.flush().await {
-                                        tracing::warn!(
-                                            error = %e, "mieru udp flush error"
-                                        );
-                                        break;
-                                    }
+                                if let Err(e) = mieru::MieruUdpFlowCodec
+                                    .write_response_tokio(&mut client, target, *port, &recv_buf[..n])
+                                    .await
+                                {
+                                    tracing::warn!(
+                                        error = %e, "mieru udp write error"
+                                    );
+                                    break;
                                 }
                             }
                         }
