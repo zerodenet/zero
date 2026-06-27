@@ -7746,12 +7746,11 @@ fn h2_udp_model_details_live_outside_manager_root() {
         );
     }
 
-    for required in ["struct H2SendExisting"] {
-        assert!(
-            model.contains(required),
-            "h2_manager model details should live in h2_manager/model.rs; missing `{required}`"
-        );
-    }
+    let required = "struct H2SendExisting";
+    assert!(
+        model.contains(required),
+        "h2_manager model details should live in h2_manager/model.rs; missing `{required}`"
+    );
     assert!(
         !model.contains("H2Key")
             && !model.contains("H2UdpPeer")
