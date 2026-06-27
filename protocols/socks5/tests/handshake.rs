@@ -2,9 +2,8 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use socks5::{
-    build_udp_packet, parse_udp_packet, Socks5Inbound, Socks5InboundUdpCodec, Socks5Outbound,
-    Socks5OutboundAuth, Socks5PasswordAuth, Socks5Request, Socks5UdpRelay, Socks5UdpRelayEndpoint,
-    Socks5UdpRelayError,
+    Socks5Inbound, Socks5InboundUdpCodec, Socks5Outbound, Socks5OutboundAuth, Socks5PasswordAuth,
+    Socks5Request, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError,
 };
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, DatagramSocket, IpAddress};
@@ -412,9 +411,11 @@ async fn outbound_establishes_udp_association() {
 
 #[test]
 fn builds_and_parses_udp_packet() {
-    let packet = build_udp_packet(&Address::Domain("example.com".into()), 5353, b"ping")
+    let codec = Socks5InboundUdpCodec;
+    let packet = codec
+        .encode_response_to_client(&Address::Domain("example.com".into()), 5353, b"ping")
         .expect("build packet");
-    let parsed = parse_udp_packet(&packet).expect("parse packet");
+    let parsed = codec.decode_request(&packet).expect("parse packet");
 
     assert_eq!(parsed.target, Address::Domain("example.com".into()));
     assert_eq!(parsed.port, 5353);
@@ -424,7 +425,8 @@ fn builds_and_parses_udp_packet() {
 #[test]
 fn inbound_udp_codec_decodes_requests_and_encodes_responses() {
     let codec = Socks5InboundUdpCodec;
-    let request = build_udp_packet(&Address::Domain("example.com".into()), 5353, b"ping")
+    let request = codec
+        .encode_response_to_client(&Address::Domain("example.com".into()), 5353, b"ping")
         .expect("build request");
     let decoded = codec.decode_request(&request).expect("decode request");
 
@@ -464,7 +466,9 @@ async fn udp_relay_wraps_socks5_packet_before_send() {
     assert_eq!(sends[0].2, 1080);
     assert_eq!(sent, sends[0].0.len());
 
-    let parsed = parse_udp_packet(&sends[0].0).expect("parse packet");
+    let parsed = Socks5InboundUdpCodec
+        .decode_response(&sends[0].0)
+        .expect("parse packet");
     assert_eq!(parsed.target, Address::Domain("example.com".into()));
     assert_eq!(parsed.port, 5353);
     assert_eq!(parsed.payload, b"ping");

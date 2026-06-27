@@ -2,7 +2,6 @@
 
 mod support;
 
-use socks5::{build_udp_packet, parse_udp_packet};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::time::{timeout, Duration};
@@ -10,7 +9,9 @@ use zero_config::RuntimeConfig;
 use zero_core::Address;
 use zero_proxy::Proxy as Engine;
 
-use support::{free_port, free_udp_port, spawn_engine, wait_for_listener};
+use support::{
+    build_udp_packet, free_port, free_udp_port, parse_udp_packet, spawn_engine, wait_for_listener,
+};
 #[cfg(feature = "socks5")]
 use support::{spawn_http_probe_server, wait_for, wait_for_group_selection};
 

@@ -11,6 +11,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::time::{sleep, Duration};
+use zero_core::{Address, Error};
 use zero_proxy::{Proxy as Engine, RunningProxy as RunningEngine};
 
 static RUSTLS_READY: OnceLock<()> = OnceLock::new();
@@ -61,6 +62,14 @@ pub async fn wait_for(description: &str, mut predicate: impl FnMut() -> bool) {
 pub fn spawn_engine(engine: Engine) -> RunningEngine {
     ensure_rustls();
     engine.spawn()
+}
+
+pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
+    socks5::Socks5InboundUdpCodec.encode_response_to_client(address, port, payload)
+}
+
+pub fn parse_udp_packet(packet: &[u8]) -> Result<socks5::Socks5UdpPacket, Error> {
+    socks5::Socks5InboundUdpCodec.decode_response(packet)
 }
 
 pub fn spawn_http_probe_server(port: u16) -> tokio::task::JoinHandle<()> {

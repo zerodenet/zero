@@ -171,7 +171,7 @@ pub struct Socks5UdpPacket {
     pub payload: Vec<u8>,
 }
 
-pub fn parse_udp_packet(packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+pub(crate) fn parse_udp_packet(packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
     if packet.len() < 4 {
         return Err(Error::Protocol("SOCKS5 UDP packet is too short"));
     }
@@ -241,7 +241,11 @@ pub fn parse_udp_packet(packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
     })
 }
 
-pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
+pub(crate) fn build_udp_packet(
+    address: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
     let mut packet = vec![0_u8, 0_u8, 0_u8];
     write_address(&mut packet, address)?;
     packet.extend_from_slice(&port.to_be_bytes());
@@ -249,15 +253,15 @@ pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<
     Ok(packet)
 }
 
-pub fn decode_udp_associate_request(packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+pub(crate) fn decode_udp_associate_request(packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
     parse_udp_packet(packet)
 }
 
-pub fn decode_udp_associate_response(packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+pub(crate) fn decode_udp_associate_response(packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
     parse_udp_packet(packet)
 }
 
-pub fn encode_udp_associate_response(
+pub(crate) fn encode_udp_associate_response(
     address: &Address,
     port: u16,
     payload: &[u8],
@@ -265,7 +269,7 @@ pub fn encode_udp_associate_response(
     build_udp_packet(address, port, payload)
 }
 
-pub fn encode_udp_associate_response_to_client(
+pub(crate) fn encode_udp_associate_response_to_client(
     upstream_address: &Address,
     upstream_port: u16,
     payload: &[u8],

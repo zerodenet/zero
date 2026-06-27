@@ -344,7 +344,7 @@ pub async fn socks5_udp_echo(proxy_port: u16, target_port: u16, payload: &[u8]) 
     let client = UdpSocket::bind(("127.0.0.1", 0))
         .await
         .expect("bind udp client");
-    let packet = socks5::build_udp_packet(&Address::Ipv4([127, 0, 0, 1]), target_port, payload)
+    let packet = super::build_udp_packet(&Address::Ipv4([127, 0, 0, 1]), target_port, payload)
         .expect("build socks5 udp packet");
     client
         .send_to(&packet, ("127.0.0.1", relay_port))
@@ -353,7 +353,7 @@ pub async fn socks5_udp_echo(proxy_port: u16, target_port: u16, payload: &[u8]) 
 
     let mut buf = [0_u8; 2048];
     let (read, _) = client.recv_from(&mut buf).await.expect("recv udp response");
-    let response = socks5::parse_udp_packet(&buf[..read]).expect("parse socks5 udp response");
+    let response = super::parse_udp_packet(&buf[..read]).expect("parse socks5 udp response");
     assert_eq!(response.target, Address::Ipv4([127, 0, 0, 1]));
     assert_eq!(response.port, target_port);
     response.payload.to_vec()

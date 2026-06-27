@@ -178,7 +178,7 @@ async fn relays_udp_through_vmess_tls_outbound() {
     let client = UdpSocket::bind(("127.0.0.1", 0))
         .await
         .expect("bind udp client");
-    let packet = socks5::build_udp_packet(&Address::Ipv4([127, 0, 0, 1]), echo_port, b"vudp")
+    let packet = support::build_udp_packet(&Address::Ipv4([127, 0, 0, 1]), echo_port, b"vudp")
         .expect("build socks5 udp packet");
     client
         .send_to(&packet, ("127.0.0.1", relay_port))
@@ -190,7 +190,7 @@ async fn relays_udp_through_vmess_tls_outbound() {
         .await
         .expect("udp recv timeout")
         .expect("recv udp response");
-    let response = socks5::parse_udp_packet(&buf[..read]).expect("parse udp response");
+    let response = support::parse_udp_packet(&buf[..read]).expect("parse udp response");
 
     assert_eq!(response.target, Address::Ipv4([127, 0, 0, 1]));
     assert_eq!(response.port, echo_port);
@@ -330,7 +330,7 @@ async fn relays_udp_through_vmess_mux_outbound() {
     let client = UdpSocket::bind(("127.0.0.1", 0))
         .await
         .expect("bind udp client");
-    let packet = socks5::build_udp_packet(&Address::Ipv4([127, 0, 0, 1]), echo_port, b"vmux-udp")
+    let packet = support::build_udp_packet(&Address::Ipv4([127, 0, 0, 1]), echo_port, b"vmux-udp")
         .expect("build socks5 udp packet");
     client
         .send_to(&packet, ("127.0.0.1", relay_port))
@@ -342,7 +342,7 @@ async fn relays_udp_through_vmess_mux_outbound() {
         .await
         .expect("udp recv timeout")
         .expect("recv udp response");
-    let response = socks5::parse_udp_packet(&buf[..read]).expect("parse udp response");
+    let response = support::parse_udp_packet(&buf[..read]).expect("parse udp response");
 
     assert_eq!(response.target, Address::Ipv4([127, 0, 0, 1]));
     assert_eq!(response.port, echo_port);

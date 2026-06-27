@@ -9354,6 +9354,8 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         .join("protocols/socks5/src/shared.rs");
     let socks5_shared =
         fs::read_to_string(socks5_shared).expect("read socks5 protocol shared source");
+    let socks5_lib = fs::read_to_string(repo_root().join("protocols/socks5/src/lib.rs"))
+        .expect("read socks5 protocol lib source");
     let hysteria2_udp = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -9372,6 +9374,20 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
             && socks5_shared.contains("socks5|"),
         "protocols/socks5 should own SOCKS5 cache identity construction internally"
     );
+    for private_helper in [
+        "parse_udp_packet",
+        "build_udp_packet",
+        "decode_udp_associate_request",
+        "decode_udp_associate_response",
+        "encode_udp_associate_response",
+        "encode_udp_associate_response_to_client",
+    ] {
+        assert!(
+            socks5_shared.contains(&format!("pub(crate) fn {private_helper}("))
+                && !socks5_lib.contains(private_helper),
+            "SOCKS5 UDP helper `{private_helper}` should stay crate-private and should not be re-exported"
+        );
+    }
     let socks5_adapter = read("src/adapters/socks5/udp.rs");
     let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
     assert!(

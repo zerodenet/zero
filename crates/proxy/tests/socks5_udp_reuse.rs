@@ -5,7 +5,6 @@ mod support;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use socks5::{build_udp_packet, parse_udp_packet};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::select;
@@ -15,7 +14,7 @@ use zero_config::RuntimeConfig;
 use zero_core::Address;
 use zero_proxy::Proxy as Engine;
 
-use support::{free_port, spawn_engine, wait_for_listener};
+use support::{build_udp_packet, free_port, parse_udp_packet, spawn_engine, wait_for_listener};
 
 #[tokio::test]
 async fn reuses_upstream_udp_association_within_single_client_session() {

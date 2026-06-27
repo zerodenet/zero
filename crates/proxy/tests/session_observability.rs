@@ -4,7 +4,6 @@ mod support;
 
 use std::time::Duration;
 
-use socks5::{build_udp_packet, parse_udp_packet};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::sync::oneshot;
@@ -13,7 +12,10 @@ use zero_config::RuntimeConfig;
 use zero_core::Address;
 use zero_proxy::Proxy as Engine;
 
-use support::{free_port, free_udp_port, spawn_engine, wait_for, wait_for_listener};
+use support::{
+    build_udp_packet, free_port, free_udp_port, parse_udp_packet, spawn_engine, wait_for,
+    wait_for_listener,
+};
 
 #[tokio::test]
 async fn tracks_live_bytes_and_completed_session_history() {
