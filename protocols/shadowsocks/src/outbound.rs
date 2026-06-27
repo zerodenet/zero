@@ -268,11 +268,6 @@ impl ShadowsocksUdpFlowPacket {
 }
 
 #[cfg(feature = "crypto")]
-pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> ShadowsocksUdpFlowPacket {
-    ShadowsocksUdpFlowPacket::from_parts(target, port, payload)
-}
-
-#[cfg(feature = "crypto")]
 impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecodeContext<'a>>
     for ShadowsocksOutbound
 {
@@ -349,7 +344,7 @@ impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecode
 }
 
 #[cfg(feature = "crypto")]
-pub fn encode_udp_datagram(
+fn encode_udp_datagram(
     target: &Address,
     port: u16,
     payload: &[u8],
@@ -372,7 +367,7 @@ pub fn encode_udp_datagram(
 }
 
 #[cfg(feature = "crypto")]
-pub fn decode_udp_datagram(
+fn decode_udp_datagram(
     datagram: &[u8],
     cipher: super::shared::CipherKind,
     password: &[u8],
@@ -388,7 +383,7 @@ pub fn decode_udp_datagram(
 }
 
 #[cfg(feature = "crypto")]
-pub fn encode_udp_flow_packet(
+fn encode_udp_flow_packet(
     target: &Address,
     port: u16,
     payload: &[u8],
@@ -399,7 +394,7 @@ pub fn encode_udp_flow_packet(
 }
 
 #[cfg(feature = "crypto")]
-pub fn decode_udp_flow_packet(
+fn decode_udp_flow_packet(
     datagram: &[u8],
     cipher: super::shared::CipherKind,
     password: &[u8],
@@ -431,7 +426,7 @@ pub struct ShadowsocksDatagramCodec {
 }
 
 #[cfg(feature = "crypto")]
-pub fn udp_datagram_codec(
+fn udp_datagram_codec(
     cipher: super::shared::CipherKind,
     password: &[u8],
 ) -> impl DatagramCodec<Address, Error = Error> {
@@ -442,7 +437,7 @@ pub fn udp_datagram_codec(
 }
 
 #[cfg(feature = "crypto")]
-pub fn udp_flow_codec(
+fn udp_flow_codec(
     cipher: super::shared::CipherKind,
     password: &[u8],
 ) -> impl DatagramCodec<Address, Error = Error> {

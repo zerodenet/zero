@@ -8797,6 +8797,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/shadowsocks/src/lib.rs"))
+        .expect("read shadowsocks protocol lib source");
 
     for forbidden in [
         "UdpDatagramFraming",
@@ -8835,7 +8837,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && adapter_packet_path.contains("spec.codec()")
             && !adapter_packet_path.contains(".packet_path_cache_key()")
             && !adapter_packet_path.contains(".packet_path_codec()")
-            && protocol_outbound.contains("pub fn udp_flow_codec(")
+            && protocol_outbound.contains("fn udp_flow_codec(")
+            && !protocol_outbound.contains("pub fn udp_flow_codec(")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self)")
             && protocol_outbound.contains("pub fn packet_path_spec(&self)")
@@ -8848,7 +8851,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && protocol_outbound
                 .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowPacket")
-            && protocol_outbound.contains("pub fn udp_flow_packet")
+            && !protocol_outbound.contains("pub fn udp_flow_packet")
+            && !protocol_outbound.contains("fn udp_flow_packet")
             && !managed.contains("shadowsocks::udp_flow_packet")
             && !managed.contains("UdpFlowPacket::from_parts")
             && generic_manager.contains(".send_datagram(")
@@ -8864,6 +8868,25 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && protocol_outbound.contains("pub fn encode_with(")
             && protocol_outbound.contains("pub fn decode_flow_packet(&self"),
         "Shadowsocks UDP managed glue should send target datagrams through transport while transport consumes a protocol-built codec"
+    );
+    for private_helper in [
+        "encode_udp_datagram",
+        "decode_udp_datagram",
+        "encode_udp_flow_packet",
+        "decode_udp_flow_packet",
+        "udp_datagram_codec",
+        "udp_flow_codec",
+    ] {
+        assert!(
+            protocol_outbound.contains(&format!("fn {private_helper}("))
+                && !protocol_outbound.contains(&format!("pub fn {private_helper}("))
+                && !protocol_lib.contains(&format!("{private_helper},")),
+            "Shadowsocks UDP helper `{private_helper}` should stay private to protocols/shadowsocks::outbound and should not be re-exported"
+        );
+    }
+    assert!(
+        !protocol_outbound.contains("fn udp_flow_packet") && !protocol_lib.contains("udp_flow_packet"),
+        "Shadowsocks UDP flow packet constructor helper should be removed from the public protocol surface"
     );
     for forbidden in [".encode_packet(", ".decode_packet("] {
         assert!(

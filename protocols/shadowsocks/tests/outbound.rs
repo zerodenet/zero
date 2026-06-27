@@ -6,14 +6,14 @@ use std::task::{Context, Poll};
 
 use shadowsocks::{
     decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, derive_download_key, derive_key,
-    derive_session_key, encode_udp_datagram, encrypt_tcp_chunk, parse_target_data, CipherKind,
-    ShadowsocksAccept, ShadowsocksAeadStream, ShadowsocksInbound, ShadowsocksOutbound,
+    derive_session_key, encrypt_tcp_chunk, parse_target_data, CipherKind, ShadowsocksAccept,
+    ShadowsocksAeadStream, ShadowsocksDatagramCodec, ShadowsocksInbound, ShadowsocksOutbound,
     ShadowsocksOutboundSession, ShadowsocksUdpDecodeContext, ShadowsocksUdpPacketTarget,
     TCP_CHUNK_SIZE_LEN,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream, ReadBuf};
 use zero_core::{Address, Network, ProtocolType, Session};
-use zero_traits::{AsyncSocket, UdpDatagramFraming};
+use zero_traits::{AsyncSocket, DatagramCodec, UdpDatagramFraming};
 
 fn supported_ciphers() -> Vec<CipherKind> {
     let mut ciphers = vec![
@@ -456,22 +456,20 @@ fn udp_datagram_framing_roundtrips_aead_packet() {
 fn udp_datagram_helpers_roundtrip_aead_packet() {
     let cipher = CipherKind::Aes128Gcm;
     let password = b"test-password";
-
-    let datagram = encode_udp_datagram(
-        &Address::Domain("dns.google".to_owned()),
-        53,
-        b"query",
+    let codec = ShadowsocksDatagramCodec {
         cipher,
-        password,
-    )
-    .expect("encode udp datagram");
+        password: password.to_vec(),
+    };
 
-    let decoded =
-        shadowsocks::decode_udp_datagram(&datagram, cipher, password).expect("decode udp datagram");
+    let datagram = codec
+        .encode(&Address::Domain("dns.google".to_owned()), 53, b"query")
+        .expect("encode udp datagram");
 
-    assert_eq!(decoded.target, Address::Domain("dns.google".to_owned()));
-    assert_eq!(decoded.port, 53);
-    assert_eq!(decoded.payload, b"query");
+    let decoded = codec.decode(&datagram).expect("decode udp datagram");
+
+    assert_eq!(decoded.0, Address::Domain("dns.google".to_owned()));
+    assert_eq!(decoded.1, 53);
+    assert_eq!(decoded.2, b"query");
 }
 
 #[cfg(feature = "blake3")]
