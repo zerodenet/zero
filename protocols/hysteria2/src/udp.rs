@@ -7,6 +7,11 @@ use alloc::vec::Vec;
 use zero_core::{Address, Error, UdpFlowPacket};
 use zero_traits::DatagramCodec;
 
+#[cfg(feature = "tokio")]
+use alloc::sync::Arc;
+#[cfg(feature = "tokio")]
+use tokio::sync::{broadcast, mpsc};
+
 /// One plaintext UDP payload to encode into a Hysteria2 UDP datagram.
 #[derive(Debug, Clone, Copy)]
 pub struct Hysteria2UdpPacketTarget<'a> {
@@ -256,6 +261,100 @@ impl Hysteria2UdpFlowIo {
             decoded.payload,
         ))
     }
+}
+
+#[cfg(feature = "tokio")]
+pub type Hysteria2UdpFlowResponse = (Address, u16, Vec<u8>);
+
+#[cfg(feature = "tokio")]
+pub type Hysteria2UdpFlowResponses = broadcast::Sender<Hysteria2UdpFlowResponse>;
+
+#[cfg(feature = "tokio")]
+#[derive(Clone)]
+pub struct Hysteria2UdpFlowSender {
+    send_tx: mpsc::Sender<UdpFlowPacket>,
+}
+
+#[cfg(feature = "tokio")]
+pub struct Hysteria2UdpFlowHandle {
+    pub sender: Hysteria2UdpFlowSender,
+    pub responses: Hysteria2UdpFlowResponses,
+}
+
+#[cfg(feature = "tokio")]
+impl Hysteria2UdpFlowSender {
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        let packet = UdpFlowPacket::from_parts(target, port, payload);
+        let packet_len = packet.payload.len();
+        self.send_tx
+            .send(packet)
+            .await
+            .map_err(|_| Error::Io("hysteria2 udp flow closed"))?;
+        Ok(packet_len)
+    }
+}
+
+#[cfg(feature = "tokio")]
+pub fn spawn_udp_flow(
+    conn: Arc<quinn::Connection>,
+    initial_packet: UdpFlowPacket,
+    flow_io: Hysteria2UdpFlowIo,
+) -> Hysteria2UdpFlowHandle {
+    let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
+    let (responses, _) = broadcast::channel::<Hysteria2UdpFlowResponse>(32);
+
+    spawn_send_task(conn.clone(), initial_packet, flow_io, send_rx);
+    spawn_recv_task(conn, flow_io, responses.clone());
+
+    Hysteria2UdpFlowHandle {
+        sender: Hysteria2UdpFlowSender { send_tx },
+        responses,
+    }
+}
+
+#[cfg(feature = "tokio")]
+fn spawn_send_task(
+    conn: Arc<quinn::Connection>,
+    initial_packet: UdpFlowPacket,
+    flow_io: Hysteria2UdpFlowIo,
+    mut send_rx: mpsc::Receiver<UdpFlowPacket>,
+) {
+    tokio::spawn(async move {
+        if let Ok(datagram) = flow_io.encode_packet(&initial_packet) {
+            if conn.send_datagram(datagram.into()).is_err() {
+                return;
+            }
+        }
+        while let Some(packet) = send_rx.recv().await {
+            let Ok(datagram) = flow_io.encode_packet(&packet) else {
+                break;
+            };
+            if conn.send_datagram(datagram.into()).is_err() {
+                break;
+            }
+        }
+    });
+}
+
+#[cfg(feature = "tokio")]
+fn spawn_recv_task(
+    conn: Arc<quinn::Connection>,
+    flow_io: Hysteria2UdpFlowIo,
+    responses: Hysteria2UdpFlowResponses,
+) {
+    tokio::spawn(async move {
+        while let Ok(data) = conn.read_datagram().await {
+            let Some(packet) = flow_io.decode_packet(&data) else {
+                continue;
+            };
+            if responses
+                .send((packet.target, packet.port, packet.payload))
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -11,13 +11,15 @@ homepage.workspace = true
 [features]
 default = []
 crypto = ["dep:ring", "dep:subtle"]
+tokio = ["dep:quinn", "dep:tokio"]
 
 [dependencies]
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.6", optional = true }
+quinn = { version = "0.11", default-features = false, features = ["rustls-ring"], optional = true }
+tokio = { workspace = true, optional = true }
 zero-core = { path = "../../crates/core" }
 zero-traits = { path = "../../crates/traits" }
 
 [dev-dependencies]
-tokio.workspace = true
 ring = { version = "0.17" }

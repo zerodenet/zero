@@ -28,3 +28,8 @@ pub use udp::{
     Hysteria2UdpFlowPacket, Hysteria2UdpFlowResume, Hysteria2UdpLeafKey, Hysteria2UdpPacket,
     Hysteria2UdpPacketPathConfig, Hysteria2UdpPacketTarget, Hysteria2UdpPeerConfig,
 };
+#[cfg(feature = "tokio")]
+pub use udp::{
+    spawn_udp_flow, Hysteria2UdpFlowHandle, Hysteria2UdpFlowResponse, Hysteria2UdpFlowResponses,
+    Hysteria2UdpFlowSender,
+};

@@ -5,7 +5,6 @@ use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::managed::{ManagedDatagramFlowHandler, ManagedExistingSend};
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
-use zero_core::UdpFlowPacket;
 
 impl H2ChainManager {
     fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
@@ -25,13 +24,10 @@ impl H2ChainManager {
         let key = resume.cache_key(endpoint.server, endpoint.port);
 
         if let Some(entry) = self.upstreams.get(&key) {
-            let packet =
-                UdpFlowPacket::from_parts(packet_ref.target, packet_ref.port, packet_ref.payload);
             return entry
-                .send_tx
-                .send(packet)
+                .sender
+                .send(packet_ref.target, packet_ref.port, packet_ref.payload)
                 .await
-                .map(|_| sent)
                 .map_err(|error| FlowFailure {
                     stage: "h2_send",
                     error: zero_engine::EngineError::Io(std::io::Error::other(format!("{error}"))),
@@ -56,7 +52,7 @@ impl H2ChainManager {
         self.upstreams.insert(
             key,
             H2Entry {
-                send_tx: sender.clone(),
+                sender: sender.clone(),
             },
         );
 

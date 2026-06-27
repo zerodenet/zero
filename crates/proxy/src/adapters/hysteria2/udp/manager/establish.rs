@@ -2,9 +2,7 @@ use super::{bridge, stream};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
-use tokio::sync::mpsc;
 use tokio::task::JoinSet;
-use zero_core::UdpFlowPacket;
 use zero_engine::EngineError;
 
 pub(super) async fn upstream(
@@ -13,11 +11,11 @@ pub(super) async fn upstream(
     endpoint: OutboundEndpoint<'_>,
     resume: hysteria2::Hysteria2UdpFlowResume,
     initial_packet: UdpPacketRef<'_>,
-) -> Result<mpsc::Sender<UdpFlowPacket>, EngineError> {
-    let stream::PacketStream { send_tx, recv_tx } =
+) -> Result<hysteria2::Hysteria2UdpFlowSender, EngineError> {
+    let stream::PacketStream { sender, recv_tx } =
         stream::establish(endpoint, initial_packet, resume).await?;
 
     bridge::spawn_response_bridge(chain_tasks, recv_tx, session_id);
 
-    Ok(send_tx)
+    Ok(sender)
 }
