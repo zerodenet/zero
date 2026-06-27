@@ -4352,12 +4352,22 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
     let runtime = read("src/adapters/socks5/udp/runtime.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/socks5/src/udp.rs"))
         .expect("read socks5 udp");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/socks5/src/outbound.rs"))
+            .expect("read socks5 outbound");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/socks5/src/lib.rs"))
+        .expect("read socks5 lib");
     let upstream = read("src/runtime/udp_flow/registered/upstream.rs");
     let response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
 
     assert!(
-        send.contains("resume.association_target(")
+        send.contains(".flow(")
+            && send.contains(".association_target()")
+            && !send.contains("resume.association_target(")
             && protocol_udp.contains("struct Socks5UdpAssociationTarget")
+            && protocol_outbound.contains("pub struct Socks5UdpFlowSpec")
+            && protocol_outbound.contains("pub fn flow(")
+            && protocol_lib.contains("Socks5UdpFlowSpec")
             && protocol_udp.contains("outbound_tag: alloc::string::String")
             && !model
                 .lines()
@@ -4375,7 +4385,8 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
         "SOCKS5 UDP runtime must pass the outbound tag into the upstream association through neutral upstream dispatch"
     );
     assert!(
-        send.contains("resume.association_target(")
+        send.contains(".flow(")
+            && !send.contains("resume.association_target(")
             && runtime.contains("association.outbound_tag()")
             && !send.contains("association.tag"),
         "SOCKS5 UDP runtime state should store and match the relay outbound tag"

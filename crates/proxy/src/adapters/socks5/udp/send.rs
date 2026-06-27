@@ -25,11 +25,13 @@ pub(crate) async fn send(
             "expected SOCKS5 UDP flow resume",
         )));
     };
-    let association = resume.association_target(
-        request.tag.to_owned(),
-        request.server.to_owned(),
-        request.port,
-    );
+    let association = resume
+        .flow(
+            request.tag.to_owned(),
+            request.server.to_owned(),
+            request.port,
+        )
+        .association_target();
 
     match runtime
         .send_packet(

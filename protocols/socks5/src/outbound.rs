@@ -72,6 +72,28 @@ impl Socks5UdpFlowResume {
     ) -> Socks5UdpAssociationTarget {
         Socks5UdpAssociationTarget::new(outbound_tag, server, port, self.owned_association_config())
     }
+
+    pub fn flow(
+        &self,
+        outbound_tag: impl Into<alloc::string::String>,
+        server: impl Into<alloc::string::String>,
+        port: u16,
+    ) -> Socks5UdpFlowSpec {
+        Socks5UdpFlowSpec {
+            association_target: self.association_target(outbound_tag, server, port),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpFlowSpec {
+    association_target: Socks5UdpAssociationTarget,
+}
+
+impl Socks5UdpFlowSpec {
+    pub fn association_target(&self) -> Socks5UdpAssociationTarget {
+        self.association_target.clone()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

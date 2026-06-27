@@ -16,7 +16,7 @@ pub use inbound::{
 pub use metadata::Socks5Protocol;
 pub use outbound::{
     Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth, Socks5TcpTunnelTarget,
-    Socks5UdpFlowResume, Socks5UdpRelayTarget,
+    Socks5UdpFlowResume, Socks5UdpFlowSpec, Socks5UdpRelayTarget,
 };
 pub use shared::{
     udp_flow_resume_from_config, udp_packet_path_spec_from_config, Socks5InboundUdpRequest,
