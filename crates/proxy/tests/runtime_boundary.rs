@@ -6695,6 +6695,8 @@ fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
 #[test]
 fn trojan_udp_response_bridge_lives_outside_manager() {
     let manager = read("src/adapters/trojan/udp/manager.rs");
+    let send = read("src/adapters/trojan/udp/manager/send.rs");
+    let managed = read("src/runtime/udp_flow/managed/mod.rs");
     let bridge = manifest_dir().join("src/adapters/trojan/udp/manager/bridge.rs");
 
     for forbidden in [
@@ -6705,12 +6707,16 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
     ] {
         assert!(
             !manager.contains(forbidden),
-            "trojan_manager.rs should keep response bridge details in trojan_manager/bridge.rs; found `{forbidden}`"
+            "trojan_manager.rs should not own response bridge details; found `{forbidden}`"
         );
     }
     assert!(
-        bridge.exists(),
-        "Trojan UDP response bridge should live in trojan_manager/bridge.rs"
+        !bridge.exists()
+            && send.contains("spawn_trojan_response_bridge")
+            && send.contains("spawn_response_bridge")
+            && managed.contains("pub(crate) fn spawn_response_bridge<T, F>")
+            && managed.contains("FnMut(T) -> (Address, u16, Vec<u8>)"),
+        "Trojan UDP response bridge should use generic managed UDP response glue, not trojan_manager/bridge.rs"
     );
 }
 

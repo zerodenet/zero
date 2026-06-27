@@ -1,6 +1,3 @@
-#[cfg(feature = "trojan")]
-mod bridge;
-#[cfg(feature = "trojan")]
 mod connect;
 #[cfg(feature = "trojan")]
 mod establish;

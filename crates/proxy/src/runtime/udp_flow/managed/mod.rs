@@ -22,19 +22,39 @@ pub(crate) use model::{
 pub(crate) use state::{ManagedProtocolUdpState, ManagedUdpHandlers};
 pub(crate) use stream_sender::ManagedStreamFlowSender;
 
-pub(crate) fn spawn_tuple_response_bridge(
+pub(crate) fn spawn_response_bridge<T, F>(
     chain_tasks: &mut JoinSet<ChainTask>,
-    mut response_rx: broadcast::Receiver<(Address, u16, Vec<u8>)>,
+    mut response_rx: broadcast::Receiver<T>,
     session_id: u64,
     closed_message: &'static str,
-) {
+    mut into_packet: F,
+) where
+    T: Clone + Send + 'static,
+    F: FnMut(T) -> (Address, u16, Vec<u8>) + Send + 'static,
+{
     chain_tasks.spawn(async move {
-        let (target, port, payload) = response_rx
+        let response = response_rx
             .recv()
             .await
             .map_err(|_| EngineError::Io(std::io::Error::other(closed_message)))?;
+        let (target, port, payload) = into_packet(response);
         Ok((target, port, payload, Some(session_id)))
     });
+}
+
+pub(crate) fn spawn_tuple_response_bridge(
+    chain_tasks: &mut JoinSet<ChainTask>,
+    response_rx: broadcast::Receiver<(Address, u16, Vec<u8>)>,
+    session_id: u64,
+    closed_message: &'static str,
+) {
+    spawn_response_bridge(
+        chain_tasks,
+        response_rx,
+        session_id,
+        closed_message,
+        |packet| packet,
+    );
 }
 
 pub(crate) struct ManagedDatagramFlow<'a> {
