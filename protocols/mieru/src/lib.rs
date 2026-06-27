@@ -39,7 +39,7 @@ pub use metadata::{
 };
 #[cfg(feature = "crypto")]
 pub use outbound::{
-    establish_udp_flow_with_resume, spawn_udp_flow, udp_flow_packet, MieruOutbound, MieruTcpTarget,
+    establish_udp_flow_with_resume, spawn_udp_flow, MieruOutbound, MieruTcpTarget,
     MieruUdpFlowConnection, MieruUdpFlowHandle, MieruUdpFlowIo, MieruUdpFlowPacket,
     MieruUdpFlowResponse, MieruUdpFlowResponseReceiver, MieruUdpFlowSession,
 };
@@ -55,8 +55,7 @@ pub use udp::MieruInboundUdpSession;
 #[cfg(feature = "crypto")]
 pub use udp::MieruUdpFlowSessions;
 pub use udp::{
-    decode_inbound_udp_packet, decode_udp_flow_packet, encode_udp_flow_packet, encode_udp_response,
-    udp_flow_codec, unwrap_udp_associate, wrap_udp_associate, MieruInboundUdpPacket,
-    MieruInboundUdpRequest, MieruUdpAssociatePacket, MieruUdpAssociatePayload, MieruUdpFlowCodec,
-    MieruUdpFlowConfig, MieruUdpFlowResume, MieruUdpFlowStore,
+    MieruInboundUdpPacket, MieruInboundUdpRequest, MieruUdpAssociatePacket,
+    MieruUdpAssociatePayload, MieruUdpFlowCodec, MieruUdpFlowConfig, MieruUdpFlowResume,
+    MieruUdpFlowStore,
 };

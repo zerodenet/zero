@@ -7832,8 +7832,6 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
         .expect("read mieru protocol lib source");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
         .expect("read mieru protocol udp source");
-    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
-        .expect("read mieru protocol outbound source");
 
     for removed in [
         "src/adapters/mieru/udp/manager.rs",
@@ -7903,7 +7901,7 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
     );
 
     assert!(
-        protocol_udp.contains("pub fn udp_flow_codec(")
+        protocol_udp.contains("pub(crate) fn udp_flow_codec(")
             && protocol_udp.contains("impl DatagramCodec<Address> for MieruUdpFlowCodec")
             && !adapter.contains("mieru::udp_flow_codec")
             && !adapter.contains("MieruUdpFlowResume::new")
@@ -7916,6 +7914,29 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
             && !protocol_udp.contains("pub fn username(&self)")
             && !protocol_udp.contains("pub fn password(&self)"),
         "Mieru adapter should build and carry an opaque protocol-owned UDP flow resume descriptor"
+    );
+    for private_helper in [
+        "wrap_udp_associate",
+        "unwrap_udp_associate",
+        "decode_inbound_udp_packet",
+        "encode_udp_response",
+        "decode_udp_flow_packet",
+        "encode_udp_flow_packet",
+        "udp_flow_codec",
+    ] {
+        assert!(
+            protocol_udp.contains(&format!("pub(crate) fn {private_helper}("))
+                && !protocol_lib.contains(private_helper),
+            "Mieru UDP helper `{private_helper}` should stay crate-private and should not be re-exported"
+        );
+    }
+    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
+        .expect("read mieru protocol outbound source");
+    assert!(
+        !protocol_outbound.contains("pub fn udp_flow_packet")
+            && !protocol_outbound.contains("fn udp_flow_packet")
+            && !protocol_lib.contains("udp_flow_packet"),
+        "Mieru UDP flow packet constructor helper should be removed from the public protocol surface"
     );
 
     for forbidden in [

@@ -113,7 +113,7 @@ impl MieruInboundUdpSession {
 /// Wrap a raw UDP datagram for transmission through mieru TCP/UDP proxy.
 ///
 /// Format: 0x00 || data_length(u16 BE) || data || 0xff
-pub fn wrap_udp_associate(data: &[u8]) -> Vec<u8> {
+pub(crate) fn wrap_udp_associate(data: &[u8]) -> Vec<u8> {
     let len = data.len() as u16;
     let mut buf = Vec::with_capacity(1 + 2 + data.len() + 1);
     buf.push(0x00);
@@ -126,7 +126,7 @@ pub fn wrap_udp_associate(data: &[u8]) -> Vec<u8> {
 /// Unwrap a mieru UDP associate datagram back into the original UDP payload.
 ///
 /// Returns the raw datagram bytes.
-pub fn unwrap_udp_associate(data: &[u8]) -> Result<Vec<u8>, Error> {
+pub(crate) fn unwrap_udp_associate(data: &[u8]) -> Result<Vec<u8>, Error> {
     if data.len() < 4 {
         return Err(Error::Protocol("mieru udp: too short"));
     }
@@ -145,21 +145,25 @@ pub fn unwrap_udp_associate(data: &[u8]) -> Result<Vec<u8>, Error> {
     Ok(data[3..3 + data_len].to_vec())
 }
 
-pub fn decode_inbound_udp_packet(data: &[u8]) -> Result<MieruInboundUdpPacket, Error> {
+pub(crate) fn decode_inbound_udp_packet(data: &[u8]) -> Result<MieruInboundUdpPacket, Error> {
     let packet = unwrap_udp_associate(data)?;
     parse_socks5_udp_packet(&packet)
 }
 
-pub fn encode_udp_response(target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_udp_response(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
     let packet = build_socks5_udp_packet(target, port, payload)?;
     Ok(wrap_udp_associate(&packet))
 }
 
-pub fn decode_udp_flow_packet(data: &[u8]) -> Result<MieruInboundUdpPacket, Error> {
+pub(crate) fn decode_udp_flow_packet(data: &[u8]) -> Result<MieruInboundUdpPacket, Error> {
     decode_inbound_udp_packet(data)
 }
 
-pub fn encode_udp_flow_packet(
+pub(crate) fn encode_udp_flow_packet(
     target: &Address,
     port: u16,
     payload: &[u8],
@@ -211,7 +215,7 @@ impl MieruUdpFlowCodec {
     }
 }
 
-pub fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
+pub(crate) fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
     MieruUdpFlowCodec
 }
 

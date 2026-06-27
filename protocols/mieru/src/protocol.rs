@@ -11,11 +11,9 @@ use zero_traits::{
 #[cfg(feature = "crypto")]
 use zero_traits::AsyncSocket;
 
-use crate::{
-    unwrap_udp_associate, wrap_udp_associate, MieruUdpAssociatePacket, MieruUdpAssociatePayload,
-};
 #[cfg(feature = "crypto")]
 use crate::{MieruOutbound, MieruTcpTarget};
+use crate::{MieruUdpAssociatePacket, MieruUdpAssociatePayload};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct MieruProtocol;
@@ -51,12 +49,12 @@ impl<'a> UdpPacketFraming<MieruUdpAssociatePacket<'a>> for MieruProtocol {
         &self,
         packet: &MieruUdpAssociatePacket<'a>,
     ) -> Result<Vec<u8>, Self::Error> {
-        Ok(wrap_udp_associate(packet.payload))
+        Ok(crate::udp::wrap_udp_associate(packet.payload))
     }
 
     fn decode_udp_packet(&self, packet: &[u8]) -> Result<Self::Decoded, Self::Error> {
         Ok(MieruUdpAssociatePayload {
-            payload: unwrap_udp_associate(packet)?,
+            payload: crate::udp::unwrap_udp_associate(packet)?,
         })
     }
 }

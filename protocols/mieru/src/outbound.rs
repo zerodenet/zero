@@ -14,7 +14,7 @@ use crate::metadata::{
 };
 use crate::segment::{build_data_segment, build_session_segment, parse_segment, Segment};
 use crate::session::MieruSession;
-use crate::udp::{decode_udp_flow_packet, encode_udp_flow_packet};
+use crate::udp;
 
 /// Mieru outbound connection.
 pub struct MieruOutbound {
@@ -48,10 +48,6 @@ impl MieruUdpFlowPacket {
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
         (self.target, self.port, self.payload)
     }
-}
-
-pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> MieruUdpFlowPacket {
-    MieruUdpFlowPacket::new(target.clone(), port, payload.to_vec())
 }
 
 pub struct MieruUdpFlowIo {
@@ -160,7 +156,7 @@ impl MieruUdpFlowIo {
         port: u16,
         payload: &[u8],
     ) -> Result<Vec<u8>, Error> {
-        let packet = encode_udp_flow_packet(target, port, payload)?;
+        let packet = udp::encode_udp_flow_packet(target, port, payload)?;
         self.encrypt_payload(&packet)
     }
 
@@ -182,7 +178,7 @@ impl MieruUdpFlowIo {
                 if segment.payload.is_empty() {
                     return Ok(None);
                 }
-                let packet = decode_udp_flow_packet(&segment.payload)?;
+                let packet = udp::decode_udp_flow_packet(&segment.payload)?;
                 Ok(Some(MieruUdpFlowPacket::new(
                     packet.target,
                     packet.port,
