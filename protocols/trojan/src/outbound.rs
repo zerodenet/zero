@@ -130,9 +130,31 @@ pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> TrojanUdp
 pub struct TrojanUdpFlowIo;
 
 #[cfg(feature = "tokio")]
+pub type TrojanUdpFlowResponses = broadcast::Sender<UdpFlowPacket>;
+
+#[cfg(feature = "tokio")]
+#[derive(Clone)]
+pub struct TrojanUdpFlowSender {
+    send_tx: mpsc::Sender<UdpFlowPacket>,
+}
+
+#[cfg(feature = "tokio")]
 pub struct TrojanUdpFlowHandle {
-    pub send_tx: mpsc::Sender<UdpFlowPacket>,
-    pub recv_tx: broadcast::Sender<UdpFlowPacket>,
+    pub sender: TrojanUdpFlowSender,
+    pub responses: TrojanUdpFlowResponses,
+}
+
+#[cfg(feature = "tokio")]
+impl TrojanUdpFlowSender {
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        let packet = UdpFlowPacket::from_parts(target, port, payload);
+        let packet_len = packet.payload.len();
+        self.send_tx
+            .send(packet)
+            .await
+            .map_err(|_| Error::Io("trojan udp flow closed"))?;
+        Ok(packet_len)
+    }
 }
 
 impl TrojanUdpFlowIo {
@@ -232,7 +254,10 @@ where
     spawn_send_task(send_rx, WriteOnlySocket(write_half));
     spawn_recv_task(ReadOnlySocket(read_half), recv_tx.clone());
 
-    TrojanUdpFlowHandle { send_tx, recv_tx }
+    TrojanUdpFlowHandle {
+        sender: TrojanUdpFlowSender { send_tx },
+        responses: recv_tx,
+    }
 }
 
 #[cfg(feature = "tokio")]

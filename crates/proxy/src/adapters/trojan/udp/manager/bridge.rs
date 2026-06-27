@@ -1,16 +1,14 @@
-use tokio::sync::broadcast;
 use tokio::task::JoinSet;
-use zero_core::UdpFlowPacket;
 use zero_engine::EngineError;
 
 use crate::runtime::udp_flow::packet_path::ChainTask;
 
 pub(super) fn spawn_response_bridge(
     chain_tasks: &mut JoinSet<ChainTask>,
-    recv_tx: broadcast::Sender<UdpFlowPacket>,
+    responses: trojan::TrojanUdpFlowResponses,
     session_id: u64,
 ) {
-    let mut recv_rx = recv_tx.subscribe();
+    let mut recv_rx = responses.subscribe();
     chain_tasks.spawn(async move {
         let packet = recv_rx
             .recv()

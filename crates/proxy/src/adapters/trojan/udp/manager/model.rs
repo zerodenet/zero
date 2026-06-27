@@ -2,13 +2,12 @@ use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
-use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
-use zero_core::{Address, Session, UdpFlowPacket};
+use zero_core::{Address, Session};
 
 pub(super) struct TrojanEntry {
-    pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
-    pub(super) recv_tx: broadcast::Sender<UdpFlowPacket>,
+    pub(super) sender: trojan::TrojanUdpFlowSender,
+    pub(super) responses: trojan::TrojanUdpFlowResponses,
 }
 
 pub(super) struct TrojanSendExisting<'a> {

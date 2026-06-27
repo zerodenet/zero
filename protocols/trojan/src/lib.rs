@@ -21,7 +21,9 @@ pub use outbound::{
     TrojanUdpPeerConfig, TrojanUdpTlsProfile,
 };
 #[cfg(feature = "tokio")]
-pub use outbound::{spawn_udp_flow, TrojanUdpFlowHandle};
+pub use outbound::{
+    spawn_udp_flow, TrojanUdpFlowHandle, TrojanUdpFlowResponses, TrojanUdpFlowSender,
+};
 pub use shared::{
     build_udp_packet, read_password, read_request, read_udp_packet, write_password, write_request,
     write_udp_packet, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, CMD_TCP, CMD_UDP, CRLF, PASSWORD_HASH_LEN,

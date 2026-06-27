@@ -38,8 +38,8 @@ async fn packet_stream(
     stream: TcpRelayStream,
     resume: &trojan::TrojanUdpFlowResume,
 ) -> Result<TrojanEntry, EngineError> {
-    let stream::PacketStream { send_tx, recv_tx } =
+    let stream::PacketStream { sender, responses } =
         stream::spawn_packet_stream(proxy, session, stream, resume).await?;
 
-    Ok(TrojanEntry { send_tx, recv_tx })
+    Ok(TrojanEntry { sender, responses })
 }

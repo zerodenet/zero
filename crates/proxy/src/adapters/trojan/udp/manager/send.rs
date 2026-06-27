@@ -11,7 +11,6 @@ use crate::runtime::udp_flow::managed::{
 };
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
-use zero_core::UdpFlowPacket;
 
 impl TrojanChainManager {
     fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
@@ -36,14 +35,10 @@ impl TrojanChainManager {
         let key = resume.cache_key(endpoint.server, endpoint.port, session_id);
 
         if let Some(entry) = self.upstreams.get(&key) {
-            bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
+            bridge::spawn_response_bridge(ctx.chain_tasks, entry.responses.clone(), session_id);
             let _ = entry
-                .send_tx
-                .send(UdpFlowPacket::from_parts(
-                    packet_ref.target,
-                    packet_ref.port,
-                    packet_ref.payload,
-                ))
+                .sender
+                .send(packet_ref.target, packet_ref.port, packet_ref.payload)
                 .await;
             return Ok(sent);
         }
@@ -67,16 +62,12 @@ impl TrojanChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
-        let send_tx = entry.send_tx.clone();
+        bridge::spawn_response_bridge(ctx.chain_tasks, entry.responses.clone(), session_id);
+        let sender = entry.sender.clone();
         self.upstreams.insert(key, entry);
 
-        let _ = send_tx
-            .send(UdpFlowPacket::from_parts(
-                packet_ref.target,
-                packet_ref.port,
-                packet_ref.payload,
-            ))
+        let _ = sender
+            .send(packet_ref.target, packet_ref.port, packet_ref.payload)
             .await;
 
         Ok(sent)
@@ -130,15 +121,11 @@ impl TrojanChainManager {
             upstream: Some((request.server.to_owned(), request.port)),
         })?;
 
-        bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
-        let send_tx = entry.send_tx.clone();
+        bridge::spawn_response_bridge(ctx.chain_tasks, entry.responses.clone(), session_id);
+        let sender = entry.sender.clone();
         self.upstreams.insert(key, entry);
-        let _ = send_tx
-            .send(UdpFlowPacket::from_parts(
-                packet_ref.target,
-                packet_ref.port,
-                packet_ref.payload,
-            ))
+        let _ = sender
+            .send(packet_ref.target, packet_ref.port, packet_ref.payload)
             .await;
 
         Ok(packet_ref.payload.len())

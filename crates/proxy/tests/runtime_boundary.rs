@@ -6661,8 +6661,13 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && !stream.contains("&mut send_stream")
             && !stream.contains(".read_flow_packet(")
             && !stream.contains("&mut recv_stream")
-            && stream.contains("broadcast::Sender<UdpFlowPacket>")
+            && stream.contains("trojan::TrojanUdpFlowSender")
+            && stream.contains("trojan::TrojanUdpFlowResponses")
+            && !stream.contains("broadcast::Sender<UdpFlowPacket>")
+            && !stream.contains("mpsc::Sender<UdpFlowPacket>")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
+            && protocol_outbound.contains("pub struct TrojanUdpFlowSender")
+            && protocol_outbound.contains("pub type TrojanUdpFlowResponses")
             && protocol_outbound.contains("tokio::spawn")
             && protocol_outbound.contains("mpsc::channel::<UdpFlowPacket>")
             && protocol_outbound.contains("broadcast::channel::<UdpFlowPacket>")
@@ -7002,9 +7007,11 @@ fn trojan_udp_state_model_lives_outside_manager() {
     assert!(
         !model.contains("struct TrojanPacket")
             && !model.contains("trojan::TrojanUdpPacket")
-            && model.contains("mpsc::Sender<UdpFlowPacket>")
-            && model.contains("broadcast::Sender<UdpFlowPacket>"),
-        "Trojan UDP state/request models should store neutral packet channels without storing packet models in proxy"
+            && model.contains("trojan::TrojanUdpFlowSender")
+            && model.contains("trojan::TrojanUdpFlowResponses")
+            && !model.contains("mpsc::Sender<UdpFlowPacket>")
+            && !model.contains("broadcast::Sender<UdpFlowPacket>"),
+        "Trojan UDP state/request models should store protocol-owned flow handles without storing packet models or raw channels in proxy"
     );
 }
 
@@ -7057,17 +7064,21 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             && protocol_outbound.contains("pub async fn write_flow_packet")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
             && protocol_outbound.contains("pub struct TrojanUdpFlowHandle")
+            && protocol_outbound.contains("pub struct TrojanUdpFlowSender")
+            && protocol_outbound.contains("pub type TrojanUdpFlowResponses")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && !establish.contains("trojan::udp_flow_packet")
             && !establish.contains("trojan::TrojanUdpPacket::new")
-            && stream.contains("mpsc::Sender<UdpFlowPacket>")
-            && stream.contains("broadcast::Sender<UdpFlowPacket>")
+            && stream.contains("trojan::TrojanUdpFlowSender")
+            && stream.contains("trojan::TrojanUdpFlowResponses")
+            && !stream.contains("mpsc::Sender<UdpFlowPacket>")
+            && !stream.contains("broadcast::Sender<UdpFlowPacket>")
             && stream.contains("trojan::spawn_udp_flow")
             && !stream.contains("trojan::udp_flow_packet")
             && !stream.contains("trojan::TrojanUdpPacket")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("trojan::udp_flow_packet"),
-        "Trojan UDP stream glue should carry neutral packets while protocols/trojan owns packet conversion"
+        "Trojan UDP stream glue should carry protocol-owned flow handles while protocols/trojan owns packet conversion and flow channels"
     );
     assert!(
         stream.contains("trojan::TrojanUdpFlowIo")
@@ -7091,6 +7102,7 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
 fn trojan_udp_send_orchestration_lives_outside_manager() {
     let manager = read("src/adapters/trojan/udp/manager.rs");
     let send = manifest_dir().join("src/adapters/trojan/udp/manager/send.rs");
+    let send_source = read("src/adapters/trojan/udp/manager/send.rs");
 
     for forbidden in [
         "async fn send(",
@@ -7111,6 +7123,14 @@ fn trojan_udp_send_orchestration_lives_outside_manager() {
     assert!(
         send.exists(),
         "Trojan UDP send orchestration should live in trojan_manager/send.rs"
+    );
+    assert!(
+        send_source.contains(".sender")
+            && send_source.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
+            && !send_source.contains("UdpFlowPacket::from_parts")
+            && !send_source.contains(".send_tx")
+            && !send_source.contains(".recv_tx"),
+        "Trojan UDP send orchestration should use protocol-owned flow sender handles instead of rebuilding raw UDP flow packets"
     );
 }
 
