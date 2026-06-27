@@ -313,6 +313,12 @@ pub struct VlessUdpFlowHandle {
 }
 
 #[cfg(feature = "reality")]
+pub struct VlessEstablishedUdpFlowHandle {
+    pub handle: VlessUdpFlowHandle,
+    pub initial_packet_len: usize,
+}
+
+#[cfg(feature = "reality")]
 #[derive(Clone)]
 pub struct VlessUdpFlowSession {
     sender: VlessUdpFlowSender,
@@ -434,6 +440,28 @@ where
         sender: VlessUdpFlowSender { send_tx },
         responses,
     }
+}
+
+#[cfg(feature = "reality")]
+pub async fn establish_udp_flow_with_initial_packet<S>(
+    mut stream: S,
+    session: &Session,
+    identity: VlessUdpIdentity,
+    initial_payload: &[u8],
+) -> Result<VlessEstablishedUdpFlowHandle, Error>
+where
+    S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+{
+    let flow_io = establish_udp_flow(&mut stream, session, identity).await?;
+    let initial_packet =
+        VlessInitialUdpFlowPacket::from_parts(&session.target, session.port, initial_payload);
+    let initial_packet_len = initial_packet.encoded_len(&flow_io)?;
+    let handle = spawn_udp_flow(stream, Some(initial_packet), flow_io);
+
+    Ok(VlessEstablishedUdpFlowHandle {
+        handle,
+        initial_packet_len,
+    })
 }
 
 #[cfg(feature = "reality")]

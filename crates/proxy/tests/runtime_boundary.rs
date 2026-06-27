@@ -2134,6 +2134,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "VlessUdpPacketTarget",
         "UdpPacketTunnelProtocol",
         "VlessUdpPacketTunnelTarget",
+        "VlessEstablishedUdpFlow",
+        "VlessInitialUdpFlowPacket",
         "encode_udp_packet",
         "decode_udp_packet",
         "vless::build_udp_packet",
@@ -2141,6 +2143,10 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "vless::establish_udp_packet_tunnel",
         "vless::encode_udp_flow_packet",
         "vless::decode_udp_flow_packet",
+        "vless::establish_udp_flow(",
+        "vless::spawn_udp_flow",
+        "VlessInitialUdpFlowPacket::from_parts",
+        ".encoded_len(&flow_io)",
         ".write_packet_tokio(",
         ".read_packet_tokio(",
         "tokio::select!",
@@ -2161,21 +2167,19 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     assert!(
         !runtime.contains("vless::open_udp_flow")
             && !runtime.contains("vless::open_mux_udp_flow")
-            && runtime.contains("vless::establish_udp_flow")
-            && runtime.contains("vless::VlessEstablishedUdpFlow")
-            && runtime.contains("vless::spawn_udp_flow")
+            && runtime.contains("vless::establish_udp_flow_with_initial_packet")
+            && runtime.contains("vless::encode_udp_flow_initial_packet")
             && !runtime.contains("vless::establish_udp_flow_stream")
-            && !runtime.contains("vless::encode_udp_flow_initial_packet")
             && !runtime.contains("vless::VlessUdpFlowIo")
-            && runtime.contains("vless::VlessInitialUdpFlowPacket::from_parts")
-            && runtime.contains(".encoded_len(&flow_io)")
             && !runtime.contains("broadcast::channel::<VlessFlowResponse>")
             && model.contains("vless::VlessUdpFlowSession")
             && !model.contains("vless::VlessUdpFlowSender")
+            && protocol_outbound.contains("pub async fn establish_udp_flow_with_initial_packet")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
             && protocol_outbound.contains("tokio::select!")
             && protocol_outbound.contains("struct VlessUdpFlowSender")
             && !protocol_outbound.contains("pub struct VlessUdpFlowSender")
+            && protocol_outbound.contains("pub struct VlessEstablishedUdpFlowHandle")
             && protocol_outbound.contains("pub struct VlessUdpFlowSession")
             && protocol_outbound.contains("pub type VlessUdpFlowResponseReceiver")
             && !protocol_outbound.contains("pub type VlessUdpFlowResponses")
@@ -2202,6 +2206,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     }
     assert!(
         protocol_outbound.contains("pub struct VlessUdpFlowHandle")
+            && protocol_outbound.contains("pub struct VlessEstablishedUdpFlowHandle")
             && protocol_outbound.contains("struct VlessUdpFlowSender")
             && !protocol_outbound.contains("pub struct VlessUdpFlowSender")
             && protocol_outbound.contains("pub struct VlessUdpFlowSession")
@@ -6228,9 +6233,17 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
     let vmess_protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read VMess protocol UDP source");
 
-    for (source, content) in [
-        ("src/adapters/vless/udp/manager.rs", &vless_runtime),
-        ("src/adapters/vmess/udp/manager.rs", &vmess_runtime),
+    for (source, content, flow_helper) in [
+        (
+            "src/adapters/vless/udp/manager.rs",
+            &vless_runtime,
+            "establish_udp_flow_with_initial_packet",
+        ),
+        (
+            "src/adapters/vmess/udp/manager.rs",
+            &vmess_runtime,
+            "spawn_udp_flow",
+        ),
     ] {
         for forbidden in [".encode_packet(", ".decode_packet("] {
             assert!(
@@ -6241,7 +6254,7 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
         assert!(
             !content.contains(".write_packet_tokio(")
                 && !content.contains(".read_packet_tokio(")
-                && content.contains("spawn_udp_flow"),
+                && content.contains(flow_helper),
             "{source} should keep cache/bridge glue and delegate protocol UDP flow pumping"
         );
     }

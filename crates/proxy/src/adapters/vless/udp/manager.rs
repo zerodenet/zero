@@ -35,20 +35,13 @@ async fn establish_vless_udp_upstream_over_stream(
     session: &Session,
     identity: vless::VlessUdpIdentity,
     initial_payload: &[u8],
-    mut stream: TcpRelayStream,
+    stream: TcpRelayStream,
 ) -> Result<VlessUdpUpstream, EngineError> {
-    let flow_io = vless::establish_udp_flow(&mut stream, session, identity).await?;
-    let initial_packet = vless::VlessInitialUdpFlowPacket::from_parts(
-        &session.target,
-        session.port,
-        initial_payload,
-    );
-    let initial_packet_len = initial_packet
-        .encoded_len(&flow_io)
-        .map_err(EngineError::from)?;
-    let flow = vless::spawn_udp_flow(stream, Some(initial_packet), flow_io);
-    proxy.record_session_outbound_tx(session.id, initial_packet_len as u64);
-    Ok(upstream_from_stream(session.id, flow))
+    let established =
+        vless::establish_udp_flow_with_initial_packet(stream, session, identity, initial_payload)
+            .await?;
+    proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
+    Ok(upstream_from_stream(session.id, established.handle))
 }
 
 /// Establishes a VLESS UDP upstream connection with optional transport encryption.
@@ -117,13 +110,11 @@ impl VlessUdpOutboundManager {
                 })
                 .await
             {
-                let initial_packet = vless::VlessInitialUdpFlowPacket::from_parts(
+                let packet = vless::encode_udp_flow_initial_packet(
                     &request.session.target,
                     request.session.port,
                     request.payload,
-                );
-                let flow_io = vless::VlessEstablishedUdpFlow::default();
-                let packet = initial_packet.encode(&flow_io)?;
+                )?;
                 let sent = packet.len();
                 let _ = up_tx.send(packet);
                 request
