@@ -30,8 +30,8 @@ pub use udp::{
     Hysteria2UdpFlowSessions,
 };
 pub use udp::{
-    Hysteria2DatagramCodec, Hysteria2InboundUdpCodec, Hysteria2InboundUdpRequest,
-    Hysteria2UdpConnectorProfile, Hysteria2UdpFlowConfig, Hysteria2UdpFlowIo,
-    Hysteria2UdpFlowPacket, Hysteria2UdpFlowResume, Hysteria2UdpFlowStore, Hysteria2UdpPacket,
-    Hysteria2UdpPacketPathSpec, Hysteria2UdpPacketTarget,
+    udp_packet_path_spec_from_config, Hysteria2DatagramCodec, Hysteria2InboundUdpCodec,
+    Hysteria2InboundUdpRequest, Hysteria2UdpConnectorProfile, Hysteria2UdpFlowConfig,
+    Hysteria2UdpFlowIo, Hysteria2UdpFlowPacket, Hysteria2UdpFlowResume, Hysteria2UdpFlowStore,
+    Hysteria2UdpPacket, Hysteria2UdpPacketPathSpec, Hysteria2UdpPacketTarget,
 };

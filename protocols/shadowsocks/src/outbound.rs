@@ -699,6 +699,17 @@ impl<'a> ShadowsocksUdpFlowConfig<'a> {
 }
 
 #[cfg(feature = "crypto")]
+pub fn udp_packet_path_spec_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    cipher: &str,
+    password: &str,
+) -> Result<ShadowsocksUdpPacketPathSpec, Error> {
+    ShadowsocksUdpFlowConfig::new(tag, server, port, cipher, password).packet_path_spec()
+}
+
+#[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ShadowsocksUdpLeafKey {
     cache_key: alloc::string::String,

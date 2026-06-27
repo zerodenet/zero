@@ -1311,8 +1311,9 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     assert!(
-        packet_path.contains("ShadowsocksUdpFlowConfig::new")
-            && packet_path.contains(".packet_path_spec()")
+        packet_path.contains("shadowsocks::udp_packet_path_spec_from_config")
+            && !packet_path.contains("ShadowsocksUdpFlowConfig::new")
+            && !packet_path.contains(".packet_path_spec()")
             && packet_path.contains("spec.cache_key()")
             && packet_path.contains("spec.codec()")
             && !packet_path.contains(".packet_path_cache_key()")
@@ -1355,8 +1356,9 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     assert!(
-        packet_path.contains("Hysteria2UdpFlowConfig::new")
-            && packet_path.contains(".packet_path_spec()")
+        packet_path.contains("hysteria2::udp_packet_path_spec_from_config")
+            && !packet_path.contains("Hysteria2UdpFlowConfig::new")
+            && !packet_path.contains(".packet_path_spec()")
             && packet_path.contains("spec.cache_key()")
             && packet_path.contains("spec.codec()")
             && !packet_path.contains(".packet_path_cache_key()")
@@ -1463,9 +1465,10 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     assert!(
-        packet_path.contains("Socks5UdpFlowConfig::new")
+        packet_path.contains("socks5::udp_packet_path_spec_from_config")
+            && !packet_path.contains("Socks5UdpFlowConfig::new")
             && !packet_path.contains("packet_path.cache_key()")
-            && packet_path.contains(".packet_path_spec()")
+            && !packet_path.contains(".packet_path_spec()")
             && packet_path.contains("spec.cache_key()")
             && packet_path.contains("spec.association_target()")
             && !packet_path.contains(".packet_path_cache_key()")
@@ -8555,7 +8558,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !adapter.contains("Hysteria2UdpFlowConfig::new")
             && !adapter.contains("Hysteria2UdpFlowConfig {")
             && adapter_flow.contains("Hysteria2UdpFlowConfig::new")
-            && adapter_packet_path.contains("Hysteria2UdpFlowConfig::new")
+            && adapter_packet_path.contains("hysteria2::udp_packet_path_spec_from_config")
+            && !adapter_packet_path.contains("Hysteria2UdpFlowConfig::new")
             && protocol_udp.contains("pub(crate) fn udp_flow_codec(")
             && protocol_udp.contains("struct Hysteria2UdpFlowConfig")
             && protocol_udp.contains("pub fn new(")
@@ -8634,7 +8638,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !adapter.contains(".flow_resume()")
             && !adapter.contains(".packet_path_spec()")
             && adapter_flow.contains(".flow_resume()")
-            && adapter_packet_path.contains(".packet_path_spec()")
+            && adapter_packet_path.contains("hysteria2::udp_packet_path_spec_from_config")
+            && !adapter_packet_path.contains(".packet_path_spec()")
             && adapter_packet_path.contains("spec.cache_key()")
             && adapter_packet_path.contains("spec.codec()")
             && !adapter_packet_path.contains(".packet_path_cache_key()")
@@ -8645,6 +8650,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn new(")
             && protocol_udp.contains("pub fn flow_resume(&self)")
             && protocol_udp.contains("pub fn packet_path_spec(&self)")
+            && protocol_udp.contains("pub fn udp_packet_path_spec_from_config(")
             && protocol_udp.contains("pub fn cache_key(&self)")
             && protocol_udp.contains("pub fn codec(&self)")
             && !protocol_udp.contains("pub fn packet_path_cache_key(&self)")
@@ -8774,7 +8780,8 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
         !adapter.contains("hysteria2::udp_flow_codec")
             && !adapter.contains("hysteria2::udp_cache_key")
             && !adapter.contains("Hysteria2UdpFlowConfig")
-            && adapter_packet_path.contains("Hysteria2UdpFlowConfig"),
+            && adapter_packet_path.contains("hysteria2::udp_packet_path_spec_from_config")
+            && !adapter_packet_path.contains("Hysteria2UdpFlowConfig"),
         "Hysteria2 packet-path adapter submodule should request protocol-built packet-path cache identity and codec through a protocol config helper"
     );
     assert!(
@@ -9154,8 +9161,9 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && !adapter.contains(".packet_path_spec()")
             && adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
             && adapter_flow.contains(".flow_resume()")
-            && adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter_packet_path.contains(".packet_path_spec()")
+            && adapter_packet_path.contains("shadowsocks::udp_packet_path_spec_from_config")
+            && !adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new")
+            && !adapter_packet_path.contains(".packet_path_spec()")
             && adapter_packet_path.contains("spec.cache_key()")
             && adapter_packet_path.contains("spec.codec()")
             && !adapter_packet_path.contains(".packet_path_cache_key()")
@@ -9165,6 +9173,7 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && protocol_outbound.contains("struct ShadowsocksUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self)")
             && protocol_outbound.contains("pub fn packet_path_spec(&self)")
+            && protocol_outbound.contains("pub fn udp_packet_path_spec_from_config(")
             && protocol_outbound.contains("pub struct ShadowsocksUdpPacketPathSpec")
             && protocol_outbound.contains("pub fn cache_key(&self)")
             && protocol_outbound.contains("pub fn codec(&self)")
@@ -9506,7 +9515,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && !adapter.contains("ShadowsocksUdpFlowConfig::new")
             && adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new"),
+            && adapter_packet_path.contains("shadowsocks::udp_packet_path_spec_from_config")
+            && !adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new"),
         "Shadowsocks adapter should ask protocols/shadowsocks to parse packet-path carrier/datagram cipher config"
     );
     for forbidden in ["ShadowsocksDatagramCodec", "shadowsocks::"] {
@@ -9530,7 +9540,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter.contains("resume.codec()")
             && !adapter.contains("resume.packet_path_codec()")
             && !adapter.contains("config.packet_path_spec()")
-            && adapter_packet_path.contains(".packet_path_spec()")
+            && adapter_packet_path.contains("shadowsocks::udp_packet_path_spec_from_config")
+            && !adapter_packet_path.contains(".packet_path_spec()")
             && !adapter_packet_path.contains("packet_path.cache_key()")
             && !adapter_packet_path.contains("packet_path.codec()")
             && adapter_packet_path.contains("spec.cache_key()")
@@ -9580,6 +9591,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         protocol_outbound.contains("fn udp_cache_key(")
             && !protocol_outbound.contains("pub fn udp_cache_key(")
             && protocol_outbound.contains("pub fn packet_path_spec(&self)")
+            && protocol_outbound.contains("pub fn udp_packet_path_spec_from_config(")
             && protocol_outbound.contains("pub struct ShadowsocksUdpPacketPathSpec")
             && protocol_outbound.contains("pub fn cache_key(&self)")
             && protocol_outbound.contains("pub fn codec(&self)")
@@ -9682,8 +9694,9 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     assert!(
         !socks5_adapter.contains("socks5::udp_cache_key")
             && !socks5_adapter.contains("Socks5UdpFlowConfig::new")
-            && socks5_packet_path.contains("Socks5UdpFlowConfig::new")
-            && socks5_packet_path.contains(".packet_path_spec()")
+            && socks5_packet_path.contains("socks5::udp_packet_path_spec_from_config")
+            && !socks5_packet_path.contains("Socks5UdpFlowConfig::new")
+            && !socks5_packet_path.contains(".packet_path_spec()")
             && socks5_packet_path.contains("spec.cache_key()")
             && socks5_packet_path.contains("spec.association_target()")
             && !socks5_packet_path.contains(".packet_path_cache_key()")
@@ -9693,6 +9706,7 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
             && socks5_shared.contains("pub fn new(")
             && socks5_shared.contains("pub struct Socks5UdpPacketPathSpec")
             && socks5_shared.contains("pub fn packet_path_spec(&self)")
+            && socks5_shared.contains("pub fn udp_packet_path_spec_from_config(")
             && !socks5_shared.contains("pub fn packet_path_cache_key(&self)")
             && !socks5_shared.contains("pub fn packet_path_association_config(&self)"),
         "SOCKS5 adapter should request packet-path cache identity through a protocol-owned config helper"
@@ -9702,6 +9716,7 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
             && !hysteria2_udp.contains("pub fn udp_cache_key(")
             && hysteria2_udp.contains("hysteria2|")
             && hysteria2_udp.contains("pub fn packet_path_spec(&self)")
+            && hysteria2_udp.contains("pub fn udp_packet_path_spec_from_config(")
             && hysteria2_udp.contains("pub struct Hysteria2UdpPacketPathSpec")
             && !hysteria2_udp.contains("pub fn packet_path_cache_key(&self)")
             && !hysteria2_udp.contains("pub fn packet_path_codec(&self)"),
