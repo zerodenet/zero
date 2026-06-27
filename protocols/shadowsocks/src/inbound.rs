@@ -42,6 +42,12 @@ pub struct ShadowsocksInboundUdpPacket {
     pub client_session_id: Option<u64>,
 }
 
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksInboundUdpResponse {
+    pub datagram: Vec<u8>,
+}
+
 /// Protocol-owned codec/state for Shadowsocks inbound UDP.
 ///
 /// Runtime code owns socket I/O and routing, while this type owns
@@ -152,6 +158,18 @@ impl ShadowsocksInboundUdpCodec {
                 password: &self.password,
             },
         )
+    }
+
+    pub fn encode_response_to_client(
+        &self,
+        client_session_id: Option<u64>,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<ShadowsocksInboundUdpResponse, Error> {
+        Ok(ShadowsocksInboundUdpResponse {
+            datagram: self.encode_response(client_session_id, target, port, payload)?,
+        })
     }
 }
 

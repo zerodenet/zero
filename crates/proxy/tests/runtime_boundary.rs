@@ -864,12 +864,12 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     );
     assert!(
         !inbound.contains("async fn ss_udp_relay_loop")
-            && !inbound.contains("struct SsEncryptedResponse"),
+            && !inbound.contains("struct SsProtocolResponse"),
         "Shadowsocks UDP relay details should live outside the listener entrypoint"
     );
     assert!(
         udp.contains("async fn ss_udp_relay_loop")
-            && udp.contains("struct SsEncryptedResponse")
+            && udp.contains("struct SsProtocolResponse")
             && udp.contains("UdpPipe::new"),
         "Shadowsocks UDP relay should live in src/inbound/shadowsocks/udp.rs and route through UdpPipe"
     );
@@ -1718,10 +1718,16 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
     }
 
     let udp = read("src/inbound/shadowsocks/udp.rs");
+    let protocol_inbound = repo_root().join("protocols/shadowsocks/src/inbound.rs");
+    let protocol_inbound =
+        fs::read_to_string(protocol_inbound).expect("read shadowsocks protocol inbound source");
     assert!(
         udp.contains("ShadowsocksInboundUdpCodec")
             && udp.contains("decode_request")
-            && udp.contains("encode_response"),
+            && udp.contains("encode_response_to_client")
+            && !udp.contains(".encode_response(")
+            && protocol_inbound.contains("struct ShadowsocksInboundUdpResponse")
+            && protocol_inbound.contains("fn encode_response_to_client"),
         "Shadowsocks inbound UDP should delegate protocol datagram logic to protocols/shadowsocks"
     );
 }

@@ -79,7 +79,7 @@ impl Proxy {
                     let (n, sender) = recv?;
                     if let Some(sid) = dispatch.direct_response_session_id(sender) {
                         if let Some(&client) = client_sessions.get(&sid) {
-                            ss_send_encrypted(SsEncryptedResponse {
+                            ss_send_protocol_response(SsProtocolResponse {
                                 socket: udp_socket.as_ref(),
                                 codec: &codec,
                                 client_session_id: client_ss_session_ids.get(&sid).copied(),
@@ -98,7 +98,7 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             if let Some(sid) = session_id {
                                 if let Some(&client) = client_sessions.get(&sid) {
-                                    ss_send_encrypted(SsEncryptedResponse {
+                                    ss_send_protocol_response(SsProtocolResponse {
                                         socket: udp_socket.as_ref(),
                                         codec: &codec,
                                         client_session_id: client_ss_session_ids.get(&sid).copied(),
@@ -129,7 +129,7 @@ impl Proxy {
 /// For 2022 (blake3) ciphers this produces a server-to-client response that
 /// echoes `client_session_id` (SIP022 3.2.3); for legacy AEAD it produces the
 /// stateless datagram via the shared codec.
-struct SsEncryptedResponse<'a> {
+struct SsProtocolResponse<'a> {
     socket: &'a UdpSocket,
     codec: &'a ShadowsocksInboundUdpCodec,
     client_session_id: Option<u64>,
@@ -139,15 +139,18 @@ struct SsEncryptedResponse<'a> {
     client: SocketAddr,
 }
 
-async fn ss_send_encrypted(response: SsEncryptedResponse<'_>) {
-    let resp = response.codec.encode_response(
+async fn ss_send_protocol_response(response: SsProtocolResponse<'_>) {
+    let resp = response.codec.encode_response_to_client(
         response.client_session_id,
         response.target,
         response.port,
         response.payload,
     );
-    let Ok(resp) = resp else {
+    let Ok(response_datagram) = resp else {
         return;
     };
-    let _ = response.socket.send_to(&resp, response.client).await;
+    let _ = response
+        .socket
+        .send_to(&response_datagram.datagram, response.client)
+        .await;
 }
