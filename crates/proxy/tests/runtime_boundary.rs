@@ -2039,6 +2039,11 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
     let protocol_inbound = repo_root().join("protocols/shadowsocks/src/inbound.rs");
     let protocol_inbound =
         fs::read_to_string(protocol_inbound).expect("read shadowsocks protocol inbound source");
+    let protocol_shared =
+        fs::read_to_string(repo_root().join("protocols/shadowsocks/src/shared.rs"))
+            .expect("read shadowsocks protocol shared source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/shadowsocks/src/lib.rs"))
+        .expect("read shadowsocks protocol lib source");
     assert!(
         udp.contains("ShadowsocksInboundUdpSession")
             && udp.contains("udp_session.decode_request")
@@ -2052,6 +2057,21 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && protocol_inbound.contains("fn encode_response_to_client"),
         "Shadowsocks inbound UDP should delegate protocol datagram logic through protocols/shadowsocks inbound UDP session"
     );
+    for private_helper in [
+        "derive_udp_packet_key",
+        "encode_udp_datagram_2022",
+        "encode_udp_response_2022",
+        "decode_udp_datagram_2022",
+        "decode_udp_datagram_2022_session",
+        "aead_encrypt_udp",
+        "aead_decrypt_udp",
+    ] {
+        assert!(
+            protocol_shared.contains(&format!("pub(crate) fn {private_helper}"))
+                && !protocol_lib.contains(private_helper),
+            "Shadowsocks UDP helper `{private_helper}` should stay crate-private and should not be re-exported"
+        );
+    }
 }
 
 #[test]

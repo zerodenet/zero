@@ -188,7 +188,7 @@ pub fn derive_session_key(
 }
 
 #[cfg(feature = "crypto")]
-pub fn derive_udp_packet_key(
+pub(crate) fn derive_udp_packet_key(
     cipher: CipherKind,
     password: &[u8],
     salt: &[u8],
@@ -228,7 +228,7 @@ pub fn derive_udp_packet_key(
 }
 
 #[cfg(feature = "crypto")]
-pub fn encode_udp_datagram_2022(
+pub(crate) fn encode_udp_datagram_2022(
     cipher: CipherKind,
     password: &[u8],
     target: &Address,
@@ -298,7 +298,7 @@ pub fn encode_udp_datagram_2022(
 /// ChaCha20 variant) and echoes `client_session_id` in the body so the client
 /// can map the response to its session.
 #[cfg(feature = "crypto")]
-pub fn encode_udp_response_2022(
+pub(crate) fn encode_udp_response_2022(
     cipher: CipherKind,
     password: &[u8],
     client_session_id: u64,
@@ -365,7 +365,7 @@ pub fn encode_udp_response_2022(
 }
 
 #[cfg(feature = "crypto")]
-pub fn decode_udp_datagram_2022(
+pub(crate) fn decode_udp_datagram_2022(
     cipher: CipherKind,
     password: &[u8],
     datagram: &[u8],
@@ -419,7 +419,7 @@ pub fn decode_udp_datagram_2022(
 /// A server uses this to recover the client session id from an incoming
 /// client packet (type 0) so it can echo it in server-to-client responses.
 #[cfg(feature = "crypto")]
-pub fn decode_udp_datagram_2022_session(
+pub(crate) fn decode_udp_datagram_2022_session(
     cipher: CipherKind,
     password: &[u8],
     datagram: &[u8],
@@ -1089,7 +1089,7 @@ pub async fn read_tcp_chunk<S: AsyncSocket>(
 // UDP AEAD uses per-packet salt and a fixed zero nonce.
 
 #[cfg(feature = "crypto")]
-pub fn aead_encrypt_udp(
+pub(crate) fn aead_encrypt_udp(
     cipher: CipherKind,
     key: &[u8],
     nonce: &[u8],
@@ -1130,7 +1130,7 @@ pub fn aead_encrypt_udp(
 }
 
 #[cfg(feature = "crypto")]
-pub fn aead_decrypt_udp(
+pub(crate) fn aead_decrypt_udp(
     cipher: CipherKind,
     key: &[u8],
     nonce: &[u8],

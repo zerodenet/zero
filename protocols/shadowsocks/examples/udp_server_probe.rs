@@ -8,8 +8,9 @@
 use std::net::UdpSocket;
 use std::time::Duration;
 
-use shadowsocks::{decode_udp_datagram_2022_session, encode_udp_datagram_2022, CipherKind};
+use shadowsocks::{CipherKind, ShadowsocksDatagramCodec, ShadowsocksInboundProfile};
 use zero_core::Address;
+use zero_traits::DatagramCodec;
 
 fn main() {
     let cipher = CipherKind::Blake3Aes256Gcm;
@@ -23,8 +24,13 @@ fn main() {
     query.extend_from_slice(b"\x07example\x03com\x00");
     query.extend_from_slice(&[0x00, 0x01, 0x00, 0x01]);
 
-    let packet =
-        encode_udp_datagram_2022(cipher, password, &dns_server, 53, &query).expect("encode");
+    let client_codec = ShadowsocksDatagramCodec {
+        cipher,
+        password: password.to_vec(),
+    };
+    let packet = client_codec
+        .encode(&dns_server, 53, &query)
+        .expect("encode");
 
     let sock = UdpSocket::bind("127.0.0.1:0").expect("bind");
     sock.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
@@ -34,8 +40,19 @@ fn main() {
     let (n, _from) = sock.recv_from(&mut buf).expect("recv response from zero");
     let resp = &buf[..n];
 
-    let (target, port, payload, server_ssid, _packet_id) =
-        decode_udp_datagram_2022_session(cipher, password, resp).expect("decode response");
+    let profile = ShadowsocksInboundProfile::from_config(
+        "2022-blake3-aes-256-gcm",
+        "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+    )
+    .expect("build inbound profile");
+    let mut server_session = profile.udp_session();
+    let decoded = server_session
+        .decode_request(resp)
+        .expect("decode response");
+    let target = decoded.target;
+    let port = decoded.port;
+    let payload = decoded.payload;
+    let server_ssid = decoded.client_session_id.unwrap_or(0);
     eprintln!("response target={target:?} port={port} server_ssid={server_ssid:#x}");
     eprintln!("payload {} bytes", payload.len());
 

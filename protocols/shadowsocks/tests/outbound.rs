@@ -7,9 +7,9 @@ use std::task::{Context, Poll};
 use shadowsocks::{
     decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload, derive_download_key, derive_key,
     derive_session_key, encrypt_tcp_chunk, parse_target_data, CipherKind, ShadowsocksAccept,
-    ShadowsocksAeadStream, ShadowsocksDatagramCodec, ShadowsocksInbound, ShadowsocksOutbound,
-    ShadowsocksOutboundSession, ShadowsocksUdpDecodeContext, ShadowsocksUdpPacketTarget,
-    TCP_CHUNK_SIZE_LEN,
+    ShadowsocksAeadStream, ShadowsocksDatagramCodec, ShadowsocksInbound, ShadowsocksInboundProfile,
+    ShadowsocksOutbound, ShadowsocksOutboundSession, ShadowsocksUdpDecodeContext,
+    ShadowsocksUdpPacketTarget, TCP_CHUNK_SIZE_LEN,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream, ReadBuf};
 use zero_core::{Address, Network, ProtocolType, Session};
@@ -62,6 +62,29 @@ fn password_for_cipher(cipher: CipherKind) -> &'static [u8] {
             b"MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
         }
         _ => b"test-password",
+    }
+}
+
+#[cfg(feature = "blake3")]
+fn cipher_name(cipher: CipherKind) -> &'static str {
+    match cipher {
+        CipherKind::Blake3Aes128Gcm => "2022-blake3-aes-128-gcm",
+        CipherKind::Blake3Aes256Gcm => "2022-blake3-aes-256-gcm",
+        CipherKind::Blake3Chacha20Poly1305 => "2022-blake3-chacha20-poly1305",
+        CipherKind::Aes128Gcm => "aes-128-gcm",
+        CipherKind::Aes256Gcm => "aes-256-gcm",
+        CipherKind::Chacha20Poly1305 => "chacha20-ietf-poly1305",
+    }
+}
+
+#[cfg(feature = "blake3")]
+fn password_str(cipher: CipherKind) -> &'static str {
+    match cipher {
+        CipherKind::Blake3Aes128Gcm => "MDEyMzQ1Njc4OWFiY2RlZg==",
+        CipherKind::Blake3Aes256Gcm | CipherKind::Blake3Chacha20Poly1305 => {
+            "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+        }
+        _ => "test-password",
     }
 }
 
@@ -515,48 +538,64 @@ fn udp_datagram_framing_roundtrips_2022_blake3_packet() {
 #[cfg(feature = "blake3")]
 #[test]
 fn udp_2022_server_response_flow_all_blake3_ciphers() {
-    use shadowsocks::{
-        decode_udp_datagram_2022_session, encode_udp_datagram_2022, encode_udp_response_2022,
-    };
     for cipher in blake3_ciphers() {
         let password = password_for_cipher(cipher);
         let target = Address::Domain("dns.google".to_owned());
+        let client_codec = ShadowsocksDatagramCodec {
+            cipher,
+            password: password.to_vec(),
+        };
+        let profile =
+            ShadowsocksInboundProfile::from_config(cipher_name(cipher), password_str(cipher))
+                .expect("build inbound profile");
+        let mut server_session = profile.udp_session();
 
         // Client -> server request.
-        let request = encode_udp_datagram_2022(cipher, password, &target, 53, b"query")
+        let request = client_codec
+            .encode(&target, 53, b"query")
             .expect("encode client request");
         // Server decodes and recovers the client session id.
-        let (req_target, req_port, req_payload, client_session_id, _req_packet_id) =
-            decode_udp_datagram_2022_session(cipher, password, &request)
-                .expect("decode client request");
-        assert_eq!(req_target, target);
-        assert_eq!(req_port, 53);
-        assert_eq!(req_payload, b"query");
+        let decoded_request = server_session
+            .decode_request(&request)
+            .expect("decode client request");
+        assert_eq!(decoded_request.target, target);
+        assert_eq!(decoded_request.port, 53);
+        assert_eq!(decoded_request.payload, b"query");
+        let client_session_id = decoded_request
+            .client_session_id
+            .expect("2022 request should carry a session id");
         assert_ne!(client_session_id, 0, "client session id must be non-zero");
 
         // Server -> client response echoing the client session id.
-        let response =
-            encode_udp_response_2022(cipher, password, client_session_id, &target, 53, b"answer")
-                .expect("encode server response");
+        let response = server_session
+            .encode_response_to_client(Some(client_session_id), &target, 53, b"answer")
+            .expect("encode server response")
+            .datagram;
         // Client decodes the response.
-        let (resp_target, resp_port, resp_payload, server_session_id, _resp_packet_id) =
-            decode_udp_datagram_2022_session(cipher, password, &response)
-                .expect("decode server response");
-        assert_eq!(resp_target, target, "response target cipher: {cipher:?}");
-        assert_eq!(resp_port, 53);
+        let decoded_response = server_session
+            .decode_request(&response)
+            .expect("decode server response");
         assert_eq!(
-            resp_payload, b"answer",
+            decoded_response.target, target,
+            "response target cipher: {cipher:?}"
+        );
+        assert_eq!(decoded_response.port, 53);
+        assert_eq!(
+            decoded_response.payload, b"answer",
             "response payload cipher: {cipher:?}"
         );
         // The response carries a fresh server session id in its separate header,
         // distinct from the client session id it echoes in the body.
+        let server_session_id = decoded_response
+            .client_session_id
+            .expect("2022 response should carry a server session id");
         assert_ne!(
             server_session_id, client_session_id,
             "server session id must differ cipher: {cipher:?}"
         );
         // A response datagram (type 1) is 8 bytes larger than the equivalent
         // client datagram (type 0) because of the echoed client session id.
-        let baseline = encode_udp_datagram_2022(cipher, password, &target, 53, b"answer").unwrap();
+        let baseline = client_codec.encode(&target, 53, b"answer").unwrap();
         assert_eq!(
             response.len(),
             baseline.len() + 8,
