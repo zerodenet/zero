@@ -5,7 +5,7 @@ use zero_engine::EngineError;
 use super::model::{VmessUdpRelayFlowStart, VmessUdpStartFlow, VmessUdpUpstreamRequest};
 use super::{establish, VmessUdpOutboundManager};
 use crate::runtime::udp_flow::managed::{
-    ManagedStreamConnection, ManagedStreamConnectionCacheKey, ManagedStreamFlowSender,
+    ManagedStreamConnectionCacheKey, ManagedStreamConnectionSend, ManagedStreamFlowSender,
 };
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
@@ -55,18 +55,13 @@ impl VmessUdpOutboundManager {
             stream,
         )
         .await?;
-        self.insert_upstream(
+        self.upstreams.insert_and_bridge(
             ManagedStreamConnectionCacheKey::new(
                 request.session.target.clone(),
                 request.session.port,
             ),
-            upstream,
-        );
-        self.spawn_bridge(
             chain_tasks,
-            request.session.target.clone(),
-            request.session.port,
-            request.session.id,
+            upstream,
         );
         Ok(())
     }
@@ -80,23 +75,9 @@ impl VmessUdpOutboundManager {
         payload: &[u8],
     ) -> Result<Option<u64>, EngineError> {
         let key = ManagedStreamConnectionCacheKey::new(target.clone(), port);
-        let Some(upstream) = self.upstreams.get(&key) else {
-            return Ok(None);
-        };
-
-        proxy.record_session_inbound_rx(upstream.session_id, payload.len() as u64);
-        let packet_len = upstream.connection.send(target, port, payload).await? as u64;
-        proxy.record_session_outbound_tx(upstream.session_id, packet_len);
-        self.spawn_bridge(chain_tasks, target.clone(), port, upstream.session_id);
-        Ok(Some(upstream.session_id))
-    }
-
-    fn insert_upstream(
-        &mut self,
-        key: ManagedStreamConnectionCacheKey,
-        upstream: ManagedStreamConnection,
-    ) {
-        self.upstreams.insert(key, upstream);
+        self.upstreams
+            .send_existing(key, chain_tasks, proxy, target, port, payload)
+            .await
     }
 
     async fn get_or_create_upstream(
@@ -105,32 +86,19 @@ impl VmessUdpOutboundManager {
         request: VmessUdpUpstreamRequest<'_>,
     ) -> Result<(), EngineError> {
         let key = ManagedStreamConnectionCacheKey::new(request.target.clone(), request.port);
-        if let Some(upstream) = self.upstreams.get(&key) {
-            request.proxy.record_session_inbound_rx(
-                upstream.session_id,
-                request.initial_payload.len() as u64,
-            );
-            let packet_len = upstream
-                .connection
-                .send(&request.target, request.port, request.initial_payload)
-                .await? as u64;
-            request
-                .proxy
-                .record_session_outbound_tx(upstream.session_id, packet_len);
-            self.spawn_bridge(
-                chain_tasks,
-                request.target,
-                request.port,
-                upstream.session_id,
-            );
-            return Ok(());
-        }
-
-        let upstream = establish::direct(&request).await?;
-        let session_id = upstream.session_id;
-        self.upstreams.insert(key, upstream);
-        self.spawn_bridge(chain_tasks, request.target, request.port, session_id);
-        Ok(())
+        self.upstreams
+            .send_or_insert(
+                key,
+                ManagedStreamConnectionSend {
+                    chain_tasks,
+                    proxy: request.proxy,
+                    target: &request.target,
+                    port: request.port,
+                    payload: request.initial_payload,
+                },
+                establish::direct(&request),
+            )
+            .await
     }
 }
 

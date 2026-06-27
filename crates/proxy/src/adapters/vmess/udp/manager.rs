@@ -4,7 +4,6 @@
 //! dialing transports, caching per-target upstream streams, metering, and
 //! response bridge tasks.
 
-mod bridge;
 mod establish;
 pub(crate) mod model;
 mod send;

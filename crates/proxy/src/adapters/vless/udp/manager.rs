@@ -3,7 +3,6 @@
 //! Protocol packet framing stays in `protocols/vless`; this module owns proxy
 //! transport opening, cached upstream streams, metering, and response bridges.
 
-mod bridge;
 mod establish;
 pub(crate) mod model;
 mod send;

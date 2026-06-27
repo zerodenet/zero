@@ -18,8 +18,8 @@ mod stream_sender;
 
 pub(crate) use cache::{
     ManagedDatagramConnectionCache, ManagedDatagramConnectionCacheKey, ManagedStreamConnection,
-    ManagedStreamConnectionCache, ManagedStreamConnectionCacheKey, ManagedUdpConnectionCache,
-    ManagedUdpConnectionCacheKey,
+    ManagedStreamConnectionCache, ManagedStreamConnectionCacheKey, ManagedStreamConnectionSend,
+    ManagedUdpConnectionCache, ManagedUdpConnectionCacheKey,
 };
 pub(crate) use model::{
     ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,

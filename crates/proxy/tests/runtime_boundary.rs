@@ -2076,10 +2076,11 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let old_runtime = manifest_dir().join("src/protocol_runtime/vless_udp.rs");
     let old_runtime_dir = manifest_dir().join("src/protocol_runtime/vless_udp");
+    let bridge = manifest_dir().join("src/adapters/vless/udp/manager/bridge.rs");
 
     assert!(
-        !old_runtime.exists() && !old_runtime_dir.exists(),
-        "VLESS UDP manager should live under the VLESS adapter, not protocol_runtime/vless_udp"
+        !old_runtime.exists() && !old_runtime_dir.exists() && !bridge.exists(),
+        "VLESS UDP manager should live under the VLESS adapter without protocol-local bridge modules"
     );
 
     for forbidden in [
@@ -2113,9 +2114,21 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
             && (root.contains("ManagedStreamConnectionCache")
                 || send.contains("ManagedStreamConnectionCacheKey"))
             && send.contains("ManagedStreamConnectionCacheKey")
+            && send.contains(".send_existing(")
+            && send.contains(".send_or_insert(")
+            && send.contains(".insert_and_bridge(")
+            && !send.contains("self.upstreams.get(")
+            && !send.contains("self.upstreams.insert(")
+            && !send.contains("self.spawn_bridge(")
+            && !send.contains(".spawn_response_bridge(")
             && managed_cache.contains("struct ManagedStreamConnection")
-            && managed_cache.contains("struct ManagedStreamConnectionCache"),
-        "VLESS UDP manager should use neutral managed stream connection cache instead of a protocol-named upstream model"
+            && managed_cache.contains("struct ManagedStreamConnectionSend")
+            && managed_cache.contains("struct ManagedStreamConnectionCache")
+            && managed_cache.contains("pub(crate) async fn send_existing")
+            && managed_cache.contains("pub(crate) async fn send_or_insert")
+            && managed_cache.contains("pub(crate) fn insert_and_bridge")
+            && managed_cache.contains("send_stream_connection"),
+        "VLESS UDP manager should delegate stream cache hit/miss, insertion, and response bridge wiring to the neutral managed stream connection cache"
     );
 }
 
@@ -2241,7 +2254,6 @@ fn vless_udp_adapter_delegates_packet_framing_to_protocol_helpers() {
 fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = [
         read("src/adapters/vless/udp/manager.rs"),
-        read("src/adapters/vless/udp/manager/bridge.rs"),
         read("src/adapters/vless/udp/manager/establish.rs"),
         read("src/adapters/vless/udp/manager/send.rs"),
     ]
@@ -2395,10 +2407,11 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let old_runtime = manifest_dir().join("src/protocol_runtime/vmess_udp.rs");
     let old_runtime_dir = manifest_dir().join("src/protocol_runtime/vmess_udp");
+    let bridge = manifest_dir().join("src/adapters/vmess/udp/manager/bridge.rs");
 
     assert!(
-        !old_runtime.exists() && !old_runtime_dir.exists(),
-        "VMess UDP manager should live under the VMess adapter, not protocol_runtime/vmess_udp"
+        !old_runtime.exists() && !old_runtime_dir.exists() && !bridge.exists(),
+        "VMess UDP manager should live under the VMess adapter without protocol-local bridge modules"
     );
 
     for forbidden in [
@@ -2431,9 +2444,21 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
             && (root.contains("ManagedStreamConnectionCache")
                 || send.contains("ManagedStreamConnectionCacheKey"))
             && send.contains("ManagedStreamConnectionCacheKey")
+            && send.contains(".send_existing(")
+            && send.contains(".send_or_insert(")
+            && send.contains(".insert_and_bridge(")
+            && !send.contains("self.upstreams.get(")
+            && !send.contains("self.upstreams.insert(")
+            && !send.contains("self.spawn_bridge(")
+            && !send.contains(".spawn_response_bridge(")
             && managed_cache.contains("struct ManagedStreamConnection")
-            && managed_cache.contains("struct ManagedStreamConnectionCache"),
-        "VMess UDP manager should use neutral managed stream connection cache instead of a protocol-named upstream model"
+            && managed_cache.contains("struct ManagedStreamConnectionSend")
+            && managed_cache.contains("struct ManagedStreamConnectionCache")
+            && managed_cache.contains("pub(crate) async fn send_existing")
+            && managed_cache.contains("pub(crate) async fn send_or_insert")
+            && managed_cache.contains("pub(crate) fn insert_and_bridge")
+            && managed_cache.contains("send_stream_connection"),
+        "VMess UDP manager should delegate stream cache hit/miss, insertion, and response bridge wiring to the neutral managed stream connection cache"
     );
 }
 
@@ -2554,7 +2579,6 @@ fn vmess_udp_identity_is_protocol_parsed() {
 fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = [
         read("src/adapters/vmess/udp/manager.rs"),
-        read("src/adapters/vmess/udp/manager/bridge.rs"),
         read("src/adapters/vmess/udp/manager/establish.rs"),
         read("src/adapters/vmess/udp/manager/send.rs"),
     ]
@@ -6514,14 +6538,12 @@ fn packet_path_traits_are_grouped_by_responsibility() {
 fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
     let vless_runtime = [
         read("src/adapters/vless/udp/manager.rs"),
-        read("src/adapters/vless/udp/manager/bridge.rs"),
         read("src/adapters/vless/udp/manager/establish.rs"),
         read("src/adapters/vless/udp/manager/send.rs"),
     ]
     .join("\n");
     let vmess_runtime = [
         read("src/adapters/vmess/udp/manager.rs"),
-        read("src/adapters/vmess/udp/manager/bridge.rs"),
         read("src/adapters/vmess/udp/manager/establish.rs"),
         read("src/adapters/vmess/udp/manager/send.rs"),
     ]
