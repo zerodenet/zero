@@ -1433,7 +1433,8 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
             && !packet_path.contains(".packet_path()")
             && !packet_path.contains("packet_path.cache_key()")
             && packet_path.contains(".packet_path_cache_key()")
-            && packet_path.contains(".packet_path_association_config()")
+            && packet_path.contains(".association_target()")
+            && !packet_path.contains(".packet_path_association_config()")
             && flow.contains("Socks5UdpFlowConfig::new")
             && flow.contains(".flow_resume()")
             && flow.contains("ManagedRelayStart")
@@ -2183,8 +2184,9 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
 
     assert!(
         active.contains("struct ActiveUpstreamSocks5UdpAssociation")
-            && active.contains("Socks5UdpAssociation<TokioSocket, TokioDatagramSocket>")
-            && active.contains("Socks5UdpAssociation::from_relay_endpoint")
+            && active.contains("Socks5EstablishedUdpAssociation<TokioSocket, TokioDatagramSocket>")
+            && active.contains("Socks5EstablishedUdpAssociation::from_relay_endpoint")
+            && !active.contains("Socks5UdpAssociation::from_relay_endpoint")
             && active.contains("impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation")
             && active.contains("impl Socks5UdpPacketPathAssociation for ActiveUpstreamSocks5UdpAssociation")
             && establish.contains("trait Socks5UdpAssociationEstablisher")
@@ -2200,6 +2202,8 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && !runtime_source.contains("use super::active::ActiveUpstreamSocks5UdpAssociation")
             && !packet_path_source.contains("use super::active::ActiveUpstreamSocks5UdpAssociation")
             && !active.contains("Socks5UdpAssociation::new")
+            && !active.contains("Socks5UdpAssociationTarget::new")
+            && !active.contains("Socks5OwnedUdpAssociationConfig")
             && !active.contains("Socks5UdpRelay,")
             && !active.contains("Socks5UdpRelayEndpoint")
             && active.contains("socks5::establish_udp_relay_with_control")
@@ -2245,6 +2249,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && model.contains("trait Socks5UdpPacketPathAssociation")
             && model.contains("type SharedSocks5UdpPacketPathAssociation")
             && protocol_udp.contains("struct Socks5UdpAssociationTarget")
+            && protocol_udp.contains("struct Socks5EstablishedUdpAssociation")
             && protocol_udp.contains("outbound_tag: alloc::string::String")
             && protocol_udp.contains("pub fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool"),
         "SOCKS5 UDP association handles should live under adapters/socks5/udp/model.rs while protocol association targets stay in protocols/socks5"

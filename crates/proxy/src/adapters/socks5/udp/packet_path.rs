@@ -73,30 +73,20 @@ pub(super) async fn build(
     };
     build_socks5_packet_path(
         proxy,
-        tag,
-        server,
-        *port,
-        packet_path_config(tag, server, *port, *username, *password)
-            .packet_path_association_config(),
+        packet_path_config(tag, server, *port, *username, *password).association_target(),
     )
     .await
 }
 
 pub(crate) async fn build_socks5_packet_path(
     proxy: &Proxy,
-    tag: &str,
-    server: &str,
-    port: u16,
-    config: socks5::Socks5UdpAssociationConfig<'_>,
+    target: socks5::Socks5UdpAssociationTarget,
 ) -> Result<std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
 {
     let association =
         establish_shared_packet_path_association(Socks5UdpAssociationEstablishRequest {
             proxy,
-            outbound_tag: tag,
-            server,
-            port,
-            config,
+            target,
             session_id: 0,
         })
         .await?;

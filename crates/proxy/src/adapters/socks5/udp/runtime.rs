@@ -138,10 +138,7 @@ impl Socks5UdpRuntime {
             .establisher
             .establish_boxed(Socks5UdpAssociationEstablishRequest {
                 proxy,
-                outbound_tag: association.outbound_tag(),
-                server: association.server(),
-                port: association.port(),
-                config: association.association_config(),
+                target: association.clone(),
                 session_id,
             })
             .await

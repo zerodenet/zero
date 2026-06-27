@@ -7,10 +7,7 @@ use zero_engine::EngineError;
 
 pub(super) struct Socks5UdpAssociationEstablishRequest<'a> {
     pub(super) proxy: &'a Proxy,
-    pub(super) outbound_tag: &'a str,
-    pub(super) server: &'a str,
-    pub(super) port: u16,
-    pub(super) config: socks5::Socks5UdpAssociationConfig<'a>,
+    pub(super) target: socks5::Socks5UdpAssociationTarget,
     pub(super) session_id: u64,
 }
 
@@ -62,13 +59,6 @@ impl Socks5UdpAssociationEstablisher for DefaultSocks5UdpAssociationEstablisher 
 async fn establish_active(
     request: Socks5UdpAssociationEstablishRequest<'_>,
 ) -> Result<ActiveUpstreamSocks5UdpAssociation, EngineError> {
-    ActiveUpstreamSocks5UdpAssociation::establish(
-        request.proxy,
-        request.outbound_tag,
-        request.server,
-        request.port,
-        request.config,
-        request.session_id,
-    )
-    .await
+    ActiveUpstreamSocks5UdpAssociation::establish(request.proxy, request.target, request.session_id)
+        .await
 }

@@ -1,3 +1,4 @@
+use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -6,7 +7,7 @@ use zero_core::{Address, Error};
 use zero_traits::AsyncSocket;
 
 use crate::outbound::{Socks5OutboundAuth, Socks5UdpFlowResume};
-use crate::udp::Socks5UdpAssociationConfig;
+use crate::udp::{Socks5UdpAssociationConfig, Socks5UdpAssociationTarget};
 
 pub(crate) const SOCKS5_VERSION: u8 = 0x05;
 pub(crate) const METHOD_NO_AUTH: u8 = 0x00;
@@ -329,5 +330,13 @@ impl<'a> Socks5UdpFlowConfig<'a> {
 
     pub fn packet_path_association_config(&self) -> Socks5UdpAssociationConfig<'a> {
         self.association_config()
+    }
+
+    pub fn association_target(&self) -> Socks5UdpAssociationTarget {
+        self.flow_resume().association_target(
+            self.tag.to_owned(),
+            self.server.to_owned(),
+            self.port,
+        )
     }
 }

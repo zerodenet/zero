@@ -1,7 +1,7 @@
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use socks5::{Socks5UdpAssociation, Socks5UdpRelayError};
+use socks5::{Socks5EstablishedUdpAssociation, Socks5UdpRelayError};
 use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
@@ -14,30 +14,26 @@ use crate::transport::MeteredStream;
 
 /// Active SOCKS5 UDP upstream association.
 pub(super) struct ActiveUpstreamSocks5UdpAssociation {
-    outbound_tag: String,
-    server: String,
-    port: u16,
     proxy: Proxy,
     close_recorded: AtomicBool,
-    association: Socks5UdpAssociation<TokioSocket, TokioDatagramSocket>,
+    association: Socks5EstablishedUdpAssociation<TokioSocket, TokioDatagramSocket>,
 }
 
 impl ActiveUpstreamSocks5UdpAssociation {
     pub(super) async fn establish(
         proxy: &Proxy,
-        outbound_tag: &str,
-        server: &str,
-        port: u16,
-        config: socks5::Socks5UdpAssociationConfig<'_>,
+        target: socks5::Socks5UdpAssociationTarget,
         session_id: u64,
     ) -> Result<Self, EngineError> {
         let control = proxy
             .protocols
             .direct_connector()
-            .connect_host(server, port, proxy.resolver.as_ref())
+            .connect_host(target.server(), target.port(), proxy.resolver.as_ref())
             .await?;
         let mut control = MeteredStream::new(control);
-        let relay_target = socks5::establish_udp_relay_with_control(&mut control, config).await?;
+        let relay_target =
+            socks5::establish_udp_relay_with_control(&mut control, target.association_config())
+                .await?;
         proxy.record_session_outbound_traffic(session_id, control.drain_traffic());
         let control = control.into_inner();
         let relay_addr = proxy
@@ -58,12 +54,10 @@ impl ActiveUpstreamSocks5UdpAssociation {
         let relay = TokioDatagramSocket::bind_addr(bind_addr).await?;
 
         Ok(Self {
-            outbound_tag: outbound_tag.to_owned(),
-            server: server.to_owned(),
-            port,
             proxy: proxy.clone(),
             close_recorded: AtomicBool::new(false),
-            association: Socks5UdpAssociation::from_relay_endpoint(
+            association: Socks5EstablishedUdpAssociation::from_relay_endpoint(
+                target,
                 control,
                 relay,
                 zero_platform_tokio::socket_addr_to_ip(relay_addr),
@@ -73,11 +67,11 @@ impl ActiveUpstreamSocks5UdpAssociation {
     }
 
     pub(super) fn outbound_tag(&self) -> &str {
-        &self.outbound_tag
+        self.association.outbound_tag()
     }
 
     pub(super) fn upstream_endpoint(&self) -> (&str, u16) {
-        (&self.server, self.port)
+        self.association.upstream_endpoint()
     }
 
     pub(super) fn close(self, reason: UpstreamAssociationCloseReason) {

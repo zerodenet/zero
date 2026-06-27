@@ -113,6 +113,12 @@ pub struct Socks5UdpAssociation<C, S> {
     relay: Socks5UdpRelay<S>,
 }
 
+#[derive(Debug)]
+pub struct Socks5EstablishedUdpAssociation<C, S> {
+    target: Socks5UdpAssociationTarget,
+    association: Socks5UdpAssociation<C, S>,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Socks5InboundUdpCodec;
 
@@ -157,6 +163,75 @@ impl<C, S> Socks5UdpAssociation<C, S> {
 
     pub fn into_parts(self) -> (C, Socks5UdpRelay<S>) {
         (self._control, self.relay)
+    }
+}
+
+impl<C, S> Socks5EstablishedUdpAssociation<C, S> {
+    pub fn new(
+        target: Socks5UdpAssociationTarget,
+        association: Socks5UdpAssociation<C, S>,
+    ) -> Self {
+        Self {
+            target,
+            association,
+        }
+    }
+
+    pub fn from_relay_endpoint(
+        target: Socks5UdpAssociationTarget,
+        control: C,
+        socket: S,
+        address: IpAddress,
+        port: u16,
+    ) -> Self {
+        Self::new(
+            target,
+            Socks5UdpAssociation::from_relay_endpoint(control, socket, address, port),
+        )
+    }
+
+    pub fn target(&self) -> &Socks5UdpAssociationTarget {
+        &self.target
+    }
+
+    pub fn outbound_tag(&self) -> &str {
+        self.target.outbound_tag()
+    }
+
+    pub fn upstream_endpoint(&self) -> (&str, u16) {
+        (self.target.server(), self.target.port())
+    }
+
+    pub fn into_parts(self) -> (Socks5UdpAssociationTarget, Socks5UdpAssociation<C, S>) {
+        (self.target, self.association)
+    }
+}
+
+impl<C, S> Socks5EstablishedUdpAssociation<C, S>
+where
+    S: DatagramSocket,
+{
+    pub async fn send_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>> {
+        self.association.send_packet(target, port, payload).await
+    }
+
+    pub async fn recv_packet(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>> {
+        self.association.recv_packet(buf).await
+    }
+
+    pub async fn recv_payload(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>> {
+        self.association.recv_payload(buf).await
     }
 }
 
