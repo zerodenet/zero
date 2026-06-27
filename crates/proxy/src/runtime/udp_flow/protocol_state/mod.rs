@@ -8,7 +8,7 @@ use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
     ManagedDatagramFlow, ManagedProtocolUdpState, ManagedRelayStreamFlow, ManagedStreamFlowSender,
     ManagedStreamPacketFlow, ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume,
-    ManagedUdpFlowSnapshot, ManagedUdpHandlers,
+    ManagedUdpHandlers,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 
@@ -60,13 +60,6 @@ impl ProtocolUdpState {
         sender: Box<dyn ManagedStreamFlowSender>,
     ) -> ManagedUdpFlowRef {
         self.managed.register_stream_sender(sender)
-    }
-
-    pub(super) fn managed_flow_snapshot(
-        &self,
-        flow_ref: ManagedUdpFlowRef,
-    ) -> Option<ManagedUdpFlowSnapshot> {
-        self.managed.flow_snapshot(flow_ref)
     }
 
     pub(crate) fn managed_flow_resume(

@@ -125,19 +125,61 @@ impl ManagedProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         proxy: &Proxy,
         flow: &UdpFlowSnapshot,
-        snapshot: &ManagedUdpFlowSnapshot,
         payload: &[u8],
-    ) -> Option<Result<usize, FlowFailure>> {
+        is_upstream_resume: impl FnOnce(&ManagedUdpFlowResume) -> bool,
+    ) -> Result<Option<usize>, FlowFailure> {
+        let Some(flow_ref) = flow.outbound.managed_flow() else {
+            return Err(managed_forward_unavailable(
+                "udp_protocol_forward",
+                "direct, relay, and packet-path flows are handled outside managed UDP state",
+            ));
+        };
+
         if let Some(result) = self
-            .datagram
-            .forward_existing_flow(chain_tasks, proxy, flow, snapshot, payload)
+            .forward_registered_stream_sender(chain_tasks, proxy, flow_ref, flow, payload)
             .await
         {
-            return Some(result);
+            return result.map(Some);
         }
-        self.stream
-            .forward_existing_flow(chain_tasks, proxy, flow, snapshot, payload)
+
+        let Some(snapshot) = self.flow_snapshot(flow_ref) else {
+            return Err(managed_forward_unavailable(
+                "udp_protocol_forward",
+                "managed UDP flow snapshot was dropped",
+            ));
+        };
+
+        if is_upstream_resume(snapshot.resume()) {
+            return Err(managed_forward_unavailable(
+                "udp_protocol_forward",
+                "upstream association flows are handled by generic UDP dispatch",
+            ));
+        }
+
+        if let Some(result) = self
+            .datagram
+            .forward_existing_flow(chain_tasks, proxy, flow, &snapshot, payload)
             .await
+        {
+            return result.map(Some);
+        }
+        if let Some(result) = self
+            .stream
+            .forward_existing_flow(chain_tasks, proxy, flow, &snapshot, payload)
+            .await
+        {
+            return result.map(Some);
+        }
+
+        Ok(None)
+    }
+}
+
+fn managed_forward_unavailable(stage: &'static str, message: &'static str) -> FlowFailure {
+    FlowFailure {
+        stage,
+        error: EngineError::Io(std::io::Error::other(message)),
+        upstream: None,
     }
 }
 

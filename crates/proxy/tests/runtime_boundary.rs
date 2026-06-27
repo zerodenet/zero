@@ -5895,6 +5895,7 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
         "relay_chain",
         ".upstream()",
         "ManagedUdpFlowResume",
+        "snapshot.resume()",
         "Socks5(_)",
     ] {
         assert!(
@@ -5904,12 +5905,14 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     }
     assert!(
         normalized_forward.contains("self\n            .managed\n            .forward_existing_flow")
-            && forward.contains("self.upstream.handles_resume(snapshot.resume())")
+            && forward.contains("self.upstream.handles_resume(resume)")
             && upstream.contains("fn handles_resume")
             && upstream.contains("handler.supports_upstream_resume(resume)")
             && socks5_runtime.contains("fn supports_upstream_resume(&self, resume: &ManagedUdpFlowResume)")
             && socks5_runtime.contains("resume.as_ref::<socks5::Socks5UdpFlowResume>()")
             && managed.contains("fn forward_existing_flow")
+            && managed.contains("is_upstream_resume(snapshot.resume())")
+            && !forward.contains("managed_flow_snapshot")
             && managed_model.contains("trait ManagedDatagramFlowHandler")
             && managed_model.contains("trait ManagedStreamFlowHandler")
             && managed_model.contains("pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>")
