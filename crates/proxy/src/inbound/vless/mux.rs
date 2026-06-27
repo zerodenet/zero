@@ -254,6 +254,7 @@ impl Proxy {
         let mut last_activity = TokioInstant::now();
         let mut direct_buf = vec![0_u8; 64 * 1024];
         let mut upstream_buf = vec![0_u8; 64 * 1024];
+        let udp_session = vless::VlessInboundUdpSession::new();
 
         info!(
             inbound_tag = inbound_tag,
@@ -280,7 +281,7 @@ impl Proxy {
                         break;
                     }
                     last_activity = TokioInstant::now();
-                    let request = match vless::VlessInboundUdpCodec.decode_request(&payload) {
+                    let request = match udp_session.decode_request(&payload) {
                         Ok(request) => request,
                         Err(error) => {
                             warn!(%error, mux_session_id, "vless mux udp packet parse failed");
@@ -312,7 +313,7 @@ impl Proxy {
                             if let Some(sid) = dispatch.direct_response_session_id(sender) {
                                 self.record_session_outbound_rx(sid, n as u64);
                             }
-                            match vless::VlessInboundUdpCodec.send_mux_response(
+                            match udp_session.send_mux_response(
                                 &down_tx,
                                 mux_session_id,
                                 &target,
@@ -346,7 +347,7 @@ impl Proxy {
                                 if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                     self.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                 }
-                                match vless::VlessInboundUdpCodec.send_mux_response(
+                                match udp_session.send_mux_response(
                                     &down_tx,
                                     mux_session_id,
                                     &pkt.target,
@@ -376,7 +377,7 @@ impl Proxy {
                             if let Some(sid) = session_id {
                                 self.record_session_outbound_rx(sid, payload.len() as u64);
                             }
-                            match vless::VlessInboundUdpCodec.send_mux_response(
+                            match udp_session.send_mux_response(
                                 &down_tx,
                                 mux_session_id,
                                 &target,

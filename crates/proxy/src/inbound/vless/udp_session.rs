@@ -39,6 +39,7 @@ impl Proxy {
         let mut udp_buffer = vec![0_u8; 64 * 1024];
         let mut upstream_buffer = vec![0_u8; 64 * 1024];
         let proxy = self.clone();
+        let udp_session = vless::VlessInboundUdpSession::new();
 
         loop {
             // Split dispatch into disjoint borrows so select! can pin
@@ -100,7 +101,7 @@ impl Proxy {
                         self.record_session_outbound_rx(session_id, n as u64);
                     }
 
-                    match vless::VlessInboundUdpCodec.write_response_tokio(
+                    match udp_session.write_response_tokio(
                         &mut client,
                         &target,
                         port,
@@ -127,7 +128,7 @@ impl Proxy {
                         Ok(read) => {
                             last_activity = TokioInstant::now();
                             if let Some(pkt) = udp_response::decode_socks5_upstream_response(&upstream_buffer[..read]) {
-                                if vless::VlessInboundUdpCodec.write_response_tokio(
+                                if udp_session.write_response_tokio(
                                     &mut client,
                                     &pkt.target,
                                     pkt.port,
@@ -154,7 +155,7 @@ impl Proxy {
                             if let Some(sid) = session_id {
                                 proxy.record_session_outbound_rx(sid, payload.len() as u64);
                             }
-                            match vless::VlessInboundUdpCodec.write_response_tokio(
+                            match udp_session.write_response_tokio(
                                 &mut client,
                                 &target,
                                 port,
@@ -203,7 +204,8 @@ impl Proxy {
         packet: &[u8],
         auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError> {
-        let request = vless::VlessInboundUdpCodec.decode_request(packet)?;
+        let udp_session = vless::VlessInboundUdpSession::new();
+        let request = udp_session.decode_request(packet)?;
 
         UdpPipe::new(proxy, dispatch)
             .dispatch(UdpPipeInput {

@@ -668,6 +668,52 @@ impl VlessInboundUdpCodec {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct VlessInboundUdpSession {
+    codec: VlessInboundUdpCodec,
+}
+
+impl VlessInboundUdpSession {
+    pub fn new() -> Self {
+        Self {
+            codec: VlessInboundUdpCodec,
+        }
+    }
+
+    pub fn decode_request(&self, packet: &[u8]) -> Result<VlessInboundUdpRequest, Error> {
+        self.codec.decode_request(packet)
+    }
+
+    #[cfg(feature = "reality")]
+    pub async fn write_response_tokio<W>(
+        &self,
+        writer: &mut W,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        self.codec
+            .write_response_tokio(writer, target, port, payload)
+            .await
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn send_mux_response(
+        &self,
+        down_tx: &mpsc::UnboundedSender<(u16, Vec<u8>)>,
+        mux_session_id: u16,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.codec
+            .send_mux_response(down_tx, mux_session_id, target, port, payload)
+    }
+}
+
 pub fn decode_udp_flow_packet(packet: &[u8]) -> Result<VlessUdpPacket, Error> {
     parse_udp_packet(packet)
 }

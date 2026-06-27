@@ -64,6 +64,6 @@ pub use shared::{
     decode_udp_flow_packet, encode_inbound_mux_udp_response, encode_inbound_udp_response,
     encode_mux_udp_response, encode_udp_flow_packet, encode_udp_response, format_uuid,
     parse_udp_packet, parse_udp_packet_v2, parse_uuid, VlessInboundUdpCodec,
-    VlessInboundUdpRequest, VlessUdpFlowCodec, VlessUdpFlowIo, VlessUdpFlowPacket, VlessUdpPacket,
-    VLESS_VERSION,
+    VlessInboundUdpRequest, VlessInboundUdpSession, VlessUdpFlowCodec, VlessUdpFlowIo,
+    VlessUdpFlowPacket, VlessUdpPacket, VLESS_VERSION,
 };
