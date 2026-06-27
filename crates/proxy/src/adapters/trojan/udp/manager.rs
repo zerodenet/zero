@@ -15,11 +15,11 @@ mod send;
 mod stream;
 
 #[cfg(feature = "trojan")]
-use model::{TrojanEntry, TrojanKey};
+use model::TrojanEntry;
 
 #[cfg(feature = "trojan")]
 pub(crate) struct TrojanChainManager {
-    upstreams: HashMap<TrojanKey, TrojanEntry>,
+    upstreams: HashMap<trojan::TrojanUdpCacheKey, TrojanEntry>,
 }
 
 #[cfg(feature = "trojan")]

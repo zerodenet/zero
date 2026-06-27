@@ -7,24 +7,6 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinSet;
 use zero_core::{Address, Session, UdpFlowPacket};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct TrojanKey(trojan::TrojanUdpCacheKey);
-
-impl TrojanKey {
-    pub(super) fn from_resume(
-        resume: &trojan::TrojanUdpFlowResume,
-        server: &str,
-        port: u16,
-        session_id: u64,
-    ) -> Self {
-        Self(resume.cache_key(server, port, session_id))
-    }
-
-    pub(super) fn relay(session_id: u64) -> Self {
-        Self(trojan::TrojanUdpCacheKey::relay(session_id))
-    }
-}
-
 pub(super) struct TrojanEntry {
     pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
     pub(super) recv_tx: broadcast::Sender<UdpFlowPacket>,

@@ -7,24 +7,6 @@ use crate::transport::TcpRelayStream;
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct MieruKey(mieru::MieruUdpCacheKey);
-
-impl MieruKey {
-    pub(super) fn from_resume(
-        resume: &mieru::MieruUdpFlowResume,
-        server: &str,
-        port: u16,
-        session_id: u64,
-    ) -> Self {
-        Self(resume.cache_key(server, port, session_id))
-    }
-
-    pub(super) fn relay(session_id: u64) -> Self {
-        Self(mieru::MieruUdpCacheKey::relay(session_id))
-    }
-}
-
 pub(super) struct MieruEntry {
     pub(super) sender: MieruFlowSender,
     pub(super) recv_tx: bridge::ResponseSender,

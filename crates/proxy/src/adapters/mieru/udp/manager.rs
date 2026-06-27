@@ -15,11 +15,11 @@ mod send;
 mod stream;
 
 #[cfg(feature = "mieru")]
-use model::{MieruEntry, MieruKey};
+use model::MieruEntry;
 
 #[cfg(feature = "mieru")]
 pub(crate) struct MieruChainManager {
-    upstreams: HashMap<MieruKey, MieruEntry>,
+    upstreams: HashMap<mieru::MieruUdpCacheKey, MieruEntry>,
 }
 
 #[cfg(feature = "mieru")]

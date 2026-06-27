@@ -2660,7 +2660,7 @@ fn protocol_runtime_udp_root_does_not_reexport_internal_managed_flow_models() {
 
 #[test]
 fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
-    let stream = read("src/protocol_runtime/udp/mieru_manager/stream.rs");
+    let stream = read("src/adapters/mieru/udp/manager/stream.rs");
     let protocol = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -5268,12 +5268,12 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
     }
     assert!(
         !root.contains("h2_manager")
-            && root.contains("pub(crate) mod mieru_manager")
+            && !root.contains("mieru_manager")
             && !root.contains("ss_manager")
-            && root.contains("pub(crate) mod trojan_manager")
+            && !root.contains("trojan_manager")
             && root.contains("ManagedDatagramFlowHandler")
             && root.contains("ManagedStreamFlowHandler"),
-        "UDP root should keep migrated datagram managers out of protocol_runtime::udp while stream managers are still pending migration"
+        "UDP root should keep protocol UDP managers out of protocol_runtime::udp"
     );
 }
 
@@ -5286,12 +5286,12 @@ fn protocol_udp_manager_construction_is_adapter_registered() {
         "src/adapters/trojan/udp.rs",
         "src/adapters/hysteria2/udp/manager.rs",
         "src/adapters/hysteria2/udp/manager/",
-        "src/protocol_runtime/udp/mieru_manager.rs",
-        "src/protocol_runtime/udp/mieru_manager/",
+        "src/adapters/mieru/udp/manager.rs",
+        "src/adapters/mieru/udp/manager/",
         "src/adapters/shadowsocks/udp/manager.rs",
         "src/adapters/shadowsocks/udp/manager/",
-        "src/protocol_runtime/udp/trojan_manager.rs",
-        "src/protocol_runtime/udp/trojan_manager/",
+        "src/adapters/trojan/udp/manager.rs",
+        "src/adapters/trojan/udp/manager/",
     ];
 
     for path in rust_sources_under("src") {
@@ -5320,23 +5320,11 @@ fn protocol_udp_manager_construction_is_adapter_registered() {
 fn protocol_udp_manager_roots_do_not_reexport_request_models() {
     for (source, forbidden) in [
         ("src/adapters/hysteria2/udp/manager.rs", "H2SendExisting"),
-        (
-            "src/protocol_runtime/udp/mieru_manager.rs",
-            "MieruSendExisting",
-        ),
-        (
-            "src/protocol_runtime/udp/mieru_manager.rs",
-            "MieruRelayExisting",
-        ),
+        ("src/adapters/mieru/udp/manager.rs", "MieruSendExisting"),
+        ("src/adapters/mieru/udp/manager.rs", "MieruRelayExisting"),
         ("src/adapters/shadowsocks/udp/manager.rs", "SsSendExisting"),
-        (
-            "src/protocol_runtime/udp/trojan_manager.rs",
-            "TrojanSendExisting",
-        ),
-        (
-            "src/protocol_runtime/udp/trojan_manager.rs",
-            "TrojanRelayExisting",
-        ),
+        ("src/adapters/trojan/udp/manager.rs", "TrojanSendExisting"),
+        ("src/adapters/trojan/udp/manager.rs", "TrojanRelayExisting"),
     ] {
         let content = read(source);
         assert!(
@@ -5353,9 +5341,9 @@ fn protocol_udp_manager_roots_do_not_reexport_request_models() {
 fn protocol_udp_manager_request_models_are_manager_private() {
     for source in [
         "src/adapters/hysteria2/udp/manager/model.rs",
-        "src/protocol_runtime/udp/mieru_manager/model.rs",
+        "src/adapters/mieru/udp/manager/model.rs",
         "src/adapters/shadowsocks/udp/manager/model.rs",
-        "src/protocol_runtime/udp/trojan_manager/model.rs",
+        "src/adapters/trojan/udp/manager/model.rs",
     ] {
         let content = read(source);
         for forbidden in [
@@ -5375,9 +5363,9 @@ fn protocol_udp_manager_request_models_are_manager_private() {
 
     for source in [
         "src/adapters/hysteria2/udp/manager/send.rs",
-        "src/protocol_runtime/udp/mieru_manager/send.rs",
+        "src/adapters/mieru/udp/manager/send.rs",
         "src/adapters/shadowsocks/udp/manager.rs",
-        "src/protocol_runtime/udp/trojan_manager/send.rs",
+        "src/adapters/trojan/udp/manager/send.rs",
     ] {
         let content = read(source);
         for forbidden in [
@@ -5390,6 +5378,36 @@ fn protocol_udp_manager_request_models_are_manager_private() {
             );
         }
     }
+}
+
+#[test]
+fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
+    for (source, protocol_key, wrapper) in [
+        (
+            "src/adapters/mieru/udp/manager/model.rs",
+            "mieru::MieruUdpCacheKey",
+            "struct MieruKey",
+        ),
+        (
+            "src/adapters/trojan/udp/manager/model.rs",
+            "trojan::TrojanUdpCacheKey",
+            "struct TrojanKey",
+        ),
+    ] {
+        let content = read(source);
+        assert!(
+            !content.contains(wrapper) && !content.contains(protocol_key),
+            "{source} should not rebuild or wrap protocol cache identity `{protocol_key}`"
+        );
+    }
+
+    let mieru_manager = read("src/adapters/mieru/udp/manager.rs");
+    let trojan_manager = read("src/adapters/trojan/udp/manager.rs");
+    assert!(
+        mieru_manager.contains("HashMap<mieru::MieruUdpCacheKey, MieruEntry>")
+            && trojan_manager.contains("HashMap<trojan::TrojanUdpCacheKey, TrojanEntry>"),
+        "stream UDP managers should store protocol-owned opaque cache keys without adapter-local key wrappers"
+    );
 }
 
 #[test]
@@ -5753,8 +5771,8 @@ fn packet_path_traits_are_grouped_by_responsibility() {
     let peer = manifest_dir().join("src/protocol_runtime/udp/peer.rs");
     let ss_model = read("src/adapters/shadowsocks/udp/manager/model.rs");
     let h2_model = read("src/adapters/hysteria2/udp/manager/model.rs");
-    let trojan_model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
-    let mieru_model = read("src/protocol_runtime/udp/mieru_manager/model.rs");
+    let trojan_model = read("src/adapters/trojan/udp/manager/model.rs");
+    let mieru_model = read("src/adapters/mieru/udp/manager/model.rs");
 
     for required in [
         "trait PacketPathCarrier",
@@ -6150,8 +6168,8 @@ fn packet_path_snapshot_send_uses_request_model() {
 fn feature_gated_udp_manager_modules_do_not_embed_disabled_stubs() {
     for source in [
         "src/adapters/hysteria2/udp/manager.rs",
-        "src/protocol_runtime/udp/mieru_manager.rs",
-        "src/protocol_runtime/udp/trojan_manager.rs",
+        "src/adapters/mieru/udp/manager.rs",
+        "src/adapters/trojan/udp/manager.rs",
     ] {
         let content = read(source);
         assert!(
@@ -6163,9 +6181,9 @@ fn feature_gated_udp_manager_modules_do_not_embed_disabled_stubs() {
 
 #[test]
 fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
-    let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
-    let socket = manifest_dir().join("src/protocol_runtime/udp/trojan_manager/socket.rs");
+    let manager = read("src/adapters/trojan/udp/manager.rs");
+    let stream = read("src/adapters/trojan/udp/manager/stream.rs");
+    let socket = manifest_dir().join("src/adapters/trojan/udp/manager/socket.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
@@ -6195,8 +6213,8 @@ fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
 
 #[test]
 fn trojan_udp_response_bridge_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let bridge = manifest_dir().join("src/protocol_runtime/udp/trojan_manager/bridge.rs");
+    let manager = read("src/adapters/trojan/udp/manager.rs");
+    let bridge = manifest_dir().join("src/adapters/trojan/udp/manager/bridge.rs");
 
     for forbidden in [
         "broadcast::channel",
@@ -6217,9 +6235,9 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
 
 #[test]
 fn trojan_udp_tls_connect_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let connect = read("src/protocol_runtime/udp/trojan_manager/connect.rs");
-    let connect_path = manifest_dir().join("src/protocol_runtime/udp/trojan_manager/connect.rs");
+    let manager = read("src/adapters/trojan/udp/manager.rs");
+    let connect = read("src/adapters/trojan/udp/manager/connect.rs");
+    let connect_path = manifest_dir().join("src/adapters/trojan/udp/manager/connect.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
@@ -6277,11 +6295,11 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/managed/stream.rs");
     let start = read("src/protocol_runtime/udp/state/managed/stream.rs");
-    let manager_send = read("src/protocol_runtime/udp/trojan_manager/send.rs");
-    let manager_connect = read("src/protocol_runtime/udp/trojan_manager/connect.rs");
-    let manager_establish = read("src/protocol_runtime/udp/trojan_manager/establish.rs");
-    let manager_stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
-    let manager_model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
+    let manager_send = read("src/adapters/trojan/udp/manager/send.rs");
+    let manager_connect = read("src/adapters/trojan/udp/manager/connect.rs");
+    let manager_establish = read("src/adapters/trojan/udp/manager/establish.rs");
+    let manager_stream = read("src/adapters/trojan/udp/manager/stream.rs");
+    let manager_model = read("src/adapters/trojan/udp/manager/model.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
@@ -6371,7 +6389,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         );
     }
     assert!(
-        manager_model.contains("resume.cache_key(server, port, session_id)")
+        manager_send.contains(".cache_key(peer.endpoint.server, peer.endpoint.port, session_id)")
             && manager_send.contains("request.resume.flow_requires_relay_upstream()")
             && manager_connect.contains("peer.resume.tls_profile(")
             && manager_connect.contains("TrojanUdpTlsOptions")
@@ -6385,9 +6403,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
 
 #[test]
 fn trojan_udp_packet_stream_tasks_live_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
-    let model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
+    let manager = read("src/adapters/trojan/udp/manager.rs");
+    let stream = read("src/adapters/trojan/udp/manager/stream.rs");
+    let model = read("src/adapters/trojan/udp/manager/model.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
@@ -6457,15 +6475,15 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
 
 #[test]
 fn mieru_udp_packet_codec_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let stream = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/stream.rs");
+    let manager = read("src/adapters/mieru/udp/manager.rs");
+    let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
     let snapshot = read("src/protocol_runtime/udp/flow_snapshot.rs");
     let forward = read("src/protocol_runtime/udp/state/managed/stream.rs");
-    let manager_send = read("src/protocol_runtime/udp/mieru_manager/send.rs");
-    let manager_connect = read("src/protocol_runtime/udp/mieru_manager/connect.rs");
-    let manager_establish = read("src/protocol_runtime/udp/mieru_manager/establish.rs");
-    let manager_model = read("src/protocol_runtime/udp/mieru_manager/model.rs");
+    let manager_send = read("src/adapters/mieru/udp/manager/send.rs");
+    let manager_connect = read("src/adapters/mieru/udp/manager/connect.rs");
+    let manager_establish = read("src/adapters/mieru/udp/manager/establish.rs");
+    let manager_model = read("src/adapters/mieru/udp/manager/model.rs");
     let transport_manifest = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
         .expect("read zero-transport manifest");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
@@ -6489,7 +6507,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     }
     assert!(
         !manifest_dir()
-            .join("src/protocol_runtime/udp/mieru_manager/codec.rs")
+            .join("src/adapters/mieru/udp/manager/codec.rs")
             .exists(),
         "Mieru UDP manager should not keep a proxy-owned codec module"
     );
@@ -6616,7 +6634,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         );
     }
     assert!(
-        manager_model.contains("resume.cache_key(server, port, session_id)")
+        manager_send.contains(".cache_key(peer.endpoint.server, peer.endpoint.port, session_id)")
             && manager_send.contains("request.resume.flow_requires_relay_upstream()")
             && !manager_connect.contains("MieruUdpFlowIo::establish_with_resume")
             && manager_establish.contains("stream::spawn_packet_stream(stream, resume)")
@@ -6628,8 +6646,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
 
 #[test]
 fn mieru_udp_response_bridge_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let bridge = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/bridge.rs");
+    let manager = read("src/adapters/mieru/udp/manager.rs");
+    let bridge = manifest_dir().join("src/adapters/mieru/udp/manager/bridge.rs");
 
     for forbidden in [
         "type RecvItem",
@@ -6651,10 +6669,10 @@ fn mieru_udp_response_bridge_lives_outside_manager() {
 
 #[test]
 fn mieru_udp_connect_handshake_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let connect = read("src/protocol_runtime/udp/mieru_manager/connect.rs");
-    let establish = read("src/protocol_runtime/udp/mieru_manager/establish.rs");
-    let stream = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/stream.rs");
+    let manager = read("src/adapters/mieru/udp/manager.rs");
+    let connect = read("src/adapters/mieru/udp/manager/connect.rs");
+    let establish = read("src/adapters/mieru/udp/manager/establish.rs");
+    let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
         .expect("read mieru protocol outbound source");
 
@@ -6687,8 +6705,8 @@ fn mieru_udp_connect_handshake_lives_outside_manager() {
 
 #[test]
 fn mieru_udp_state_model_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let model = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/model.rs");
+    let manager = read("src/adapters/mieru/udp/manager.rs");
+    let model = manifest_dir().join("src/adapters/mieru/udp/manager/model.rs");
 
     for forbidden in [
         "enum MieruKey",
@@ -6709,8 +6727,8 @@ fn mieru_udp_state_model_lives_outside_manager() {
 
 #[test]
 fn mieru_udp_establish_logic_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let establish = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/establish.rs");
+    let manager = read("src/adapters/mieru/udp/manager.rs");
+    let establish = manifest_dir().join("src/adapters/mieru/udp/manager/establish.rs");
 
     for forbidden in [
         "fn establish_direct",
@@ -6732,8 +6750,8 @@ fn mieru_udp_establish_logic_lives_outside_manager() {
 
 #[test]
 fn mieru_udp_send_orchestration_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let send = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/send.rs");
+    let manager = read("src/adapters/mieru/udp/manager.rs");
+    let send = manifest_dir().join("src/adapters/mieru/udp/manager/send.rs");
 
     for forbidden in [
         "async fn send(",
@@ -6759,8 +6777,8 @@ fn mieru_udp_send_orchestration_lives_outside_manager() {
 
 #[test]
 fn trojan_udp_state_model_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let model = read("src/protocol_runtime/udp/trojan_manager/model.rs");
+    let manager = read("src/adapters/trojan/udp/manager.rs");
+    let model = read("src/adapters/trojan/udp/manager/model.rs");
 
     for forbidden in [
         "enum TrojanKey",
@@ -6785,9 +6803,9 @@ fn trojan_udp_state_model_lives_outside_manager() {
 
 #[test]
 fn trojan_udp_establish_logic_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let establish = read("src/protocol_runtime/udp/trojan_manager/establish.rs");
-    let stream = read("src/protocol_runtime/udp/trojan_manager/stream.rs");
+    let manager = read("src/adapters/trojan/udp/manager.rs");
+    let establish = read("src/adapters/trojan/udp/manager/establish.rs");
+    let stream = read("src/adapters/trojan/udp/manager/stream.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
@@ -6861,8 +6879,8 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
 
 #[test]
 fn trojan_udp_send_orchestration_lives_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/trojan_manager.rs");
-    let send = manifest_dir().join("src/protocol_runtime/udp/trojan_manager/send.rs");
+    let manager = read("src/adapters/trojan/udp/manager.rs");
+    let send = manifest_dir().join("src/adapters/trojan/udp/manager/send.rs");
 
     for forbidden in [
         "async fn send(",
@@ -6888,11 +6906,11 @@ fn trojan_udp_send_orchestration_lives_outside_manager() {
 
 #[test]
 fn mieru_udp_packet_stream_tasks_live_outside_manager() {
-    let manager = read("src/protocol_runtime/udp/mieru_manager.rs");
-    let manager_send = read("src/protocol_runtime/udp/mieru_manager/send.rs");
-    let manager_model = read("src/protocol_runtime/udp/mieru_manager/model.rs");
-    let stream = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/stream.rs");
-    let socket = manifest_dir().join("src/protocol_runtime/udp/mieru_manager/socket.rs");
+    let manager = read("src/adapters/mieru/udp/manager.rs");
+    let manager_send = read("src/adapters/mieru/udp/manager/send.rs");
+    let manager_model = read("src/adapters/mieru/udp/manager/model.rs");
+    let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
+    let socket = manifest_dir().join("src/adapters/mieru/udp/manager/socket.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
         .expect("read zero-transport manifest");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
@@ -6929,7 +6947,7 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
         stream.exists() && !socket.exists(),
         "Mieru UDP stream task should live in proxy stream glue without a separate socket module"
     );
-    let stream = read("src/protocol_runtime/udp/mieru_manager/stream.rs");
+    let stream = read("src/adapters/mieru/udp/manager/stream.rs");
     assert!(
         !repo_root()
             .join("crates/transport/src/mieru_transport.rs")

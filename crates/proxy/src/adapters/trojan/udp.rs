@@ -11,8 +11,10 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_dispatch::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 use crate::runtime::Proxy;
 
+mod manager;
+
 pub(crate) fn managed_stream_handler() -> Box<dyn ManagedStreamFlowHandler> {
-    Box::new(crate::protocol_runtime::udp::trojan_manager::TrojanChainManager::new())
+    Box::new(manager::TrojanChainManager::new())
 }
 
 impl TrojanAdapter {

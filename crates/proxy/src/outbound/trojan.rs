@@ -2,7 +2,7 @@
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
 //! so the runtime dispatches via the `ProtocolAdapter` trait. UDP stream-packet
-//! management lives in `crate::runtime::udp_dispatch::trojan_manager`.
+//! management lives in the Trojan adapter UDP module.
 
 use tokio::io::AsyncWriteExt;
 use zero_config::ClientTlsConfig;

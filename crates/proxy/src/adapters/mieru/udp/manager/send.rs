@@ -1,95 +1,93 @@
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use super::model::{
-    TrojanKey, TrojanRelayExisting, TrojanRelaySend, TrojanSendExisting, TrojanUdpPeer,
+use super::model::{MieruRelayExisting, MieruSendExisting, MieruUdpPeer};
+use super::{bridge, establish, MieruChainManager};
+use crate::protocol_runtime::udp::{
+    FlowFailure, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
+    ProtocolUdpFlowResume,
 };
-use super::{bridge, establish, TrojanChainManager};
-use crate::protocol_runtime::udp::state::managed::model::{
-    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
-};
-use crate::protocol_runtime::udp::{FlowFailure, ProtocolUdpFlowResume};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
-use zero_core::UdpFlowPacket;
+use crate::transport::TcpRelayStream;
 
-impl TrojanChainManager {
+impl MieruChainManager {
     fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
-        resume.as_ref::<trojan::TrojanUdpFlowResume>().is_some()
+        resume.as_ref::<mieru::MieruUdpFlowResume>().is_some()
     }
 
     fn supports_managed_relay_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
-        resume.as_ref::<trojan::TrojanUdpFlowResume>().is_some()
+        resume.as_ref::<mieru::MieruUdpFlowResume>().is_some()
     }
 
     async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
-        session: &Session,
-        peer: TrojanUdpPeer<'_>,
+        _session: &Session,
+        peer: MieruUdpPeer<'_>,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
-        let key = TrojanKey::from_resume(
-            peer.resume,
-            peer.endpoint.server,
-            peer.endpoint.port,
-            session_id,
-        );
+        let key = peer
+            .resume
+            .cache_key(peer.endpoint.server, peer.endpoint.port, session_id);
 
         if let Some(entry) = self.upstreams.get(&key) {
             bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
-            let _ = entry
-                .send_tx
-                .send(UdpFlowPacket::from_parts(
-                    packet_ref.target,
-                    packet_ref.port,
-                    packet_ref.payload,
-                ))
-                .await;
+            entry
+                .sender
+                .send(packet_ref.target, packet_ref.port, packet_ref.payload)
+                .await
+                .map_err(|error| FlowFailure {
+                    stage: "mieru_send",
+                    error: EngineError::Io(std::io::Error::other(format!(
+                        "mieru udp send: {error}"
+                    ))),
+                    upstream: Some(peer.endpoint.upstream()),
+                })?;
             return Ok(sent);
         }
 
         if peer.relay {
             return Err(FlowFailure {
-                stage: "trojan_relay_upstream",
+                stage: "mieru_relay_upstream",
                 error: EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::NotConnected,
-                    "trojan relay upstream is not established",
+                    "mieru relay upstream is not established",
                 )),
                 upstream: Some(peer.endpoint.upstream()),
             });
         }
 
-        let entry = establish::direct(proxy, session, &peer, packet_ref.target, packet_ref.port)
+        let entry = establish::direct(proxy, &peer)
             .await
             .map_err(|e| FlowFailure {
-                stage: "trojan_establish",
+                stage: "mieru_establish",
                 error: e,
                 upstream: Some(peer.endpoint.upstream()),
             })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
-        let send_tx = entry.send_tx.clone();
+        let sender = entry.sender.clone();
         self.upstreams.insert(key, entry);
 
-        let _ = send_tx
-            .send(UdpFlowPacket::from_parts(
-                packet_ref.target,
-                packet_ref.port,
-                packet_ref.payload,
-            ))
-            .await;
-
+        sender
+            .send(packet_ref.target, packet_ref.port, packet_ref.payload)
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "mieru_send",
+                error: EngineError::Io(std::io::Error::other(format!("mieru udp send: {error}"))),
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
         Ok(sent)
     }
 
     async fn send_existing(
         &mut self,
-        request: TrojanSendExisting<'_>,
+        request: MieruSendExisting<'_>,
     ) -> Result<usize, FlowFailure> {
         self.send(
             UdpFlowContext {
@@ -98,7 +96,7 @@ impl TrojanChainManager {
             },
             request.proxy,
             request.session,
-            TrojanUdpPeer {
+            MieruUdpPeer {
                 endpoint: OutboundEndpoint {
                     server: request.server,
                     port: request.port,
@@ -115,56 +113,50 @@ impl TrojanChainManager {
         .await
     }
 
-    async fn send_relay(&mut self, request: TrojanRelaySend<'_>) -> Result<usize, FlowFailure> {
-        let ctx = request.ctx;
-        let packet_ref = request.packet;
-        let peer = request.peer;
+    async fn send_relay(
+        &mut self,
+        ctx: UdpFlowContext<'_>,
+        stream: TcpRelayStream,
+        peer: MieruUdpPeer<'_>,
+        packet_ref: UdpPacketRef<'_>,
+    ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
-        let key = TrojanKey::relay(session_id);
-        let entry = establish::over_relay_stream(
-            request.stream,
-            request.tls_server_name,
-            request.proxy,
-            request.session,
-            &peer,
-            packet_ref.target,
-            packet_ref.port,
-        )
-        .await
-        .map_err(|e| FlowFailure {
-            stage: "trojan_relay_establish",
-            error: e,
-            upstream: Some(peer.endpoint.upstream()),
-        })?;
+        let key = mieru::MieruUdpCacheKey::relay(session_id);
+        let entry = establish::packet_stream(stream, peer.resume)
+            .await
+            .map_err(|e| FlowFailure {
+                stage: "mieru_relay_establish",
+                error: e,
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
-        let send_tx = entry.send_tx.clone();
+        let sender = entry.sender.clone();
         self.upstreams.insert(key, entry);
-        let _ = send_tx
-            .send(UdpFlowPacket::from_parts(
-                packet_ref.target,
-                packet_ref.port,
-                packet_ref.payload,
-            ))
-            .await;
 
-        Ok(packet_ref.payload.len())
+        let sent = packet_ref.payload.len();
+        sender
+            .send(packet_ref.target, packet_ref.port, packet_ref.payload)
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "mieru_relay_send",
+                error: EngineError::Io(std::io::Error::other(format!("mieru udp send: {error}"))),
+                upstream: Some(peer.endpoint.upstream()),
+            })?;
+        Ok(sent)
     }
 
     async fn send_relay_existing(
         &mut self,
-        request: TrojanRelayExisting<'_>,
+        request: MieruRelayExisting<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.send_relay(TrojanRelaySend {
-            ctx: UdpFlowContext {
+        self.send_relay(
+            UdpFlowContext {
                 chain_tasks: request.chain_tasks,
                 session_id: request.session_id,
             },
-            stream: request.stream,
-            tls_server_name: request.tls_server_name,
-            proxy: request.proxy,
-            session: request.session,
-            peer: TrojanUdpPeer {
+            request.stream,
+            MieruUdpPeer {
                 endpoint: OutboundEndpoint {
                     server: request.server,
                     port: request.port,
@@ -172,12 +164,12 @@ impl TrojanChainManager {
                 resume: &request.resume,
                 relay: true,
             },
-            packet: UdpPacketRef {
+            UdpPacketRef {
                 target: request.target,
                 port: request.target_port,
                 payload: request.payload,
             },
-        })
+        )
         .await
     }
 
@@ -185,23 +177,23 @@ impl TrojanChainManager {
         &mut self,
         request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let Some(resume) = request.resume.cloned::<trojan::TrojanUdpFlowResume>() else {
+        let Some(resume) = request.resume.cloned::<mieru::MieruUdpFlowResume>() else {
             return Err(managed_mismatch(
-                "udp_trojan_resume",
+                "udp_mieru_resume",
                 request.server,
                 request.port,
-                "expected Trojan UDP flow resume",
+                "expected Mieru UDP flow resume",
             ));
         };
         let Some(proxy) = request.proxy else {
             return Err(managed_mismatch(
-                "udp_trojan_proxy",
+                "udp_mieru_proxy",
                 request.server,
                 request.port,
-                "expected proxy context for Trojan UDP flow",
+                "expected proxy context for Mieru UDP flow",
             ));
         };
-        self.send_existing(TrojanSendExisting {
+        self.send_existing(MieruSendExisting {
             chain_tasks: request.chain_tasks,
             session_id: request.session_id,
             proxy,
@@ -220,29 +212,18 @@ impl TrojanChainManager {
         &mut self,
         request: ManagedRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
-        let Some(resume) = request.resume.cloned::<trojan::TrojanUdpFlowResume>() else {
+        let Some(resume) = request.resume.cloned::<mieru::MieruUdpFlowResume>() else {
             return Err(managed_mismatch(
-                "udp_trojan_resume",
+                "udp_mieru_resume",
                 request.server,
                 request.port,
-                "expected Trojan UDP flow resume",
+                "expected Mieru UDP flow resume",
             ));
         };
-        let Some(proxy) = request.proxy else {
-            return Err(managed_mismatch(
-                "udp_trojan_resume",
-                request.server,
-                request.port,
-                "expected Trojan UDP relay proxy context",
-            ));
-        };
-        self.send_relay_existing(TrojanRelayExisting {
+        self.send_relay_existing(MieruRelayExisting {
             chain_tasks: request.chain_tasks,
             session_id: request.session_id,
             stream: request.stream,
-            tls_server_name: request.tls_server_name,
-            proxy,
-            session: request.session,
             server: request.server,
             port: request.port,
             resume,
@@ -255,27 +236,27 @@ impl TrojanChainManager {
 }
 
 #[async_trait::async_trait]
-impl ManagedStreamFlowHandler for TrojanChainManager {
+impl ManagedStreamFlowHandler for MieruChainManager {
     fn supports_managed_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
-        TrojanChainManager::supports_managed_existing(self, resume)
+        MieruChainManager::supports_managed_existing(self, resume)
     }
 
     fn supports_managed_relay_existing(&self, resume: &ProtocolUdpFlowResume) -> bool {
-        TrojanChainManager::supports_managed_relay_existing(self, resume)
+        MieruChainManager::supports_managed_relay_existing(self, resume)
     }
 
     async fn send_managed_existing(
         &mut self,
         request: ManagedExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        TrojanChainManager::send_managed_existing(self, request).await
+        MieruChainManager::send_managed_existing(self, request).await
     }
 
     async fn send_managed_relay_existing(
         &mut self,
         request: ManagedRelaySend<'_>,
     ) -> Result<usize, FlowFailure> {
-        TrojanChainManager::send_managed_relay_existing(self, request).await
+        MieruChainManager::send_managed_relay_existing(self, request).await
     }
 }
 
