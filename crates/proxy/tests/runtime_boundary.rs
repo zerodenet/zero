@@ -6612,10 +6612,12 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !vless_flow.exists()
             && !vmess_flow.exists()
             && vless_adapter.contains("VlessUdpOutboundManager")
-            && vless_adapter.contains("register_managed_stream_flow_sender")
+            && vless_adapter.contains("register_managed_stream_packet_flow")
+            && !vless_adapter.contains("register_managed_stream_flow_sender")
             && !vless_adapter.contains("cached_handler_mut")
             && vmess_adapter.contains("VmessUdpOutboundManager")
-            && vmess_adapter.contains("register_managed_stream_flow_sender")
+            && vmess_adapter.contains("register_managed_stream_packet_flow")
+            && !vmess_adapter.contains("register_managed_stream_flow_sender")
             && !vmess_adapter.contains("cached_handler_mut")
             && !register.contains("ManagedStreamSenderHandlers")
             && !register.contains("vless_cached_handler")
@@ -9167,12 +9169,7 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
             !content.contains("ManagedUdpFlowSnapshot"),
             "{source} should ask UdpDispatch bridges to describe protocol UDP flow snapshots"
         );
-        if !matches!(
-            source.as_str(),
-            "src/adapters/direct/udp.rs"
-                | "src/adapters/vless/udp.rs"
-                | "src/adapters/vmess/udp.rs"
-        ) {
+        if !matches!(source.as_str(), "src/adapters/direct/udp.rs") {
             assert!(
                 !content.contains("FlowStartResult::Flow"),
                 "{source} should let UdpDispatch bridges build tracked protocol UDP flow results"
@@ -9225,10 +9222,10 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
     for source in ["src/adapters/vless/udp.rs", "src/adapters/vmess/udp.rs"] {
         let adapter = read(source);
         assert!(
-            adapter.contains("UdpFlowOutbound::StreamPacket")
-                && adapter.contains("let managed = dispatch.register_managed_stream_flow_sender")
-                && adapter.contains("managed,"),
-            "{source} should track stream UDP flows through neutral managed flow refs, not a runtime cached variant"
+            adapter.contains("register_managed_stream_packet_flow")
+                && !adapter.contains("UdpFlowOutbound::StreamPacket")
+                && !adapter.contains("register_managed_stream_flow_sender"),
+            "{source} should let UdpDispatch build stream-packet UDP flow results through neutral managed flow refs"
         );
     }
 
@@ -9251,6 +9248,7 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
     assert!(
         managed.contains("managed_udp_chain_tasks")
             && managed.contains("register_managed_stream_flow_sender")
+            && managed.contains("register_managed_stream_packet_flow")
             && !managed.contains("protocol_udp_state_and_chain_tasks"),
         "runtime UDP dispatch should expose only narrow managed stream-flow registration glue, not protocol flow bridges"
     );
@@ -9279,8 +9277,9 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
         assert!(
             adapter.contains(manager)
                 && adapter.contains("managed_udp_chain_tasks")
-                && adapter.contains("register_managed_stream_flow_sender"),
-            "{source} should own managed stream UDP manager starts and use only narrow UdpDispatch glue"
+                && adapter.contains("register_managed_stream_packet_flow")
+                && !adapter.contains("register_managed_stream_flow_sender"),
+            "{source} should own managed stream UDP manager starts while UdpDispatch builds tracked flow results"
         );
     }
 }

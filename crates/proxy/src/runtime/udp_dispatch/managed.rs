@@ -82,6 +82,25 @@ impl UdpDispatch {
         self.flow_state.register_managed_stream_flow_sender(sender)
     }
 
+    pub(crate) fn register_managed_stream_packet_flow(
+        &mut self,
+        tag: &str,
+        server: &str,
+        port: u16,
+        sender: Box<dyn ManagedStreamFlowSender>,
+    ) -> FlowStartResult {
+        let managed = self.register_managed_stream_flow_sender(sender);
+        FlowStartResult::Flow {
+            outbound: Box::new(UdpFlowOutbound::StreamPacket {
+                tag: tag.to_string(),
+                server: server.to_string(),
+                port,
+                managed,
+            }),
+            tx_bytes: 0,
+        }
+    }
+
     pub(crate) async fn start_managed_flow(
         &mut self,
         request: ManagedUdpFlowRequest<'_>,

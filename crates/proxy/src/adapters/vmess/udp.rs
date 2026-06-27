@@ -5,7 +5,6 @@ use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 use managed::{VmessUdpOutboundManager, VmessUdpRelayFlowStart, VmessUdpStartFlow};
 
@@ -51,7 +50,6 @@ impl VmessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let tag_owned = (*tag).to_string();
         let config =
             vmess_udp_flow_config(id, cipher, "udp_vmess_parse_config", Some((server, *port)))?;
         let transport = crate::transport::VmessTransportOptions {
@@ -82,17 +80,7 @@ impl VmessAdapter {
                 error,
                 upstream: Some((server.to_string(), *port)),
             })?;
-        let managed = dispatch.register_managed_stream_flow_sender(Box::new(manager));
-
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::StreamPacket {
-                tag: tag_owned,
-                server: (*server).to_string(),
-                port: *port,
-                managed,
-            }),
-            tx_bytes: 0,
-        })
+        Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
     }
 
     pub(super) async fn start_udp_relay_final_hop_impl(
@@ -118,7 +106,6 @@ impl VmessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let tag_owned = (*tag).to_string();
         let config = vmess_udp_flow_config(
             id,
             cipher,
@@ -150,16 +137,6 @@ impl VmessAdapter {
                 error,
                 upstream: None,
             })?;
-        let managed = dispatch.register_managed_stream_flow_sender(Box::new(manager));
-
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::StreamPacket {
-                tag: tag_owned,
-                server: (*server).to_string(),
-                port: *port,
-                managed,
-            }),
-            tx_bytes: 0,
-        })
+        Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
     }
 }

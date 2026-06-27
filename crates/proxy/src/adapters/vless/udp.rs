@@ -5,7 +5,6 @@ use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
 use managed::{
     VlessUdpOutboundManager, VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow,
@@ -57,7 +56,6 @@ impl VlessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let tag_owned = (*tag).to_string();
         let config =
             vless_udp_flow_config(id, *flow, "udp_vless_parse_config", Some((server, *port)))?;
 
@@ -93,17 +91,7 @@ impl VlessAdapter {
                 error,
                 upstream: Some((server.to_string(), *port)),
             })?;
-        let managed = dispatch.register_managed_stream_flow_sender(Box::new(manager));
-
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::StreamPacket {
-                tag: tag_owned,
-                server: (*server).to_string(),
-                port: *port,
-                managed,
-            }),
-            tx_bytes: 0,
-        })
+        Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
     }
 
     pub(super) fn udp_relay_needs_two_streams_impl(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
@@ -180,17 +168,7 @@ impl VlessAdapter {
                 error,
                 upstream: None,
             })?;
-        let managed = dispatch.register_managed_stream_flow_sender(Box::new(manager));
-
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::StreamPacket {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                managed,
-            }),
-            tx_bytes: 0,
-        })
+        Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
     }
 
     pub(super) async fn start_udp_relay_final_hop_impl(
@@ -231,7 +209,6 @@ impl VlessAdapter {
             });
         }
 
-        let tag_owned = (*tag).to_string();
         let config =
             vless_udp_flow_config(id, None, "udp_vless_relay_final_hop_parse_config", None)?;
         let transport = crate::transport::VlessUdpTransportOptions {
@@ -264,16 +241,6 @@ impl VlessAdapter {
                 error,
                 upstream: None,
             })?;
-        let managed = dispatch.register_managed_stream_flow_sender(Box::new(manager));
-
-        Ok(FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::StreamPacket {
-                tag: tag_owned,
-                server: (*server).to_string(),
-                port: *port,
-                managed,
-            }),
-            tx_bytes: 0,
-        })
+        Ok(dispatch.register_managed_stream_packet_flow(tag, server, *port, Box::new(manager)))
     }
 }
