@@ -628,6 +628,14 @@ impl<'a> ShadowsocksUdpFlowConfig<'a> {
     pub fn packet_path(&self) -> Result<ShadowsocksUdpPacketPath, Error> {
         Ok(self.flow_resume()?.packet_path())
     }
+
+    pub fn packet_path_cache_key(&self) -> Result<alloc::string::String, Error> {
+        Ok(self.flow_resume()?.packet_path_cache_key())
+    }
+
+    pub fn packet_path_codec(&self) -> Result<impl DatagramCodec<Address, Error = Error>, Error> {
+        Ok(self.flow_resume()?.packet_path_codec())
+    }
 }
 
 #[cfg(feature = "crypto")]

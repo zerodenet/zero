@@ -1280,9 +1280,11 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
     }
     assert!(
         packet_path.contains("ShadowsocksUdpFlowConfig::new")
-            && packet_path.contains(".packet_path()")
-            && packet_path.contains("packet_path.cache_key()")
-            && packet_path.contains("packet_path.codec()")
+            && !packet_path.contains(".packet_path()")
+            && !packet_path.contains("packet_path.cache_key()")
+            && !packet_path.contains("packet_path.codec()")
+            && packet_path.contains(".packet_path_cache_key()")
+            && packet_path.contains(".packet_path_codec()")
             && flow.contains("ShadowsocksUdpFlowConfig::new")
             && flow.contains(".flow_resume()")
             && flow.contains("ManagedUdpSend {")
@@ -8482,11 +8484,15 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
             && adapter_flow.contains(".flow_resume()")
             && adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter_packet_path.contains(".packet_path()")
+            && !adapter_packet_path.contains(".packet_path()")
+            && adapter_packet_path.contains(".packet_path_cache_key()")
+            && adapter_packet_path.contains(".packet_path_codec()")
             && protocol_outbound.contains("pub fn udp_flow_codec(")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self)")
             && protocol_outbound.contains("pub fn packet_path(&self)")
+            && protocol_outbound.contains("pub fn packet_path_cache_key(&self)")
+            && protocol_outbound.contains("pub fn packet_path_codec(&self)")
             && protocol_outbound.contains("pub fn from_config(")
             && protocol_outbound
                 .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec")
@@ -8827,7 +8833,11 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter.contains("resume.codec()")
             && !adapter.contains("resume.packet_path_codec()")
             && !adapter.contains("config.packet_path()")
-            && adapter_packet_path.contains(".packet_path()"),
+            && !adapter_packet_path.contains(".packet_path()")
+            && !adapter_packet_path.contains("packet_path.cache_key()")
+            && !adapter_packet_path.contains("packet_path.codec()")
+            && adapter_packet_path.contains(".packet_path_cache_key()")
+            && adapter_packet_path.contains(".packet_path_codec()"),
         "Shadowsocks adapter should request protocol-built packet-path bundles through explicit protocol packet-path helpers"
     );
     assert!(
@@ -8862,7 +8872,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter.contains("resume.cache_key()")
             && !adapter.contains("resume.packet_path_cache_key()")
             && !adapter.contains("packet_path.cache_key()")
-            && adapter_packet_path.contains("packet_path.cache_key()"),
+            && !adapter_packet_path.contains("packet_path.cache_key()")
+            && adapter_packet_path.contains(".packet_path_cache_key()"),
         "Shadowsocks adapter should receive opaque packet-path cache keys from protocols/shadowsocks resume config"
     );
     assert!(

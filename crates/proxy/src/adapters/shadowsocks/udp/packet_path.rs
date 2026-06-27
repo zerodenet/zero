@@ -24,12 +24,9 @@ pub(super) fn carrier_descriptor(
     else {
         return None;
     };
-    let packet_path = packet_path_config(tag, server, *port, cipher, password).ok()?;
-    Some(packet_path_carrier_descriptor(
-        packet_path.cache_key(),
-        server,
-        *port,
-    ))
+    let config = packet_path_config(tag, server, *port, cipher, password);
+    let cache_key = config.packet_path_cache_key().ok()?;
+    Some(packet_path_carrier_descriptor(cache_key, server, *port))
 }
 
 pub(super) async fn build(
@@ -47,9 +44,12 @@ pub(super) async fn build(
     else {
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
-    let packet_path = packet_path_config("", server, *port, cipher, password)
-        .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
-    let codec = Arc::new(packet_path.codec());
+    let config = packet_path_config("", server, *port, cipher, password);
+    let codec = Arc::new(
+        config
+            .packet_path_codec()
+            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?,
+    );
     crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
         proxy, server, *port, codec,
     )
@@ -69,15 +69,10 @@ pub(super) fn datagram_source<'a>(
     else {
         return None;
     };
-    let packet_path = packet_path_config(tag, server, *port, cipher, password).ok()?;
-    let codec = Arc::new(packet_path.codec());
-    Some(udp_datagram_source(
-        tag,
-        server,
-        *port,
-        packet_path.cache_key(),
-        codec,
-    ))
+    let config = packet_path_config(tag, server, *port, cipher, password);
+    let cache_key = config.packet_path_cache_key().ok()?;
+    let codec = Arc::new(config.packet_path_codec().ok()?);
+    Some(udp_datagram_source(tag, server, *port, cache_key, codec))
 }
 
 fn packet_path_config<'a>(
@@ -86,6 +81,6 @@ fn packet_path_config<'a>(
     port: u16,
     cipher: &'a str,
     password: &'a str,
-) -> Result<shadowsocks::ShadowsocksUdpPacketPath, zero_core::Error> {
-    shadowsocks::ShadowsocksUdpFlowConfig::new(tag, server, port, cipher, password).packet_path()
+) -> shadowsocks::ShadowsocksUdpFlowConfig<'a> {
+    shadowsocks::ShadowsocksUdpFlowConfig::new(tag, server, port, cipher, password)
 }
