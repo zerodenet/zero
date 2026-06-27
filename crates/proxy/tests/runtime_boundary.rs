@@ -5808,11 +5808,13 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
     let trojan_manager = read("src/adapters/trojan/udp/manager.rs");
     let trojan_manager_send = read("src/adapters/trojan/udp/manager/send.rs");
     assert!(
-        mieru_manager.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>")
-            && trojan_manager.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>")
+        mieru_manager.contains("mieru::MieruUdpFlowSessions")
+            && trojan_manager.contains("trojan::TrojanUdpFlowSessions")
+            && !mieru_manager.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>")
+            && !trojan_manager.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>")
             && !mieru_manager.contains("HashMap<mieru::MieruUdpCacheKey")
             && !trojan_manager.contains("HashMap<trojan::TrojanUdpCacheKey"),
-        "stream UDP managers should store protocol-owned flow stores without adapter-visible cache keys"
+        "stream UDP managers should store protocol-owned session caches without adapter-visible store/session generics or cache keys"
     );
     assert!(
         !mieru_manager_send.contains("MieruUdpCacheKey::relay")
@@ -8092,8 +8094,11 @@ fn h2_udp_model_details_live_outside_manager_root() {
             && establish.contains("endpoint: OutboundEndpoint")
             && !stream.exists()
             && read("src/adapters/hysteria2/udp/manager.rs")
-                .contains("hysteria2::Hysteria2UdpFlowStore<hysteria2::Hysteria2UdpFlowSession>"),
-        "h2_manager should store protocol-owned flow stores without adapter-local H2Key/H2UdpPeer wrappers or a dedicated stream wrapper"
+                .contains("hysteria2::Hysteria2UdpFlowSessions")
+            && !read("src/adapters/hysteria2/udp/manager.rs").contains(
+                "hysteria2::Hysteria2UdpFlowStore<hysteria2::Hysteria2UdpFlowSession>"
+            ),
+        "h2_manager should store a protocol-owned session cache without adapter-local H2Key/H2UdpPeer wrappers, store/session generics, or a dedicated stream wrapper"
     );
 }
 

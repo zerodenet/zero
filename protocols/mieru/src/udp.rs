@@ -274,6 +274,43 @@ impl<T> MieruUdpFlowStore<T> {
     }
 }
 
+#[cfg(feature = "crypto")]
+#[derive(Default)]
+pub struct MieruUdpFlowSessions {
+    entries: MieruUdpFlowStore<crate::MieruUdpFlowSession>,
+}
+
+#[cfg(feature = "crypto")]
+impl MieruUdpFlowSessions {
+    pub fn new() -> Self {
+        Self {
+            entries: MieruUdpFlowStore::new(),
+        }
+    }
+
+    pub fn get(
+        &self,
+        resume: &MieruUdpFlowResume,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> Option<&crate::MieruUdpFlowSession> {
+        self.entries.get(resume, server, port, session_id)
+    }
+
+    pub fn insert(
+        &mut self,
+        resume: &MieruUdpFlowResume,
+        server: &str,
+        port: u16,
+        session_id: u64,
+        session: crate::MieruUdpFlowSession,
+    ) -> Option<crate::MieruUdpFlowSession> {
+        self.entries
+            .insert(resume, server, port, session_id, session)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct MieruUdpPeerConfig<'a> {
     username: &'a str,

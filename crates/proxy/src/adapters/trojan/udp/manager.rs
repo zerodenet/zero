@@ -8,14 +8,14 @@ mod send;
 
 #[cfg(feature = "trojan")]
 pub(crate) struct TrojanChainManager {
-    upstreams: trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>,
+    upstreams: trojan::TrojanUdpFlowSessions,
 }
 
 #[cfg(feature = "trojan")]
 impl TrojanChainManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: trojan::TrojanUdpFlowStore::new(),
+            upstreams: trojan::TrojanUdpFlowSessions::new(),
         }
     }
 }

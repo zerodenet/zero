@@ -32,5 +32,5 @@ pub use udp::{
 pub use udp::{
     spawn_udp_flow, start_udp_flow_with_initial_packet, Hysteria2InitialUdpFlowPacket,
     Hysteria2UdpFlowHandle, Hysteria2UdpFlowResponse, Hysteria2UdpFlowResponseReceiver,
-    Hysteria2UdpFlowSession,
+    Hysteria2UdpFlowSession, Hysteria2UdpFlowSessions,
 };

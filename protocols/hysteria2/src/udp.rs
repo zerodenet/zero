@@ -617,6 +617,40 @@ impl<T> Hysteria2UdpFlowStore<T> {
     }
 }
 
+#[cfg(feature = "tokio")]
+#[derive(Default)]
+pub struct Hysteria2UdpFlowSessions {
+    entries: Hysteria2UdpFlowStore<Hysteria2UdpFlowSession>,
+}
+
+#[cfg(feature = "tokio")]
+impl Hysteria2UdpFlowSessions {
+    pub fn new() -> Self {
+        Self {
+            entries: Hysteria2UdpFlowStore::new(),
+        }
+    }
+
+    pub fn get(
+        &self,
+        resume: &Hysteria2UdpFlowResume,
+        server: &str,
+        port: u16,
+    ) -> Option<&Hysteria2UdpFlowSession> {
+        self.entries.get(resume, server, port)
+    }
+
+    pub fn insert(
+        &mut self,
+        resume: &Hysteria2UdpFlowResume,
+        server: &str,
+        port: u16,
+        session: Hysteria2UdpFlowSession,
+    ) -> Option<Hysteria2UdpFlowSession> {
+        self.entries.insert(resume, server, port, session)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hysteria2UdpConnectorProfile {
     password: String,

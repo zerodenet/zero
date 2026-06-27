@@ -566,6 +566,43 @@ impl<T> TrojanUdpFlowStore<T> {
     }
 }
 
+#[cfg(feature = "tokio")]
+#[derive(Default)]
+pub struct TrojanUdpFlowSessions {
+    entries: TrojanUdpFlowStore<TrojanUdpFlowSession>,
+}
+
+#[cfg(feature = "tokio")]
+impl TrojanUdpFlowSessions {
+    pub fn new() -> Self {
+        Self {
+            entries: TrojanUdpFlowStore::new(),
+        }
+    }
+
+    pub fn get(
+        &self,
+        resume: &TrojanUdpFlowResume,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> Option<&TrojanUdpFlowSession> {
+        self.entries.get(resume, server, port, session_id)
+    }
+
+    pub fn insert(
+        &mut self,
+        resume: &TrojanUdpFlowResume,
+        server: &str,
+        port: u16,
+        session_id: u64,
+        session: TrojanUdpFlowSession,
+    ) -> Option<TrojanUdpFlowSession> {
+        self.entries
+            .insert(resume, server, port, session_id, session)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrojanUdpTlsProfile {
     server_name: Option<String>,

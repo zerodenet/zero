@@ -9,14 +9,14 @@ mod send;
 
 #[cfg(feature = "mieru")]
 pub(crate) struct MieruChainManager {
-    upstreams: mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>,
+    upstreams: mieru::MieruUdpFlowSessions,
 }
 
 #[cfg(feature = "mieru")]
 impl MieruChainManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: mieru::MieruUdpFlowStore::new(),
+            upstreams: mieru::MieruUdpFlowSessions::new(),
         }
     }
 }
