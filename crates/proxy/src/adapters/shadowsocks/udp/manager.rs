@@ -14,13 +14,13 @@ pub(super) mod model;
 use model::{SsSendExisting, SsUpstream};
 
 pub(crate) struct SsChainManager {
-    upstreams: shadowsocks::ShadowsocksUdpFlowStore<Arc<SsUpstream>>,
+    upstreams: shadowsocks::ShadowsocksUdpFlowEntries<Arc<SsUpstream>>,
 }
 
 impl SsChainManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: shadowsocks::ShadowsocksUdpFlowStore::new(),
+            upstreams: shadowsocks::ShadowsocksUdpFlowEntries::new(),
         }
     }
 

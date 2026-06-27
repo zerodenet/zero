@@ -455,6 +455,35 @@ impl<T> ShadowsocksUdpFlowStore<T> {
 }
 
 #[cfg(feature = "crypto")]
+pub struct ShadowsocksUdpFlowEntries<T> {
+    entries: ShadowsocksUdpFlowStore<T>,
+}
+
+#[cfg(feature = "crypto")]
+impl<T> Default for ShadowsocksUdpFlowEntries<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "crypto")]
+impl<T> ShadowsocksUdpFlowEntries<T> {
+    pub fn new() -> Self {
+        Self {
+            entries: ShadowsocksUdpFlowStore::new(),
+        }
+    }
+
+    pub fn get(&self, resume: &ShadowsocksUdpFlowResume) -> Option<&T> {
+        self.entries.get(resume)
+    }
+
+    pub fn insert(&mut self, resume: &ShadowsocksUdpFlowResume, value: T) -> Option<T> {
+        self.entries.insert(resume, value)
+    }
+}
+
+#[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShadowsocksUdpFlowResume {
     cache_key: alloc::string::String,

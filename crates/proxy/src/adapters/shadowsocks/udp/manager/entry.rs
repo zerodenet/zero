@@ -7,7 +7,7 @@ use zero_engine::EngineError;
 use zero_transport::shadowsocks_transport;
 
 pub(super) async fn ensure(
-    upstreams: &mut shadowsocks::ShadowsocksUdpFlowStore<Arc<SsUpstream>>,
+    upstreams: &mut shadowsocks::ShadowsocksUdpFlowEntries<Arc<SsUpstream>>,
     resume: &shadowsocks::ShadowsocksUdpFlowResume,
     target_addr: SocketAddr,
 ) -> Result<Arc<SsUpstream>, EngineError> {
