@@ -3,6 +3,7 @@ use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 use zero_traits::AsyncSocket;
 
+use crate::inbound::udp_response;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
@@ -125,7 +126,7 @@ impl Proxy {
                     match upstream {
                         Ok(read) => {
                             last_activity = TokioInstant::now();
-                            if let Ok(pkt) = socks5::decode_udp_associate_response(&upstream_buffer[..read]) {
+                            if let Some(pkt) = udp_response::decode_socks5_upstream_response(&upstream_buffer[..read]) {
                                 if vless::VlessInboundUdpCodec.write_response_tokio(
                                     &mut client,
                                     &pkt.target,

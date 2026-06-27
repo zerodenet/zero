@@ -3104,8 +3104,9 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     );
     assert!(
         !mux.contains("socks5::parse_udp_packet")
-            && mux.contains("socks5::decode_udp_associate_response"),
-        "VMess inbound SOCKS5 upstream response bridge should use semantic SOCKS5 associate helpers"
+            && !mux.contains("socks5::decode_udp_associate_response")
+            && mux.contains("udp_response::decode_socks5_upstream_response"),
+        "VMess inbound SOCKS5 upstream response bridge should use neutral proxy bridge helpers"
     );
     for forbidden in [
         "vmess::encode_udp_response",
@@ -3203,8 +3204,9 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
     ] {
         assert!(
             !source.contains("socks5::parse_udp_packet")
-                && source.contains("socks5::decode_udp_associate_response"),
-            "{source_name} should use semantic SOCKS5 associate helpers for upstream response bridging"
+                && !source.contains("socks5::decode_udp_associate_response")
+                && source.contains("udp_response::decode_socks5_upstream_response"),
+            "{source_name} should use neutral proxy bridge helpers for upstream response bridging"
         );
     }
 
@@ -3248,6 +3250,19 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
 }
 
 #[test]
+fn inbound_udp_socks5_response_decode_is_confined_to_bridge() {
+    assert_src_pattern_confined(
+        "socks5::decode_udp_associate_response",
+        &[
+            "src/inbound/socks5/udp_associate/upstream_response.rs",
+            "src/inbound/udp_response.rs",
+        ],
+        &[],
+        "SOCKS5 upstream response decoding should stay in SOCKS5 associate handling or the neutral inbound UDP response bridge",
+    );
+}
+
+#[test]
 fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     let inbound = read("src/inbound/trojan.rs");
     let protocol_outbound = manifest_dir()
@@ -3281,8 +3296,9 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         );
     }
     assert!(
-        inbound.contains("socks5::decode_udp_associate_response"),
-        "Trojan inbound SOCKS5 upstream response bridge should use semantic SOCKS5 associate helpers"
+        !inbound.contains("socks5::decode_udp_associate_response")
+            && inbound.contains("udp_response::decode_socks5_upstream_response"),
+        "Trojan inbound SOCKS5 upstream response bridge should use neutral proxy bridge helpers"
     );
 
     assert!(
