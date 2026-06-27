@@ -74,6 +74,19 @@ impl<'a> VmessUdpFlowConfig<'a> {
         establish_udp_flow_with_initial_packet(stream, session, self.identity, initial_payload)
             .await
     }
+
+    pub fn start_flow_with_initial_packet<S>(
+        &self,
+        stream: S,
+        target: &Address,
+        port: u16,
+        initial_payload: &[u8],
+    ) -> Result<VmessEstablishedUdpFlowHandle, Error>
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
+    {
+        start_udp_flow_with_initial_packet(stream, target, port, initial_payload)
+    }
 }
 
 pub fn parse_udp_identity(id: &str, cipher: &str) -> Result<VmessUdpIdentity, Error> {

@@ -47,7 +47,7 @@ pub(super) async fn direct(
                 max_concurrency,
             })
             .await?;
-        let established = vmess::start_udp_flow_with_initial_packet(
+        let established = request.config.start_flow_with_initial_packet(
             mux_stream,
             &request.session.target,
             request.session.port,
