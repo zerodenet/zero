@@ -1,8 +1,7 @@
 use crate::protocol_runtime::udp::state::managed::model::ManagedCachedFlowSender;
-use crate::protocol_runtime::udp::CachedUdpFlowHandler;
 
 pub(crate) struct CachedUdpHandlers {
-    pub(crate) cached: Vec<Box<dyn CachedUdpFlowHandler>>,
+    pub(crate) cached: Vec<Box<dyn ManagedCachedFlowSender>>,
 }
 
 pub(in crate::protocol_runtime::udp::state) struct CachedProtocolUdpState {
@@ -23,12 +22,10 @@ impl CachedProtocolUdpState {
             .map(|handler| handler.as_mut() as &mut dyn ManagedCachedFlowSender)
     }
 
-    pub(in crate::protocol_runtime::udp::state) fn handlers(
+    pub(in crate::protocol_runtime::udp::state) fn push_sender(
         &mut self,
-    ) -> impl Iterator<Item = &mut (dyn CachedUdpFlowHandler + '_)> + '_ {
-        self.handlers
-            .cached
-            .iter_mut()
-            .map(move |handler| handler.as_mut() as &mut (dyn CachedUdpFlowHandler + '_))
+        sender: Box<dyn ManagedCachedFlowSender>,
+    ) {
+        self.handlers.cached.push(sender);
     }
 }

@@ -2,10 +2,11 @@ use tokio::task::JoinSet;
 
 use super::super::state::ProtocolUdpState;
 use super::super::FlowFailure;
-use crate::protocol_runtime::udp::CachedUdpFlowStart;
 use crate::protocol_runtime::vless_udp::model::{
-    VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream,
+    VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream,
+    VlessUdpStartFlow,
 };
+use crate::protocol_runtime::vless_udp::VlessUdpOutboundManager;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 
 impl ProtocolUdpState {
@@ -25,10 +26,11 @@ impl ProtocolUdpState {
             quic: flow.quic,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.start_cached_flow(
-            chain_tasks,
-            CachedUdpFlowStart::Vless(
-                crate::protocol_runtime::vless_udp::model::VlessUdpStartFlow {
+        let mut manager = VlessUdpOutboundManager::new();
+        manager
+            .start_flow(
+                chain_tasks,
+                VlessUdpStartFlow {
                     proxy: flow.proxy,
                     session: flow.session,
                     server: flow.server,
@@ -38,14 +40,14 @@ impl ProtocolUdpState {
                     transport,
                     payload: flow.payload,
                 },
-            ),
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vless_upstream",
-            error,
-            upstream: Some((flow.server.to_string(), flow.port)),
-        })?;
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_upstream",
+                error,
+                upstream: Some((flow.server.to_string(), flow.port)),
+            })?;
+        self.register_cached_flow_sender(Box::new(manager));
         Ok(())
     }
 
@@ -54,10 +56,11 @@ impl ProtocolUdpState {
         chain_tasks: &mut JoinSet<ChainTask>,
         flow: VlessUdpRelayTwoStream<'_>,
     ) -> Result<(), FlowFailure> {
-        self.start_cached_flow(
-            chain_tasks,
-            CachedUdpFlowStart::VlessRelayTwoStream(
-                crate::protocol_runtime::vless_udp::model::VlessUdpRelayTwoStream {
+        let mut manager = VlessUdpOutboundManager::new();
+        manager
+            .start_relay_two_stream(
+                chain_tasks,
+                VlessUdpRelayTwoStream {
                     proxy: flow.proxy,
                     session: flow.session,
                     post_carrier: flow.post_carrier,
@@ -66,14 +69,14 @@ impl ProtocolUdpState {
                     split_http: flow.split_http,
                     payload: flow.payload,
                 },
-            ),
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vless_relay_chain",
-            error,
-            upstream: None,
-        })?;
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        self.register_cached_flow_sender(Box::new(manager));
         Ok(())
     }
 
@@ -93,10 +96,11 @@ impl ProtocolUdpState {
             quic: None,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.start_cached_flow(
-            chain_tasks,
-            CachedUdpFlowStart::VlessRelayFinalHop(
-                crate::protocol_runtime::vless_udp::model::VlessUdpRelayFinalHopStart {
+        let mut manager = VlessUdpOutboundManager::new();
+        manager
+            .start_relay_final_hop(
+                chain_tasks,
+                VlessUdpRelayFinalHopStart {
                     proxy: flow.proxy,
                     session: flow.session,
                     carrier: flow.carrier,
@@ -104,14 +108,14 @@ impl ProtocolUdpState {
                     transport,
                     payload: flow.payload,
                 },
-            ),
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vless_relay_chain",
-            error,
-            upstream: None,
-        })?;
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        self.register_cached_flow_sender(Box::new(manager));
         Ok(())
     }
 }

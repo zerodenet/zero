@@ -60,12 +60,6 @@ impl ProtocolUdpState {
         }
     }
 
-    pub(in crate::protocol_runtime::udp) fn cached_handlers(
-        &mut self,
-    ) -> impl Iterator<Item = &mut dyn super::CachedUdpFlowHandler> {
-        self.cached.handlers()
-    }
-
     pub(crate) fn register_managed_flow(
         &mut self,
         resume: ProtocolUdpFlowResume,

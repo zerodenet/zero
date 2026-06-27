@@ -23,7 +23,6 @@ pub(crate) mod vmess_flow;
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
 pub(crate) use flow_snapshot::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};
 pub(crate) use flows::{ManagedUdpFlowKind, ManagedUdpFlowRequest};
-pub(crate) use start::{CachedUdpFlowHandler, CachedUdpFlowStart};
 pub(crate) use state::{CachedUdpHandlers, ProtocolUdpHandlers, ProtocolUdpState};
 pub(crate) use state::{
     ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedStreamFlowHandler,
@@ -48,13 +47,4 @@ pub(crate) fn mieru_stream_handler() -> Box<dyn ManagedStreamFlowHandler> {
 #[cfg(feature = "trojan")]
 pub(crate) fn trojan_stream_handler() -> Box<dyn ManagedStreamFlowHandler> {
     Box::new(trojan_manager::TrojanChainManager::new())
-}
-
-pub(crate) fn vless_cached_handler() -> Box<dyn CachedUdpFlowHandler> {
-    Box::new(crate::protocol_runtime::vless_udp::VlessUdpOutboundManager::new())
-}
-
-#[cfg(feature = "vmess")]
-pub(crate) fn vmess_cached_handler() -> Box<dyn CachedUdpFlowHandler> {
-    Box::new(crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager::new())
 }

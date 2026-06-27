@@ -15,9 +15,7 @@ use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
-use crate::protocol_runtime::udp::{
-    CachedUdpFlowHandler, CachedUdpFlowStart, ManagedCachedFlowSender,
-};
+use crate::protocol_runtime::udp::ManagedCachedFlowSender;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -329,27 +327,6 @@ impl ManagedCachedFlowSender for VmessUdpOutboundManager {
     ) -> Result<Option<u64>, EngineError> {
         VmessUdpOutboundManager::send_existing(self, chain_tasks, proxy, target, port, payload)
             .await
-    }
-}
-
-#[async_trait::async_trait]
-impl CachedUdpFlowHandler for VmessUdpOutboundManager {
-    async fn try_start_cached_flow<'a>(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        request: CachedUdpFlowStart<'a>,
-    ) -> Result<Option<CachedUdpFlowStart<'a>>, EngineError> {
-        match request {
-            CachedUdpFlowStart::Vmess(flow) => {
-                VmessUdpOutboundManager::start_flow(self, chain_tasks, flow).await?;
-                Ok(None)
-            }
-            CachedUdpFlowStart::VmessRelay(flow) => {
-                VmessUdpOutboundManager::start_relay_flow(self, chain_tasks, flow).await?;
-                Ok(None)
-            }
-            other => Ok(Some(other)),
-        }
     }
 }
 

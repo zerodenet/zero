@@ -2,8 +2,10 @@ use tokio::task::JoinSet;
 
 use super::super::state::ProtocolUdpState;
 use super::super::FlowFailure;
-use crate::protocol_runtime::udp::CachedUdpFlowStart;
-use crate::protocol_runtime::vmess_udp::model::{VmessUdpFlow, VmessUdpRelayFlow};
+use crate::protocol_runtime::vmess_udp::model::{
+    VmessUdpFlow, VmessUdpRelayFlow, VmessUdpRelayFlowStart, VmessUdpStartFlow,
+};
+use crate::protocol_runtime::vmess_udp::VmessUdpOutboundManager;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 
 impl ProtocolUdpState {
@@ -18,10 +20,11 @@ impl ProtocolUdpState {
             grpc: flow.grpc,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.start_cached_flow(
-            chain_tasks,
-            CachedUdpFlowStart::Vmess(
-                crate::protocol_runtime::vmess_udp::model::VmessUdpStartFlow {
+        let mut manager = VmessUdpOutboundManager::new();
+        manager
+            .start_flow(
+                chain_tasks,
+                VmessUdpStartFlow {
                     proxy: flow.proxy,
                     session: flow.session,
                     server: flow.server,
@@ -32,14 +35,14 @@ impl ProtocolUdpState {
                     transport,
                     payload: flow.payload,
                 },
-            ),
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vmess_upstream",
-            error,
-            upstream: Some((flow.server.to_string(), flow.port)),
-        })?;
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vmess_upstream",
+                error,
+                upstream: Some((flow.server.to_string(), flow.port)),
+            })?;
+        self.register_cached_flow_sender(Box::new(manager));
         Ok(())
     }
 
@@ -54,10 +57,11 @@ impl ProtocolUdpState {
             grpc: flow.grpc,
             source_dir: flow.proxy.config.source_dir(),
         };
-        self.start_cached_flow(
-            chain_tasks,
-            CachedUdpFlowStart::VmessRelay(
-                crate::protocol_runtime::vmess_udp::model::VmessUdpRelayFlowStart {
+        let mut manager = VmessUdpOutboundManager::new();
+        manager
+            .start_relay_flow(
+                chain_tasks,
+                VmessUdpRelayFlowStart {
                     proxy: flow.proxy,
                     session: flow.session,
                     carrier: flow.carrier,
@@ -65,14 +69,14 @@ impl ProtocolUdpState {
                     transport,
                     payload: flow.payload,
                 },
-            ),
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_vmess_relay_chain",
-            error,
-            upstream: None,
-        })?;
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vmess_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        self.register_cached_flow_sender(Box::new(manager));
         Ok(())
     }
 }

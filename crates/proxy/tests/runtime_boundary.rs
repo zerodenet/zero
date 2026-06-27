@@ -5158,7 +5158,7 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
     let cached = read("src/protocol_runtime/udp/state/cached.rs");
     let cached_model = read("src/protocol_runtime/udp/state/cached/model.rs");
-    let cached_start = read("src/protocol_runtime/udp/start/cached.rs");
+    let cached_start = manifest_dir().join("src/protocol_runtime/udp/start/cached.rs");
     let datagram = read("src/protocol_runtime/udp/state/managed/datagram.rs");
     let stream = read("src/protocol_runtime/udp/state/managed/stream.rs");
     let register = read("src/register.rs");
@@ -5190,11 +5190,10 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
             && managed.contains("datagram: ManagedDatagramState")
             && managed.contains("stream: ManagedStreamState")
             && !cached.contains("start_cached_flow")
-            && cached_start.contains("start_cached_flow")
+            && !cached_start.exists()
             && cached_model.contains("handlers: CachedUdpHandlers")
-            && cached_model.contains("cached: Vec<Box<dyn CachedUdpFlowHandler>>")
+            && cached_model.contains("cached: Vec<Box<dyn ManagedCachedFlowSender>>")
             && !cached_model.contains("enum CachedUdpFlowStart")
-            && cached_start.contains("enum CachedUdpFlowStart")
             && datagram.contains("handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>")
             && stream.contains("handlers: Vec<Box<dyn ManagedStreamFlowHandler>>")
             && !managed.contains("pub(crate) vless:")
@@ -5532,7 +5531,7 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let cached_model = read("src/protocol_runtime/udp/state/cached/model.rs");
     let start_vless = read("src/protocol_runtime/udp/start/vless.rs");
     let start_vmess = read("src/protocol_runtime/udp/start/vmess.rs");
-    let cached_start = read("src/protocol_runtime/udp/start/cached.rs");
+    let cached_start = manifest_dir().join("src/protocol_runtime/udp/start/cached.rs");
     let register = read("src/register.rs");
 
     for forbidden in [
@@ -5555,15 +5554,13 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !managed.contains("vless: VlessUdpOutboundManager")
             && !managed.contains("vmess: VmessUdpOutboundManager")
             && !cached_state.contains("start_cached_flow")
-            && cached_start.contains("start_cached_flow")
+            && !cached_start.exists()
             && cached_model.contains("struct CachedProtocolUdpState")
             && cached_model.contains("handlers: CachedUdpHandlers")
-            && cached_model.contains("cached: Vec<Box<dyn CachedUdpFlowHandler>>")
+            && cached_model.contains("cached: Vec<Box<dyn ManagedCachedFlowSender>>")
             && !cached_model.contains("enum CachedUdpFlowStart")
             && !cached_model.contains("VlessUdpStartFlow")
             && !cached_model.contains("VmessUdpStartFlow")
-            && cached_start.contains("enum CachedUdpFlowStart")
-            && cached_start.contains("try_start_cached_flow")
             && !cached_model.contains("VlessCachedFlowHandler")
             && !cached_model.contains("VmessCachedFlowHandler")
             && !cached_model.contains("vless: Box")
@@ -5575,13 +5572,13 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !cached_model.contains("downcast")
             && !cached_model.contains("as_any")
             && !state.contains("cached_handler_mut")
-            && !start_vless.contains("VlessUdpOutboundManager")
+            && start_vless.contains("VlessUdpOutboundManager")
             && !start_vless.contains("cached_handler_mut")
-            && !start_vmess.contains("VmessUdpOutboundManager")
+            && start_vmess.contains("VmessUdpOutboundManager")
             && !start_vmess.contains("cached_handler_mut")
-            && register.contains("cached: vec!")
-            && register.contains("vless_cached_handler")
-            && register.contains("vmess_cached_handler"),
+            && register.contains("CachedUdpHandlers { cached: Vec::new() }")
+            && !register.contains("vless_cached_handler")
+            && !register.contains("vmess_cached_handler"),
         "cached UDP flow handlers should live outside generic managed state without Vec-order protocol identity or runtime downcasts"
     );
 }

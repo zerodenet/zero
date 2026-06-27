@@ -12,6 +12,13 @@ pub(in crate::protocol_runtime::udp::state) use model::CachedProtocolUdpState;
 pub(crate) use model::CachedUdpHandlers;
 
 impl ProtocolUdpState {
+    pub(in crate::protocol_runtime::udp) fn register_cached_flow_sender(
+        &mut self,
+        sender: Box<dyn crate::protocol_runtime::udp::ManagedCachedFlowSender>,
+    ) {
+        self.cached.push_sender(sender);
+    }
+
     pub(crate) async fn send_existing_cached_flow(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
