@@ -22,7 +22,7 @@ pub use outbound::{
 };
 #[cfg(feature = "tokio")]
 pub use outbound::{
-    spawn_udp_flow, TrojanUdpFlowHandle, TrojanUdpFlowResponses, TrojanUdpFlowSender,
+    spawn_udp_flow, TrojanUdpFlowHandle, TrojanUdpFlowResponseReceiver, TrojanUdpFlowSession,
 };
 pub use shared::{
     build_udp_packet, read_password, read_request, read_udp_packet, write_password, write_request,

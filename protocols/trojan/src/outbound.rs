@@ -130,18 +130,46 @@ pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> TrojanUdp
 pub struct TrojanUdpFlowIo;
 
 #[cfg(feature = "tokio")]
-pub type TrojanUdpFlowResponses = broadcast::Sender<UdpFlowPacket>;
+type TrojanUdpFlowResponses = broadcast::Sender<UdpFlowPacket>;
+
+#[cfg(feature = "tokio")]
+pub type TrojanUdpFlowResponseReceiver = broadcast::Receiver<UdpFlowPacket>;
 
 #[cfg(feature = "tokio")]
 #[derive(Clone)]
-pub struct TrojanUdpFlowSender {
+struct TrojanUdpFlowSender {
     send_tx: mpsc::Sender<UdpFlowPacket>,
 }
 
 #[cfg(feature = "tokio")]
 pub struct TrojanUdpFlowHandle {
-    pub sender: TrojanUdpFlowSender,
-    pub responses: TrojanUdpFlowResponses,
+    sender: TrojanUdpFlowSender,
+    responses: TrojanUdpFlowResponses,
+}
+
+#[cfg(feature = "tokio")]
+#[derive(Clone)]
+pub struct TrojanUdpFlowSession {
+    sender: TrojanUdpFlowSender,
+    responses: TrojanUdpFlowResponses,
+}
+
+#[cfg(feature = "tokio")]
+impl TrojanUdpFlowSession {
+    pub fn new(handle: TrojanUdpFlowHandle) -> Self {
+        Self {
+            sender: handle.sender,
+            responses: handle.responses,
+        }
+    }
+
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        self.sender.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> TrojanUdpFlowResponseReceiver {
+        self.responses.subscribe()
+    }
 }
 
 #[cfg(feature = "tokio")]

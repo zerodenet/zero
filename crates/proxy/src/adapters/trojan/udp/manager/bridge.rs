@@ -5,10 +5,9 @@ use crate::runtime::udp_flow::packet_path::ChainTask;
 
 pub(super) fn spawn_response_bridge(
     chain_tasks: &mut JoinSet<ChainTask>,
-    responses: trojan::TrojanUdpFlowResponses,
+    mut recv_rx: trojan::TrojanUdpFlowResponseReceiver,
     session_id: u64,
 ) {
-    let mut recv_rx = responses.subscribe();
     chain_tasks.spawn(async move {
         let packet = recv_rx
             .recv()

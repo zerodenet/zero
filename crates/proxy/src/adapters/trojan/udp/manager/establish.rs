@@ -1,5 +1,4 @@
 use super::connect;
-use super::model::TrojanEntry;
 use super::stream;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::Proxy;
@@ -12,7 +11,7 @@ pub(super) async fn direct(
     session: &Session,
     endpoint: OutboundEndpoint<'_>,
     resume: &trojan::TrojanUdpFlowResume,
-) -> Result<TrojanEntry, EngineError> {
+) -> Result<trojan::TrojanUdpFlowSession, EngineError> {
     let tls_stream = connect::direct_tls_stream(proxy, endpoint, resume).await?;
 
     packet_stream(proxy, session, tls_stream, resume).await
@@ -25,7 +24,7 @@ pub(super) async fn over_relay_stream(
     session: &Session,
     endpoint: OutboundEndpoint<'_>,
     resume: &trojan::TrojanUdpFlowResume,
-) -> Result<TrojanEntry, EngineError> {
+) -> Result<trojan::TrojanUdpFlowSession, EngineError> {
     let tls_stream =
         connect::relay_tls_stream(stream, tls_server_name, proxy, endpoint, resume).await?;
 
@@ -37,9 +36,10 @@ async fn packet_stream(
     session: &Session,
     stream: TcpRelayStream,
     resume: &trojan::TrojanUdpFlowResume,
-) -> Result<TrojanEntry, EngineError> {
-    let stream::PacketStream { sender, responses } =
-        stream::spawn_packet_stream(proxy, session, stream, resume).await?;
+) -> Result<trojan::TrojanUdpFlowSession, EngineError> {
+    let stream::PacketStream {
+        session: flow_session,
+    } = stream::spawn_packet_stream(proxy, session, stream, resume).await?;
 
-    Ok(TrojanEntry { sender, responses })
+    Ok(flow_session)
 }

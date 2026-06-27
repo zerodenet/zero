@@ -5,11 +5,6 @@ use crate::transport::TcpRelayStream;
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 
-pub(super) struct TrojanEntry {
-    pub(super) sender: trojan::TrojanUdpFlowSender,
-    pub(super) responses: trojan::TrojanUdpFlowResponses,
-}
-
 pub(super) struct TrojanSendExisting<'a> {
     pub(super) chain_tasks: &'a mut JoinSet<ChainTask>,
     pub(super) session_id: u64,
