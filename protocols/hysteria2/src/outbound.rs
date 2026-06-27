@@ -3,7 +3,7 @@
 use alloc::vec::Vec;
 
 use crate::shared::build_tcp_connect_header;
-use crate::{parse_udp_datagram, Hysteria2UdpPacket, Hysteria2UdpPacketTarget};
+use crate::{Hysteria2UdpPacket, Hysteria2UdpPacketTarget};
 use zero_core::{Error, ProtocolType, Session};
 use zero_traits::{AsyncSocket, UdpDatagramFraming};
 
@@ -93,7 +93,7 @@ impl<'a> UdpDatagramFraming<Hysteria2UdpPacketTarget<'a>, ()> for Hysteria2Outbo
         &self,
         packet: &Hysteria2UdpPacketTarget<'a>,
     ) -> Result<Vec<u8>, Self::Error> {
-        crate::build_udp_datagram(
+        crate::udp::build_udp_datagram(
             packet.session_id,
             packet.packet_id,
             packet.target,
@@ -107,6 +107,6 @@ impl<'a> UdpDatagramFraming<Hysteria2UdpPacketTarget<'a>, ()> for Hysteria2Outbo
         _context: &(),
         datagram: &[u8],
     ) -> Result<Self::Decoded, Self::Error> {
-        parse_udp_datagram(datagram)
+        crate::udp::parse_udp_datagram(datagram)
     }
 }

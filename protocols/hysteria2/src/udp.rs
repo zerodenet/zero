@@ -122,7 +122,7 @@ impl Default for Hysteria2InboundUdpSession {
 
 /// Build a Hysteria2 UDP datagram.
 /// Format: [session_id:2][pkt_id:2][addr_type:1][addr:var][port:2][payload:var]
-pub fn build_udp_datagram(
+pub(crate) fn build_udp_datagram(
     session_id: u16,
     packet_id: u16,
     address: &Address,
@@ -140,7 +140,7 @@ pub fn build_udp_datagram(
 }
 
 /// Parse a Hysteria2 UDP datagram.
-pub fn parse_udp_datagram(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
+pub(crate) fn parse_udp_datagram(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
     if data.len() < 5 {
         return Err(Error::Protocol("hysteria2: truncated UDP datagram"));
     }
@@ -199,7 +199,7 @@ pub fn parse_udp_datagram(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
     })
 }
 
-pub fn encode_udp_flow_packet(
+pub(crate) fn encode_udp_flow_packet(
     target: &Address,
     port: u16,
     payload: &[u8],
@@ -207,7 +207,7 @@ pub fn encode_udp_flow_packet(
     build_udp_datagram(0, 0, target, port, payload)
 }
 
-pub fn decode_udp_flow_packet(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
+pub(crate) fn decode_udp_flow_packet(data: &[u8]) -> Result<Hysteria2UdpPacket, Error> {
     parse_udp_datagram(data)
 }
 
@@ -354,7 +354,7 @@ impl Hysteria2UdpPacketPathSpec {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Hysteria2DatagramCodec;
 
-pub fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
+pub(crate) fn udp_flow_codec() -> impl DatagramCodec<Address, Error = Error> {
     Hysteria2DatagramCodec
 }
 
@@ -385,10 +385,6 @@ impl Hysteria2UdpFlowPacket {
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
         (self.target, self.port, self.payload)
     }
-}
-
-pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> Hysteria2UdpFlowPacket {
-    Hysteria2UdpFlowPacket::from_parts(target, port, payload)
 }
 
 #[derive(Debug, Clone, Copy, Default)]

@@ -8233,17 +8233,35 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !adapter.contains("Hysteria2UdpFlowConfig {")
             && adapter_flow.contains("Hysteria2UdpFlowConfig::new")
             && adapter_packet_path.contains("Hysteria2UdpFlowConfig::new")
-            && protocol_udp.contains("pub fn udp_flow_codec(")
+            && protocol_udp.contains("pub(crate) fn udp_flow_codec(")
             && protocol_udp.contains("struct Hysteria2UdpFlowConfig")
             && protocol_udp.contains("pub fn new(")
             && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec")
-            && protocol_udp.contains("pub fn udp_flow_packet")
+            && !protocol_udp.contains("pub fn udp_flow_packet")
+            && !protocol_udp.contains("fn udp_flow_packet")
             && protocol_udp.contains("pub fn encode_packet(")
             && protocol_udp.contains("pub fn encode_flow_packet(")
             && protocol_udp.contains("struct Hysteria2UdpFlowIo")
             && protocol_udp.contains("pub fn flow_io(&self)")
             && protocol_udp.contains("pub fn decode_packet(&self"),
         "Hysteria2 adapter and UDP manager should consume protocol-owned UDP flow packet helpers"
+    );
+    for private_helper in [
+        "build_udp_datagram",
+        "parse_udp_datagram",
+        "encode_udp_flow_packet",
+        "decode_udp_flow_packet",
+        "udp_flow_codec",
+    ] {
+        assert!(
+            protocol_udp.contains(&format!("pub(crate) fn {private_helper}("))
+                && !protocol_lib.contains(private_helper),
+            "Hysteria2 UDP helper `{private_helper}` should stay crate-private and should not be re-exported"
+        );
+    }
+    assert!(
+        !protocol_udp.contains("fn udp_flow_packet") && !protocol_lib.contains("udp_flow_packet"),
+        "Hysteria2 UDP flow packet constructor helper should be removed from the public protocol surface"
     );
     assert!(
         !managed.contains("struct H2Entry")
@@ -8426,6 +8444,8 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
         .expect("read zero-transport udp packet path source");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
+        .expect("read hysteria2 protocol lib source");
 
     assert!(
         !adapter.contains("hysteria2::udp_flow_codec")
@@ -8435,11 +8455,23 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
         "Hysteria2 packet-path adapter submodule should request protocol-built packet-path cache identity and codec through a protocol config helper"
     );
     assert!(
-        protocol_udp.contains("pub fn udp_flow_codec(")
+        protocol_udp.contains("pub(crate) fn udp_flow_codec(")
             && protocol_udp.contains("struct Hysteria2UdpFlowConfig")
             && protocol_udp.contains("impl DatagramCodec<Address> for Hysteria2DatagramCodec"),
         "protocols/hysteria2 should own Hysteria2 UDP flow codec construction"
     );
+    for private_helper in [
+        "build_udp_datagram",
+        "parse_udp_datagram",
+        "encode_udp_flow_packet",
+        "decode_udp_flow_packet",
+        "udp_flow_codec",
+    ] {
+        assert!(
+            !protocol_lib.contains(private_helper),
+            "protocols/hysteria2 lib root should not re-export raw UDP helper `{private_helper}`"
+        );
+    }
     for forbidden in [
         "hysteria2::build_udp_datagram",
         "hysteria2::parse_udp_datagram",

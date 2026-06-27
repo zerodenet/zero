@@ -22,17 +22,16 @@ pub use shared::{
 };
 #[cfg(feature = "crypto")]
 pub use shared::{derive_salt, sign_hmac, verify_hmac};
-pub use udp::{
-    build_udp_datagram, decode_udp_flow_packet, encode_udp_flow_packet, parse_udp_datagram,
-    udp_flow_codec, udp_flow_packet, Hysteria2DatagramCodec, Hysteria2InboundUdpCodec,
-    Hysteria2InboundUdpRequest, Hysteria2UdpConnectorProfile, Hysteria2UdpFlowConfig,
-    Hysteria2UdpFlowIo, Hysteria2UdpFlowPacket, Hysteria2UdpFlowResume, Hysteria2UdpFlowStore,
-    Hysteria2UdpPacket, Hysteria2UdpPacketPathSpec, Hysteria2UdpPacketTarget,
-};
 #[cfg(feature = "tokio")]
 pub use udp::{
     spawn_udp_flow, start_udp_flow_with_initial_packet, Hysteria2InboundUdpSession,
     Hysteria2InitialUdpFlowPacket, Hysteria2UdpFlowConnection, Hysteria2UdpFlowHandle,
     Hysteria2UdpFlowResponse, Hysteria2UdpFlowResponseReceiver, Hysteria2UdpFlowSession,
     Hysteria2UdpFlowSessions,
+};
+pub use udp::{
+    Hysteria2DatagramCodec, Hysteria2InboundUdpCodec, Hysteria2InboundUdpRequest,
+    Hysteria2UdpConnectorProfile, Hysteria2UdpFlowConfig, Hysteria2UdpFlowIo,
+    Hysteria2UdpFlowPacket, Hysteria2UdpFlowResume, Hysteria2UdpFlowStore, Hysteria2UdpPacket,
+    Hysteria2UdpPacketPathSpec, Hysteria2UdpPacketTarget,
 };

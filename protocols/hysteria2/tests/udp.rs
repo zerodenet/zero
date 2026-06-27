@@ -3,18 +3,32 @@
 //! Migrated from the inline `#[cfg(test)] mod tests` in
 //! `protocols/hysteria2/src/udp.rs`.
 
-use hysteria2::{
-    build_udp_datagram, parse_udp_datagram, udp_flow_codec, Hysteria2Outbound,
-    Hysteria2UdpPacketTarget,
-};
+use hysteria2::{Hysteria2DatagramCodec, Hysteria2Outbound, Hysteria2UdpPacketTarget};
 use zero_core::Address;
 use zero_traits::{DatagramCodec, UdpDatagramFraming};
 
 #[test]
 fn test_udp_datagram_roundtrip() {
     let addr = Address::Domain("example.com".into());
-    let datagram = build_udp_datagram(1, 42, &addr, 443, b"hello").unwrap();
-    let parsed = parse_udp_datagram(&datagram).unwrap();
+    let datagram = <Hysteria2Outbound as UdpDatagramFraming<
+        Hysteria2UdpPacketTarget<'_>,
+        (),
+    >>::encode_udp_datagram(
+        &Hysteria2Outbound,
+        &Hysteria2UdpPacketTarget {
+            session_id: 1,
+            packet_id: 42,
+            target: &addr,
+            port: 443,
+            payload: b"hello",
+        },
+    )
+    .unwrap();
+    let parsed = <Hysteria2Outbound as UdpDatagramFraming<
+        Hysteria2UdpPacketTarget<'_>,
+        (),
+    >>::decode_udp_datagram(&Hysteria2Outbound, &(), &datagram)
+    .unwrap();
     assert_eq!(parsed.session_id, 1);
     assert_eq!(parsed.packet_id, 42);
     assert_eq!(parsed.target, addr);
@@ -25,8 +39,25 @@ fn test_udp_datagram_roundtrip() {
 #[test]
 fn test_udp_datagram_ipv4() {
     let addr = Address::Ipv4([8, 8, 8, 8]);
-    let datagram = build_udp_datagram(0, 0, &addr, 53, b"dns").unwrap();
-    let parsed = parse_udp_datagram(&datagram).unwrap();
+    let datagram = <Hysteria2Outbound as UdpDatagramFraming<
+        Hysteria2UdpPacketTarget<'_>,
+        (),
+    >>::encode_udp_datagram(
+        &Hysteria2Outbound,
+        &Hysteria2UdpPacketTarget {
+            session_id: 0,
+            packet_id: 0,
+            target: &addr,
+            port: 53,
+            payload: b"dns",
+        },
+    )
+    .unwrap();
+    let parsed = <Hysteria2Outbound as UdpDatagramFraming<
+        Hysteria2UdpPacketTarget<'_>,
+        (),
+    >>::decode_udp_datagram(&Hysteria2Outbound, &(), &datagram)
+    .unwrap();
     assert_eq!(parsed.target, addr);
 }
 
@@ -63,7 +94,7 @@ fn udp_datagram_framing_trait_roundtrips_packet() {
 
 #[test]
 fn udp_flow_codec_roundtrips_payload() {
-    let codec = udp_flow_codec();
+    let codec = Hysteria2DatagramCodec;
     let target = Address::Domain("example.com".into());
     let encoded = codec
         .encode(&target, 443, b"packet-path")
