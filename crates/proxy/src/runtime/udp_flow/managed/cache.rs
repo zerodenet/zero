@@ -54,6 +54,27 @@ impl ManagedUdpConnectionCache {
         Ok(sent)
     }
 
+    pub(crate) async fn send_or_insert_pre_sent_key<Fut>(
+        &mut self,
+        key: impl Into<String>,
+        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+        session_id: u64,
+        packet: UdpPacketRef<'_>,
+        establish: Fut,
+    ) -> Result<usize, EngineError>
+    where
+        Fut: Future<Output = Result<SharedManagedUdpConnection, EngineError>>,
+    {
+        self.send_or_insert_pre_sent(
+            ManagedUdpConnectionCacheKey::new(key),
+            chain_tasks,
+            session_id,
+            packet,
+            establish,
+        )
+        .await
+    }
+
     pub(crate) async fn send_or_insert<Fut>(
         &mut self,
         key: ManagedUdpConnectionCacheKey,
@@ -76,6 +97,27 @@ impl ManagedUdpConnectionCache {
         Ok(sent)
     }
 
+    pub(crate) async fn send_or_insert_key<Fut>(
+        &mut self,
+        key: impl Into<String>,
+        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+        session_id: u64,
+        packet: UdpPacketRef<'_>,
+        establish: Fut,
+    ) -> Result<usize, EngineError>
+    where
+        Fut: Future<Output = Result<SharedManagedUdpConnection, EngineError>>,
+    {
+        self.send_or_insert(
+            ManagedUdpConnectionCacheKey::new(key),
+            chain_tasks,
+            session_id,
+            packet,
+            establish,
+        )
+        .await
+    }
+
     pub(crate) async fn insert_and_send(
         &mut self,
         key: ManagedUdpConnectionCacheKey,
@@ -88,6 +130,24 @@ impl ManagedUdpConnectionCache {
             send_managed_udp_connection(&connection, chain_tasks, session_id, packet).await?;
         self.entries.insert(key, connection);
         Ok(sent)
+    }
+
+    pub(crate) async fn insert_and_send_key(
+        &mut self,
+        key: impl Into<String>,
+        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+        session_id: u64,
+        packet: UdpPacketRef<'_>,
+        connection: SharedManagedUdpConnection,
+    ) -> Result<usize, EngineError> {
+        self.insert_and_send(
+            ManagedUdpConnectionCacheKey::new(key),
+            chain_tasks,
+            session_id,
+            packet,
+            connection,
+        )
+        .await
     }
 }
 
@@ -161,6 +221,20 @@ impl ManagedStreamConnectionCache {
         self.entries.insert(key, upstream)
     }
 
+    pub(crate) fn insert_and_bridge_target(
+        &mut self,
+        target: Address,
+        port: u16,
+        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+        upstream: ManagedStreamConnection,
+    ) -> Option<ManagedStreamConnection> {
+        self.insert_and_bridge(
+            ManagedStreamConnectionCacheKey::new(target, port),
+            chain_tasks,
+            upstream,
+        )
+    }
+
     pub(crate) async fn send_existing(
         &self,
         key: ManagedStreamConnectionCacheKey,
@@ -176,6 +250,25 @@ impl ManagedStreamConnectionCache {
 
         send_stream_connection(upstream, chain_tasks, proxy, target, port, payload).await?;
         Ok(Some(upstream.session_id))
+    }
+
+    pub(crate) async fn send_existing_target(
+        &self,
+        target: &Address,
+        port: u16,
+        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+        proxy: &Proxy,
+        payload: &[u8],
+    ) -> Result<Option<u64>, EngineError> {
+        self.send_existing(
+            ManagedStreamConnectionCacheKey::new(target.clone(), port),
+            chain_tasks,
+            proxy,
+            target,
+            port,
+            payload,
+        )
+        .await
     }
 
     pub(crate) async fn send_or_insert<Fut>(
@@ -203,6 +296,24 @@ impl ManagedStreamConnectionCache {
         let upstream = establish.await?;
         self.insert_and_bridge(key, request.chain_tasks, upstream);
         Ok(())
+    }
+
+    pub(crate) async fn send_or_insert_target<Fut>(
+        &mut self,
+        target: &Address,
+        port: u16,
+        request: ManagedStreamConnectionSend<'_>,
+        establish: Fut,
+    ) -> Result<(), EngineError>
+    where
+        Fut: Future<Output = Result<ManagedStreamConnection, EngineError>>,
+    {
+        self.send_or_insert(
+            ManagedStreamConnectionCacheKey::new(target.clone(), port),
+            request,
+            establish,
+        )
+        .await
     }
 }
 

@@ -3,9 +3,7 @@ use super::{establish, H2ChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
-use crate::runtime::udp_flow::managed::{
-    ManagedDatagramFlowHandler, ManagedExistingSend, ManagedUdpConnectionCacheKey,
-};
+use crate::runtime::udp_flow::managed::{ManagedDatagramFlowHandler, ManagedExistingSend};
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 
 impl H2ChainManager {
@@ -22,12 +20,10 @@ impl H2ChainManager {
         resume: hysteria2::Hysteria2UdpFlowResume,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let cache_key = ManagedUdpConnectionCacheKey::new(
-            resume.flow_cache_key(endpoint.server, endpoint.port),
-        );
+        let cache_key = resume.flow_cache_key(endpoint.server, endpoint.port);
 
         self.upstreams
-            .send_or_insert_pre_sent(
+            .send_or_insert_pre_sent_key(
                 cache_key,
                 ctx.chain_tasks,
                 ctx.session_id,

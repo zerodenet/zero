@@ -5,8 +5,7 @@ use super::{establish, MieruChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpConnectionCacheKey,
-    ManagedUdpFlowResume,
+    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -31,11 +30,7 @@ impl MieruChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
-        let cache_key = ManagedUdpConnectionCacheKey::new(resume.flow_cache_key(
-            endpoint.server,
-            endpoint.port,
-            session_id,
-        ));
+        let cache_key = resume.flow_cache_key(endpoint.server, endpoint.port, session_id);
 
         if relay {
             return Err(FlowFailure {
@@ -49,7 +44,7 @@ impl MieruChainManager {
         }
 
         self.upstreams
-            .send_or_insert(
+            .send_or_insert_key(
                 cache_key,
                 ctx.chain_tasks,
                 session_id,
@@ -98,11 +93,7 @@ impl MieruChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
-        let cache_key = ManagedUdpConnectionCacheKey::new(resume.flow_cache_key(
-            endpoint.server,
-            endpoint.port,
-            session_id,
-        ));
+        let cache_key = resume.flow_cache_key(endpoint.server, endpoint.port, session_id);
         let entry = establish::packet_stream(stream, resume)
             .await
             .map_err(|e| FlowFailure {
@@ -112,7 +103,7 @@ impl MieruChainManager {
             })?;
 
         self.upstreams
-            .insert_and_send(cache_key, ctx.chain_tasks, session_id, packet_ref, entry)
+            .insert_and_send_key(cache_key, ctx.chain_tasks, session_id, packet_ref, entry)
             .await
             .map_err(|error| FlowFailure {
                 stage: "mieru_relay_send",

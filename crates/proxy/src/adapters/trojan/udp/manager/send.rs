@@ -6,8 +6,7 @@ use super::{establish, TrojanChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpConnectionCacheKey,
-    ManagedUdpFlowResume,
+    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -31,11 +30,7 @@ impl TrojanChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
-        let cache_key = ManagedUdpConnectionCacheKey::new(resume.flow_cache_key(
-            endpoint.server,
-            endpoint.port,
-            session_id,
-        ));
+        let cache_key = resume.flow_cache_key(endpoint.server, endpoint.port, session_id);
 
         if resume.flow_requires_relay_upstream() {
             return Err(FlowFailure {
@@ -49,7 +44,7 @@ impl TrojanChainManager {
         }
 
         self.upstreams
-            .send_or_insert(
+            .send_or_insert_key(
                 cache_key,
                 ctx.chain_tasks,
                 session_id,
@@ -93,11 +88,9 @@ impl TrojanChainManager {
         let ctx = request.ctx;
         let packet_ref = request.packet;
         let session_id = ctx.session_id;
-        let cache_key = ManagedUdpConnectionCacheKey::new(request.resume.flow_cache_key(
-            request.server,
-            request.port,
-            session_id,
-        ));
+        let cache_key = request
+            .resume
+            .flow_cache_key(request.server, request.port, session_id);
         let entry = establish::over_relay_stream(
             request.stream,
             request.tls_server_name,
@@ -117,7 +110,7 @@ impl TrojanChainManager {
         })?;
 
         self.upstreams
-            .insert_and_send(cache_key, ctx.chain_tasks, session_id, packet_ref, entry)
+            .insert_and_send_key(cache_key, ctx.chain_tasks, session_id, packet_ref, entry)
             .await
             .map_err(|error| FlowFailure {
                 stage: "trojan_relay_send",

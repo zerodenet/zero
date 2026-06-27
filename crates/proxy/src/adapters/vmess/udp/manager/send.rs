@@ -4,9 +4,7 @@ use zero_engine::EngineError;
 
 use super::model::{VmessUdpRelayFlowStart, VmessUdpStartFlow, VmessUdpUpstreamRequest};
 use super::{establish, VmessUdpOutboundManager};
-use crate::runtime::udp_flow::managed::{
-    ManagedStreamConnectionCacheKey, ManagedStreamConnectionSend, ManagedStreamFlowSender,
-};
+use crate::runtime::udp_flow::managed::{ManagedStreamConnectionSend, ManagedStreamFlowSender};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 
@@ -55,11 +53,9 @@ impl VmessUdpOutboundManager {
             stream,
         )
         .await?;
-        self.upstreams.insert_and_bridge(
-            ManagedStreamConnectionCacheKey::new(
-                request.session.target.clone(),
-                request.session.port,
-            ),
+        self.upstreams.insert_and_bridge_target(
+            request.session.target.clone(),
+            request.session.port,
             chain_tasks,
             upstream,
         );
@@ -74,9 +70,8 @@ impl VmessUdpOutboundManager {
         port: u16,
         payload: &[u8],
     ) -> Result<Option<u64>, EngineError> {
-        let key = ManagedStreamConnectionCacheKey::new(target.clone(), port);
         self.upstreams
-            .send_existing(key, chain_tasks, proxy, target, port, payload)
+            .send_existing_target(target, port, chain_tasks, proxy, payload)
             .await
     }
 
@@ -85,10 +80,10 @@ impl VmessUdpOutboundManager {
         chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VmessUdpUpstreamRequest<'_>,
     ) -> Result<(), EngineError> {
-        let key = ManagedStreamConnectionCacheKey::new(request.target.clone(), request.port);
         self.upstreams
-            .send_or_insert(
-                key,
+            .send_or_insert_target(
+                &request.target,
+                request.port,
                 ManagedStreamConnectionSend {
                     chain_tasks,
                     proxy: request.proxy,
