@@ -67,7 +67,8 @@ pub(super) async fn forward_direct_udp_response(
     sender: SocketAddr,
     payload: &[u8],
 ) -> Result<usize, EngineError> {
-    let packet = socks5::Socks5InboundUdpCodec.encode_response_to_client(
+    let udp_session = socks5::Socks5InboundUdpSession::new();
+    let packet = udp_session.encode_response_to_client(
         &address_from_socket_addr(sender),
         sender.port(),
         payload,

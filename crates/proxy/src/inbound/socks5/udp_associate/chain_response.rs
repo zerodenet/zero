@@ -63,11 +63,8 @@ async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
         return;
     };
 
-    match socks5::Socks5InboundUdpCodec.encode_response_to_client(
-        request.target,
-        request.port,
-        request.payload,
-    ) {
+    let udp_session = socks5::Socks5InboundUdpSession::new();
+    match udp_session.encode_response_to_client(request.target, request.port, request.payload) {
         Ok(frame) => match request.relay.send_to_addr(&frame, client_addr).await {
             Ok(sent) => {
                 if let Some(sid) = request.session_id {

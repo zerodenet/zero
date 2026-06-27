@@ -141,6 +141,37 @@ impl Socks5InboundUdpCodec {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Socks5InboundUdpSession {
+    codec: Socks5InboundUdpCodec,
+}
+
+impl Socks5InboundUdpSession {
+    pub fn new() -> Self {
+        Self {
+            codec: Socks5InboundUdpCodec,
+        }
+    }
+
+    pub fn decode_request(&self, packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+        self.codec.decode_request(packet)
+    }
+
+    pub fn decode_response(&self, packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+        self.codec.decode_response(packet)
+    }
+
+    pub fn encode_response_to_client(
+        &self,
+        upstream_address: &Address,
+        upstream_port: u16,
+        payload: &[u8],
+    ) -> Result<alloc::vec::Vec<u8>, Error> {
+        self.codec
+            .encode_response_to_client(upstream_address, upstream_port, payload)
+    }
+}
+
 impl<C, S> Socks5UdpAssociation<C, S> {
     pub fn new(control: C, relay: Socks5UdpRelay<S>) -> Self {
         Self {

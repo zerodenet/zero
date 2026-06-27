@@ -3663,6 +3663,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
 
 #[test]
 fn inbound_udp_socks5_response_decode_is_confined_to_bridge() {
+    let bridge = read("src/inbound/udp_response.rs");
     assert_src_pattern_confined(
         "socks5::decode_udp_associate_response",
         &[
@@ -3671,6 +3672,11 @@ fn inbound_udp_socks5_response_decode_is_confined_to_bridge() {
         ],
         &[],
         "SOCKS5 upstream response decoding should stay in SOCKS5 associate handling or the neutral inbound UDP response bridge",
+    );
+    assert!(
+        bridge.contains("socks5::Socks5InboundUdpSession::new")
+            && !bridge.contains("Socks5InboundUdpCodec"),
+        "neutral inbound UDP response bridge should use the protocol-owned SOCKS5 inbound UDP session"
     );
 }
 
@@ -3995,7 +4001,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("async fn forward_relay_socket_response")
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("direct_response_session_id")
-            && direct_response.contains("socks5::Socks5InboundUdpCodec.encode_response_to_client")
+            && direct_response.contains("socks5::Socks5InboundUdpSession::new")
+            && direct_response.contains("udp_session.encode_response_to_client")
+            && !direct_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("socks5::encode_udp_associate_response("),
         "SOCKS5 UDP direct response metering and framing should live in inbound/socks5/udp_associate/direct_response.rs"
     );
@@ -4003,7 +4011,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         chain_response.contains("async fn handle_chain_result")
             && chain_response.contains("pub(super) struct ChainResponseRequest")
             && chain_response.contains("struct ForwardChainResponseRequest")
-            && chain_response.contains("socks5::Socks5InboundUdpCodec.encode_response_to_client")
+            && chain_response.contains("socks5::Socks5InboundUdpSession::new")
+            && chain_response.contains("udp_session.encode_response_to_client")
+            && !chain_response.contains("Socks5InboundUdpCodec")
             && !chain_response.contains("socks5::encode_udp_associate_response(")
             && chain_response.contains("failed to send UDP chain response to client")
             && chain_response.contains("chain response task panicked"),
@@ -4035,16 +4045,24 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         ] {
             assert!(
                 !source.contains(forbidden),
-                "SOCKS5 UDP associate {path} should call Socks5InboundUdpCodec instead of raw helper `{forbidden}`"
+                "SOCKS5 UDP associate {path} should call Socks5InboundUdpSession instead of raw helper `{forbidden}`"
             );
         }
     }
     assert!(
-        dispatch.contains("socks5::Socks5InboundUdpCodec.decode_request")
-            && upstream_response.contains("socks5::Socks5InboundUdpCodec.decode_response")
-            && direct_response.contains("socks5::Socks5InboundUdpCodec.encode_response_to_client")
-            && chain_response.contains("socks5::Socks5InboundUdpCodec.encode_response_to_client"),
-        "SOCKS5 UDP associate dispatch/attribution should use the protocol-owned inbound UDP codec"
+        dispatch.contains("socks5::Socks5InboundUdpSession::new")
+            && dispatch.contains("udp_session.decode_request")
+            && upstream_response.contains("socks5::Socks5InboundUdpSession::new")
+            && upstream_response.contains("udp_session.decode_response")
+            && direct_response.contains("socks5::Socks5InboundUdpSession::new")
+            && direct_response.contains("udp_session.encode_response_to_client")
+            && chain_response.contains("socks5::Socks5InboundUdpSession::new")
+            && chain_response.contains("udp_session.encode_response_to_client")
+            && !dispatch.contains("Socks5InboundUdpCodec")
+            && !upstream_response.contains("Socks5InboundUdpCodec")
+            && !direct_response.contains("Socks5InboundUdpCodec")
+            && !chain_response.contains("Socks5InboundUdpCodec"),
+        "SOCKS5 UDP associate dispatch/attribution should use the protocol-owned inbound UDP session"
     );
     assert!(
         upstream_response.contains("async fn handle_upstream_response")
