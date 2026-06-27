@@ -5,7 +5,7 @@ use tokio::time::Instant as TokioInstant;
 
 use zero_engine::EngineError;
 
-use super::FlowFailure;
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
     ManagedDatagramFlow, ManagedProtocolUdpState, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
     ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume, ManagedUdpFlowSnapshot,
@@ -19,7 +19,9 @@ use upstream::UpstreamAssociationState;
 pub(crate) use upstream::{UpstreamAssociationHandler, UpstreamUdpHandlers};
 
 mod cached;
+mod datagram;
 mod forward;
+mod stream;
 mod upstream;
 
 pub(crate) struct ProtocolUpstreamAssociationView<'a> {

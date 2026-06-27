@@ -22,8 +22,10 @@ use crate::adapters::VlessAdapter;
 #[cfg(feature = "vmess")]
 use crate::adapters::VmessAdapter;
 use crate::protocol_adapter::ProtocolRegistry;
-use crate::protocol_runtime::udp::{CachedUdpHandlers, ProtocolUdpHandlers, UpstreamUdpHandlers};
 use crate::runtime::udp_flow::managed::ManagedUdpHandlers;
+use crate::runtime::udp_flow::protocol_state::{
+    CachedUdpHandlers, ProtocolUdpHandlers, UpstreamUdpHandlers,
+};
 
 pub(crate) fn protocol_registry() -> ProtocolRegistry {
     let mut registry = ProtocolRegistry::default();

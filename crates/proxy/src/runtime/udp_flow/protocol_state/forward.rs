@@ -2,7 +2,7 @@ use tokio::task::JoinSet;
 use zero_engine::EngineError;
 
 use super::ProtocolUdpState;
-use crate::protocol_runtime::udp::FlowFailure;
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;

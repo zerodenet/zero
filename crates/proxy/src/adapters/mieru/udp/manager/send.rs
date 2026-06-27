@@ -3,8 +3,8 @@ use zero_engine::EngineError;
 
 use super::model::{MieruRelayExisting, MieruSendExisting, MieruUdpPeer};
 use super::{bridge, establish, MieruChainManager};
-use crate::protocol_runtime::udp::FlowFailure;
 use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::managed::{
     ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,

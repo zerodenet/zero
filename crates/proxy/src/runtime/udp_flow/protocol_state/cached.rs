@@ -6,9 +6,9 @@ use super::ProtocolUdpState;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 
-pub(in crate::protocol_runtime::udp::state) mod model;
+pub(super) mod model;
 
-pub(in crate::protocol_runtime::udp::state) use model::CachedProtocolUdpState;
+pub(super) use model::CachedProtocolUdpState;
 pub(crate) use model::CachedUdpHandlers;
 
 impl ProtocolUdpState {

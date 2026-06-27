@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::protocol_runtime::udp::FlowFailure;
 use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::managed::{ManagedDatagramFlowHandler, ManagedExistingSend};
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};

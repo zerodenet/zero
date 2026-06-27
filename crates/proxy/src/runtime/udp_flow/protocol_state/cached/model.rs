@@ -4,16 +4,16 @@ pub(crate) struct CachedUdpHandlers {
     pub(crate) cached: Vec<Box<dyn ManagedCachedFlowSender>>,
 }
 
-pub(in crate::protocol_runtime::udp::state) struct CachedProtocolUdpState {
+pub(in crate::runtime::udp_flow::protocol_state) struct CachedProtocolUdpState {
     handlers: CachedUdpHandlers,
 }
 
 impl CachedProtocolUdpState {
-    pub(in crate::protocol_runtime::udp::state) fn new(handlers: CachedUdpHandlers) -> Self {
+    pub(in crate::runtime::udp_flow::protocol_state) fn new(handlers: CachedUdpHandlers) -> Self {
         Self { handlers }
     }
 
-    pub(in crate::protocol_runtime::udp::state) fn senders(
+    pub(in crate::runtime::udp_flow::protocol_state) fn senders(
         &mut self,
     ) -> impl Iterator<Item = &mut dyn ManagedCachedFlowSender> {
         self.handlers
@@ -22,7 +22,7 @@ impl CachedProtocolUdpState {
             .map(|handler| handler.as_mut() as &mut dyn ManagedCachedFlowSender)
     }
 
-    pub(in crate::protocol_runtime::udp::state) fn push_sender(
+    pub(in crate::runtime::udp_flow::protocol_state) fn push_sender(
         &mut self,
         sender: Box<dyn ManagedCachedFlowSender>,
     ) {

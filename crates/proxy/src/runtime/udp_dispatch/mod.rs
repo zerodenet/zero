@@ -9,7 +9,7 @@
 //!
 //! - [`forward`]: re-dispatch packets on existing outbound flows
 //! - [`start`]: establish new outbound flows (single-hop and relay chains)
-//! - [`crate::protocol_runtime::udp`]: protocol-specific UDP managers
+//! - [`crate::runtime::udp_flow::protocol_state`]: registered protocol UDP handlers
 //! - [`packet_path_chain`]: generic datagram-over-packet-path manager for
 //!   relay chains (Shadowsocks -> Shadowsocks, SOCKS5 -> Shadowsocks, etc.)
 //!
@@ -72,9 +72,9 @@ mod types;
 
 // Re-exports.
 
-use crate::protocol_runtime::udp::ProtocolUdpState;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::packet_path_chain::PacketPathManager;
+use crate::runtime::udp_flow::protocol_state::ProtocolUdpState;
 pub(crate) use managed::{ManagedProtocolUdpSend, ManagedUdpOutboundKind};
 pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
 

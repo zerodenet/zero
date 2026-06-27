@@ -1,5 +1,5 @@
-use super::super::state::ProtocolUdpState;
-use super::super::FlowFailure;
+use super::ProtocolUdpState;
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{ManagedRelayStreamFlow, ManagedStreamPacketFlow};
 
 impl ProtocolUdpState {
