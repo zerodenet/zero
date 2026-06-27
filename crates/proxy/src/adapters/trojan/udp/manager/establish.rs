@@ -1,21 +1,21 @@
 use super::connect;
-use super::model::{TrojanEntry, TrojanUdpPeer};
+use super::model::TrojanEntry;
 use super::stream;
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
-use zero_core::{Address, Session};
+use zero_core::Session;
 use zero_engine::EngineError;
 
 pub(super) async fn direct(
     proxy: &Proxy,
     session: &Session,
-    peer: &TrojanUdpPeer<'_>,
-    target: &Address,
-    target_port: u16,
+    endpoint: OutboundEndpoint<'_>,
+    resume: &trojan::TrojanUdpFlowResume,
 ) -> Result<TrojanEntry, EngineError> {
-    let tls_stream = connect::direct_tls_stream(proxy, peer).await?;
+    let tls_stream = connect::direct_tls_stream(proxy, endpoint, resume).await?;
 
-    packet_stream(proxy, session, tls_stream, peer.resume, target, target_port).await
+    packet_stream(proxy, session, tls_stream, resume).await
 }
 
 pub(super) async fn over_relay_stream(
@@ -23,13 +23,13 @@ pub(super) async fn over_relay_stream(
     tls_server_name: Option<&str>,
     proxy: &Proxy,
     session: &Session,
-    peer: &TrojanUdpPeer<'_>,
-    target: &Address,
-    target_port: u16,
+    endpoint: OutboundEndpoint<'_>,
+    resume: &trojan::TrojanUdpFlowResume,
 ) -> Result<TrojanEntry, EngineError> {
-    let tls_stream = connect::relay_tls_stream(stream, tls_server_name, proxy, peer).await?;
+    let tls_stream =
+        connect::relay_tls_stream(stream, tls_server_name, proxy, endpoint, resume).await?;
 
-    packet_stream(proxy, session, tls_stream, peer.resume, target, target_port).await
+    packet_stream(proxy, session, tls_stream, resume).await
 }
 
 async fn packet_stream(
@@ -37,8 +37,6 @@ async fn packet_stream(
     session: &Session,
     stream: TcpRelayStream,
     resume: &trojan::TrojanUdpFlowResume,
-    _target: &Address,
-    _target_port: u16,
 ) -> Result<TrojanEntry, EngineError> {
     let stream::PacketStream { send_tx, recv_tx } =
         stream::spawn_packet_stream(proxy, session, stream, resume).await?;

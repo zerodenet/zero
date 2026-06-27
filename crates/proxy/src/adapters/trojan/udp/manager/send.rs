@@ -1,7 +1,7 @@
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use super::model::{TrojanRelayExisting, TrojanRelaySend, TrojanSendExisting, TrojanUdpPeer};
+use super::model::{TrojanRelayExisting, TrojanRelaySend, TrojanSendExisting};
 use super::{bridge, establish, TrojanChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -27,14 +27,13 @@ impl TrojanChainManager {
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
         session: &Session,
-        peer: TrojanUdpPeer<'_>,
+        endpoint: OutboundEndpoint<'_>,
+        resume: &trojan::TrojanUdpFlowResume,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
-        let key = peer
-            .resume
-            .cache_key(peer.endpoint.server, peer.endpoint.port, session_id);
+        let key = resume.cache_key(endpoint.server, endpoint.port, session_id);
 
         if let Some(entry) = self.upstreams.get(&key) {
             bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
@@ -49,23 +48,23 @@ impl TrojanChainManager {
             return Ok(sent);
         }
 
-        if peer.relay {
+        if resume.flow_requires_relay_upstream() {
             return Err(FlowFailure {
                 stage: "trojan_relay_upstream",
                 error: EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::NotConnected,
                     "trojan relay upstream is not established",
                 )),
-                upstream: Some(peer.endpoint.upstream()),
+                upstream: Some(endpoint.upstream()),
             });
         }
 
-        let entry = establish::direct(proxy, session, &peer, packet_ref.target, packet_ref.port)
+        let entry = establish::direct(proxy, session, endpoint, resume)
             .await
             .map_err(|e| FlowFailure {
                 stage: "trojan_establish",
                 error: e,
-                upstream: Some(peer.endpoint.upstream()),
+                upstream: Some(endpoint.upstream()),
             })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
@@ -94,14 +93,11 @@ impl TrojanChainManager {
             },
             request.proxy,
             request.session,
-            TrojanUdpPeer {
-                endpoint: OutboundEndpoint {
-                    server: request.server,
-                    port: request.port,
-                },
-                resume: &request.resume,
-                relay: request.resume.flow_requires_relay_upstream(),
+            OutboundEndpoint {
+                server: request.server,
+                port: request.port,
             },
+            &request.resume,
             UdpPacketRef {
                 target: request.target,
                 port: request.target_port,
@@ -114,7 +110,6 @@ impl TrojanChainManager {
     async fn send_relay(&mut self, request: TrojanRelaySend<'_>) -> Result<usize, FlowFailure> {
         let ctx = request.ctx;
         let packet_ref = request.packet;
-        let peer = request.peer;
         let session_id = ctx.session_id;
         let key = trojan::TrojanUdpCacheKey::relay(session_id);
         let entry = establish::over_relay_stream(
@@ -122,15 +117,17 @@ impl TrojanChainManager {
             request.tls_server_name,
             request.proxy,
             request.session,
-            &peer,
-            packet_ref.target,
-            packet_ref.port,
+            OutboundEndpoint {
+                server: request.server,
+                port: request.port,
+            },
+            request.resume,
         )
         .await
         .map_err(|e| FlowFailure {
             stage: "trojan_relay_establish",
             error: e,
-            upstream: Some(peer.endpoint.upstream()),
+            upstream: Some((request.server.to_owned(), request.port)),
         })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.recv_tx.clone(), session_id);
@@ -160,14 +157,9 @@ impl TrojanChainManager {
             tls_server_name: request.tls_server_name,
             proxy: request.proxy,
             session: request.session,
-            peer: TrojanUdpPeer {
-                endpoint: OutboundEndpoint {
-                    server: request.server,
-                    port: request.port,
-                },
-                resume: &request.resume,
-                relay: true,
-            },
+            server: request.server,
+            port: request.port,
+            resume: &request.resume,
             packet: UdpPacketRef {
                 target: request.target,
                 port: request.target_port,

@@ -5943,9 +5943,9 @@ fn packet_path_traits_are_grouped_by_responsibility() {
             && !runtime_root.join("peer.rs").exists()
             && ss_model.contains("struct SsUdpPeer")
             && !h2_model.contains("struct H2UdpPeer")
-            && trojan_model.contains("struct TrojanUdpPeer")
+            && !trojan_model.contains("struct TrojanUdpPeer")
             && !mieru_model.contains("struct MieruUdpPeer"),
-        "protocol UDP peer models should not live under runtime packet-path helpers or protocol_runtime::udp root; Hysteria2 and Mieru should use neutral OutboundEndpoint directly"
+        "protocol UDP peer models should not live under runtime packet-path helpers or protocol_runtime::udp root; Hysteria2, Trojan, and Mieru should use neutral OutboundEndpoint directly"
     );
     assert!(
         !packet_path.contains("ProtocolAdapter::"),
@@ -6526,15 +6526,17 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         );
     }
     assert!(
-        manager_send.contains(".cache_key(peer.endpoint.server, peer.endpoint.port, session_id)")
-            && manager_send.contains("request.resume.flow_requires_relay_upstream()")
-            && manager_connect.contains("peer.resume.tls_profile(")
+        manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
+            && !manager_send.contains("peer.endpoint")
+            && !manager_model.contains("TrojanUdpPeer")
+            && manager_send.contains("resume.flow_requires_relay_upstream()")
+            && manager_connect.contains("resume.tls_profile(")
             && manager_connect.contains("TrojanUdpTlsOptions")
             && manager_stream.contains("trojan::TrojanUdpFlowIo")
             && manager_stream.contains(".establish_with_resume(")
             && protocol_outbound.contains("pub async fn establish_with_resume")
             && !transport.contains("trojan::"),
-        "Trojan UDP manager should consume protocol-owned cache key, TLS profile, and protocol-owned tunnel establishment helpers without putting protocol calls in zero-transport"
+        "Trojan UDP manager should consume protocol-owned cache key and TLS profile through neutral endpoints without putting protocol calls in zero-transport"
     );
 }
 
