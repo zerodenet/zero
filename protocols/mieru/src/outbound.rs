@@ -280,6 +280,17 @@ where
     }
 }
 
+pub async fn establish_udp_flow_with_resume<S>(
+    mut stream: S,
+    resume: &crate::udp::MieruUdpFlowResume,
+) -> Result<MieruUdpFlowSession, Error>
+where
+    S: AsyncSocket + AsyncRead + AsyncWrite + Send + 'static,
+{
+    let flow_io = MieruUdpFlowIo::establish_with_resume(&mut stream, resume).await?;
+    Ok(MieruUdpFlowSession::new(spawn_udp_flow(stream, flow_io)))
+}
+
 fn spawn_udp_flow_task<S>(
     mut stream: S,
     mut flow_io: MieruUdpFlowIo,

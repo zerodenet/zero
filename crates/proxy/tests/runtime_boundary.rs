@@ -2853,24 +2853,22 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
         "flow_io.read_flow_packets",
         "tokio::spawn",
         "mpsc::channel::<UdpFlowPacket>",
+        "mieru::MieruUdpFlowIo::establish_with_resume",
+        "mieru::spawn_udp_flow",
+        "mieru::MieruUdpFlowSession::new",
     ] {
         assert!(
             !stream.contains(forbidden),
             "Mieru UDP stream glue should delegate protocol encode/decode and pump detail to protocols/mieru; found `{forbidden}`"
         );
     }
-    for required in [
-        "mieru::MieruUdpFlowIo::establish_with_resume",
-        "mieru::spawn_udp_flow",
-        "mieru::MieruUdpFlowSession::new",
-    ] {
-        assert!(
-            stream.contains(required),
-            "Mieru UDP stream glue should call protocol-owned flow API `{required}`"
-        );
-    }
     assert!(
-        protocol.contains("pub fn spawn_udp_flow")
+        stream.contains("mieru::establish_udp_flow_with_resume"),
+        "Mieru UDP stream glue should call the protocol-owned established flow API"
+    );
+    assert!(
+        protocol.contains("pub async fn establish_udp_flow_with_resume")
+            && protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("pub struct MieruUdpFlowHandle")
             && protocol.contains("struct MieruUdpFlowSender")
             && !protocol.contains("pub struct MieruUdpFlowSender")
@@ -7476,8 +7474,10 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             && !stream.contains("mpsc::channel")
             && !stream.contains("tokio::sync::broadcast::channel")
             && !stream.contains("tokio::spawn")
-            && stream.contains("mieru::MieruUdpFlowIo::establish_with_resume")
-            && stream.contains("mieru::spawn_udp_flow")
+            && stream.contains("mieru::establish_udp_flow_with_resume")
+            && !stream.contains("mieru::MieruUdpFlowIo::establish_with_resume")
+            && !stream.contains("mieru::spawn_udp_flow")
+            && !stream.contains("mieru::MieruUdpFlowSession::new")
             && !stream.contains("flow_io.write_flow_packet")
             && !stream.contains("flow_io.decode_encrypted_response")
             && !stream.contains("flow_io.read_flow_packets")
@@ -7488,6 +7488,7 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_outbound.contains("pub async fn read_packets")
             && protocol_outbound.contains("pub async fn write_flow_packet")
             && protocol_outbound.contains("pub async fn read_flow_packets")
+            && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
             && protocol_outbound.contains("pub fn decode_encrypted_response"),
         "Mieru UDP stream flow task should stay out of zero-transport and live in protocols/mieru while proxy keeps handshake/cache bridge glue"
     );
