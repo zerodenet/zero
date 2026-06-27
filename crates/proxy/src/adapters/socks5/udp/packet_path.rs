@@ -1,11 +1,14 @@
 use async_trait::async_trait;
 use zero_core::Address;
-use zero_engine::EngineError;
+use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::establish::{
     establish_shared_packet_path_association, Socks5UdpAssociationEstablishRequest,
 };
 use super::model::SharedSocks5UdpPacketPathAssociation;
+use crate::adapters::common::unreachable_leaf;
+use crate::adapters::socks5::Socks5Adapter;
+use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 
 pub(crate) struct Socks5PacketPath {
@@ -29,6 +32,55 @@ impl crate::runtime::udp_flow::packet_path::PacketPathCarrier for Socks5PacketPa
     }
 }
 
+pub(super) fn carrier_descriptor(
+    leaf: &ResolvedLeafOutbound<'_>,
+) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
+    let ResolvedLeafOutbound::Socks5 {
+        tag,
+        server,
+        port,
+        username,
+        password,
+    } = leaf
+    else {
+        return None;
+    };
+    let packet_path = packet_path_config(tag, server, *port, *username, *password);
+    Some(
+        crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
+            packet_path.cache_key(),
+            server,
+            *port,
+        ),
+    )
+}
+
+pub(super) async fn build(
+    adapter: &Socks5Adapter,
+    proxy: &Proxy,
+    leaf: &ResolvedLeafOutbound<'_>,
+) -> Result<std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
+{
+    let ResolvedLeafOutbound::Socks5 {
+        tag,
+        server,
+        port,
+        username,
+        password,
+    } = leaf
+    else {
+        return Err(unreachable_leaf(adapter.name(), leaf).error);
+    };
+    build_socks5_packet_path(
+        proxy,
+        tag,
+        server,
+        *port,
+        packet_path_config(tag, server, *port, *username, *password),
+    )
+    .await
+}
+
 pub(crate) async fn build_socks5_packet_path(
     proxy: &Proxy,
     tag: &str,
@@ -48,4 +100,14 @@ pub(crate) async fn build_socks5_packet_path(
         })
         .await?;
     Ok(std::sync::Arc::new(Socks5PacketPath { association }))
+}
+
+fn packet_path_config<'a>(
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    username: Option<&'a str>,
+    password: Option<&'a str>,
+) -> socks5::Socks5UdpPacketPath<'a> {
+    socks5::Socks5UdpPacketPathConfig::new(tag, server, port, username, password).packet_path()
 }

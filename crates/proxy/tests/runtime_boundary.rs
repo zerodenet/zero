@@ -1375,6 +1375,42 @@ fn stream_udp_roots_delegate_flow_building() {
 }
 
 #[test]
+fn socks5_udp_root_delegates_packet_path_and_flow_building() {
+    let root = read("src/adapters/socks5/udp.rs");
+    let packet_path = read("src/adapters/socks5/udp/packet_path.rs");
+    let flow = read("src/adapters/socks5/udp/flow.rs");
+
+    for required in ["mod packet_path;", "mod flow;"] {
+        assert!(
+            root.contains(required),
+            "src/adapters/socks5/udp.rs should wire `{required}` as protocol-local UDP glue"
+        );
+    }
+    for forbidden in [
+        "Socks5UdpPacketPathConfig::new",
+        "config.packet_path()",
+        "packet_path.cache_key()",
+        "ManagedProtocolUdpSend {",
+        "ManagedUdpFlowResume::new",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "src/adapters/socks5/udp.rs should be a UDP capability facade and not own `{forbidden}`"
+        );
+    }
+    assert!(
+        packet_path.contains("Socks5UdpPacketPathConfig::new")
+            && packet_path.contains(".packet_path()")
+            && packet_path.contains("packet_path.cache_key()")
+            && flow.contains("Socks5UdpPacketPathConfig::new")
+            && flow.contains(".flow_resume()")
+            && flow.contains("ManagedProtocolUdpSend {")
+            && flow.contains("ManagedUdpFlowResume::new"),
+        "SOCKS5 packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
+    );
+}
+
+#[test]
 fn adapter_root_is_facade_only() {
     let adapters = read("src/adapters/mod.rs");
 
@@ -3677,6 +3713,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
     let managed = read("src/runtime/udp_dispatch/managed.rs");
     let forward = read("src/runtime/udp_dispatch/forward.rs");
     let socks5_adapter = read("src/adapters/socks5/udp.rs");
+    let socks5_flow = read("src/adapters/socks5/udp/flow.rs");
 
     for forbidden in [
         "Socks5UdpAssociation {",
@@ -3700,8 +3737,8 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
         managed.contains("send_managed_protocol_udp")
             && managed.contains("start_tracked_managed_protocol_udp")
             && managed.contains("forward_managed_relay_flow")
-            && socks5_adapter.contains("ManagedUdpFlowKind::RelayStream")
-            && socks5_adapter.contains("ManagedUdpFlowResume::new")
+            && socks5_flow.contains("ManagedUdpFlowKind::RelayStream")
+            && socks5_flow.contains("ManagedUdpFlowResume::new")
             && !managed.contains("Socks5UdpPacketSend")
             && !managed.contains("username: Option<&'a str>")
             && !managed.contains("password: Option<&'a str>")
@@ -9240,6 +9277,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
 fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     for source in [
         "src/adapters/socks5/udp.rs",
+        "src/adapters/socks5/udp/packet_path.rs",
         "src/adapters/shadowsocks/udp/packet_path.rs",
         "src/adapters/hysteria2/udp.rs",
     ] {
@@ -9280,10 +9318,13 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         "protocols/socks5 should own SOCKS5 cache identity construction internally"
     );
     let socks5_adapter = read("src/adapters/socks5/udp.rs");
+    let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
     assert!(
         !socks5_adapter.contains("socks5::udp_cache_key")
-            && socks5_adapter.contains("Socks5UdpPacketPathConfig::new")
+            && !socks5_adapter.contains("Socks5UdpPacketPathConfig::new")
+            && socks5_packet_path.contains("Socks5UdpPacketPathConfig::new")
             && !socks5_adapter.contains("Socks5UdpPacketPathConfig {")
+            && !socks5_packet_path.contains("Socks5UdpPacketPathConfig {")
             && socks5_shared.contains("struct Socks5UdpPacketPathConfig")
             && socks5_shared.contains("pub fn new("),
         "SOCKS5 adapter should request packet-path cache identity through a protocol-owned config helper"
@@ -9500,7 +9541,7 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
     }
 
     for source in [
-        "src/adapters/socks5/udp.rs",
+        "src/adapters/socks5/udp/flow.rs",
         "src/adapters/shadowsocks/udp/flow.rs",
         "src/adapters/hysteria2/udp/flow.rs",
         "src/adapters/trojan/udp/flow.rs",
@@ -9638,6 +9679,7 @@ fn udp_dispatch_does_not_unpack_protocol_flow_resume() {
     let managed = read("src/runtime/udp_dispatch/managed.rs");
     for source in [
         "src/runtime/udp_dispatch/managed.rs",
+        "src/adapters/socks5/udp/flow.rs",
         "src/adapters/hysteria2/udp/flow.rs",
         "src/adapters/mieru/udp/flow.rs",
         "src/adapters/shadowsocks/udp.rs",
