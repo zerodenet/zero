@@ -1,7 +1,7 @@
 //! VLESS outbound - TCP connect helpers.
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
-//! so the runtime dispatches via the `ProtocolAdapter` trait. UDP flow manager
+//! so the runtime dispatches via registered TCP outbound capabilities. UDP flow manager
 //! glue lives under the VLESS adapter UDP module.
 
 #[cfg(feature = "vless")]

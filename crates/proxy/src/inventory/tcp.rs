@@ -1,7 +1,7 @@
 use zero_engine::EngineError;
 
 use super::ProtocolInventory;
-use crate::protocol_adapter::{OutboundAdapterContext, TcpOutboundCapability};
+use crate::protocol_registry::{OutboundAdapterContext, TcpOutboundCapability};
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 

@@ -1,7 +1,7 @@
 //! Hysteria2 outbound — TCP connect.
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
-//! so the runtime dispatches via the `ProtocolAdapter` trait. UDP datagram
+//! so the runtime dispatches via registered TCP outbound capabilities. UDP datagram
 //! management lives in the Hysteria2 adapter UDP module.
 
 use zero_core::Session;

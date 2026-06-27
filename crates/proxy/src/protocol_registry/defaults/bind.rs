@@ -1,8 +1,8 @@
 use zero_engine::EngineError;
 
-use crate::protocol_adapter::BoundInbound;
+use crate::protocol_registry::BoundInbound;
 
-pub(in crate::protocol_adapter) async fn bind_tcp_inbound(
+pub(in crate::protocol_registry) async fn bind_tcp_inbound(
     inbound: &zero_config::InboundConfig,
 ) -> Result<BoundInbound, EngineError> {
     let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);

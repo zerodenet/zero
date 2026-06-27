@@ -1,4 +1,4 @@
-//! Concrete `ProtocolAdapter` implementations for each compiled-in protocol.
+//! Concrete protocol capability bridges for each compiled-in protocol.
 
 mod common;
 mod direct;

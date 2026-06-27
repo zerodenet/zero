@@ -12,7 +12,7 @@ use super::Proxy;
 pub(super) async fn bind_inbound_listener(
     proxy: &Proxy,
     inbound: &InboundConfig,
-) -> Result<crate::protocol_adapter::BoundInbound, EngineError> {
+) -> Result<crate::protocol_registry::BoundInbound, EngineError> {
     proxy
         .protocols
         .bind_inbound(inbound, proxy.config.source_dir())
@@ -22,7 +22,7 @@ pub(super) async fn bind_inbound_listener(
 pub(super) fn spawn_inbound_listener(
     proxy: &Proxy,
     inbound: &InboundConfig,
-    bound: crate::protocol_adapter::BoundInbound,
+    bound: crate::protocol_registry::BoundInbound,
     shutdown_rx: watch::Receiver<bool>,
     listeners: &mut JoinSet<Result<(), EngineError>>,
 ) {

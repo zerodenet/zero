@@ -1,4 +1,4 @@
-use crate::protocol_adapter::ProtocolSupportCapability;
+use crate::protocol_registry::ProtocolSupportCapability;
 
 use super::fixtures::{compiled_in_inbound_configs, inbound_protocol_name};
 

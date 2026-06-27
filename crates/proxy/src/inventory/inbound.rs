@@ -5,7 +5,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 
 use super::ProtocolInventory;
-use crate::protocol_adapter::{BoundInbound, InboundAdapterContext, InboundListenerCapability};
+use crate::protocol_registry::{BoundInbound, InboundAdapterContext, InboundListenerCapability};
 use crate::runtime::Proxy;
 
 impl ProtocolInventory {

@@ -14,7 +14,7 @@ mod validation;
 /// match arms in `ProtocolInventory::supports_*` and `protocol_name` functions.
 #[derive(Clone, Default)]
 pub(crate) struct ProtocolRegistry {
-    adapters: Vec<std::sync::Arc<dyn crate::protocol_adapter::RegisteredProtocolCapability>>,
+    adapters: Vec<std::sync::Arc<dyn crate::protocol_registry::RegisteredProtocolCapability>>,
 }
 
 impl fmt::Debug for ProtocolRegistry {

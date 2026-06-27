@@ -14,7 +14,7 @@ use crate::transport::{MeteredStream, TcpRelayStream};
 /// CONNECT tunnel handshake, return the relay stream.
 ///
 /// Moved here from `runtime/upstream.rs` so the runtime dispatches via the
-/// `ProtocolAdapter` trait instead of a per-protocol `connect_via_*` method.
+/// registered TCP outbound capability instead of a per-protocol `connect_via_*` method.
 pub(crate) async fn connect_tcp(
     proxy: &Proxy,
     session: &Session,

@@ -1,7 +1,7 @@
 //! Trojan outbound -?TCP connect.
 //!
 //! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
-//! so the runtime dispatches via the `ProtocolAdapter` trait. UDP stream-packet
+//! so the runtime dispatches via registered TCP outbound capabilities. UDP stream-packet
 //! management lives in the Trojan adapter UDP module.
 
 use tokio::io::AsyncWriteExt;

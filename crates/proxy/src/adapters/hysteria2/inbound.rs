@@ -2,7 +2,7 @@ use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
 use crate::adapters::hysteria2::Hysteria2Adapter;
-use crate::protocol_adapter::BoundInbound;
+use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 use crate::transport::QuicInbound;
 

@@ -1,4 +1,4 @@
-use crate::protocol_adapter::ProtocolRegistry;
+use crate::protocol_registry::ProtocolRegistry;
 
 mod inbound;
 mod metadata;

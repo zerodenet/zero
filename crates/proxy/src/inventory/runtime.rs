@@ -1,7 +1,7 @@
 use zero_engine::EngineError;
 
 use super::ProtocolInventory;
-use crate::protocol_adapter::OutboundLeafRuntime;
+use crate::protocol_registry::OutboundLeafRuntime;
 
 impl ProtocolInventory {
     pub(crate) fn on_config_reloaded(&self) {

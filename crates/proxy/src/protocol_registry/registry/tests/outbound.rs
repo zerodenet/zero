@@ -1,6 +1,6 @@
 use zero_engine::ResolvedLeafOutbound;
 
-use crate::protocol_adapter::TcpOutboundCapability;
+use crate::protocol_registry::TcpOutboundCapability;
 use crate::runtime::orchestration::TcpPathCategory;
 
 use super::fixtures::{compiled_in_outbound_leaves, outbound_leaf_name};

@@ -2,7 +2,7 @@ use zero_config::InboundConfig;
 use zero_engine::EngineError;
 
 use crate::adapters::http_connect::HttpConnectAdapter;
-use crate::protocol_adapter::BoundInbound;
+use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
 impl HttpConnectAdapter {

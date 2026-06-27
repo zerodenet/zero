@@ -2,7 +2,7 @@ use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
 use crate::adapters::trojan::TrojanAdapter;
-use crate::protocol_adapter::BoundInbound;
+use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
 impl TrojanAdapter {

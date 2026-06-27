@@ -3,7 +3,7 @@ use std::sync::Arc;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::ProtocolRegistry;
-use crate::protocol_adapter::{
+use crate::protocol_registry::{
     OutboundLeafRuntime, RegisteredProtocolCapability, TcpOutboundCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;

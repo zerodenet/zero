@@ -3,7 +3,7 @@ use zero_engine::EngineError;
 
 use crate::adapters::vless::VlessAdapter;
 use crate::inbound::vless::ConfiguredVlessUser;
-use crate::protocol_adapter::BoundInbound;
+use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 use crate::transport::QuicInbound;
 

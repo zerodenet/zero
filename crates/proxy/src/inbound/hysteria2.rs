@@ -1,4 +1,4 @@
-//! Hysteria2 inbound — QUIC accept, HMAC auth, TCP stream dispatch.
+//! Hysteria2 inbound: QUIC accept, HMAC auth, TCP stream dispatch.
 //!
 //! TCP stream relay uses the `InboundProtocol` trait with a custom relay
 //! that handles QUIC stream I/O (not raw TCP).
@@ -50,7 +50,7 @@ impl InboundProtocol for Hysteria2StreamHandler {
         &self,
         _stream: crate::transport::TcpRelayStream,
     ) -> Result<(Session, Self::ClientStream), EngineError> {
-        // Hysteria2 accept is handled inline by the listener — this is unused.
+        // Hysteria2 accept is handled inline by the listener; this is unused.
         Err(EngineError::Io(io::Error::new(
             io::ErrorKind::Unsupported,
             "Hysteria2 accept is handled by the listener",
@@ -125,7 +125,7 @@ impl InboundProtocol for Hysteria2StreamHandler {
 pub(crate) async fn run_hysteria2_listener_with_bound(
     proxy: &Proxy,
     request: Hysteria2InboundRequest,
-    bound: crate::protocol_adapter::BoundInbound,
+    bound: crate::protocol_registry::BoundInbound,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
     let Hysteria2InboundRequest {
@@ -136,7 +136,7 @@ pub(crate) async fn run_hysteria2_listener_with_bound(
     } = request;
     let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
     let quic_inbound = match bound {
-        crate::protocol_adapter::BoundInbound::Quic(e) => e,
+        crate::protocol_registry::BoundInbound::Quic(e) => e,
         _ => {
             return Err(EngineError::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,

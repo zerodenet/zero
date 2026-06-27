@@ -16,14 +16,14 @@ use super::upgrade_vless_reality_server;
 pub(crate) async fn run_vless_listener_with_bound(
     proxy: &Proxy,
     request: VlessInboundRequest,
-    bound: crate::protocol_adapter::BoundInbound,
+    bound: crate::protocol_registry::BoundInbound,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
     let VlessInboundRequest { inbound, users } = request;
     let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
 
     match bound {
-        crate::protocol_adapter::BoundInbound::Quic(quic_inbound) => {
+        crate::protocol_registry::BoundInbound::Quic(quic_inbound) => {
             info!(
                 inbound_tag = %inbound.tag,
                 protocol = "vless",
@@ -44,7 +44,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                 )
                 .await;
         }
-        crate::protocol_adapter::BoundInbound::Tcp(listener) => {
+        crate::protocol_registry::BoundInbound::Tcp(listener) => {
             let local_addr = listener.local_addr()?;
             let tls_acceptor = inbound
                 .protocol
@@ -165,7 +165,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                                             Err(error) => Err(error.into()),
                                         }
                                     } else {
-                                        // Not valid TLS — direct TLS accept without peek
+                                        // Not valid TLS; direct TLS accept without peek.
                                         match acceptor.accept(raw).await {
                                             Ok(tls_stream) => engine
                                                 .handle_vless_stream(VlessStreamRequest {

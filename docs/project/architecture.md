@@ -54,17 +54,18 @@
 
 ### Adapter dispatch boundary
 
-`ProtocolAdapter` is only the registration compatibility marker.
-Inbound bind/spawn dispatch is split out into explicit `InboundListenerCapability` implementations on each registered adapter.
-TCP outbound dispatch is split out into explicit `TcpOutboundCapability` implementations on each registered adapter.
-UDP flow dispatch is split out into explicit `UdpFlowCapability` implementations on each registered adapter.
-UDP packet-path carrier/datagram dispatch is split out into explicit `UdpPacketPathCapability` implementations on each registered adapter.
-Focused capability traits (`ProtocolSupportCapability`, `InboundListenerCapability`, `TcpOutboundCapability`, `UdpFlowCapability`, and `UdpPacketPathCapability`) are the runtime-facing adapter surface.
-Metadata and feature/support checks live in explicit `ProtocolSupportCapability` implementations, not on the monolithic adapter trait.
+`ProtocolAdapter` does not exist. Protocol dispatch is represented by registered
+capability objects.
+Inbound bind/spawn dispatch is split out into explicit `InboundListenerCapability` implementations on each registered protocol bridge.
+TCP outbound dispatch is split out into explicit `TcpOutboundCapability` implementations on each registered protocol bridge.
+UDP flow dispatch is split out into explicit `UdpFlowCapability` implementations on each registered protocol bridge.
+UDP packet-path carrier/datagram dispatch is split out into explicit `UdpPacketPathCapability` implementations on each registered protocol bridge.
+Focused capability traits (`ProtocolSupportCapability`, `InboundListenerCapability`, `TcpOutboundCapability`, `UdpFlowCapability`, and `UdpPacketPathCapability`) are the runtime-facing protocol surface.
+Metadata and feature/support checks live in explicit `ProtocolSupportCapability` implementations, not on a monolithic adapter trait.
 These capability entrypoints receive narrow adapter context values (`InboundAdapterContext`, `OutboundAdapterContext`, `UdpAdapterContext`) instead of exposing the full `Proxy` parameter in the trait surface; protocol implementations can still use the context as a migration bridge while runtime dependencies are reduced.
-`ProtocolRegistry` stores registered capability objects; the monolithic adapter trait must not regain runtime methods.
+`ProtocolRegistry` stores registered capability objects; a monolithic adapter trait must not be introduced.
 `zero-proxy` runtime orchestration does not match on `InboundProtocolConfig` or `ResolvedLeafOutbound` to select a protocol path.
-Adding a protocol means registering an adapter and adding protocol-local inbound/outbound code.
+Adding a protocol means registering its capability object and adding protocol-local inbound/outbound code.
 
 Inbound listener entrypoints live as module functions under `crates/proxy/src/inbound/`.
 Adapters call `crate::inbound::run_<protocol>_listener_with_bound`; `Proxy` does not own `run_*_listener_with_bound` methods.
@@ -75,11 +76,11 @@ Adapters call `crate::inbound::run_<protocol>_listener_with_bound`; `Proxy` does
 - `adapters/mod.rs` only declares concrete adapter modules and re-exports adapter types. Registry construction and protocol dispatch stay outside this facade.
 - `inbound/mod.rs` only declares inbound listener modules and re-exports `run_<protocol>_listener_with_bound` entrypoints. Request models and listener/session logic stay in protocol-local inbound modules.
 - `outbound/mod.rs` only declares crate-private per-protocol outbound helper modules. Helper logic lives in `outbound/<protocol>.rs` and is called only by adapter TCP modules.
-- `protocol_adapter.rs` only re-exports the crate-private adapter trait, focused capability traits, adapter contexts, adapter models, and registry.
-- `protocol_adapter/defaults.rs` only wires adapter default helper modules. TCP bind defaults live in `defaults/bind.rs`; unsupported error construction lives in `defaults/errors.rs`.
-- `protocol_adapter/model.rs` only wires adapter model modules. Inbound bind/spawn models live in `model/inbound.rs`; outbound runtime facts live in `model/outbound.rs`.
-- `protocol_adapter/registry.rs` only owns the registry struct and submodule wiring. The low-level register helper lives in `registry/build.rs`; compiled protocol collection lives in `src/register.rs`; inbound dispatch, outbound dispatch, metadata, support lookup, and validation live in `registry/{inbound,outbound,metadata,support,validation}.rs`.
-- `protocol_adapter/registry/tests.rs` only wires registry test modules. Shared fixtures live in `registry/tests/fixtures.rs`; inbound coverage lives in `registry/tests/inbound.rs`; outbound and `block` kernel fact coverage live in `registry/tests/outbound.rs`.
+- `protocol_registry.rs` only re-exports focused capability traits, adapter contexts, registry models, and registry.
+- `protocol_registry/defaults.rs` only wires default helper modules. TCP bind defaults live in `defaults/bind.rs`; unsupported error construction lives in `defaults/errors.rs`.
+- `protocol_registry/model.rs` only wires registry model modules. Inbound bind/spawn models live in `model/inbound.rs`; outbound runtime facts live in `model/outbound.rs`.
+- `protocol_registry/registry.rs` only owns the registry struct and submodule wiring. The low-level register helper lives in `registry/build.rs`; compiled protocol collection lives in `src/register.rs`; inbound dispatch, outbound dispatch, metadata, support lookup, and validation live in `registry/{inbound,outbound,metadata,support,validation}.rs`.
+- `protocol_registry/registry/tests.rs` only wires registry test modules. Shared fixtures live in `registry/tests/fixtures.rs`; inbound coverage lives in `registry/tests/inbound.rs`; outbound and `block` kernel fact coverage live in `registry/tests/outbound.rs`.
 - `inventory.rs` only owns the runtime-facing `ProtocolInventory` shell. Inbound, TCP, UDP, metadata, direct connector access, and runtime-fact lookups live in sibling modules.
 - `inventory/protocols.rs` exposes only neutral proxy-owned protocol helpers such as the direct connector; concrete protocol object construction stays in protocol-local integration code or the compiled registration surface.
 - `inventory/udp.rs` only wires UDP inventory submodules. Single-hop leaf dispatch, relay final-hop dispatch, and packet-path adapter probing live in `inventory/udp/{leaf,relay,packet_path}.rs`.

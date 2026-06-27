@@ -4,7 +4,7 @@ use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 
 use super::ProtocolRegistry;
-use crate::protocol_adapter::{
+use crate::protocol_registry::{
     BoundInbound, InboundListenerCapability, ProtocolSupportCapability,
     RegisteredProtocolCapability,
 };

@@ -1,7 +1,7 @@
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 
 use super::ProtocolRegistry;
-use crate::protocol_adapter::ProtocolSupportCapability;
+use crate::protocol_registry::ProtocolSupportCapability;
 
 impl ProtocolRegistry {
     pub(crate) fn supports_inbound(&self, config: &InboundProtocolConfig) -> bool {

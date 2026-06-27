@@ -1,18 +1,16 @@
-//! Protocol adapter registry - eliminates per-protocol match arms in the proxy.
+//! Protocol registry - eliminates per-protocol match arms in the proxy.
 //!
-//! Each protocol provides a `ProtocolAdapter` that knows its name, feature gate,
-//! and how to validate its configuration. The `ProtocolRegistry` collects
-//! adapters at startup and replaces the hard-coded match statements in
-//! `ProtocolInventory`.
+//! Each registered protocol contributes focused capability traits for support
+//! metadata, inbound listeners, TCP outbound, UDP flows, and packet-path roles.
+//! The `ProtocolRegistry` collects capability objects at startup and replaces
+//! hard-coded match statements in `ProtocolInventory`.
 
-mod adapter;
 mod capability;
 mod context;
 mod defaults;
 mod model;
 mod registry;
 
-pub(crate) use adapter::ProtocolAdapter;
 pub(crate) use capability::{
     InboundListenerCapability, ProtocolSupportCapability, RegisteredProtocolCapability,
     TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,

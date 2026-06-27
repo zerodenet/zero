@@ -1,14 +1,12 @@
-use async_trait::async_trait;
-
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::protocol_adapter::{
-    BoundInbound, InboundAdapterContext, InboundListenerCapability, ProtocolAdapter,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
-};
 use crate::protocol_capability::protocol_descriptor;
+use crate::protocol_registry::{
+    BoundInbound, InboundAdapterContext, InboundListenerCapability, ProtocolSupportCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+};
 
 #[cfg(feature = "mixed")]
 mod inbound;
@@ -16,10 +14,6 @@ mod inbound;
 #[cfg(feature = "mixed")]
 #[derive(Debug)]
 pub(crate) struct MixedAdapter;
-
-#[cfg(feature = "mixed")]
-#[async_trait]
-impl ProtocolAdapter for MixedAdapter {}
 
 #[cfg(feature = "mixed")]
 impl InboundListenerCapability for MixedAdapter {

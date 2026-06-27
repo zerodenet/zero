@@ -1,5 +1,5 @@
 use super::super::ProtocolInventory;
-use crate::protocol_adapter::{UdpAdapterContext, UdpFlowCapability};
+use crate::protocol_registry::{UdpAdapterContext, UdpFlowCapability};
 use crate::runtime::Proxy;
 
 impl ProtocolInventory {

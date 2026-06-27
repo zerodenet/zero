@@ -3,7 +3,7 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
-use crate::protocol_adapter::ProtocolSupportCapability;
+use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 

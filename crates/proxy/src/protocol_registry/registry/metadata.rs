@@ -1,6 +1,6 @@
 use super::ProtocolRegistry;
-use crate::protocol_adapter::ProtocolSupportCapability;
 use crate::protocol_capability::{protocol_capability, protocol_descriptor};
+use crate::protocol_registry::ProtocolSupportCapability;
 
 impl ProtocolRegistry {
     /// Names of all compiled-in inbound protocols.

@@ -4,7 +4,7 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
 use crate::adapters::vmess::VmessAdapter;
-use crate::protocol_adapter::ProtocolSupportCapability;
+use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 

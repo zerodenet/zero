@@ -6,10 +6,10 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::common::proxy_leaf_runtime;
-use crate::protocol_adapter::{
+use crate::protocol_registry::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
-    OutboundLeafRuntime, ProtocolAdapter, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
+    OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -25,10 +25,6 @@ pub(crate) mod udp;
 #[cfg(feature = "trojan")]
 #[derive(Debug)]
 pub(crate) struct TrojanAdapter;
-
-#[cfg(feature = "trojan")]
-#[async_trait]
-impl ProtocolAdapter for TrojanAdapter {}
 
 #[cfg(feature = "trojan")]
 #[async_trait]

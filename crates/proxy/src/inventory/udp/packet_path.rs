@@ -1,7 +1,7 @@
 use zero_engine::EngineError;
 
 use super::super::ProtocolInventory;
-use crate::protocol_adapter::{UdpAdapterContext, UdpPacketPathCapability};
+use crate::protocol_registry::{UdpAdapterContext, UdpPacketPathCapability};
 use crate::runtime::Proxy;
 
 impl ProtocolInventory {

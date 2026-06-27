@@ -1,10 +1,10 @@
 use super::ProtocolRegistry;
-use crate::protocol_adapter::{ProtocolAdapter, RegisteredProtocolCapability};
+use crate::protocol_registry::RegisteredProtocolCapability;
 
 impl ProtocolRegistry {
     pub(crate) fn register<T>(&mut self, adapter: std::sync::Arc<T>)
     where
-        T: ProtocolAdapter + RegisteredProtocolCapability + 'static,
+        T: RegisteredProtocolCapability + 'static,
     {
         let adapter: std::sync::Arc<dyn RegisteredProtocolCapability> = adapter;
         self.adapters.push(adapter);

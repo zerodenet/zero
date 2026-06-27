@@ -3,7 +3,7 @@ use zero_engine::ResolvedLeafOutbound;
 
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::hysteria2::Hysteria2Adapter;
-use crate::protocol_adapter::ProtocolSupportCapability;
+use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 

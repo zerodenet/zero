@@ -1,6 +1,6 @@
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use crate::protocol_adapter::OutboundLeafRuntime;
+use crate::protocol_registry::OutboundLeafRuntime;
 use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory};
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::transport::TcpOutboundFailure;
