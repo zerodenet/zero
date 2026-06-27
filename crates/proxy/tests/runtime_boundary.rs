@@ -2266,7 +2266,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vless::VlessUdpIdentity")
             && !runtime.contains("vless::VlessUdpFlowIo")
             && !runtime.contains("broadcast::channel::<VlessFlowResponse>")
-            && model.contains("BoxedManagedStreamUdpConnection")
+            && model.contains("SharedManagedUdpConnection")
             && !model.contains("vless::VlessUdpFlowConnection")
             && !model.contains("vless::VlessUdpFlowSession")
             && !model.contains("vless::VlessUdpFlowSender")
@@ -2292,7 +2292,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "VLESS UDP runtime should keep protocol flow I/O inside protocols/vless and leave proxy manager as cache/bridge glue"
     );
     assert!(
-        model.contains("BoxedManagedStreamUdpConnection")
+        model.contains("SharedManagedUdpConnection")
             && !model.contains("vless::VlessUdpFlowConnection"),
         "VLESS UDP manager cache should store a neutral stream UDP connection object"
     );
@@ -2563,7 +2563,7 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vmess::VmessUdpIdentity")
             && !runtime.contains("vmess::VmessUdpFlowIo")
             && !runtime.contains("broadcast::channel::<VmessFlowResponse>")
-            && model.contains("BoxedManagedStreamUdpConnection")
+            && model.contains("SharedManagedUdpConnection")
             && !model.contains("vmess::VmessUdpFlowConnection")
             && !model.contains("vmess::VmessUdpFlowSession")
             && !model.contains("vmess::VmessUdpFlowSender")
@@ -2589,7 +2589,7 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "VMess UDP runtime should keep protocol flow I/O inside protocols/vmess and leave proxy manager as cache/bridge glue"
     );
     assert!(
-        model.contains("BoxedManagedStreamUdpConnection")
+        model.contains("SharedManagedUdpConnection")
             && !model.contains("vmess::VmessUdpFlowConnection"),
         "VMess UDP manager cache should store a neutral stream UDP connection object"
     );
@@ -3080,9 +3080,10 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         "Hysteria2 UDP establish glue should delegate QUIC/profile setup and protocol flow pumping to outbound/hysteria2"
     );
     assert!(
-        establish.contains("hysteria2::Hysteria2UdpFlowConnection")
+        establish.contains("impl ManagedUdpConnection for hysteria2::Hysteria2UdpFlowConnection")
+            && establish.contains("SharedManagedUdpConnection")
             && !establish.contains("hysteria2::Hysteria2UdpFlowSession"),
-        "Hysteria2 UDP establish glue should return the protocol-owned flow connection wrapper, not a raw flow session"
+        "Hysteria2 UDP establish glue should expose a neutral proxy connection capability, not a raw flow session"
     );
     assert!(
         protocol.contains("struct Hysteria2UdpFlowIo")
@@ -5968,8 +5969,8 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
     assert!(
         mieru_manager.contains("mieru::MieruUdpFlowStore")
             && trojan_manager.contains("trojan::TrojanUdpFlowStore")
-            && mieru_manager.contains("BoxedManagedStreamUdpConnection")
-            && trojan_manager.contains("BoxedManagedStreamUdpConnection")
+            && mieru_manager.contains("SharedManagedUdpConnection")
+            && trojan_manager.contains("SharedManagedUdpConnection")
             && !mieru_manager.contains("mieru::MieruUdpFlowSessions")
             && !trojan_manager.contains("trojan::TrojanUdpFlowSessions")
             && !mieru_manager.contains("mieru::MieruUdpFlowConnection")
@@ -6898,7 +6899,7 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
             && send.contains(".spawn_response_bridge(")
             && !send.contains("spawn_trojan_response_bridge")
             && !send.contains("spawn_response_bridge(\n")
-            && establish.contains("impl ManagedStreamUdpConnection for trojan::TrojanUdpFlowConnection")
+            && establish.contains("impl ManagedUdpConnection for trojan::TrojanUdpFlowConnection")
             && establish.contains("spawn_response_bridge")
             && managed.contains("pub(crate) fn spawn_response_bridge<T, F>")
             && managed.contains("FnMut(T) -> (Address, u16, Vec<u8>)"),
@@ -7446,7 +7447,7 @@ fn mieru_udp_response_bridge_lives_outside_manager() {
         !bridge.exists()
             && send.contains(".spawn_response_bridge(")
             && !send.contains("spawn_tuple_response_bridge")
-            && establish.contains("impl ManagedStreamUdpConnection for mieru::MieruUdpFlowConnection")
+            && establish.contains("impl ManagedUdpConnection for mieru::MieruUdpFlowConnection")
             && establish.contains("spawn_tuple_response_bridge")
             && managed.contains("pub(crate) fn spawn_tuple_response_bridge")
             && managed.contains("broadcast::Receiver<(Address, u16, Vec<u8>)>"),
@@ -8291,11 +8292,17 @@ fn h2_udp_model_details_live_outside_manager_root() {
             && establish.contains("endpoint: OutboundEndpoint")
             && !stream.exists()
             && read("src/adapters/hysteria2/udp/manager.rs")
+                .contains("hysteria2::Hysteria2UdpFlowStore")
+            && read("src/adapters/hysteria2/udp/manager.rs")
+                .contains("SharedManagedUdpConnection")
+            && !read("src/adapters/hysteria2/udp/manager.rs")
                 .contains("hysteria2::Hysteria2UdpFlowSessions")
+            && !read("src/adapters/hysteria2/udp/manager.rs")
+                .contains("hysteria2::Hysteria2UdpFlowConnection")
             && !read("src/adapters/hysteria2/udp/manager.rs").contains(
                 "hysteria2::Hysteria2UdpFlowStore<hysteria2::Hysteria2UdpFlowSession>"
             ),
-        "h2_manager should store a protocol-owned session cache without adapter-local H2Key/H2UdpPeer wrappers, store/session generics, or a dedicated stream wrapper"
+        "h2_manager should reuse protocol cache-key storage while caching neutral UDP connection capabilities"
     );
 }
 
@@ -8303,6 +8310,7 @@ fn h2_udp_model_details_live_outside_manager_root() {
 fn h2_udp_send_orchestration_lives_outside_manager() {
     let manager = read("src/adapters/hysteria2/udp/manager.rs");
     let send = manifest_dir().join("src/adapters/hysteria2/udp/manager/send.rs");
+    let send_source = read("src/adapters/hysteria2/udp/manager/send.rs");
 
     for forbidden in [
         "async fn send(",
@@ -8320,6 +8328,12 @@ fn h2_udp_send_orchestration_lives_outside_manager() {
     assert!(
         send.exists(),
         "Hysteria2 UDP send orchestration should live in h2_manager/send.rs"
+    );
+    assert!(
+        send_source.contains(".spawn_response_bridge(")
+            && !send_source.contains("subscribe_responses()")
+            && !send_source.contains("spawn_tuple_response_bridge"),
+        "Hysteria2 UDP send orchestration should use the neutral UDP connection response bridge"
     );
 }
 

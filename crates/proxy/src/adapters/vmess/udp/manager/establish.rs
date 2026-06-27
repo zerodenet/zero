@@ -4,13 +4,13 @@ use zero_platform_tokio::TransportConnector;
 
 use super::model::{VmessUdpUpstream, VmessUdpUpstreamRequest};
 use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
-use crate::runtime::udp_flow::managed::{spawn_tuple_response_bridge, ManagedStreamUdpConnection};
+use crate::runtime::udp_flow::managed::{spawn_tuple_response_bridge, ManagedUdpConnection};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::transport::TcpRelayStream;
 use std::sync::Arc;
 
 #[async_trait::async_trait]
-impl ManagedStreamUdpConnection for vmess::VmessUdpFlowConnection {
+impl ManagedUdpConnection for vmess::VmessUdpFlowConnection {
     async fn send(
         &self,
         target: &zero_core::Address,

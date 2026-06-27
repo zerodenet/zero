@@ -23,6 +23,7 @@ impl H2ChainManager {
         let sent = packet_ref.payload.len();
 
         if let Some(entry) = self.upstreams.get(&resume, endpoint.server, endpoint.port) {
+            entry.spawn_response_bridge(ctx.chain_tasks, ctx.session_id);
             return entry
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
                 .await
@@ -33,20 +34,15 @@ impl H2ChainManager {
                 });
         }
 
-        let session = establish::upstream(
-            ctx.chain_tasks,
-            ctx.session_id,
-            endpoint,
-            resume.clone(),
-            packet_ref,
-        )
-        .await
-        .map_err(|e| FlowFailure {
-            stage: "h2_establish",
-            error: e,
-            upstream: Some(endpoint.upstream()),
-        })?;
+        let session = establish::upstream(endpoint, resume.clone(), packet_ref)
+            .await
+            .map_err(|e| FlowFailure {
+                stage: "h2_establish",
+                error: e,
+                upstream: Some(endpoint.upstream()),
+            })?;
 
+        session.spawn_response_bridge(ctx.chain_tasks, ctx.session_id);
         self.upstreams
             .insert(&resume, endpoint.server, endpoint.port, session);
 

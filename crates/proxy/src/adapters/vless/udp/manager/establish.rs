@@ -3,14 +3,14 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
 use super::model::VlessUdpUpstream;
-use crate::runtime::udp_flow::managed::{spawn_tuple_response_bridge, ManagedStreamUdpConnection};
+use crate::runtime::udp_flow::managed::{spawn_tuple_response_bridge, ManagedUdpConnection};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use std::sync::Arc;
 
 #[async_trait::async_trait]
-impl ManagedStreamUdpConnection for vless::VlessUdpFlowConnection {
+impl ManagedUdpConnection for vless::VlessUdpFlowConnection {
     async fn send(
         &self,
         target: &zero_core::Address,

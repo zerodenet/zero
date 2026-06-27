@@ -22,14 +22,14 @@ pub(crate) use state::{ManagedProtocolUdpState, ManagedUdpHandlers};
 pub(crate) use stream_sender::ManagedStreamFlowSender;
 
 #[async_trait::async_trait]
-pub(crate) trait ManagedStreamUdpConnection: Send + Sync {
+pub(crate) trait ManagedUdpConnection: Send + Sync {
     async fn send(&self, target: &Address, port: u16, payload: &[u8])
         -> Result<usize, EngineError>;
 
     fn spawn_response_bridge(&self, chain_tasks: &mut JoinSet<ChainTask>, session_id: u64);
 }
 
-pub(crate) type BoxedManagedStreamUdpConnection = Arc<dyn ManagedStreamUdpConnection>;
+pub(crate) type SharedManagedUdpConnection = Arc<dyn ManagedUdpConnection>;
 
 pub(crate) fn spawn_response_bridge<T, F>(
     chain_tasks: &mut JoinSet<ChainTask>,

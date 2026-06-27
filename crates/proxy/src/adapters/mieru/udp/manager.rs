@@ -9,9 +9,8 @@ mod send;
 
 #[cfg(feature = "mieru")]
 pub(crate) struct MieruChainManager {
-    upstreams: mieru::MieruUdpFlowStore<
-        crate::runtime::udp_flow::managed::BoxedManagedStreamUdpConnection,
-    >,
+    upstreams:
+        mieru::MieruUdpFlowStore<crate::runtime::udp_flow::managed::SharedManagedUdpConnection>,
 }
 
 #[cfg(feature = "mieru")]

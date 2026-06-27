@@ -8,9 +8,8 @@ mod send;
 
 #[cfg(feature = "trojan")]
 pub(crate) struct TrojanChainManager {
-    upstreams: trojan::TrojanUdpFlowStore<
-        crate::runtime::udp_flow::managed::BoxedManagedStreamUdpConnection,
-    >,
+    upstreams:
+        trojan::TrojanUdpFlowStore<crate::runtime::udp_flow::managed::SharedManagedUdpConnection>,
 }
 
 #[cfg(feature = "trojan")]
