@@ -1,7 +1,7 @@
-use crate::protocol_runtime::udp::{
-    FlowFailure, ManagedCachedFlowSender, ManagedUdpFlowKind, ManagedUdpFlowRequest,
+use crate::protocol_runtime::udp::{FlowFailure, ManagedCachedFlowSender};
+use crate::runtime::udp_flow::managed::{
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume,
 };
-use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::packet_path::ChainTask;

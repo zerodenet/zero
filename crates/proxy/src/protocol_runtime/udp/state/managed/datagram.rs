@@ -2,13 +2,11 @@ use crate::protocol_runtime::udp::state::managed::model::{
     ManagedDatagramFlowHandler, ManagedExistingSend,
 };
 use crate::protocol_runtime::udp::FlowFailure;
-use crate::runtime::udp_flow::managed::ManagedUdpFlowSnapshot;
+use crate::runtime::udp_flow::managed::{ManagedDatagramFlow, ManagedUdpFlowSnapshot};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 use tokio::task::JoinSet;
-
-use crate::protocol_runtime::udp::flows::ManagedDatagramFlow;
 
 pub(in crate::protocol_runtime::udp::state::managed) struct ManagedDatagramState {
     handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>,

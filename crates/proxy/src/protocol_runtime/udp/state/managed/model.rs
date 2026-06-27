@@ -1,11 +1,10 @@
 use tokio::task::JoinSet;
 use zero_core::{Address, Session};
 
-use crate::protocol_runtime::udp::flows::{
-    ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow,
-};
 use crate::protocol_runtime::udp::FlowFailure;
-use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
+use crate::runtime::udp_flow::managed::{
+    ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowResume,
+};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;

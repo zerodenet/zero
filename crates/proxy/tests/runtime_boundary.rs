@@ -2705,25 +2705,24 @@ fn protocol_runtime_udp_root_does_not_reexport_upstream_poll_details() {
 #[test]
 fn protocol_runtime_udp_root_does_not_reexport_internal_managed_flow_models() {
     let root = read("src/protocol_runtime/udp/mod.rs");
-    let flow_reexports = root
-        .lines()
-        .filter(|line| line.contains("pub(crate) use flows::"))
-        .collect::<Vec<_>>()
-        .join("\n");
 
     for forbidden in [
-        "ManagedDatagramFlow",
-        "ManagedStreamPacketFlow",
-        "ManagedRelayStreamFlow",
+        "mod flows",
+        "pub(crate) use flows::",
+        "ManagedDatagramFlow,",
+        "ManagedStreamPacketFlow,",
+        "ManagedRelayStreamFlow,",
+        "ManagedUdpFlowKind",
+        "ManagedUdpFlowRequest",
     ] {
         assert!(
-            !flow_reexports.contains(forbidden),
-            "protocol_runtime::udp root should not re-export internal managed flow model `{forbidden}`"
+            !root.contains(forbidden),
+            "protocol_runtime::udp root should not own or re-export managed flow model `{forbidden}`"
         );
     }
     assert!(
-        root.contains("pub(crate) use flows::{ManagedUdpFlowKind, ManagedUdpFlowRequest};"),
-        "protocol_runtime::udp root should expose only the neutral managed flow request facade"
+        !manifest_dir().join("src/protocol_runtime/udp/flows.rs").exists(),
+        "managed UDP flow request models should live under runtime::udp_flow, not protocol_runtime::udp"
     );
 }
 
@@ -3718,7 +3717,13 @@ fn udp_dispatch_internal_state_fields_are_not_crate_public() {
 
 #[test]
 fn protocol_udp_flow_requests_do_not_extend_udp_dispatch() {
-    let content = read("src/protocol_runtime/udp/flows.rs");
+    assert!(
+        !manifest_dir()
+            .join("src/protocol_runtime/udp/flows.rs")
+            .exists(),
+        "managed UDP flow request models should not live under protocol_runtime::udp"
+    );
+    let content = read("src/runtime/udp_flow/managed.rs");
 
     for forbidden in [
         "VlessUdpFlow",
@@ -3729,7 +3734,7 @@ fn protocol_udp_flow_requests_do_not_extend_udp_dispatch() {
     ] {
         assert!(
             !content.contains(forbidden),
-            "protocol_runtime::udp::flows should keep only neutral flow requests, not protocol-specific `{forbidden}`"
+            "runtime::udp_flow::managed should keep only neutral flow requests, not protocol-specific `{forbidden}`"
         );
     }
 
@@ -3739,7 +3744,7 @@ fn protocol_udp_flow_requests_do_not_extend_udp_dispatch() {
     ] {
         assert!(
             !content.contains(forbidden),
-            "protocol_runtime::udp::flows should define request types, not extend runtime dispatcher; found `{forbidden}`"
+            "runtime::udp_flow::managed should define request types, not extend runtime dispatcher; found `{forbidden}`"
         );
     }
 }
@@ -7687,7 +7692,7 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
 #[test]
 fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
-    let flows = read("src/protocol_runtime/udp/flows.rs");
+    let flows = read("src/runtime/udp_flow/managed.rs");
     let manager = read("src/adapters/shadowsocks/udp/manager.rs");
     let model = read("src/adapters/shadowsocks/udp/manager/model.rs");
     let snapshot = read("src/runtime/udp_flow/managed.rs");

@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use tokio::time::Instant as TokioInstant;
 use zero_engine::EngineError;
 
-use crate::protocol_runtime::udp::{FlowFailure, ManagedUdpFlowRequest};
-use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
+use crate::protocol_runtime::udp::FlowFailure;
+use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
 
 #[async_trait]
 pub(crate) trait UpstreamAssociationHandler: Send + Sync {

@@ -9,10 +9,8 @@ use super::model::{
     ClosedSocks5UdpAssociation, Socks5UdpAssociationView, UpstreamAssociationCloseReason,
 };
 use super::send::{self, Socks5UdpSend};
-use crate::protocol_runtime::udp::{
-    FlowFailure, ManagedUdpFlowRequest, UpstreamAssociationHandler,
-};
-use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
+use crate::protocol_runtime::udp::{FlowFailure, UpstreamAssociationHandler};
+use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
 
 #[derive(Default)]
 pub(crate) struct Socks5UdpRuntime {
