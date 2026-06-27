@@ -1985,7 +1985,7 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
 fn vless_udp_transport_opening_lives_in_transport_crate() {
     let runtime = read("src/protocol_runtime/vless_udp.rs");
     let model = read("src/protocol_runtime/vless_udp/model.rs");
-    let start = read("src/protocol_runtime/udp/start/vless.rs");
+    let flow = read("src/protocol_runtime/udp/vless_flow.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read crates/transport/src/vless_transport.rs");
 
@@ -2002,7 +2002,7 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
     }
 
     assert!(
-        start.contains("crate::transport::VlessUdpTransportOptions")
+        flow.contains("crate::transport::VlessUdpTransportOptions")
             && runtime.contains("crate::transport::VlessUdpTransportConnector")
             && runtime.contains("crate::transport::build_vless_outbound_transport_over_stream"),
         "VLESS UDP runtime should request VLESS transport helpers instead of opening QUIC/TCP transports directly"
@@ -2212,7 +2212,7 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
 fn vmess_udp_transport_opening_lives_in_transport_crate() {
     let runtime = read("src/protocol_runtime/vmess_udp.rs");
     let model = read("src/protocol_runtime/vmess_udp/model.rs");
-    let start = read("src/protocol_runtime/udp/start/vmess.rs");
+    let flow = read("src/protocol_runtime/udp/vmess_flow.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
         .expect("read crates/transport/src/vmess_transport.rs");
 
@@ -2230,7 +2230,7 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
     }
 
     assert!(
-        start.contains("crate::transport::VmessTransportOptions")
+        flow.contains("crate::transport::VmessTransportOptions")
             && runtime.contains("crate::transport::VmessTransportConnector")
             && runtime.contains("crate::transport::build_vmess_outbound_transport_over_stream"),
         "VMess UDP runtime should request VMess transport helpers instead of opening TLS/WS/gRPC directly"
@@ -3685,12 +3685,16 @@ fn protocol_udp_start_logic_is_split_by_protocol_family() {
         "start/datagram.rs",
         "start/socks5.rs",
         "start/stream.rs",
-        "start/vless.rs",
-        "start/vmess.rs",
     ] {
         assert!(
             root.join(path).exists(),
             "protocol UDP start logic should keep protocol-family module `{path}`"
+        );
+    }
+    for removed in ["start/vless.rs", "start/vmess.rs", "start/cached.rs"] {
+        assert!(
+            !root.join(removed).exists(),
+            "protocol-specific cached UDP start logic should live in protocol flow bridges, not `{removed}`"
         );
     }
 }
@@ -5529,8 +5533,8 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
     let cached_state = read("src/protocol_runtime/udp/state/cached.rs");
     let cached_model = read("src/protocol_runtime/udp/state/cached/model.rs");
-    let start_vless = read("src/protocol_runtime/udp/start/vless.rs");
-    let start_vmess = read("src/protocol_runtime/udp/start/vmess.rs");
+    let vless_flow = read("src/protocol_runtime/udp/vless_flow.rs");
+    let vmess_flow = read("src/protocol_runtime/udp/vmess_flow.rs");
     let cached_start = manifest_dir().join("src/protocol_runtime/udp/start/cached.rs");
     let register = read("src/register.rs");
 
@@ -5572,10 +5576,10 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !cached_model.contains("downcast")
             && !cached_model.contains("as_any")
             && !state.contains("cached_handler_mut")
-            && start_vless.contains("VlessUdpOutboundManager")
-            && !start_vless.contains("cached_handler_mut")
-            && start_vmess.contains("VmessUdpOutboundManager")
-            && !start_vmess.contains("cached_handler_mut")
+            && vless_flow.contains("VlessUdpOutboundManager")
+            && !vless_flow.contains("cached_handler_mut")
+            && vmess_flow.contains("VmessUdpOutboundManager")
+            && !vmess_flow.contains("cached_handler_mut")
             && register.contains("CachedUdpHandlers { cached: Vec::new() }")
             && !register.contains("vless_cached_handler")
             && !register.contains("vmess_cached_handler"),
