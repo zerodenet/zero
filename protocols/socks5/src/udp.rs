@@ -6,7 +6,7 @@ use crate::outbound::{
 };
 use crate::shared::{
     build_udp_packet, decode_udp_associate_request, decode_udp_associate_response,
-    encode_udp_associate_response_to_client, Socks5UdpPacket,
+    encode_udp_associate_response_to_client, Socks5InboundUdpRequest, Socks5InboundUdpResponse,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,12 +123,12 @@ pub struct Socks5EstablishedUdpAssociation<C, S> {
 pub struct Socks5InboundUdpCodec;
 
 impl Socks5InboundUdpCodec {
-    pub fn decode_request(&self, packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
-        decode_udp_associate_request(packet)
+    pub fn decode_request(&self, packet: &[u8]) -> Result<Socks5InboundUdpRequest, Error> {
+        decode_udp_associate_request(packet).map(Socks5InboundUdpRequest::from_packet)
     }
 
-    pub fn decode_response(&self, packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
-        decode_udp_associate_response(packet)
+    pub fn decode_response(&self, packet: &[u8]) -> Result<Socks5InboundUdpResponse, Error> {
+        decode_udp_associate_response(packet).map(Socks5InboundUdpResponse::from_packet)
     }
 
     pub fn encode_response_to_client(
@@ -153,11 +153,11 @@ impl Socks5InboundUdpSession {
         }
     }
 
-    pub fn decode_request(&self, packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+    pub fn decode_request(&self, packet: &[u8]) -> Result<Socks5InboundUdpRequest, Error> {
         self.codec.decode_request(packet)
     }
 
-    pub fn decode_response(&self, packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
+    pub fn decode_response(&self, packet: &[u8]) -> Result<Socks5InboundUdpResponse, Error> {
         self.codec.decode_response(packet)
     }
 

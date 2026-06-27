@@ -21,8 +21,8 @@ pub(super) async fn dispatch_packet(
     // DNS interception.
     // Intercept UDP packets to port 53 with a domain target.
     // Resolve locally through DnsSystem and reply directly.
-    if udp_packet.port == 53 {
-        if let Address::Domain(ref domain) = udp_packet.target {
+    if udp_packet.port() == 53 {
+        if let Address::Domain(domain) = udp_packet.target() {
             match proxy.resolver.resolve(domain).await {
                 Ok(_ips) => {
                     // DNS resolved locally; build response and return.
@@ -39,12 +39,15 @@ pub(super) async fn dispatch_packet(
         }
     }
 
+    let payload_len = udp_packet.payload().len() as u64;
+    let (target, port, payload) = udp_packet.into_parts();
+
     // Generic dispatch.
     let session_id = UdpPipe::new(proxy, dispatch)
         .dispatch(UdpPipeInput {
-            target: udp_packet.target,
-            port: udp_packet.port,
-            payload: &udp_packet.payload,
+            target,
+            port,
+            payload: &payload,
             protocol: ProtocolType::Socks5,
             auth: None,
             client_session_id: None,
@@ -55,7 +58,7 @@ pub(super) async fn dispatch_packet(
     // SOCKS5 framing bytes (payload is already tracked by dispatch).
     proxy.record_session_inbound_traffic(session_id, *pending_control_traffic);
     *pending_control_traffic = StreamTraffic::default();
-    let framing_bytes = packet.len() as u64 - udp_packet.payload.len() as u64;
+    let framing_bytes = packet.len() as u64 - payload_len;
     proxy.record_session_inbound_rx(session_id, framing_bytes);
 
     Ok(())

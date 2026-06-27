@@ -9428,6 +9428,16 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
             && socks5_shared.contains("socks5|"),
         "protocols/socks5 should own SOCKS5 cache identity construction internally"
     );
+    let proxy_test_support = fs::read_to_string(manifest_dir().join("tests/support/mod.rs"))
+        .expect("read proxy test support source");
+    assert!(
+        socks5_shared.contains("pub(crate) struct Socks5UdpPacket")
+            && socks5_lib.contains("Socks5InboundUdpRequest")
+            && socks5_lib.contains("Socks5InboundUdpResponse")
+            && !socks5_lib.contains("Socks5UdpPacket,")
+            && !proxy_test_support.contains("socks5::Socks5UdpPacket"),
+        "SOCKS5 raw UDP packet model should remain protocol-private; public callers use inbound UDP request/response views"
+    );
     for private_helper in [
         "parse_udp_packet",
         "build_udp_packet",

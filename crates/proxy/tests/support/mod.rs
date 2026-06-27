@@ -68,8 +68,24 @@ pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<
     socks5::Socks5InboundUdpCodec.encode_response_to_client(address, port, payload)
 }
 
-pub fn parse_udp_packet(packet: &[u8]) -> Result<socks5::Socks5UdpPacket, Error> {
-    socks5::Socks5InboundUdpCodec.decode_response(packet)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedUdpPacket {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+}
+
+pub fn parse_udp_packet(packet: &[u8]) -> Result<DecodedUdpPacket, Error> {
+    socks5::Socks5InboundUdpCodec
+        .decode_response(packet)
+        .map(|response| {
+            let (target, port, payload) = response.into_parts();
+            DecodedUdpPacket {
+                target,
+                port,
+                payload,
+            }
+        })
 }
 
 pub fn spawn_http_probe_server(port: u16) -> tokio::task::JoinHandle<()> {

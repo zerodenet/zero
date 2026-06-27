@@ -8,9 +8,12 @@ pub(crate) fn decode_socks5_upstream_response(packet: &[u8]) -> Option<InboundUd
     socks5::Socks5InboundUdpSession::new()
         .decode_response(packet)
         .ok()
-        .map(|response| InboundUdpResponse {
-            target: response.target,
-            port: response.port,
-            payload: response.payload,
+        .map(|response| {
+            let (target, port, payload) = response.into_parts();
+            InboundUdpResponse {
+                target,
+                port,
+                payload,
+            }
         })
 }

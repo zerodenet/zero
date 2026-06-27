@@ -82,8 +82,8 @@ fn upstream_response_session_id(
     match udp_session.decode_response(payload) {
         Ok(packet) => dispatch.upstream_response_session_id(
             association.outbound_tag,
-            &packet.target,
-            packet.port,
+            packet.target(),
+            packet.port(),
         ),
         Err(error) => {
             debug!(

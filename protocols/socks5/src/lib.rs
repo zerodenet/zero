@@ -18,7 +18,10 @@ pub use outbound::{
     Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth, Socks5TcpTunnelTarget,
     Socks5UdpFlowResume, Socks5UdpRelayTarget,
 };
-pub use shared::{Socks5Reply, Socks5UdpFlowConfig, Socks5UdpPacket, Socks5UdpPacketPathSpec};
+pub use shared::{
+    Socks5InboundUdpRequest, Socks5InboundUdpResponse, Socks5Reply, Socks5UdpFlowConfig,
+    Socks5UdpPacketPathSpec,
+};
 pub use udp::{
     establish_udp_relay_with_control, Socks5EstablishedUdpAssociation, Socks5InboundUdpCodec,
     Socks5InboundUdpSession, Socks5OwnedUdpAssociationConfig, Socks5UdpAssociation,

@@ -417,9 +417,9 @@ fn builds_and_parses_udp_packet() {
         .expect("build packet");
     let parsed = codec.decode_request(&packet).expect("parse packet");
 
-    assert_eq!(parsed.target, Address::Domain("example.com".into()));
-    assert_eq!(parsed.port, 5353);
-    assert_eq!(parsed.payload, b"ping");
+    assert_eq!(parsed.target(), &Address::Domain("example.com".into()));
+    assert_eq!(parsed.port(), 5353);
+    assert_eq!(parsed.payload(), b"ping");
 }
 
 #[test]
@@ -430,18 +430,18 @@ fn inbound_udp_codec_decodes_requests_and_encodes_responses() {
         .expect("build request");
     let decoded = codec.decode_request(&request).expect("decode request");
 
-    assert_eq!(decoded.target, Address::Domain("example.com".into()));
-    assert_eq!(decoded.port, 5353);
-    assert_eq!(decoded.payload, b"ping");
+    assert_eq!(decoded.target(), &Address::Domain("example.com".into()));
+    assert_eq!(decoded.port(), 5353);
+    assert_eq!(decoded.payload(), b"ping");
 
     let response = codec
         .encode_response_to_client(&Address::Ipv4([1, 1, 1, 1]), 53, b"pong")
         .expect("encode response");
     let decoded_response = codec.decode_response(&response).expect("decode response");
 
-    assert_eq!(decoded_response.target, Address::Ipv4([1, 1, 1, 1]));
-    assert_eq!(decoded_response.port, 53);
-    assert_eq!(decoded_response.payload, b"pong");
+    assert_eq!(decoded_response.target(), &Address::Ipv4([1, 1, 1, 1]));
+    assert_eq!(decoded_response.port(), 53);
+    assert_eq!(decoded_response.payload(), b"pong");
 }
 
 #[tokio::test]
@@ -469,9 +469,9 @@ async fn udp_relay_wraps_socks5_packet_before_send() {
     let parsed = Socks5InboundUdpCodec
         .decode_response(&sends[0].0)
         .expect("parse packet");
-    assert_eq!(parsed.target, Address::Domain("example.com".into()));
-    assert_eq!(parsed.port, 5353);
-    assert_eq!(parsed.payload, b"ping");
+    assert_eq!(parsed.target(), &Address::Domain("example.com".into()));
+    assert_eq!(parsed.port(), 5353);
+    assert_eq!(parsed.payload(), b"ping");
 }
 
 #[tokio::test]

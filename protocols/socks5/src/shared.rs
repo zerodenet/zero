@@ -165,10 +165,76 @@ pub(crate) fn write_address(buf: &mut Vec<u8>, address: &Address) -> Result<(), 
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Socks5UdpPacket {
+pub(crate) struct Socks5UdpPacket {
     pub target: Address,
     pub port: u16,
     pub payload: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5InboundUdpRequest {
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl Socks5InboundUdpRequest {
+    pub(crate) fn from_packet(packet: Socks5UdpPacket) -> Self {
+        Self {
+            target: packet.target,
+            port: packet.port,
+            payload: packet.payload,
+        }
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5InboundUdpResponse {
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl Socks5InboundUdpResponse {
+    pub(crate) fn from_packet(packet: Socks5UdpPacket) -> Self {
+        Self {
+            target: packet.target,
+            port: packet.port,
+            payload: packet.payload,
+        }
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 pub(crate) fn parse_udp_packet(packet: &[u8]) -> Result<Socks5UdpPacket, Error> {
