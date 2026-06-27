@@ -1,6 +1,5 @@
 use zero_core::{Address, Session};
 
-use super::VlessFlowSender;
 use crate::adapters::vless::mux_pool::MuxConnectionPool;
 use crate::runtime::Proxy;
 
@@ -8,7 +7,7 @@ use crate::runtime::Proxy;
 #[derive(Clone)]
 pub(super) struct VlessUdpUpstream {
     pub(super) session_id: u64,
-    pub(super) sender: VlessFlowSender,
+    pub(super) sender: vless::VlessUdpFlowSender,
 }
 
 pub(crate) struct VlessUdpStartFlow<'a> {

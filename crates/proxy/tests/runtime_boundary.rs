@@ -2095,7 +2095,7 @@ fn vless_udp_adapter_delegates_packet_framing_to_protocol_helpers() {
     );
     assert!(
         !adapter.contains("vless::encode_udp_flow_packet"),
-        "VLESS UDP adapter should leave mux fast-path packet framing to protocol_runtime/vless_udp"
+        "VLESS UDP adapter should leave mux fast-path packet framing to protocols/vless"
     );
 }
 
@@ -2106,19 +2106,18 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let proxy_transport = read("src/transport/mod.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read zero-transport vless_transport source");
-    let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
+    let protocol_shared = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
         .expect("read protocols/vless/src/shared.rs");
-    let sender_model = runtime
-        .split("pub(super) struct VlessFlowSender")
-        .nth(1)
-        .expect("VlessFlowSender should exist")
-        .split("struct VlessFlowSend")
-        .next()
-        .expect("VlessFlowSend should follow VlessFlowSender");
+    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
+        .expect("read protocols/vless/src/outbound.rs");
 
     for forbidden in [
         "broadcast::Sender<vless::VlessUdpPacket>",
         "mpsc::Sender<Vec<u8>>",
+        "mpsc::channel::<VlessFlowSend>",
+        "oneshot::Sender<Result<usize, EngineError>>",
+        "struct VlessFlowSend",
+        "pub(super) struct VlessFlowSender",
         "UdpPacketFraming",
         "VlessUdpFlowCodec",
         "VlessUdpPacket)",
@@ -2132,6 +2131,10 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "vless::establish_udp_packet_tunnel",
         "vless::encode_udp_flow_packet",
         "vless::decode_udp_flow_packet",
+        ".write_packet_tokio(",
+        ".read_packet_tokio(",
+        "tokio::select!",
+        "tokio::spawn",
     ] {
         assert!(
             !runtime.contains(forbidden) && !model.contains(forbidden),
@@ -2143,19 +2146,17 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vless::open_mux_udp_flow")
             && runtime.contains("vless::establish_udp_flow")
             && runtime.contains("vless::VlessEstablishedUdpFlow")
+            && runtime.contains("vless::spawn_udp_flow")
             && !runtime.contains("vless::establish_udp_flow_stream")
             && !runtime.contains("vless::encode_udp_flow_initial_packet")
             && !runtime.contains("vless::VlessUdpFlowIo")
-            && runtime.contains("struct VlessFlowSend")
-            && runtime.contains("mpsc::channel::<VlessFlowSend>")
-            && runtime.contains("result_tx: oneshot::Sender<Result<usize, EngineError>>")
-            && !sender_model.contains("vless::VlessEstablishedUdpFlow")
             && !runtime.contains("encoded_packet_len")
-            && runtime.contains("broadcast::channel::<VlessFlowResponse>")
-            && runtime.contains("tokio::spawn")
-            && model.contains("VlessFlowSender")
-            && !model.contains("vless::VlessUdpFlowSender"),
-        "VLESS UDP runtime should keep protocol flow I/O inside the pump task while protocols/vless owns packet helpers"
+            && !runtime.contains("broadcast::channel::<VlessFlowResponse>")
+            && model.contains("vless::VlessUdpFlowSender")
+            && protocol_outbound.contains("pub fn spawn_udp_flow")
+            && protocol_outbound.contains("tokio::select!")
+            && protocol_outbound.contains("VlessUdpFlowSender"),
+        "VLESS UDP runtime should keep protocol flow I/O inside protocols/vless and leave proxy manager as cache/bridge glue"
     );
     for forbidden in [
         "VlessUdpFlowStream",
@@ -2176,20 +2177,21 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         );
     }
     assert!(
-        !protocol.contains("pub struct VlessUdpFlowHandle")
-            && !protocol.contains("pub struct VlessUdpFlowSender")
-            && !protocol.contains("pub type VlessUdpFlowResponse")
-            && !protocol.contains("pub async fn open_udp_flow")
-            && !protocol.contains("pub fn open_mux_udp_flow")
-            && !protocol.contains("mpsc::channel::<VlessUdpFlowPacket>")
-            && !protocol.contains("broadcast::channel")
-            && !protocol.contains("tokio::spawn")
-            && protocol.contains("pub fn encode_udp_flow_initial_packet")
-            && protocol.contains("pub struct VlessUdpFlowIo")
-            && protocol.contains("pub struct VlessUdpFlowPacket")
-            && protocol.contains("pub fn encode_udp_flow_packet")
-            && protocol.contains("pub fn decode_udp_flow_packet"),
-        "protocols/vless should own VLESS UDP packet IO helpers without owning runtime task/channel glue"
+        protocol_outbound.contains("pub struct VlessUdpFlowHandle")
+            && protocol_outbound.contains("pub struct VlessUdpFlowSender")
+            && protocol_outbound.contains("pub type VlessUdpFlowResponse")
+            && !protocol_outbound.contains("pub async fn open_udp_flow")
+            && !protocol_outbound.contains("pub fn open_mux_udp_flow")
+            && !protocol_outbound.contains("mpsc::channel::<VlessUdpFlowPacket>")
+            && protocol_outbound.contains("fn spawn_udp_flow_task")
+            && protocol_outbound.contains("broadcast::channel")
+            && protocol_outbound.contains("tokio::spawn")
+            && protocol_shared.contains("pub fn encode_udp_flow_initial_packet")
+            && protocol_shared.contains("pub struct VlessUdpFlowIo")
+            && protocol_shared.contains("pub struct VlessUdpFlowPacket")
+            && protocol_shared.contains("pub fn encode_udp_flow_packet")
+            && protocol_shared.contains("pub fn decode_udp_flow_packet"),
+        "protocols/vless should own VLESS UDP packet IO helpers and protocol flow pump handles"
     );
 }
 
@@ -2342,17 +2344,14 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         .expect("read zero-transport vmess_transport source");
     let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read protocols/vmess/src/udp.rs");
-    let sender_model = runtime
-        .split("pub(super) struct VmessFlowSender")
-        .nth(1)
-        .expect("VmessFlowSender should exist")
-        .split("struct VmessFlowSend")
-        .next()
-        .expect("VmessFlowSend should follow VmessFlowSender");
 
     for forbidden in [
         "broadcast::Sender<vmess::VmessUdpPacket>",
         "mpsc::Sender<Vec<u8>>",
+        "mpsc::channel::<VmessFlowSend>",
+        "oneshot::Sender<Result<usize, EngineError>>",
+        "struct VmessFlowSend",
+        "pub(super) struct VmessFlowSender",
         "UdpPacketFraming",
         "VmessUdpFlowCodec",
         "VmessUdpPacket)",
@@ -2366,6 +2365,10 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         "vmess::establish_udp_outbound_stream",
         "vmess::encode_udp_flow_packet",
         "vmess::decode_udp_flow_packet",
+        ".write_packet_tokio(",
+        ".read_packet_tokio(",
+        "tokio::select!",
+        "tokio::spawn",
     ] {
         assert!(
             !runtime.contains(forbidden) && !model.contains(forbidden),
@@ -2377,19 +2380,17 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vmess::open_mux_udp_flow")
             && runtime.contains("vmess::establish_udp_flow")
             && runtime.contains("vmess::VmessEstablishedUdpFlow")
+            && runtime.contains("vmess::spawn_udp_flow")
             && !runtime.contains("vmess::establish_udp_flow_stream")
             && !runtime.contains("vmess::encode_udp_flow_initial_packet")
             && !runtime.contains("vmess::VmessUdpFlowIo")
-            && runtime.contains("struct VmessFlowSend")
-            && runtime.contains("mpsc::channel::<VmessFlowSend>")
-            && runtime.contains("result_tx: oneshot::Sender<Result<usize, EngineError>>")
-            && !sender_model.contains("vmess::VmessEstablishedUdpFlow")
             && !runtime.contains("encoded_packet_len")
-            && runtime.contains("broadcast::channel::<VmessFlowResponse>")
-            && runtime.contains("tokio::spawn")
-            && model.contains("VmessFlowSender")
-            && !model.contains("vmess::VmessUdpFlowSender"),
-        "VMess UDP runtime should keep protocol flow I/O inside the pump task while protocols/vmess owns packet helpers"
+            && !runtime.contains("broadcast::channel::<VmessFlowResponse>")
+            && model.contains("vmess::VmessUdpFlowSender")
+            && protocol.contains("pub fn spawn_udp_flow")
+            && protocol.contains("tokio::select!")
+            && protocol.contains("VmessUdpFlowSender"),
+        "VMess UDP runtime should keep protocol flow I/O inside protocols/vmess and leave proxy manager as cache/bridge glue"
     );
     for forbidden in [
         "VmessUdpFlowStream",
@@ -2410,20 +2411,21 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         );
     }
     assert!(
-        !protocol.contains("pub struct VmessUdpFlowHandle")
-            && !protocol.contains("pub struct VmessUdpFlowSender")
-            && !protocol.contains("pub type VmessUdpFlowResponse")
+        protocol.contains("pub struct VmessUdpFlowHandle")
+            && protocol.contains("pub struct VmessUdpFlowSender")
+            && protocol.contains("pub type VmessUdpFlowResponse")
             && !protocol.contains("pub async fn open_udp_flow")
             && !protocol.contains("pub fn open_mux_udp_flow")
             && !protocol.contains("mpsc::channel::<VmessUdpFlowPacket>")
-            && !protocol.contains("broadcast::channel")
-            && !protocol.contains("tokio::spawn")
+            && protocol.contains("fn spawn_udp_flow_task")
+            && protocol.contains("broadcast::channel")
+            && protocol.contains("tokio::spawn")
             && protocol.contains("pub fn encode_udp_flow_initial_packet")
             && protocol.contains("pub struct VmessUdpFlowIo")
             && protocol.contains("pub struct VmessUdpFlowPacket")
             && protocol.contains("pub fn encode_udp_flow_packet")
             && protocol.contains("pub fn decode_udp_flow_packet"),
-        "protocols/vmess should own VMess UDP packet IO helpers without owning runtime task/channel glue"
+        "protocols/vmess should own VMess UDP packet IO helpers and protocol flow pump handles"
     );
 }
 
@@ -5976,8 +5978,10 @@ fn packet_path_traits_are_grouped_by_responsibility() {
 fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
     let vless_runtime = read("src/adapters/vless/udp/manager.rs");
     let vmess_runtime = read("src/adapters/vmess/udp/manager.rs");
-    let vless_protocol = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
+    let vless_shared = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
         .expect("read VLESS protocol shared source");
+    let vless_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
+        .expect("read VLESS protocol outbound source");
     let vmess_protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read VMess protocol UDP source");
 
@@ -5992,21 +5996,31 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
             );
         }
         assert!(
-            content.contains(".write_packet_tokio(") && content.contains(".read_packet_tokio("),
-            "{source} should keep Tokio orchestration while delegating protocol packet IO"
+            !content.contains(".write_packet_tokio(")
+                && !content.contains(".read_packet_tokio(")
+                && content.contains("spawn_udp_flow"),
+            "{source} should keep cache/bridge glue and delegate protocol UDP flow pumping"
         );
     }
 
-    for (source, content) in [
-        ("protocols/vless/src/shared.rs", &vless_protocol),
-        ("protocols/vmess/src/udp.rs", &vmess_protocol),
-    ] {
-        assert!(
-            content.contains("pub async fn write_packet_tokio")
-                && content.contains("pub async fn read_packet_tokio"),
-            "{source} should own async stream packet IO helpers for UDP flow framing"
-        );
-    }
+    assert!(
+        vless_shared.contains("pub async fn write_packet_tokio")
+            && vless_shared.contains("pub async fn read_packet_tokio")
+            && vless_outbound.contains("pub fn spawn_udp_flow")
+            && vless_outbound.contains("fn spawn_udp_flow_task")
+            && vless_outbound.contains(".write_packet_tokio(")
+            && vless_outbound.contains(".read_packet_tokio("),
+        "protocols/vless should own async stream packet IO helpers and UDP flow pumping"
+    );
+    assert!(
+        vmess_protocol.contains("pub async fn write_packet_tokio")
+            && vmess_protocol.contains("pub async fn read_packet_tokio")
+            && vmess_protocol.contains("pub fn spawn_udp_flow")
+            && vmess_protocol.contains("fn spawn_udp_flow_task")
+            && vmess_protocol.contains(".write_packet_tokio(")
+            && vmess_protocol.contains(".read_packet_tokio("),
+        "protocols/vmess should own async stream packet IO helpers and UDP flow pumping"
+    );
 }
 
 #[test]
@@ -8017,7 +8031,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         ] {
             assert!(
                 !content.contains(forbidden),
-                "{source} should use protocol_runtime::udp packet-path constructors instead of `{forbidden}`"
+                "{source} should use runtime::udp_flow packet-path constructors instead of `{forbidden}`"
             );
         }
     }
@@ -8027,7 +8041,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
     for required in ["packet_path_carrier_descriptor", "udp_datagram_source"] {
         assert!(
             snapshot.contains(required),
-            "protocol_runtime::udp packet-path snapshot module should own neutral constructor `{required}`"
+            "runtime::udp_flow packet-path snapshot module should own neutral constructor `{required}`"
         );
     }
     for forbidden in [

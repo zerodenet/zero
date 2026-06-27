@@ -1,3 +1,4 @@
+use tokio::sync::{broadcast, mpsc, oneshot};
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
 
@@ -299,6 +300,39 @@ pub struct VmessEstablishedUdpFlow {
     io: VmessUdpFlowIo,
 }
 
+pub type VmessUdpFlowResponse = (Address, u16, Vec<u8>);
+
+pub type VmessUdpFlowResponses = broadcast::Sender<VmessUdpFlowResponse>;
+
+pub struct VmessUdpFlowSend {
+    packet: zero_core::UdpFlowPacket,
+    result_tx: oneshot::Sender<Result<usize, Error>>,
+}
+
+#[derive(Clone)]
+pub struct VmessUdpFlowSender {
+    send_tx: mpsc::Sender<VmessUdpFlowSend>,
+}
+
+pub struct VmessUdpFlowHandle {
+    pub sender: VmessUdpFlowSender,
+    pub responses: VmessUdpFlowResponses,
+}
+
+impl VmessUdpFlowSender {
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        let packet = zero_core::UdpFlowPacket::from_parts(target, port, payload);
+        let (result_tx, result_rx) = oneshot::channel();
+        self.send_tx
+            .send(VmessUdpFlowSend { packet, result_tx })
+            .await
+            .map_err(|_| Error::Io("vmess udp flow closed"))?;
+        result_rx
+            .await
+            .map_err(|_| Error::Io("vmess udp flow closed"))?
+    }
+}
+
 impl VmessEstablishedUdpFlow {
     pub fn encode_packet(
         &self,
@@ -352,6 +386,80 @@ impl VmessEstablishedUdpFlow {
     {
         self.io.read_packet_tokio(stream, buffer).await
     }
+}
+
+pub fn spawn_udp_flow<S>(
+    stream: S,
+    initial_packet: Option<zero_core::UdpFlowPacket>,
+    flow_io: VmessEstablishedUdpFlow,
+) -> VmessUdpFlowHandle
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    let (send_tx, send_rx) = mpsc::channel::<VmessUdpFlowSend>(32);
+    let (responses, _) = broadcast::channel::<VmessUdpFlowResponse>(32);
+    spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone(), flow_io);
+    VmessUdpFlowHandle {
+        sender: VmessUdpFlowSender { send_tx },
+        responses,
+    }
+}
+
+fn spawn_udp_flow_task<S>(
+    mut stream: S,
+    initial_packet: Option<zero_core::UdpFlowPacket>,
+    mut send_rx: mpsc::Receiver<VmessUdpFlowSend>,
+    responses: VmessUdpFlowResponses,
+    flow_io: VmessEstablishedUdpFlow,
+) where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    tokio::spawn(async move {
+        if let Some(packet) = initial_packet {
+            if flow_io
+                .write_packet_tokio(&mut stream, &packet.target, packet.port, &packet.payload)
+                .await
+                .is_err()
+            {
+                return;
+            }
+        }
+
+        let mut buffer = vec![0_u8; 64 * 1024];
+        loop {
+            tokio::select! {
+                to_send = send_rx.recv() => {
+                    match to_send {
+                        Some(request) => {
+                            let result = flow_io
+                                .write_packet_tokio(
+                                    &mut stream,
+                                    &request.packet.target,
+                                    request.packet.port,
+                                    &request.packet.payload,
+                                )
+                                .await;
+                            let should_break = result.is_err();
+                            let _ = request.result_tx.send(result);
+                            if should_break {
+                                break;
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                read = flow_io.read_packet_tokio(&mut stream, &mut buffer) => {
+                    match read {
+                        Ok(Some(packet)) => {
+                            let _ = responses.send(packet.into_parts());
+                        }
+                        Ok(None) => break,
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+    });
 }
 
 pub async fn establish_udp_flow<S>(

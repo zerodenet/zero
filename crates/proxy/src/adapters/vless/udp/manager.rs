@@ -7,8 +7,7 @@ pub(crate) mod model;
 
 use std::collections::HashMap;
 
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
@@ -27,43 +26,9 @@ use model::{
 type VlessFlowResponse = (Address, u16, Vec<u8>);
 type VlessResponseSender = broadcast::Sender<VlessFlowResponse>;
 
-#[derive(Clone)]
-pub(super) struct VlessFlowSender {
-    send_tx: mpsc::Sender<VlessFlowSend>,
-}
-
-struct VlessFlowSend {
-    packet: UdpFlowPacket,
-    result_tx: oneshot::Sender<Result<usize, EngineError>>,
-}
-
-impl VlessFlowSender {
-    async fn send(
-        &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<usize, EngineError> {
-        let packet = UdpFlowPacket::from_parts(target, port, payload);
-        let (result_tx, result_rx) = oneshot::channel();
-        self.send_tx
-            .send(VlessFlowSend { packet, result_tx })
-            .await
-            .map_err(|_| EngineError::Io(std::io::Error::other("vless udp flow closed")))?;
-        result_rx
-            .await
-            .map_err(|_| EngineError::Io(std::io::Error::other("vless udp flow closed")))?
-    }
-}
-
-struct VlessFlowHandle {
-    sender: VlessFlowSender,
-    responses: VlessResponseSender,
-}
-
 fn upstream_from_stream(
     session_id: u64,
-    flow: VlessFlowHandle,
+    flow: vless::VlessUdpFlowHandle,
 ) -> (VlessUdpUpstream, VlessResponseSender) {
     (
         VlessUdpUpstream {
@@ -83,11 +48,16 @@ async fn establish_vless_udp_upstream_over_stream(
     mut stream: TcpRelayStream,
 ) -> Result<(VlessUdpUpstream, VlessResponseSender), EngineError> {
     let flow_io = vless::establish_udp_flow(&mut stream, session, identity).await?;
+    let initial_packet = UdpFlowPacket::from_parts(&session.target, session.port, initial_payload);
     let initial_packet_len = flow_io
-        .write_packet_tokio(&mut stream, &session.target, session.port, initial_payload)
-        .await
-        .map_err(EngineError::from)?;
-    let flow = spawn_udp_flow(stream, None, flow_io);
+        .initial_packet(
+            &initial_packet.target,
+            initial_packet.port,
+            &initial_packet.payload,
+        )
+        .map_err(EngineError::from)?
+        .len();
+    let flow = vless::spawn_udp_flow(stream, Some(initial_packet), flow_io);
     proxy.record_session_outbound_tx(session.id, initial_packet_len as u64);
     Ok(upstream_from_stream(session.id, flow))
 }
@@ -387,79 +357,4 @@ impl ManagedCachedFlowSender for VlessUdpOutboundManager {
         VlessUdpOutboundManager::send_existing(self, chain_tasks, proxy, target, port, payload)
             .await
     }
-}
-
-fn spawn_udp_flow<S>(
-    stream: S,
-    initial_packet: Option<UdpFlowPacket>,
-    flow_io: vless::VlessEstablishedUdpFlow,
-) -> VlessFlowHandle
-where
-    S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
-{
-    let (send_tx, send_rx) = mpsc::channel::<VlessFlowSend>(32);
-    let (responses, _) = broadcast::channel::<VlessFlowResponse>(32);
-    spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone(), flow_io);
-    VlessFlowHandle {
-        sender: VlessFlowSender { send_tx },
-        responses,
-    }
-}
-
-fn spawn_udp_flow_task<S>(
-    mut stream: S,
-    initial_packet: Option<UdpFlowPacket>,
-    mut send_rx: mpsc::Receiver<VlessFlowSend>,
-    responses: VlessResponseSender,
-    flow_io: vless::VlessEstablishedUdpFlow,
-) where
-    S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
-{
-    tokio::spawn(async move {
-        if let Some(packet) = initial_packet {
-            if flow_io
-                .write_packet_tokio(&mut stream, &packet.target, packet.port, &packet.payload)
-                .await
-                .is_err()
-            {
-                return;
-            }
-        }
-
-        let mut buffer = vec![0_u8; 64 * 1024];
-        loop {
-            tokio::select! {
-                to_send = send_rx.recv() => {
-                    match to_send {
-                        Some(request) => {
-                            let result = flow_io
-                                .write_packet_tokio(
-                                    &mut stream,
-                                    &request.packet.target,
-                                    request.packet.port,
-                                    &request.packet.payload,
-                                )
-                                .await
-                                .map_err(EngineError::from);
-                            let should_break = result.is_err();
-                            let _ = request.result_tx.send(result);
-                            if should_break {
-                                break;
-                            }
-                        }
-                        None => break,
-                    }
-                }
-                read = flow_io.read_packet_tokio(&mut stream, &mut buffer) => {
-                    match read {
-                        Ok(Some(packet)) => {
-                            let _ = responses.send(packet.into_parts());
-                        }
-                        Ok(None) => break,
-                        Err(_) => break,
-                    }
-                }
-            }
-        }
-    });
 }
