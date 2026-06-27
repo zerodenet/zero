@@ -5694,11 +5694,20 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
     }
 
     let mieru_manager = read("src/adapters/mieru/udp/manager.rs");
+    let mieru_manager_send = read("src/adapters/mieru/udp/manager/send.rs");
     let trojan_manager = read("src/adapters/trojan/udp/manager.rs");
+    let trojan_manager_send = read("src/adapters/trojan/udp/manager/send.rs");
     assert!(
         mieru_manager.contains("HashMap<mieru::MieruUdpCacheKey, MieruEntry>")
             && trojan_manager.contains("HashMap<trojan::TrojanUdpCacheKey, TrojanEntry>"),
         "stream UDP managers should store protocol-owned opaque cache keys without adapter-local key wrappers"
+    );
+    assert!(
+        !mieru_manager_send.contains("MieruUdpCacheKey::relay")
+            && !trojan_manager_send.contains("TrojanUdpCacheKey::relay")
+            && mieru_manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
+            && trojan_manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)"),
+        "stream UDP managers should ask protocol resumes for relay cache identity instead of choosing protocol key variants"
     );
 }
 

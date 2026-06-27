@@ -102,7 +102,9 @@ impl TrojanChainManager {
         let ctx = request.ctx;
         let packet_ref = request.packet;
         let session_id = ctx.session_id;
-        let key = trojan::TrojanUdpCacheKey::relay(session_id);
+        let key = request
+            .resume
+            .cache_key(request.server, request.port, session_id);
         let entry = establish::over_relay_stream(
             request.stream,
             request.tls_server_name,

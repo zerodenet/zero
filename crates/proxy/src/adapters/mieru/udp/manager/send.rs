@@ -118,7 +118,7 @@ impl MieruChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
-        let key = mieru::MieruUdpCacheKey::relay(session_id);
+        let key = resume.cache_key(endpoint.server, endpoint.port, session_id);
         let entry = establish::packet_stream(stream, resume)
             .await
             .map_err(|e| FlowFailure {
