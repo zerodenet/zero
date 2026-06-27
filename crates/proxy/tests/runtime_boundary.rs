@@ -2548,6 +2548,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         .expect("read zero-transport vless_transport source");
     let protocol_shared = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
         .expect("read protocols/vless/src/shared.rs");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/vless/src/lib.rs"))
+        .expect("read protocols/vless/src/lib.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
         .expect("read protocols/vless/src/outbound.rs");
 
@@ -2694,6 +2696,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && protocol_outbound.contains("broadcast::channel")
             && protocol_outbound.contains("tokio::spawn")
             && protocol_shared.contains("pub fn encode_udp_flow_initial_packet")
+            && !protocol_lib.contains("encode_udp_flow_initial_packet")
             && protocol_shared.contains("pub struct VlessUdpFlowIo")
             && protocol_shared.contains("pub struct VlessUdpFlowPacket")
             && protocol_shared.contains("pub fn encode_udp_flow_packet")
@@ -3769,6 +3772,22 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
                 && protocol_shared.contains(&format!("fn {private_helper}"))
                 && !protocol_lib.contains(private_helper),
             "VLESS inbound UDP helper `{private_helper}` should stay private to protocols/vless::shared and should not be re-exported"
+        );
+    }
+    for root_private_helper in [
+        "build_udp_packet",
+        "parse_udp_packet",
+        "decode_inbound_udp_packet",
+        "encode_udp_response",
+        "encode_mux_udp_response",
+        "encode_udp_flow_packet",
+        "decode_udp_flow_packet",
+        "encode_udp_flow_initial_packet",
+    ] {
+        let root_export = format!("{root_private_helper},");
+        assert!(
+            protocol_shared.contains(root_private_helper) && !protocol_lib.contains(&root_export),
+            "VLESS low-level UDP helper `{root_private_helper}` should not be re-exported from protocols/vless crate root"
         );
     }
 }
