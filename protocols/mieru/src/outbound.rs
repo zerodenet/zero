@@ -2,6 +2,8 @@
 
 use alloc::vec::Vec;
 
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::sync::{broadcast, mpsc};
 use zero_core::{Address, Error};
 use zero_traits::AsyncSocket;
 
@@ -55,6 +57,32 @@ pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> MieruUdpF
 pub struct MieruUdpFlowIo {
     outbound: MieruOutbound,
     recv_raw: Vec<u8>,
+}
+
+pub type MieruUdpFlowResponse = (Address, u16, Vec<u8>);
+
+pub type MieruUdpFlowResponses = broadcast::Sender<MieruUdpFlowResponse>;
+
+#[derive(Clone)]
+pub struct MieruUdpFlowSender {
+    send_tx: mpsc::Sender<zero_core::UdpFlowPacket>,
+}
+
+pub struct MieruUdpFlowHandle {
+    pub sender: MieruUdpFlowSender,
+    pub responses: MieruUdpFlowResponses,
+}
+
+impl MieruUdpFlowSender {
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        let packet = zero_core::UdpFlowPacket::from_parts(target, port, payload);
+        let packet_len = packet.payload.len();
+        self.send_tx
+            .send(packet)
+            .await
+            .map_err(|_| Error::Io("mieru udp flow closed"))?;
+        Ok(packet_len)
+    }
 }
 
 impl MieruUdpFlowIo {
@@ -212,6 +240,67 @@ impl MieruUdpFlowIo {
                 .collect(),
         ))
     }
+}
+
+pub fn spawn_udp_flow<S>(stream: S, flow_io: MieruUdpFlowIo) -> MieruUdpFlowHandle
+where
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
+    let (send_tx, send_rx) = mpsc::channel::<zero_core::UdpFlowPacket>(32);
+    let (responses, _) = broadcast::channel::<MieruUdpFlowResponse>(32);
+    spawn_udp_flow_task(stream, flow_io, send_rx, responses.clone());
+    MieruUdpFlowHandle {
+        sender: MieruUdpFlowSender { send_tx },
+        responses,
+    }
+}
+
+fn spawn_udp_flow_task<S>(
+    mut stream: S,
+    mut flow_io: MieruUdpFlowIo,
+    mut send_rx: mpsc::Receiver<zero_core::UdpFlowPacket>,
+    responses: MieruUdpFlowResponses,
+) where
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
+    tokio::spawn(async move {
+        let mut scratch = [0u8; 4096];
+        loop {
+            tokio::select! {
+                to_send = send_rx.recv() => {
+                    match to_send {
+                        Some(packet) => {
+                            let Ok(encrypted) = flow_io.encrypt_packet(
+                                &packet.target,
+                                packet.port,
+                                &packet.payload,
+                            ) else {
+                                break;
+                            };
+                            if stream.write_all(&encrypted).await.is_err() {
+                                break;
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                read = stream.read(&mut scratch) => {
+                    match read {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            let Ok(packets) = flow_io.decode_encrypted_response(&scratch[..n]) else {
+                                break;
+                            };
+                            for packet in packets {
+                                let _ = responses.send(packet.into_parts());
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+    });
 }
 
 impl MieruOutbound {
