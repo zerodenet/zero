@@ -11,7 +11,7 @@ pub(super) async fn upstream(
     endpoint: OutboundEndpoint<'_>,
     resume: hysteria2::Hysteria2UdpFlowResume,
     initial_packet: UdpPacketRef<'_>,
-) -> Result<hysteria2::Hysteria2UdpFlowSession, EngineError> {
+) -> Result<hysteria2::Hysteria2UdpFlowConnection, EngineError> {
     let session =
         crate::outbound::hysteria2::establish_udp_flow_session(endpoint, initial_packet, resume)
             .await?;

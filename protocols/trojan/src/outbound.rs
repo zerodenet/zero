@@ -173,6 +173,27 @@ impl TrojanUdpFlowSession {
 }
 
 #[cfg(feature = "tokio")]
+#[derive(Clone)]
+pub struct TrojanUdpFlowConnection {
+    session: TrojanUdpFlowSession,
+}
+
+#[cfg(feature = "tokio")]
+impl TrojanUdpFlowConnection {
+    pub fn new(session: TrojanUdpFlowSession) -> Self {
+        Self { session }
+    }
+
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        self.session.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> TrojanUdpFlowResponseReceiver {
+        self.session.subscribe_responses()
+    }
+}
+
+#[cfg(feature = "tokio")]
 impl TrojanUdpFlowSender {
     pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
         let packet = UdpFlowPacket::from_parts(target, port, payload);
@@ -293,7 +314,7 @@ pub async fn establish_udp_flow_with_resume<S>(
     mut stream: S,
     session: &Session,
     resume: &TrojanUdpFlowResume,
-) -> Result<TrojanUdpFlowSession, Error>
+) -> Result<TrojanUdpFlowConnection, Error>
 where
     S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
 {
@@ -301,7 +322,9 @@ where
     flow_io
         .establish_with_resume(&mut stream, session, resume)
         .await?;
-    Ok(TrojanUdpFlowSession::new(spawn_udp_flow(stream)))
+    Ok(TrojanUdpFlowConnection::new(TrojanUdpFlowSession::new(
+        spawn_udp_flow(stream),
+    )))
 }
 
 #[cfg(feature = "tokio")]
@@ -569,7 +592,7 @@ impl<T> TrojanUdpFlowStore<T> {
 #[cfg(feature = "tokio")]
 #[derive(Default)]
 pub struct TrojanUdpFlowSessions {
-    entries: TrojanUdpFlowStore<TrojanUdpFlowSession>,
+    entries: TrojanUdpFlowStore<TrojanUdpFlowConnection>,
 }
 
 #[cfg(feature = "tokio")]
@@ -586,7 +609,7 @@ impl TrojanUdpFlowSessions {
         server: &str,
         port: u16,
         session_id: u64,
-    ) -> Option<&TrojanUdpFlowSession> {
+    ) -> Option<&TrojanUdpFlowConnection> {
         self.entries.get(resume, server, port, session_id)
     }
 
@@ -596,10 +619,10 @@ impl TrojanUdpFlowSessions {
         server: &str,
         port: u16,
         session_id: u64,
-        session: TrojanUdpFlowSession,
-    ) -> Option<TrojanUdpFlowSession> {
+        connection: TrojanUdpFlowConnection,
+    ) -> Option<TrojanUdpFlowConnection> {
         self.entries
-            .insert(resume, server, port, session_id, session)
+            .insert(resume, server, port, session_id, connection)
     }
 }
 

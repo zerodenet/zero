@@ -98,6 +98,25 @@ impl MieruUdpFlowSession {
     }
 }
 
+#[derive(Clone)]
+pub struct MieruUdpFlowConnection {
+    session: MieruUdpFlowSession,
+}
+
+impl MieruUdpFlowConnection {
+    pub fn new(session: MieruUdpFlowSession) -> Self {
+        Self { session }
+    }
+
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        self.session.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> MieruUdpFlowResponseReceiver {
+        self.session.subscribe_responses()
+    }
+}
+
 impl MieruUdpFlowSender {
     pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
         let packet = zero_core::UdpFlowPacket::from_parts(target, port, payload);
@@ -283,12 +302,14 @@ where
 pub async fn establish_udp_flow_with_resume<S>(
     mut stream: S,
     resume: &crate::udp::MieruUdpFlowResume,
-) -> Result<MieruUdpFlowSession, Error>
+) -> Result<MieruUdpFlowConnection, Error>
 where
     S: AsyncSocket + AsyncRead + AsyncWrite + Send + 'static,
 {
     let flow_io = MieruUdpFlowIo::establish_with_resume(&mut stream, resume).await?;
-    Ok(MieruUdpFlowSession::new(spawn_udp_flow(stream, flow_io)))
+    Ok(MieruUdpFlowConnection::new(MieruUdpFlowSession::new(
+        spawn_udp_flow(stream, flow_io),
+    )))
 }
 
 fn spawn_udp_flow_task<S>(

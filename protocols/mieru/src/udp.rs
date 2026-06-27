@@ -277,7 +277,7 @@ impl<T> MieruUdpFlowStore<T> {
 #[cfg(feature = "crypto")]
 #[derive(Default)]
 pub struct MieruUdpFlowSessions {
-    entries: MieruUdpFlowStore<crate::MieruUdpFlowSession>,
+    entries: MieruUdpFlowStore<crate::MieruUdpFlowConnection>,
 }
 
 #[cfg(feature = "crypto")]
@@ -294,7 +294,7 @@ impl MieruUdpFlowSessions {
         server: &str,
         port: u16,
         session_id: u64,
-    ) -> Option<&crate::MieruUdpFlowSession> {
+    ) -> Option<&crate::MieruUdpFlowConnection> {
         self.entries.get(resume, server, port, session_id)
     }
 
@@ -304,10 +304,10 @@ impl MieruUdpFlowSessions {
         server: &str,
         port: u16,
         session_id: u64,
-        session: crate::MieruUdpFlowSession,
-    ) -> Option<crate::MieruUdpFlowSession> {
+        connection: crate::MieruUdpFlowConnection,
+    ) -> Option<crate::MieruUdpFlowConnection> {
         self.entries
-            .insert(resume, server, port, session_id, session)
+            .insert(resume, server, port, session_id, connection)
     }
 }
 

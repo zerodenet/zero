@@ -403,6 +403,27 @@ impl Hysteria2UdpFlowSession {
 }
 
 #[cfg(feature = "tokio")]
+#[derive(Clone)]
+pub struct Hysteria2UdpFlowConnection {
+    session: Hysteria2UdpFlowSession,
+}
+
+#[cfg(feature = "tokio")]
+impl Hysteria2UdpFlowConnection {
+    pub fn new(session: Hysteria2UdpFlowSession) -> Self {
+        Self { session }
+    }
+
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        self.session.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> Hysteria2UdpFlowResponseReceiver {
+        self.session.subscribe_responses()
+    }
+}
+
+#[cfg(feature = "tokio")]
 impl Hysteria2UdpFlowSender {
     pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
         let packet = UdpFlowPacket::from_parts(target, port, payload);
@@ -440,10 +461,14 @@ pub fn start_udp_flow_with_initial_packet(
     port: u16,
     payload: &[u8],
     resume: Hysteria2UdpFlowResume,
-) -> Hysteria2UdpFlowSession {
+) -> Hysteria2UdpFlowConnection {
     let flow_io = resume.flow_io();
     let initial_packet = Hysteria2InitialUdpFlowPacket::from_parts(target, port, payload);
-    Hysteria2UdpFlowSession::new(spawn_udp_flow(conn, initial_packet, flow_io))
+    Hysteria2UdpFlowConnection::new(Hysteria2UdpFlowSession::new(spawn_udp_flow(
+        conn,
+        initial_packet,
+        flow_io,
+    )))
 }
 
 #[cfg(feature = "tokio")]
@@ -620,7 +645,7 @@ impl<T> Hysteria2UdpFlowStore<T> {
 #[cfg(feature = "tokio")]
 #[derive(Default)]
 pub struct Hysteria2UdpFlowSessions {
-    entries: Hysteria2UdpFlowStore<Hysteria2UdpFlowSession>,
+    entries: Hysteria2UdpFlowStore<Hysteria2UdpFlowConnection>,
 }
 
 #[cfg(feature = "tokio")]
@@ -636,7 +661,7 @@ impl Hysteria2UdpFlowSessions {
         resume: &Hysteria2UdpFlowResume,
         server: &str,
         port: u16,
-    ) -> Option<&Hysteria2UdpFlowSession> {
+    ) -> Option<&Hysteria2UdpFlowConnection> {
         self.entries.get(resume, server, port)
     }
 
@@ -645,9 +670,9 @@ impl Hysteria2UdpFlowSessions {
         resume: &Hysteria2UdpFlowResume,
         server: &str,
         port: u16,
-        session: Hysteria2UdpFlowSession,
-    ) -> Option<Hysteria2UdpFlowSession> {
-        self.entries.insert(resume, server, port, session)
+        connection: Hysteria2UdpFlowConnection,
+    ) -> Option<Hysteria2UdpFlowConnection> {
+        self.entries.insert(resume, server, port, connection)
     }
 }
 

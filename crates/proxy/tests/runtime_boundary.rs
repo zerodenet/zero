@@ -2917,11 +2917,17 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
         "Mieru UDP establish glue should call the protocol-owned established flow API without a dedicated stream wrapper"
     );
     assert!(
+        establish.contains("mieru::MieruUdpFlowConnection")
+            && !establish.contains("mieru::MieruUdpFlowSession"),
+        "Mieru UDP establish glue should return the protocol-owned flow connection wrapper, not a raw flow session"
+    );
+    assert!(
         protocol.contains("pub async fn establish_udp_flow_with_resume")
             && protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("pub struct MieruUdpFlowHandle")
             && protocol.contains("struct MieruUdpFlowSender")
             && !protocol.contains("pub struct MieruUdpFlowSender")
+            && protocol.contains("pub struct MieruUdpFlowConnection")
             && protocol.contains("pub struct MieruUdpFlowSession")
             && protocol.contains("pub type MieruUdpFlowResponseReceiver")
             && !protocol.contains("pub type MieruUdpFlowResponses")
@@ -2974,6 +2980,11 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         "Hysteria2 UDP establish glue should delegate QUIC/profile setup and protocol flow pumping to outbound/hysteria2"
     );
     assert!(
+        establish.contains("hysteria2::Hysteria2UdpFlowConnection")
+            && !establish.contains("hysteria2::Hysteria2UdpFlowSession"),
+        "Hysteria2 UDP establish glue should return the protocol-owned flow connection wrapper, not a raw flow session"
+    );
+    assert!(
         protocol.contains("struct Hysteria2UdpFlowIo")
             && protocol.contains("pub fn encode_packet(&self")
             && protocol.contains("pub fn decode_packet(&self")
@@ -2982,6 +2993,7 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
             && protocol.contains("pub struct Hysteria2UdpFlowHandle")
             && protocol.contains("struct Hysteria2UdpFlowSender")
             && !protocol.contains("pub struct Hysteria2UdpFlowSender")
+            && protocol.contains("pub struct Hysteria2UdpFlowConnection")
             && protocol.contains("pub struct Hysteria2UdpFlowSession")
             && protocol.contains("pub type Hysteria2UdpFlowResponseReceiver")
             && protocol.contains("type Hysteria2UdpFlowResponses")
@@ -6993,6 +7005,8 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
     );
     assert!(
         establish.contains("trojan::establish_udp_flow_with_resume")
+            && establish.contains("trojan::TrojanUdpFlowConnection")
+            && !establish.contains("trojan::TrojanUdpFlowSession")
             && !establish.contains("tokio::io::split")
             && !establish.contains("tokio::spawn")
             && !establish.contains(".write_flow_packet(")
@@ -7009,6 +7023,7 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
             && protocol_outbound.contains("struct TrojanUdpFlowSender")
             && !protocol_outbound.contains("pub struct TrojanUdpFlowSender")
+            && protocol_outbound.contains("pub struct TrojanUdpFlowConnection")
             && protocol_outbound.contains("pub struct TrojanUdpFlowSession")
             && protocol_outbound.contains("pub type TrojanUdpFlowResponseReceiver")
             && protocol_outbound.contains("type TrojanUdpFlowResponses")
@@ -7078,6 +7093,7 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && protocol_outbound.contains("pub struct MieruUdpFlowHandle")
             && protocol_outbound.contains("struct MieruUdpFlowSender")
             && !protocol_outbound.contains("pub struct MieruUdpFlowSender")
+            && protocol_outbound.contains("pub struct MieruUdpFlowConnection")
             && protocol_outbound.contains("pub struct MieruUdpFlowSession")
             && protocol_outbound.contains("pub type MieruUdpFlowResponse")
             && protocol_outbound.contains("pub type MieruUdpFlowResponseReceiver")
@@ -7459,6 +7475,7 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
             && protocol_outbound.contains("pub struct TrojanUdpFlowHandle")
             && protocol_outbound.contains("struct TrojanUdpFlowSender")
             && !protocol_outbound.contains("pub struct TrojanUdpFlowSender")
+            && protocol_outbound.contains("pub struct TrojanUdpFlowConnection")
             && protocol_outbound.contains("pub struct TrojanUdpFlowSession")
             && protocol_outbound.contains("pub type TrojanUdpFlowResponseReceiver")
             && !protocol_outbound.contains("pub type TrojanUdpFlowResponses")
@@ -7481,6 +7498,8 @@ fn trojan_udp_establish_logic_lives_outside_manager() {
     );
     assert!(
         establish.contains("trojan::establish_udp_flow_with_resume")
+            && establish.contains("trojan::TrojanUdpFlowConnection")
+            && !establish.contains("trojan::TrojanUdpFlowSession")
             && !establish.contains("trojan::TrojanUdpFlowIo")
             && !establish.contains(".establish_with_resume(")
             && !establish.contains("trojan::spawn_udp_flow")
@@ -7597,6 +7616,7 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_outbound.contains("pub struct MieruUdpFlowHandle")
             && protocol_outbound.contains("struct MieruUdpFlowSender")
             && !protocol_outbound.contains("pub struct MieruUdpFlowSender")
+            && protocol_outbound.contains("pub struct MieruUdpFlowConnection")
             && protocol_outbound.contains("pub struct MieruUdpFlowSession")
             && protocol_outbound.contains("pub type MieruUdpFlowResponse")
             && protocol_outbound.contains("pub type MieruUdpFlowResponseReceiver")
@@ -7705,6 +7725,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !establish.contains("hysteria2::spawn_udp_flow")
             && protocol_udp.contains("struct Hysteria2UdpFlowSender")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
+            && protocol_udp.contains("pub struct Hysteria2UdpFlowConnection")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowSession")
             && protocol_udp.contains("pub fn subscribe_responses(&self)")
             && protocol_udp.contains("pub struct Hysteria2InitialUdpFlowPacket")
@@ -7975,6 +7996,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_udp.contains("pub async fn authenticate_connection")
             && protocol_udp.contains("struct Hysteria2UdpFlowSender")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
+            && protocol_udp.contains("pub struct Hysteria2UdpFlowConnection")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowHandle")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowSession")
             && protocol_udp.contains("pub fn start_udp_flow_with_initial_packet")
