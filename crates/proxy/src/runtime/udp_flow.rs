@@ -1,7 +1,7 @@
 //! Generic UDP flow helpers and session state.
 //!
 //! Protocol-specific SOCKS5 UDP ASSOCIATE handling lives under
-//! `protocol_runtime::socks5_udp_associate`.
+//! `inbound::socks5::udp_associate`.
 
 pub(crate) mod helpers;
 pub(crate) mod outbound;

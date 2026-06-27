@@ -15,6 +15,8 @@ use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
+mod udp_associate;
+
 // ── New trait-based handler ────────────────────────────────────────────
 
 #[derive(Clone)]

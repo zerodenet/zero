@@ -1,8 +1,7 @@
-//! Protocol-specific runtime state.
+//! Protocol runtime integration glue.
 //!
-//! Generic `runtime` owns lifecycle, routing, pipes, and dispatch. Protocol
-//! pools and UDP state machines live here so new protocol dependencies do not
-//! drift into generic runtime modules.
+//! Generic `runtime` owns lifecycle, routing, pipes, and dispatch. This module
+//! keeps the remaining UDP integration facades while protocol-private managers,
+//! codecs, and pools continue moving behind protocol-local capability code.
 
-pub(crate) mod socks5_udp_associate;
 pub(crate) mod udp;

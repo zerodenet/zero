@@ -128,7 +128,7 @@ fn runtime_protocol_runtime_references_are_confined_to_facades() {
 #[test]
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     for source in [
-        "src/protocol_runtime/socks5_udp_associate/dispatch.rs",
+        "src/inbound/socks5/udp_associate/dispatch.rs",
         "src/inbound/vless/udp_session.rs",
         "src/inbound/trojan.rs",
         "src/inbound/shadowsocks/udp.rs",
@@ -3099,7 +3099,7 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
     let send = read("src/adapters/socks5/udp/send.rs");
     let runtime = read("src/adapters/socks5/udp/runtime.rs");
     let upstream = read("src/protocol_runtime/udp/state/upstream.rs");
-    let response = read("src/protocol_runtime/socks5_udp_associate/upstream_response.rs");
+    let response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
 
     assert!(
         model
@@ -3133,7 +3133,7 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
 
 #[test]
 fn socks5_udp_association_close_details_stay_out_of_udp_associate_loop() {
-    let associate = read("src/protocol_runtime/socks5_udp_associate.rs");
+    let associate = read("src/inbound/socks5/udp_associate.rs");
 
     for forbidden in [
         "UpstreamAssociationCloseReason",
@@ -3152,15 +3152,28 @@ fn socks5_udp_association_close_details_stay_out_of_udp_associate_loop() {
 
 #[test]
 fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
-    let associate = read("src/protocol_runtime/socks5_udp_associate.rs");
-    let chain_response = read("src/protocol_runtime/socks5_udp_associate/chain_response.rs");
-    let cleanup = read("src/protocol_runtime/socks5_udp_associate/cleanup.rs");
-    let dispatch = read("src/protocol_runtime/socks5_udp_associate/dispatch.rs");
-    let direct_response = read("src/protocol_runtime/socks5_udp_associate/direct_response.rs");
-    let idle_timeout = read("src/protocol_runtime/socks5_udp_associate/idle_timeout.rs");
-    let relay_socket = read("src/protocol_runtime/socks5_udp_associate/relay_socket.rs");
-    let setup = read("src/protocol_runtime/socks5_udp_associate/setup.rs");
-    let upstream_response = read("src/protocol_runtime/socks5_udp_associate/upstream_response.rs");
+    assert!(
+        !manifest_dir()
+            .join("src/protocol_runtime/socks5_udp_associate.rs")
+            .exists(),
+        "SOCKS5 UDP associate inbound glue should not live under protocol_runtime"
+    );
+    assert!(
+        !manifest_dir()
+            .join("src/protocol_runtime/socks5_udp_associate")
+            .exists(),
+        "SOCKS5 UDP associate submodules should not live under protocol_runtime"
+    );
+
+    let associate = read("src/inbound/socks5/udp_associate.rs");
+    let chain_response = read("src/inbound/socks5/udp_associate/chain_response.rs");
+    let cleanup = read("src/inbound/socks5/udp_associate/cleanup.rs");
+    let dispatch = read("src/inbound/socks5/udp_associate/dispatch.rs");
+    let direct_response = read("src/inbound/socks5/udp_associate/direct_response.rs");
+    let idle_timeout = read("src/inbound/socks5/udp_associate/idle_timeout.rs");
+    let relay_socket = read("src/inbound/socks5/udp_associate/relay_socket.rs");
+    let setup = read("src/inbound/socks5/udp_associate/setup.rs");
+    let upstream_response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
 
     for forbidden in [
         "UdpPipeInput",
@@ -3213,7 +3226,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && dispatch.contains("UdpPipeInput")
             && dispatch.contains("ProtocolType::Socks5")
             && dispatch.contains(".resolver.resolve("),
-        "SOCKS5 UDP packet dispatch should live in socks5_udp_associate/dispatch.rs"
+        "SOCKS5 UDP packet dispatch should live in inbound/socks5/udp_associate/dispatch.rs"
     );
     assert!(
         direct_response.contains("async fn forward_direct_udp_response")
@@ -3221,7 +3234,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("direct_response_session_id")
             && direct_response.contains("socks5::encode_udp_associate_response"),
-        "SOCKS5 UDP direct response metering and framing should live in socks5_udp_associate/direct_response.rs"
+        "SOCKS5 UDP direct response metering and framing should live in inbound/socks5/udp_associate/direct_response.rs"
     );
     assert!(
         chain_response.contains("async fn handle_chain_result")
@@ -3230,7 +3243,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && chain_response.contains("socks5::encode_udp_associate_response(request.target")
             && chain_response.contains("failed to send UDP chain response to client")
             && chain_response.contains("chain response task panicked"),
-        "SOCKS5 UDP chain response result handling and framing should live in socks5_udp_associate/chain_response.rs"
+        "SOCKS5 UDP chain response result handling and framing should live in inbound/socks5/udp_associate/chain_response.rs"
     );
     for (path, source) in [
         ("dispatch.rs", &dispatch),
@@ -3256,13 +3269,13 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && upstream_response.contains("upstream_response_session_id")
             && upstream_response.contains("record_udp_upstream_recv_failure")
             && upstream_response.contains("failed to attribute upstream UDP response"),
-        "SOCKS5 UDP upstream response attribution and cleanup should live in socks5_udp_associate/upstream_response.rs"
+        "SOCKS5 UDP upstream response attribution and cleanup should live in inbound/socks5/udp_associate/upstream_response.rs"
     );
     assert!(
         idle_timeout.contains("fn handle_idle_timeout")
             && idle_timeout.contains("drop_idle_upstream_association")
             && idle_timeout.contains("log_udp_upstream_association_idle_timeout"),
-        "SOCKS5 UDP idle timeout cleanup should live in socks5_udp_associate/idle_timeout.rs"
+        "SOCKS5 UDP idle timeout cleanup should live in inbound/socks5/udp_associate/idle_timeout.rs"
     );
     assert!(
         relay_socket.contains("async fn handle_relay_packet")
@@ -3270,7 +3283,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && relay_socket.contains("client_udp_addr.is_none")
             && relay_socket.contains("failed to process UDP packet")
             && relay_socket.contains("dropping udp packet from unexpected sender"),
-        "SOCKS5 UDP relay socket packet classification should live in socks5_udp_associate/relay_socket.rs"
+        "SOCKS5 UDP relay socket packet classification should live in inbound/socks5/udp_associate/relay_socket.rs"
     );
     assert!(
         setup.contains("async fn setup_association")
@@ -3279,13 +3292,13 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && setup.contains("bind_addr(SocketAddr::new")
             && setup.contains("socks5 udp association ready")
             && setup.contains("drain_traffic"),
-        "SOCKS5 UDP associate bind/response setup should live in socks5_udp_associate/setup.rs"
+        "SOCKS5 UDP associate bind/response setup should live in inbound/socks5/udp_associate/setup.rs"
     );
     assert!(
         cleanup.contains("fn finish_dispatch")
             && cleanup.contains("finish_all")
             && cleanup.contains("log_completed_udp_flow"),
-        "SOCKS5 UDP associate cleanup should live in socks5_udp_associate/cleanup.rs"
+        "SOCKS5 UDP associate cleanup should live in inbound/socks5/udp_associate/cleanup.rs"
     );
 }
 
