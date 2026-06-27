@@ -5,9 +5,8 @@ use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{
-    FlowFailure, FlowStartResult, ManagedUdpOutboundKind, ManagedUdpSend, UdpDispatch,
+    FlowFailure, FlowStartResult, ManagedDatagramStart, UdpDispatch,
 };
-use crate::runtime::udp_flow::managed::{ManagedUdpFlowKind, ManagedUdpFlowResume};
 use crate::runtime::Proxy;
 
 pub(super) async fn start(
@@ -36,18 +35,14 @@ pub(super) async fn start(
         upstream: Some((server.to_string(), *port)),
     })?;
     dispatch
-        .start_tracked_managed_udp(ManagedUdpSend {
+        .start_tracked_managed_datagram(ManagedDatagramStart {
             proxy: Some(proxy),
             tag,
             session,
-            carrier: None,
-            tls_server_name: None,
             server,
             port: *port,
-            resume: ManagedUdpFlowResume::new(resume),
+            resume,
             payload,
-            kind: ManagedUdpFlowKind::Datagram,
-            outbound: ManagedUdpOutboundKind::Datagram,
         })
         .await
 }

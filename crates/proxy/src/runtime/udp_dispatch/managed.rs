@@ -15,13 +15,37 @@ use zero_engine::EngineError;
 use super::{FlowStartResult, UdpDispatch};
 
 #[derive(Clone, Copy)]
-pub(crate) enum ManagedUdpOutboundKind {
+enum ManagedUdpOutboundKind {
     Relay,
     Datagram,
     StreamPacket,
 }
 
-pub(crate) struct ManagedUdpSend<'a> {
+struct ManagedUdpSend<'a> {
+    proxy: Option<&'a Proxy>,
+    tag: &'a str,
+    session: &'a Session,
+    carrier: Option<crate::transport::RelayCarrier>,
+    tls_server_name: Option<&'a str>,
+    server: &'a str,
+    port: u16,
+    resume: ManagedUdpFlowResume,
+    payload: &'a [u8],
+    kind: ManagedUdpFlowKind,
+    outbound: ManagedUdpOutboundKind,
+}
+
+pub(crate) struct ManagedDatagramStart<'a, T> {
+    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) tag: &'a str,
+    pub(crate) session: &'a Session,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) resume: T,
+    pub(crate) payload: &'a [u8],
+}
+
+pub(crate) struct ManagedRelayStart<'a, T> {
     pub(crate) proxy: Option<&'a Proxy>,
     pub(crate) tag: &'a str,
     pub(crate) session: &'a Session,
@@ -29,10 +53,21 @@ pub(crate) struct ManagedUdpSend<'a> {
     pub(crate) tls_server_name: Option<&'a str>,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
-    pub(crate) resume: ManagedUdpFlowResume,
+    pub(crate) resume: T,
     pub(crate) payload: &'a [u8],
-    pub(crate) kind: ManagedUdpFlowKind,
-    pub(crate) outbound: ManagedUdpOutboundKind,
+}
+
+pub(crate) struct ManagedStreamPacketStart<'a, T> {
+    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) tag: &'a str,
+    pub(crate) session: &'a Session,
+    pub(crate) carrier: Option<crate::transport::RelayCarrier>,
+    pub(crate) tls_server_name: Option<&'a str>,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) resume: T,
+    pub(crate) payload: &'a [u8],
+    pub(crate) relay_chain: bool,
 }
 
 impl UdpDispatch {
@@ -70,7 +105,7 @@ impl UdpDispatch {
         self.flow_state.managed_flow_resume(flow_ref)
     }
 
-    pub(crate) async fn send_managed_udp(
+    async fn send_managed_udp(
         &mut self,
         request: ManagedUdpSend<'_>,
     ) -> Result<usize, FlowFailure> {
@@ -90,7 +125,7 @@ impl UdpDispatch {
         .await
     }
 
-    pub(crate) async fn start_tracked_managed_udp(
+    async fn start_tracked_managed_udp(
         &mut self,
         request: ManagedUdpSend<'_>,
     ) -> Result<FlowStartResult, FlowFailure> {
@@ -125,6 +160,79 @@ impl UdpDispatch {
             outbound: Box::new(outbound),
             tx_bytes: sent as u64,
         })
+    }
+
+    pub(crate) async fn start_tracked_managed_datagram<T>(
+        &mut self,
+        request: ManagedDatagramStart<'_, T>,
+    ) -> Result<FlowStartResult, FlowFailure>
+    where
+        T: std::any::Any + Send + Sync + std::fmt::Debug,
+    {
+        self.start_tracked_managed_udp(ManagedUdpSend {
+            proxy: request.proxy,
+            tag: request.tag,
+            session: request.session,
+            carrier: None,
+            tls_server_name: None,
+            server: request.server,
+            port: request.port,
+            resume: ManagedUdpFlowResume::new(request.resume),
+            payload: request.payload,
+            kind: ManagedUdpFlowKind::Datagram,
+            outbound: ManagedUdpOutboundKind::Datagram,
+        })
+        .await
+    }
+
+    pub(crate) async fn start_tracked_managed_relay<T>(
+        &mut self,
+        request: ManagedRelayStart<'_, T>,
+    ) -> Result<FlowStartResult, FlowFailure>
+    where
+        T: std::any::Any + Send + Sync + std::fmt::Debug,
+    {
+        self.start_tracked_managed_udp(ManagedUdpSend {
+            proxy: request.proxy,
+            tag: request.tag,
+            session: request.session,
+            carrier: request.carrier,
+            tls_server_name: request.tls_server_name,
+            server: request.server,
+            port: request.port,
+            resume: ManagedUdpFlowResume::new(request.resume),
+            payload: request.payload,
+            kind: ManagedUdpFlowKind::RelayStream,
+            outbound: ManagedUdpOutboundKind::Relay,
+        })
+        .await
+    }
+
+    pub(crate) async fn start_tracked_managed_stream_packet<T>(
+        &mut self,
+        request: ManagedStreamPacketStart<'_, T>,
+    ) -> Result<FlowStartResult, FlowFailure>
+    where
+        T: std::any::Any + Send + Sync + std::fmt::Debug,
+    {
+        self.start_tracked_managed_udp(ManagedUdpSend {
+            proxy: request.proxy,
+            tag: request.tag,
+            session: request.session,
+            carrier: request.carrier,
+            tls_server_name: request.tls_server_name,
+            server: request.server,
+            port: request.port,
+            resume: ManagedUdpFlowResume::new(request.resume),
+            payload: request.payload,
+            kind: if request.relay_chain {
+                ManagedUdpFlowKind::RelayStream
+            } else {
+                ManagedUdpFlowKind::StreamPacket
+            },
+            outbound: ManagedUdpOutboundKind::StreamPacket,
+        })
+        .await
     }
 
     pub(super) async fn forward_managed_relay_flow(

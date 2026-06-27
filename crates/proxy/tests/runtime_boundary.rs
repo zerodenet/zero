@@ -1287,8 +1287,10 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
             && packet_path.contains(".packet_path_codec()")
             && flow.contains("ShadowsocksUdpFlowConfig::new")
             && flow.contains(".flow_resume()")
-            && flow.contains("ManagedUdpSend {")
-            && flow.contains("ManagedUdpFlowResume::new"),
+            && flow.contains("ManagedDatagramStart")
+            && flow.contains(".start_tracked_managed_datagram(")
+            && !flow.contains("ManagedUdpSend {")
+            && !flow.contains("ManagedUdpFlowResume::new"),
         "Shadowsocks packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
     );
 }
@@ -1329,8 +1331,10 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
             && packet_path.contains("open_udp_packet_path_connection")
             && flow.contains("Hysteria2UdpPacketPathConfig::new")
             && flow.contains(".flow_resume()")
-            && flow.contains("ManagedUdpSend {")
-            && flow.contains("ManagedUdpFlowResume::new"),
+            && flow.contains("ManagedDatagramStart")
+            && flow.contains(".start_tracked_managed_datagram(")
+            && !flow.contains("ManagedUdpSend {")
+            && !flow.contains("ManagedUdpFlowResume::new"),
         "Hysteria2 packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
     );
 }
@@ -1371,8 +1375,10 @@ fn stream_udp_roots_delegate_flow_building() {
         assert!(
             flow.contains(config)
                 && flow.contains(".flow_resume(request.relay_chain)")
-                && flow.contains("ManagedUdpSend {")
-                && flow.contains("ManagedUdpFlowResume::new"),
+                && flow.contains("ManagedStreamPacketStart")
+                && flow.contains(".start_tracked_managed_stream_packet(")
+                && !flow.contains("ManagedUdpSend {")
+                && !flow.contains("ManagedUdpFlowResume::new"),
             "{flow_path} should own stream UDP flow and relay-final-hop resume construction"
         );
     }
@@ -1410,8 +1416,10 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
             && packet_path.contains(".packet_path_association_config()")
             && flow.contains("Socks5UdpPacketPathConfig::new")
             && flow.contains(".flow_resume()")
-            && flow.contains("ManagedUdpSend {")
-            && flow.contains("ManagedUdpFlowResume::new"),
+            && flow.contains("ManagedRelayStart")
+            && flow.contains(".start_tracked_managed_relay(")
+            && !flow.contains("ManagedUdpSend {")
+            && !flow.contains("ManagedUdpFlowResume::new"),
         "SOCKS5 packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
     );
 }
@@ -3725,9 +3733,12 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
     assert!(
         managed.contains("send_managed_udp")
             && managed.contains("start_tracked_managed_udp")
+            && managed.contains("start_tracked_managed_relay")
             && managed.contains("forward_managed_relay_flow")
-            && socks5_flow.contains("ManagedUdpFlowKind::RelayStream")
-            && socks5_flow.contains("ManagedUdpFlowResume::new")
+            && socks5_flow.contains("ManagedRelayStart")
+            && socks5_flow.contains(".start_tracked_managed_relay(")
+            && !socks5_flow.contains("ManagedUdpFlowKind::RelayStream")
+            && !socks5_flow.contains("ManagedUdpFlowResume::new")
             && !managed.contains("Socks5UdpPacketSend")
             && !managed.contains("username: Option<&'a str>")
             && !managed.contains("password: Option<&'a str>")
@@ -9169,24 +9180,27 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
         }
     }
 
-    for source in [
-        "src/adapters/socks5/udp/flow.rs",
-        "src/adapters/shadowsocks/udp/flow.rs",
-        "src/adapters/hysteria2/udp/flow.rs",
-        "src/adapters/trojan/udp/flow.rs",
-        "src/adapters/mieru/udp/flow.rs",
+    for (source, required) in [
+        ("src/adapters/socks5/udp/flow.rs", "ManagedRelayStart"),
+        (
+            "src/adapters/shadowsocks/udp/flow.rs",
+            "ManagedDatagramStart",
+        ),
+        ("src/adapters/hysteria2/udp/flow.rs", "ManagedDatagramStart"),
+        (
+            "src/adapters/trojan/udp/flow.rs",
+            "ManagedStreamPacketStart",
+        ),
+        ("src/adapters/mieru/udp/flow.rs", "ManagedStreamPacketStart"),
     ] {
         let adapter = read(source);
-        for required in [
-            "ManagedUdpSend",
-            "ManagedUdpOutboundKind",
-            "start_tracked_managed_udp",
-        ] {
-            assert!(
-                adapter.contains(required),
-                "{source} should use the neutral managed UDP bridge `{required}`"
-            );
-        }
+        assert!(
+            adapter.contains(required)
+                && !adapter.contains("ManagedUdpSend")
+                && !adapter.contains("ManagedUdpOutboundKind")
+                && !adapter.contains("start_tracked_managed_udp"),
+            "{source} should use the narrow neutral managed UDP start bridge `{required}` instead of owning runtime flow construction"
+        );
         for forbidden in [
             "ManagedUdpFlowResume::Socks5",
             "ManagedUdpFlowResume::Shadowsocks",
