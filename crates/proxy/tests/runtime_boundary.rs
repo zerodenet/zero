@@ -2078,7 +2078,9 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
 
 #[test]
 fn vless_udp_transport_opening_lives_in_transport_crate() {
-    let runtime = read("src/adapters/vless/udp/manager.rs");
+    let root = read("src/adapters/vless/udp/manager.rs");
+    let establish = read("src/adapters/vless/udp/manager/establish.rs");
+    let send = read("src/adapters/vless/udp/manager/send.rs");
     let model = read("src/adapters/vless/udp/manager/model.rs");
     let adapter = read("src/adapters/vless/udp.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
@@ -2091,15 +2093,18 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
         "pub(crate) struct VlessUdpTransport",
     ] {
         assert!(
-            !runtime.contains(forbidden) && !model.contains(forbidden),
+            !root.contains(forbidden)
+                && !establish.contains(forbidden)
+                && !send.contains(forbidden)
+                && !model.contains(forbidden),
             "VLESS UDP runtime/model should not own transport opening detail; found `{forbidden}`"
         );
     }
 
     assert!(
         adapter.contains("crate::transport::VlessUdpTransportOptions")
-            && runtime.contains("crate::transport::VlessUdpTransportConnector")
-            && runtime.contains("crate::transport::build_vless_outbound_transport_over_stream"),
+            && establish.contains("crate::transport::VlessUdpTransportConnector")
+            && send.contains("crate::transport::build_vless_outbound_transport_over_stream"),
         "VLESS UDP adapter/runtime should request VLESS transport helpers instead of opening QUIC/TCP transports directly"
     );
 
@@ -2121,14 +2126,18 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
 
 #[test]
 fn vless_udp_identity_is_protocol_parsed() {
-    let runtime = read("src/adapters/vless/udp/manager.rs");
+    let root = read("src/adapters/vless/udp/manager.rs");
+    let establish = read("src/adapters/vless/udp/manager/establish.rs");
+    let send = read("src/adapters/vless/udp/manager/send.rs");
     let model = read("src/adapters/vless/udp/manager/model.rs");
     let adapter = read("src/adapters/vless/udp.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
         .expect("read protocols/vless/src/outbound.rs");
 
     assert!(
-        !runtime.contains("parse_uuid"),
+        !root.contains("parse_uuid")
+            && !establish.contains("parse_uuid")
+            && !send.contains("parse_uuid"),
         "VLESS UDP runtime should receive protocol-parsed UUIDs"
     );
     assert!(
@@ -2187,7 +2196,13 @@ fn vless_udp_adapter_delegates_packet_framing_to_protocol_helpers() {
 
 #[test]
 fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
-    let runtime = read("src/adapters/vless/udp/manager.rs");
+    let runtime = [
+        read("src/adapters/vless/udp/manager.rs"),
+        read("src/adapters/vless/udp/manager/bridge.rs"),
+        read("src/adapters/vless/udp/manager/establish.rs"),
+        read("src/adapters/vless/udp/manager/send.rs"),
+    ]
+    .join("\n");
     let model = read("src/adapters/vless/udp/manager/model.rs");
     let proxy_transport = read("src/transport/mod.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
@@ -2352,7 +2367,9 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
 
 #[test]
 fn vmess_udp_transport_opening_lives_in_transport_crate() {
-    let runtime = read("src/adapters/vmess/udp/manager.rs");
+    let root = read("src/adapters/vmess/udp/manager.rs");
+    let establish = read("src/adapters/vmess/udp/manager/establish.rs");
+    let send = read("src/adapters/vmess/udp/manager/send.rs");
     let model = read("src/adapters/vmess/udp/manager/model.rs");
     let adapter = read("src/adapters/vmess/udp.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
@@ -2366,15 +2383,18 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
         "struct VmessUdpTransport",
     ] {
         assert!(
-            !runtime.contains(forbidden) && !model.contains(forbidden),
+            !root.contains(forbidden)
+                && !establish.contains(forbidden)
+                && !send.contains(forbidden)
+                && !model.contains(forbidden),
             "VMess UDP runtime/model should not own transport opening detail; found `{forbidden}`"
         );
     }
 
     assert!(
         adapter.contains("crate::transport::VmessTransportOptions")
-            && runtime.contains("crate::transport::VmessTransportConnector")
-            && runtime.contains("crate::transport::build_vmess_outbound_transport_over_stream"),
+            && establish.contains("crate::transport::VmessTransportConnector")
+            && send.contains("crate::transport::build_vmess_outbound_transport_over_stream"),
         "VMess UDP adapter/runtime should request VMess transport helpers instead of opening TLS/WS/gRPC directly"
     );
 
@@ -2399,7 +2419,9 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
 
 #[test]
 fn vmess_udp_identity_is_protocol_parsed() {
-    let runtime = read("src/adapters/vmess/udp/manager.rs");
+    let root = read("src/adapters/vmess/udp/manager.rs");
+    let establish = read("src/adapters/vmess/udp/manager/establish.rs");
+    let send = read("src/adapters/vmess/udp/manager/send.rs");
     let model = read("src/adapters/vmess/udp/manager/model.rs");
     let adapter = read("src/adapters/vmess/udp.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
@@ -2407,7 +2429,9 @@ fn vmess_udp_identity_is_protocol_parsed() {
 
     for forbidden in ["parse_uuid", "VmessCipher::from_name"] {
         assert!(
-            !runtime.contains(forbidden),
+            !root.contains(forbidden)
+                && !establish.contains(forbidden)
+                && !send.contains(forbidden),
             "VMess UDP runtime should receive protocol-parsed identity; found `{forbidden}`"
         );
         assert!(
@@ -2456,7 +2480,13 @@ fn vmess_udp_identity_is_protocol_parsed() {
 
 #[test]
 fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
-    let runtime = read("src/adapters/vmess/udp/manager.rs");
+    let runtime = [
+        read("src/adapters/vmess/udp/manager.rs"),
+        read("src/adapters/vmess/udp/manager/bridge.rs"),
+        read("src/adapters/vmess/udp/manager/establish.rs"),
+        read("src/adapters/vmess/udp/manager/send.rs"),
+    ]
+    .join("\n");
     let model = read("src/adapters/vmess/udp/manager/model.rs");
     let proxy_transport = read("src/transport/mod.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
@@ -6377,8 +6407,20 @@ fn packet_path_traits_are_grouped_by_responsibility() {
 
 #[test]
 fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
-    let vless_runtime = read("src/adapters/vless/udp/manager.rs");
-    let vmess_runtime = read("src/adapters/vmess/udp/manager.rs");
+    let vless_runtime = [
+        read("src/adapters/vless/udp/manager.rs"),
+        read("src/adapters/vless/udp/manager/bridge.rs"),
+        read("src/adapters/vless/udp/manager/establish.rs"),
+        read("src/adapters/vless/udp/manager/send.rs"),
+    ]
+    .join("\n");
+    let vmess_runtime = [
+        read("src/adapters/vmess/udp/manager.rs"),
+        read("src/adapters/vmess/udp/manager/bridge.rs"),
+        read("src/adapters/vmess/udp/manager/establish.rs"),
+        read("src/adapters/vmess/udp/manager/send.rs"),
+    ]
+    .join("\n");
     let vless_shared = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
         .expect("read VLESS protocol shared source");
     let vless_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
@@ -6388,12 +6430,12 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
 
     for (source, content, flow_helper) in [
         (
-            "src/adapters/vless/udp/manager.rs",
+            "src/adapters/vless/udp/manager",
             &vless_runtime,
             "establish_flow_with_initial_packet",
         ),
         (
-            "src/adapters/vmess/udp/manager.rs",
+            "src/adapters/vmess/udp/manager",
             &vmess_runtime,
             "establish_flow_with_initial_packet",
         ),

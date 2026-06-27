@@ -1,0 +1,91 @@
+use zero_core::Session;
+use zero_engine::EngineError;
+use zero_platform_tokio::TransportConnector;
+
+use super::model::{VmessUdpUpstream, VmessUdpUpstreamRequest};
+use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
+use crate::transport::TcpRelayStream;
+
+fn upstream_from_stream(session_id: u64, flow: vmess::VmessUdpFlowHandle) -> VmessUdpUpstream {
+    VmessUdpUpstream {
+        session_id,
+        connection: vmess::VmessUdpFlowConnection::new(flow),
+    }
+}
+
+pub(super) async fn over_stream(
+    proxy: &crate::runtime::Proxy,
+    session: &Session,
+    config: vmess::VmessUdpFlowConfig<'_>,
+    initial_payload: &[u8],
+    stream: TcpRelayStream,
+) -> Result<VmessUdpUpstream, EngineError> {
+    let established = config
+        .establish_flow_with_initial_packet(stream, session, initial_payload)
+        .await?;
+    proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
+    Ok(upstream_from_stream(session.id, established.handle))
+}
+
+pub(super) async fn direct(
+    request: &VmessUdpUpstreamRequest<'_>,
+) -> Result<VmessUdpUpstream, EngineError> {
+    if let Some(max_concurrency) = request.mux_concurrency {
+        let mux_stream = request
+            .mux_pool
+            .open_udp_stream(VmessMuxOpenRequest {
+                proxy: request.proxy,
+                session: request.session,
+                server: request.server.to_owned(),
+                port: request.server_port,
+                id: request.config.uuid(),
+                cipher_name: request.config.cipher_name().to_owned(),
+                cipher: request.config.cipher(),
+                tls: request.transport.and_then(|transport| transport.tls),
+                ws: request.transport.and_then(|transport| transport.ws),
+                grpc: request.transport.and_then(|transport| transport.grpc),
+                max_concurrency,
+            })
+            .await?;
+        let established = vmess::start_udp_flow_with_initial_packet(
+            mux_stream,
+            &request.session.target,
+            request.session.port,
+            request.initial_payload,
+        )?;
+        request
+            .proxy
+            .record_session_outbound_tx(request.session.id, established.initial_packet_len as u64);
+        return Ok(upstream_from_stream(request.session.id, established.handle));
+    }
+
+    let socket = request
+        .proxy
+        .protocols
+        .direct_connector()
+        .connect_host(
+            request.server,
+            request.server_port,
+            request.proxy.resolver.as_ref(),
+        )
+        .await?;
+
+    let stream = match request.transport {
+        Some(transport) => {
+            let connector = crate::transport::VmessTransportConnector::new(*transport);
+            connector
+                .connect(socket, request.server, request.server_port)
+                .await?
+        }
+        None => socket.into(),
+    };
+
+    over_stream(
+        request.proxy,
+        request.session,
+        request.config,
+        request.initial_payload,
+        stream,
+    )
+    .await
+}
