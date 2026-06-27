@@ -8050,8 +8050,14 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     );
     assert!(
         !adapter.contains("shadowsocks::udp_flow_codec")
-            && adapter.contains("ShadowsocksUdpFlowResume::from_config")
+            && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
+            && adapter.contains("ShadowsocksUdpFlowConfig::new")
+            && adapter.contains(".flow_resume()")
+            && adapter.contains(".packet_path()")
             && protocol_outbound.contains("pub fn udp_flow_codec(")
+            && protocol_outbound.contains("struct ShadowsocksUdpFlowConfig")
+            && protocol_outbound.contains("pub fn flow_resume(&self)")
+            && protocol_outbound.contains("pub fn packet_path(&self)")
             && protocol_outbound.contains("pub fn from_config(")
             && protocol_outbound
                 .contains("impl DatagramCodec<Address> for ShadowsocksDatagramCodec")
@@ -8196,7 +8202,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
 
     assert!(
         !adapter.contains("CipherKind::from_str")
-            && adapter.contains("ShadowsocksUdpFlowResume::from_config")
+            && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
+            && adapter.contains("ShadowsocksUdpFlowConfig::new")
             && protocol_outbound.contains("pub fn parse_udp_cipher("),
         "Shadowsocks UDP adapter should ask protocols/shadowsocks to parse ordinary UDP flow cipher config"
     );
@@ -8237,8 +8244,12 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "ordinary Shadowsocks UDP peer model should carry only protocol-owned opaque cache identity"
     );
     assert!(
-        adapter.contains("ShadowsocksUdpFlowResume::from_config")
+        !adapter.contains("ShadowsocksUdpFlowResume::from_config")
+            && adapter.contains("ShadowsocksUdpFlowConfig::new")
+            && adapter.contains(".flow_resume()")
             && !adapter.contains("ShadowsocksUdpFlowResume::new")
+            && protocol_outbound.contains("struct ShadowsocksUdpFlowConfig")
+            && protocol_outbound.contains("pub fn flow_resume(&self)")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowResume")
             && protocol_outbound.contains("struct ShadowsocksUdpCacheKey")
             && protocol_outbound.contains("pub struct ShadowsocksUdpFlowStore")
@@ -8324,7 +8335,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let forward = read("src/runtime/udp_flow/managed/datagram.rs");
 
     assert!(
-        !adapter.contains("CipherKind::from_str") && adapter.contains("ShadowsocksUdpFlowResume::from_config"),
+        !adapter.contains("CipherKind::from_str")
+            && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
+            && adapter.contains("ShadowsocksUdpFlowConfig::new"),
         "Shadowsocks adapter should ask protocols/shadowsocks to parse packet-path carrier/datagram cipher config"
     );
     for forbidden in ["ShadowsocksDatagramCodec", "shadowsocks::"] {
@@ -8347,7 +8360,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter.contains("shadowsocks::udp_datagram_codec")
             && !adapter.contains("resume.codec()")
             && !adapter.contains("resume.packet_path_codec()")
-            && adapter.contains("resume.packet_path()"),
+            && adapter.contains("config.packet_path()"),
         "Shadowsocks adapter should request protocol-built packet-path bundles through explicit protocol packet-path helpers"
     );
     assert!(

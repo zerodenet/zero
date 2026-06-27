@@ -555,6 +555,49 @@ impl ShadowsocksUdpFlowResume {
 }
 
 #[cfg(feature = "crypto")]
+#[derive(Debug, Clone, Copy)]
+pub struct ShadowsocksUdpFlowConfig<'a> {
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    cipher: &'a str,
+    password: &'a str,
+}
+
+#[cfg(feature = "crypto")]
+impl<'a> ShadowsocksUdpFlowConfig<'a> {
+    pub fn new(
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        cipher: &'a str,
+        password: &'a str,
+    ) -> Self {
+        Self {
+            tag,
+            server,
+            port,
+            cipher,
+            password,
+        }
+    }
+
+    pub fn flow_resume(&self) -> Result<ShadowsocksUdpFlowResume, Error> {
+        ShadowsocksUdpFlowResume::from_config(
+            self.tag,
+            self.server,
+            self.port,
+            self.cipher,
+            self.password,
+        )
+    }
+
+    pub fn packet_path(&self) -> Result<ShadowsocksUdpPacketPath, Error> {
+        Ok(self.flow_resume()?.packet_path())
+    }
+}
+
+#[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShadowsocksUdpPacketPath {
     cache_key: alloc::string::String,

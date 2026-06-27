@@ -34,11 +34,9 @@ impl ShadowsocksAdapter {
         else {
             return None;
         };
-        let resume = shadowsocks::ShadowsocksUdpFlowResume::from_config(
-            tag, server, *port, cipher, password,
-        )
-        .ok()?;
-        let packet_path = resume.packet_path();
+        let config =
+            shadowsocks::ShadowsocksUdpFlowConfig::new(tag, server, *port, cipher, password);
+        let packet_path = config.packet_path().ok()?;
         Some(
             crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
                 packet_path.cache_key(),
@@ -64,10 +62,11 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let resume =
-            shadowsocks::ShadowsocksUdpFlowResume::from_config("", server, *port, cipher, password)
-                .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
-        let packet_path = resume.packet_path();
+        let config =
+            shadowsocks::ShadowsocksUdpFlowConfig::new("", server, *port, cipher, password);
+        let packet_path = config
+            .packet_path()
+            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
         let codec = Arc::new(packet_path.codec());
         crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
             proxy, server, *port, codec,
@@ -90,11 +89,9 @@ impl ShadowsocksAdapter {
         else {
             return None;
         };
-        let resume = shadowsocks::ShadowsocksUdpFlowResume::from_config(
-            tag, server, *port, cipher, password,
-        )
-        .ok()?;
-        let packet_path = resume.packet_path();
+        let config =
+            shadowsocks::ShadowsocksUdpFlowConfig::new(tag, server, *port, cipher, password);
+        let packet_path = config.packet_path().ok()?;
         let codec = Arc::new(packet_path.codec());
         Some(crate::runtime::udp_flow::packet_path::udp_datagram_source(
             tag,
@@ -124,10 +121,9 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let resume = shadowsocks::ShadowsocksUdpFlowResume::from_config(
-            tag, server, *port, cipher, password,
-        )
-        .map_err(|error| FlowFailure {
+        let config =
+            shadowsocks::ShadowsocksUdpFlowConfig::new(tag, server, *port, cipher, password);
+        let resume = config.flow_resume().map_err(|error| FlowFailure {
             stage: "udp_shadowsocks_resume",
             error: zero_engine::EngineError::Io(std::io::Error::other(error.to_string())),
             upstream: Some((server.to_string(), *port)),
