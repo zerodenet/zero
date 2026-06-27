@@ -104,6 +104,13 @@ impl<'a> VmessUdpFlowConfig<'a> {
     }
 }
 
+pub fn udp_flow_config_from_config<'a>(
+    id: &str,
+    cipher: &'a str,
+) -> Result<VmessUdpFlowConfig<'a>, Error> {
+    VmessUdpFlowConfig::new(id, cipher)
+}
+
 pub fn parse_udp_identity(id: &str, cipher: &str) -> Result<VmessUdpIdentity, Error> {
     let uuid = crate::shared::parse_uuid(id)?;
     let cipher = VmessCipher::from_name(cipher).ok_or(Error::Protocol("vmess unknown cipher"))?;

@@ -1394,13 +1394,13 @@ fn stream_udp_roots_delegate_flow_building() {
         (
             "src/adapters/vless/udp.rs",
             "src/adapters/vless/udp/flow.rs",
-            "vless_udp_flow_config",
+            "vless::udp_flow_config_from_config",
             "register_managed_stream_packet_flow",
         ),
         (
             "src/adapters/vmess/udp.rs",
             "src/adapters/vmess/udp/flow.rs",
-            "vmess_udp_flow_config",
+            "vmess::udp_flow_config_from_config",
             "register_managed_stream_packet_flow",
         ),
     ] {
@@ -2552,8 +2552,8 @@ fn vless_udp_identity_is_protocol_parsed() {
         !adapter.contains("parse_uuid")
             && !adapter.contains("vless::parse_udp_identity")
             && !adapter.contains("VlessUdpFlowConfig::new")
-            && flow.contains("vless_udp_flow_config")
-            && flow.contains("vless::VlessUdpFlowConfig::new"),
+            && flow.contains("vless::udp_flow_config_from_config")
+            && !flow.contains("vless::VlessUdpFlowConfig::new"),
         "VLESS UDP flow glue should use the protocol-owned flow config parser while the root stays a facade"
     );
     assert!(
@@ -2563,7 +2563,8 @@ fn vless_udp_identity_is_protocol_parsed() {
     );
     assert!(
         protocol.contains("struct VlessUdpFlowConfig")
-            && protocol.contains("pub fn new(id: &str, flow: Option<&'a str>)"),
+            && protocol.contains("pub fn new(id: &str, flow: Option<&'a str>)")
+            && protocol.contains("pub fn udp_flow_config_from_config"),
         "protocols/vless should own VLESS UDP flow config construction"
     );
 }
@@ -2892,8 +2893,8 @@ fn vmess_udp_identity_is_protocol_parsed() {
     assert!(
         !adapter.contains("vmess::parse_udp_identity")
             && !adapter.contains("VmessUdpFlowConfig::new")
-            && flow.contains("vmess_udp_flow_config")
-            && flow.contains("vmess::VmessUdpFlowConfig::new"),
+            && flow.contains("vmess::udp_flow_config_from_config")
+            && !flow.contains("vmess::VmessUdpFlowConfig::new"),
         "VMess UDP flow glue should use the protocol-owned flow config parser while the root stays a facade"
     );
     assert!(
@@ -2904,7 +2905,8 @@ fn vmess_udp_identity_is_protocol_parsed() {
     );
     assert!(
         protocol.contains("struct VmessUdpFlowConfig")
-            && protocol.contains("pub fn new(id: &str, cipher: &'a str)"),
+            && protocol.contains("pub fn new(id: &str, cipher: &'a str)")
+            && protocol.contains("pub fn udp_flow_config_from_config"),
         "protocols/vmess should own VMess UDP flow config construction"
     );
 
@@ -3397,7 +3399,8 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
         !tcp_adapter.contains("VmessCipher::from_name")
             && tcp_adapter.contains("VmessTcpConnectConfig::from_config")
             && protocol_outbound.contains("VmessCipher::from_name")
-            && udp_flow.contains("vmess::VmessUdpFlowConfig::new")
+            && udp_flow.contains("vmess::udp_flow_config_from_config")
+            && !udp_flow.contains("vmess::VmessUdpFlowConfig::new")
             && !udp_root.contains("vmess::parse_udp_identity")
             && !udp_root.contains("VmessCipher::from_name")
             && !udp_root.contains("VmessUdpFlowConfig::new"),

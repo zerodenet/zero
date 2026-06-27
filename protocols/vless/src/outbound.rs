@@ -366,6 +366,13 @@ impl<'a> VlessUdpFlowConfig<'a> {
     }
 }
 
+pub fn udp_flow_config_from_config<'a>(
+    id: &str,
+    flow: Option<&'a str>,
+) -> Result<VlessUdpFlowConfig<'a>, Error> {
+    VlessUdpFlowConfig::new(id, flow)
+}
+
 pub fn parse_udp_identity(id: &str) -> Result<VlessUdpIdentity, Error> {
     crate::shared::parse_uuid(id).map(|uuid| VlessUdpIdentity { uuid })
 }

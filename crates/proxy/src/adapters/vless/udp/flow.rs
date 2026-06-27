@@ -15,7 +15,7 @@ fn vless_udp_flow_config<'a>(
     stage: &'static str,
     upstream: Option<(&str, u16)>,
 ) -> Result<vless::VlessUdpFlowConfig<'a>, FlowFailure> {
-    vless::VlessUdpFlowConfig::new(id, flow).map_err(|error| FlowFailure {
+    vless::udp_flow_config_from_config(id, flow).map_err(|error| FlowFailure {
         stage,
         error: zero_engine::EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,

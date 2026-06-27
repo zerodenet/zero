@@ -15,7 +15,7 @@ fn vmess_udp_flow_config<'a>(
     stage: &'static str,
     upstream: Option<(&str, u16)>,
 ) -> Result<vmess::VmessUdpFlowConfig<'a>, FlowFailure> {
-    vmess::VmessUdpFlowConfig::new(id, cipher).map_err(|error| FlowFailure {
+    vmess::udp_flow_config_from_config(id, cipher).map_err(|error| FlowFailure {
         stage,
         error: zero_engine::EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,

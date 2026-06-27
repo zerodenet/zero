@@ -31,11 +31,11 @@ pub use stream::VmessAeadStream;
 pub use udp::{
     establish_udp_flow, establish_udp_flow_stream, establish_udp_flow_with_initial_packet,
     establish_udp_outbound_stream, parse_udp_identity, spawn_udp_flow,
-    start_udp_flow_with_initial_packet, VmessEstablishedUdpFlow, VmessEstablishedUdpFlowHandle,
-    VmessInboundUdpCodec, VmessInboundUdpPayload, VmessInboundUdpRequest, VmessInboundUdpSession,
-    VmessInitialUdpFlowPacket, VmessUdpFlowCodec, VmessUdpFlowConfig, VmessUdpFlowConnection,
-    VmessUdpFlowHandle, VmessUdpFlowIo, VmessUdpFlowPacket, VmessUdpFlowResponse,
-    VmessUdpFlowResponseReceiver, VmessUdpFlowSession, VmessUdpIdentity, VmessUdpMuxOpenIdentity,
-    VmessUdpPacket, VmessUdpPacketTarget, VmessUdpPacketTunnelTarget, VmessUdpPayloadMode,
-    VmessUdpPayloadState,
+    start_udp_flow_with_initial_packet, udp_flow_config_from_config, VmessEstablishedUdpFlow,
+    VmessEstablishedUdpFlowHandle, VmessInboundUdpCodec, VmessInboundUdpPayload,
+    VmessInboundUdpRequest, VmessInboundUdpSession, VmessInitialUdpFlowPacket, VmessUdpFlowCodec,
+    VmessUdpFlowConfig, VmessUdpFlowConnection, VmessUdpFlowHandle, VmessUdpFlowIo,
+    VmessUdpFlowPacket, VmessUdpFlowResponse, VmessUdpFlowResponseReceiver, VmessUdpFlowSession,
+    VmessUdpIdentity, VmessUdpMuxOpenIdentity, VmessUdpPacket, VmessUdpPacketTarget,
+    VmessUdpPacketTunnelTarget, VmessUdpPayloadMode, VmessUdpPayloadState,
 };
