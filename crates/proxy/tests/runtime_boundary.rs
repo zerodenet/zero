@@ -4338,6 +4338,44 @@ fn managed_udp_root_is_facade_only() {
 }
 
 #[test]
+fn managed_udp_cache_keys_are_internal_details() {
+    let cache = read("src/runtime/udp_flow/managed/cache.rs");
+
+    for forbidden in [
+        "pub(crate) struct ManagedUdpConnectionCacheKey",
+        "pub(crate) struct ManagedStreamConnectionCacheKey",
+        "pub(crate) struct ManagedDatagramConnectionCacheKey",
+        "pub(crate) async fn send_or_insert_pre_sent(",
+        "pub(crate) async fn send_or_insert(",
+        "pub(crate) async fn insert_and_send(",
+        "pub(crate) async fn send_existing(",
+        "pub(crate) async fn get_or_insert_with(",
+    ] {
+        assert!(
+            !cache.contains(forbidden),
+            "managed UDP cache should keep typed key/raw cache methods private; found `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "pub(crate) async fn send_or_insert_pre_sent_key",
+        "pub(crate) async fn send_or_insert_key",
+        "pub(crate) async fn insert_and_send_key",
+        "pub(crate) async fn send_existing_target",
+        "pub(crate) async fn send_or_insert_target",
+        "pub(crate) async fn get_or_insert_key",
+        "struct ManagedUdpConnectionCacheKey",
+        "struct ManagedStreamConnectionCacheKey",
+        "struct ManagedDatagramConnectionCacheKey",
+    ] {
+        assert!(
+            cache.contains(required),
+            "managed UDP cache should expose opaque key/target helper `{required}` while owning typed cache identity internally"
+        );
+    }
+}
+
+#[test]
 fn protocol_udp_runtime_channels_store_neutral_packets() {
     for path in rust_sources_under("src/runtime/udp_flow/protocol_state") {
         let source = relative(&path);
@@ -6142,7 +6180,8 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
             && !mieru_manager.contains("HashMap<mieru::MieruUdpCacheKey")
             && !trojan_manager.contains("HashMap<trojan::TrojanUdpCacheKey")
             && managed_cache.contains("struct ManagedUdpConnectionCache")
-            && managed_cache.contains("struct ManagedUdpConnectionCacheKey"),
+            && managed_cache.contains("struct ManagedUdpConnectionCacheKey")
+            && !managed_cache.contains("pub(crate) struct ManagedUdpConnectionCacheKey"),
         "stream UDP managers should cache neutral proxy connection capabilities without holding protocol flow stores"
     );
     assert!(
@@ -6164,7 +6203,8 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
             && !trojan_manager_send.contains("self.upstreams.insert(")
             && !mieru_manager_send.contains("entry.spawn_response_bridge(")
             && !trojan_manager_send.contains("entry.spawn_response_bridge(")
-            && managed_cache.contains("pub(crate) async fn insert_and_send")
+            && managed_cache.contains("async fn insert_and_send")
+            && !managed_cache.contains("pub(crate) async fn insert_and_send(")
             && managed_cache.contains("pub(crate) async fn insert_and_send_key")
             && managed_cache.contains("pub(crate) async fn send_or_insert_key")
             && managed_cache.contains("self.entries.get(&key)"),
@@ -8554,7 +8594,8 @@ fn h2_udp_send_orchestration_lives_outside_manager() {
             && !send_source.contains(".spawn_response_bridge(")
             && !send_source.contains("self.upstreams.get(&cache_key)")
             && !send_source.contains("self.upstreams.insert(cache_key")
-            && managed_cache.contains("pub(crate) async fn send_or_insert_pre_sent")
+            && managed_cache.contains("async fn send_or_insert_pre_sent")
+            && !managed_cache.contains("pub(crate) async fn send_or_insert_pre_sent(")
             && managed_cache.contains("pub(crate) async fn send_or_insert_pre_sent_key")
             && managed_cache.contains("connection.spawn_response_bridge(chain_tasks, session_id)")
             && !send_source.contains("subscribe_responses()")
@@ -8843,7 +8884,8 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !manager_entry.contains("upstreams.get(")
             && !manager_entry.contains("upstreams.insert(")
             && managed_cache.contains("struct ManagedDatagramConnectionCache")
-            && managed_cache.contains("pub(crate) async fn get_or_insert_with")
+            && managed_cache.contains("async fn get_or_insert_with")
+            && !managed_cache.contains("pub(crate) async fn get_or_insert_with")
             && managed_cache.contains("pub(crate) async fn get_or_insert_key")
             && !manager.contains("shadowsocks::ShadowsocksUdpFlowEntries")
             && !manager_entry.contains("shadowsocks::ShadowsocksUdpFlowEntries")

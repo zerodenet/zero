@@ -9,7 +9,7 @@ use crate::runtime::udp_flow::packet_path::{ChainTask, UdpPacketRef};
 use crate::runtime::Proxy;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct ManagedUdpConnectionCacheKey(String);
+struct ManagedUdpConnectionCacheKey(String);
 
 impl ManagedUdpConnectionCacheKey {
     pub(crate) fn new(value: impl Into<String>) -> Self {
@@ -28,7 +28,7 @@ impl ManagedUdpConnectionCache {
         }
     }
 
-    pub(crate) async fn send_or_insert_pre_sent<Fut>(
+    async fn send_or_insert_pre_sent<Fut>(
         &mut self,
         key: ManagedUdpConnectionCacheKey,
         chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
@@ -74,7 +74,7 @@ impl ManagedUdpConnectionCache {
         .await
     }
 
-    pub(crate) async fn send_or_insert<Fut>(
+    async fn send_or_insert<Fut>(
         &mut self,
         key: ManagedUdpConnectionCacheKey,
         chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
@@ -117,7 +117,7 @@ impl ManagedUdpConnectionCache {
         .await
     }
 
-    pub(crate) async fn insert_and_send(
+    async fn insert_and_send(
         &mut self,
         key: ManagedUdpConnectionCacheKey,
         chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
@@ -163,7 +163,7 @@ async fn send_managed_udp_connection(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct ManagedStreamConnectionCacheKey {
+struct ManagedStreamConnectionCacheKey {
     target: Address,
     port: u16,
 }
@@ -207,7 +207,7 @@ impl ManagedStreamConnectionCache {
         }
     }
 
-    pub(crate) fn insert_and_bridge(
+    fn insert_and_bridge(
         &mut self,
         key: ManagedStreamConnectionCacheKey,
         chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
@@ -234,7 +234,7 @@ impl ManagedStreamConnectionCache {
         )
     }
 
-    pub(crate) async fn send_existing(
+    async fn send_existing(
         &self,
         key: ManagedStreamConnectionCacheKey,
         chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
@@ -270,7 +270,7 @@ impl ManagedStreamConnectionCache {
         .await
     }
 
-    pub(crate) async fn send_or_insert<Fut>(
+    async fn send_or_insert<Fut>(
         &mut self,
         key: ManagedStreamConnectionCacheKey,
         request: ManagedStreamConnectionSend<'_>,
@@ -334,7 +334,7 @@ async fn send_stream_connection(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct ManagedDatagramConnectionCacheKey(String);
+struct ManagedDatagramConnectionCacheKey(String);
 
 impl ManagedDatagramConnectionCacheKey {
     pub(crate) fn new(value: impl Into<String>) -> Self {
@@ -353,7 +353,7 @@ impl ManagedDatagramConnectionCache {
         }
     }
 
-    pub(crate) async fn get_or_insert_with<Fut>(
+    async fn get_or_insert_with<Fut>(
         &mut self,
         key: ManagedDatagramConnectionCacheKey,
         establish: Fut,
