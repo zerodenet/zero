@@ -1,9 +1,7 @@
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
+use crate::runtime::udp_flow::managed::ManagedDatagramConnectionCache;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
-use crate::runtime::udp_flow::managed::{
-    ManagedDatagramConnectionCache, ManagedDatagramConnectionCacheKey,
-};
 use crate::runtime::udp_flow::managed::{ManagedDatagramFlowHandler, ManagedExistingSend};
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -55,7 +53,7 @@ impl SsChainManager {
                 upstream: Some(endpoint.upstream()),
             })?;
 
-        let cache_key = ManagedDatagramConnectionCacheKey::new(resume.flow_cache_key());
+        let cache_key = resume.flow_cache_key();
         let entry = entry::ensure(&mut self.upstreams, cache_key, &resume, target_addr)
             .await
             .map_err(|error| FlowFailure {

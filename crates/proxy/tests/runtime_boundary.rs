@@ -8770,14 +8770,16 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !shadowsocks_peer_model.contains("fn from_resume(")
             && !shadowsocks_peer_model.contains("socket_flow_cache_key()")
             && manager.contains("ManagedDatagramConnectionCache")
-            && manager.contains("ManagedDatagramConnectionCacheKey")
+            && !manager.contains("ManagedDatagramConnectionCacheKey")
             && manager.contains("resume.flow_cache_key()")
             && manager_entry.contains("ManagedDatagramConnectionCache")
-            && manager_entry.contains(".get_or_insert_with(")
+            && !manager_entry.contains("ManagedDatagramConnectionCacheKey")
+            && manager_entry.contains(".get_or_insert_key(")
             && !manager_entry.contains("upstreams.get(")
             && !manager_entry.contains("upstreams.insert(")
             && managed_cache.contains("struct ManagedDatagramConnectionCache")
             && managed_cache.contains("pub(crate) async fn get_or_insert_with")
+            && managed_cache.contains("pub(crate) async fn get_or_insert_key")
             && !manager.contains("shadowsocks::ShadowsocksUdpFlowEntries")
             && !manager_entry.contains("shadowsocks::ShadowsocksUdpFlowEntries")
             && manager_entry.contains("SharedManagedDatagramUdpConnection")
@@ -9158,6 +9160,11 @@ fn shadowsocks_udp_entry_cache_lives_outside_manager() {
             "ss_manager.rs should keep entry/cache construction in ss_manager/entry.rs; found `{forbidden}`"
         );
     }
+    assert!(
+        !manager.contains("ManagedDatagramConnectionCacheKey")
+            && !entry_source.contains("ManagedDatagramConnectionCacheKey"),
+        "Shadowsocks UDP manager/entry should pass opaque cache identity strings to runtime cache helpers"
+    );
     assert!(
         entry.exists(),
         "Shadowsocks UDP entry/cache construction should live in ss_manager/entry.rs"

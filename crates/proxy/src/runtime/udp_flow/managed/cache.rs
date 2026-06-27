@@ -370,4 +370,16 @@ impl ManagedDatagramConnectionCache {
         self.entries.insert(key, connection.clone());
         Ok(connection)
     }
+
+    pub(crate) async fn get_or_insert_key<Fut>(
+        &mut self,
+        key: impl Into<String>,
+        establish: Fut,
+    ) -> Result<SharedManagedDatagramUdpConnection, EngineError>
+    where
+        Fut: Future<Output = Result<SharedManagedDatagramUdpConnection, EngineError>>,
+    {
+        self.get_or_insert_with(ManagedDatagramConnectionCacheKey::new(key), establish)
+            .await
+    }
 }
