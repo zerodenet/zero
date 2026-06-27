@@ -20,8 +20,7 @@ use crate::transport::TcpRelayStream;
 
 pub(crate) use model::{MuxConnectionPool, VlessMuxOpenRequest};
 use vless::mux_pool::{
-    decrypt_mux_payload, encode_mux_data_frame, encode_mux_end_frame, encode_mux_new_stream,
-    encrypt_mux_payload, new_mux_crypto, MuxPoolConn, MuxStreamRelay, PoolKey, TransportKey,
+    open_mux_tcp_stream, open_mux_udp_stream, MuxPoolConn, PoolKey, TransportKey,
 };
 
 impl std::fmt::Debug for MuxConnectionPool {
@@ -128,55 +127,9 @@ impl MuxConnectionPool {
     > {
         let conn = self.get_or_create_conn(&request).await?;
 
-        // Allocate stream ID
-        let sid = {
-            let mut next = conn.next_id.lock().unwrap();
-            let s = *next;
-            *next = next.wrapping_add(1);
-            if *next == 0 {
-                *next = 1;
-            }
-            s
-        };
-
-        *conn.active.lock().unwrap() += 1;
-
-        let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let (down_tx, down_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-
-        conn.streams.lock().unwrap().insert(sid, down_tx);
-
-        // Send new-stream request with NETWORK_UDP
-        let req = encode_mux_new_stream(
-            vless::NETWORK_UDP,
-            0,                                       /* port unused for UDP MUX sub-stream */
-            &zero_core::Address::Ipv4([0, 0, 0, 0]), /* address unused */
-        )
-        .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
-        conn.write_tx
-            .send(req)
+        let stream = open_mux_udp_stream(conn)
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
-
-        // Upload relay: raw VLESS UDP packets -?encrypt -?MUX frame -?write_tx
-        let write = conn.write_tx.clone();
-        let conn_drop = conn.clone();
-        let crypto = conn.crypto.clone();
-        tokio::spawn(async move {
-            let mut up_rx = up_rx;
-            while let Some(vless_udp_packet) = up_rx.recv().await {
-                let payload = encrypt_mux_payload(&crypto, sid, &vless_udp_packet, true);
-                // UDP MUX data frames: the VLESS UDP packet is the full payload
-                let frame = encode_mux_data_frame(sid, &payload);
-                if write.send(frame).is_err() {
-                    break;
-                }
-            }
-            let close_frame = encode_mux_end_frame(sid);
-            let _ = write.send(close_frame);
-            *conn_drop.active.lock().unwrap() -= 1;
-        });
-
-        Ok((sid, up_tx, down_rx))
+        Ok((stream.session_id, stream.up_tx, stream.down_rx))
     }
 
     async fn open_stream_inner(
@@ -190,55 +143,8 @@ impl MuxConnectionPool {
         let _ = network; // network is used by future callers (e.g. open_udp_stream), TcpStream path hardcodes NETWORK_TCP
         let conn = self.get_or_create_conn(&request).await?;
 
-        // Allocate stream ID
-        let sid = {
-            let mut next = conn.next_id.lock().unwrap();
-            let s = *next;
-            *next = next.wrapping_add(1);
-            if *next == 0 {
-                *next = 1;
-            }
-            s
-        };
-
-        *conn.active.lock().unwrap() += 1;
-
-        let (_up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let (down_tx, down_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-
-        conn.streams.lock().unwrap().insert(sid, down_tx);
-
-        // Send new-stream request to the peer
-        let req = encode_mux_new_stream(vless::NETWORK_TCP, session.port, &session.target)
+        let stream = open_mux_tcp_stream(conn, session.port, &session.target)
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
-        conn.write_tx
-            .send(req)
-            .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
-
-        // Spawn upload relay: up_rx -?encrypt -?MUX frame -?write_tx
-        let write = conn.write_tx.clone();
-        let conn_drop = conn.clone();
-        let crypto = conn.crypto.clone();
-        tokio::spawn(async move {
-            let mut up_rx = up_rx;
-            while let Some(data) = up_rx.recv().await {
-                let payload = encrypt_mux_payload(&crypto, sid, &data, true);
-                let frame = encode_mux_data_frame(sid, &payload);
-                if write.send(frame).is_err() {
-                    break;
-                }
-            }
-            let close_frame = encode_mux_end_frame(sid);
-            let _ = write.send(close_frame);
-            *conn_drop.active.lock().unwrap() -= 1;
-        });
-
-        let stream = MuxStreamRelay {
-            up_tx: conn.write_tx.clone(),
-            sid,
-            down_rx: Some(down_rx),
-            conn: conn.clone(),
-        };
 
         Ok(TcpRelayStream::new(stream))
     }
@@ -276,70 +182,10 @@ impl MuxConnectionPool {
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
 
-        let tcp: TcpRelayStream = metered.into_inner();
-        let (tcp_read, tcp_write) = tokio::io::split(tcp);
-
-        let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-
-        let crypto = new_mux_crypto(&key.uuid);
-
-        // Write relay: frames -?TCP
-        tokio::spawn(async move {
-            use tokio::io::AsyncWriteExt;
-            let mut w = tcp_write;
-            while let Some(frame) = write_rx.recv().await {
-                if w.write_all(&frame).await.is_err() {
-                    break;
-                }
-            }
-            let _ = w.shutdown().await;
-        });
-
-        let streams: Arc<Mutex<HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
-        let streams_for_relay = streams.clone();
-        let streams_for_pool = streams;
-
-        // Read relay: TCP -?dispatch MUX frames -?decrypt -?stream channels
-        let crypto_for_read = crypto.clone();
-        tokio::spawn(async move {
-            use tokio::io::AsyncReadExt;
-            let mut r = tcp_read;
-            let mut buf = [0u8; 4];
-            loop {
-                if r.read_exact(&mut buf).await.is_err() {
-                    break;
-                }
-                let stream_id = u16::from_be_bytes([buf[0], buf[1]]);
-                let length = u16::from_be_bytes([buf[2], buf[3]]) as usize;
-                if length > 16384 {
-                    break;
-                }
-                let mut payload = vec![0u8; length];
-                if length > 0 && r.read_exact(&mut payload).await.is_err() {
-                    break;
-                }
-
-                if stream_id != 0 {
-                    let decrypted =
-                        decrypt_mux_payload(&crypto_for_read, stream_id, &payload, false);
-                    if let Some(decrypted_payload) = decrypted {
-                        let streams = streams_for_relay.lock().unwrap();
-                        if let Some(tx) = streams.get(&stream_id) {
-                            let _ = tx.send(decrypted_payload);
-                        }
-                    }
-                }
-            }
-        });
-
-        Ok(MuxPoolConn {
-            write_tx,
-            streams: streams_for_pool,
-            next_id: Mutex::new(1),
-            active: Mutex::new(0),
-            max_concurrency: request.max_concurrency,
-            crypto,
-        })
+        Ok(MuxPoolConn::new(
+            metered.into_inner(),
+            &key.uuid,
+            request.max_concurrency,
+        ))
     }
 }

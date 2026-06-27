@@ -10,7 +10,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
 use zero_core::{Address, Error};
 
@@ -49,6 +49,37 @@ pub struct MuxPoolConn {
     pub active: Mutex<usize>,
     pub max_concurrency: u32,
     pub crypto: Option<Arc<Mutex<MuxCrypto>>>,
+}
+
+impl MuxPoolConn {
+    pub fn new<S>(stream: S, uuid: &[u8; 16], max_concurrency: u32) -> Self
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        let (read_half, write_half) = tokio::io::split(stream);
+        let (write_tx, write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let streams: Arc<Mutex<HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let crypto = new_mux_crypto(uuid);
+
+        spawn_mux_write_relay(write_half, write_rx);
+        spawn_mux_read_relay(read_half, streams.clone(), crypto.clone());
+
+        Self {
+            write_tx,
+            streams,
+            next_id: Mutex::new(1),
+            active: Mutex::new(0),
+            max_concurrency,
+            crypto,
+        }
+    }
+}
+
+pub struct MuxUdpStream {
+    pub session_id: u16,
+    pub up_tx: mpsc::UnboundedSender<Vec<u8>>,
+    pub down_rx: mpsc::UnboundedReceiver<Vec<u8>>,
 }
 
 // ── MUX stream relay ──
@@ -122,6 +153,141 @@ impl AsyncWrite for MuxStreamRelay {
 
 pub fn new_mux_crypto(uuid: &[u8; 16]) -> Option<Arc<Mutex<MuxCrypto>>> {
     Some(Arc::new(Mutex::new(MuxCrypto::new(uuid))))
+}
+
+pub fn open_mux_tcp_stream(
+    conn: Arc<MuxPoolConn>,
+    port: u16,
+    address: &Address,
+) -> Result<MuxStreamRelay, Error> {
+    let sid = allocate_stream_id(&conn);
+    let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let (down_tx, down_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+
+    conn.streams.lock().unwrap().insert(sid, down_tx);
+
+    let req = encode_mux_new_stream(crate::NETWORK_TCP, port, address)?;
+    conn.write_tx
+        .send(req)
+        .map_err(|_| Error::Io("failed to write VLESS MUX new stream request"))?;
+
+    spawn_mux_upload_relay(conn.clone(), sid, up_rx, false);
+
+    Ok(MuxStreamRelay {
+        up_tx,
+        sid,
+        down_rx: Some(down_rx),
+        conn,
+    })
+}
+
+pub fn open_mux_udp_stream(conn: Arc<MuxPoolConn>) -> Result<MuxUdpStream, Error> {
+    let sid = allocate_stream_id(&conn);
+    let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let (down_tx, down_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+
+    conn.streams.lock().unwrap().insert(sid, down_tx);
+
+    let req = encode_mux_new_stream(crate::NETWORK_UDP, 0, &Address::Ipv4([0, 0, 0, 0]))?;
+    conn.write_tx
+        .send(req)
+        .map_err(|_| Error::Io("failed to write VLESS MUX UDP stream request"))?;
+
+    spawn_mux_upload_relay(conn, sid, up_rx, true);
+
+    Ok(MuxUdpStream {
+        session_id: sid,
+        up_tx,
+        down_rx,
+    })
+}
+
+fn allocate_stream_id(conn: &MuxPoolConn) -> u16 {
+    let sid = {
+        let mut next = conn.next_id.lock().unwrap();
+        let s = *next;
+        *next = next.wrapping_add(1);
+        if *next == 0 {
+            *next = 1;
+        }
+        s
+    };
+    *conn.active.lock().unwrap() += 1;
+    sid
+}
+
+fn spawn_mux_upload_relay(
+    conn: Arc<MuxPoolConn>,
+    sid: u16,
+    mut up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    decrement_active_on_close: bool,
+) {
+    let write = conn.write_tx.clone();
+    let crypto = conn.crypto.clone();
+    tokio::spawn(async move {
+        while let Some(payload) = up_rx.recv().await {
+            let payload = encrypt_mux_payload(&crypto, sid, &payload, true);
+            let frame = encode_mux_data_frame(sid, &payload);
+            if write.send(frame).is_err() {
+                break;
+            }
+        }
+        let close_frame = encode_mux_end_frame(sid);
+        let _ = write.send(close_frame);
+        if decrement_active_on_close {
+            *conn.active.lock().unwrap() -= 1;
+        }
+    });
+}
+
+fn spawn_mux_write_relay<W>(mut writer: W, mut write_rx: mpsc::UnboundedReceiver<Vec<u8>>)
+where
+    W: AsyncWrite + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        while let Some(frame) = write_rx.recv().await {
+            if writer.write_all(&frame).await.is_err() {
+                break;
+            }
+        }
+        let _ = writer.shutdown().await;
+    });
+}
+
+fn spawn_mux_read_relay<R>(
+    mut reader: R,
+    streams: Arc<Mutex<HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>>>,
+    crypto: Option<Arc<Mutex<MuxCrypto>>>,
+) where
+    R: AsyncRead + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        let mut buf = [0u8; 4];
+        loop {
+            if reader.read_exact(&mut buf).await.is_err() {
+                break;
+            }
+            let stream_id = u16::from_be_bytes([buf[0], buf[1]]);
+            let length = u16::from_be_bytes([buf[2], buf[3]]) as usize;
+            if length > 16384 {
+                break;
+            }
+            let mut payload = vec![0u8; length];
+            if length > 0 && reader.read_exact(&mut payload).await.is_err() {
+                break;
+            }
+
+            if stream_id != 0 {
+                let decrypted = decrypt_mux_payload(&crypto, stream_id, &payload, false);
+                if let Some(decrypted_payload) = decrypted {
+                    let streams = streams.lock().unwrap();
+                    if let Some(tx) = streams.get(&stream_id) {
+                        let _ = tx.send(decrypted_payload);
+                    }
+                }
+            }
+        }
+    });
 }
 
 /// Encrypt a MUX frame payload.

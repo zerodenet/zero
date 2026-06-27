@@ -2603,21 +2603,48 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         "vless::encode_end_frame",
         "vless::MuxCrypto",
         "MuxCrypto::new",
-    ] {
-        assert!(
-            !root.contains(forbidden),
-            "VLESS mux pool runtime should use protocol mux_pool frame helpers instead of `{forbidden}`"
-        );
-    }
-    for required in [
         "encode_mux_new_stream",
         "encode_mux_data_frame",
         "encode_mux_end_frame",
         "new_mux_crypto",
+        "encrypt_mux_payload",
+        "decrypt_mux_payload",
+        "tokio::spawn",
+        "read_exact(&mut buf)",
+        "write_all(&frame)",
+        "mpsc::unbounded_channel::<Vec<u8>>()",
+        "zero_core::Address::Ipv4([0, 0, 0, 0])",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "VLESS adapter mux pool should not own protocol MUX frame or pump detail `{forbidden}`"
+        );
+    }
+    for required in [
+        "open_mux_tcp_stream",
+        "open_mux_udp_stream",
+        "MuxPoolConn::new",
     ] {
         assert!(
             root.contains(required),
-            "VLESS mux pool runtime should call protocol mux_pool helper `{required}`"
+            "VLESS adapter mux pool should delegate protocol MUX stream mechanics through `{required}`"
+        );
+    }
+    let protocol_mux_pool = fs::read_to_string(repo_root().join("protocols/vless/src/mux_pool.rs"))
+        .expect("read protocols/vless mux_pool source");
+    for required in [
+        "pub fn open_mux_tcp_stream",
+        "pub fn open_mux_udp_stream",
+        "impl MuxPoolConn",
+        "tokio::spawn",
+        "encrypt_mux_payload",
+        "decrypt_mux_payload",
+        "encode_mux_data_frame",
+        "encode_mux_end_frame",
+    ] {
+        assert!(
+            protocol_mux_pool.contains(required),
+            "protocols/vless should own VLESS MUX stream mechanics through `{required}`"
         );
     }
 }
