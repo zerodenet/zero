@@ -7,6 +7,8 @@
 use zero_core::Session;
 use zero_engine::EngineError;
 
+use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use crate::runtime::Proxy;
 use crate::transport::{Hysteria2Stream, QuicConnectionOptions, TcpRelayStream};
 
@@ -104,6 +106,41 @@ impl Hysteria2Connector {
 
         Ok(stream)
     }
+}
+
+pub(crate) async fn open_udp_packet_path_connection(
+    server: &str,
+    port: u16,
+    packet_path: hysteria2::Hysteria2UdpPacketPath<'_>,
+) -> Result<quinn::Connection, EngineError> {
+    let connector_profile = packet_path.connector_profile();
+    Hysteria2Connector::from_udp_profile(server, port, connector_profile.clone())
+        .connect_raw_with_udp_profile(&connector_profile)
+        .await
+}
+
+pub(crate) async fn establish_udp_flow_session(
+    endpoint: OutboundEndpoint<'_>,
+    initial_packet: UdpPacketRef<'_>,
+    resume: hysteria2::Hysteria2UdpFlowResume,
+) -> Result<hysteria2::Hysteria2UdpFlowSession, EngineError> {
+    let connector_profile = resume.connector_profile();
+    let conn = std::sync::Arc::new(
+        Hysteria2Connector::from_udp_profile(
+            endpoint.server,
+            endpoint.port,
+            connector_profile.clone(),
+        )
+        .connect_raw_with_udp_profile(&connector_profile)
+        .await?,
+    );
+    Ok(hysteria2::start_udp_flow_with_initial_packet(
+        conn,
+        initial_packet.target,
+        initial_packet.port,
+        initial_packet.payload,
+        resume,
+    ))
 }
 
 async fn authenticate_with_password(

@@ -2960,10 +2960,11 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         );
     }
     assert!(
-        stream.contains("hysteria2::start_udp_flow_with_initial_packet")
-            && stream.contains("Hysteria2Connector::from_udp_profile")
-            && stream.contains("connect_raw_with_udp_profile"),
-        "Hysteria2 UDP stream glue should only connect QUIC and call the protocol-owned flow pump"
+        stream.contains("outbound::hysteria2::establish_udp_flow_session")
+            && !stream.contains("Hysteria2Connector::from_udp_profile")
+            && !stream.contains("connect_raw_with_udp_profile")
+            && !stream.contains("resume.connector_profile()"),
+        "Hysteria2 UDP stream glue should delegate QUIC/profile setup and protocol flow pumping to outbound/hysteria2"
     );
     assert!(
         protocol.contains("struct Hysteria2UdpFlowIo")
@@ -7631,7 +7632,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !stream.contains("packet.encode_with(&resume)")
             && !stream.contains("hysteria2::udp_flow_packet")
             && !stream.contains("flow_io.decode_packet(&data)")
-            && stream.contains("hysteria2::start_udp_flow_with_initial_packet")
+            && stream.contains("outbound::hysteria2::establish_udp_flow_session")
             && !stream.contains("hysteria2::spawn_udp_flow")
             && protocol_udp.contains("struct Hysteria2UdpFlowSender")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
@@ -7740,12 +7741,15 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("H2UdpPeer")
-            && stream.contains("Hysteria2Connector::from_udp_profile")
-            && stream.contains("resume.connector_profile()")
-            && stream.contains("connect_raw_with_udp_profile")
+            && stream.contains("outbound::hysteria2::establish_udp_flow_session")
+            && !stream.contains("Hysteria2Connector::from_udp_profile")
+            && !stream.contains("resume.connector_profile()")
+            && !stream.contains("connect_raw_with_udp_profile")
+            && outbound.contains("resume.connector_profile()")
+            && outbound.contains("connect_raw_with_udp_profile")
             && !outbound.contains("profile.password()")
             && !transport.contains("request.resume.connector_profile()"),
-        "Hysteria2 UDP manager should consume protocol-owned opaque cache keys through neutral endpoints and keep UDP profile auth in protocols/hysteria2"
+        "Hysteria2 UDP manager should consume protocol-owned opaque cache keys through neutral endpoints and keep UDP profile/connection setup in outbound/hysteria2"
     );
 }
 
@@ -7791,9 +7795,10 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
             && carrier.contains("PacketPathCarrierAdapter")
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
             && transport.contains("conn: Arc<quinn::Connection>")
-            && adapter.contains("outbound::hysteria2::Hysteria2Connector")
-            && adapter.contains("connect_raw"),
-        "Hysteria2 adapter should own protocol-specific QUIC connection setup while zero-transport owns connection lifecycle and codec use"
+            && adapter.contains("outbound::hysteria2::open_udp_packet_path_connection")
+            && !adapter.contains("Hysteria2Connector")
+            && !adapter.contains("connect_raw"),
+        "Hysteria2 adapter should request protocol-specific QUIC connection setup from outbound/hysteria2 while zero-transport owns connection lifecycle and codec use"
     );
 }
 
@@ -7828,6 +7833,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         .expect("read hysteria2 protocol udp source");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
+    let outbound = read("src/outbound/hysteria2.rs");
 
     for forbidden in [
         "Hysteria2Connector",
@@ -7860,9 +7866,10 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        stream.contains("Hysteria2Connector::from_udp_profile")
-            && stream.contains("connect_raw_with_udp_profile")
-            && stream.contains("hysteria2::start_udp_flow_with_initial_packet")
+        stream.contains("outbound::hysteria2::establish_udp_flow_session")
+            && !stream.contains("Hysteria2Connector::from_udp_profile")
+            && !stream.contains("connect_raw_with_udp_profile")
+            && !stream.contains("hysteria2::start_udp_flow_with_initial_packet")
             && !stream.contains("hysteria2::spawn_udp_flow")
             && !stream.contains("hysteria2::Hysteria2UdpFlowSession::new")
             && !stream.contains("send_datagram")
@@ -7884,12 +7891,15 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_udp.contains("tokio::spawn")
             && protocol_udp.contains("send_datagram")
             && protocol_udp.contains("read_datagram")
+            && outbound.contains("hysteria2::start_udp_flow_with_initial_packet")
+            && outbound.contains("Hysteria2Connector::from_udp_profile")
+            && outbound.contains("connect_raw_with_udp_profile")
             && !transport.contains("pub async fn establish_hysteria2_udp_flow_stream")
             && !transport.contains("Hysteria2UdpFlowStreamRequest")
             && !transport.contains("hysteria2::udp_flow_packet")
             && !transport.contains("resume.encode_flow_packet")
             && !transport.contains("resume.decode_flow_packet"),
-        "Hysteria2 UDP flow tasks should stay out of zero-transport and live in protocols/hysteria2 while proxy keeps QUIC connect/cache bridge glue"
+        "Hysteria2 UDP flow tasks should stay out of zero-transport and live in protocols/hysteria2 while outbound/hysteria2 owns QUIC connect/cache bridge glue"
     );
 }
 
