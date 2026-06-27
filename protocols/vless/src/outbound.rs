@@ -237,6 +237,33 @@ pub struct VlessUdpIdentity {
     pub uuid: [u8; 16],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VlessUdpFlowConfig<'a> {
+    identity: VlessUdpIdentity,
+    flow: Option<&'a str>,
+}
+
+impl<'a> VlessUdpFlowConfig<'a> {
+    pub fn new(id: &str, flow: Option<&'a str>) -> Result<Self, Error> {
+        Ok(Self {
+            identity: parse_udp_identity(id)?,
+            flow,
+        })
+    }
+
+    pub fn identity(&self) -> VlessUdpIdentity {
+        self.identity
+    }
+
+    pub fn uuid(&self) -> &[u8; 16] {
+        &self.identity.uuid
+    }
+
+    pub fn mux_flow_enabled(&self) -> bool {
+        self.flow == Some("xtls-rprx-vision") || self.flow == Some("xtls-rprx-vision-udp443")
+    }
+}
+
 pub fn parse_udp_identity(id: &str) -> Result<VlessUdpIdentity, Error> {
     crate::shared::parse_uuid(id).map(|uuid| VlessUdpIdentity { uuid })
 }

@@ -52,9 +52,9 @@ async fn establish_vmess_udp_upstream(
                 session: request.session,
                 server: request.server.to_owned(),
                 port: request.server_port,
-                id: request.identity.uuid,
-                cipher_name: request.cipher_name.to_owned(),
-                cipher: request.identity.cipher,
+                id: request.config.identity().uuid,
+                cipher_name: request.config.cipher_name().to_owned(),
+                cipher: request.config.identity().cipher,
                 tls: request.transport.and_then(|transport| transport.tls),
                 ws: request.transport.and_then(|transport| transport.ws),
                 grpc: request.transport.and_then(|transport| transport.grpc),
@@ -97,7 +97,7 @@ async fn establish_vmess_udp_upstream(
     establish_vmess_udp_upstream_over_stream(
         request.proxy,
         request.session,
-        request.identity,
+        request.config.identity(),
         request.initial_payload,
         stream,
     )
@@ -129,8 +129,7 @@ impl VmessUdpOutboundManager {
                 port: request.session.port,
                 server: request.server,
                 server_port: request.port,
-                identity: request.identity,
-                cipher_name: request.cipher_name,
+                config: request.config,
                 mux_pool: request.mux_pool,
                 initial_payload: request.payload,
                 transport: Some(&request.transport),
@@ -155,7 +154,7 @@ impl VmessUdpOutboundManager {
         let upstream = establish_vmess_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.identity,
+            request.config.identity(),
             request.payload,
             stream,
         )

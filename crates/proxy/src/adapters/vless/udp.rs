@@ -14,16 +14,17 @@ use manager::{
 
 mod manager;
 
-fn parse_vless_udp_identity(
+fn vless_udp_flow_config<'a>(
     id: &str,
+    flow: Option<&'a str>,
     stage: &'static str,
     upstream: Option<(&str, u16)>,
-) -> Result<vless::VlessUdpIdentity, FlowFailure> {
-    vless::parse_udp_identity(id).map_err(|error| FlowFailure {
+) -> Result<vless::VlessUdpFlowConfig<'a>, FlowFailure> {
+    vless::VlessUdpFlowConfig::new(id, flow).map_err(|error| FlowFailure {
         stage,
         error: zero_engine::EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("invalid VLESS UDP identity: {error}"),
+            format!("invalid VLESS UDP config: {error}"),
         )),
         upstream: upstream.map(|(server, port)| (server.to_string(), port)),
     })
@@ -58,8 +59,8 @@ impl VlessAdapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         let tag_owned = (*tag).to_string();
-        let identity =
-            parse_vless_udp_identity(id, "udp_vless_parse_identity", Some((server, *port)))?;
+        let config =
+            vless_udp_flow_config(id, *flow, "udp_vless_parse_config", Some((server, *port)))?;
 
         let transport = crate::transport::VlessUdpTransportOptions {
             tls: *tls,
@@ -82,8 +83,7 @@ impl VlessAdapter {
                     session,
                     server,
                     port: *port,
-                    identity,
-                    flow: *flow,
+                    config,
                     transport,
                     payload,
                 },
@@ -156,8 +156,8 @@ impl VlessAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), &final_hop));
         };
-        let identity =
-            parse_vless_udp_identity(id, "udp_vless_relay_two_stream_parse_identity", None)?;
+        let config =
+            vless_udp_flow_config(id, None, "udp_vless_relay_two_stream_parse_config", None)?;
         let split_http_cfg = split_http
             .as_ref()
             .expect("udp_relay_needs_two_streams checked split_http is Some");
@@ -170,7 +170,7 @@ impl VlessAdapter {
                     session,
                     post_carrier,
                     get_carrier,
-                    identity,
+                    config,
                     split_http: split_http_cfg,
                     payload,
                 },
@@ -233,8 +233,8 @@ impl VlessAdapter {
         }
 
         let tag_owned = (*tag).to_string();
-        let identity =
-            parse_vless_udp_identity(id, "udp_vless_relay_final_hop_parse_identity", None)?;
+        let config =
+            vless_udp_flow_config(id, None, "udp_vless_relay_final_hop_parse_config", None)?;
         let transport = crate::transport::VlessUdpTransportOptions {
             tls: *tls,
             reality: *reality,
@@ -254,7 +254,7 @@ impl VlessAdapter {
                     proxy,
                     session,
                     carrier,
-                    identity,
+                    config,
                     transport,
                     payload,
                 },

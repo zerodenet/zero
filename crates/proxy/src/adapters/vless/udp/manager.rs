@@ -92,9 +92,7 @@ impl VlessUdpOutboundManager {
         chain_tasks: &mut JoinSet<crate::runtime::udp_flow::packet_path::ChainTask>,
         request: VlessUdpStartFlow<'_>,
     ) -> Result<(), EngineError> {
-        let mux_flow_enabled = request.flow == Some("xtls-rprx-vision")
-            || request.flow == Some("xtls-rprx-vision-udp443");
-        if mux_flow_enabled {
+        if request.config.mux_flow_enabled() {
             let max_concurrency = 8u32;
             if let Ok((_mux_sid, up_tx, _down_rx)) = request
                 .mux_pool
@@ -103,7 +101,7 @@ impl VlessUdpOutboundManager {
                     session: None,
                     server: request.server,
                     port: request.port,
-                    id: &request.identity.uuid,
+                    id: request.config.uuid(),
                     tls: request.transport.tls,
                     reality: request.transport.reality,
                     max_concurrency,
@@ -133,7 +131,7 @@ impl VlessUdpOutboundManager {
                 port: request.session.port,
                 server: request.server,
                 server_port: request.port,
-                identity: request.identity,
+                config: request.config,
                 initial_payload: request.payload,
                 transport: Some(&request.transport),
             },
@@ -155,7 +153,7 @@ impl VlessUdpOutboundManager {
         let upstream = establish_vless_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.identity,
+            request.config.identity(),
             request.payload,
             stream,
         )
@@ -197,7 +195,7 @@ impl VlessUdpOutboundManager {
         let upstream = establish_vless_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.identity,
+            request.config.identity(),
             request.payload,
             stream,
         )
@@ -295,7 +293,7 @@ impl VlessUdpOutboundManager {
             request.session,
             request.server,
             request.server_port,
-            request.identity,
+            request.config.identity(),
             request.initial_payload,
             request.transport,
         )

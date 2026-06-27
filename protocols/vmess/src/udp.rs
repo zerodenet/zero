@@ -32,6 +32,29 @@ pub struct VmessUdpIdentity {
     pub cipher: VmessCipher,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VmessUdpFlowConfig<'a> {
+    identity: VmessUdpIdentity,
+    cipher_name: &'a str,
+}
+
+impl<'a> VmessUdpFlowConfig<'a> {
+    pub fn new(id: &str, cipher: &'a str) -> Result<Self, Error> {
+        Ok(Self {
+            identity: parse_udp_identity(id, cipher)?,
+            cipher_name: cipher,
+        })
+    }
+
+    pub fn identity(&self) -> VmessUdpIdentity {
+        self.identity
+    }
+
+    pub fn cipher_name(&self) -> &'a str {
+        self.cipher_name
+    }
+}
+
 pub fn parse_udp_identity(id: &str, cipher: &str) -> Result<VmessUdpIdentity, Error> {
     let uuid = crate::shared::parse_uuid(id)?;
     let cipher = VmessCipher::from_name(cipher).ok_or(Error::Protocol("vmess unknown cipher"))?;

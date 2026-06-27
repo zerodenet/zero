@@ -14,17 +14,17 @@ use manager::{
 
 mod manager;
 
-fn parse_vmess_udp_identity(
+fn vmess_udp_flow_config<'a>(
     id: &str,
-    cipher: &str,
+    cipher: &'a str,
     stage: &'static str,
     upstream: Option<(&str, u16)>,
-) -> Result<vmess::VmessUdpIdentity, FlowFailure> {
-    vmess::parse_udp_identity(id, cipher).map_err(|error| FlowFailure {
+) -> Result<vmess::VmessUdpFlowConfig<'a>, FlowFailure> {
+    vmess::VmessUdpFlowConfig::new(id, cipher).map_err(|error| FlowFailure {
         stage,
         error: zero_engine::EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("invalid VMess UDP identity: {error}"),
+            format!("invalid VMess UDP config: {error}"),
         )),
         upstream: upstream.map(|(server, port)| (server.to_string(), port)),
     })
@@ -55,12 +55,8 @@ impl VmessAdapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         let tag_owned = (*tag).to_string();
-        let identity = parse_vmess_udp_identity(
-            id,
-            cipher,
-            "udp_vmess_parse_identity",
-            Some((server, *port)),
-        )?;
+        let config =
+            vmess_udp_flow_config(id, cipher, "udp_vmess_parse_config", Some((server, *port)))?;
         let transport = crate::transport::VmessTransportOptions {
             tls: *tls,
             ws: *ws,
@@ -77,8 +73,7 @@ impl VmessAdapter {
                     session,
                     server,
                     port: *port,
-                    identity,
-                    cipher_name: cipher,
+                    config,
                     mux_concurrency: *mux_concurrency,
                     transport,
                     payload,
@@ -127,10 +122,10 @@ impl VmessAdapter {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         let tag_owned = (*tag).to_string();
-        let identity = parse_vmess_udp_identity(
+        let config = vmess_udp_flow_config(
             id,
             cipher,
-            "udp_vmess_relay_final_hop_parse_identity",
+            "udp_vmess_relay_final_hop_parse_config",
             Some((server, *port)),
         )?;
         let transport = crate::transport::VmessTransportOptions {
@@ -147,7 +142,7 @@ impl VmessAdapter {
                     proxy,
                     session,
                     carrier,
-                    identity,
+                    config,
                     transport,
                     payload,
                 },

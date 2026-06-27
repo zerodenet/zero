@@ -2090,8 +2090,8 @@ fn vless_udp_identity_is_protocol_parsed() {
         "VLESS UDP runtime should receive protocol-parsed UUIDs"
     );
     assert!(
-        !model.contains("id: &'a str") && model.contains("vless::VlessUdpIdentity"),
-        "VLESS UDP request models should carry protocol-owned identities instead of raw config IDs"
+        !model.contains("id: &'a str") && model.contains("vless::VlessUdpFlowConfig"),
+        "VLESS UDP request models should carry protocol-owned flow config instead of raw config IDs"
     );
     for forbidden in [
         "pub(crate) id: &'a str",
@@ -2105,13 +2105,20 @@ fn vless_udp_identity_is_protocol_parsed() {
         );
     }
     assert!(
-        !adapter.contains("parse_uuid") && adapter.contains("vless::parse_udp_identity"),
-        "VLESS UDP adapter should delegate UUID parsing to protocols/vless"
+        !adapter.contains("parse_uuid")
+            && !adapter.contains("vless::parse_udp_identity")
+            && adapter.contains("vless::VlessUdpFlowConfig::new"),
+        "VLESS UDP adapter should use the protocol-owned flow config parser"
     );
     assert!(
         protocol.contains("struct VlessUdpIdentity")
             && protocol.contains("pub fn parse_udp_identity"),
         "protocols/vless should own VLESS UDP identity parsing"
+    );
+    assert!(
+        protocol.contains("struct VlessUdpFlowConfig")
+            && protocol.contains("pub fn new(id: &str, flow: Option<&'a str>)"),
+        "protocols/vless should own VLESS UDP flow config construction"
     );
 }
 
@@ -2361,14 +2368,20 @@ fn vmess_udp_identity_is_protocol_parsed() {
         );
     }
     assert!(
-        adapter.contains("vmess::parse_udp_identity"),
-        "VMess UDP adapter should call protocols/vmess UDP identity parser"
+        !adapter.contains("vmess::parse_udp_identity")
+            && adapter.contains("vmess::VmessUdpFlowConfig::new"),
+        "VMess UDP adapter should use the protocol-owned flow config parser"
     );
     assert!(
         protocol.contains("struct VmessUdpIdentity")
             && protocol.contains("pub fn parse_udp_identity")
             && protocol.contains("VmessCipher::from_name"),
         "protocols/vmess should own VMess UDP identity and cipher parsing"
+    );
+    assert!(
+        protocol.contains("struct VmessUdpFlowConfig")
+            && protocol.contains("pub fn new(id: &str, cipher: &'a str)"),
+        "protocols/vmess should own VMess UDP flow config construction"
     );
 
     for forbidden in [
@@ -2380,20 +2393,16 @@ fn vmess_udp_identity_is_protocol_parsed() {
         "pub(super) uuid: [u8; 16]",
         "pub(crate) cipher: vmess::VmessCipher",
         "pub(super) cipher: vmess::VmessCipher",
+        "cipher_name: &'a str",
     ] {
         assert!(
             !model.contains(forbidden),
-            "VMess UDP request models should carry protocol-owned identity plus cipher_name only; found `{forbidden}`"
+            "VMess UDP request models should carry protocol-owned flow config only; found `{forbidden}`"
         );
     }
     assert!(
-        model.contains("vmess::VmessUdpIdentity") && model.contains("cipher_name: &'a str"),
-        "VMess UDP request models should carry protocol-owned identity plus cipher_name for mux"
-    );
-    assert!(
-        model.contains("struct VmessUdpUpstreamRequest")
-            && model.contains("pub(super) cipher_name: &'a str"),
-        "VMess UDP upstream request should retain cipher_name for mux pool"
+        model.contains("vmess::VmessUdpFlowConfig") && !model.contains("vmess::VmessUdpIdentity"),
+        "VMess UDP request models should carry protocol-owned flow config for identity and mux keying"
     );
 }
 
@@ -2652,9 +2661,10 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
     );
     assert!(
         tcp_adapter.contains("VmessCipher::from_name")
-            && udp_adapter.contains("vmess::parse_udp_identity")
+            && udp_adapter.contains("vmess::VmessUdpFlowConfig::new")
+            && !udp_adapter.contains("vmess::parse_udp_identity")
             && !udp_adapter.contains("VmessCipher::from_name"),
-        "VMess TCP adapter still parses cipher locally, while UDP adapter delegates cipher parsing to protocols/vmess"
+        "VMess TCP adapter still parses cipher locally, while UDP adapter delegates cipher parsing to protocols/vmess flow config"
     );
 }
 

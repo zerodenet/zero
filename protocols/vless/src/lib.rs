@@ -48,7 +48,8 @@ pub use outbound::{
 };
 pub use outbound::{
     establish_udp_flow_stream, establish_udp_packet_tunnel, parse_udp_identity, VlessOutbound,
-    VlessTcpTunnelTarget, VlessUdpIdentity, VlessUdpPacketTarget, VlessUdpPacketTunnelTarget,
+    VlessTcpTunnelTarget, VlessUdpFlowConfig, VlessUdpIdentity, VlessUdpPacketTarget,
+    VlessUdpPacketTunnelTarget,
 };
 #[cfg(feature = "reality")]
 pub use reality::{
