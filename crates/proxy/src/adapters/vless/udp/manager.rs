@@ -14,6 +14,7 @@ use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
+use crate::adapters::vless::mux_pool::VlessMuxOpenRequest;
 use crate::protocol_runtime::udp::ManagedCachedFlowSender;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
@@ -144,20 +145,17 @@ impl VlessUdpOutboundManager {
         if mux_flow_enabled {
             let max_concurrency = 8u32;
             if let Ok((_mux_sid, up_tx, _down_rx)) = request
-                .proxy
                 .mux_pool
-                .open_udp_stream(
-                    crate::protocol_runtime::vless_mux_pool::model::VlessMuxOpenRequest {
-                        proxy: request.proxy,
-                        session: None,
-                        server: request.server,
-                        port: request.port,
-                        id: &request.identity.uuid,
-                        tls: request.transport.tls,
-                        reality: request.transport.reality,
-                        max_concurrency,
-                    },
-                )
+                .open_udp_stream(VlessMuxOpenRequest {
+                    proxy: request.proxy,
+                    session: None,
+                    server: request.server,
+                    port: request.port,
+                    id: &request.identity.uuid,
+                    tls: request.transport.tls,
+                    reality: request.transport.reality,
+                    max_concurrency,
+                })
                 .await
             {
                 let initial_packet = UdpFlowPacket::from_parts(

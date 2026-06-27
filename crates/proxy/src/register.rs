@@ -34,7 +34,7 @@ pub(crate) fn protocol_registry() -> ProtocolRegistry {
     #[cfg(feature = "http_connect")]
     registry.register(Arc::new(HttpConnectAdapter));
     #[cfg(feature = "vless")]
-    registry.register(Arc::new(VlessAdapter));
+    registry.register(Arc::new(VlessAdapter::default()));
     #[cfg(feature = "hysteria2")]
     registry.register(Arc::new(Hysteria2Adapter));
     #[cfg(feature = "shadowsocks")]
@@ -42,7 +42,7 @@ pub(crate) fn protocol_registry() -> ProtocolRegistry {
     #[cfg(feature = "trojan")]
     registry.register(Arc::new(TrojanAdapter));
     #[cfg(feature = "vmess")]
-    registry.register(Arc::new(VmessAdapter));
+    registry.register(Arc::new(VmessAdapter::default()));
     #[cfg(feature = "mieru")]
     registry.register(Arc::new(MieruAdapter));
     #[cfg(feature = "mixed")]

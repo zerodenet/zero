@@ -15,6 +15,7 @@ use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
+use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
 use crate::protocol_runtime::udp::ManagedCachedFlowSender;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
@@ -101,23 +102,20 @@ async fn establish_vmess_udp_upstream(
 
     if let Some(max_concurrency) = request.mux_concurrency {
         let mux_stream = request
-            .proxy
-            .vmess_mux_pool
-            .open_udp_stream(
-                crate::protocol_runtime::vmess_mux_pool::model::VmessMuxOpenRequest {
-                    proxy: request.proxy,
-                    session: request.session,
-                    server: request.server.to_owned(),
-                    port: request.server_port,
-                    id: request.identity.uuid,
-                    cipher_name: request.cipher_name.to_owned(),
-                    cipher: request.identity.cipher,
-                    tls: request.transport.and_then(|transport| transport.tls),
-                    ws: request.transport.and_then(|transport| transport.ws),
-                    grpc: request.transport.and_then(|transport| transport.grpc),
-                    max_concurrency,
-                },
-            )
+            .mux_pool
+            .open_udp_stream(VmessMuxOpenRequest {
+                proxy: request.proxy,
+                session: request.session,
+                server: request.server.to_owned(),
+                port: request.server_port,
+                id: request.identity.uuid,
+                cipher_name: request.cipher_name.to_owned(),
+                cipher: request.identity.cipher,
+                tls: request.transport.and_then(|transport| transport.tls),
+                ws: request.transport.and_then(|transport| transport.ws),
+                grpc: request.transport.and_then(|transport| transport.grpc),
+                max_concurrency,
+            })
             .await?;
         let initial_packet_len = flow_io
             .initial_packet(
@@ -191,6 +189,7 @@ impl VmessUdpOutboundManager {
                 server_port: request.port,
                 identity: request.identity,
                 cipher_name: request.cipher_name,
+                mux_pool: request.mux_pool,
                 initial_payload: request.payload,
                 transport: Some(&request.transport),
                 mux_concurrency: request.mux_concurrency,

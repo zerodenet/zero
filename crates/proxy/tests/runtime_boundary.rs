@@ -2429,8 +2429,10 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
 
 #[test]
 fn vmess_mux_pool_model_lives_outside_runtime_root() {
-    let root = read("src/protocol_runtime/vmess_mux_pool.rs");
-    let model = read("src/protocol_runtime/vmess_mux_pool/model.rs");
+    let root = read("src/adapters/vmess/mux_pool.rs");
+    let model = read("src/adapters/vmess/mux_pool/model.rs");
+    let old_root = manifest_dir().join("src/protocol_runtime/vmess_mux_pool.rs");
+    let old_dir = manifest_dir().join("src/protocol_runtime/vmess_mux_pool");
 
     for forbidden in [
         "struct VmessMuxPoolKey",
@@ -2441,7 +2443,7 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
     ] {
         assert!(
             !root.contains(forbidden),
-            "vmess_mux_pool.rs should keep pool/request models in vmess_mux_pool/model.rs; found `{forbidden}`"
+            "VMess adapter mux_pool.rs should keep pool/request models in mux_pool/model.rs; found `{forbidden}`"
         );
     }
 
@@ -2454,9 +2456,13 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
     ] {
         assert!(
             model.contains(required),
-            "VMess MUX pool model should live in vmess_mux_pool/model.rs; missing `{required}`"
+            "VMess MUX pool model should live in adapters/vmess/mux_pool/model.rs; missing `{required}`"
         );
     }
+    assert!(
+        !old_root.exists() && !old_dir.exists(),
+        "VMess MUX pool should not live under protocol_runtime"
+    );
 
     assert!(
         !root.contains("VmessMuxStream::new_with_network"),
@@ -2490,7 +2496,7 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
 
 #[test]
 fn vmess_mux_pool_transport_opening_lives_in_transport_crate() {
-    let root = read("src/protocol_runtime/vmess_mux_pool.rs");
+    let root = read("src/adapters/vmess/mux_pool.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
         .expect("read crates/transport/src/vmess_transport.rs");
 
@@ -2524,8 +2530,8 @@ fn vmess_mux_pool_transport_opening_lives_in_transport_crate() {
 
 #[test]
 fn vmess_mux_pool_receives_adapter_parsed_cipher() {
-    let root = read("src/protocol_runtime/vmess_mux_pool.rs");
-    let model = read("src/protocol_runtime/vmess_mux_pool/model.rs");
+    let root = read("src/adapters/vmess/mux_pool.rs");
+    let model = read("src/adapters/vmess/mux_pool/model.rs");
     let tcp_adapter = read("src/adapters/vmess/tcp.rs");
     let udp_adapter = read("src/adapters/vmess/udp.rs");
 
@@ -2547,22 +2553,28 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
 
 #[test]
 fn vless_mux_pool_model_lives_outside_runtime_root() {
-    let root = read("src/protocol_runtime/vless_mux_pool.rs");
-    let model = read("src/protocol_runtime/vless_mux_pool/model.rs");
+    let root = read("src/adapters/vless/mux_pool.rs");
+    let model = read("src/adapters/vless/mux_pool/model.rs");
+    let old_root = manifest_dir().join("src/protocol_runtime/vless_mux_pool.rs");
+    let old_dir = manifest_dir().join("src/protocol_runtime/vless_mux_pool");
 
     for forbidden in ["struct MuxConnectionPool", "struct VlessMuxOpenRequest"] {
         assert!(
             !root.contains(forbidden),
-            "vless_mux_pool.rs should keep proxy-layer pool/request models in vless_mux_pool/model.rs; found `{forbidden}`"
+            "VLESS adapter mux_pool.rs should keep proxy-layer pool/request models in mux_pool/model.rs; found `{forbidden}`"
         );
     }
 
     for required in ["struct MuxConnectionPool", "struct VlessMuxOpenRequest"] {
         assert!(
             model.contains(required),
-            "VLESS MUX pool model should live in vless_mux_pool/model.rs; missing `{required}`"
+            "VLESS MUX pool model should live in adapters/vless/mux_pool/model.rs; missing `{required}`"
         );
     }
+    assert!(
+        !old_root.exists() && !old_dir.exists(),
+        "VLESS MUX pool should not live under protocol_runtime"
+    );
     for forbidden in [
         "vless::encode_new_stream",
         "vless::encode_data_frame",
@@ -2589,6 +2601,51 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
 }
 
 #[test]
+fn protocol_mux_pools_are_adapter_owned_not_proxy_fields() {
+    let runtime = read("src/runtime.rs");
+    let vless_adapter = read("src/adapters/vless.rs");
+    let vmess_adapter = read("src/adapters/vmess.rs");
+    let vless_tcp = read("src/adapters/vless/tcp.rs");
+    let vmess_tcp = read("src/adapters/vmess/tcp.rs");
+    let vless_udp = read("src/adapters/vless/udp.rs");
+    let vmess_udp = read("src/adapters/vmess/udp.rs");
+
+    for forbidden in [
+        "mux_pool: MuxConnectionPool",
+        "vmess_mux_pool: VmessMuxConnectionPool",
+        "vless_mux_pool",
+        "vmess_mux_pool",
+    ] {
+        assert!(
+            !runtime.contains(forbidden),
+            "Proxy runtime should not own protocol-named MUX pool field `{forbidden}`"
+        );
+    }
+    assert!(
+        runtime.contains("self.protocols.on_config_reloaded()"),
+        "runtime reload should notify protocol inventory instead of clearing concrete protocol pools"
+    );
+    assert!(
+        vless_adapter.contains("mux_pool: mux_pool::MuxConnectionPool")
+            && vless_adapter.contains("fn on_config_reloaded(&self)")
+            && vless_adapter.contains("self.mux_pool.evict_all()")
+            && vless_tcp.contains("VlessMuxOpenRequest")
+            && vless_tcp.contains(".mux_pool")
+            && vless_udp.contains("mux_pool: &self.mux_pool"),
+        "VLESS MUX pool should be owned by VlessAdapter and shared by its TCP/UDP paths"
+    );
+    assert!(
+        vmess_adapter.contains("mux_pool: mux_pool::VmessMuxConnectionPool")
+            && vmess_adapter.contains("fn on_config_reloaded(&self)")
+            && vmess_adapter.contains("self.mux_pool.evict_all()")
+            && vmess_tcp.contains("VmessMuxOpenRequest")
+            && vmess_tcp.contains(".mux_pool")
+            && vmess_udp.contains("mux_pool: &self.mux_pool"),
+        "VMess MUX pool should be owned by VmessAdapter and shared by its TCP/UDP paths"
+    );
+}
+
+#[test]
 fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
     for (source, forbidden) in [
         ("src/adapters/vless/udp/manager.rs", "VlessUdpStartFlow"),
@@ -2606,14 +2663,6 @@ fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
             "src/adapters/vmess/udp/manager.rs",
             "VmessUdpRelayFlowStart",
         ),
-        (
-            "src/protocol_runtime/vless_mux_pool.rs",
-            "VlessMuxOpenRequest",
-        ),
-        (
-            "src/protocol_runtime/vmess_mux_pool.rs",
-            "VmessMuxOpenRequest",
-        ),
     ] {
         let content = read(source);
         assert!(
@@ -2626,14 +2675,14 @@ fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
     }
 
     assert!(
-        read("src/protocol_runtime/vless_mux_pool.rs")
-            .contains("pub(crate) use model::MuxConnectionPool;"),
-        "VLESS mux pool root should expose the pool type facade"
+        read("src/adapters/vless/mux_pool.rs")
+            .contains("pub(crate) use model::{MuxConnectionPool, VlessMuxOpenRequest};"),
+        "VLESS mux pool root should expose only the adapter-owned pool/request facade"
     );
     assert!(
-        read("src/protocol_runtime/vmess_mux_pool.rs")
-            .contains("pub(crate) use model::VmessMuxConnectionPool;"),
-        "VMess mux pool root should expose the pool type facade"
+        read("src/adapters/vmess/mux_pool.rs")
+            .contains("pub(crate) use model::{VmessMuxConnectionPool, VmessMuxOpenRequest};"),
+        "VMess mux pool root should expose only the adapter-owned pool/request facade"
     );
 }
 
@@ -4063,6 +4112,7 @@ fn protocol_registry_root_is_facade_only() {
         "mod inbound;",
         "mod metadata;",
         "mod outbound;",
+        "mod runtime;",
         "mod support;",
         "mod validation;",
         "pub(crate) struct ProtocolRegistry",
@@ -4083,6 +4133,7 @@ fn protocol_registry_root_is_facade_only() {
         "pub(crate) fn bind_inbound",
         "pub(crate) fn inbound_names",
         "pub(crate) fn outbound_names",
+        "pub(crate) fn on_config_reloaded",
         "pub(crate) fn supports_inbound",
         "pub(crate) fn supports_outbound",
         "pub(crate) fn validate_inbounds",

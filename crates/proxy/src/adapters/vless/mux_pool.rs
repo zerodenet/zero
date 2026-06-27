@@ -6,7 +6,7 @@
 // Types moved to vless::mux_pool; this module handles
 // connection establishment which depends on proxy I/O infrastructure.
 
-pub(crate) mod model;
+mod model;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -18,8 +18,7 @@ use zero_platform_tokio::TransportConnector;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
-pub(crate) use model::MuxConnectionPool;
-use model::VlessMuxOpenRequest;
+pub(crate) use model::{MuxConnectionPool, VlessMuxOpenRequest};
 use vless::mux_pool::{
     decrypt_mux_payload, encode_mux_data_frame, encode_mux_end_frame, encode_mux_new_stream,
     encrypt_mux_payload, new_mux_crypto, MuxPoolConn, MuxStreamRelay, PoolKey, TransportKey,

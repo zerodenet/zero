@@ -1,6 +1,7 @@
 use zero_core::{Address, Session};
 
 use super::VlessFlowSender;
+use crate::adapters::vless::mux_pool::MuxConnectionPool;
 use crate::runtime::Proxy;
 
 /// Handle to an established VLESS UDP upstream connection.
@@ -12,6 +13,7 @@ pub(super) struct VlessUdpUpstream {
 
 pub(crate) struct VlessUdpStartFlow<'a> {
     pub(crate) proxy: &'a Proxy,
+    pub(crate) mux_pool: &'a MuxConnectionPool,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,

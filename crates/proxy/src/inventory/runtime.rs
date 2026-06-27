@@ -4,6 +4,10 @@ use super::ProtocolInventory;
 use crate::protocol_adapter::OutboundLeafRuntime;
 
 impl ProtocolInventory {
+    pub(crate) fn on_config_reloaded(&self) {
+        self.registry.on_config_reloaded();
+    }
+
     /// Return the runtime-neutral facts for a resolved outbound leaf.
     ///
     /// The runtime asks the inventory for this instead of matching concrete

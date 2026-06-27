@@ -16,7 +16,6 @@ use zero_engine::EngineError;
 #[cfg(feature = "vless")]
 use zero_platform_tokio::TransportConnector;
 
-#[cfg(feature = "vless")]
 use crate::runtime::Proxy;
 #[cfg(feature = "vless")]
 use crate::transport::TcpRelayStream;
@@ -49,24 +48,7 @@ pub(crate) async fn connect_tcp(
         split_http,
     } = request;
 
-    // If MUX flow is configured, use connection pool.
-    if flow == Some("xtls-rprx-vision") {
-        return proxy
-            .mux_pool
-            .open_stream(
-                crate::protocol_runtime::vless_mux_pool::model::VlessMuxOpenRequest {
-                    proxy,
-                    session: Some(session),
-                    server,
-                    port,
-                    id: &uuid,
-                    tls,
-                    reality,
-                    max_concurrency: mux_concurrency.unwrap_or(8),
-                },
-            )
-            .await;
-    }
+    let _ = mux_concurrency;
     let _ = mux_idle_timeout_secs;
 
     // QUIC uses UDP; handle before TCP connect entirely.

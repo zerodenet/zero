@@ -26,7 +26,6 @@ pub(crate) async fn connect_tcp(
         server,
         port,
         uuid,
-        cipher_name,
         cipher,
         mux_concurrency,
         mux_idle_timeout_secs,
@@ -35,26 +34,7 @@ pub(crate) async fn connect_tcp(
         grpc,
     } = request;
 
-    if let Some(max_concurrency) = mux_concurrency {
-        return proxy
-            .vmess_mux_pool
-            .open_stream(
-                crate::protocol_runtime::vmess_mux_pool::model::VmessMuxOpenRequest {
-                    proxy,
-                    session,
-                    server: server.to_owned(),
-                    port,
-                    id: uuid,
-                    cipher_name: cipher_name.to_owned(),
-                    cipher,
-                    tls,
-                    ws,
-                    grpc,
-                    max_concurrency,
-                },
-            )
-            .await;
-    }
+    let _ = mux_concurrency;
     let _ = mux_idle_timeout_secs;
 
     let socket = proxy
@@ -130,7 +110,6 @@ pub(crate) struct VmessTcpConnectRequest<'a> {
     pub server: &'a str,
     pub port: u16,
     pub uuid: [u8; 16],
-    pub cipher_name: &'a str,
     pub cipher: vmess::VmessCipher,
     pub mux_concurrency: Option<u32>,
     pub mux_idle_timeout_secs: Option<u64>,

@@ -18,13 +18,26 @@ use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 #[cfg(feature = "vmess")]
 mod inbound;
 #[cfg(feature = "vmess")]
+pub(crate) mod mux_pool;
+#[cfg(feature = "vmess")]
 mod tcp;
 #[cfg(feature = "vmess")]
 mod udp;
 
 #[cfg(feature = "vmess")]
 #[derive(Debug)]
-pub(crate) struct VmessAdapter;
+pub(crate) struct VmessAdapter {
+    mux_pool: mux_pool::VmessMuxConnectionPool,
+}
+
+#[cfg(feature = "vmess")]
+impl Default for VmessAdapter {
+    fn default() -> Self {
+        Self {
+            mux_pool: mux_pool::VmessMuxConnectionPool::new(),
+        }
+    }
+}
 
 #[cfg(feature = "vmess")]
 #[async_trait]
@@ -128,6 +141,10 @@ impl ProtocolSupportCapability for VmessAdapter {
     }
     fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
         matches!(c, OutboundProtocolConfig::Vmess { .. })
+    }
+
+    fn on_config_reloaded(&self) {
+        self.mux_pool.evict_all();
     }
 }
 

@@ -13,9 +13,6 @@ use zero_dns::DnsSystem;
 use zero_engine::{Engine, EngineError};
 
 use crate::inventory::ProtocolInventory;
-use crate::protocol_runtime::vless_mux_pool::MuxConnectionPool;
-#[cfg(feature = "vmess")]
-use crate::protocol_runtime::vmess_mux_pool::VmessMuxConnectionPool;
 
 mod engine_facade;
 mod handle;
@@ -39,9 +36,6 @@ pub struct Proxy {
     pub(crate) config: Arc<RuntimeConfig>,
     pub(crate) resolver: Arc<DnsSystem>,
     pub(crate) protocols: ProtocolInventory,
-    pub(crate) mux_pool: MuxConnectionPool,
-    #[cfg(feature = "vmess")]
-    pub(crate) vmess_mux_pool: VmessMuxConnectionPool,
     pub(crate) tun_shutdown: Arc<std::sync::Mutex<Option<tokio::sync::watch::Sender<bool>>>>,
     pub(crate) tun_info: Arc<std::sync::Mutex<Option<TunInfo>>>,
 }
@@ -74,9 +68,6 @@ impl Proxy {
             engine,
             resolver: Arc::new(dns),
             protocols,
-            mux_pool: MuxConnectionPool::new(),
-            #[cfg(feature = "vmess")]
-            vmess_mux_pool: VmessMuxConnectionPool::new(),
             tun_shutdown: Arc::new(std::sync::Mutex::new(None)),
             tun_info: Arc::new(std::sync::Mutex::new(None)),
         })
@@ -218,9 +209,7 @@ impl Proxy {
                     // changes via the plan swap and exit cleanly next cycle.
                     // Spawn new ones.
                     listeners::reconcile_urltests(self, &new_config, &shutdown_rx, &mut urltests);
-                    self.mux_pool.evict_all();
-                    #[cfg(feature = "vmess")]
-                    self.vmess_mux_pool.evict_all();
+                    self.protocols.on_config_reloaded();
                     info!(
                         inbound_count = new_config.inbounds.len(),
                         outbound_count = new_config.outbounds.len(),

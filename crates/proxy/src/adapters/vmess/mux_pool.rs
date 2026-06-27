@@ -1,4 +1,4 @@
-pub(crate) mod model;
+mod model;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -12,8 +12,8 @@ use zero_platform_tokio::TransportConnector;
 
 use crate::transport::{MeteredStream, TcpRelayStream, VmessTransportConnector};
 
-pub(crate) use model::VmessMuxConnectionPool;
-use model::{VmessMuxConn, VmessMuxOpenRequest, VmessMuxPoolKey, VmessMuxTransportKey};
+use model::{VmessMuxConn, VmessMuxPoolKey, VmessMuxTransportKey};
+pub(crate) use model::{VmessMuxConnectionPool, VmessMuxOpenRequest};
 
 impl std::fmt::Debug for VmessMuxConnectionPool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

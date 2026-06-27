@@ -42,6 +42,8 @@ pub(crate) trait ProtocolSupportCapability: ProtocolMetadata {
     fn supports_outbound(&self, config: &OutboundProtocolConfig) -> bool;
     fn has_inbound(&self) -> bool;
     fn has_outbound(&self) -> bool;
+
+    fn on_config_reloaded(&self) {}
 }
 
 #[async_trait]

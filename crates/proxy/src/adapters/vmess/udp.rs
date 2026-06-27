@@ -73,6 +73,7 @@ impl VmessAdapter {
                 dispatch.protocol_udp_chain_tasks(),
                 VmessUdpStartFlow {
                     proxy,
+                    mux_pool: &self.mux_pool,
                     session,
                     server,
                     port: *port,

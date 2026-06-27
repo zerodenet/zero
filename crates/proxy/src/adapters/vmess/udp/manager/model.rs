@@ -1,6 +1,7 @@
 use zero_core::{Address, Session};
 
 use super::VmessFlowSender;
+use crate::adapters::vmess::mux_pool::VmessMuxConnectionPool;
 use crate::runtime::Proxy;
 
 #[derive(Clone)]
@@ -11,6 +12,7 @@ pub(super) struct VmessUdpUpstream {
 
 pub(crate) struct VmessUdpStartFlow<'a> {
     pub(crate) proxy: &'a Proxy,
+    pub(crate) mux_pool: &'a VmessMuxConnectionPool,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
@@ -32,6 +34,7 @@ pub(crate) struct VmessUdpRelayFlowStart<'a> {
 
 pub(super) struct VmessUdpUpstreamRequest<'a> {
     pub(super) proxy: &'a Proxy,
+    pub(super) mux_pool: &'a VmessMuxConnectionPool,
     pub(super) session: &'a Session,
     pub(super) target: Address,
     pub(super) port: u16,

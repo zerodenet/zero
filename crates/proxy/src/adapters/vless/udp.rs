@@ -78,6 +78,7 @@ impl VlessAdapter {
                 dispatch.protocol_udp_chain_tasks(),
                 VlessUdpStartFlow {
                     proxy,
+                    mux_pool: &self.mux_pool,
                     session,
                     server,
                     port: *port,

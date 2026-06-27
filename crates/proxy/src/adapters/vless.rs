@@ -18,13 +18,26 @@ use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 #[cfg(feature = "vless")]
 mod inbound;
 #[cfg(feature = "vless")]
+pub(crate) mod mux_pool;
+#[cfg(feature = "vless")]
 mod tcp;
 #[cfg(feature = "vless")]
 mod udp;
 
 #[cfg(feature = "vless")]
 #[derive(Debug)]
-pub(crate) struct VlessAdapter;
+pub(crate) struct VlessAdapter {
+    mux_pool: mux_pool::MuxConnectionPool,
+}
+
+#[cfg(feature = "vless")]
+impl Default for VlessAdapter {
+    fn default() -> Self {
+        Self {
+            mux_pool: mux_pool::MuxConnectionPool::new(),
+        }
+    }
+}
 
 #[cfg(feature = "vless")]
 #[async_trait]
@@ -151,6 +164,10 @@ impl ProtocolSupportCapability for VlessAdapter {
     }
     fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
         matches!(c, OutboundProtocolConfig::Vless { .. })
+    }
+
+    fn on_config_reloaded(&self) {
+        self.mux_pool.evict_all();
     }
 }
 
