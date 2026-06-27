@@ -3296,6 +3296,7 @@ fn runtime_registered_consumes_managed_flow_models_without_legacy_facade() {
 #[test]
 fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
     let managed = read("src/adapters/mieru/udp/managed.rs");
+    let connector = read("src/adapters/mieru/udp/managed/connector.rs");
     let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
     let protocol = manifest_dir()
@@ -3320,16 +3321,19 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
         "mieru::MieruUdpFlowSession::new",
     ] {
         assert!(
-            !managed.contains(forbidden) && !stream_manager.contains(forbidden),
+            !managed.contains(forbidden)
+                && !connector.contains(forbidden)
+                && !stream_manager.contains(forbidden),
             "Mieru UDP managed glue should delegate protocol encode/decode and pump detail to protocols/mieru; found `{forbidden}`"
         );
     }
     assert!(
-        !stream.exists() && managed.contains("mieru::establish_udp_flow_with_resume"),
+        !stream.exists() && connector.contains("mieru::establish_udp_flow_with_resume"),
         "Mieru UDP managed glue should call the protocol-owned established flow API without a dedicated stream wrapper"
     );
     assert!(
-        managed.contains("mieru::MieruUdpFlowConnection")
+        connector.contains("mieru::MieruUdpFlowConnection")
+            && !managed.contains("mieru::MieruUdpFlowConnection")
             && !managed.contains("mieru::MieruUdpFlowSession"),
         "Mieru UDP managed glue should return the protocol-owned flow connection wrapper, not a raw flow session"
     );
@@ -6352,7 +6356,9 @@ fn protocol_udp_manager_request_models_are_manager_private() {
 #[test]
 fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
     let mieru_managed = read("src/adapters/mieru/udp/managed.rs");
+    let mieru_connector = read("src/adapters/mieru/udp/managed/connector.rs");
     let trojan_managed = read("src/adapters/trojan/udp/managed.rs");
+    let trojan_connector = read("src/adapters/trojan/udp/managed/connector.rs");
     let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     assert!(
@@ -6361,8 +6367,10 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
             && !trojan_managed.contains("trojan::TrojanUdpFlowStore")
             && !mieru_managed.contains("mieru::MieruUdpFlowSessions")
             && !trojan_managed.contains("trojan::TrojanUdpFlowSessions")
-            && mieru_managed.contains("mieru::MieruUdpFlowConnection")
-            && trojan_managed.contains("trojan::TrojanUdpFlowConnection")
+            && !mieru_managed.contains("mieru::MieruUdpFlowConnection")
+            && !trojan_managed.contains("trojan::TrojanUdpFlowConnection")
+            && mieru_connector.contains("mieru::MieruUdpFlowConnection")
+            && trojan_connector.contains("trojan::TrojanUdpFlowConnection")
             && !mieru_managed.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>")
             && !trojan_managed.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>")
             && !mieru_managed.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowConnection>")
@@ -6379,8 +6387,8 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
             && !trojan_managed.contains("TrojanUdpCacheKey::relay")
             && !mieru_managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !trojan_managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
-            && mieru_managed.contains("resume.flow_cache_key(")
-            && trojan_managed.contains("resume.flow_cache_key(")
+            && mieru_connector.contains("resume.flow_cache_key(")
+            && trojan_connector.contains("resume.flow_cache_key(")
             && !mieru_managed.contains("ManagedUdpConnectionCacheKey")
             && !trojan_managed.contains("ManagedUdpConnectionCacheKey")
             && stream_manager.contains(".send_or_insert_key(")
@@ -7280,6 +7288,7 @@ fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
 #[test]
 fn trojan_udp_response_bridge_lives_outside_manager() {
     let trojan_managed = read("src/adapters/trojan/udp/managed.rs");
+    let connector = read("src/adapters/trojan/udp/managed/connector.rs");
     let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let managed = read("src/runtime/udp_flow/managed/connection.rs");
     let bridge = manifest_dir().join("src/adapters/trojan/udp/manager/bridge.rs");
@@ -7298,7 +7307,8 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
             && !trojan_managed.contains("spawn_trojan_response_bridge")
             && !trojan_managed.contains("spawn_response_bridge(\n")
             && !trojan_managed.contains("impl ManagedUdpConnection for trojan::TrojanUdpFlowConnection")
-            && trojan_managed.contains("managed_packet_udp_connection")
+            && !trojan_managed.contains("managed_packet_udp_connection")
+            && connector.contains("managed_packet_udp_connection")
             && !trojan_managed.contains("spawn_response_bridge")
             && managed.contains("pub(crate) fn managed_packet_udp_connection")
             && managed.contains("pub(crate) fn spawn_response_bridge<T, F>")
@@ -7311,6 +7321,7 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
 fn trojan_udp_tls_connect_lives_outside_manager() {
     let connect_path = manifest_dir().join("src/adapters/trojan/udp/manager/connect.rs");
     let managed = read("src/adapters/trojan/udp/managed.rs");
+    let connector = read("src/adapters/trojan/udp/managed/connector.rs");
     let outbound = read("src/outbound/trojan.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
@@ -7346,8 +7357,9 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
         );
     }
     assert!(
-        managed.contains("crate::outbound::trojan::open_udp_tls_stream")
-            && managed.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
+        !managed.contains("crate::outbound::trojan::open_udp_tls_stream")
+            && connector.contains("crate::outbound::trojan::open_udp_tls_stream")
+            && connector.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
             && outbound.contains("open_trojan_udp_tls_stream")
             && outbound.contains("open_trojan_udp_tls_relay_stream")
             && outbound.contains("TrojanUdpTlsOptions")
@@ -7493,8 +7505,10 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             "Trojan UDP managed glue should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
         );
     }
+    let connector = read("src/adapters/trojan/udp/managed/connector.rs");
     assert!(
-        managed.contains("resume.flow_cache_key(")
+        !managed.contains("resume.flow_cache_key(")
+            && connector.contains("resume.flow_cache_key(")
             && !managed.contains("ManagedUdpConnectionCacheKey")
             && stream_manager.contains(".send_or_insert_key(")
             && stream_manager.contains(".insert_and_send_key(")
@@ -7504,12 +7518,15 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && !managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !managed.contains("peer.endpoint")
             && !managed.contains("TrojanUdpPeer")
-            && managed.contains("resume.flow_requires_relay_upstream()")
+            && !managed.contains("resume.flow_requires_relay_upstream()")
+            && connector.contains("resume.flow_requires_relay_upstream()")
             && !managed.contains("resume.tls_profile(")
             && !managed.contains("TrojanUdpTlsOptions")
-            && managed.contains("crate::outbound::trojan::open_udp_tls_stream")
+            && !managed.contains("crate::outbound::trojan::open_udp_tls_stream")
+            && connector.contains("crate::outbound::trojan::open_udp_tls_stream")
             && !manager_stream.exists()
-            && managed.contains("trojan::establish_udp_flow_with_resume")
+            && !managed.contains("trojan::establish_udp_flow_with_resume")
+            && connector.contains("trojan::establish_udp_flow_with_resume")
             && !managed.contains("trojan::TrojanUdpFlowIo")
             && !managed.contains(".establish_with_resume(")
             && protocol_outbound.contains("pub async fn establish_with_resume")
@@ -7522,6 +7539,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
 #[test]
 fn trojan_udp_packet_stream_tasks_live_outside_manager() {
     let managed = read("src/adapters/trojan/udp/managed.rs");
+    let connector = read("src/adapters/trojan/udp/managed/connector.rs");
     let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let stream = manifest_dir().join("src/adapters/trojan/udp/manager/stream.rs");
     let transport =
@@ -7550,13 +7568,17 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "trojan::TrojanUdpPacket",
     ] {
         assert!(
-            !managed.contains(forbidden) && !stream_manager.contains(forbidden),
+            !managed.contains(forbidden)
+                && !connector.contains(forbidden)
+                && !stream_manager.contains(forbidden),
             "Trojan managed UDP glue should delegate Trojan packet framing to protocols/trojan helpers; found `{forbidden}`"
         );
     }
     for forbidden in ["TrojanUdpPacket {", "trojan::TrojanUdpPacket"] {
         assert!(
-            !managed.contains(forbidden) && !stream_manager.contains(forbidden),
+            !managed.contains(forbidden)
+                && !connector.contains(forbidden)
+                && !stream_manager.contains(forbidden),
             "Trojan managed UDP glue should not rebuild Trojan packet framing details; found `{forbidden}`"
         );
     }
@@ -7567,8 +7589,10 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "Trojan UDP managed glue should use flow-specific protocol helpers instead of generic UDP helpers"
     );
     assert!(
-        managed.contains("trojan::establish_udp_flow_with_resume")
-            && managed.contains("trojan::TrojanUdpFlowConnection")
+        !managed.contains("trojan::establish_udp_flow_with_resume")
+            && connector.contains("trojan::establish_udp_flow_with_resume")
+            && !managed.contains("trojan::TrojanUdpFlowConnection")
+            && connector.contains("trojan::TrojanUdpFlowConnection")
             && !managed.contains("trojan::TrojanUdpFlowSession")
             && !managed.contains("tokio::io::split")
             && !managed.contains("tokio::spawn")
@@ -7608,6 +7632,7 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
 #[test]
 fn mieru_udp_managed_connector_is_thin_protocol_glue() {
     let managed = read("src/adapters/mieru/udp/managed.rs");
+    let connector = read("src/adapters/mieru/udp/managed/connector.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
     let adapter_flow = read("src/adapters/mieru/udp/flow.rs");
     let snapshot = read("src/runtime/udp_flow/managed/flow.rs");
@@ -7668,19 +7693,21 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
         "UdpPacketRef",
     ] {
         assert!(
-            !managed.contains(forbidden),
+            !managed.contains(forbidden) && !connector.contains(forbidden),
             "Mieru UDP managed connector should not own protocol-private/cache/runtime orchestration detail `{forbidden}`"
         );
     }
 
     assert!(
         managed.contains("ManagedStreamFlowManager::new")
-            && managed.contains("impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume>")
-            && managed.contains("resume.flow_cache_key(")
-            && managed.contains("resume.flow_requires_relay_upstream()")
-            && managed.contains("mieru::establish_udp_flow_with_resume(stream, &resume)")
-            && managed.contains("managed_tuple_udp_connection")
-            && managed.contains("impl ManagedTupleUdpSender for MieruManagedUdpSender")
+            && managed.contains("connector::MieruManagedStreamConnector")
+            && !managed.contains("impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume>")
+            && connector.contains("impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume>")
+            && connector.contains("resume.flow_cache_key(")
+            && connector.contains("resume.flow_requires_relay_upstream()")
+            && connector.contains("mieru::establish_udp_flow_with_resume(stream, &resume)")
+            && connector.contains("managed_tuple_udp_connection")
+            && connector.contains("impl ManagedTupleUdpSender for MieruManagedUdpSender")
             && stream_manager.contains("ManagedUdpConnectionCache")
             && stream_manager.contains(".send_or_insert_key(")
             && stream_manager.contains(".insert_and_send_key("),
@@ -7752,6 +7779,7 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
 #[test]
 fn mieru_udp_response_bridge_uses_generic_managed_tuple_connection() {
     let managed = read("src/adapters/mieru/udp/managed.rs");
+    let connector = read("src/adapters/mieru/udp/managed/connector.rs");
     let connection = read("src/runtime/udp_flow/managed/connection.rs");
     let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
 
@@ -7765,14 +7793,15 @@ fn mieru_udp_response_bridge_uses_generic_managed_tuple_connection() {
         "self.upstreams.insert(",
     ] {
         assert!(
-            !managed.contains(forbidden),
+            !managed.contains(forbidden) && !connector.contains(forbidden),
             "Mieru managed.rs should not own response bridge or cache details `{forbidden}`"
         );
     }
     assert!(
-        managed.contains("managed_tuple_udp_connection")
-            && managed.contains("fn subscribe_responses")
-            && managed.contains("mieru upstream closed")
+        !managed.contains("managed_tuple_udp_connection")
+            && connector.contains("managed_tuple_udp_connection")
+            && connector.contains("fn subscribe_responses")
+            && connector.contains("mieru upstream closed")
             && connection.contains("pub(crate) fn managed_tuple_udp_connection")
             && connection.contains("pub(crate) fn spawn_tuple_response_bridge")
             && connection.contains("broadcast::Receiver<(Address, u16, Vec<u8>)>")
@@ -7784,6 +7813,7 @@ fn mieru_udp_response_bridge_uses_generic_managed_tuple_connection() {
 #[test]
 fn trojan_udp_managed_connector_is_thin_protocol_glue() {
     let managed = read("src/adapters/trojan/udp/managed.rs");
+    let connector = read("src/adapters/trojan/udp/managed/connector.rs");
     let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let connection = read("src/runtime/udp_flow/managed/connection.rs");
     let transport =
@@ -7832,21 +7862,23 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
         "TrojanUdpTlsOptions",
     ] {
         assert!(
-            !managed.contains(forbidden),
+            !managed.contains(forbidden) && !connector.contains(forbidden),
             "Trojan managed.rs should not own protocol-private/cache/runtime orchestration detail `{forbidden}`"
         );
     }
 
     assert!(
         managed.contains("ManagedStreamFlowManager::new")
-            && managed.contains("impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume>")
-            && managed.contains("resume.flow_cache_key(")
-            && managed.contains("resume.flow_requires_relay_upstream()")
-            && managed.contains("crate::outbound::trojan::open_udp_tls_stream")
-            && managed.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
-            && managed.contains("trojan::establish_udp_flow_with_resume")
-            && managed.contains("managed_packet_udp_connection")
-            && managed.contains("impl ManagedPacketUdpSender for TrojanManagedUdpSender")
+            && managed.contains("connector::TrojanManagedStreamConnector")
+            && !managed.contains("impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume>")
+            && connector.contains("impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume>")
+            && connector.contains("resume.flow_cache_key(")
+            && connector.contains("resume.flow_requires_relay_upstream()")
+            && connector.contains("crate::outbound::trojan::open_udp_tls_stream")
+            && connector.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
+            && connector.contains("trojan::establish_udp_flow_with_resume")
+            && connector.contains("managed_packet_udp_connection")
+            && connector.contains("impl ManagedPacketUdpSender for TrojanManagedUdpSender")
             && stream_manager.contains("ManagedUdpConnectionCache")
             && stream_manager.contains(".send_or_insert_key(")
             && stream_manager.contains(".insert_and_send_key(")
@@ -7874,6 +7906,7 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
 #[test]
 fn mieru_udp_packet_stream_tasks_live_outside_manager() {
     let managed = read("src/adapters/mieru/udp/managed.rs");
+    let connector = read("src/adapters/mieru/udp/managed/connector.rs");
     let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
     let socket = manifest_dir().join("src/adapters/mieru/udp/manager/socket.rs");
@@ -7890,7 +7923,9 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
         "parse_udp_packet",
     ] {
         assert!(
-            !managed.contains(forbidden) && !stream_manager.contains(forbidden),
+            !managed.contains(forbidden)
+                && !connector.contains(forbidden)
+                && !stream_manager.contains(forbidden),
             "Mieru UDP proxy glue should delegate protocol packet details to protocols/mieru; found `{forbidden}`"
         );
     }
@@ -7902,7 +7937,9 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
         "struct WriteOnlySocket",
     ] {
         assert!(
-            !managed.contains(forbidden) && !stream_manager.contains(forbidden),
+            !managed.contains(forbidden)
+                && !connector.contains(forbidden)
+                && !stream_manager.contains(forbidden),
             "Mieru UDP proxy manager should not own protocol flow runtime detail `{forbidden}`"
         );
     }
@@ -7940,7 +7977,8 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             && !managed.contains("mpsc::channel")
             && !managed.contains("tokio::sync::broadcast::channel")
             && !managed.contains("tokio::spawn")
-            && managed.contains("mieru::establish_udp_flow_with_resume")
+            && !managed.contains("mieru::establish_udp_flow_with_resume")
+            && connector.contains("mieru::establish_udp_flow_with_resume")
             && !managed.contains("mieru::MieruUdpFlowIo::establish_with_resume")
             && !managed.contains("mieru::spawn_udp_flow")
             && !managed.contains("mieru::MieruUdpFlowSession::new")
