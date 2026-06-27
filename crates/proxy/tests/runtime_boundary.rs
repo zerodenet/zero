@@ -3219,6 +3219,104 @@ fn vless_vmess_udp_packet_models_do_not_expose_raw_fields() {
 }
 
 #[test]
+fn protocol_udp_packet_models_do_not_expose_raw_fields() {
+    let hysteria2_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
+        .expect("read protocols/hysteria2/src/udp.rs");
+    let trojan_outbound = fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
+        .expect("read protocols/trojan/src/outbound.rs");
+    let shadowsocks_outbound =
+        fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
+            .expect("read protocols/shadowsocks/src/outbound.rs");
+    let mieru_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
+        .expect("read protocols/mieru/src/udp.rs");
+    let mieru_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
+        .expect("read protocols/mieru/src/outbound.rs");
+
+    for (source_name, source, struct_name, forbidden_fields) in [
+        (
+            "protocols/hysteria2/src/udp.rs",
+            hysteria2_udp.as_str(),
+            "Hysteria2UdpPacket",
+            &[
+                "pub session_id: u16",
+                "pub packet_id: u16",
+                "pub target: Address",
+                "pub port: u16",
+                "pub payload: Vec<u8>",
+            ][..],
+        ),
+        (
+            "protocols/hysteria2/src/udp.rs",
+            hysteria2_udp.as_str(),
+            "Hysteria2UdpFlowPacket",
+            &[
+                "pub target: Address",
+                "pub port: u16",
+                "pub payload: Vec<u8>",
+            ][..],
+        ),
+        (
+            "protocols/trojan/src/outbound.rs",
+            trojan_outbound.as_str(),
+            "TrojanUdpPacket",
+            &[
+                "pub target: Address",
+                "pub port: u16",
+                "pub payload: Vec<u8>",
+            ][..],
+        ),
+        (
+            "protocols/shadowsocks/src/outbound.rs",
+            shadowsocks_outbound.as_str(),
+            "ShadowsocksUdpPacket",
+            &[
+                "pub target: Address",
+                "pub port: u16",
+                "pub payload: Vec<u8>",
+            ][..],
+        ),
+        (
+            "protocols/mieru/src/udp.rs",
+            mieru_udp.as_str(),
+            "MieruInboundUdpPacket",
+            &[
+                "pub target: Address",
+                "pub port: u16",
+                "pub payload: Vec<u8>",
+            ][..],
+        ),
+        (
+            "protocols/mieru/src/outbound.rs",
+            mieru_outbound.as_str(),
+            "MieruUdpFlowPacket",
+            &[
+                "pub target: Address",
+                "pub port: u16",
+                "pub payload: Vec<u8>",
+            ][..],
+        ),
+        (
+            "protocols/mieru/src/udp.rs",
+            mieru_udp.as_str(),
+            "MieruUdpAssociatePayload",
+            &["pub payload: Vec<u8>"][..],
+        ),
+    ] {
+        let struct_body = source
+            .split(&format!("pub struct {struct_name} {{"))
+            .nth(1)
+            .and_then(|tail| tail.split("}\n").next())
+            .unwrap_or_else(|| panic!("{source_name} should define {struct_name}"));
+        for forbidden in forbidden_fields {
+            assert!(
+                !struct_body.contains(forbidden),
+                "{source_name} {struct_name} should expose UDP packet contents through methods, not raw field `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn vmess_mux_pool_transport_opening_lives_in_transport_crate() {
     let root = read("src/adapters/vmess/mux_pool.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))

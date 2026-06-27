@@ -432,9 +432,9 @@ fn udp_datagram_framing_roundtrips_all_supported_ciphers() {
         )
         .expect("decode udp datagram");
 
-        assert_eq!(decoded.target, Address::Domain("dns.google".to_owned()));
-        assert_eq!(decoded.port, 53);
-        assert_eq!(decoded.payload, b"query", "cipher: {cipher:?}");
+        assert_eq!(decoded.target(), &Address::Domain("dns.google".to_owned()));
+        assert_eq!(decoded.port(), 53);
+        assert_eq!(decoded.payload(), b"query", "cipher: {cipher:?}");
     }
 }
 
@@ -470,9 +470,9 @@ fn udp_datagram_framing_roundtrips_aead_packet() {
     )
     .expect("decode udp datagram");
 
-    assert_eq!(decoded.target, Address::Ipv4([8, 8, 8, 8]));
-    assert_eq!(decoded.port, 53);
-    assert_eq!(decoded.payload, b"query");
+    assert_eq!(decoded.target(), &Address::Ipv4([8, 8, 8, 8]));
+    assert_eq!(decoded.port(), 53);
+    assert_eq!(decoded.payload(), b"query");
 }
 
 #[test]
@@ -526,9 +526,9 @@ fn udp_datagram_framing_roundtrips_2022_blake3_packet() {
     )
     .expect("decode udp datagram");
 
-    assert_eq!(decoded.target, Address::Domain("dns.google".to_owned()));
-    assert_eq!(decoded.port, 53);
-    assert_eq!(decoded.payload, b"query");
+    assert_eq!(decoded.target(), &Address::Domain("dns.google".to_owned()));
+    assert_eq!(decoded.port(), 53);
+    assert_eq!(decoded.payload(), b"query");
 }
 
 /// SIP022 3.2.3 server-to-client UDP response: a server recovers the client

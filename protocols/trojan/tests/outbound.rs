@@ -130,11 +130,7 @@ async fn outbound_establishes_udp_packet_tunnel() {
 
 #[tokio::test]
 async fn udp_stream_framing_roundtrips_packet() {
-    let packet = TrojanUdpPacket {
-        target: Address::Ipv4([8, 8, 8, 8]),
-        port: 53,
-        payload: b"query".to_vec(),
-    };
+    let packet = TrojanUdpPacket::new(Address::Ipv4([8, 8, 8, 8]), 53, b"query".to_vec());
     let mut writer = RecordingSocket::default();
 
     <TrojanOutbound as UdpPacketStreamFraming<TrojanUdpPacket>>::write_udp_packet(

@@ -53,9 +53,9 @@ impl<'a> UdpPacketFraming<MieruUdpAssociatePacket<'a>> for MieruProtocol {
     }
 
     fn decode_udp_packet(&self, packet: &[u8]) -> Result<Self::Decoded, Self::Error> {
-        Ok(MieruUdpAssociatePayload {
-            payload: crate::udp::unwrap_udp_associate(packet)?,
-        })
+        Ok(MieruUdpAssociatePayload::new(
+            crate::udp::unwrap_udp_associate(packet)?,
+        ))
     }
 }
 

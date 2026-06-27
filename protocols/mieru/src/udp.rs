@@ -29,14 +29,54 @@ pub struct MieruUdpAssociatePacket<'a> {
 /// One unwrapped Mieru UDP associate payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MieruUdpAssociatePayload {
-    pub payload: Vec<u8>,
+    payload: Vec<u8>,
+}
+
+impl MieruUdpAssociatePayload {
+    pub fn new(payload: Vec<u8>) -> Self {
+        Self { payload }
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub fn into_payload(self) -> Vec<u8> {
+        self.payload
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MieruInboundUdpPacket {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl MieruInboundUdpPacket {
+    pub fn new(target: Address, port: u16, payload: Vec<u8>) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,10 +88,11 @@ pub struct MieruInboundUdpRequest {
 
 impl MieruInboundUdpRequest {
     fn from_packet(packet: MieruInboundUdpPacket) -> Self {
+        let (target, port, payload) = packet.into_parts();
         Self {
-            target: packet.target,
-            port: packet.port,
-            payload: packet.payload,
+            target,
+            port,
+            payload,
         }
     }
 
@@ -443,7 +484,7 @@ impl DatagramCodec<Address> for MieruUdpFlowCodec {
 
     fn decode(&self, data: &[u8]) -> Option<(Address, u16, Vec<u8>)> {
         let decoded = decode_udp_flow_packet(data).ok()?;
-        Some((decoded.target, decoded.port, decoded.payload))
+        Some(decoded.into_parts())
     }
 }
 
@@ -510,11 +551,11 @@ fn parse_socks5_udp_packet(packet: &[u8]) -> Result<MieruInboundUdpPacket, Error
     let port = u16::from_be_bytes([packet[offset], packet[offset + 1]]);
     offset += 2;
 
-    Ok(MieruInboundUdpPacket {
+    Ok(MieruInboundUdpPacket::new(
         target,
         port,
-        payload: packet[offset..].to_vec(),
-    })
+        packet[offset..].to_vec(),
+    ))
 }
 
 fn build_socks5_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {

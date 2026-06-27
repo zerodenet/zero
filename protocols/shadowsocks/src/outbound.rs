@@ -235,9 +235,36 @@ pub struct ShadowsocksUdpDecodeContext<'a> {
 #[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShadowsocksUdpPacket {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpPacket {
+    pub fn new(target: Address, port: u16, payload: Vec<u8>) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 #[cfg(feature = "crypto")]
@@ -260,6 +287,18 @@ impl ShadowsocksUdpFlowPacket {
 
     pub fn encode_with(&self, resume: &ShadowsocksUdpFlowResume) -> Result<Vec<u8>, Error> {
         resume.encode_flow_packet(self)
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
     }
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
@@ -319,11 +358,7 @@ impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecode
                 context.password,
                 datagram,
             )?;
-            return Ok(ShadowsocksUdpPacket {
-                target,
-                port,
-                payload,
-            });
+            return Ok(ShadowsocksUdpPacket::new(target, port, payload));
         }
 
         let salt_len = context.cipher.udp_salt_len();
@@ -335,11 +370,11 @@ impl<'a> UdpDatagramFraming<ShadowsocksUdpPacketTarget<'a>, ShadowsocksUdpDecode
 
         let plain = aead_decrypt_udp(context.cipher, &key, &[0u8; 12], &datagram[salt_len..])?;
         let (target, port, payload_offset) = parse_target_data(&plain)?;
-        Ok(ShadowsocksUdpPacket {
+        Ok(ShadowsocksUdpPacket::new(
             target,
             port,
-            payload: plain[payload_offset..].to_vec(),
-        })
+            plain[payload_offset..].to_vec(),
+        ))
     }
 }
 
@@ -580,9 +615,9 @@ impl ShadowsocksUdpFlowResume {
         packet: &ShadowsocksUdpFlowPacket,
     ) -> Result<alloc::vec::Vec<u8>, Error> {
         encode_udp_flow_packet(
-            &packet.target,
-            packet.port,
-            &packet.payload,
+            packet.target(),
+            packet.port(),
+            packet.payload(),
             self.cipher,
             &self.password,
         )
@@ -590,10 +625,11 @@ impl ShadowsocksUdpFlowResume {
 
     pub fn decode_flow_packet(&self, data: &[u8]) -> Option<ShadowsocksUdpFlowPacket> {
         let decoded = decode_udp_flow_packet(data, self.cipher, &self.password).ok()?;
+        let (target, port, payload) = decoded.into_parts();
         Some(ShadowsocksUdpFlowPacket {
-            target: decoded.target,
-            port: decoded.port,
-            payload: decoded.payload,
+            target,
+            port,
+            payload,
         })
     }
 }
@@ -713,6 +749,6 @@ impl DatagramCodec<Address> for ShadowsocksDatagramCodec {
             data,
         )
         .ok()?;
-        Some((decoded.target, decoded.port, decoded.payload))
+        Some(decoded.into_parts())
     }
 }

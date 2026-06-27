@@ -29,11 +29,11 @@ fn test_udp_datagram_roundtrip() {
         (),
     >>::decode_udp_datagram(&Hysteria2Outbound, &(), &datagram)
     .unwrap();
-    assert_eq!(parsed.session_id, 1);
-    assert_eq!(parsed.packet_id, 42);
-    assert_eq!(parsed.target, addr);
-    assert_eq!(parsed.port, 443);
-    assert_eq!(parsed.payload, b"hello");
+    assert_eq!(parsed.session_id(), 1);
+    assert_eq!(parsed.packet_id(), 42);
+    assert_eq!(parsed.target(), &addr);
+    assert_eq!(parsed.port(), 443);
+    assert_eq!(parsed.payload(), b"hello");
 }
 
 #[test]
@@ -58,7 +58,7 @@ fn test_udp_datagram_ipv4() {
         (),
     >>::decode_udp_datagram(&Hysteria2Outbound, &(), &datagram)
     .unwrap();
-    assert_eq!(parsed.target, addr);
+    assert_eq!(parsed.target(), &addr);
 }
 
 #[test]
@@ -85,11 +85,11 @@ fn udp_datagram_framing_trait_roundtrips_packet() {
     >>::decode_udp_datagram(&Hysteria2Outbound, &(), &datagram)
     .expect("decode hysteria2 udp datagram");
 
-    assert_eq!(decoded.session_id, 7);
-    assert_eq!(decoded.packet_id, 9);
-    assert_eq!(decoded.target, target);
-    assert_eq!(decoded.port, 8443);
-    assert_eq!(decoded.payload, b"h2");
+    assert_eq!(decoded.session_id(), 7);
+    assert_eq!(decoded.packet_id(), 9);
+    assert_eq!(decoded.target(), &target);
+    assert_eq!(decoded.port(), 8443);
+    assert_eq!(decoded.payload(), b"h2");
 }
 
 #[test]

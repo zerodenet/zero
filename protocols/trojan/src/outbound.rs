@@ -94,9 +94,9 @@ impl<'a> UdpPacketTunnelProtocol<TrojanUdpPacketTunnelTarget<'a>> for TrojanOutb
 /// One Trojan UDP packet carried over a connected stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrojanUdpPacket {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
 }
 
 impl TrojanUdpPacket {
@@ -115,6 +115,18 @@ impl TrojanUdpPacket {
         flow_io
             .write_packet(stream, &self.target, self.port, &self.payload)
             .await
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
     }
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
@@ -687,7 +699,8 @@ impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {
     where
         S: AsyncSocket,
     {
-        super::shared::write_udp_packet(stream, &packet.target, packet.port, &packet.payload).await
+        super::shared::write_udp_packet(stream, packet.target(), packet.port(), packet.payload())
+            .await
     }
 
     async fn read_udp_packet<S>(&self, stream: &mut S) -> Result<Self::Decoded, Self::Error>

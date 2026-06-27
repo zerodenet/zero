@@ -22,7 +22,7 @@ fn test_udp_associate_roundtrip() {
             &wrapped,
         )
         .unwrap();
-    assert_eq!(&unwrapped.payload, original);
+    assert_eq!(unwrapped.payload(), original);
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn udp_packet_framing_trait_roundtrips_associate_payload() {
         )
         .expect("decode mieru udp associate payload");
 
-    assert_eq!(decoded.payload, b"mieru udp");
+    assert_eq!(decoded.payload(), b"mieru udp");
 }
 
 #[test]
@@ -96,11 +96,11 @@ fn udp_response_encoder_wraps_socks5_payload() {
         )
         .expect("unwrap response frame");
 
-    assert_eq!(&unwrapped.payload[..4], &[0, 0, 0, 0x01]);
-    assert_eq!(&unwrapped.payload[4..8], &[1, 1, 1, 1]);
+    assert_eq!(&unwrapped.payload()[..4], &[0, 0, 0, 0x01]);
+    assert_eq!(&unwrapped.payload()[4..8], &[1, 1, 1, 1]);
     assert_eq!(
-        u16::from_be_bytes([unwrapped.payload[8], unwrapped.payload[9]]),
+        u16::from_be_bytes([unwrapped.payload()[8], unwrapped.payload()[9]]),
         53
     );
-    assert_eq!(&unwrapped.payload[10..], b"answer");
+    assert_eq!(&unwrapped.payload()[10..], b"answer");
 }

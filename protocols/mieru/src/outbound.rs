@@ -27,9 +27,9 @@ pub struct MieruOutbound {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MieruUdpFlowPacket {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
 }
 
 impl MieruUdpFlowPacket {
@@ -43,6 +43,18 @@ impl MieruUdpFlowPacket {
 
     pub fn encode_with(&self, flow_io: &mut MieruUdpFlowIo) -> Result<Vec<u8>, Error> {
         flow_io.encrypt_packet(&self.target, self.port, &self.payload)
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
     }
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
@@ -179,11 +191,8 @@ impl MieruUdpFlowIo {
                     return Ok(None);
                 }
                 let packet = udp::decode_udp_flow_packet(&segment.payload)?;
-                Ok(Some(MieruUdpFlowPacket::new(
-                    packet.target,
-                    packet.port,
-                    packet.payload,
-                )))
+                let (target, port, payload) = packet.into_parts();
+                Ok(Some(MieruUdpFlowPacket::new(target, port, payload)))
             }
             Err(Error::Protocol("mieru: need more data")) => Ok(None),
             Err(error) => Err(error),

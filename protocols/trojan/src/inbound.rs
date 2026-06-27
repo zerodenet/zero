@@ -25,10 +25,11 @@ pub struct TrojanInboundUdpRequest {
 
 impl TrojanInboundUdpRequest {
     fn from_packet(packet: TrojanUdpPacket) -> Self {
+        let (target, port, payload) = packet.into_parts();
         Self {
-            target: packet.target,
-            port: packet.port,
-            payload: packet.payload,
+            target,
+            port,
+            payload,
         }
     }
 
