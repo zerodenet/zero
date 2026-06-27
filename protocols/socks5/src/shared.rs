@@ -441,6 +441,10 @@ impl Socks5UdpPacketPathSpec {
         self.cache_key.clone()
     }
 
+    pub fn carrier_cache_key(&self) -> String {
+        self.cache_key.clone()
+    }
+
     pub fn association_target(&self) -> Socks5UdpAssociationTarget {
         self.association_target.clone()
     }

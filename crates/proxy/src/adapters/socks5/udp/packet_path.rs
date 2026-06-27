@@ -48,7 +48,7 @@ pub(super) fn carrier_descriptor(
     let spec = socks5::udp_packet_path_spec_from_config(tag, server, *port, *username, *password);
     Some(
         crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
-            spec.cache_key(),
+            spec.carrier_cache_key(),
             server,
             *port,
         ),

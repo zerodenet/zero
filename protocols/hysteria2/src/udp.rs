@@ -391,6 +391,10 @@ impl Hysteria2UdpPacketPathSpec {
         self.cache_key.clone()
     }
 
+    pub fn carrier_cache_key(&self) -> String {
+        self.cache_key.clone()
+    }
+
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         self.resume.codec()
     }

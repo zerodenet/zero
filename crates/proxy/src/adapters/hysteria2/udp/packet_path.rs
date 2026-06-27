@@ -30,7 +30,7 @@ pub(super) fn carrier_descriptor(
     );
     Some(
         crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
-            spec.cache_key(),
+            spec.carrier_cache_key(),
             server,
             *port,
         ),
