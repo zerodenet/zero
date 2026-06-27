@@ -43,8 +43,8 @@ impl UdpDispatch {
     pub(crate) fn register_cached_protocol_flow_sender(
         &mut self,
         sender: Box<dyn CachedProtocolFlowSender>,
-    ) {
-        self.protocol_state.register_cached_flow_sender(sender);
+    ) -> ManagedUdpFlowRef {
+        self.protocol_state.register_cached_flow_sender(sender)
     }
 
     pub(crate) async fn start_managed_protocol_flow(

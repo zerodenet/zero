@@ -5527,6 +5527,9 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
             && cached_model.contains("handlers: CachedUdpHandlers")
             && cached_model.contains("trait CachedProtocolFlowSender")
             && cached_model.contains("cached: Vec<Box<dyn CachedProtocolFlowSender>>")
+            && cached_model
+                .contains("HashMap<ManagedUdpFlowRef, Box<dyn CachedProtocolFlowSender>>")
+            && cached_model.contains("fn sender(")
             && !managed.contains("ManagedCachedFlowSender")
             && !cached_model.contains("enum CachedUdpFlowStart")
             && datagram.contains("handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>")
@@ -5982,6 +5985,9 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && cached_model.contains("handlers: CachedUdpHandlers")
             && cached_model.contains("trait CachedProtocolFlowSender")
             && cached_model.contains("cached: Vec<Box<dyn CachedProtocolFlowSender>>")
+            && cached_model
+                .contains("HashMap<ManagedUdpFlowRef, Box<dyn CachedProtocolFlowSender>>")
+            && cached_model.contains("fn sender(")
             && !managed.contains("ManagedCachedFlowSender")
             && !cached_model.contains("enum CachedUdpFlowStart")
             && !cached_model.contains("VlessUdpStartFlow")
@@ -5993,6 +5999,7 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !cached_state.contains(".get_mut(0)")
             && !cached_state.contains(".get_mut(1)")
             && !cached_state.contains("handlers.get_mut")
+            && !cached_model.contains("fn senders(")
             && !cached_model.contains("std::any::Any")
             && !cached_model.contains("downcast")
             && !cached_model.contains("as_any")
@@ -8551,8 +8558,10 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
     for source in ["src/adapters/vless/udp.rs", "src/adapters/vmess/udp.rs"] {
         let adapter = read(source);
         assert!(
-            adapter.contains("UdpFlowOutbound::Cached") && !adapter.contains("ManagedFlow"),
-            "{source} should track cached UDP flows through neutral flow snapshots, not external managed-flow handles"
+            adapter.contains("UdpFlowOutbound::Cached")
+                && adapter.contains("let managed = dispatch.register_cached_protocol_flow_sender")
+                && adapter.contains("managed,"),
+            "{source} should track cached UDP flows through neutral managed flow refs, not Vec-order cached handlers"
         );
     }
 

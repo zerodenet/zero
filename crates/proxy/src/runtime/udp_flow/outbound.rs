@@ -42,6 +42,7 @@ pub(crate) enum UdpFlowOutbound {
         tag: String,
         server: String,
         port: u16,
+        managed: ManagedUdpFlowRef,
     },
     PacketPathDatagram {
         tag: String,
@@ -114,11 +115,10 @@ impl UdpFlowOutbound {
 
     pub(crate) fn managed_flow(&self) -> Option<ManagedUdpFlowRef> {
         match self {
-            Self::Datagram { managed, .. } | Self::StreamPacket { managed, .. } => Some(*managed),
-            Self::Direct { .. }
-            | Self::Relay { .. }
-            | Self::Cached { .. }
-            | Self::PacketPathDatagram { .. } => None,
+            Self::Datagram { managed, .. }
+            | Self::StreamPacket { managed, .. }
+            | Self::Cached { managed, .. } => Some(*managed),
+            Self::Direct { .. } | Self::Relay { .. } | Self::PacketPathDatagram { .. } => None,
         }
     }
 

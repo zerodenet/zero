@@ -80,29 +80,35 @@ impl UdpDispatch {
                 self.record_or_fail(flow, proxy, started_at, result)?;
             }
 
-            UdpPathCategory::Cached => match self
-                .protocol_state
-                .send_existing_cached_flow(
-                    &mut self.chain_tasks,
-                    proxy,
-                    &flow.session.target,
-                    flow.session.port,
-                    payload,
-                )
-                .await
-            {
-                Ok(Some(_session_id)) => {}
-                Ok(None) => {
-                    let error =
-                        EngineError::Io(std::io::Error::other("cached UDP flow was dropped"));
-                    self.fail_flow(flow, started_at, "udp_cached_send", &error);
-                    return Err(error);
+            UdpPathCategory::Cached => {
+                let Some(managed) = flow.outbound.managed_flow() else {
+                    unreachable!("Cached category maps to a managed cached flow");
+                };
+                match self
+                    .protocol_state
+                    .send_existing_cached_flow(
+                        managed,
+                        &mut self.chain_tasks,
+                        proxy,
+                        &flow.session.target,
+                        flow.session.port,
+                        payload,
+                    )
+                    .await
+                {
+                    Ok(Some(_session_id)) => {}
+                    Ok(None) => {
+                        let error =
+                            EngineError::Io(std::io::Error::other("cached UDP flow was dropped"));
+                        self.fail_flow(flow, started_at, "udp_cached_send", &error);
+                        return Err(error);
+                    }
+                    Err(error) => {
+                        self.fail_flow(flow, started_at, "udp_cached_send", &error);
+                        return Err(error);
+                    }
                 }
-                Err(error) => {
-                    self.fail_flow(flow, started_at, "udp_cached_send", &error);
-                    return Err(error);
-                }
-            },
+            }
 
             UdpPathCategory::PacketPathDatagram => {
                 let result = self.forward_existing_packet_path_flow(flow, payload).await;

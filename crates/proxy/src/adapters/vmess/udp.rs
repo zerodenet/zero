@@ -90,13 +90,14 @@ impl VmessAdapter {
                 error,
                 upstream: Some((server.to_string(), *port)),
             })?;
-        dispatch.register_cached_protocol_flow_sender(Box::new(manager));
+        let managed = dispatch.register_cached_protocol_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Cached {
                 tag: tag_owned,
                 server: (*server).to_string(),
                 port: *port,
+                managed,
             }),
             tx_bytes: 0,
         })
@@ -157,13 +158,14 @@ impl VmessAdapter {
                 error,
                 upstream: None,
             })?;
-        dispatch.register_cached_protocol_flow_sender(Box::new(manager));
+        let managed = dispatch.register_cached_protocol_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Cached {
                 tag: tag_owned,
                 server: (*server).to_string(),
                 port: *port,
+                managed,
             }),
             tx_bytes: 0,
         })

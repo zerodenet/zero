@@ -63,10 +63,15 @@ impl ProtocolUdpState {
         &mut self,
         resume: ManagedUdpFlowResume,
     ) -> ManagedUdpFlowRef {
-        let flow_ref = ManagedUdpFlowRef::new(self.next_managed_flow_id);
-        self.next_managed_flow_id += 1;
+        let flow_ref = self.next_managed_flow_ref();
         self.managed_flows
             .insert(flow_ref, ManagedUdpFlowSnapshot::managed(resume));
+        flow_ref
+    }
+
+    pub(super) fn next_managed_flow_ref(&mut self) -> ManagedUdpFlowRef {
+        let flow_ref = ManagedUdpFlowRef::new(self.next_managed_flow_id);
+        self.next_managed_flow_id += 1;
         flow_ref
     }
 

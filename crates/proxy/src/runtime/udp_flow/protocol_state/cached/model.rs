@@ -1,6 +1,7 @@
 use tokio::task::JoinSet;
 use zero_core::Address;
 
+use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 
@@ -21,27 +22,37 @@ pub(crate) struct CachedUdpHandlers {
 }
 
 pub(in crate::runtime::udp_flow::protocol_state) struct CachedProtocolUdpState {
-    handlers: CachedUdpHandlers,
+    senders: std::collections::HashMap<ManagedUdpFlowRef, Box<dyn CachedProtocolFlowSender>>,
 }
 
 impl CachedProtocolUdpState {
-    pub(in crate::runtime::udp_flow::protocol_state) fn new(handlers: CachedUdpHandlers) -> Self {
-        Self { handlers }
+    pub(in crate::runtime::udp_flow::protocol_state) fn new(
+        mut handlers: CachedUdpHandlers,
+    ) -> Self {
+        debug_assert!(
+            handlers.cached.is_empty(),
+            "cached flow senders are registered after flow establishment"
+        );
+        handlers.cached.clear();
+        Self {
+            senders: std::collections::HashMap::new(),
+        }
     }
 
-    pub(in crate::runtime::udp_flow::protocol_state) fn senders(
+    pub(in crate::runtime::udp_flow::protocol_state) fn sender(
         &mut self,
-    ) -> impl Iterator<Item = &mut dyn CachedProtocolFlowSender> {
-        self.handlers
-            .cached
-            .iter_mut()
+        flow_ref: ManagedUdpFlowRef,
+    ) -> Option<&mut dyn CachedProtocolFlowSender> {
+        self.senders
+            .get_mut(&flow_ref)
             .map(|handler| handler.as_mut() as &mut dyn CachedProtocolFlowSender)
     }
 
     pub(in crate::runtime::udp_flow::protocol_state) fn push_sender(
         &mut self,
+        flow_ref: ManagedUdpFlowRef,
         sender: Box<dyn CachedProtocolFlowSender>,
     ) {
-        self.handlers.cached.push(sender);
+        self.senders.insert(flow_ref, sender);
     }
 }
