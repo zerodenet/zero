@@ -73,6 +73,10 @@ impl ShadowsocksInboundProfile {
         ShadowsocksInboundUdpCodec::new(self.cipher, &self.password)
     }
 
+    pub fn udp_session(&self) -> ShadowsocksInboundUdpSession {
+        ShadowsocksInboundUdpSession::new(self.udp_codec())
+    }
+
     pub async fn accept_request<S: zero_traits::AsyncSocket>(
         &self,
         inbound: &ShadowsocksInbound,
@@ -231,6 +235,36 @@ impl ShadowsocksInboundUdpCodec {
         Ok(ShadowsocksInboundUdpResponse {
             datagram: self.encode_response(client_session_id, target, port, payload)?,
         })
+    }
+}
+
+#[cfg(feature = "crypto")]
+pub struct ShadowsocksInboundUdpSession {
+    codec: ShadowsocksInboundUdpCodec,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksInboundUdpSession {
+    pub fn new(codec: ShadowsocksInboundUdpCodec) -> Self {
+        Self { codec }
+    }
+
+    pub fn decode_request(
+        &mut self,
+        datagram: &[u8],
+    ) -> Result<ShadowsocksInboundUdpPacket, Error> {
+        self.codec.decode_request(datagram)
+    }
+
+    pub fn encode_response_to_client(
+        &self,
+        client_session_id: Option<u64>,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<ShadowsocksInboundUdpResponse, Error> {
+        self.codec
+            .encode_response_to_client(client_session_id, target, port, payload)
     }
 }
 

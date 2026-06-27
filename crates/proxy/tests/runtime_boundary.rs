@@ -877,12 +877,12 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     );
     assert!(
         udp.contains("ShadowsocksInboundProfile")
-            && udp.contains("profile.udp_codec()")
+            && udp.contains("profile.udp_session()")
             && udp.contains("profile.principal_key()")
             && !udp.contains("CipherKind")
             && !udp.contains("password: &str")
             && !udp.contains("ShadowsocksInboundUdpCodec::new"),
-        "Shadowsocks UDP relay should delegate protocol-private codec/auth construction to the profile"
+        "Shadowsocks UDP relay should delegate protocol-private UDP session/auth construction to the profile"
     );
 }
 
@@ -1985,13 +1985,17 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
     let protocol_inbound =
         fs::read_to_string(protocol_inbound).expect("read shadowsocks protocol inbound source");
     assert!(
-        udp.contains("ShadowsocksInboundUdpCodec")
-            && udp.contains("decode_request")
-            && udp.contains("encode_response_to_client")
+        udp.contains("ShadowsocksInboundUdpSession")
+            && udp.contains("udp_session.decode_request")
+            && udp.contains("udp_session.encode_response_to_client")
+            && !udp.contains("ShadowsocksInboundUdpCodec")
             && !udp.contains(".encode_response(")
+            && protocol_inbound.contains("struct ShadowsocksInboundUdpCodec")
+            && protocol_inbound.contains("struct ShadowsocksInboundUdpSession")
+            && protocol_inbound.contains("fn decode_request")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpResponse")
             && protocol_inbound.contains("fn encode_response_to_client"),
-        "Shadowsocks inbound UDP should delegate protocol datagram logic to protocols/shadowsocks"
+        "Shadowsocks inbound UDP should delegate protocol datagram logic through protocols/shadowsocks inbound UDP session"
     );
 }
 

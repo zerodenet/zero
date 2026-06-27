@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 
-use shadowsocks::{ShadowsocksInboundProfile, ShadowsocksInboundUdpCodec};
+use shadowsocks::{ShadowsocksInboundProfile, ShadowsocksInboundUdpSession};
 use tokio::net::UdpSocket;
 use tracing::warn;
 use zero_core::{Address, ProtocolType};
@@ -23,7 +23,7 @@ impl Proxy {
         profile: ShadowsocksInboundProfile,
     ) -> Result<(), EngineError> {
         let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(inbound_tag).await?;
-        let mut codec = profile.udp_codec();
+        let mut udp_session = profile.udp_session();
         // Map session_id -> client_addr for response delivery.
         let mut client_sessions: HashMap<u64, SocketAddr> = HashMap::new();
         // For 2022 (blake3): map internal dispatch session_id -> the client's
@@ -44,7 +44,7 @@ impl Proxy {
                     };
                     let packet = &buf[..n];
 
-                    let request = match codec.decode_request(packet) {
+                    let request = match udp_session.decode_request(packet) {
                         Ok(request) => request,
                         Err(_) => continue,
                     };
@@ -80,7 +80,7 @@ impl Proxy {
                         if let Some(&client) = client_sessions.get(&sid) {
                             ss_send_protocol_response(SsProtocolResponse {
                                 socket: udp_socket.as_ref(),
-                                codec: &codec,
+                                udp_session: &udp_session,
                                 client_session_id: client_ss_session_ids.get(&sid).copied(),
                                 target: &address_from_socket_addr(sender),
                                 port: sender.port(),
@@ -99,7 +99,7 @@ impl Proxy {
                                 if let Some(&client) = client_sessions.get(&sid) {
                                     ss_send_protocol_response(SsProtocolResponse {
                                         socket: udp_socket.as_ref(),
-                                        codec: &codec,
+                                        udp_session: &udp_session,
                                         client_session_id: client_ss_session_ids.get(&sid).copied(),
                                         target: &target,
                                         port,
@@ -130,7 +130,7 @@ impl Proxy {
 /// stateless datagram via the shared codec.
 struct SsProtocolResponse<'a> {
     socket: &'a UdpSocket,
-    codec: &'a ShadowsocksInboundUdpCodec,
+    udp_session: &'a ShadowsocksInboundUdpSession,
     client_session_id: Option<u64>,
     target: &'a Address,
     port: u16,
@@ -139,7 +139,7 @@ struct SsProtocolResponse<'a> {
 }
 
 async fn ss_send_protocol_response(response: SsProtocolResponse<'_>) {
-    let resp = response.codec.encode_response_to_client(
+    let resp = response.udp_session.encode_response_to_client(
         response.client_session_id,
         response.target,
         response.port,
