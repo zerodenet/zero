@@ -15,10 +15,6 @@ mod start;
 mod state;
 #[cfg(feature = "trojan")]
 mod trojan_manager;
-#[cfg(feature = "vless")]
-pub(crate) mod vless_flow;
-#[cfg(feature = "vmess")]
-pub(crate) mod vmess_flow;
 
 pub(crate) use crate::runtime::udp_dispatch::FlowFailure;
 pub(crate) use flow_snapshot::{ProtocolUdpFlowResume, ProtocolUdpFlowSnapshot};

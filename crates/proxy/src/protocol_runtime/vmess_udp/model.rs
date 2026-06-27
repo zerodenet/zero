@@ -21,31 +21,6 @@ pub(crate) struct VmessUdpStartFlow<'a> {
     pub(crate) payload: &'a [u8],
 }
 
-pub(crate) struct VmessUdpFlow<'a> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) identity: vmess::VmessUdpIdentity,
-    pub(crate) cipher_name: &'a str,
-    pub(crate) mux_concurrency: Option<u32>,
-    pub(crate) tls: Option<&'a zero_config::ClientTlsConfig>,
-    pub(crate) ws: Option<&'a zero_config::WebSocketConfig>,
-    pub(crate) grpc: Option<&'a zero_config::GrpcConfig>,
-    pub(crate) payload: &'a [u8],
-}
-
-pub(crate) struct VmessUdpRelayFlow<'a> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) session: &'a Session,
-    pub(crate) carrier: crate::transport::RelayCarrier,
-    pub(crate) identity: vmess::VmessUdpIdentity,
-    pub(crate) tls: Option<&'a zero_config::ClientTlsConfig>,
-    pub(crate) ws: Option<&'a zero_config::WebSocketConfig>,
-    pub(crate) grpc: Option<&'a zero_config::GrpcConfig>,
-    pub(crate) payload: &'a [u8],
-}
-
 pub(crate) struct VmessUdpRelayFlowStart<'a> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) session: &'a Session,

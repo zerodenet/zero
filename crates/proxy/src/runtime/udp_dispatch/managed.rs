@@ -1,6 +1,6 @@
-use crate::protocol_runtime::udp::ProtocolUdpState;
 use crate::protocol_runtime::udp::{
-    FlowFailure, ManagedUdpFlowKind, ManagedUdpFlowRequest, ProtocolUdpFlowResume,
+    FlowFailure, ManagedCachedFlowSender, ManagedUdpFlowKind, ManagedUdpFlowRequest,
+    ProtocolUdpFlowResume,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
@@ -35,10 +35,15 @@ pub(crate) struct ManagedProtocolUdpSend<'a> {
 }
 
 impl UdpDispatch {
-    pub(crate) fn protocol_udp_state_and_chain_tasks(
+    pub(crate) fn protocol_udp_chain_tasks(&mut self) -> &mut JoinSet<ChainTask> {
+        &mut self.chain_tasks
+    }
+
+    pub(crate) fn register_cached_protocol_flow_sender(
         &mut self,
-    ) -> (&mut ProtocolUdpState, &mut JoinSet<ChainTask>) {
-        (&mut self.protocol_state, &mut self.chain_tasks)
+        sender: Box<dyn ManagedCachedFlowSender>,
+    ) {
+        self.protocol_state.register_cached_flow_sender(sender);
     }
 
     pub(crate) async fn start_managed_protocol_flow(

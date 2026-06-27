@@ -4,7 +4,10 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::vmess_flow::{self, VmessUdpFlow, VmessUdpRelayFlow};
+use crate::protocol_runtime::vmess_udp::{
+    model::{VmessUdpRelayFlowStart, VmessUdpStartFlow},
+    VmessUdpOutboundManager,
+};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::Proxy;
@@ -56,23 +59,35 @@ impl VmessAdapter {
             "udp_vmess_parse_identity",
             Some((server, *port)),
         )?;
-        vmess_flow::send_datagram(
-            dispatch,
-            VmessUdpFlow {
-                proxy,
-                session,
-                server,
-                port: *port,
-                identity,
-                cipher_name: cipher,
-                mux_concurrency: *mux_concurrency,
-                tls: *tls,
-                ws: *ws,
-                grpc: *grpc,
-                payload,
-            },
-        )
-        .await?;
+        let transport = crate::transport::VmessTransportOptions {
+            tls: *tls,
+            ws: *ws,
+            grpc: *grpc,
+            source_dir: proxy.config.source_dir(),
+        };
+        let mut manager = VmessUdpOutboundManager::new();
+        manager
+            .start_flow(
+                dispatch.protocol_udp_chain_tasks(),
+                VmessUdpStartFlow {
+                    proxy,
+                    session,
+                    server,
+                    port: *port,
+                    identity,
+                    cipher_name: cipher,
+                    mux_concurrency: *mux_concurrency,
+                    transport,
+                    payload,
+                },
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vmess_upstream",
+                error,
+                upstream: Some((server.to_string(), *port)),
+            })?;
+        dispatch.register_cached_protocol_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Cached {
@@ -114,20 +129,32 @@ impl VmessAdapter {
             "udp_vmess_relay_final_hop_parse_identity",
             Some((server, *port)),
         )?;
-        vmess_flow::send_relay(
-            dispatch,
-            VmessUdpRelayFlow {
-                proxy,
-                session,
-                carrier,
-                identity,
-                tls: *tls,
-                ws: *ws,
-                grpc: *grpc,
-                payload,
-            },
-        )
-        .await?;
+        let transport = crate::transport::VmessTransportOptions {
+            tls: *tls,
+            ws: *ws,
+            grpc: *grpc,
+            source_dir: proxy.config.source_dir(),
+        };
+        let mut manager = VmessUdpOutboundManager::new();
+        manager
+            .start_relay_flow(
+                dispatch.protocol_udp_chain_tasks(),
+                VmessUdpRelayFlowStart {
+                    proxy,
+                    session,
+                    carrier,
+                    identity,
+                    transport,
+                    payload,
+                },
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vmess_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        dispatch.register_cached_protocol_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Cached {

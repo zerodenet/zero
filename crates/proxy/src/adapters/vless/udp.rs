@@ -4,8 +4,9 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_adapter::ProtocolSupportCapability;
-use crate::protocol_runtime::udp::vless_flow::{
-    self, VlessUdpFlow, VlessUdpRelayFinalHop, VlessUdpRelayTwoStream,
+use crate::protocol_runtime::vless_udp::{
+    model::{VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow},
+    VlessUdpOutboundManager,
 };
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
@@ -58,32 +59,39 @@ impl VlessAdapter {
         let identity =
             parse_vless_udp_identity(id, "udp_vless_parse_identity", Some((server, *port)))?;
 
-        vless_flow::send_datagram(
-            dispatch,
-            VlessUdpFlow {
-                proxy,
-                session,
-                server,
-                port: *port,
-                identity,
-                flow: *flow,
-                tls: *tls,
-                reality: *reality,
-                ws: *ws,
-                grpc: *grpc,
-                h2: *h2,
-                http_upgrade: *http_upgrade,
-                split_http: *split_http,
-                quic: *quic,
-                payload,
-            },
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: error.stage,
-            error: error.error,
-            upstream: error.upstream,
-        })?;
+        let transport = crate::transport::VlessUdpTransportOptions {
+            tls: *tls,
+            reality: *reality,
+            ws: *ws,
+            grpc: *grpc,
+            h2: *h2,
+            http_upgrade: *http_upgrade,
+            split_http: *split_http,
+            quic: *quic,
+            source_dir: proxy.config.source_dir(),
+        };
+        let mut manager = VlessUdpOutboundManager::new();
+        manager
+            .start_flow(
+                dispatch.protocol_udp_chain_tasks(),
+                VlessUdpStartFlow {
+                    proxy,
+                    session,
+                    server,
+                    port: *port,
+                    identity,
+                    flow: *flow,
+                    transport,
+                    payload,
+                },
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_upstream",
+                error,
+                upstream: Some((server.to_string(), *port)),
+            })?;
+        dispatch.register_cached_protocol_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Cached {
@@ -149,19 +157,27 @@ impl VlessAdapter {
         let split_http_cfg = split_http
             .as_ref()
             .expect("udp_relay_needs_two_streams checked split_http is Some");
-        vless_flow::send_relay_two_stream(
-            dispatch,
-            VlessUdpRelayTwoStream {
-                proxy,
-                session,
-                post_carrier,
-                get_carrier,
-                identity,
-                split_http: split_http_cfg,
-                payload,
-            },
-        )
-        .await?;
+        let mut manager = VlessUdpOutboundManager::new();
+        manager
+            .start_relay_two_stream(
+                dispatch.protocol_udp_chain_tasks(),
+                VlessUdpRelayTwoStream {
+                    proxy,
+                    session,
+                    post_carrier,
+                    get_carrier,
+                    identity,
+                    split_http: split_http_cfg,
+                    payload,
+                },
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        dispatch.register_cached_protocol_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Cached {
@@ -214,24 +230,37 @@ impl VlessAdapter {
         let tag_owned = (*tag).to_string();
         let identity =
             parse_vless_udp_identity(id, "udp_vless_relay_final_hop_parse_identity", None)?;
-        vless_flow::send_relay_final_hop(
-            dispatch,
-            VlessUdpRelayFinalHop {
-                proxy,
-                session,
-                carrier,
-                identity,
-                tls: *tls,
-                reality: *reality,
-                ws: *ws,
-                grpc: *grpc,
-                h2: *h2,
-                http_upgrade: *http_upgrade,
-                split_http: *split_http,
-                payload,
-            },
-        )
-        .await?;
+        let transport = crate::transport::VlessUdpTransportOptions {
+            tls: *tls,
+            reality: *reality,
+            ws: *ws,
+            grpc: *grpc,
+            h2: *h2,
+            http_upgrade: *http_upgrade,
+            split_http: *split_http,
+            quic: None,
+            source_dir: proxy.config.source_dir(),
+        };
+        let mut manager = VlessUdpOutboundManager::new();
+        manager
+            .start_relay_final_hop(
+                dispatch.protocol_udp_chain_tasks(),
+                VlessUdpRelayFinalHopStart {
+                    proxy,
+                    session,
+                    carrier,
+                    identity,
+                    transport,
+                    payload,
+                },
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: "udp_vless_relay_chain",
+                error,
+                upstream: None,
+            })?;
+        dispatch.register_cached_protocol_flow_sender(Box::new(manager));
 
         Ok(FlowStartResult::Flow {
             outbound: Box::new(UdpFlowOutbound::Cached {

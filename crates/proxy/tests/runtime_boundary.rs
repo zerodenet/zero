@@ -1958,7 +1958,6 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
         "struct VlessUdpTransport",
         "struct VlessUdpStartFlow",
         "struct VlessUdpRelayTwoStream",
-        "struct VlessUdpRelayFinalHop",
         "struct VlessUdpUpstreamRequest",
     ] {
         assert!(
@@ -1971,7 +1970,7 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
         "struct VlessUdpUpstream",
         "struct VlessUdpStartFlow",
         "struct VlessUdpRelayTwoStream",
-        "struct VlessUdpRelayFinalHop",
+        "struct VlessUdpRelayFinalHopStart",
         "struct VlessUdpUpstreamRequest",
     ] {
         assert!(
@@ -1985,7 +1984,7 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
 fn vless_udp_transport_opening_lives_in_transport_crate() {
     let runtime = read("src/protocol_runtime/vless_udp.rs");
     let model = read("src/protocol_runtime/vless_udp/model.rs");
-    let flow = read("src/protocol_runtime/udp/vless_flow.rs");
+    let adapter = read("src/adapters/vless/udp.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read crates/transport/src/vless_transport.rs");
 
@@ -2002,10 +2001,10 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
     }
 
     assert!(
-        flow.contains("crate::transport::VlessUdpTransportOptions")
+        adapter.contains("crate::transport::VlessUdpTransportOptions")
             && runtime.contains("crate::transport::VlessUdpTransportConnector")
             && runtime.contains("crate::transport::build_vless_outbound_transport_over_stream"),
-        "VLESS UDP runtime should request VLESS transport helpers instead of opening QUIC/TCP transports directly"
+        "VLESS UDP adapter/runtime should request VLESS transport helpers instead of opening QUIC/TCP transports directly"
     );
 
     for required in [
@@ -2186,7 +2185,7 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
         "struct VmessUdpUpstream",
         "struct VmessUdpTransport",
         "struct VmessUdpStartFlow",
-        "struct VmessUdpRelayFlow",
+        "struct VmessUdpRelayFlowStart",
         "struct VmessUdpUpstreamRequest",
     ] {
         assert!(
@@ -2198,7 +2197,7 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
     for required in [
         "struct VmessUdpUpstream",
         "struct VmessUdpStartFlow",
-        "struct VmessUdpRelayFlow",
+        "struct VmessUdpRelayFlowStart",
         "struct VmessUdpUpstreamRequest",
     ] {
         assert!(
@@ -2212,7 +2211,7 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
 fn vmess_udp_transport_opening_lives_in_transport_crate() {
     let runtime = read("src/protocol_runtime/vmess_udp.rs");
     let model = read("src/protocol_runtime/vmess_udp/model.rs");
-    let flow = read("src/protocol_runtime/udp/vmess_flow.rs");
+    let adapter = read("src/adapters/vmess/udp.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
         .expect("read crates/transport/src/vmess_transport.rs");
 
@@ -2230,10 +2229,10 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
     }
 
     assert!(
-        flow.contains("crate::transport::VmessTransportOptions")
+        adapter.contains("crate::transport::VmessTransportOptions")
             && runtime.contains("crate::transport::VmessTransportConnector")
             && runtime.contains("crate::transport::build_vmess_outbound_transport_over_stream"),
-        "VMess UDP runtime should request VMess transport helpers instead of opening TLS/WS/gRPC directly"
+        "VMess UDP adapter/runtime should request VMess transport helpers instead of opening TLS/WS/gRPC directly"
     );
 
     for required in [
@@ -2573,10 +2572,16 @@ fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
             "src/protocol_runtime/vless_udp.rs",
             "VlessUdpRelayTwoStream",
         ),
-        ("src/protocol_runtime/vless_udp.rs", "VlessUdpRelayFinalHop"),
+        (
+            "src/protocol_runtime/vless_udp.rs",
+            "VlessUdpRelayFinalHopStart",
+        ),
         ("src/protocol_runtime/vless_udp.rs", "VlessUdpTransport"),
         ("src/protocol_runtime/vmess_udp.rs", "VmessUdpStartFlow"),
-        ("src/protocol_runtime/vmess_udp.rs", "VmessUdpRelayFlow"),
+        (
+            "src/protocol_runtime/vmess_udp.rs",
+            "VmessUdpRelayFlowStart",
+        ),
         (
             "src/protocol_runtime/vless_mux_pool.rs",
             "VlessMuxOpenRequest",
@@ -5533,8 +5538,10 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
     let cached_state = read("src/protocol_runtime/udp/state/cached.rs");
     let cached_model = read("src/protocol_runtime/udp/state/cached/model.rs");
-    let vless_flow = read("src/protocol_runtime/udp/vless_flow.rs");
-    let vmess_flow = read("src/protocol_runtime/udp/vmess_flow.rs");
+    let vless_flow = manifest_dir().join("src/protocol_runtime/udp/vless_flow.rs");
+    let vmess_flow = manifest_dir().join("src/protocol_runtime/udp/vmess_flow.rs");
+    let vless_adapter = read("src/adapters/vless/udp.rs");
+    let vmess_adapter = read("src/adapters/vmess/udp.rs");
     let cached_start = manifest_dir().join("src/protocol_runtime/udp/start/cached.rs");
     let register = read("src/register.rs");
 
@@ -5576,14 +5583,18 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !cached_model.contains("downcast")
             && !cached_model.contains("as_any")
             && !state.contains("cached_handler_mut")
-            && vless_flow.contains("VlessUdpOutboundManager")
-            && !vless_flow.contains("cached_handler_mut")
-            && vmess_flow.contains("VmessUdpOutboundManager")
-            && !vmess_flow.contains("cached_handler_mut")
+            && !vless_flow.exists()
+            && !vmess_flow.exists()
+            && vless_adapter.contains("VlessUdpOutboundManager")
+            && vless_adapter.contains("register_cached_protocol_flow_sender")
+            && !vless_adapter.contains("cached_handler_mut")
+            && vmess_adapter.contains("VmessUdpOutboundManager")
+            && vmess_adapter.contains("register_cached_protocol_flow_sender")
+            && !vmess_adapter.contains("cached_handler_mut")
             && register.contains("CachedUdpHandlers { cached: Vec::new() }")
             && !register.contains("vless_cached_handler")
             && !register.contains("vmess_cached_handler"),
-        "cached UDP flow handlers should live outside generic managed state without Vec-order protocol identity or runtime downcasts"
+        "cached UDP flow starts should live in adapters while generic state keeps only cached senders without Vec-order protocol identity or runtime downcasts"
     );
 }
 
@@ -7962,6 +7973,8 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
         "src/protocol_runtime/udp/shadowsocks_flow.rs",
         "src/protocol_runtime/udp/socks5_flow.rs",
         "src/protocol_runtime/udp/trojan_flow.rs",
+        "src/protocol_runtime/udp/vless_flow.rs",
+        "src/protocol_runtime/udp/vmess_flow.rs",
     ] {
         assert!(
             !manifest_dir().join(removed).exists(),
@@ -7969,30 +7982,25 @@ fn udp_adapters_use_neutral_managed_bridge_for_protocol_state() {
         );
     }
 
-    for source in [
-        "src/protocol_runtime/udp/vless_flow.rs",
-        "src/protocol_runtime/udp/vmess_flow.rs",
+    let managed = read("src/runtime/udp_dispatch/managed.rs");
+    assert!(
+        managed.contains("protocol_udp_chain_tasks")
+            && managed.contains("register_cached_protocol_flow_sender")
+            && !managed.contains("protocol_udp_state_and_chain_tasks"),
+        "runtime UDP dispatch should expose only narrow cached-flow registration glue, not protocol flow bridges"
+    );
+
+    for (source, manager) in [
+        ("src/adapters/vless/udp.rs", "VlessUdpOutboundManager"),
+        ("src/adapters/vmess/udp.rs", "VmessUdpOutboundManager"),
     ] {
-        let bridge = read(source);
+        let adapter = read(source);
         assert!(
-            bridge.contains("protocol_udp_state_and_chain_tasks"),
-            "{source} should stay as a narrow bridge while VLESS/VMess UDP glue is still in proxy"
+            adapter.contains(manager)
+                && adapter.contains("protocol_udp_chain_tasks")
+                && adapter.contains("register_cached_protocol_flow_sender"),
+            "{source} should own cached UDP manager starts and use only narrow UdpDispatch glue"
         );
-        for forbidden in [
-            "impl UdpDispatch",
-            "send_vless_",
-            "send_vmess_",
-            "VlessDatagramSend",
-            "VlessRelayFinalHopSend",
-            "VlessRelayTwoStreamSend",
-            "VmessDatagramSend",
-            "VmessRelaySend",
-        ] {
-            assert!(
-                !bridge.contains(forbidden),
-                "{source} should not extend UdpDispatch or declare protocol-named facade methods; found `{forbidden}`"
-            );
-        }
     }
 }
 
