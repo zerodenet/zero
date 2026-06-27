@@ -15,11 +15,8 @@ mod send;
 mod stream;
 
 #[cfg(feature = "mieru")]
-use model::MieruEntry;
-
-#[cfg(feature = "mieru")]
 pub(crate) struct MieruChainManager {
-    upstreams: HashMap<mieru::MieruUdpCacheKey, MieruEntry>,
+    upstreams: HashMap<mieru::MieruUdpCacheKey, mieru::MieruUdpFlowSession>,
 }
 
 #[cfg(feature = "mieru")]

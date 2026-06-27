@@ -2831,7 +2831,7 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
     for required in [
         "mieru::MieruUdpFlowIo::establish_with_resume",
         "mieru::spawn_udp_flow",
-        "mieru::MieruUdpFlowHandle",
+        "mieru::MieruUdpFlowSession::new",
     ] {
         assert!(
             stream.contains(required),
@@ -2841,7 +2841,11 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
     assert!(
         protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("pub struct MieruUdpFlowHandle")
-            && protocol.contains("pub struct MieruUdpFlowSender")
+            && protocol.contains("struct MieruUdpFlowSender")
+            && !protocol.contains("pub struct MieruUdpFlowSender")
+            && protocol.contains("pub struct MieruUdpFlowSession")
+            && protocol.contains("pub type MieruUdpFlowResponseReceiver")
+            && !protocol.contains("pub type MieruUdpFlowResponses")
             && protocol.contains("broadcast::channel::<MieruUdpFlowResponse>")
             && protocol.contains("mpsc::channel::<zero_core::UdpFlowPacket>")
             && protocol.contains("tokio::spawn")
@@ -5703,7 +5707,7 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
     let trojan_manager = read("src/adapters/trojan/udp/manager.rs");
     let trojan_manager_send = read("src/adapters/trojan/udp/manager/send.rs");
     assert!(
-        mieru_manager.contains("HashMap<mieru::MieruUdpCacheKey, MieruEntry>")
+        mieru_manager.contains("HashMap<mieru::MieruUdpCacheKey, mieru::MieruUdpFlowSession>")
             && trojan_manager.contains("HashMap<trojan::TrojanUdpCacheKey, TrojanEntry>"),
         "stream UDP managers should store protocol-owned opaque cache keys without adapter-local key wrappers"
     );
@@ -6851,9 +6855,14 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     assert!(
         protocol_outbound.contains("struct MieruUdpFlowIo")
             && protocol_outbound.contains("struct MieruUdpFlowPacket")
-            && protocol_outbound.contains("struct MieruUdpFlowHandle")
+            && protocol_outbound.contains("pub struct MieruUdpFlowHandle")
             && protocol_outbound.contains("struct MieruUdpFlowSender")
+            && !protocol_outbound.contains("pub struct MieruUdpFlowSender")
+            && protocol_outbound.contains("pub struct MieruUdpFlowSession")
             && protocol_outbound.contains("pub type MieruUdpFlowResponse")
+            && protocol_outbound.contains("pub type MieruUdpFlowResponseReceiver")
+            && protocol_outbound.contains("type MieruUdpFlowResponses")
+            && !protocol_outbound.contains("pub type MieruUdpFlowResponses")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && protocol_outbound.contains("pub fn udp_flow_packet")
             && protocol_outbound.contains("encode_udp_flow_packet")
@@ -6877,15 +6886,18 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     );
     assert!(
         !manager_model.contains("struct MieruPacket")
-            && manager_model.contains("MieruFlowSender")
+            && !manager_model.contains("struct MieruEntry")
+            && !manager_model.contains("MieruFlowSender")
+            && !manager_model.contains("mieru::MieruUdpFlowSender")
+            && !manager_model.contains("recv_tx")
             && !manager_model.contains("mpsc::Sender<UdpFlowPacket>")
             && !manager_model.contains("UdpFlowPacket")
             && !manager_send.contains("mieru::udp_flow_packet")
             && !manager_send.contains("MieruUdpFlowPacket::new")
             && !manager_send.contains("MieruUdpFlowIo")
-            && manager_send.contains(".sender")
+            && !manager_send.contains(".sender")
             && manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)"),
-        "Mieru UDP manager should hold proxy-owned flow senders while protocols/mieru owns packet I/O helpers"
+        "Mieru UDP manager should hold protocol-owned flow sessions while protocols/mieru owns packet I/O helpers"
     );
     assert!(
         protocol_udp.contains("pub fn udp_flow_codec(")
@@ -7309,14 +7321,20 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             .exists()
             && !transport.contains("dep:mieru")
             && !transport.contains("mieru/crypto")
-            && manager_model.contains("MieruFlowSender")
-            && manager_send.contains(".sender")
+            && !manager_model.contains("MieruFlowSender")
+            && !manager_model.contains("MieruEntry")
+            && !manager_send.contains(".sender")
+            && !manager_send.contains(".recv_tx")
             && manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
             && !manager_send.contains("UdpFlowPacket")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && protocol_outbound.contains("pub struct MieruUdpFlowHandle")
-            && protocol_outbound.contains("pub struct MieruUdpFlowSender")
+            && protocol_outbound.contains("struct MieruUdpFlowSender")
+            && !protocol_outbound.contains("pub struct MieruUdpFlowSender")
+            && protocol_outbound.contains("pub struct MieruUdpFlowSession")
             && protocol_outbound.contains("pub type MieruUdpFlowResponse")
+            && protocol_outbound.contains("pub type MieruUdpFlowResponseReceiver")
+            && !protocol_outbound.contains("pub type MieruUdpFlowResponses")
             && !protocol_outbound.contains("mpsc::channel::<MieruUdpFlowPacket>")
             && protocol_outbound.contains("broadcast::channel::<MieruUdpFlowResponse>")
             && protocol_outbound.contains("mpsc::channel::<zero_core::UdpFlowPacket>")

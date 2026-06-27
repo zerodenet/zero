@@ -1,15 +1,8 @@
-use super::bridge;
-use super::stream::MieruFlowSender;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use tokio::task::JoinSet;
 use zero_core::Address;
-
-pub(super) struct MieruEntry {
-    pub(super) sender: MieruFlowSender,
-    pub(super) recv_tx: bridge::ResponseSender,
-}
 
 pub(super) struct MieruSendExisting<'a> {
     pub(super) chain_tasks: &'a mut JoinSet<ChainTask>,

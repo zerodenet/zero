@@ -61,16 +61,41 @@ pub struct MieruUdpFlowIo {
 
 pub type MieruUdpFlowResponse = (Address, u16, Vec<u8>);
 
-pub type MieruUdpFlowResponses = broadcast::Sender<MieruUdpFlowResponse>;
+type MieruUdpFlowResponses = broadcast::Sender<MieruUdpFlowResponse>;
+
+pub type MieruUdpFlowResponseReceiver = broadcast::Receiver<MieruUdpFlowResponse>;
 
 #[derive(Clone)]
-pub struct MieruUdpFlowSender {
+struct MieruUdpFlowSender {
     send_tx: mpsc::Sender<zero_core::UdpFlowPacket>,
 }
 
 pub struct MieruUdpFlowHandle {
-    pub sender: MieruUdpFlowSender,
-    pub responses: MieruUdpFlowResponses,
+    sender: MieruUdpFlowSender,
+    responses: MieruUdpFlowResponses,
+}
+
+#[derive(Clone)]
+pub struct MieruUdpFlowSession {
+    sender: MieruUdpFlowSender,
+    responses: MieruUdpFlowResponses,
+}
+
+impl MieruUdpFlowSession {
+    pub fn new(handle: MieruUdpFlowHandle) -> Self {
+        Self {
+            sender: handle.sender,
+            responses: handle.responses,
+        }
+    }
+
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        self.sender.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> MieruUdpFlowResponseReceiver {
+        self.responses.subscribe()
+    }
 }
 
 impl MieruUdpFlowSender {
