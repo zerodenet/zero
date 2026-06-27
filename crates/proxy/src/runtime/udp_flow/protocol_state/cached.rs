@@ -8,13 +8,14 @@ use crate::runtime::Proxy;
 
 pub(super) mod model;
 
+pub(crate) use model::CachedProtocolFlowSender;
 pub(super) use model::CachedProtocolUdpState;
 pub(crate) use model::CachedUdpHandlers;
 
 impl ProtocolUdpState {
     pub(crate) fn register_cached_flow_sender(
         &mut self,
-        sender: Box<dyn crate::runtime::udp_flow::managed::ManagedCachedFlowSender>,
+        sender: Box<dyn CachedProtocolFlowSender>,
     ) {
         self.cached.push_sender(sender);
     }

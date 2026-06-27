@@ -1,10 +1,11 @@
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    ManagedCachedFlowSender, ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume,
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::packet_path::ChainTask;
+use crate::runtime::udp_flow::protocol_state::CachedProtocolFlowSender;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 use tokio::task::JoinSet;
@@ -41,7 +42,7 @@ impl UdpDispatch {
 
     pub(crate) fn register_cached_protocol_flow_sender(
         &mut self,
-        sender: Box<dyn ManagedCachedFlowSender>,
+        sender: Box<dyn CachedProtocolFlowSender>,
     ) {
         self.protocol_state.register_cached_flow_sender(sender);
     }

@@ -10,8 +10,7 @@ pub(crate) mod state;
 mod stream;
 
 pub(crate) use model::{
-    ManagedCachedFlowSender, ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend,
-    ManagedStreamFlowHandler,
+    ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
 };
 pub(crate) use state::{ManagedProtocolUdpState, ManagedUdpHandlers};
 

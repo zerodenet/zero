@@ -14,8 +14,8 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
 use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
-use crate::runtime::udp_flow::managed::ManagedCachedFlowSender;
 use crate::runtime::udp_flow::packet_path::ChainTask;
+use crate::runtime::udp_flow::protocol_state::CachedProtocolFlowSender;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use model::{VmessUdpRelayFlowStart, VmessUdpStartFlow, VmessUdpUpstream, VmessUdpUpstreamRequest};
@@ -261,7 +261,7 @@ impl VmessUdpOutboundManager {
 }
 
 #[async_trait::async_trait]
-impl ManagedCachedFlowSender for VmessUdpOutboundManager {
+impl CachedProtocolFlowSender for VmessUdpOutboundManager {
     async fn send_existing(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
