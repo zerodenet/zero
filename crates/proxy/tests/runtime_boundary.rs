@@ -3870,13 +3870,14 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     assert!(
         !mux.contains("socks5::parse_udp_packet")
             && !mux.contains("socks5::decode_udp_associate_response")
-            && mux.contains("udp_response::decode_socks5_upstream_response")
+            && !mux.contains("udp_response::decode_socks5_upstream_response")
+            && mux.contains("upstream_udp.recv_response")
             && !mux.contains("&pkt.target")
             && !mux.contains("pkt.port,")
             && !mux.contains("&pkt.payload")
             && !mux.contains("pkt.payload.len()")
             && !mux.contains("pkt.payload,"),
-        "VMess inbound SOCKS5 upstream response bridge should use neutral proxy bridge helpers"
+        "VMess inbound upstream response bridge should consume neutral registered upstream responses"
     );
     for forbidden in [
         "vmess::encode_udp_response",
@@ -4012,13 +4013,14 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         assert!(
             !source.contains("socks5::parse_udp_packet")
                 && !source.contains("socks5::decode_udp_associate_response")
-                && source.contains("udp_response::decode_socks5_upstream_response")
+                && !source.contains("udp_response::decode_socks5_upstream_response")
+                && source.contains("upstream_udp.recv_response")
                 && !source.contains("&pkt.target")
                 && !source.contains("pkt.port,")
                 && !source.contains("&pkt.payload")
                 && !source.contains("pkt.payload.len()")
                 && !source.contains("pkt.payload,"),
-            "{source_name} should use neutral proxy bridge helpers for upstream response bridging"
+            "{source_name} should consume neutral registered upstream responses"
         );
     }
 
@@ -4125,22 +4127,26 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
 }
 
 #[test]
-fn inbound_udp_socks5_response_decode_is_confined_to_bridge() {
-    let bridge = read("src/inbound/udp_response.rs");
+fn upstream_udp_response_decode_lives_behind_registered_handler() {
+    let response = read("src/runtime/udp_flow/response.rs");
+    let upstream = read("src/runtime/udp_flow/registered/upstream.rs");
+    let state = read("src/runtime/udp_flow/state.rs");
+    let socks5_runtime = read("src/adapters/socks5/udp/runtime.rs");
+
     assert_src_pattern_confined(
         "socks5::decode_udp_associate_response",
-        &[
-            "src/inbound/socks5/udp_associate/upstream_response.rs",
-            "src/inbound/udp_response.rs",
-        ],
+        &["src/inbound/socks5/udp_associate/upstream_response.rs"],
         &[],
-        "SOCKS5 upstream response decoding should stay in SOCKS5 associate handling or the neutral inbound UDP response bridge",
+        "raw SOCKS5 UDP response decoding should not leak into generic inbound response bridging",
     );
     assert!(
-        bridge.contains("socks5::Socks5Inbound")
-            && bridge.contains(".udp_session()")
-            && !bridge.contains("Socks5InboundUdpCodec"),
-        "neutral inbound UDP response bridge should use the protocol-owned SOCKS5 inbound UDP session"
+        response.contains("struct UpstreamUdpResponse")
+            && upstream.contains("Result<UpstreamUdpResponse, EngineError>")
+            && state.contains("recv_response")
+            && socks5_runtime.contains("socks5::Socks5Inbound")
+            && socks5_runtime.contains(".decode_response(&buf[..read])")
+            && !socks5_runtime.contains("Socks5InboundUdpCodec"),
+        "registered upstream handlers should decode protocol responses into neutral UpstreamUdpResponse values"
     );
 }
 
@@ -4181,13 +4187,14 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     }
     assert!(
         !inbound.contains("socks5::decode_udp_associate_response")
-            && inbound.contains("udp_response::decode_socks5_upstream_response")
+            && !inbound.contains("udp_response::decode_socks5_upstream_response")
+            && inbound.contains("upstream_udp.recv_response")
             && !inbound.contains("&pkt.target")
             && !inbound.contains("pkt.port,")
             && !inbound.contains("&pkt.payload")
             && !inbound.contains("pkt.payload.len()")
             && !inbound.contains("pkt.payload,"),
-        "Trojan inbound SOCKS5 upstream response bridge should use neutral proxy bridge helpers"
+        "Trojan inbound upstream response bridge should consume neutral registered upstream responses"
     );
 
     assert!(
@@ -4638,7 +4645,8 @@ fn udp_dispatch_poll_refs_does_not_expose_socks5_association_type() {
     }
     assert!(
         lifecycle.contains("UpstreamUdpPoll")
-            && flow_state.contains("recv_packet")
+            && flow_state.contains("recv_response")
+            && flow_state.contains("recv_raw_packet")
             && lifecycle.contains("UpstreamAssociationView")
             && lifecycle.contains("ClosedUpstreamAssociation")
             && lifecycle.contains("upstream_association_view")
@@ -4980,7 +4988,7 @@ fn udp_dispatch_keeps_protocol_managers_behind_registered_udp_state() {
         );
     }
     assert!(
-        state.contains("pub(crate) async fn recv_upstream_packet")
+        state.contains("pub(crate) async fn recv_upstream_response")
             && state.contains("pub(crate) fn upstream_association_view")
             && state.contains("pub(crate) fn upstream_idle_deadline")
             && state.contains("pub(crate) fn touch_upstream_idle")

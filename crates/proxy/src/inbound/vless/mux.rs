@@ -5,7 +5,6 @@ use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 use zero_traits::AsyncSocket;
 
-use crate::inbound::udp_response;
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
@@ -338,32 +337,30 @@ impl Proxy {
                         }
                     }
                 }
-                upstream = upstream_udp.recv_packet(&mut upstream_buf) => {
+                upstream = upstream_udp.recv_response(&mut upstream_buf) => {
                     match upstream {
-                        Ok(read) => {
+                        Ok(pkt) => {
                             last_activity = TokioInstant::now();
                             self.record_udp_upstream_packet_received();
                             dispatch.touch_upstream_idle(timeout);
-                            if let Some(pkt) = udp_response::decode_socks5_upstream_response(&upstream_buf[..read]) {
-                                if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
-                                    self.record_session_outbound_rx(sid, pkt.payload().len() as u64);
+                            if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
+                                self.record_session_outbound_rx(sid, pkt.payload().len() as u64);
+                            }
+                            match udp_session.send_mux_response(
+                                &down_tx,
+                                mux_session_id,
+                                pkt.target(),
+                                pkt.port(),
+                                pkt.payload(),
+                            ) {
+                                Ok(frame_len) => {
+                                    if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
+                                        self.record_session_inbound_tx(sid, frame_len as u64);
+                                    }
                                 }
-                                match udp_session.send_mux_response(
-                                    &down_tx,
-                                    mux_session_id,
-                                    pkt.target(),
-                                    pkt.port(),
-                                    pkt.payload(),
-                                ) {
-                                    Ok(frame_len) => {
-                                        if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
-                                            self.record_session_inbound_tx(sid, frame_len as u64);
-                                        }
-                                    }
-                                    Err(error) => {
-                                        warn!(%error, mux_session_id, "vless mux udp upstream response encode failed");
-                                        break;
-                                    }
+                                Err(error) => {
+                                    warn!(%error, mux_session_id, "vless mux udp upstream response encode failed");
+                                    break;
                                 }
                             }
                         }

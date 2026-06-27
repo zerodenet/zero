@@ -3,7 +3,6 @@ use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 use zero_traits::AsyncSocket;
 
-use crate::inbound::udp_response;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
@@ -122,20 +121,18 @@ impl Proxy {
                         }
                     }
                 }
-                upstream = upstream_udp.recv_packet(&mut upstream_buffer) => {
-                    // SOCKS5 chain upstream response -?re-encode as VLESS.
+                upstream = upstream_udp.recv_response(&mut upstream_buffer) => {
+                    // Registered upstream response - re-encode as VLESS.
                     match upstream {
-                        Ok(read) => {
+                        Ok(pkt) => {
                             last_activity = TokioInstant::now();
-                            if let Some(pkt) = udp_response::decode_socks5_upstream_response(&upstream_buffer[..read]) {
-                                if udp_session.write_response_tokio(
-                                    &mut client,
-                                    pkt.target(),
-                                    pkt.port(),
-                                    pkt.payload(),
-                                ).await.is_ok() {
-                                    proxy.record_session_inbound_traffic(0, client.drain_traffic());
-                                }
+                            if udp_session.write_response_tokio(
+                                &mut client,
+                                pkt.target(),
+                                pkt.port(),
+                                pkt.payload(),
+                            ).await.is_ok() {
+                                proxy.record_session_inbound_traffic(0, client.drain_traffic());
                             }
                         }
                         Err(error) => {

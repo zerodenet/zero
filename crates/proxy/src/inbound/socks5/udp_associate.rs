@@ -83,7 +83,7 @@ impl Proxy {
                     )
                     .await;
                 }
-                upstream = upstream_udp.recv_packet(&mut upstream_buf) => {
+                upstream = upstream_udp.recv_raw_packet(&mut upstream_buf) => {
                     upstream_response::handle_upstream_response(
                         self,
                         &mut dispatch,

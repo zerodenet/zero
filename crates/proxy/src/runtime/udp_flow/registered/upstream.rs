@@ -6,6 +6,7 @@ use zero_engine::EngineError;
 
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
+use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 
 #[async_trait]
 pub(crate) trait UpstreamAssociationHandler: Send + Sync {
@@ -17,7 +18,12 @@ pub(crate) trait UpstreamAssociationHandler: Send + Sync {
         request: ManagedUdpFlowRequest<'_>,
     ) -> Result<usize, FlowFailure>;
 
-    async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError>;
+    async fn recv_upstream_response(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<UpstreamUdpResponse, EngineError>;
+
+    async fn recv_raw_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError>;
 
     fn upstream_outbound_tag(&self) -> Option<&str>;
 
@@ -71,10 +77,25 @@ impl UpstreamAssociationState {
         ))
     }
 
-    pub(super) async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+    pub(super) async fn recv_upstream_response(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<UpstreamUdpResponse, EngineError> {
         for handler in &self.handlers.upstream {
             if handler.upstream_outbound_tag().is_some() {
-                return handler.recv_upstream_packet(buf).await;
+                return handler.recv_upstream_response(buf).await;
+            }
+        }
+        std::future::pending::<Result<UpstreamUdpResponse, EngineError>>().await
+    }
+
+    pub(super) async fn recv_raw_upstream_packet(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<usize, EngineError> {
+        for handler in &self.handlers.upstream {
+            if handler.upstream_outbound_tag().is_some() {
+                return handler.recv_raw_upstream_packet(buf).await;
             }
         }
         std::future::pending::<Result<usize, EngineError>>().await

@@ -13,6 +13,7 @@ use crate::runtime::udp_flow::registered::{
     ClosedRegisteredUpstreamAssociation, RegisteredUdpHandlers, RegisteredUdpState,
     RegisteredUpstreamAssociationView,
 };
+use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 
@@ -27,8 +28,15 @@ pub(crate) struct UpstreamUdpPoll<'a> {
 }
 
 impl UpstreamUdpPoll<'_> {
-    pub(crate) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.registered.recv_upstream_packet(buf).await
+    pub(crate) async fn recv_response(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<UpstreamUdpResponse, EngineError> {
+        self.registered.recv_upstream_response(buf).await
+    }
+
+    pub(crate) async fn recv_raw_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        self.registered.recv_raw_upstream_packet(buf).await
     }
 }
 

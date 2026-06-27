@@ -15,6 +15,7 @@ use super::send::{self, Socks5UdpSend};
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
+use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 
 pub(crate) struct Socks5UdpRuntime {
     pub(super) upstream: Option<BoxedSocks5UdpAssociation>,
@@ -250,7 +251,27 @@ impl Socks5UdpRuntime {
         })
     }
 
-    pub(crate) async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+    pub(crate) async fn recv_upstream_response(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<UpstreamUdpResponse, EngineError> {
+        match self.upstream.as_ref() {
+            Some(association) => {
+                let read = association.recv_packet(buf).await?;
+                let response = socks5::Socks5Inbound
+                    .udp_session()
+                    .decode_response(&buf[..read])?;
+                let (target, port, payload) = response.into_parts();
+                Ok(UpstreamUdpResponse::new(target, port, payload))
+            }
+            None => std::future::pending::<Result<UpstreamUdpResponse, EngineError>>().await,
+        }
+    }
+
+    pub(crate) async fn recv_raw_upstream_packet(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<usize, EngineError> {
         match self.upstream.as_ref() {
             Some(association) => association.recv_packet(buf).await,
             None => std::future::pending::<Result<usize, EngineError>>().await,
@@ -272,8 +293,15 @@ impl UpstreamAssociationHandler for Socks5UdpRuntime {
         self.start_relay_flow(inbound_tag, request).await
     }
 
-    async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.recv_upstream_packet(buf).await
+    async fn recv_upstream_response(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<UpstreamUdpResponse, EngineError> {
+        self.recv_upstream_response(buf).await
+    }
+
+    async fn recv_raw_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        self.recv_raw_upstream_packet(buf).await
     }
 
     fn upstream_outbound_tag(&self) -> Option<&str> {

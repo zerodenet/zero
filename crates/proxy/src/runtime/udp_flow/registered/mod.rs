@@ -10,6 +10,7 @@ use crate::runtime::udp_flow::managed::{
     ManagedUdpHandlers, ManagedUdpState,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
+use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 
 use upstream::UpstreamAssociationState;
 pub(crate) use upstream::{UpstreamAssociationHandler, UpstreamUdpHandlers};
@@ -66,8 +67,18 @@ impl RegisteredUdpState {
         self.managed.flow_resume(flow_ref)
     }
 
-    pub(crate) async fn recv_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.upstream.recv_upstream_packet(buf).await
+    pub(crate) async fn recv_upstream_response(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<UpstreamUdpResponse, EngineError> {
+        self.upstream.recv_upstream_response(buf).await
+    }
+
+    pub(crate) async fn recv_raw_upstream_packet(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<usize, EngineError> {
+        self.upstream.recv_raw_upstream_packet(buf).await
     }
 
     pub(crate) fn upstream_association_view(
