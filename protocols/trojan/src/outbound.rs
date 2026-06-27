@@ -490,6 +490,9 @@ impl TrojanUdpFlowResume {
         TrojanUdpFlowSpec {
             cache_key: self.flow_cache_key(server, port, session_id),
             requires_relay_upstream: self.flow_requires_relay_upstream(),
+            sni: self.sni.clone(),
+            insecure: self.insecure,
+            client_fingerprint: self.client_fingerprint.clone(),
         }
     }
 
@@ -506,6 +509,14 @@ impl TrojanUdpFlowResume {
                 .as_deref()
                 .or(fallback_server_name)
                 .map(ToOwned::to_owned),
+            insecure: self.insecure,
+            client_fingerprint: self.client_fingerprint.clone(),
+        }
+    }
+
+    pub fn tls_profile_spec(&self) -> TrojanUdpTlsProfileSpec {
+        TrojanUdpTlsProfileSpec {
+            sni: self.sni.clone(),
             insecure: self.insecure,
             client_fingerprint: self.client_fingerprint.clone(),
         }
@@ -528,6 +539,9 @@ impl TrojanUdpFlowResume {
 pub struct TrojanUdpFlowSpec {
     cache_key: String,
     requires_relay_upstream: bool,
+    sni: Option<String>,
+    insecure: bool,
+    client_fingerprint: Option<String>,
 }
 
 impl TrojanUdpFlowSpec {
@@ -537,6 +551,18 @@ impl TrojanUdpFlowSpec {
 
     pub fn requires_relay_upstream(&self) -> bool {
         self.requires_relay_upstream
+    }
+
+    pub fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
+        TrojanUdpTlsProfile {
+            server_name: self
+                .sni
+                .as_deref()
+                .or(fallback_server_name)
+                .map(ToOwned::to_owned),
+            insecure: self.insecure,
+            client_fingerprint: self.client_fingerprint.clone(),
+        }
     }
 }
 
@@ -548,6 +574,27 @@ pub struct TrojanUdpFlowRequirement {
 impl TrojanUdpFlowRequirement {
     pub fn requires_relay_upstream(&self) -> bool {
         self.requires_relay_upstream
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanUdpTlsProfileSpec {
+    sni: Option<String>,
+    insecure: bool,
+    client_fingerprint: Option<String>,
+}
+
+impl TrojanUdpTlsProfileSpec {
+    pub fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
+        TrojanUdpTlsProfile {
+            server_name: self
+                .sni
+                .as_deref()
+                .or(fallback_server_name)
+                .map(ToOwned::to_owned),
+            insecure: self.insecure,
+            client_fingerprint: self.client_fingerprint.clone(),
+        }
     }
 }
 

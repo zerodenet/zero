@@ -94,7 +94,7 @@ pub(crate) async fn open_udp_tls_stream(
 
     open_trojan_udp_tls_stream(
         upstream,
-        udp_tls_options(proxy, endpoint, resume.tls_profile(None)),
+        udp_tls_options(proxy, endpoint, resume.tls_profile_spec().tls_profile(None)),
     )
     .await
 }
@@ -108,7 +108,11 @@ pub(crate) async fn open_udp_tls_relay_stream(
 ) -> Result<TcpRelayStream, EngineError> {
     open_trojan_udp_tls_relay_stream(
         stream,
-        udp_tls_options(proxy, endpoint, resume.tls_profile(tls_server_name)),
+        udp_tls_options(
+            proxy,
+            endpoint,
+            resume.tls_profile_spec().tls_profile(tls_server_name),
+        ),
     )
     .await
 }

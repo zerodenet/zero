@@ -711,11 +711,16 @@ pub struct Hysteria2UdpFlowResume {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hysteria2UdpFlowSpec {
     cache_key: String,
+    connector_profile: Hysteria2UdpConnectorProfile,
 }
 
 impl Hysteria2UdpFlowSpec {
     pub fn cache_key(&self) -> String {
         self.cache_key.clone()
+    }
+
+    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
+        self.connector_profile.clone()
     }
 }
 
@@ -755,6 +760,7 @@ impl Hysteria2UdpFlowResume {
     pub fn flow(&self, server: &str, port: u16) -> Hysteria2UdpFlowSpec {
         Hysteria2UdpFlowSpec {
             cache_key: self.flow_cache_key(server, port),
+            connector_profile: self.connector_profile(),
         }
     }
 

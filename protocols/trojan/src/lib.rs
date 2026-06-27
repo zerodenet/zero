@@ -20,7 +20,7 @@ pub use outbound::{
     build_udp_request, establish_udp_packet_tunnel, udp_flow_resume_from_config, TrojanOutbound,
     TrojanTcpTunnelTarget, TrojanUdpFlowConfig, TrojanUdpFlowIo, TrojanUdpFlowRequirement,
     TrojanUdpFlowResume, TrojanUdpFlowSpec, TrojanUdpFlowStore, TrojanUdpPacket,
-    TrojanUdpPacketTunnelTarget, TrojanUdpTlsProfile,
+    TrojanUdpPacketTunnelTarget, TrojanUdpTlsProfile, TrojanUdpTlsProfileSpec,
 };
 #[cfg(feature = "tokio")]
 pub use outbound::{
