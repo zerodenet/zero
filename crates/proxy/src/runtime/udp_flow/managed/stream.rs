@@ -1,7 +1,7 @@
 use super::model::{ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler};
 use super::state::flow_mismatch;
 use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::{
+use crate::runtime::udp_flow::managed::flow::{
     ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowSnapshot,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;

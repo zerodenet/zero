@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+use super::connection::{ManagedDatagramUdpConnection, SharedManagedDatagramUdpConnection};
+use super::flow::{ManagedDatagramFlow, ManagedUdpFlowSnapshot};
 use super::model::{ManagedDatagramFlowHandler, ManagedExistingSend};
-use super::{ManagedDatagramUdpConnection, SharedManagedDatagramUdpConnection};
 use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::{ManagedDatagramFlow, ManagedUdpFlowSnapshot};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;

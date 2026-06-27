@@ -4,8 +4,7 @@ use std::future::Future;
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use super::SharedManagedDatagramUdpConnection;
-use super::SharedManagedUdpConnection;
+use super::connection::{SharedManagedDatagramUdpConnection, SharedManagedUdpConnection};
 use crate::runtime::udp_flow::packet_path::{ChainTask, UdpPacketRef};
 use crate::runtime::Proxy;
 

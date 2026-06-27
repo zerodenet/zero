@@ -1,4 +1,4 @@
-use super::{
+use super::flow::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowKind,
     ManagedUdpFlowRequest, ManagedUdpFlowResume, ManagedUdpFlowSnapshot,
 };
