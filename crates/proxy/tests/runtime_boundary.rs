@@ -2226,57 +2226,51 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
 
 #[test]
 fn vless_udp_state_model_lives_outside_runtime_root() {
-    let root = read("src/adapters/vless/udp/manager.rs");
-    let model = read("src/adapters/vless/udp/manager/model.rs");
-    let establish = read("src/adapters/vless/udp/manager/establish.rs");
-    let send = read("src/adapters/vless/udp/manager/send.rs");
+    let managed = read("src/adapters/vless/udp/managed.rs");
+    let stream_packet_manager = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let old_runtime = manifest_dir().join("src/protocol_runtime/vless_udp.rs");
     let old_runtime_dir = manifest_dir().join("src/protocol_runtime/vless_udp");
-    let bridge = manifest_dir().join("src/adapters/vless/udp/manager/bridge.rs");
 
-    assert!(
-        !old_runtime.exists() && !old_runtime_dir.exists() && !bridge.exists(),
-        "VLESS UDP manager should live under the VLESS adapter without protocol-local bridge modules"
-    );
-
-    for forbidden in [
-        "struct VlessUdpUpstream",
-        "struct VlessUdpTransport",
-        "struct VlessUdpStartFlow",
-        "struct VlessUdpRelayTwoStream",
-        "struct VlessUdpUpstreamRequest",
+    for removed in [
+        "src/adapters/vless/udp/manager.rs",
+        "src/adapters/vless/udp/manager/model.rs",
+        "src/adapters/vless/udp/manager/establish.rs",
+        "src/adapters/vless/udp/manager/send.rs",
+        "src/adapters/vless/udp/manager/bridge.rs",
     ] {
         assert!(
-            !root.contains(forbidden),
-            "vless UDP manager should keep state/request models in manager/model.rs; found `{forbidden}`"
+            !manifest_dir().join(removed).exists(),
+            "VLESS UDP should use managed.rs plus generic stream packet manager instead of `{removed}`"
         );
     }
+    assert!(
+        !old_runtime.exists() && !old_runtime_dir.exists(),
+        "VLESS UDP manager should not live under protocol_runtime"
+    );
 
     for required in [
         "struct VlessUdpStartFlow",
         "struct VlessUdpRelayTwoStream",
         "struct VlessUdpRelayFinalHopStart",
-        "struct VlessUdpUpstreamRequest",
     ] {
         assert!(
-            model.contains(required),
-            "VLESS UDP state/request model should live in adapters/vless/udp/manager/model.rs; missing `{required}`"
+            managed.contains(required),
+            "VLESS UDP request model should live in adapters/vless/udp/managed.rs; missing `{required}`"
         );
     }
     assert!(
-        !model.contains("struct VlessUdpUpstream {")
-            && !establish.contains("VlessUdpUpstream {")
-            && !send.contains("VlessUdpUpstream {")
-            && root.contains("ManagedStreamConnectionCache")
-            && !send.contains("ManagedStreamConnectionCacheKey")
-            && send.contains(".send_existing_target(")
-            && send.contains(".send_or_insert_target(")
-            && send.contains(".insert_and_bridge_target(")
-            && !send.contains("self.upstreams.get(")
-            && !send.contains("self.upstreams.insert(")
-            && !send.contains("self.spawn_bridge(")
-            && !send.contains(".spawn_response_bridge(")
+        !managed.contains("struct VlessUdpUpstream {")
+            && !managed.contains("VlessUdpUpstream {")
+            && managed.contains("ManagedStreamPacketSender")
+            && !managed.contains("ManagedStreamConnectionCacheKey")
+            && stream_packet_manager.contains(".send_existing_target(")
+            && stream_packet_manager.contains(".send_or_insert_target(")
+            && stream_packet_manager.contains(".insert_and_bridge_target(")
+            && !managed.contains("self.upstreams.get(")
+            && !managed.contains("self.upstreams.insert(")
+            && !managed.contains("self.spawn_bridge(")
+            && !managed.contains(".spawn_response_bridge(")
             && managed_cache.contains("struct ManagedStreamConnection")
             && managed_cache.contains("struct ManagedStreamConnectionSend")
             && managed_cache.contains("struct ManagedStreamConnectionCache")
@@ -2287,16 +2281,13 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
             && managed_cache.contains("pub(crate) fn insert_and_bridge")
             && managed_cache.contains("pub(crate) fn insert_and_bridge_target")
             && managed_cache.contains("send_stream_connection"),
-        "VLESS UDP manager should delegate stream cache hit/miss, insertion, and response bridge wiring to the neutral managed stream connection cache"
+        "VLESS UDP managed glue should delegate stream cache hit/miss, insertion, and response bridge wiring to the neutral managed stream connection cache"
     );
 }
 
 #[test]
 fn vless_udp_transport_opening_lives_in_transport_crate() {
-    let root = read("src/adapters/vless/udp/manager.rs");
-    let establish = read("src/adapters/vless/udp/manager/establish.rs");
-    let send = read("src/adapters/vless/udp/manager/send.rs");
-    let model = read("src/adapters/vless/udp/manager/model.rs");
+    let managed = read("src/adapters/vless/udp/managed.rs");
     let adapter = read("src/adapters/vless/udp.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read crates/transport/src/vless_transport.rs");
@@ -2308,18 +2299,15 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
         "pub(crate) struct VlessUdpTransport",
     ] {
         assert!(
-            !root.contains(forbidden)
-                && !establish.contains(forbidden)
-                && !send.contains(forbidden)
-                && !model.contains(forbidden),
+            !managed.contains(forbidden),
             "VLESS UDP runtime/model should not own transport opening detail; found `{forbidden}`"
         );
     }
 
     assert!(
         adapter.contains("crate::transport::VlessUdpTransportOptions")
-            && establish.contains("crate::transport::VlessUdpTransportConnector")
-            && send.contains("crate::transport::build_vless_outbound_transport_over_stream"),
+            && managed.contains("crate::transport::VlessUdpTransportConnector")
+            && managed.contains("crate::transport::build_vless_outbound_transport_over_stream"),
         "VLESS UDP adapter/runtime should request VLESS transport helpers instead of opening QUIC/TCP transports directly"
     );
 
@@ -2341,22 +2329,17 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
 
 #[test]
 fn vless_udp_identity_is_protocol_parsed() {
-    let root = read("src/adapters/vless/udp/manager.rs");
-    let establish = read("src/adapters/vless/udp/manager/establish.rs");
-    let send = read("src/adapters/vless/udp/manager/send.rs");
-    let model = read("src/adapters/vless/udp/manager/model.rs");
+    let managed = read("src/adapters/vless/udp/managed.rs");
     let adapter = read("src/adapters/vless/udp.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
         .expect("read protocols/vless/src/outbound.rs");
 
     assert!(
-        !root.contains("parse_uuid")
-            && !establish.contains("parse_uuid")
-            && !send.contains("parse_uuid"),
+        !managed.contains("parse_uuid"),
         "VLESS UDP runtime should receive protocol-parsed UUIDs"
     );
     assert!(
-        !model.contains("id: &'a str") && model.contains("vless::VlessUdpFlowConfig"),
+        !managed.contains("id: &'a str") && managed.contains("vless::VlessUdpFlowConfig"),
         "VLESS UDP request models should carry protocol-owned flow config instead of raw config IDs"
     );
     for forbidden in [
@@ -2366,7 +2349,7 @@ fn vless_udp_identity_is_protocol_parsed() {
         "pub(super) uuid: [u8; 16]",
     ] {
         assert!(
-            !model.contains(forbidden),
+            !managed.contains(forbidden),
             "VLESS UDP request models should not carry raw config IDs or UUID fields; found `{forbidden}`"
         );
     }
@@ -2411,13 +2394,8 @@ fn vless_udp_adapter_delegates_packet_framing_to_protocol_helpers() {
 
 #[test]
 fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
-    let runtime = [
-        read("src/adapters/vless/udp/manager.rs"),
-        read("src/adapters/vless/udp/manager/establish.rs"),
-        read("src/adapters/vless/udp/manager/send.rs"),
-    ]
-    .join("\n");
-    let model = read("src/adapters/vless/udp/manager/model.rs");
+    let runtime = read("src/adapters/vless/udp/managed.rs");
+    let model = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let proxy_transport = read("src/transport/mod.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read zero-transport vless_transport source");
@@ -3153,16 +3131,16 @@ fn protocol_mux_pools_are_adapter_owned_not_proxy_fields() {
 #[test]
 fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
     for (source, forbidden) in [
-        ("src/adapters/vless/udp/manager.rs", "VlessUdpStartFlow"),
+        ("src/adapters/vless/udp/managed.rs", "VlessUdpStartFlow"),
         (
-            "src/adapters/vless/udp/manager.rs",
+            "src/adapters/vless/udp/managed.rs",
             "VlessUdpRelayTwoStream",
         ),
         (
-            "src/adapters/vless/udp/manager.rs",
+            "src/adapters/vless/udp/managed.rs",
             "VlessUdpRelayFinalHopStart",
         ),
-        ("src/adapters/vless/udp/manager.rs", "VlessUdpTransport"),
+        ("src/adapters/vless/udp/managed.rs", "VlessUdpTransport"),
         ("src/adapters/vmess/udp/manager.rs", "VmessUdpStartFlow"),
         (
             "src/adapters/vmess/udp/manager.rs",
@@ -6784,12 +6762,7 @@ fn packet_path_traits_are_grouped_by_responsibility() {
 
 #[test]
 fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
-    let vless_runtime = [
-        read("src/adapters/vless/udp/manager.rs"),
-        read("src/adapters/vless/udp/manager/establish.rs"),
-        read("src/adapters/vless/udp/manager/send.rs"),
-    ]
-    .join("\n");
+    let vless_runtime = read("src/adapters/vless/udp/managed.rs");
     let vmess_runtime = [
         read("src/adapters/vmess/udp/manager.rs"),
         read("src/adapters/vmess/udp/manager/establish.rs"),

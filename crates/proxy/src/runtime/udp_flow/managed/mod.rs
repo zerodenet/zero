@@ -7,6 +7,7 @@ pub(crate) mod model;
 pub(crate) mod state;
 mod stream;
 mod stream_manager;
+mod stream_packet_manager;
 mod stream_sender;
 
 pub(crate) use cache::{
@@ -25,4 +26,5 @@ pub(crate) use flow::{ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowR
 pub(crate) use model::{ManagedDatagramFlowHandler, ManagedStreamFlowHandler};
 pub(crate) use state::{ManagedUdpHandlers, ManagedUdpState};
 pub(crate) use stream_manager::{ManagedStreamFlowConnector, ManagedStreamFlowManager};
+pub(crate) use stream_packet_manager::ManagedStreamPacketSender;
 pub(crate) use stream_sender::ManagedStreamFlowSender;
