@@ -506,6 +506,12 @@ pub struct VmessEstablishedUdpFlowHandle {
     pub initial_packet_len: usize,
 }
 
+impl VmessEstablishedUdpFlowHandle {
+    pub fn into_connection(self) -> VmessUdpFlowConnection {
+        VmessUdpFlowConnection::new(self.handle)
+    }
+}
+
 #[derive(Clone)]
 pub struct VmessUdpFlowSession {
     sender: VmessUdpFlowSender,

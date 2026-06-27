@@ -6,13 +6,6 @@ use super::model::VlessUdpUpstream;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
-fn upstream_from_stream(session_id: u64, flow: vless::VlessUdpFlowHandle) -> VlessUdpUpstream {
-    VlessUdpUpstream {
-        session_id,
-        connection: vless::VlessUdpFlowConnection::new(flow),
-    }
-}
-
 pub(super) async fn over_stream(
     proxy: &Proxy,
     session: &Session,
@@ -24,7 +17,10 @@ pub(super) async fn over_stream(
         .establish_flow_with_initial_packet(stream, session, initial_payload)
         .await?;
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
-    Ok(upstream_from_stream(session.id, established.handle))
+    Ok(VlessUdpUpstream {
+        session_id: session.id,
+        connection: established.into_connection(),
+    })
 }
 
 pub(super) async fn direct(

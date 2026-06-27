@@ -370,6 +370,13 @@ pub struct VlessEstablishedUdpFlowHandle {
 }
 
 #[cfg(feature = "reality")]
+impl VlessEstablishedUdpFlowHandle {
+    pub fn into_connection(self) -> VlessUdpFlowConnection {
+        VlessUdpFlowConnection::new(self.handle)
+    }
+}
+
+#[cfg(feature = "reality")]
 #[derive(Clone)]
 pub struct VlessUdpFlowSession {
     sender: VlessUdpFlowSender,

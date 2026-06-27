@@ -6,13 +6,6 @@ use super::model::{VmessUdpUpstream, VmessUdpUpstreamRequest};
 use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
 use crate::transport::TcpRelayStream;
 
-fn upstream_from_stream(session_id: u64, flow: vmess::VmessUdpFlowHandle) -> VmessUdpUpstream {
-    VmessUdpUpstream {
-        session_id,
-        connection: vmess::VmessUdpFlowConnection::new(flow),
-    }
-}
-
 pub(super) async fn over_stream(
     proxy: &crate::runtime::Proxy,
     session: &Session,
@@ -24,7 +17,10 @@ pub(super) async fn over_stream(
         .establish_flow_with_initial_packet(stream, session, initial_payload)
         .await?;
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
-    Ok(upstream_from_stream(session.id, established.handle))
+    Ok(VmessUdpUpstream {
+        session_id: session.id,
+        connection: established.into_connection(),
+    })
 }
 
 pub(super) async fn direct(
@@ -56,7 +52,10 @@ pub(super) async fn direct(
         request
             .proxy
             .record_session_outbound_tx(request.session.id, established.initial_packet_len as u64);
-        return Ok(upstream_from_stream(request.session.id, established.handle));
+        return Ok(VmessUdpUpstream {
+            session_id: request.session.id,
+            connection: established.into_connection(),
+        });
     }
 
     let socket = request
