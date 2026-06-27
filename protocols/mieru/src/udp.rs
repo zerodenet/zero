@@ -8,6 +8,10 @@
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
+#[cfg(feature = "crypto")]
+use std::collections::HashMap;
+#[cfg(feature = "crypto")]
+use std::net::SocketAddr;
 
 use zero_core::{Address, Error};
 use zero_traits::DatagramCodec;
@@ -33,6 +37,77 @@ pub struct MieruInboundUdpPacket {
     pub target: Address,
     pub port: u16,
     pub payload: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MieruInboundUdpRequest {
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+}
+
+impl MieruInboundUdpRequest {
+    fn from_packet(packet: MieruInboundUdpPacket) -> Self {
+        Self {
+            target: packet.target,
+            port: packet.port,
+            payload: packet.payload,
+        }
+    }
+
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+}
+
+#[cfg(feature = "crypto")]
+#[derive(Debug, Default)]
+pub struct MieruInboundUdpSession {
+    targets_by_sender: HashMap<SocketAddr, (Address, u16)>,
+}
+
+#[cfg(feature = "crypto")]
+impl MieruInboundUdpSession {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn decode_request(&self, data: &[u8]) -> Result<MieruInboundUdpRequest, Error> {
+        MieruUdpFlowCodec
+            .decode_packet(data)
+            .map(MieruInboundUdpRequest::from_packet)
+    }
+
+    pub fn record_target(&mut self, sender: SocketAddr, request: &MieruInboundUdpRequest) {
+        self.targets_by_sender
+            .insert(sender, (request.target.clone(), request.port));
+    }
+
+    pub async fn write_response_tokio<W>(
+        &self,
+        writer: &mut W,
+        sender: SocketAddr,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        let Some((target, port)) = self.targets_by_sender.get(&sender) else {
+            return Ok(None);
+        };
+        MieruUdpFlowCodec
+            .write_response_tokio(writer, target, *port, payload)
+            .await
+            .map(Some)
+    }
 }
 
 /// Wrap a raw UDP datagram for transmission through mieru TCP/UDP proxy.

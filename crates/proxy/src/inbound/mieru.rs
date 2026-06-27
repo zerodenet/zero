@@ -256,10 +256,7 @@ impl Proxy {
 
         let mut read_buf = [0u8; 65536];
         let mut recv_buf = [0u8; 65536];
-        let mut session_map: std::collections::HashMap<
-            std::net::SocketAddr,
-            (zero_core::Address, u16),
-        > = std::collections::HashMap::new();
+        let mut udp_session = mieru::MieruInboundUdpSession::new();
 
         loop {
             tokio::select! {
@@ -269,12 +266,12 @@ impl Proxy {
                         Ok(0) => break,
                         Ok(n) => {
                             let data = &read_buf[..n];
-                            if let Ok(pkt) = mieru::MieruUdpFlowCodec.decode_packet(data) {
-                                let target_addr = match &pkt.target {
+                            if let Ok(request) = udp_session.decode_request(data) {
+                                let target_addr = match request.target() {
                                         zero_core::Address::Domain(domain) => {
                                             match self.resolver.resolve(domain).await {
                                                 Ok(ips) => ips.first().copied().map(|ip| {
-                                                    addr_from_ip(ip, pkt.port)
+                                                    addr_from_ip(ip, request.port())
                                                 }),
                                                 Err(_) => None,
                                             }
@@ -286,7 +283,7 @@ impl Proxy {
                                                         ip[0], ip[1], ip[2], ip[3],
                                                     ),
                                                 ),
-                                                pkt.port,
+                                                request.port(),
                                             ),
                                         ),
                                         zero_core::Address::Ipv6(ip) => Some(
@@ -294,17 +291,14 @@ impl Proxy {
                                                 std::net::IpAddr::V6(
                                                     std::net::Ipv6Addr::from(*ip),
                                                 ),
-                                                pkt.port,
+                                                request.port(),
                                             ),
                                         ),
                                     };
 
                                 if let Some(addr) = target_addr {
-                                    session_map.insert(
-                                        addr,
-                                        (pkt.target.clone(), pkt.port),
-                                    );
-                                    let _ = udp_socket.send_to(&pkt.payload, addr).await;
+                                    udp_session.record_target(addr, &request);
+                                    let _ = udp_socket.send_to(request.payload(), addr).await;
                                 }
                             }
                         }
@@ -318,16 +312,14 @@ impl Proxy {
                 recv = udp_socket.recv_from(&mut recv_buf) => {
                     match recv {
                         Ok((n, sender)) => {
-                            if let Some((target, port)) = session_map.get(&sender) {
-                                if let Err(e) = mieru::MieruUdpFlowCodec
-                                    .write_response_tokio(&mut client, target, *port, &recv_buf[..n])
-                                    .await
-                                {
-                                    tracing::warn!(
-                                        error = %e, "mieru udp write error"
-                                    );
-                                    break;
-                                }
+                            if let Err(e) = udp_session
+                                .write_response_tokio(&mut client, sender, &recv_buf[..n])
+                                .await
+                            {
+                                tracing::warn!(
+                                    error = %e, "mieru udp write error"
+                                );
+                                break;
                             }
                         }
                         Err(e) => {

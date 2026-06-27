@@ -3353,15 +3353,23 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
     }
 
     assert!(
-        inbound.contains("mieru::MieruUdpFlowCodec")
-            && inbound.contains("write_response_tokio")
+        inbound.contains("mieru::MieruInboundUdpSession::new")
+            && inbound.contains("udp_session.decode_request")
+            && inbound.contains("udp_session.record_target")
+            && inbound.contains(".write_response_tokio(&mut client")
+            && !inbound.contains("mieru::MieruUdpFlowCodec")
+            && !inbound.contains("decode_packet")
             && !inbound.contains(".encode_packet(")
             && !inbound.contains("write_all(&frame)")
+            && protocol_udp.contains("struct MieruInboundUdpSession")
+            && protocol_udp.contains("struct MieruInboundUdpRequest")
+            && protocol_udp.contains("fn decode_request")
+            && protocol_udp.contains("fn record_target")
             && protocol_udp.contains("struct MieruUdpFlowCodec")
             && protocol_udp.contains("fn encode_packet")
             && protocol_udp.contains("fn write_response_tokio")
             && protocol_udp.contains("fn decode_packet"),
-        "Mieru inbound UDP packet framing should go through the protocols/mieru flow codec wrapper"
+        "Mieru inbound UDP packet framing should go through the protocols/mieru inbound UDP session"
     );
 }
 
