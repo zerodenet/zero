@@ -22,35 +22,24 @@ impl H2ChainManager {
         resume: hysteria2::Hysteria2UdpFlowResume,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let sent = packet_ref.payload.len();
         let cache_key = ManagedUdpConnectionCacheKey::new(
             resume.flow_cache_key(endpoint.server, endpoint.port),
         );
 
-        if let Some(entry) = self.upstreams.get(&cache_key) {
-            entry.spawn_response_bridge(ctx.chain_tasks, ctx.session_id);
-            return entry
-                .send(packet_ref.target, packet_ref.port, packet_ref.payload)
-                .await
-                .map_err(|error| FlowFailure {
-                    stage: "h2_send",
-                    error: zero_engine::EngineError::Io(std::io::Error::other(format!("{error}"))),
-                    upstream: Some(endpoint.upstream()),
-                });
-        }
-
-        let session = establish::upstream(endpoint, resume.clone(), packet_ref)
+        self.upstreams
+            .send_or_insert(
+                cache_key,
+                ctx.chain_tasks,
+                ctx.session_id,
+                packet_ref,
+                establish::upstream(endpoint, resume.clone(), packet_ref),
+            )
             .await
             .map_err(|e| FlowFailure {
                 stage: "h2_establish",
                 error: e,
                 upstream: Some(endpoint.upstream()),
-            })?;
-
-        session.spawn_response_bridge(ctx.chain_tasks, ctx.session_id);
-        self.upstreams.insert(cache_key, session);
-
-        Ok(sent)
+            })
     }
 
     async fn send_existing(&mut self, request: H2SendExisting<'_>) -> Result<usize, FlowFailure> {

@@ -27,6 +27,7 @@ pub(crate) struct UdpFlowContext<'a> {
 }
 
 /// Borrowed target payload for one UDP send operation.
+#[derive(Clone, Copy)]
 pub(crate) struct UdpPacketRef<'a> {
     pub(crate) target: &'a Address,
     pub(crate) port: u16,

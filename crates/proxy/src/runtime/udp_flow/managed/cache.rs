@@ -1,9 +1,12 @@
 use std::collections::HashMap;
+use std::future::Future;
 
 use zero_core::Address;
+use zero_engine::EngineError;
 
 use super::SharedManagedDatagramUdpConnection;
 use super::SharedManagedUdpConnection;
+use crate::runtime::udp_flow::packet_path::{ChainTask, UdpPacketRef};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct ManagedUdpConnectionCacheKey(String);
@@ -38,6 +41,31 @@ impl ManagedUdpConnectionCache {
         value: SharedManagedUdpConnection,
     ) -> Option<SharedManagedUdpConnection> {
         self.entries.insert(key, value)
+    }
+
+    pub(crate) async fn send_or_insert<Fut>(
+        &mut self,
+        key: ManagedUdpConnectionCacheKey,
+        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+        session_id: u64,
+        packet: UdpPacketRef<'_>,
+        establish: Fut,
+    ) -> Result<usize, EngineError>
+    where
+        Fut: Future<Output = Result<SharedManagedUdpConnection, EngineError>>,
+    {
+        let sent = packet.payload.len();
+        if let Some(connection) = self.entries.get(&key) {
+            connection.spawn_response_bridge(chain_tasks, session_id);
+            return connection
+                .send(packet.target, packet.port, packet.payload)
+                .await;
+        }
+
+        let connection = establish.await?;
+        connection.spawn_response_bridge(chain_tasks, session_id);
+        self.entries.insert(key, connection);
+        Ok(sent)
     }
 }
 

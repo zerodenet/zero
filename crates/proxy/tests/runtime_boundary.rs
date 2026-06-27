@@ -7899,6 +7899,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .expect("read zero-transport hysteria2_quic source");
     let adapter = read("src/adapters/hysteria2/udp.rs");
     let snapshot = read("src/runtime/udp_flow/managed/mod.rs");
+    let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let forward = read("src/runtime/udp_flow/managed/datagram.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
@@ -7953,7 +7954,9 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !establish.contains("zero_core::UdpFlowPacket::from_parts")
             && !establish.contains("let initial_packet = UdpFlowPacket::from_parts")
             && !establish.contains("hysteria2::Hysteria2InitialUdpFlowPacket::from_parts")
-            && manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
+            && manager_send.contains(".send_or_insert(")
+            && !manager_send.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
+            && managed_cache.contains(".send(packet.target, packet.port, packet.payload)")
             && !establish.contains("mpsc::Sender<UdpFlowPacket>")
             && !establish.contains("mpsc::channel::<UdpFlowPacket>")
             && !establish.contains("flow_io.encode_packet")
@@ -8085,7 +8088,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     }
     assert!(
         manager_send.contains("resume.flow_cache_key(")
-            && manager_send.contains("self.upstreams.get(&cache_key)")
+            && manager_send.contains("self.upstreams")
+            && manager_send.contains(".send_or_insert(")
+            && !manager_send.contains("self.upstreams.get(&cache_key)")
+            && managed_cache.contains("self.entries.get(&key)")
             && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("H2UdpPeer")
@@ -8384,6 +8390,7 @@ fn h2_udp_send_orchestration_lives_outside_manager() {
     let manager = read("src/adapters/hysteria2/udp/manager.rs");
     let send = manifest_dir().join("src/adapters/hysteria2/udp/manager/send.rs");
     let send_source = read("src/adapters/hysteria2/udp/manager/send.rs");
+    let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
 
     for forbidden in [
         "async fn send(",
@@ -8403,10 +8410,15 @@ fn h2_udp_send_orchestration_lives_outside_manager() {
         "Hysteria2 UDP send orchestration should live in h2_manager/send.rs"
     );
     assert!(
-        send_source.contains(".spawn_response_bridge(")
+        send_source.contains(".send_or_insert(")
+            && !send_source.contains(".spawn_response_bridge(")
+            && !send_source.contains("self.upstreams.get(&cache_key)")
+            && !send_source.contains("self.upstreams.insert(cache_key")
+            && managed_cache.contains("pub(crate) async fn send_or_insert")
+            && managed_cache.contains("connection.spawn_response_bridge(chain_tasks, session_id)")
             && !send_source.contains("subscribe_responses()")
             && !send_source.contains("spawn_tuple_response_bridge"),
-        "Hysteria2 UDP send orchestration should use the neutral UDP connection response bridge"
+        "Hysteria2 UDP send orchestration should delegate cache hit/miss and response bridge wiring to the neutral UDP connection cache"
     );
 }
 
