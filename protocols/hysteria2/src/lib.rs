@@ -27,7 +27,7 @@ pub use udp::{
     encode_inbound_udp_datagram, encode_udp_flow_packet, parse_udp_datagram, udp_flow_codec,
     udp_flow_packet, Hysteria2DatagramCodec, Hysteria2InboundUdpCodec, Hysteria2InboundUdpRequest,
     Hysteria2UdpConnectorProfile, Hysteria2UdpFlowIo, Hysteria2UdpFlowPacket,
-    Hysteria2UdpFlowResume, Hysteria2UdpFlowStore, Hysteria2UdpPacket, Hysteria2UdpPacketPath,
+    Hysteria2UdpFlowResume, Hysteria2UdpFlowStore, Hysteria2UdpPacket,
     Hysteria2UdpPacketPathConfig, Hysteria2UdpPacketTarget,
 };
 #[cfg(feature = "tokio")]

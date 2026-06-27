@@ -7995,7 +7995,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && adapter_packet_path.contains(".packet_path_cache_key()")
             && adapter_packet_path.contains(".packet_path_codec()")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
-            && protocol_udp.contains("pub struct Hysteria2UdpPacketPath")
+            && !protocol_udp.contains("pub struct Hysteria2UdpPacketPath {")
             && protocol_udp.contains("struct Hysteria2UdpPacketPathConfig")
             && protocol_udp.contains("pub fn new(")
             && protocol_udp.contains("pub fn flow_resume(&self)")
@@ -8497,7 +8497,7 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && protocol_outbound.contains("pub fn udp_flow_codec(")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self)")
-            && protocol_outbound.contains("pub fn packet_path(&self)")
+            && !protocol_outbound.contains("pub fn packet_path(&self)")
             && protocol_outbound.contains("pub fn packet_path_cache_key(&self)")
             && protocol_outbound.contains("pub fn packet_path_codec(&self)")
             && protocol_outbound.contains("pub fn from_config(")
@@ -8886,8 +8886,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     assert!(
         protocol_outbound.contains("fn udp_cache_key(")
             && !protocol_outbound.contains("pub fn udp_cache_key(")
-            && protocol_outbound.contains("pub fn packet_path(&self)")
-            && protocol_outbound.contains("pub struct ShadowsocksUdpPacketPath")
+            && !protocol_outbound.contains("pub fn packet_path(&self)")
+            && !protocol_outbound.contains("pub struct ShadowsocksUdpPacketPath")
             && protocol_outbound.contains("pub fn packet_path_cache_key(&self)")
             && protocol_outbound.contains("pub fn packet_path_codec(&self)"),
         "protocols/shadowsocks should own Shadowsocks cache identity internally and expose packet-path helpers instead"
@@ -8972,8 +8972,8 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         hysteria2_udp.contains("fn udp_cache_key(")
             && !hysteria2_udp.contains("pub fn udp_cache_key(")
             && hysteria2_udp.contains("hysteria2|")
-            && hysteria2_udp.contains("pub fn packet_path(&self)")
-            && hysteria2_udp.contains("pub struct Hysteria2UdpPacketPath"),
+            && !hysteria2_udp.contains("pub fn packet_path(&self)")
+            && !hysteria2_udp.contains("pub struct Hysteria2UdpPacketPath {"),
         "protocols/hysteria2 should own Hysteria2 cache identity construction internally"
     );
 }

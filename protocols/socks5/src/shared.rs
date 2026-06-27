@@ -305,15 +305,6 @@ impl<'a> Socks5UdpPacketPathConfig<'a> {
         }
     }
 
-    pub fn packet_path(&self) -> Socks5UdpPacketPath<'a> {
-        Socks5UdpPacketPath {
-            tag: self.tag,
-            server: self.server,
-            port: self.port,
-            auth: self.auth(),
-        }
-    }
-
     pub fn flow_resume(&self) -> Socks5UdpFlowResume {
         Socks5UdpFlowResume::new(self.auth())
     }
@@ -338,32 +329,5 @@ impl<'a> Socks5UdpPacketPathConfig<'a> {
 
     pub fn packet_path_association_config(&self) -> Socks5UdpAssociationConfig<'a> {
         self.association_config()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Socks5UdpPacketPath<'a> {
-    tag: &'a str,
-    server: &'a str,
-    port: u16,
-    auth: Option<Socks5OutboundAuth<'a>>,
-}
-
-impl<'a> Socks5UdpPacketPath<'a> {
-    pub fn cache_key(&self) -> String {
-        udp_cache_key(
-            self.tag,
-            self.server,
-            self.port,
-            self.auth.map(|auth| auth.username),
-        )
-    }
-
-    pub fn auth(&self) -> Option<Socks5OutboundAuth<'a>> {
-        self.auth
-    }
-
-    pub fn association_config(&self) -> Socks5UdpAssociationConfig<'a> {
-        Socks5UdpAssociationConfig::new(self.auth)
     }
 }

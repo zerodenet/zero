@@ -25,8 +25,7 @@ pub use outbound::{
     ShadowsocksDatagramCodec, ShadowsocksOutboundSession, ShadowsocksTcpTarget,
     ShadowsocksUdpDecodeContext, ShadowsocksUdpFlowConfig, ShadowsocksUdpFlowEntries,
     ShadowsocksUdpFlowPacket, ShadowsocksUdpFlowResume, ShadowsocksUdpFlowStore,
-    ShadowsocksUdpLeafKey, ShadowsocksUdpPacket, ShadowsocksUdpPacketPath,
-    ShadowsocksUdpPacketTarget,
+    ShadowsocksUdpLeafKey, ShadowsocksUdpPacket, ShadowsocksUdpPacketTarget,
 };
 #[cfg(feature = "crypto")]
 pub use shared::{
