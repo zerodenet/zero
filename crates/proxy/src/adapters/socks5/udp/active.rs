@@ -1,7 +1,7 @@
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use socks5::{Socks5UdpAssociation, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError};
+use socks5::{Socks5UdpAssociation, Socks5UdpRelayError};
 use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
@@ -61,15 +61,11 @@ impl ActiveUpstreamSocks5UdpAssociation {
             port,
             proxy: proxy.clone(),
             close_recorded: AtomicBool::new(false),
-            association: Socks5UdpAssociation::new(
+            association: Socks5UdpAssociation::from_relay_endpoint(
                 control,
-                Socks5UdpRelay::new(
-                    relay,
-                    Socks5UdpRelayEndpoint {
-                        address: zero_platform_tokio::socket_addr_to_ip(relay_addr),
-                        port: relay_addr.port(),
-                    },
-                ),
+                relay,
+                zero_platform_tokio::socket_addr_to_ip(relay_addr),
+                relay_addr.port(),
             ),
         })
     }

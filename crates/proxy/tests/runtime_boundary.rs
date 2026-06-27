@@ -1926,9 +1926,11 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
 
     assert!(
         active.contains("struct ActiveUpstreamSocks5UdpAssociation")
-            && active.contains("Socks5UdpRelay")
             && active.contains("Socks5UdpAssociation<TokioSocket, TokioDatagramSocket>")
-            && active.contains("Socks5UdpAssociation::new")
+            && active.contains("Socks5UdpAssociation::from_relay_endpoint")
+            && !active.contains("Socks5UdpAssociation::new")
+            && !active.contains("Socks5UdpRelay,")
+            && !active.contains("Socks5UdpRelayEndpoint")
             && active.contains("socks5::establish_udp_relay_with_control")
             && !active.contains("_control:")
             && !active.contains("relay:")
