@@ -708,6 +708,17 @@ pub struct Hysteria2UdpFlowResume {
     client_fingerprint: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2UdpFlowSpec {
+    cache_key: String,
+}
+
+impl Hysteria2UdpFlowSpec {
+    pub fn cache_key(&self) -> String {
+        self.cache_key.clone()
+    }
+}
+
 impl Hysteria2UdpFlowResume {
     pub fn new(password: &str, client_fingerprint: Option<&str>) -> Self {
         Self {
@@ -739,6 +750,12 @@ impl Hysteria2UdpFlowResume {
             "leaf|{server}:{port}|password:{}",
             self.peer_config().password
         )
+    }
+
+    pub fn flow(&self, server: &str, port: u16) -> Hysteria2UdpFlowSpec {
+        Hysteria2UdpFlowSpec {
+            cache_key: self.flow_cache_key(server, port),
+        }
     }
 
     pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {

@@ -30,7 +30,7 @@ impl ManagedDatagramFlowConnector<hysteria2::Hysteria2UdpFlowResume>
         resume: &hysteria2::Hysteria2UdpFlowResume,
         endpoint: OutboundEndpoint<'_>,
     ) -> String {
-        resume.flow_cache_key(endpoint.server, endpoint.port)
+        resume.flow(endpoint.server, endpoint.port).cache_key()
     }
 
     async fn establish(

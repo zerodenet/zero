@@ -486,6 +486,24 @@ struct ShadowsocksUdpCacheKey {
 }
 
 #[cfg(feature = "crypto")]
+#[derive(Debug, Clone)]
+pub struct ShadowsocksUdpSocketFlowSpec {
+    cache_key: alloc::string::String,
+    codec: ShadowsocksDatagramCodec,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpSocketFlowSpec {
+    pub fn cache_key(&self) -> alloc::string::String {
+        self.cache_key.clone()
+    }
+
+    pub fn codec(&self) -> ShadowsocksDatagramCodec {
+        self.codec.clone()
+    }
+}
+
+#[cfg(feature = "crypto")]
 pub struct ShadowsocksUdpFlowStore<T> {
     entries: std::collections::HashMap<ShadowsocksUdpCacheKey, T>,
 }
@@ -608,6 +626,16 @@ impl ShadowsocksUdpFlowResume {
 
     pub fn socket_flow_codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         self.codec()
+    }
+
+    pub fn socket_flow(&self) -> ShadowsocksUdpSocketFlowSpec {
+        ShadowsocksUdpSocketFlowSpec {
+            cache_key: self.flow_cache_key(),
+            codec: ShadowsocksDatagramCodec {
+                cipher: self.cipher,
+                password: self.password.clone(),
+            },
+        }
     }
 
     fn encode_flow_packet(
