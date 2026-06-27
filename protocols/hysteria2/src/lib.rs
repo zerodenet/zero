@@ -9,6 +9,8 @@ mod outbound;
 pub mod shared;
 pub mod udp;
 
+#[cfg(feature = "crypto")]
+pub use inbound::Hysteria2InboundProfile;
 pub use inbound::{Hysteria2Inbound, Hysteria2User, Hysteria2UserStore};
 pub use metadata::Hysteria2Protocol;
 pub use outbound::Hysteria2Outbound;

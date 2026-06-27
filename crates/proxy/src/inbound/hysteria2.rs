@@ -7,16 +7,13 @@ use std::io;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use hysteria2::{
-    build_auth_error, build_auth_ok, build_connect_error, build_connect_ok, parse_auth_frame,
-    parse_tcp_connect_header, verify_hmac,
-};
+use hysteria2::{Hysteria2Inbound, Hysteria2InboundProfile};
 use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 use zero_config::InboundConfig;
-use zero_core::{Address, Network, ProtocolType, Session};
+use zero_core::{Address, ProtocolType, Session};
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
@@ -28,7 +25,7 @@ use crate::transport::{copy_one_way, Hysteria2Stream};
 #[derive(Debug)]
 pub(crate) struct Hysteria2InboundRequest {
     pub(crate) inbound: InboundConfig,
-    pub(crate) password: String,
+    pub(crate) profile: Hysteria2InboundProfile,
     pub(crate) up_bps: Option<u64>,
     pub(crate) down_bps: Option<u64>,
 }
@@ -58,20 +55,20 @@ impl InboundProtocol for Hysteria2StreamHandler {
     }
 
     async fn send_ok(&self, client: &mut Hysteria2Stream) -> Result<(), EngineError> {
-        let ok = build_connect_ok();
+        let ok = Hysteria2Inbound.connect_ok_response();
         AsyncSocket::write_all(client, &ok)
             .await
             .map_err(|e| EngineError::Io(io::Error::other(format!("write connect ok: {e}"))))
     }
 
     async fn send_blocked(&self, client: &mut Hysteria2Stream) -> Result<(), EngineError> {
-        let err = build_connect_error("blocked");
+        let err = Hysteria2Inbound.connect_error_response("blocked");
         let _ = AsyncSocket::write_all(client, &err).await;
         Ok(())
     }
 
     async fn send_upstream_failure(&self, client: &mut Hysteria2Stream) -> Result<(), EngineError> {
-        let err = build_connect_error("outbound failed");
+        let err = Hysteria2Inbound.connect_error_response("outbound failed");
         let _ = AsyncSocket::write_all(client, &err).await;
         Ok(())
     }
@@ -130,7 +127,7 @@ pub(crate) async fn run_hysteria2_listener_with_bound(
 ) -> Result<(), EngineError> {
     let Hysteria2InboundRequest {
         inbound,
-        password,
+        profile,
         up_bps: _up_bps,
         down_bps: _down_bps,
     } = request;
@@ -170,13 +167,13 @@ pub(crate) async fn run_hysteria2_listener_with_bound(
                     Ok(conn) => {
                         let engine = proxy.clone();
                         let tag = inbound.tag.clone();
-                        let pw = password.clone();
+                        let profile = profile.clone();
                         let resolver = Arc::clone(&proxy.resolver);
                         let handler = stream_handler.clone();
 
                         connections.spawn(async move {
                             if let Err(error) = engine.handle_hysteria2_connection(
-                                conn, &tag, &pw, &handler, resolver,
+                                conn, &tag, profile, &handler, resolver,
                             ).await {
                                 error!(error = %error, "hysteria2 connection error");
                             }
@@ -218,7 +215,7 @@ impl Proxy {
         &self,
         conn: quinn::Connection,
         inbound_tag: &str,
-        password: &str,
+        profile: Hysteria2InboundProfile,
         stream_handler: &Hysteria2StreamHandler,
         resolver: Arc<zero_dns::DnsSystem>,
     ) -> Result<(), EngineError> {
@@ -255,10 +252,8 @@ impl Proxy {
             )));
         }
 
-        let client_hmac = parse_auth_frame(&auth_buf[..n])?;
-
-        if !verify_hmac(password, &salt, &client_hmac) {
-            let err_resp = build_auth_error("authentication failed");
+        if profile.authenticate_client(&salt, &auth_buf[..n]).is_err() {
+            let err_resp = profile.auth_error_response("authentication failed");
             let _ = AsyncSocket::write_all(&mut auth_stream, &err_resp).await;
             return Err(EngineError::Io(io::Error::new(
                 io::ErrorKind::PermissionDenied,
@@ -266,7 +261,7 @@ impl Proxy {
             )));
         }
 
-        let ok_resp = build_auth_ok();
+        let ok_resp = profile.auth_ok_response();
         AsyncSocket::write_all(&mut auth_stream, &ok_resp)
             .await
             .map_err(|e| EngineError::Io(io::Error::other(format!("write auth ok: {e}"))))?;
@@ -316,14 +311,12 @@ impl Proxy {
                                     Err(_) => return Ok(()),
                                 };
 
-                                let (target, port) = match parse_tcp_connect_header(&header_buf[..n]) {
-                                    Ok(v) => v,
+                                let session = match Hysteria2Inbound
+                                    .accept_tcp_connect_header(&header_buf[..n])
+                                {
+                                    Ok(session) => session,
                                     Err(_) => return Ok(()),
                                 };
-
-                                let session = Session::new(
-                                    0, target, port, Network::Tcp, ProtocolType::Hysteria2,
-                                );
 
                                 let _ = serve_inbound(
                                     &engine, session, stream, &handler, &tag, None,

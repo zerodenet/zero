@@ -1014,6 +1014,26 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && adapter.contains("Hysteria2InboundRequest"),
         "Hysteria2 adapter should extract Hysteria2 config and pass Hysteria2InboundRequest"
     );
+    assert!(
+        inbound.contains("pub(crate) profile: Hysteria2InboundProfile")
+            && !inbound.contains("pub(crate) password: String")
+            && adapter.contains("Hysteria2InboundProfile::from_config"),
+        "Hysteria2 inbound listener should receive a protocol-owned profile instead of raw password"
+    );
+    for forbidden in [
+        "parse_auth_frame",
+        "verify_hmac",
+        "build_auth_error",
+        "build_auth_ok",
+        "build_connect_error",
+        "build_connect_ok",
+        "parse_tcp_connect_header",
+    ] {
+        assert!(
+            !inbound.contains(forbidden),
+            "Hysteria2 inbound should delegate private auth/connect framing to the protocol crate; found `{forbidden}`"
+        );
+    }
     for forbidden in [
         "build_udp_datagram",
         "parse_udp_datagram",
