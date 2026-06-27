@@ -99,29 +99,24 @@ impl Proxy {
                         self.record_session_outbound_rx(session_id, n as u64);
                     }
 
-                    match vless::VlessInboundUdpCodec.encode_response(&target, port, &udp_buffer[..n]) {
-                        Ok(packet) => {
-                            match client.write_all(&packet).await {
-                                Ok(_) => {
-                                    if let Some(session_id) = dispatch.direct_response_session_id(sender) {
-                                        self.record_session_inbound_tx(session_id, packet.len() as u64);
-                                    }
-                                    self.record_session_inbound_traffic(0, client.drain_traffic());
-                                }
-                                Err(error) => {
-                                    warn!(
-                                        error = %error,
-                                        "failed to write vless udp response"
-                                    );
-                                    break;
-                                }
+                    match vless::VlessInboundUdpCodec.write_response_tokio(
+                        &mut client,
+                        &target,
+                        port,
+                        &udp_buffer[..n],
+                    ).await {
+                        Ok(written) => {
+                            if let Some(session_id) = dispatch.direct_response_session_id(sender) {
+                                self.record_session_inbound_tx(session_id, written as u64);
                             }
+                            self.record_session_inbound_traffic(0, client.drain_traffic());
                         }
                         Err(error) => {
                             warn!(
                                 error = %error,
-                                "failed to build vless udp response packet"
+                                "failed to write vless udp response"
                             );
+                            break;
                         }
                     }
                 }
@@ -131,8 +126,12 @@ impl Proxy {
                         Ok(read) => {
                             last_activity = TokioInstant::now();
                             if let Ok(pkt) = socks5::decode_udp_associate_response(&upstream_buffer[..read]) {
-                                if let Ok(packet) = vless::VlessInboundUdpCodec.encode_response(&pkt.target, pkt.port, &pkt.payload) {
-                                    let _ = client.write_all(&packet).await;
+                                if vless::VlessInboundUdpCodec.write_response_tokio(
+                                    &mut client,
+                                    &pkt.target,
+                                    pkt.port,
+                                    &pkt.payload,
+                                ).await.is_ok() {
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());
                                 }
                             }
@@ -154,15 +153,22 @@ impl Proxy {
                             if let Some(sid) = session_id {
                                 proxy.record_session_outbound_rx(sid, payload.len() as u64);
                             }
-                            if let Ok(packet) = vless::VlessInboundUdpCodec.encode_response(&target, port, &payload) {
-                                if let Err(error) = client.write_all(&packet).await {
+                            match vless::VlessInboundUdpCodec.write_response_tokio(
+                                &mut client,
+                                &target,
+                                port,
+                                &payload,
+                            ).await {
+                                Ok(written) => {
+                                    if let Some(sid) = session_id {
+                                        proxy.record_session_inbound_tx(sid, written as u64);
+                                    }
+                                    proxy.record_session_inbound_traffic(0, client.drain_traffic());
+                                }
+                                Err(error) => {
                                     warn!(error = %error, "failed to write chain response");
                                     break;
                                 }
-                                if let Some(sid) = session_id {
-                                    proxy.record_session_inbound_tx(sid, packet.len() as u64);
-                                }
-                                proxy.record_session_inbound_traffic(0, client.drain_traffic());
                             }
                         }
                         Ok(Err(error)) => {

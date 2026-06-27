@@ -311,20 +311,16 @@ impl Proxy {
                             if let Some(sid) = dispatch.direct_response_session_id(sender) {
                                 self.record_session_outbound_rx(sid, n as u64);
                             }
-                            let frame = vless::VlessInboundUdpCodec.encode_mux_response(
+                            match vless::VlessInboundUdpCodec.send_mux_response(
+                                &down_tx,
                                 mux_session_id,
                                 &target,
                                 sender.port(),
                                 &direct_buf[..n],
-                            );
-                            match frame {
-                                Ok(frame) => {
-                                    let frame_len = frame.len() as u64;
-                                    if down_tx.send((mux_session_id, frame)).is_err() {
-                                        break;
-                                    }
+                            ) {
+                                Ok(frame_len) => {
                                     if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                                        self.record_session_inbound_tx(sid, frame_len);
+                                        self.record_session_inbound_tx(sid, frame_len as u64);
                                     }
                                 }
                                 Err(error) => {
@@ -349,19 +345,16 @@ impl Proxy {
                                 if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
                                     self.record_session_outbound_rx(sid, pkt.payload.len() as u64);
                                 }
-                                match vless::VlessInboundUdpCodec.encode_mux_response(
+                                match vless::VlessInboundUdpCodec.send_mux_response(
+                                    &down_tx,
                                     mux_session_id,
                                     &pkt.target,
                                     pkt.port,
                                     &pkt.payload,
                                 ) {
-                                    Ok(frame) => {
-                                        let frame_len = frame.len() as u64;
-                                        if down_tx.send((mux_session_id, frame)).is_err() {
-                                            break;
-                                        }
+                                    Ok(frame_len) => {
                                         if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
-                                            self.record_session_inbound_tx(sid, frame_len);
+                                            self.record_session_inbound_tx(sid, frame_len as u64);
                                         }
                                     }
                                     Err(error) => {
@@ -382,19 +375,16 @@ impl Proxy {
                             if let Some(sid) = session_id {
                                 self.record_session_outbound_rx(sid, payload.len() as u64);
                             }
-                            match vless::VlessInboundUdpCodec.encode_mux_response(
+                            match vless::VlessInboundUdpCodec.send_mux_response(
+                                &down_tx,
                                 mux_session_id,
                                 &target,
                                 port,
                                 &payload,
                             ) {
-                                Ok(frame) => {
-                                    let frame_len = frame.len() as u64;
-                                    if down_tx.send((mux_session_id, frame)).is_err() {
-                                        break;
-                                    }
+                                Ok(frame_len) => {
                                     if let Some(sid) = session_id {
-                                        self.record_session_inbound_tx(sid, frame_len);
+                                        self.record_session_inbound_tx(sid, frame_len as u64);
                                     }
                                 }
                                 Err(error) => {

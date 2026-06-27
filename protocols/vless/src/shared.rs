@@ -2,6 +2,8 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
+#[cfg(feature = "reality")]
+use tokio::sync::mpsc;
 use zero_core::{Address, Error};
 use zero_traits::AsyncSocket;
 
@@ -581,6 +583,25 @@ impl VlessInboundUdpCodec {
         encode_inbound_udp_response(target, port, payload)
     }
 
+    #[cfg(feature = "reality")]
+    pub async fn write_response_tokio<W>(
+        &self,
+        writer: &mut W,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        let packet = self.encode_response(target, port, payload)?;
+        let len = packet.len();
+        tokio::io::AsyncWriteExt::write_all(writer, &packet)
+            .await
+            .map_err(|_| Error::Io("failed to write VLESS UDP response"))?;
+        Ok(len)
+    }
+
     pub fn encode_mux_response(
         &self,
         mux_session_id: u16,
@@ -589,6 +610,23 @@ impl VlessInboundUdpCodec {
         payload: &[u8],
     ) -> Result<Vec<u8>, Error> {
         encode_inbound_mux_udp_response(mux_session_id, target, port, payload)
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn send_mux_response(
+        &self,
+        down_tx: &mpsc::UnboundedSender<(u16, Vec<u8>)>,
+        mux_session_id: u16,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        let frame = self.encode_mux_response(mux_session_id, target, port, payload)?;
+        let len = frame.len();
+        down_tx
+            .send((mux_session_id, frame))
+            .map_err(|_| Error::Io("failed to queue VLESS MUX UDP response"))?;
+        Ok(len)
     }
 }
 

@@ -3061,13 +3061,17 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !helper.contains("encode_vless_mux_udp_response")
             && !helper.contains("vless::VlessInboundUdpCodec")
             && udp_session.contains("vless::VlessInboundUdpCodec.decode_datagram")
-            && udp_session.contains("vless::VlessInboundUdpCodec.encode_response")
+            && udp_session.contains("vless::VlessInboundUdpCodec.write_response_tokio")
+            && !udp_session.contains("VlessInboundUdpCodec.encode_response")
             && mux.contains("vless::VlessInboundUdpCodec.decode_datagram")
-            && mux.contains("vless::VlessInboundUdpCodec.encode_mux_response")
+            && mux.contains("vless::VlessInboundUdpCodec.send_mux_response")
+            && !mux.contains("VlessInboundUdpCodec.encode_mux_response")
             && protocol_shared.contains("struct VlessInboundUdpCodec")
             && protocol_shared.contains("fn decode_datagram")
             && protocol_shared.contains("fn encode_response")
-            && protocol_shared.contains("fn encode_mux_response"),
+            && protocol_shared.contains("fn write_response_tokio")
+            && protocol_shared.contains("fn encode_mux_response")
+            && protocol_shared.contains("fn send_mux_response"),
         "VLESS inbound UDP packet framing should go directly through the protocols/vless inbound codec from inbound glue"
     );
 }
