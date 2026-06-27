@@ -298,6 +298,10 @@ impl VmessInboundUdpRequest {
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+        (self.target, self.port, self.payload)
+    }
 }
 
 /// Stateful inbound UDP codec wrapper for VMess packet/raw payload detection.

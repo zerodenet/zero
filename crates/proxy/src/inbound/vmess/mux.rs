@@ -253,11 +253,12 @@ impl Proxy {
                                 break;
                             }
                         };
+                        let (target, port, payload) = request.into_parts();
                         if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
                             .dispatch(UdpPipeInput {
-                                target: request.target().clone(),
-                                port: request.port(),
-                                payload: request.payload(),
+                                target,
+                                port,
+                                payload: &payload,
                                 protocol: ProtocolType::Vmess,
                                 auth: None,
                                 client_session_id: None,
@@ -421,11 +422,12 @@ impl Proxy {
                                     break;
                                 }
                             };
+                            let (target, port, payload) = request.into_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target: request.target().clone(),
-                                    port: request.port(),
-                                    payload: request.payload(),
+                                    target,
+                                    port,
+                                    payload: &payload,
                                     protocol: ProtocolType::Vmess,
                                     auth: auth.as_ref(),
                                     client_session_id: None,

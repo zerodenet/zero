@@ -206,12 +206,13 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let udp_session = vless::VlessInboundUdpSession::new();
         let request = udp_session.decode_request(packet)?;
+        let (target, port, payload) = request.into_parts();
 
         UdpPipe::new(proxy, dispatch)
             .dispatch(UdpPipeInput {
-                target: request.target().clone(),
-                port: request.port(),
-                payload: request.payload(),
+                target,
+                port,
+                payload: &payload,
                 protocol: zero_core::ProtocolType::Vless,
                 auth: auth.as_ref(),
                 client_session_id: None,
