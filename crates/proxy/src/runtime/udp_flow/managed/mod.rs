@@ -9,12 +9,14 @@ use crate::runtime::Proxy;
 use zero_core::Session;
 use zero_engine::EngineError;
 
+mod cache;
 mod datagram;
 pub(crate) mod model;
 pub(crate) mod state;
 mod stream;
 mod stream_sender;
 
+pub(crate) use cache::{ManagedUdpConnectionCache, ManagedUdpConnectionCacheKey};
 pub(crate) use model::{
     ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
 };

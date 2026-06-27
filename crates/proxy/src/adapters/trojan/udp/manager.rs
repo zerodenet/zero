@@ -7,16 +7,18 @@ pub(super) mod model;
 mod send;
 
 #[cfg(feature = "trojan")]
+use crate::runtime::udp_flow::managed::ManagedUdpConnectionCache;
+
+#[cfg(feature = "trojan")]
 pub(crate) struct TrojanChainManager {
-    upstreams:
-        trojan::TrojanUdpFlowStore<crate::runtime::udp_flow::managed::SharedManagedUdpConnection>,
+    upstreams: ManagedUdpConnectionCache,
 }
 
 #[cfg(feature = "trojan")]
 impl TrojanChainManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: trojan::TrojanUdpFlowStore::new(),
+            upstreams: ManagedUdpConnectionCache::new(),
         }
     }
 }

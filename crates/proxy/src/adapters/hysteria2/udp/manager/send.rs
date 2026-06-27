@@ -3,7 +3,9 @@ use super::{establish, H2ChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
-use crate::runtime::udp_flow::managed::{ManagedDatagramFlowHandler, ManagedExistingSend};
+use crate::runtime::udp_flow::managed::{
+    ManagedDatagramFlowHandler, ManagedExistingSend, ManagedUdpConnectionCacheKey,
+};
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 
 impl H2ChainManager {
@@ -21,8 +23,11 @@ impl H2ChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
+        let cache_key = ManagedUdpConnectionCacheKey::new(
+            resume.flow_cache_key(endpoint.server, endpoint.port),
+        );
 
-        if let Some(entry) = self.upstreams.get(&resume, endpoint.server, endpoint.port) {
+        if let Some(entry) = self.upstreams.get(&cache_key) {
             entry.spawn_response_bridge(ctx.chain_tasks, ctx.session_id);
             return entry
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
@@ -43,8 +48,7 @@ impl H2ChainManager {
             })?;
 
         session.spawn_response_bridge(ctx.chain_tasks, ctx.session_id);
-        self.upstreams
-            .insert(&resume, endpoint.server, endpoint.port, session);
+        self.upstreams.insert(cache_key, session);
 
         Ok(sent)
     }

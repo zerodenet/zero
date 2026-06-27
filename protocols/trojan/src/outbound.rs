@@ -468,6 +468,16 @@ impl TrojanUdpFlowResume {
         TrojanUdpCacheKey::from_flow_key(self.flow_key(server, port), session_id)
     }
 
+    pub fn flow_cache_key(&self, server: &str, port: u16, session_id: u64) -> String {
+        if self.relay_chain {
+            return format!("relay|session:{session_id}");
+        }
+        format!(
+            "leaf|{server}:{port}|password:{}",
+            self.peer_config().password
+        )
+    }
+
     pub fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
         TrojanUdpTlsProfile {
             server_name: self

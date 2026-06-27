@@ -6,7 +6,8 @@ use super::{establish, TrojanChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpFlowResume,
+    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpConnectionCacheKey,
+    ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -31,11 +32,13 @@ impl TrojanChainManager {
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
+        let cache_key = ManagedUdpConnectionCacheKey::new(resume.flow_cache_key(
+            endpoint.server,
+            endpoint.port,
+            session_id,
+        ));
 
-        if let Some(entry) = self
-            .upstreams
-            .get(resume, endpoint.server, endpoint.port, session_id)
-        {
+        if let Some(entry) = self.upstreams.get(&cache_key) {
             entry.spawn_response_bridge(ctx.chain_tasks, session_id);
             let _ = entry
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
@@ -63,13 +66,7 @@ impl TrojanChainManager {
             })?;
 
         entry.spawn_response_bridge(ctx.chain_tasks, session_id);
-        self.upstreams.insert(
-            resume,
-            endpoint.server,
-            endpoint.port,
-            session_id,
-            entry.clone(),
-        );
+        self.upstreams.insert(cache_key, entry.clone());
 
         let _ = entry
             .send(packet_ref.target, packet_ref.port, packet_ref.payload)
@@ -107,6 +104,11 @@ impl TrojanChainManager {
         let ctx = request.ctx;
         let packet_ref = request.packet;
         let session_id = ctx.session_id;
+        let cache_key = ManagedUdpConnectionCacheKey::new(request.resume.flow_cache_key(
+            request.server,
+            request.port,
+            session_id,
+        ));
         let entry = establish::over_relay_stream(
             request.stream,
             request.tls_server_name,
@@ -126,13 +128,7 @@ impl TrojanChainManager {
         })?;
 
         entry.spawn_response_bridge(ctx.chain_tasks, session_id);
-        self.upstreams.insert(
-            request.resume,
-            request.server,
-            request.port,
-            session_id,
-            entry.clone(),
-        );
+        self.upstreams.insert(cache_key, entry.clone());
         let _ = entry
             .send(packet_ref.target, packet_ref.port, packet_ref.payload)
             .await;

@@ -2,16 +2,16 @@ mod establish;
 pub(super) mod model;
 mod send;
 
+use crate::runtime::udp_flow::managed::ManagedUdpConnectionCache;
+
 pub(crate) struct H2ChainManager {
-    upstreams: hysteria2::Hysteria2UdpFlowStore<
-        crate::runtime::udp_flow::managed::SharedManagedUdpConnection,
-    >,
+    upstreams: ManagedUdpConnectionCache,
 }
 
 impl H2ChainManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: hysteria2::Hysteria2UdpFlowStore::new(),
+            upstreams: ManagedUdpConnectionCache::new(),
         }
     }
 }

@@ -5,7 +5,8 @@ use super::{establish, MieruChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpFlowResume,
+    ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler, ManagedUdpConnectionCacheKey,
+    ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
@@ -31,11 +32,13 @@ impl MieruChainManager {
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
+        let cache_key = ManagedUdpConnectionCacheKey::new(resume.flow_cache_key(
+            endpoint.server,
+            endpoint.port,
+            session_id,
+        ));
 
-        if let Some(entry) = self
-            .upstreams
-            .get(resume, endpoint.server, endpoint.port, session_id)
-        {
+        if let Some(entry) = self.upstreams.get(&cache_key) {
             entry.spawn_response_bridge(ctx.chain_tasks, session_id);
             entry
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
@@ -70,13 +73,7 @@ impl MieruChainManager {
             })?;
 
         entry.spawn_response_bridge(ctx.chain_tasks, session_id);
-        self.upstreams.insert(
-            resume,
-            endpoint.server,
-            endpoint.port,
-            session_id,
-            entry.clone(),
-        );
+        self.upstreams.insert(cache_key, entry.clone());
 
         entry
             .send(packet_ref.target, packet_ref.port, packet_ref.payload)
@@ -123,6 +120,11 @@ impl MieruChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
+        let cache_key = ManagedUdpConnectionCacheKey::new(resume.flow_cache_key(
+            endpoint.server,
+            endpoint.port,
+            session_id,
+        ));
         let entry = establish::packet_stream(stream, resume)
             .await
             .map_err(|e| FlowFailure {
@@ -132,13 +134,7 @@ impl MieruChainManager {
             })?;
 
         entry.spawn_response_bridge(ctx.chain_tasks, session_id);
-        self.upstreams.insert(
-            resume,
-            endpoint.server,
-            endpoint.port,
-            session_id,
-            entry.clone(),
-        );
+        self.upstreams.insert(cache_key, entry.clone());
 
         let sent = packet_ref.payload.len();
         entry

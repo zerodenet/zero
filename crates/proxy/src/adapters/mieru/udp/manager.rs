@@ -8,16 +8,18 @@ pub(super) mod model;
 mod send;
 
 #[cfg(feature = "mieru")]
+use crate::runtime::udp_flow::managed::ManagedUdpConnectionCache;
+
+#[cfg(feature = "mieru")]
 pub(crate) struct MieruChainManager {
-    upstreams:
-        mieru::MieruUdpFlowStore<crate::runtime::udp_flow::managed::SharedManagedUdpConnection>,
+    upstreams: ManagedUdpConnectionCache,
 }
 
 #[cfg(feature = "mieru")]
 impl MieruChainManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: mieru::MieruUdpFlowStore::new(),
+            upstreams: ManagedUdpConnectionCache::new(),
         }
     }
 }

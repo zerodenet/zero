@@ -634,6 +634,13 @@ impl Hysteria2UdpFlowResume {
         Hysteria2UdpCacheKey::from_flow_key(self.flow_key(server, port))
     }
 
+    pub fn flow_cache_key(&self, server: &str, port: u16) -> String {
+        alloc::format!(
+            "leaf|{server}:{port}|password:{}",
+            self.peer_config().password
+        )
+    }
+
     pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
         Hysteria2UdpConnectorProfile {
             password: self.password.clone(),

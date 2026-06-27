@@ -259,6 +259,18 @@ impl MieruUdpFlowResume {
         MieruUdpCacheKey::from_flow_key(self.flow_key(server, port), session_id)
     }
 
+    pub fn flow_cache_key(&self, server: &str, port: u16, session_id: u64) -> String {
+        if self.relay_chain {
+            return alloc::format!("relay|session:{session_id}");
+        }
+        let peer = self.peer_config();
+        alloc::format!(
+            "leaf|{server}:{port}|username:{}|password:{}",
+            peer.username,
+            peer.password
+        )
+    }
+
     pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
         udp_flow_codec()
     }
