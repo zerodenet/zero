@@ -3100,6 +3100,13 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         .join("protocols/trojan/src/outbound.rs");
     let protocol_outbound =
         fs::read_to_string(protocol_outbound).expect("read trojan protocol outbound source");
+    let protocol_inbound = manifest_dir()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("workspace root")
+        .join("protocols/trojan/src/inbound.rs");
+    let protocol_inbound =
+        fs::read_to_string(protocol_inbound).expect("read trojan protocol inbound source");
 
     for forbidden in [
         "TrojanUdpPacket {",
@@ -3107,6 +3114,8 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         "TrojanOutbound as UdpPacketStreamFraming",
         "trojan::read_inbound_udp_packet",
         "trojan::write_udp_response",
+        "trojan::read_udp_flow_packet",
+        "trojan::write_udp_flow_packet",
         "socks5::parse_udp_packet",
     ] {
         assert!(
@@ -3119,13 +3128,17 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         "Trojan inbound SOCKS5 upstream response bridge should use semantic SOCKS5 associate helpers"
     );
 
-    for required in ["read_udp_flow_packet", "write_udp_flow_packet"] {
-        assert!(
-            protocol_outbound.contains(required)
-                && inbound.contains(&format!("trojan::{required}")),
-            "Trojan inbound UDP packet framing should be owned by protocols/trojan `{required}`"
-        );
-    }
+    assert!(
+        inbound.contains("TrojanInboundUdpCodec")
+            && inbound.contains(".read_packet(&mut client)")
+            && inbound.contains(".write_response(&mut client")
+            && protocol_inbound.contains("struct TrojanInboundUdpCodec")
+            && protocol_inbound.contains("fn read_packet")
+            && protocol_inbound.contains("fn write_response")
+            && protocol_outbound.contains("read_udp_flow_packet")
+            && protocol_outbound.contains("write_udp_flow_packet"),
+        "Trojan inbound UDP packet framing should be owned by protocols/trojan inbound codec"
+    );
 }
 
 #[test]

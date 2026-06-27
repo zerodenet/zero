@@ -3,6 +3,7 @@
 use zero_core::{Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
+use super::outbound::TrojanUdpPacket;
 use super::shared::{read_password, read_request, CMD_TCP, CMD_UDP};
 
 /// Trojan inbound handler.
@@ -13,6 +14,32 @@ pub struct TrojanInbound;
 pub struct TrojanAccept {
     pub session: Session,
     pub command: u8,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct TrojanInboundUdpCodec;
+
+impl TrojanInboundUdpCodec {
+    pub async fn read_packet<S>(&self, stream: &mut S) -> Result<TrojanUdpPacket, Error>
+    where
+        S: AsyncSocket,
+    {
+        let (target, port, payload) = super::shared::read_udp_packet(stream).await?;
+        Ok(TrojanUdpPacket::new(target, port, payload))
+    }
+
+    pub async fn write_response<S>(
+        &self,
+        stream: &mut S,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        super::shared::write_udp_packet(stream, target, port, payload).await
+    }
 }
 
 impl TrojanInbound {

@@ -8,7 +8,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{error, info, warn};
-use trojan::TrojanInbound;
+use trojan::{TrojanInbound, TrojanInboundUdpCodec};
 use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
@@ -179,6 +179,7 @@ impl Proxy {
         let auth = session.auth.clone();
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
+        let udp_codec = TrojanInboundUdpCodec;
 
         info!(
             inbound_tag = inbound_tag,
@@ -201,7 +202,7 @@ impl Proxy {
                     );
                     break;
                 }
-                packet = trojan::read_udp_flow_packet(&mut client) => {
+                packet = udp_codec.read_packet(&mut client) => {
                     match packet {
                         Ok(packet) => {
                             last_activity = TokioInstant::now();
@@ -237,7 +238,7 @@ impl Proxy {
                     if let Some(sid) = session_id {
                         self.record_session_outbound_rx(sid, n as u64);
                     }
-                    trojan::write_udp_flow_packet(&mut client, &target, sender.port(), &direct_buf[..n]).await?;
+                    udp_codec.write_response(&mut client, &target, sender.port(), &direct_buf[..n]).await?;
                     if let Some(sid) = session_id {
                         self.record_session_inbound_tx(sid, n as u64);
                     }
@@ -255,7 +256,7 @@ impl Proxy {
                                 let target = pkt.target;
                                 let port = pkt.port;
                                 let payload = pkt.payload;
-                                trojan::write_udp_flow_packet(&mut client, &target, port, &payload).await?;
+                                udp_codec.write_response(&mut client, &target, port, &payload).await?;
                                 if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
                                     self.record_session_inbound_tx(sid, payload.len() as u64);
                                 }
@@ -275,7 +276,7 @@ impl Proxy {
                                 self.record_session_outbound_rx(sid, payload.len() as u64);
                             }
                             let payload_len = payload.len() as u64;
-                            trojan::write_udp_flow_packet(&mut client, &target, port, &payload).await?;
+                            udp_codec.write_response(&mut client, &target, port, &payload).await?;
                             if let Some(sid) = session_id {
                                 self.record_session_inbound_tx(sid, payload_len);
                             }
