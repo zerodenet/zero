@@ -14,7 +14,7 @@ use super::model::{
 use super::send::{self, Socks5UdpSend};
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
-use crate::runtime::udp_flow::protocol_state::UpstreamAssociationHandler;
+use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 
 pub(crate) struct Socks5UdpRuntime {
     pub(super) upstream: Option<BoxedSocks5UdpAssociation>,

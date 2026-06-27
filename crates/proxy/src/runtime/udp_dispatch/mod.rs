@@ -9,7 +9,7 @@
 //!
 //! - [`forward`]: re-dispatch packets on existing outbound flows
 //! - [`start`]: establish new outbound flows (single-hop and relay chains)
-//! - [`crate::runtime::udp_flow::protocol_state`]: registered protocol UDP handlers
+//! - [`crate::runtime::udp_flow::registered`]: registered protocol UDP handlers
 //! - [`packet_path_chain`]: generic datagram-over-packet-path manager for
 //!   relay chains (Shadowsocks -> Shadowsocks, SOCKS5 -> Shadowsocks, etc.)
 //!

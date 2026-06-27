@@ -1,11 +1,11 @@
-use super::ProtocolUdpState;
+use super::RegisteredUdpState;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 use tokio::task::JoinSet;
 
-impl ProtocolUdpState {
+impl RegisteredUdpState {
     pub(crate) async fn forward_existing_protocol_flow(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,

@@ -3,7 +3,7 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::adapters::socks5::Socks5Adapter;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::udp_flow::protocol_state::UpstreamAssociationHandler;
+use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 use crate::runtime::Proxy;
 
 mod active;

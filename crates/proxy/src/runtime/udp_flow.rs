@@ -8,6 +8,6 @@ pub(crate) mod managed;
 pub(crate) mod outbound;
 pub(crate) mod packet_path;
 pub(crate) mod packet_path_chain;
-pub(crate) mod protocol_state;
+pub(crate) mod registered;
 pub(crate) mod sessions;
 pub(crate) mod state;

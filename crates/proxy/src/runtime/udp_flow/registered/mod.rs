@@ -17,28 +17,28 @@ pub(crate) use upstream::{UpstreamAssociationHandler, UpstreamUdpHandlers};
 mod forward;
 mod upstream;
 
-pub(crate) struct ProtocolUpstreamAssociationView<'a> {
+pub(crate) struct RegisteredUpstreamAssociationView<'a> {
     pub(crate) outbound_tag: &'a str,
 }
 
-pub(crate) struct ClosedProtocolUpstreamAssociation {
+pub(crate) struct ClosedRegisteredUpstreamAssociation {
     pub(crate) outbound_tag: String,
     pub(crate) server: String,
     pub(crate) port: u16,
 }
 
-pub(crate) struct ProtocolUdpState {
+pub(crate) struct RegisteredUdpState {
     pub(super) managed: ManagedProtocolUdpState,
     upstream: UpstreamAssociationState,
 }
 
-pub(crate) struct ProtocolUdpHandlers {
+pub(crate) struct RegisteredUdpHandlers {
     pub(crate) managed: ManagedUdpHandlers,
     pub(crate) upstream: UpstreamUdpHandlers,
 }
 
-impl ProtocolUdpState {
-    pub(crate) fn new(handlers: ProtocolUdpHandlers) -> Self {
+impl RegisteredUdpState {
+    pub(crate) fn new(handlers: RegisteredUdpHandlers) -> Self {
         Self {
             managed: ManagedProtocolUdpState::new(handlers.managed),
             upstream: UpstreamAssociationState::new(handlers.upstream),
@@ -70,10 +70,12 @@ impl ProtocolUdpState {
         self.upstream.recv_upstream_packet(buf).await
     }
 
-    pub(crate) fn upstream_association_view(&self) -> Option<ProtocolUpstreamAssociationView<'_>> {
+    pub(crate) fn upstream_association_view(
+        &self,
+    ) -> Option<RegisteredUpstreamAssociationView<'_>> {
         self.upstream
             .upstream_outbound_tag()
-            .map(|outbound_tag| ProtocolUpstreamAssociationView { outbound_tag })
+            .map(|outbound_tag| RegisteredUpstreamAssociationView { outbound_tag })
     }
 
     pub(crate) fn upstream_idle_deadline(&self) -> Option<TokioInstant> {
@@ -86,16 +88,16 @@ impl ProtocolUdpState {
 
     pub(crate) fn drop_upstream_association(
         &mut self,
-    ) -> Option<ClosedProtocolUpstreamAssociation> {
+    ) -> Option<ClosedRegisteredUpstreamAssociation> {
         self.upstream
             .drop_upstream_association()
-            .map(closed_protocol_upstream_association)
+            .map(closed_registered_upstream_association)
     }
 
-    pub(crate) fn close_idle_upstream(&mut self) -> Option<ClosedProtocolUpstreamAssociation> {
+    pub(crate) fn close_idle_upstream(&mut self) -> Option<ClosedRegisteredUpstreamAssociation> {
         self.upstream
             .close_idle_upstream()
-            .map(closed_protocol_upstream_association)
+            .map(closed_registered_upstream_association)
     }
 
     pub(crate) fn close_all_upstreams(mut self) {
@@ -121,10 +123,10 @@ impl ProtocolUdpState {
     }
 }
 
-fn closed_protocol_upstream_association(
+fn closed_registered_upstream_association(
     (outbound_tag, server, port): (String, String, u16),
-) -> ClosedProtocolUpstreamAssociation {
-    ClosedProtocolUpstreamAssociation {
+) -> ClosedRegisteredUpstreamAssociation {
+    ClosedRegisteredUpstreamAssociation {
         outbound_tag,
         server,
         port,
