@@ -5520,6 +5520,8 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let managed = read("src/protocol_runtime/udp/state/managed.rs");
     let cached_state = read("src/protocol_runtime/udp/state/cached.rs");
     let cached_model = read("src/protocol_runtime/udp/state/cached/model.rs");
+    let start_vless = read("src/protocol_runtime/udp/start/vless.rs");
+    let start_vmess = read("src/protocol_runtime/udp/start/vmess.rs");
     let cached_start = read("src/protocol_runtime/udp/start/cached.rs");
     let register = read("src/register.rs");
 
@@ -5559,10 +5561,18 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !cached_state.contains(".get_mut(0)")
             && !cached_state.contains(".get_mut(1)")
             && !cached_state.contains("handlers.get_mut")
+            && !cached_model.contains("std::any::Any")
+            && !cached_model.contains("downcast")
+            && !cached_model.contains("as_any")
+            && !state.contains("cached_handler_mut")
+            && !start_vless.contains("VlessUdpOutboundManager")
+            && !start_vless.contains("cached_handler_mut")
+            && !start_vmess.contains("VmessUdpOutboundManager")
+            && !start_vmess.contains("cached_handler_mut")
             && register.contains("cached: vec!")
             && register.contains("vless_cached_handler")
             && register.contains("vmess_cached_handler"),
-        "cached UDP flow handlers should live outside generic managed state and avoid Vec-order protocol identity"
+        "cached UDP flow handlers should live outside generic managed state without Vec-order protocol identity or runtime downcasts"
     );
 }
 
