@@ -5942,10 +5942,10 @@ fn packet_path_traits_are_grouped_by_responsibility() {
         !peer.exists()
             && !runtime_root.join("peer.rs").exists()
             && ss_model.contains("struct SsUdpPeer")
-            && h2_model.contains("struct H2UdpPeer")
+            && !h2_model.contains("struct H2UdpPeer")
             && trojan_model.contains("struct TrojanUdpPeer")
             && mieru_model.contains("struct MieruUdpPeer"),
-        "protocol UDP peer models should stay manager-local, not under runtime packet-path helpers or protocol_runtime::udp root"
+        "protocol UDP peer models should not live under runtime packet-path helpers or protocol_runtime::udp root; Hysteria2 should use neutral OutboundEndpoint directly"
     );
     assert!(
         !packet_path.contains("ProtocolAdapter::"),
@@ -7270,11 +7270,13 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         );
     }
     assert!(
-        manager_send.contains("resume.cache_key(peer.endpoint.server, peer.endpoint.port)")
+        manager_send.contains("resume.cache_key(endpoint.server, endpoint.port)")
+            && !manager_send.contains("peer.endpoint")
+            && !manager_model.contains("H2UdpPeer")
             && stream.contains("resume.connector_profile()")
             && stream.contains("Hysteria2Connector::new")
             && !transport.contains("request.resume.connector_profile()"),
-        "Hysteria2 UDP manager should consume protocol-owned opaque cache keys and keep UDP connector profile use in proxy stream glue"
+        "Hysteria2 UDP manager should consume protocol-owned opaque cache keys through neutral endpoints and keep UDP connector profile use in proxy stream glue"
     );
 }
 
@@ -7483,10 +7485,14 @@ fn h2_udp_state_model_lives_outside_manager() {
 fn h2_udp_model_details_live_outside_manager_root() {
     let manager = read("src/adapters/hysteria2/udp/manager.rs");
     let model = read("src/adapters/hysteria2/udp/manager/model.rs");
+    let send = read("src/adapters/hysteria2/udp/manager/send.rs");
+    let establish = read("src/adapters/hysteria2/udp/manager/establish.rs");
+    let stream = read("src/adapters/hysteria2/udp/manager/stream.rs");
 
     for forbidden in [
         "struct H2Entry",
         "struct H2SendExisting",
+        "struct H2UdpPeer",
         "struct H2Key",
         "enum H2Key",
         "H2Key",
@@ -7505,9 +7511,13 @@ fn h2_udp_model_details_live_outside_manager_root() {
     }
     assert!(
         !model.contains("H2Key")
+            && !model.contains("H2UdpPeer")
+            && send.contains("OutboundEndpoint {")
+            && establish.contains("endpoint: OutboundEndpoint")
+            && stream.contains("endpoint: OutboundEndpoint")
             && read("src/adapters/hysteria2/udp/manager.rs")
                 .contains("HashMap<hysteria2::Hysteria2UdpCacheKey, H2Entry>"),
-        "h2_manager should store protocol-owned opaque cache keys without adapter-local H2Key wrappers"
+        "h2_manager should store protocol-owned opaque cache keys without adapter-local H2Key or H2UdpPeer wrappers"
     );
 }
 

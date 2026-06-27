@@ -1,4 +1,3 @@
-use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -6,10 +5,6 @@ use zero_core::{Address, UdpFlowPacket};
 
 pub(super) struct H2Entry {
     pub(super) send_tx: mpsc::Sender<UdpFlowPacket>,
-}
-
-pub(super) struct H2UdpPeer<'a> {
-    pub(super) endpoint: OutboundEndpoint<'a>,
 }
 
 pub(super) struct H2SendExisting<'a> {

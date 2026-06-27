@@ -1,4 +1,4 @@
-use super::model::{H2Entry, H2SendExisting, H2UdpPeer};
+use super::model::{H2Entry, H2SendExisting};
 use super::{establish, H2ChainManager};
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -17,12 +17,12 @@ impl H2ChainManager {
     async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
-        peer: H2UdpPeer<'_>,
+        endpoint: OutboundEndpoint<'_>,
         resume: hysteria2::Hysteria2UdpFlowResume,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
-        let key = resume.cache_key(peer.endpoint.server, peer.endpoint.port);
+        let key = resume.cache_key(endpoint.server, endpoint.port);
 
         if let Some(entry) = self.upstreams.get(&key) {
             let packet =
@@ -35,14 +35,14 @@ impl H2ChainManager {
                 .map_err(|error| FlowFailure {
                     stage: "h2_send",
                     error: zero_engine::EngineError::Io(std::io::Error::other(format!("{error}"))),
-                    upstream: Some(peer.endpoint.upstream()),
+                    upstream: Some(endpoint.upstream()),
                 });
         }
 
         let sender = establish::upstream(
             ctx.chain_tasks,
             ctx.session_id,
-            &peer,
+            endpoint,
             resume.clone(),
             packet_ref,
         )
@@ -50,7 +50,7 @@ impl H2ChainManager {
         .map_err(|e| FlowFailure {
             stage: "h2_establish",
             error: e,
-            upstream: Some(peer.endpoint.upstream()),
+            upstream: Some(endpoint.upstream()),
         })?;
 
         self.upstreams.insert(
@@ -70,11 +70,9 @@ impl H2ChainManager {
                 chain_tasks: request.chain_tasks,
                 session_id: request.session_id,
             },
-            H2UdpPeer {
-                endpoint: OutboundEndpoint {
-                    server: request.server,
-                    port: request.port,
-                },
+            OutboundEndpoint {
+                server: request.server,
+                port: request.port,
             },
             resume,
             UdpPacketRef {

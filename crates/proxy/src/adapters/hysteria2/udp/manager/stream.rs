@@ -1,6 +1,6 @@
 use super::bridge;
-use super::model::H2UdpPeer;
 use crate::outbound::hysteria2::Hysteria2Connector;
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -13,21 +13,17 @@ pub(super) struct PacketStream {
 }
 
 pub(super) async fn establish(
-    peer: &H2UdpPeer<'_>,
+    endpoint: OutboundEndpoint<'_>,
     initial_packet: UdpPacketRef<'_>,
     resume: hysteria2::Hysteria2UdpFlowResume,
 ) -> Result<PacketStream, EngineError> {
     let connector_profile = resume.connector_profile();
     let flow_io = resume.flow_io();
     let conn = Arc::new(
-        Hysteria2Connector::new(
-            peer.endpoint.server,
-            peer.endpoint.port,
-            connector_profile.password(),
-        )
-        .with_fingerprint(connector_profile.client_fingerprint())
-        .connect_raw()
-        .await?,
+        Hysteria2Connector::new(endpoint.server, endpoint.port, connector_profile.password())
+            .with_fingerprint(connector_profile.client_fingerprint())
+            .connect_raw()
+            .await?,
     );
     let (send_tx, send_rx) = mpsc::channel::<UdpFlowPacket>(32);
     let (recv_tx, _) = tokio::sync::broadcast::channel::<bridge::RecvItem>(32);
