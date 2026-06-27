@@ -2142,6 +2142,13 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         );
     }
     assert!(
+        !runtime.contains("use zero_core::{Address, Session, UdpFlowPacket}")
+            && !runtime.contains("zero_core::UdpFlowPacket::from_parts")
+            && !runtime.contains("let initial_packet = UdpFlowPacket::from_parts")
+            && !model.contains("UdpFlowPacket::from_parts"),
+        "VLESS UDP runtime should not construct core UDP flow packets directly"
+    );
+    assert!(
         !runtime.contains("vless::open_udp_flow")
             && !runtime.contains("vless::open_mux_udp_flow")
             && runtime.contains("vless::establish_udp_flow")
@@ -2150,12 +2157,14 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vless::establish_udp_flow_stream")
             && !runtime.contains("vless::encode_udp_flow_initial_packet")
             && !runtime.contains("vless::VlessUdpFlowIo")
-            && !runtime.contains("encoded_packet_len")
+            && runtime.contains("vless::VlessInitialUdpFlowPacket::from_parts")
+            && runtime.contains(".encoded_len(&flow_io)")
             && !runtime.contains("broadcast::channel::<VlessFlowResponse>")
             && model.contains("vless::VlessUdpFlowSender")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
             && protocol_outbound.contains("tokio::select!")
-            && protocol_outbound.contains("VlessUdpFlowSender"),
+            && protocol_outbound.contains("VlessUdpFlowSender")
+            && protocol_outbound.contains("pub struct VlessInitialUdpFlowPacket"),
         "VLESS UDP runtime should keep protocol flow I/O inside protocols/vless and leave proxy manager as cache/bridge glue"
     );
     for forbidden in [
@@ -2179,6 +2188,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     assert!(
         protocol_outbound.contains("pub struct VlessUdpFlowHandle")
             && protocol_outbound.contains("pub struct VlessUdpFlowSender")
+            && protocol_outbound.contains("pub struct VlessInitialUdpFlowPacket")
             && protocol_outbound.contains("pub type VlessUdpFlowResponse")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && !protocol_outbound.contains("pub fn open_mux_udp_flow")
@@ -2376,6 +2386,13 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
         );
     }
     assert!(
+        !runtime.contains("use zero_core::{Address, Session, UdpFlowPacket}")
+            && !runtime.contains("zero_core::UdpFlowPacket::from_parts")
+            && !runtime.contains("let initial_packet = UdpFlowPacket::from_parts")
+            && !model.contains("UdpFlowPacket::from_parts"),
+        "VMess UDP runtime should not construct core UDP flow packets directly"
+    );
+    assert!(
         !runtime.contains("vmess::open_udp_flow")
             && !runtime.contains("vmess::open_mux_udp_flow")
             && runtime.contains("vmess::establish_udp_flow")
@@ -2384,12 +2401,14 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("vmess::establish_udp_flow_stream")
             && !runtime.contains("vmess::encode_udp_flow_initial_packet")
             && !runtime.contains("vmess::VmessUdpFlowIo")
-            && !runtime.contains("encoded_packet_len")
+            && runtime.contains("vmess::VmessInitialUdpFlowPacket::from_parts")
+            && runtime.contains("initial_packet.encoded_len(&flow_io)")
             && !runtime.contains("broadcast::channel::<VmessFlowResponse>")
             && model.contains("vmess::VmessUdpFlowSender")
             && protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("tokio::select!")
-            && protocol.contains("VmessUdpFlowSender"),
+            && protocol.contains("VmessUdpFlowSender")
+            && protocol.contains("pub struct VmessInitialUdpFlowPacket"),
         "VMess UDP runtime should keep protocol flow I/O inside protocols/vmess and leave proxy manager as cache/bridge glue"
     );
     for forbidden in [
@@ -2413,6 +2432,7 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     assert!(
         protocol.contains("pub struct VmessUdpFlowHandle")
             && protocol.contains("pub struct VmessUdpFlowSender")
+            && protocol.contains("pub struct VmessInitialUdpFlowPacket")
             && protocol.contains("pub type VmessUdpFlowResponse")
             && !protocol.contains("pub async fn open_udp_flow")
             && !protocol.contains("pub fn open_mux_udp_flow")

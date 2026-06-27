@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use tokio::sync::broadcast;
 use tokio::task::JoinSet;
-use zero_core::{Address, Session, UdpFlowPacket};
+use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
@@ -45,15 +45,14 @@ async fn establish_vmess_udp_upstream_over_stream(
     stream: TcpRelayStream,
 ) -> Result<(VmessUdpUpstream, VmessResponseSender), EngineError> {
     let (stream, flow_io) = vmess::establish_udp_flow(stream, session, identity).await?;
-    let initial_packet = UdpFlowPacket::from_parts(&session.target, session.port, initial_payload);
-    let initial_packet_len = flow_io
-        .initial_packet(
-            &initial_packet.target,
-            initial_packet.port,
-            &initial_packet.payload,
-        )
-        .map_err(EngineError::from)?
-        .len();
+    let initial_packet = vmess::VmessInitialUdpFlowPacket::from_parts(
+        &session.target,
+        session.port,
+        initial_payload,
+    );
+    let initial_packet_len = initial_packet
+        .encoded_len(&flow_io)
+        .map_err(EngineError::from)?;
     let flow = vmess::spawn_udp_flow(stream, Some(initial_packet), flow_io);
     proxy.record_session_outbound_tx(session.id, initial_packet_len as u64);
     Ok(upstream_from_stream(session.id, flow))
@@ -63,7 +62,7 @@ async fn establish_vmess_udp_upstream(
     request: &VmessUdpUpstreamRequest<'_>,
 ) -> Result<(VmessUdpUpstream, VmessResponseSender), EngineError> {
     let flow_io = vmess::VmessEstablishedUdpFlow::default();
-    let initial_packet = UdpFlowPacket::from_parts(
+    let initial_packet = vmess::VmessInitialUdpFlowPacket::from_parts(
         &request.session.target,
         request.session.port,
         request.initial_payload,
@@ -86,13 +85,7 @@ async fn establish_vmess_udp_upstream(
                 max_concurrency,
             })
             .await?;
-        let initial_packet_len = flow_io
-            .initial_packet(
-                &initial_packet.target,
-                initial_packet.port,
-                &initial_packet.payload,
-            )?
-            .len();
+        let initial_packet_len = initial_packet.encoded_len(&flow_io)?;
         let flow = vmess::spawn_udp_flow(mux_stream, Some(initial_packet), flow_io);
         request
             .proxy

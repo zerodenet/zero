@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use tokio::sync::broadcast;
 use tokio::task::JoinSet;
-use zero_core::{Address, Session, UdpFlowPacket};
+use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
@@ -48,15 +48,14 @@ async fn establish_vless_udp_upstream_over_stream(
     mut stream: TcpRelayStream,
 ) -> Result<(VlessUdpUpstream, VlessResponseSender), EngineError> {
     let flow_io = vless::establish_udp_flow(&mut stream, session, identity).await?;
-    let initial_packet = UdpFlowPacket::from_parts(&session.target, session.port, initial_payload);
-    let initial_packet_len = flow_io
-        .initial_packet(
-            &initial_packet.target,
-            initial_packet.port,
-            &initial_packet.payload,
-        )
-        .map_err(EngineError::from)?
-        .len();
+    let initial_packet = vless::VlessInitialUdpFlowPacket::from_parts(
+        &session.target,
+        session.port,
+        initial_payload,
+    );
+    let initial_packet_len = initial_packet
+        .encoded_len(&flow_io)
+        .map_err(EngineError::from)?;
     let flow = vless::spawn_udp_flow(stream, Some(initial_packet), flow_io);
     proxy.record_session_outbound_tx(session.id, initial_packet_len as u64);
     Ok(upstream_from_stream(session.id, flow))
@@ -128,17 +127,13 @@ impl VlessUdpOutboundManager {
                 })
                 .await
             {
-                let initial_packet = UdpFlowPacket::from_parts(
+                let initial_packet = vless::VlessInitialUdpFlowPacket::from_parts(
                     &request.session.target,
                     request.session.port,
                     request.payload,
                 );
                 let flow_io = vless::VlessEstablishedUdpFlow::default();
-                let packet = flow_io.initial_packet(
-                    &initial_packet.target,
-                    initial_packet.port,
-                    &initial_packet.payload,
-                )?;
+                let packet = initial_packet.encode(&flow_io)?;
                 let sent = packet.len();
                 let _ = up_tx.send(packet);
                 request

@@ -272,6 +272,33 @@ pub struct VlessUdpFlowSend {
 
 #[cfg(feature = "reality")]
 #[derive(Clone)]
+pub struct VlessInitialUdpFlowPacket {
+    packet: zero_core::UdpFlowPacket,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInitialUdpFlowPacket {
+    pub fn from_parts(target: &zero_core::Address, port: u16, payload: &[u8]) -> Self {
+        Self {
+            packet: zero_core::UdpFlowPacket::from_parts(target, port, payload),
+        }
+    }
+
+    pub fn encoded_len(&self, flow: &VlessEstablishedUdpFlow) -> Result<usize, Error> {
+        flow.encoded_packet_len(&self.packet.target, self.packet.port, &self.packet.payload)
+    }
+
+    pub fn encode(&self, flow: &VlessEstablishedUdpFlow) -> Result<Vec<u8>, Error> {
+        flow.initial_packet(&self.packet.target, self.packet.port, &self.packet.payload)
+    }
+
+    fn write_target(&self) -> (&zero_core::Address, u16, &[u8]) {
+        (&self.packet.target, self.packet.port, &self.packet.payload)
+    }
+}
+
+#[cfg(feature = "reality")]
+#[derive(Clone)]
 pub struct VlessUdpFlowSender {
     send_tx: mpsc::Sender<VlessUdpFlowSend>,
 }
@@ -361,7 +388,7 @@ impl VlessEstablishedUdpFlow {
 #[cfg(feature = "reality")]
 pub fn spawn_udp_flow<S>(
     stream: S,
-    initial_packet: Option<zero_core::UdpFlowPacket>,
+    initial_packet: Option<VlessInitialUdpFlowPacket>,
     flow_io: VlessEstablishedUdpFlow,
 ) -> VlessUdpFlowHandle
 where
@@ -379,7 +406,7 @@ where
 #[cfg(feature = "reality")]
 fn spawn_udp_flow_task<S>(
     mut stream: S,
-    initial_packet: Option<zero_core::UdpFlowPacket>,
+    initial_packet: Option<VlessInitialUdpFlowPacket>,
     mut send_rx: mpsc::Receiver<VlessUdpFlowSend>,
     responses: VlessUdpFlowResponses,
     flow_io: VlessEstablishedUdpFlow,
@@ -388,8 +415,9 @@ fn spawn_udp_flow_task<S>(
 {
     tokio::spawn(async move {
         if let Some(packet) = initial_packet {
+            let (target, port, payload) = packet.write_target();
             if flow_io
-                .write_packet_tokio(&mut stream, &packet.target, packet.port, &packet.payload)
+                .write_packet_tokio(&mut stream, target, port, payload)
                 .await
                 .is_err()
             {

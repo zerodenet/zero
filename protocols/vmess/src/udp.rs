@@ -310,6 +310,31 @@ pub struct VmessUdpFlowSend {
 }
 
 #[derive(Clone)]
+pub struct VmessInitialUdpFlowPacket {
+    packet: zero_core::UdpFlowPacket,
+}
+
+impl VmessInitialUdpFlowPacket {
+    pub fn from_parts(target: &Address, port: u16, payload: &[u8]) -> Self {
+        Self {
+            packet: zero_core::UdpFlowPacket::from_parts(target, port, payload),
+        }
+    }
+
+    pub fn encoded_len(&self, flow: &VmessEstablishedUdpFlow) -> Result<usize, Error> {
+        flow.encoded_packet_len(&self.packet.target, self.packet.port, &self.packet.payload)
+    }
+
+    pub fn encode(&self, flow: &VmessEstablishedUdpFlow) -> Result<Vec<u8>, Error> {
+        flow.initial_packet(&self.packet.target, self.packet.port, &self.packet.payload)
+    }
+
+    fn write_target(&self) -> (&Address, u16, &[u8]) {
+        (&self.packet.target, self.packet.port, &self.packet.payload)
+    }
+}
+
+#[derive(Clone)]
 pub struct VmessUdpFlowSender {
     send_tx: mpsc::Sender<VmessUdpFlowSend>,
 }
@@ -390,7 +415,7 @@ impl VmessEstablishedUdpFlow {
 
 pub fn spawn_udp_flow<S>(
     stream: S,
-    initial_packet: Option<zero_core::UdpFlowPacket>,
+    initial_packet: Option<VmessInitialUdpFlowPacket>,
     flow_io: VmessEstablishedUdpFlow,
 ) -> VmessUdpFlowHandle
 where
@@ -407,7 +432,7 @@ where
 
 fn spawn_udp_flow_task<S>(
     mut stream: S,
-    initial_packet: Option<zero_core::UdpFlowPacket>,
+    initial_packet: Option<VmessInitialUdpFlowPacket>,
     mut send_rx: mpsc::Receiver<VmessUdpFlowSend>,
     responses: VmessUdpFlowResponses,
     flow_io: VmessEstablishedUdpFlow,
@@ -416,8 +441,9 @@ fn spawn_udp_flow_task<S>(
 {
     tokio::spawn(async move {
         if let Some(packet) = initial_packet {
+            let (target, port, payload) = packet.write_target();
             if flow_io
-                .write_packet_tokio(&mut stream, &packet.target, packet.port, &packet.payload)
+                .write_packet_tokio(&mut stream, target, port, payload)
                 .await
                 .is_err()
             {
