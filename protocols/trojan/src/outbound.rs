@@ -122,10 +122,6 @@ impl TrojanUdpPacket {
     }
 }
 
-pub fn udp_flow_packet(target: &Address, port: u16, payload: &[u8]) -> TrojanUdpPacket {
-    TrojanUdpPacket::new(target.clone(), port, payload.to_vec())
-}
-
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrojanUdpFlowIo;
 
@@ -703,7 +699,7 @@ impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {
     }
 }
 
-pub async fn read_inbound_udp_packet<S>(stream: &mut S) -> Result<TrojanUdpPacket, Error>
+async fn read_inbound_udp_packet<S>(stream: &mut S) -> Result<TrojanUdpPacket, Error>
 where
     S: AsyncSocket,
 {
@@ -714,7 +710,7 @@ where
     .await
 }
 
-pub async fn read_udp_flow_packet<S>(stream: &mut S) -> Result<TrojanUdpPacket, Error>
+async fn read_udp_flow_packet<S>(stream: &mut S) -> Result<TrojanUdpPacket, Error>
 where
     S: AsyncSocket,
 {
@@ -737,7 +733,7 @@ where
     .await
 }
 
-pub async fn write_udp_response<S>(
+async fn write_udp_response<S>(
     stream: &mut S,
     target: &Address,
     port: u16,
@@ -755,7 +751,7 @@ where
     .await
 }
 
-pub async fn write_udp_flow_packet<S>(
+async fn write_udp_flow_packet<S>(
     stream: &mut S,
     target: &Address,
     port: u16,

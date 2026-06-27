@@ -3828,6 +3828,8 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         .join("protocols/trojan/src/inbound.rs");
     let protocol_inbound =
         fs::read_to_string(protocol_inbound).expect("read trojan protocol inbound source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/trojan/src/lib.rs"))
+        .expect("read trojan protocol lib source");
 
     for forbidden in [
         "TrojanUdpPacket {",
@@ -3863,8 +3865,26 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_inbound.contains("fn read_packet")
             && protocol_inbound.contains("fn write_response")
             && protocol_outbound.contains("read_udp_flow_packet")
+            && !protocol_outbound.contains("pub async fn read_udp_flow_packet")
             && protocol_outbound.contains("write_udp_flow_packet"),
         "Trojan inbound UDP packet framing should be owned by protocols/trojan inbound codec"
+    );
+    for private_helper in [
+        "read_inbound_udp_packet",
+        "read_udp_flow_packet",
+        "write_udp_response",
+        "write_udp_flow_packet",
+    ] {
+        assert!(
+            protocol_outbound.contains(&format!("async fn {private_helper}"))
+                && !protocol_outbound.contains(&format!("pub async fn {private_helper}"))
+                && !protocol_lib.contains(private_helper),
+            "Trojan UDP helper `{private_helper}` should stay private to protocols/trojan::outbound and should not be re-exported"
+        );
+    }
+    assert!(
+        !protocol_outbound.contains("fn udp_flow_packet") && !protocol_lib.contains("udp_flow_packet"),
+        "Trojan UDP flow packet constructor helper should be removed from the public protocol surface"
     );
 }
 
@@ -7747,8 +7767,6 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "write_udp_packet",
         "read_udp_packet",
         "establish_udp_packet_tunnel",
-        "read_udp_flow_packet",
-        "write_udp_flow_packet",
         "TrojanUdpFlowIo",
         ".establish_with_resume(",
         "trojan::spawn_udp_flow",
@@ -7796,6 +7814,10 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && !managed.contains("mpsc::Sender<UdpFlowPacket>")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
             && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
+            && protocol_outbound.contains("async fn read_udp_flow_packet")
+            && !protocol_outbound.contains("pub async fn read_udp_flow_packet")
+            && protocol_outbound.contains("async fn write_udp_flow_packet")
+            && !protocol_outbound.contains("pub async fn write_udp_flow_packet")
             && protocol_outbound.contains("struct TrojanUdpFlowSender")
             && !protocol_outbound.contains("pub struct TrojanUdpFlowSender")
             && protocol_outbound.contains("pub struct TrojanUdpFlowConnection")
@@ -8097,7 +8119,8 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
     );
 
     assert!(
-        protocol_outbound.contains("pub fn udp_flow_packet")
+        !protocol_outbound.contains("pub fn udp_flow_packet")
+            && !protocol_outbound.contains("fn udp_flow_packet")
             && protocol_outbound.contains("pub async fn read_flow_packet")
             && protocol_outbound.contains("pub async fn write_flow_packet")
             && protocol_outbound.contains("pub fn spawn_udp_flow")

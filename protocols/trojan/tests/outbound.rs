@@ -3,8 +3,8 @@
 use std::io;
 
 use trojan::{
-    read_inbound_udp_packet, write_udp_response, TrojanOutbound, TrojanUdpPacket,
-    TrojanUdpPacketTunnelTarget, CMD_TCP, CMD_UDP, CRLF, PASSWORD_HASH_LEN,
+    TrojanInboundUdpSession, TrojanOutbound, TrojanUdpPacket, TrojanUdpPacketTunnelTarget, CMD_TCP,
+    CMD_UDP, CRLF, PASSWORD_HASH_LEN,
 };
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, UdpPacketStreamFraming, UdpPacketTunnelProtocol};
@@ -166,25 +166,28 @@ async fn udp_stream_framing_roundtrips_packet() {
 #[tokio::test]
 async fn inbound_udp_helpers_roundtrip_response_packet() {
     let mut writer = RecordingSocket::default();
+    let udp_session = TrojanInboundUdpSession::new();
 
-    write_udp_response(
-        &mut writer,
-        &Address::Domain("dns.example".to_owned()),
-        5353,
-        b"answer",
-    )
-    .await
-    .expect("write trojan udp response");
+    udp_session
+        .write_response(
+            &mut writer,
+            &Address::Domain("dns.example".to_owned()),
+            5353,
+            b"answer",
+        )
+        .await
+        .expect("write trojan udp response");
 
     let mut reader = RecordingSocket {
         read_buf: writer.writes[0].clone(),
         ..RecordingSocket::default()
     };
-    let decoded = read_inbound_udp_packet(&mut reader)
+    let decoded = udp_session
+        .read_request(&mut reader)
         .await
         .expect("read trojan udp packet");
 
-    assert_eq!(decoded.target, Address::Domain("dns.example".to_owned()));
-    assert_eq!(decoded.port, 5353);
-    assert_eq!(decoded.payload, b"answer");
+    assert_eq!(decoded.target(), &Address::Domain("dns.example".to_owned()));
+    assert_eq!(decoded.port(), 5353);
+    assert_eq!(decoded.payload(), b"answer");
 }
