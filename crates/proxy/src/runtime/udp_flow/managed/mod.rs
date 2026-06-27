@@ -11,7 +11,6 @@ mod stream_sender;
 
 pub(crate) use cache::{
     ManagedStreamConnection, ManagedStreamConnectionCache, ManagedStreamConnectionSend,
-    ManagedUdpConnectionCache,
 };
 pub(crate) use connection::{
     managed_packet_udp_connection, managed_tuple_udp_connection, ManagedPacketUdpSender,
@@ -23,9 +22,7 @@ pub(crate) use datagram_manager::{
     ManagedDatagramSocketFlowManager,
 };
 pub(crate) use flow::{ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume};
-pub(crate) use model::{
-    ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
-};
+pub(crate) use model::{ManagedDatagramFlowHandler, ManagedStreamFlowHandler};
 pub(crate) use state::{ManagedUdpHandlers, ManagedUdpState};
 pub(crate) use stream_manager::{ManagedStreamFlowConnector, ManagedStreamFlowManager};
 pub(crate) use stream_sender::ManagedStreamFlowSender;

@@ -6210,8 +6210,7 @@ fn protocol_udp_manager_construction_is_adapter_registered() {
         "src/adapters/shadowsocks/udp/managed.rs",
         "src/adapters/shadowsocks/udp.rs",
         "src/adapters/trojan/udp.rs",
-        "src/adapters/trojan/udp/manager.rs",
-        "src/adapters/trojan/udp/manager/",
+        "src/adapters/trojan/udp/managed.rs",
     ];
 
     for path in rust_sources_under("src") {
@@ -6238,49 +6237,17 @@ fn protocol_udp_manager_construction_is_adapter_registered() {
 
 #[test]
 fn protocol_udp_manager_roots_do_not_reexport_request_models() {
-    for (source, forbidden) in [
-        ("src/adapters/trojan/udp/manager.rs", "TrojanSendExisting"),
-        ("src/adapters/trojan/udp/manager.rs", "TrojanRelayExisting"),
-    ] {
-        let content = read(source);
+    let trojan = read("src/adapters/trojan/udp/managed.rs");
+    for forbidden in ["TrojanSendExisting", "TrojanRelayExisting"] {
         assert!(
-            !content.lines().any(
-                |line| line.trim_start().starts_with("pub(crate) use model::")
-                    && line.contains(forbidden)
-            ),
-            "{source} should not re-export manager request model `{forbidden}`"
+            !trojan.contains(forbidden),
+            "Trojan managed UDP glue should use generic request models, not `{forbidden}`"
         );
     }
 }
 
 #[test]
 fn protocol_udp_manager_request_models_are_manager_private() {
-    for source in ["src/adapters/trojan/udp/manager/model.rs"] {
-        let content = read(source);
-        for forbidden in [
-            "pub(crate) struct TrojanSendExisting",
-            "pub(crate) struct TrojanRelayExisting",
-        ] {
-            assert!(
-                !content.contains(forbidden),
-                "{source} should keep protocol UDP request model `{forbidden}` manager-private"
-            );
-        }
-    }
-
-    for source in ["src/adapters/trojan/udp/manager/send.rs"] {
-        let content = read(source);
-        for forbidden in [
-            "pub(crate) async fn send_existing",
-            "pub(crate) async fn send_relay_existing",
-        ] {
-            assert!(
-                !content.contains(forbidden),
-                "{source} should expose managed send entrypoints instead of request-model send method `{forbidden}`"
-            );
-        }
-    }
-
     for removed in [
         "src/adapters/hysteria2/udp/manager.rs",
         "src/adapters/hysteria2/udp/manager/model.rs",
@@ -6295,6 +6262,11 @@ fn protocol_udp_manager_request_models_are_manager_private() {
         "src/adapters/mieru/udp/manager/send.rs",
         "src/adapters/mieru/udp/manager/establish.rs",
         "src/adapters/mieru/udp/manager/connect.rs",
+        "src/adapters/trojan/udp/manager.rs",
+        "src/adapters/trojan/udp/manager/model.rs",
+        "src/adapters/trojan/udp/manager/send.rs",
+        "src/adapters/trojan/udp/manager/establish.rs",
+        "src/adapters/trojan/udp/manager/connect.rs",
     ] {
         assert!(
             !manifest_dir().join(removed).exists(),
@@ -6305,37 +6277,24 @@ fn protocol_udp_manager_request_models_are_manager_private() {
 
 #[test]
 fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
-    let (source, protocol_key, wrapper) = (
-        "src/adapters/trojan/udp/manager/model.rs",
-        "trojan::TrojanUdpCacheKey",
-        "struct TrojanKey",
-    );
-    let content = read(source);
-    assert!(
-        !content.contains(wrapper) && !content.contains(protocol_key),
-        "{source} should not rebuild or wrap protocol cache identity `{protocol_key}`"
-    );
-
     let mieru_managed = read("src/adapters/mieru/udp/managed.rs");
+    let trojan_managed = read("src/adapters/trojan/udp/managed.rs");
     let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
-    let trojan_manager = read("src/adapters/trojan/udp/manager.rs");
-    let trojan_manager_send = read("src/adapters/trojan/udp/manager/send.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     assert!(
         stream_manager.contains("ManagedUdpConnectionCache")
-            && trojan_manager.contains("ManagedUdpConnectionCache")
             && !mieru_managed.contains("mieru::MieruUdpFlowStore")
-            && !trojan_manager.contains("trojan::TrojanUdpFlowStore")
+            && !trojan_managed.contains("trojan::TrojanUdpFlowStore")
             && !mieru_managed.contains("mieru::MieruUdpFlowSessions")
-            && !trojan_manager.contains("trojan::TrojanUdpFlowSessions")
+            && !trojan_managed.contains("trojan::TrojanUdpFlowSessions")
             && mieru_managed.contains("mieru::MieruUdpFlowConnection")
-            && !trojan_manager.contains("trojan::TrojanUdpFlowConnection")
+            && trojan_managed.contains("trojan::TrojanUdpFlowConnection")
             && !mieru_managed.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>")
-            && !trojan_manager.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>")
+            && !trojan_managed.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>")
             && !mieru_managed.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowConnection>")
-            && !trojan_manager.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowConnection>")
+            && !trojan_managed.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowConnection>")
             && !mieru_managed.contains("HashMap<mieru::MieruUdpCacheKey")
-            && !trojan_manager.contains("HashMap<trojan::TrojanUdpCacheKey")
+            && !trojan_managed.contains("HashMap<trojan::TrojanUdpCacheKey")
             && managed_cache.contains("struct ManagedUdpConnectionCache")
             && managed_cache.contains("struct ManagedUdpConnectionCacheKey")
             && !managed_cache.contains("pub(crate) struct ManagedUdpConnectionCacheKey"),
@@ -6343,23 +6302,18 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
     );
     assert!(
         !mieru_managed.contains("MieruUdpCacheKey::relay")
-            && !trojan_manager_send.contains("TrojanUdpCacheKey::relay")
+            && !trojan_managed.contains("TrojanUdpCacheKey::relay")
             && !mieru_managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
-            && !trojan_manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
+            && !trojan_managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && mieru_managed.contains("resume.flow_cache_key(")
-            && trojan_manager_send.contains("resume.flow_cache_key(")
+            && trojan_managed.contains("resume.flow_cache_key(")
             && !mieru_managed.contains("ManagedUdpConnectionCacheKey")
-            && !trojan_manager_send.contains("ManagedUdpConnectionCacheKey")
+            && !trojan_managed.contains("ManagedUdpConnectionCacheKey")
             && stream_manager.contains(".send_or_insert_key(")
-            && trojan_manager_send.contains(".send_or_insert_key(")
             && stream_manager.contains(".insert_and_send_key(")
-            && trojan_manager_send.contains(".insert_and_send_key(")
             && !stream_manager.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
-            && !trojan_manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
             && !stream_manager.contains("self.upstreams.insert(")
-            && !trojan_manager_send.contains("self.upstreams.insert(")
             && !stream_manager.contains("entry.spawn_response_bridge(")
-            && !trojan_manager_send.contains("entry.spawn_response_bridge(")
             && managed_cache.contains("async fn insert_and_send")
             && !managed_cache.contains("pub(crate) async fn insert_and_send(")
             && managed_cache.contains("pub(crate) async fn insert_and_send_key")
@@ -6778,7 +6732,7 @@ fn packet_path_traits_are_grouped_by_responsibility() {
     let peer = manifest_dir().join("src/runtime/udp_flow/registered/peer.rs");
     let ss_managed = read("src/adapters/shadowsocks/udp/managed.rs");
     let h2_managed = read("src/adapters/hysteria2/udp/managed.rs");
-    let trojan_model = read("src/adapters/trojan/udp/manager/model.rs");
+    let trojan_managed = read("src/adapters/trojan/udp/managed.rs");
     let mieru_managed = read("src/adapters/mieru/udp/managed.rs");
 
     for required in [
@@ -6813,7 +6767,7 @@ fn packet_path_traits_are_grouped_by_responsibility() {
             && !runtime_root.join("peer.rs").exists()
             && !ss_managed.contains("struct SsUdpPeer")
             && !h2_managed.contains("struct H2UdpPeer")
-            && !trojan_model.contains("struct TrojanUdpPeer")
+            && !trojan_managed.contains("struct TrojanUdpPeer")
             && !mieru_managed.contains("struct MieruUdpPeer"),
         "protocol UDP peer models should not live under runtime packet-path helpers or protocol_runtime::udp root; stream/datagram managers should use neutral OutboundEndpoint directly"
     );
@@ -7212,7 +7166,7 @@ fn packet_path_snapshot_send_uses_request_model() {
 fn feature_gated_udp_manager_modules_do_not_embed_disabled_stubs() {
     for source in [
         "src/adapters/mieru/udp/managed.rs",
-        "src/adapters/trojan/udp/manager.rs",
+        "src/adapters/trojan/udp/managed.rs",
     ] {
         let content = read(source);
         assert!(
@@ -7224,8 +7178,7 @@ fn feature_gated_udp_manager_modules_do_not_embed_disabled_stubs() {
 
 #[test]
 fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
-    let manager = read("src/adapters/trojan/udp/manager.rs");
-    let establish = read("src/adapters/trojan/udp/manager/establish.rs");
+    let managed = read("src/adapters/trojan/udp/managed.rs");
     let stream = manifest_dir().join("src/adapters/trojan/udp/manager/stream.rs");
     let socket = manifest_dir().join("src/adapters/trojan/udp/manager/socket.rs");
     let transport =
@@ -7237,7 +7190,7 @@ fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
 
     for forbidden in ["struct ReadOnlySocket", "struct WriteOnlySocket"] {
         assert!(
-            !manager.contains(forbidden) && !establish.contains(forbidden) && !stream.exists(),
+            !managed.contains(forbidden) && !stream.exists(),
             "Trojan proxy glue should not own stream socket adapter `{forbidden}`"
         );
     }
@@ -7260,33 +7213,27 @@ fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
 
 #[test]
 fn trojan_udp_response_bridge_lives_outside_manager() {
-    let manager = read("src/adapters/trojan/udp/manager.rs");
-    let send = read("src/adapters/trojan/udp/manager/send.rs");
-    let establish = read("src/adapters/trojan/udp/manager/establish.rs");
+    let trojan_managed = read("src/adapters/trojan/udp/managed.rs");
+    let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let managed = read("src/runtime/udp_flow/managed/connection.rs");
     let bridge = manifest_dir().join("src/adapters/trojan/udp/manager/bridge.rs");
 
-    for forbidden in [
-        "broadcast::channel",
-        "recv_tx.subscribe",
-        "fn spawn_bridge",
-        "trojan upstream closed",
-    ] {
+    for forbidden in ["broadcast::channel", "recv_tx.subscribe", "fn spawn_bridge"] {
         assert!(
-            !manager.contains(forbidden),
-            "trojan_manager.rs should not own response bridge details; found `{forbidden}`"
+            !trojan_managed.contains(forbidden),
+            "Trojan managed.rs should not own response bridge details; found `{forbidden}`"
         );
     }
     assert!(
         !bridge.exists()
-            && send.contains(".insert_and_send_key(")
-            && !send.contains(".spawn_response_bridge(")
-            && !send.contains("self.upstreams.insert(")
-            && !send.contains("spawn_trojan_response_bridge")
-            && !send.contains("spawn_response_bridge(\n")
-            && !establish.contains("impl ManagedUdpConnection for trojan::TrojanUdpFlowConnection")
-            && establish.contains("managed_packet_udp_connection")
-            && !establish.contains("spawn_response_bridge")
+            && stream_manager.contains(".insert_and_send_key(")
+            && !trojan_managed.contains(".spawn_response_bridge(")
+            && !trojan_managed.contains("self.upstreams.insert(")
+            && !trojan_managed.contains("spawn_trojan_response_bridge")
+            && !trojan_managed.contains("spawn_response_bridge(\n")
+            && !trojan_managed.contains("impl ManagedUdpConnection for trojan::TrojanUdpFlowConnection")
+            && trojan_managed.contains("managed_packet_udp_connection")
+            && !trojan_managed.contains("spawn_response_bridge")
             && managed.contains("pub(crate) fn managed_packet_udp_connection")
             && managed.contains("pub(crate) fn spawn_response_bridge<T, F>")
             && managed.contains("FnMut(T) -> (Address, u16, Vec<u8>)"),
@@ -7296,9 +7243,8 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
 
 #[test]
 fn trojan_udp_tls_connect_lives_outside_manager() {
-    let manager = read("src/adapters/trojan/udp/manager.rs");
-    let connect = read("src/adapters/trojan/udp/manager/connect.rs");
     let connect_path = manifest_dir().join("src/adapters/trojan/udp/manager/connect.rs");
+    let managed = read("src/adapters/trojan/udp/managed.rs");
     let outbound = read("src/outbound/trojan.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
@@ -7314,13 +7260,13 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
         ".connect_host(",
     ] {
         assert!(
-            !manager.contains(forbidden) && !connect.contains(forbidden),
-            "Trojan UDP manager should keep TLS config/profile conversion out of manager glue; found `{forbidden}`"
+            !managed.contains(forbidden),
+            "Trojan UDP managed glue should keep TLS config/profile conversion out of adapter glue; found `{forbidden}`"
         );
     }
     assert!(
-        connect_path.exists(),
-        "Trojan UDP TLS connect helpers should live in trojan_manager/connect.rs"
+        !connect_path.exists(),
+        "Trojan UDP TLS connect helpers should collapse into managed.rs thin protocol glue"
     );
     for forbidden in [
         "zero_transport::tls::connect_tls_upstream",
@@ -7329,13 +7275,13 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
         "connect_tls_stream",
     ] {
         assert!(
-            !connect.contains(forbidden),
-            "trojan_manager/connect.rs should delegate only raw TLS stream opening to zero-transport; found `{forbidden}`"
+            !managed.contains(forbidden),
+            "Trojan managed.rs should delegate only raw TLS stream opening through outbound/trojan.rs; found `{forbidden}`"
         );
     }
     assert!(
-        connect.contains("crate::outbound::trojan::open_udp_tls_stream")
-            && connect.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
+        managed.contains("crate::outbound::trojan::open_udp_tls_stream")
+            && managed.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
             && outbound.contains("open_trojan_udp_tls_stream")
             && outbound.contains("open_trojan_udp_tls_relay_stream")
             && outbound.contains("TrojanUdpTlsOptions")
@@ -7363,11 +7309,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     let snapshot = read("src/runtime/udp_flow/managed/flow.rs");
     let forward = read("src/runtime/udp_flow/managed/stream.rs");
     let start = read("src/runtime/udp_flow/managed/stream.rs");
-    let manager_send = read("src/adapters/trojan/udp/manager/send.rs");
-    let manager_connect = read("src/adapters/trojan/udp/manager/connect.rs");
-    let manager_establish = read("src/adapters/trojan/udp/manager/establish.rs");
+    let managed = read("src/adapters/trojan/udp/managed.rs");
+    let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let manager_stream = manifest_dir().join("src/adapters/trojan/udp/manager/stream.rs");
-    let manager_model = read("src/adapters/trojan/udp/manager/model.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
@@ -7424,12 +7368,10 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     }
     for forbidden in ["TrojanUdpFlowKey", "TrojanUdpLeafKey", "fn from_flow_key("] {
         assert!(
-            !manager_send.contains(forbidden)
-                && !manager_connect.contains(forbidden)
-                && !manager_establish.contains(forbidden)
-                && !manager_stream.exists()
-                && !manager_model.contains(forbidden),
-            "Trojan UDP manager should not match or store protocol-private cache-key internals `{forbidden}`"
+            !managed.contains(forbidden)
+                && !stream_manager.contains(forbidden)
+                && !manager_stream.exists(),
+            "Trojan UDP managed glue should not match or store protocol-private cache-key internals `{forbidden}`"
         );
     }
     assert!(
@@ -7479,33 +7421,31 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         "password: String",
     ] {
         assert!(
-            !manager_send.contains(forbidden)
-                && !manager_connect.contains(forbidden)
-                && !manager_establish.contains(forbidden)
-                && !manager_stream.exists()
-                && !manager_model.contains(forbidden),
-            "Trojan UDP manager should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
+            !managed.contains(forbidden)
+                && !stream_manager.contains(forbidden)
+                && !manager_stream.exists(),
+            "Trojan UDP managed glue should use protocol-owned peer config/key instead of unpacking `{forbidden}`"
         );
     }
     assert!(
-        manager_send.contains("resume.flow_cache_key(")
-            && !manager_send.contains("ManagedUdpConnectionCacheKey")
-            && manager_send.contains(".send_or_insert_key(")
-            && manager_send.contains(".insert_and_send_key(")
-            && !manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
-            && !manager_send.contains("self.upstreams.insert(")
-            && !manager_send.contains("entry.spawn_response_bridge(")
-            && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
-            && !manager_send.contains("peer.endpoint")
-            && !manager_model.contains("TrojanUdpPeer")
-            && manager_send.contains("resume.flow_requires_relay_upstream()")
-            && !manager_connect.contains("resume.tls_profile(")
-            && !manager_connect.contains("TrojanUdpTlsOptions")
-            && manager_connect.contains("crate::outbound::trojan::open_udp_tls_stream")
+        managed.contains("resume.flow_cache_key(")
+            && !managed.contains("ManagedUdpConnectionCacheKey")
+            && stream_manager.contains(".send_or_insert_key(")
+            && stream_manager.contains(".insert_and_send_key(")
+            && !stream_manager.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
+            && !stream_manager.contains("self.upstreams.insert(")
+            && !stream_manager.contains("entry.spawn_response_bridge(")
+            && !managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
+            && !managed.contains("peer.endpoint")
+            && !managed.contains("TrojanUdpPeer")
+            && managed.contains("resume.flow_requires_relay_upstream()")
+            && !managed.contains("resume.tls_profile(")
+            && !managed.contains("TrojanUdpTlsOptions")
+            && managed.contains("crate::outbound::trojan::open_udp_tls_stream")
             && !manager_stream.exists()
-            && manager_establish.contains("trojan::establish_udp_flow_with_resume")
-            && !manager_establish.contains("trojan::TrojanUdpFlowIo")
-            && !manager_establish.contains(".establish_with_resume(")
+            && managed.contains("trojan::establish_udp_flow_with_resume")
+            && !managed.contains("trojan::TrojanUdpFlowIo")
+            && !managed.contains(".establish_with_resume(")
             && protocol_outbound.contains("pub async fn establish_with_resume")
             && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
             && !transport.contains("trojan::"),
@@ -7515,10 +7455,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
 
 #[test]
 fn trojan_udp_packet_stream_tasks_live_outside_manager() {
-    let manager = read("src/adapters/trojan/udp/manager.rs");
-    let establish = read("src/adapters/trojan/udp/manager/establish.rs");
+    let managed = read("src/adapters/trojan/udp/managed.rs");
+    let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let stream = manifest_dir().join("src/adapters/trojan/udp/manager/stream.rs");
-    let model = read("src/adapters/trojan/udp/manager/model.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
@@ -7528,8 +7467,8 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
 
     let forbidden = "MeteredStream";
     assert!(
-        !manager.contains(forbidden),
-        "trojan_manager.rs should keep packet stream task details in trojan_manager/stream.rs; found `{forbidden}`"
+        !managed.contains(forbidden) && !stream_manager.contains(forbidden),
+        "Trojan managed UDP glue should not own packet stream task detail `{forbidden}`"
     );
     for forbidden in [
         "UdpPacketStreamFraming",
@@ -7545,42 +7484,38 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "trojan::TrojanUdpPacket",
     ] {
         assert!(
-            !manager.contains(forbidden),
-            "trojan_manager.rs should not own Trojan packet framing details; found `{forbidden}`"
-        );
-        assert!(
-            !establish.contains(forbidden),
-            "trojan_manager/establish.rs should delegate Trojan packet framing to protocols/trojan helpers; found `{forbidden}`"
+            !managed.contains(forbidden) && !stream_manager.contains(forbidden),
+            "Trojan managed UDP glue should delegate Trojan packet framing to protocols/trojan helpers; found `{forbidden}`"
         );
     }
     for forbidden in ["TrojanUdpPacket {", "trojan::TrojanUdpPacket"] {
         assert!(
-            !model.contains(forbidden),
-            "trojan_manager/model.rs should not rebuild Trojan packet framing details; found `{forbidden}`"
+            !managed.contains(forbidden) && !stream_manager.contains(forbidden),
+            "Trojan managed UDP glue should not rebuild Trojan packet framing details; found `{forbidden}`"
         );
     }
     assert!(
         !stream.exists()
-            && !establish.contains("trojan::write_udp_response")
-            && !establish.contains("trojan::read_inbound_udp_packet"),
-        "Trojan UDP manager establish glue should use flow-specific protocol helpers instead of generic UDP helpers"
+            && !managed.contains("trojan::write_udp_response")
+            && !managed.contains("trojan::read_inbound_udp_packet"),
+        "Trojan UDP managed glue should use flow-specific protocol helpers instead of generic UDP helpers"
     );
     assert!(
-        establish.contains("trojan::establish_udp_flow_with_resume")
-            && establish.contains("trojan::TrojanUdpFlowConnection")
-            && !establish.contains("trojan::TrojanUdpFlowSession")
-            && !establish.contains("tokio::io::split")
-            && !establish.contains("tokio::spawn")
-            && !establish.contains(".write_flow_packet(")
-            && !establish.contains(".write_packet(")
-            && !establish.contains("&mut send_stream")
-            && !establish.contains(".read_flow_packet(")
-            && !establish.contains("&mut recv_stream")
-            && !establish.contains("trojan::TrojanUdpFlowSession::new")
-            && !establish.contains("trojan::TrojanUdpFlowSender")
-            && !establish.contains("trojan::TrojanUdpFlowResponses")
-            && !establish.contains("broadcast::Sender<UdpFlowPacket>")
-            && !establish.contains("mpsc::Sender<UdpFlowPacket>")
+        managed.contains("trojan::establish_udp_flow_with_resume")
+            && managed.contains("trojan::TrojanUdpFlowConnection")
+            && !managed.contains("trojan::TrojanUdpFlowSession")
+            && !managed.contains("tokio::io::split")
+            && !managed.contains("tokio::spawn")
+            && !managed.contains(".write_flow_packet(")
+            && !managed.contains(".write_packet(")
+            && !managed.contains("&mut send_stream")
+            && !managed.contains(".read_flow_packet(")
+            && !managed.contains("&mut recv_stream")
+            && !managed.contains("trojan::TrojanUdpFlowSession::new")
+            && !managed.contains("trojan::TrojanUdpFlowSender")
+            && !managed.contains("trojan::TrojanUdpFlowResponses")
+            && !managed.contains("broadcast::Sender<UdpFlowPacket>")
+            && !managed.contains("mpsc::Sender<UdpFlowPacket>")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
             && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
             && protocol_outbound.contains("struct TrojanUdpFlowSender")
@@ -7593,13 +7528,13 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_outbound.contains("tokio::spawn")
             && protocol_outbound.contains("mpsc::channel::<UdpFlowPacket>")
             && protocol_outbound.contains("broadcast::channel::<UdpFlowPacket>")
-            && !establish.contains(".write_stream_packet")
-            && !establish.contains(".read_stream_packet")
-            && !establish.contains(".read_packet(")
-            && !establish.contains("trojan::udp_flow_packet")
+            && !managed.contains(".write_stream_packet")
+            && !managed.contains(".read_stream_packet")
+            && !managed.contains(".read_packet(")
+            && !managed.contains("trojan::udp_flow_packet")
             && !transport.contains("trojan::")
-            && !establish.contains("packet.write_to")
-            && !model.contains("struct TrojanPacket"),
+            && !managed.contains("packet.write_to")
+            && !managed.contains("struct TrojanPacket"),
         "Trojan UDP packet stream tasks should live in protocols/trojan while proxy keeps handshake/cache bridge glue"
     );
 }
@@ -7781,166 +7716,92 @@ fn mieru_udp_response_bridge_uses_generic_managed_tuple_connection() {
 }
 
 #[test]
-fn trojan_udp_state_model_lives_outside_manager() {
-    let manager = read("src/adapters/trojan/udp/manager.rs");
-    let model = read("src/adapters/trojan/udp/manager/model.rs");
-
-    for forbidden in [
-        "enum TrojanKey",
-        "struct TrojanEntry",
-        "struct TrojanSendExisting",
-        "struct TrojanRelaySend",
-        "struct TrojanRelayExisting",
-    ] {
-        assert!(
-            !manager.contains(forbidden),
-            "trojan_manager.rs should keep state/request models in trojan_manager/model.rs; found `{forbidden}`"
-        );
-    }
-    assert!(
-        !model.contains("struct TrojanPacket")
-            && !model.contains("trojan::TrojanUdpPacket")
-            && !model.contains("struct TrojanEntry")
-            && !model.contains("trojan::TrojanUdpFlowSender")
-            && !model.contains("trojan::TrojanUdpFlowResponses")
-            && !model.contains("mpsc::Sender<UdpFlowPacket>")
-            && !model.contains("broadcast::Sender<UdpFlowPacket>"),
-        "Trojan UDP state/request models should avoid packet models and raw protocol flow handles in proxy"
-    );
-}
-
-#[test]
-fn trojan_udp_establish_logic_lives_outside_manager() {
-    let manager = read("src/adapters/trojan/udp/manager.rs");
-    let establish = read("src/adapters/trojan/udp/manager/establish.rs");
-    let stream = manifest_dir().join("src/adapters/trojan/udp/manager/stream.rs");
+fn trojan_udp_managed_connector_is_thin_protocol_glue() {
+    let managed = read("src/adapters/trojan/udp/managed.rs");
+    let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
+    let connection = read("src/runtime/udp_flow/managed/connection.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
-
-    for forbidden in [
-        "fn establish_direct",
-        "fn establish_over_relay_stream",
-        "fn establish_packet_stream",
-        "connect::direct_tls_stream",
-        "connect::relay_tls_stream",
-        "spawn_packet_stream",
-    ] {
-        assert!(
-            !manager.contains(forbidden),
-            "trojan_manager.rs should keep UDP establish glue in trojan_manager/establish.rs; found `{forbidden}`"
-        );
-    }
-    for forbidden in [
-        "TrojanUdpPacket {\n        target:",
-        "TrojanUdpPacketTunnelTarget",
-        "UdpPacketTunnelProtocol",
-    ] {
-        assert!(
-            !manager.contains(forbidden),
-            "trojan_manager.rs should not use protocol packet structs; found `{forbidden}`"
-        );
-        assert!(
-            !establish.contains(forbidden),
-            "trojan_manager/establish.rs should use protocol-owned packet helpers without rebuilding protocol packet internals; found `{forbidden}`"
-        );
-        assert!(
-            !stream.exists(),
-            "trojan_manager/stream.rs should not exist; packet tunnel establishment should delegate through establish.rs"
-        );
-    }
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
             .expect("read trojan protocol outbound source");
+
+    for removed in [
+        "src/adapters/trojan/udp/manager.rs",
+        "src/adapters/trojan/udp/manager/connect.rs",
+        "src/adapters/trojan/udp/manager/establish.rs",
+        "src/adapters/trojan/udp/manager/model.rs",
+        "src/adapters/trojan/udp/manager/send.rs",
+        "src/adapters/trojan/udp/manager/stream.rs",
+        "src/adapters/trojan/udp/manager/socket.rs",
+        "src/adapters/trojan/udp/manager/bridge.rs",
+    ] {
+        assert!(
+            !manifest_dir().join(removed).exists(),
+            "Trojan UDP should use managed.rs plus generic stream manager instead of `{removed}`"
+        );
+    }
+
+    for forbidden in [
+        "TrojanSendExisting",
+        "TrojanRelaySend",
+        "TrojanRelayExisting",
+        "UdpFlowContext",
+        "UdpPacketRef",
+        "ManagedUdpConnectionCacheKey",
+        "if let Some(entry) = self.upstreams.get(&cache_key)",
+        "self.upstreams.insert(",
+        "entry.spawn_response_bridge(",
+        "TrojanUdpPacket {",
+        "trojan::TrojanUdpPacket",
+        "TrojanUdpFlowIo",
+        "trojan::spawn_udp_flow",
+        "TrojanUdpFlowSession::new",
+        "mpsc::Sender<UdpFlowPacket>",
+        "broadcast::Sender<UdpFlowPacket>",
+        "trojan::udp_flow_packet",
+        "resume.cache_key(endpoint.server, endpoint.port, session_id)",
+        "resume.tls_profile(",
+        "TrojanUdpTlsOptions",
+    ] {
+        assert!(
+            !managed.contains(forbidden),
+            "Trojan managed.rs should not own protocol-private/cache/runtime orchestration detail `{forbidden}`"
+        );
+    }
+
+    assert!(
+        managed.contains("ManagedStreamFlowManager::new")
+            && managed.contains("impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume>")
+            && managed.contains("resume.flow_cache_key(")
+            && managed.contains("resume.flow_requires_relay_upstream()")
+            && managed.contains("crate::outbound::trojan::open_udp_tls_stream")
+            && managed.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
+            && managed.contains("trojan::establish_udp_flow_with_resume")
+            && managed.contains("managed_packet_udp_connection")
+            && managed.contains("impl ManagedPacketUdpSender for TrojanManagedUdpSender")
+            && stream_manager.contains("ManagedUdpConnectionCache")
+            && stream_manager.contains(".send_or_insert_key(")
+            && stream_manager.contains(".insert_and_send_key(")
+            && connection.contains("pub(crate) fn managed_packet_udp_connection")
+            && connection.contains("pub(crate) fn spawn_response_bridge<T, F>"),
+        "Trojan managed.rs should adapt TLS stream and protocol flow establishment while generic stream_manager owns cache/send orchestration"
+    );
+
     assert!(
         protocol_outbound.contains("pub fn udp_flow_packet")
             && protocol_outbound.contains("pub async fn read_flow_packet")
             && protocol_outbound.contains("pub async fn write_flow_packet")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
             && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
-            && protocol_outbound.contains("pub struct TrojanUdpFlowHandle")
-            && protocol_outbound.contains("struct TrojanUdpFlowSender")
-            && !protocol_outbound.contains("pub struct TrojanUdpFlowSender")
             && protocol_outbound.contains("pub struct TrojanUdpFlowConnection")
-            && protocol_outbound.contains("pub struct TrojanUdpFlowSession")
             && protocol_outbound.contains("pub type TrojanUdpFlowResponseReceiver")
-            && !protocol_outbound.contains("pub type TrojanUdpFlowResponses")
             && !protocol_outbound.contains("pub async fn open_udp_flow")
-            && !establish.contains("trojan::udp_flow_packet")
-            && !establish.contains("trojan::TrojanUdpPacket::new")
-            && !stream.exists()
-            && establish.contains("trojan::establish_udp_flow_with_resume")
-            && !establish.contains("trojan::TrojanUdpFlowSession::new")
-            && !establish.contains("trojan::TrojanUdpFlowSender")
-            && !establish.contains("trojan::TrojanUdpFlowResponses")
-            && !establish.contains("mpsc::Sender<UdpFlowPacket>")
-            && !establish.contains("broadcast::Sender<UdpFlowPacket>")
-            && !establish.contains("trojan::spawn_udp_flow")
-            && !establish.contains("trojan::udp_flow_packet")
-            && !establish.contains("trojan::TrojanUdpPacket")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
-            && !transport.contains("trojan::udp_flow_packet"),
-        "Trojan UDP stream glue should carry protocol-owned flow handles while protocols/trojan owns packet conversion and flow channels"
-    );
-    assert!(
-        establish.contains("trojan::establish_udp_flow_with_resume")
-            && establish.contains("trojan::TrojanUdpFlowConnection")
-            && !establish.contains("trojan::TrojanUdpFlowSession")
-            && !establish.contains("trojan::TrojanUdpFlowIo")
-            && !establish.contains(".establish_with_resume(")
-            && !establish.contains("trojan::spawn_udp_flow")
-            && !establish.contains(".write_flow_packet(")
-            && !establish.contains(".write_packet(")
-            && !establish.contains("&mut send_stream")
-            && !establish.contains(".read_flow_packet(")
-            && !establish.contains("&mut recv_stream")
-            && !establish.contains(".write_stream_packet")
-            && !establish.contains(".read_stream_packet")
-            && !establish.contains(".read_packet(")
-            && !transport.contains("trojan::TrojanUdpFlowIo")
-            && !establish.contains("trojan::establish_udp_packet_tunnel"),
-        "Trojan UDP packet stream should delegate protocol flow pumping to protocols/trojan"
-    );
-}
-
-#[test]
-fn trojan_udp_send_orchestration_lives_outside_manager() {
-    let manager = read("src/adapters/trojan/udp/manager.rs");
-    let send = manifest_dir().join("src/adapters/trojan/udp/manager/send.rs");
-    let send_source = read("src/adapters/trojan/udp/manager/send.rs");
-    let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
-
-    for forbidden in [
-        "async fn send(",
-        "fn send_relay",
-        "send_existing(",
-        "send_relay_existing(",
-        "trojan_relay_upstream",
-        "trojan_establish",
-        "trojan_relay_establish",
-        "UdpFlowContext",
-        "UdpPacketRef",
-    ] {
-        assert!(
-            !manager.contains(forbidden),
-            "trojan_manager.rs should keep send orchestration in trojan_manager/send.rs; found `{forbidden}`"
-        );
-    }
-    assert!(
-        send.exists(),
-        "Trojan UDP send orchestration should live in trojan_manager/send.rs"
-    );
-    assert!(
-        !send_source.contains(".sender")
-            && !send_source.contains(".responses")
-            && send_source.contains(".send_or_insert_key(")
-            && managed_cache.contains("connection.spawn_response_bridge(chain_tasks, session_id)")
-            && !send_source.contains("subscribe_responses()")
-            && managed_cache.contains(".send(packet.target, packet.port, packet.payload)")
-            && !send_source.contains("UdpFlowPacket::from_parts")
-            && !send_source.contains(".send_tx")
-            && !send_source.contains(".recv_tx"),
-        "Trojan UDP send orchestration should use protocol-owned flow sessions instead of rebuilding raw UDP flow packets"
+            && !transport.contains("trojan::udp_flow_packet")
+            && !transport.contains("trojan::TrojanUdpFlowIo"),
+        "Trojan UDP packet conversion and flow channels should stay protocol-owned and out of zero-transport"
     );
 }
 

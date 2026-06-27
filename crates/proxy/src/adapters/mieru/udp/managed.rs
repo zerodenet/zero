@@ -7,6 +7,7 @@ use crate::runtime::udp_flow::managed::{
 };
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
+use zero_core::Session;
 use zero_engine::EngineError;
 
 struct MieruManagedStreamConnector;
@@ -41,6 +42,7 @@ impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume> for MieruManagedStrea
     async fn establish_direct(
         &self,
         proxy: &Proxy,
+        _session: &Session,
         endpoint: OutboundEndpoint<'_>,
         resume: mieru::MieruUdpFlowResume,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
@@ -55,6 +57,10 @@ impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume> for MieruManagedStrea
     async fn establish_relay(
         &self,
         stream: TcpRelayStream,
+        _tls_server_name: Option<&str>,
+        _proxy: Option<&Proxy>,
+        _session: &Session,
+        _endpoint: OutboundEndpoint<'_>,
         resume: mieru::MieruUdpFlowResume,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
         packet_stream(stream, resume).await

@@ -2,6 +2,7 @@ use std::any::Any;
 use std::marker::PhantomData;
 
 use async_trait::async_trait;
+use zero_core::Session;
 use zero_engine::EngineError;
 
 use super::cache::ManagedUdpConnectionCache;
@@ -24,6 +25,7 @@ pub(crate) trait ManagedStreamFlowConnector<T>: Send + Sync {
     async fn establish_direct(
         &self,
         proxy: &Proxy,
+        session: &Session,
         endpoint: OutboundEndpoint<'_>,
         resume: T,
     ) -> Result<SharedManagedUdpConnection, EngineError>;
@@ -31,6 +33,10 @@ pub(crate) trait ManagedStreamFlowConnector<T>: Send + Sync {
     async fn establish_relay(
         &self,
         stream: TcpRelayStream,
+        tls_server_name: Option<&str>,
+        proxy: Option<&Proxy>,
+        session: &Session,
+        endpoint: OutboundEndpoint<'_>,
         resume: T,
     ) -> Result<SharedManagedUdpConnection, EngineError>;
 }
@@ -45,6 +51,17 @@ pub(crate) struct ManagedStreamFlowManager<T, C> {
     mismatch_stage: &'static str,
     mismatch_message: &'static str,
     _resume: PhantomData<T>,
+}
+
+struct ManagedStreamRelayRequest<'a, T> {
+    ctx: UdpFlowContext<'a>,
+    stream: TcpRelayStream,
+    tls_server_name: Option<&'a str>,
+    proxy: Option<&'a Proxy>,
+    session: &'a Session,
+    endpoint: OutboundEndpoint<'a>,
+    resume: T,
+    packet_ref: UdpPacketRef<'a>,
 }
 
 impl<T, C> ManagedStreamFlowManager<T, C> {
@@ -84,6 +101,7 @@ where
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
+        session: &Session,
         endpoint: OutboundEndpoint<'_>,
         resume: T,
         packet_ref: UdpPacketRef<'_>,
@@ -107,7 +125,8 @@ where
                 ctx.chain_tasks,
                 session_id,
                 packet_ref,
-                self.connector.establish_direct(proxy, endpoint, resume),
+                self.connector
+                    .establish_direct(proxy, session, endpoint, resume),
             )
             .await
             .map_err(|e| FlowFailure {
@@ -119,31 +138,43 @@ where
 
     async fn send_relay(
         &mut self,
-        ctx: UdpFlowContext<'_>,
-        stream: TcpRelayStream,
-        endpoint: OutboundEndpoint<'_>,
-        resume: T,
-        packet_ref: UdpPacketRef<'_>,
+        request: ManagedStreamRelayRequest<'_, T>,
     ) -> Result<usize, FlowFailure> {
-        let session_id = ctx.session_id;
-        let cache_key = self.connector.flow_cache_key(&resume, endpoint, session_id);
+        let session_id = request.ctx.session_id;
+        let upstream = request.endpoint.upstream();
+        let cache_key =
+            self.connector
+                .flow_cache_key(&request.resume, request.endpoint, session_id);
         let entry = self
             .connector
-            .establish_relay(stream, resume)
+            .establish_relay(
+                request.stream,
+                request.tls_server_name,
+                request.proxy,
+                request.session,
+                request.endpoint,
+                request.resume,
+            )
             .await
             .map_err(|e| FlowFailure {
                 stage: self.relay_establish_stage,
                 error: e,
-                upstream: Some(endpoint.upstream()),
+                upstream: Some(upstream.clone()),
             })?;
 
         self.upstreams
-            .insert_and_send_key(cache_key, ctx.chain_tasks, session_id, packet_ref, entry)
+            .insert_and_send_key(
+                cache_key,
+                request.ctx.chain_tasks,
+                session_id,
+                request.packet_ref,
+                entry,
+            )
             .await
             .map_err(|error| FlowFailure {
                 stage: self.relay_send_stage,
                 error,
-                upstream: Some(endpoint.upstream()),
+                upstream: Some(upstream),
             })
     }
 
@@ -173,6 +204,7 @@ where
                 session_id: request.session_id,
             },
             proxy,
+            request.session,
             OutboundEndpoint {
                 server: request.server,
                 port: request.port,
@@ -199,23 +231,26 @@ where
                 self.mismatch_message,
             ));
         };
-        self.send_relay(
-            UdpFlowContext {
+        self.send_relay(ManagedStreamRelayRequest {
+            ctx: UdpFlowContext {
                 chain_tasks: request.chain_tasks,
                 session_id: request.session_id,
             },
-            request.stream,
-            OutboundEndpoint {
+            stream: request.stream,
+            tls_server_name: request.tls_server_name,
+            proxy: request.proxy,
+            session: request.session,
+            endpoint: OutboundEndpoint {
                 server: request.server,
                 port: request.port,
             },
             resume,
-            UdpPacketRef {
+            packet_ref: UdpPacketRef {
                 target: request.target,
                 port: request.target_port,
                 payload: request.payload,
             },
-        )
+        })
         .await
     }
 }

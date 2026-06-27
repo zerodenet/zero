@@ -7,10 +7,10 @@ use crate::runtime::udp_flow::managed::ManagedStreamFlowHandler;
 use crate::runtime::Proxy;
 
 mod flow;
-mod manager;
+mod managed;
 
 pub(crate) fn managed_stream_handler() -> Box<dyn ManagedStreamFlowHandler> {
-    Box::new(manager::TrojanChainManager::new())
+    managed::handler()
 }
 
 impl TrojanAdapter {
