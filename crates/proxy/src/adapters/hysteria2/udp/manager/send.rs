@@ -21,9 +21,8 @@ impl H2ChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
-        let key = resume.cache_key(endpoint.server, endpoint.port);
 
-        if let Some(entry) = self.upstreams.get(&key) {
+        if let Some(entry) = self.upstreams.get(&resume, endpoint.server, endpoint.port) {
             return entry
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
                 .await
@@ -48,7 +47,8 @@ impl H2ChainManager {
             upstream: Some(endpoint.upstream()),
         })?;
 
-        self.upstreams.insert(key, session);
+        self.upstreams
+            .insert(&resume, endpoint.server, endpoint.port, session);
 
         Ok(sent)
     }

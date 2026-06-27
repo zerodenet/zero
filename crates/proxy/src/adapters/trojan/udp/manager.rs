@@ -1,7 +1,4 @@
 #[cfg(feature = "trojan")]
-use std::collections::HashMap;
-
-#[cfg(feature = "trojan")]
 mod bridge;
 #[cfg(feature = "trojan")]
 mod connect;
@@ -16,14 +13,14 @@ mod stream;
 
 #[cfg(feature = "trojan")]
 pub(crate) struct TrojanChainManager {
-    upstreams: HashMap<trojan::TrojanUdpCacheKey, trojan::TrojanUdpFlowSession>,
+    upstreams: trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>,
 }
 
 #[cfg(feature = "trojan")]
 impl TrojanChainManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: HashMap::new(),
+            upstreams: trojan::TrojanUdpFlowStore::new(),
         }
     }
 }

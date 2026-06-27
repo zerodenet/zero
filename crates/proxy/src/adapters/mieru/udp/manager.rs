@@ -1,7 +1,4 @@
 #[cfg(feature = "mieru")]
-use std::collections::HashMap;
-
-#[cfg(feature = "mieru")]
 mod bridge;
 #[cfg(feature = "mieru")]
 mod connect;
@@ -16,14 +13,14 @@ mod stream;
 
 #[cfg(feature = "mieru")]
 pub(crate) struct MieruChainManager {
-    upstreams: HashMap<mieru::MieruUdpCacheKey, mieru::MieruUdpFlowSession>,
+    upstreams: mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>,
 }
 
 #[cfg(feature = "mieru")]
 impl MieruChainManager {
     pub(crate) fn new() -> Self {
         Self {
-            upstreams: HashMap::new(),
+            upstreams: mieru::MieruUdpFlowStore::new(),
         }
     }
 }

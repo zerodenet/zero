@@ -449,7 +449,7 @@ impl TrojanUdpFlowResume {
         }
     }
 
-    pub fn cache_key(&self, server: &str, port: u16, session_id: u64) -> TrojanUdpCacheKey {
+    fn cache_key(&self, server: &str, port: u16, session_id: u64) -> TrojanUdpCacheKey {
         TrojanUdpCacheKey::from_flow_key(self.flow_key(server, port), session_id)
     }
 
@@ -478,7 +478,7 @@ impl TrojanUdpFlowResume {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TrojanUdpFlowKey {
     Leaf(TrojanUdpLeafKey),
     Relay,
@@ -490,22 +490,59 @@ impl TrojanUdpFlowKey {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TrojanUdpCacheKey {
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum TrojanUdpCacheKey {
     Leaf(TrojanUdpLeafKey),
     Relay { session_id: u64 },
 }
 
 impl TrojanUdpCacheKey {
-    pub fn from_flow_key(flow_key: TrojanUdpFlowKey, session_id: u64) -> Self {
+    fn from_flow_key(flow_key: TrojanUdpFlowKey, session_id: u64) -> Self {
         match flow_key {
             TrojanUdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
             TrojanUdpFlowKey::Relay => Self::Relay { session_id },
         }
     }
+}
 
-    pub fn relay(session_id: u64) -> Self {
-        Self::Relay { session_id }
+pub struct TrojanUdpFlowStore<T> {
+    entries: std::collections::BTreeMap<TrojanUdpCacheKey, T>,
+}
+
+impl<T> Default for TrojanUdpFlowStore<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> TrojanUdpFlowStore<T> {
+    pub fn new() -> Self {
+        Self {
+            entries: std::collections::BTreeMap::new(),
+        }
+    }
+
+    pub fn get(
+        &self,
+        resume: &TrojanUdpFlowResume,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> Option<&T> {
+        let key = resume.cache_key(server, port, session_id);
+        self.entries.get(&key)
+    }
+
+    pub fn insert(
+        &mut self,
+        resume: &TrojanUdpFlowResume,
+        server: &str,
+        port: u16,
+        session_id: u64,
+        value: T,
+    ) -> Option<T> {
+        let key = resume.cache_key(server, port, session_id);
+        self.entries.insert(key, value)
     }
 }
 
@@ -569,7 +606,7 @@ impl<'a> TrojanUdpPeerConfig<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TrojanUdpLeafKey {
     server: String,
     port: u16,

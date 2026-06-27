@@ -5727,17 +5727,20 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
     let trojan_manager = read("src/adapters/trojan/udp/manager.rs");
     let trojan_manager_send = read("src/adapters/trojan/udp/manager/send.rs");
     assert!(
-        mieru_manager.contains("HashMap<mieru::MieruUdpCacheKey, mieru::MieruUdpFlowSession>")
-            && trojan_manager
-                .contains("HashMap<trojan::TrojanUdpCacheKey, trojan::TrojanUdpFlowSession>"),
-        "stream UDP managers should store protocol-owned opaque cache keys without adapter-local key wrappers"
+        mieru_manager.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>")
+            && trojan_manager.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>")
+            && !mieru_manager.contains("HashMap<mieru::MieruUdpCacheKey")
+            && !trojan_manager.contains("HashMap<trojan::TrojanUdpCacheKey"),
+        "stream UDP managers should store protocol-owned flow stores without adapter-visible cache keys"
     );
     assert!(
         !mieru_manager_send.contains("MieruUdpCacheKey::relay")
             && !trojan_manager_send.contains("TrojanUdpCacheKey::relay")
-            && mieru_manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
-            && trojan_manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)"),
-        "stream UDP managers should ask protocol resumes for relay cache identity instead of choosing protocol key variants"
+            && !mieru_manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
+            && !trojan_manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
+            && mieru_manager_send.contains(".get(resume, endpoint.server, endpoint.port, session_id)")
+            && trojan_manager_send.contains(".get(resume, endpoint.server, endpoint.port, session_id)"),
+        "stream UDP managers should ask protocol stores for cached sessions instead of choosing protocol key variants"
     );
 }
 
@@ -6661,8 +6664,11 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && protocol_outbound.contains("struct TrojanUdpFlowResume")
             && protocol_outbound.contains("pub fn peer_config(&self)")
             && protocol_outbound.contains("pub fn flow_key(&self")
-            && protocol_outbound.contains("pub fn cache_key(&self")
+            && protocol_outbound.contains("fn cache_key(&self")
+            && !protocol_outbound.contains("pub fn cache_key(&self")
             && protocol_outbound.contains("enum TrojanUdpCacheKey")
+            && !protocol_outbound.contains("pub enum TrojanUdpCacheKey")
+            && protocol_outbound.contains("pub struct TrojanUdpFlowStore")
             && protocol_outbound.contains("struct TrojanUdpTlsProfile")
             && protocol_outbound.contains("pub fn tls_profile(&self")
             && protocol_outbound.contains("pub async fn establish_udp_tunnel")
@@ -6738,7 +6744,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         );
     }
     assert!(
-        manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
+        manager_send.contains(".get(resume, endpoint.server, endpoint.port, session_id)")
+            && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("TrojanUdpPeer")
             && manager_send.contains("resume.flow_requires_relay_upstream()")
@@ -6936,9 +6943,14 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
             && protocol_udp.contains("struct MieruUdpFlowResume")
             && protocol_udp.contains("pub fn peer_config(&self)")
             && protocol_udp.contains("pub fn flow_key(&self")
-            && protocol_udp.contains("pub fn cache_key(&self")
+            && protocol_udp
+                .contains("fn cache_key(&self, server: &str, port: u16, session_id: u64)")
+            && !protocol_udp
+                .contains("pub fn cache_key(&self, server: &str, port: u16, session_id: u64)")
             && protocol_udp.contains("enum MieruUdpFlowKey")
             && protocol_udp.contains("enum MieruUdpCacheKey")
+            && !protocol_udp.contains("pub enum MieruUdpCacheKey")
+            && protocol_udp.contains("pub struct MieruUdpFlowStore")
             && protocol_udp.contains("struct MieruUdpLeafKey")
             && protocol_udp.contains("pub fn codec(&self)")
             && protocol_udp.contains("pub fn flow_requires_relay_upstream(&self) -> bool")
@@ -7006,7 +7018,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         );
     }
     assert!(
-        manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
+        manager_send.contains(".get(resume, endpoint.server, endpoint.port, session_id)")
+            && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("MieruUdpPeer")
             && manager_send.contains("request.resume.flow_requires_relay_upstream()")
@@ -7490,9 +7503,12 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && protocol_udp.contains("pub fn new(")
             && protocol_udp.contains("pub fn peer_config(&self)")
             && protocol_udp.contains("pub fn flow_key(&self")
-            && protocol_udp.contains("pub fn cache_key(&self")
+            && protocol_udp.contains("fn cache_key(&self, server: &str, port: u16)")
+            && !protocol_udp.contains("pub fn cache_key(&self, server: &str, port: u16)")
             && protocol_udp.contains("enum Hysteria2UdpFlowKey")
             && protocol_udp.contains("struct Hysteria2UdpCacheKey")
+            && !protocol_udp.contains("pub struct Hysteria2UdpCacheKey")
+            && protocol_udp.contains("pub struct Hysteria2UdpFlowStore")
             && protocol_udp.contains("struct Hysteria2UdpConnectorProfile")
             && protocol_udp.contains("pub fn connector_profile(&self)")
             && protocol_udp.contains("struct Hysteria2UdpLeafKey")
@@ -7556,7 +7572,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         );
     }
     assert!(
-        manager_send.contains("resume.cache_key(endpoint.server, endpoint.port)")
+        manager_send.contains(".get(&resume, endpoint.server, endpoint.port)")
+            && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("H2UdpPeer")
             && stream.contains("resume.connector_profile()")
@@ -7809,8 +7826,8 @@ fn h2_udp_model_details_live_outside_manager_root() {
             && establish.contains("endpoint: OutboundEndpoint")
             && stream.contains("endpoint: OutboundEndpoint")
             && read("src/adapters/hysteria2/udp/manager.rs")
-                .contains("HashMap<hysteria2::Hysteria2UdpCacheKey, hysteria2::Hysteria2UdpFlowSession>"),
-        "h2_manager should store protocol-owned opaque cache keys and sessions without adapter-local H2Key or H2UdpPeer wrappers"
+                .contains("hysteria2::Hysteria2UdpFlowStore<hysteria2::Hysteria2UdpFlowSession>"),
+        "h2_manager should store protocol-owned flow stores without adapter-local H2Key or H2UdpPeer wrappers"
     );
 }
 

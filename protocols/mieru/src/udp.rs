@@ -184,7 +184,7 @@ impl MieruUdpFlowResume {
         }
     }
 
-    pub fn cache_key(&self, server: &str, port: u16, session_id: u64) -> MieruUdpCacheKey {
+    fn cache_key(&self, server: &str, port: u16, session_id: u64) -> MieruUdpCacheKey {
         MieruUdpCacheKey::from_flow_key(self.flow_key(server, port), session_id)
     }
 
@@ -201,7 +201,7 @@ impl MieruUdpFlowResume {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MieruUdpFlowKey {
     Leaf(MieruUdpLeafKey),
     Relay,
@@ -213,22 +213,59 @@ impl MieruUdpFlowKey {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum MieruUdpCacheKey {
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum MieruUdpCacheKey {
     Leaf(MieruUdpLeafKey),
     Relay { session_id: u64 },
 }
 
 impl MieruUdpCacheKey {
-    pub fn from_flow_key(flow_key: MieruUdpFlowKey, session_id: u64) -> Self {
+    fn from_flow_key(flow_key: MieruUdpFlowKey, session_id: u64) -> Self {
         match flow_key {
             MieruUdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
             MieruUdpFlowKey::Relay => Self::Relay { session_id },
         }
     }
+}
 
-    pub fn relay(session_id: u64) -> Self {
-        Self::Relay { session_id }
+pub struct MieruUdpFlowStore<T> {
+    entries: alloc::collections::BTreeMap<MieruUdpCacheKey, T>,
+}
+
+impl<T> Default for MieruUdpFlowStore<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> MieruUdpFlowStore<T> {
+    pub fn new() -> Self {
+        Self {
+            entries: alloc::collections::BTreeMap::new(),
+        }
+    }
+
+    pub fn get(
+        &self,
+        resume: &MieruUdpFlowResume,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> Option<&T> {
+        let key = resume.cache_key(server, port, session_id);
+        self.entries.get(&key)
+    }
+
+    pub fn insert(
+        &mut self,
+        resume: &MieruUdpFlowResume,
+        server: &str,
+        port: u16,
+        session_id: u64,
+        value: T,
+    ) -> Option<T> {
+        let key = resume.cache_key(server, port, session_id);
+        self.entries.insert(key, value)
     }
 }
 
@@ -262,7 +299,7 @@ impl<'a> MieruUdpPeerConfig<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MieruUdpLeafKey {
     server: String,
     port: u16,

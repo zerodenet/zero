@@ -32,9 +32,11 @@ impl MieruChainManager {
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
-        let key = resume.cache_key(endpoint.server, endpoint.port, session_id);
 
-        if let Some(entry) = self.upstreams.get(&key) {
+        if let Some(entry) = self
+            .upstreams
+            .get(resume, endpoint.server, endpoint.port, session_id)
+        {
             bridge::spawn_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
             entry
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
@@ -69,7 +71,13 @@ impl MieruChainManager {
             })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
-        self.upstreams.insert(key, entry.clone());
+        self.upstreams.insert(
+            resume,
+            endpoint.server,
+            endpoint.port,
+            session_id,
+            entry.clone(),
+        );
 
         entry
             .send(packet_ref.target, packet_ref.port, packet_ref.payload)
@@ -116,7 +124,6 @@ impl MieruChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
-        let key = resume.cache_key(endpoint.server, endpoint.port, session_id);
         let entry = establish::packet_stream(stream, resume)
             .await
             .map_err(|e| FlowFailure {
@@ -126,7 +133,13 @@ impl MieruChainManager {
             })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
-        self.upstreams.insert(key, entry.clone());
+        self.upstreams.insert(
+            resume,
+            endpoint.server,
+            endpoint.port,
+            session_id,
+            entry.clone(),
+        );
 
         let sent = packet_ref.payload.len();
         entry

@@ -16,8 +16,8 @@ pub use metadata::TrojanProtocol;
 pub use outbound::{
     build_udp_request, establish_udp_packet_tunnel, read_inbound_udp_packet, read_udp_flow_packet,
     udp_flow_packet, write_udp_flow_packet, write_udp_response, TrojanOutbound,
-    TrojanTcpTunnelTarget, TrojanUdpCacheKey, TrojanUdpFlowIo, TrojanUdpFlowKey,
-    TrojanUdpFlowResume, TrojanUdpLeafKey, TrojanUdpPacket, TrojanUdpPacketTunnelTarget,
+    TrojanTcpTunnelTarget, TrojanUdpFlowIo, TrojanUdpFlowKey, TrojanUdpFlowResume,
+    TrojanUdpFlowStore, TrojanUdpLeafKey, TrojanUdpPacket, TrojanUdpPacketTunnelTarget,
     TrojanUdpPeerConfig, TrojanUdpTlsProfile,
 };
 #[cfg(feature = "tokio")]

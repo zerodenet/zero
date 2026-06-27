@@ -469,7 +469,7 @@ impl Hysteria2UdpFlowResume {
         Hysteria2UdpFlowKey::Leaf(self.leaf_cache_key(server, port))
     }
 
-    pub fn cache_key(&self, server: &str, port: u16) -> Hysteria2UdpCacheKey {
+    fn cache_key(&self, server: &str, port: u16) -> Hysteria2UdpCacheKey {
         Hysteria2UdpCacheKey::from_flow_key(self.flow_key(server, port))
     }
 
@@ -517,19 +517,53 @@ impl Hysteria2UdpFlowResume {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Hysteria2UdpFlowKey {
     Leaf(Hysteria2UdpLeafKey),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Hysteria2UdpCacheKey(Hysteria2UdpLeafKey);
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Hysteria2UdpCacheKey(Hysteria2UdpLeafKey);
 
 impl Hysteria2UdpCacheKey {
-    pub fn from_flow_key(flow_key: Hysteria2UdpFlowKey) -> Self {
+    fn from_flow_key(flow_key: Hysteria2UdpFlowKey) -> Self {
         match flow_key {
             Hysteria2UdpFlowKey::Leaf(leaf_key) => Self(leaf_key),
         }
+    }
+}
+
+pub struct Hysteria2UdpFlowStore<T> {
+    entries: alloc::collections::BTreeMap<Hysteria2UdpCacheKey, T>,
+}
+
+impl<T> Default for Hysteria2UdpFlowStore<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> Hysteria2UdpFlowStore<T> {
+    pub fn new() -> Self {
+        Self {
+            entries: alloc::collections::BTreeMap::new(),
+        }
+    }
+
+    pub fn get(&self, resume: &Hysteria2UdpFlowResume, server: &str, port: u16) -> Option<&T> {
+        let key = resume.cache_key(server, port);
+        self.entries.get(&key)
+    }
+
+    pub fn insert(
+        &mut self,
+        resume: &Hysteria2UdpFlowResume,
+        server: &str,
+        port: u16,
+        value: T,
+    ) -> Option<T> {
+        let key = resume.cache_key(server, port);
+        self.entries.insert(key, value)
     }
 }
 
@@ -573,7 +607,7 @@ impl<'a> Hysteria2UdpPeerConfig<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hysteria2UdpLeafKey {
     server: String,
     port: u16,

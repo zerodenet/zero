@@ -32,9 +32,11 @@ impl TrojanChainManager {
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
-        let key = resume.cache_key(endpoint.server, endpoint.port, session_id);
 
-        if let Some(entry) = self.upstreams.get(&key) {
+        if let Some(entry) = self
+            .upstreams
+            .get(resume, endpoint.server, endpoint.port, session_id)
+        {
             bridge::spawn_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
             let _ = entry
                 .send(packet_ref.target, packet_ref.port, packet_ref.payload)
@@ -62,7 +64,13 @@ impl TrojanChainManager {
             })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
-        self.upstreams.insert(key, entry.clone());
+        self.upstreams.insert(
+            resume,
+            endpoint.server,
+            endpoint.port,
+            session_id,
+            entry.clone(),
+        );
 
         let _ = entry
             .send(packet_ref.target, packet_ref.port, packet_ref.payload)
@@ -100,9 +108,6 @@ impl TrojanChainManager {
         let ctx = request.ctx;
         let packet_ref = request.packet;
         let session_id = ctx.session_id;
-        let key = request
-            .resume
-            .cache_key(request.server, request.port, session_id);
         let entry = establish::over_relay_stream(
             request.stream,
             request.tls_server_name,
@@ -122,7 +127,13 @@ impl TrojanChainManager {
         })?;
 
         bridge::spawn_response_bridge(ctx.chain_tasks, entry.subscribe_responses(), session_id);
-        self.upstreams.insert(key, entry.clone());
+        self.upstreams.insert(
+            request.resume,
+            request.server,
+            request.port,
+            session_id,
+            entry.clone(),
+        );
         let _ = entry
             .send(packet_ref.target, packet_ref.port, packet_ref.payload)
             .await;
