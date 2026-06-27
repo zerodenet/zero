@@ -6,7 +6,8 @@ use zero_engine::EngineError;
 
 use super::active::ActiveUpstreamSocks5UdpAssociation;
 use super::model::{
-    ClosedSocks5UdpAssociation, Socks5UdpAssociationView, UpstreamAssociationCloseReason,
+    ClosedSocks5UdpAssociation, Socks5UdpAssociation, Socks5UdpAssociationView,
+    UpstreamAssociationCloseReason,
 };
 use super::send::{self, Socks5UdpSend};
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -51,6 +52,121 @@ impl Socks5UdpRuntime {
         inbound_tag: &str,
     ) -> Result<usize, EngineError> {
         send::send(request, inbound_tag, self).await
+    }
+
+    pub(super) async fn send_packet(
+        &mut self,
+        proxy: &crate::runtime::Proxy,
+        inbound_tag: &str,
+        association: &Socks5UdpAssociation,
+        session: &zero_core::Session,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        self.ensure_association(proxy, inbound_tag, association, session.id)
+            .await?;
+
+        let association_ref = self
+            .upstream
+            .as_ref()
+            .expect("successful establish stores upstream association");
+
+        match association_ref
+            .send_packet(&session.target, session.port, payload)
+            .await
+        {
+            Ok(sent) => {
+                proxy.record_udp_upstream_packet_sent();
+                self.idle_deadline = Some(TokioInstant::now() + proxy.udp_upstream_idle_timeout());
+                Ok(sent)
+            }
+            Err(error) => {
+                proxy.record_udp_upstream_send_failure();
+                self.drop_after_send_error(inbound_tag, &error);
+                Err(error)
+            }
+        }
+    }
+
+    async fn ensure_association(
+        &mut self,
+        proxy: &crate::runtime::Proxy,
+        inbound_tag: &str,
+        association: &Socks5UdpAssociation,
+        session_id: u64,
+    ) -> Result<(), EngineError> {
+        let needs_new_association = self
+            .upstream
+            .as_ref()
+            .map(|a| {
+                !a.matches(
+                    &association.outbound_tag,
+                    &association.server,
+                    association.port,
+                )
+            })
+            .unwrap_or(true);
+
+        if !needs_new_association {
+            proxy.record_udp_upstream_association_reused();
+            crate::logging::log_udp_upstream_association_reused(
+                inbound_tag,
+                &association.outbound_tag,
+                &association.server,
+                association.port,
+            );
+            return Ok(());
+        }
+
+        if let Some(a) = self.upstream.take() {
+            a.close(UpstreamAssociationCloseReason::Closed);
+            self.idle_deadline = None;
+        }
+
+        match ActiveUpstreamSocks5UdpAssociation::establish(
+            proxy,
+            &association.outbound_tag,
+            &association.server,
+            association.port,
+            association.config.as_ref(),
+            session_id,
+        )
+        .await
+        {
+            Ok(a) => {
+                proxy.record_udp_upstream_association_created();
+                self.idle_deadline = Some(TokioInstant::now() + proxy.udp_upstream_idle_timeout());
+                crate::logging::log_udp_upstream_association_created(
+                    inbound_tag,
+                    &association.outbound_tag,
+                    &association.server,
+                    association.port,
+                    proxy.udp_upstream_idle_timeout(),
+                );
+                self.upstream = Some(a);
+                Ok(())
+            }
+            Err(error) => {
+                proxy.record_udp_upstream_association_failed();
+                Err(error)
+            }
+        }
+    }
+
+    pub(super) fn drop_after_send_error(&mut self, inbound_tag: &str, error: &EngineError) {
+        if let Some(assoc) = self.upstream.take() {
+            let outbound_tag = assoc.outbound_tag().to_owned();
+            let (active_server, active_port) = assoc.upstream_endpoint();
+            let active_server = active_server.to_owned();
+            assoc.close(UpstreamAssociationCloseReason::Dropped);
+            crate::logging::log_udp_upstream_association_dropped(
+                inbound_tag,
+                &outbound_tag,
+                &active_server,
+                active_port,
+                error,
+            );
+        }
+        self.idle_deadline = None;
     }
 
     pub(crate) async fn start_relay_flow(

@@ -1933,6 +1933,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let packet_path_source = read("src/adapters/socks5/udp/packet_path.rs");
     let send_source = read("src/adapters/socks5/udp/send.rs");
     let send = manifest_dir().join("src/adapters/socks5/udp/send.rs");
+    let runtime_source = read("src/adapters/socks5/udp/runtime.rs");
     let runtime = manifest_dir().join("src/adapters/socks5/udp/runtime.rs");
     let packet_path = manifest_dir().join("src/adapters/socks5/udp/packet_path.rs");
     let old_protocol_runtime = manifest_dir().join("src/protocol_runtime/socks5_udp.rs");
@@ -2012,9 +2013,14 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         "SOCKS5 UDP association model should live under adapters/socks5/udp/model.rs"
     );
     assert!(
-        send_source.contains("async fn send_socks5_udp_packet")
-            && send_source.contains("async fn ensure_socks5_udp_association"),
-        "SOCKS5 UDP send orchestration should live under adapters/socks5/udp/send.rs"
+        !send_source.contains("send_socks5_udp_packet")
+            && !send_source.contains("ensure_socks5_udp_association")
+            && !send_source.contains("runtime.upstream")
+            && !send_source.contains("runtime.idle_deadline")
+            && runtime_source.contains("pub(super) async fn send_packet")
+            && runtime_source.contains("async fn ensure_association")
+            && runtime_source.contains("fn drop_after_send_error"),
+        "SOCKS5 UDP upstream association lifecycle should be owned by runtime.rs, not send.rs"
     );
     assert!(
         !packet_path_source.contains("socks5::parse_udp_packet")
@@ -3519,9 +3525,9 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
     );
     assert!(
         send.contains("outbound_tag: request.tag.to_owned()")
-            && send.contains("association.outbound_tag")
+            && runtime.contains("&association.outbound_tag")
             && !send.contains("association.tag"),
-        "SOCKS5 UDP send state should store and match the relay outbound tag"
+        "SOCKS5 UDP runtime state should store and match the relay outbound tag"
     );
     assert!(
         response.contains("association.outbound_tag")
