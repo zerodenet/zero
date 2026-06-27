@@ -3620,7 +3620,12 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     assert!(
         !mux.contains("socks5::parse_udp_packet")
             && !mux.contains("socks5::decode_udp_associate_response")
-            && mux.contains("udp_response::decode_socks5_upstream_response"),
+            && mux.contains("udp_response::decode_socks5_upstream_response")
+            && !mux.contains("&pkt.target")
+            && !mux.contains("pkt.port,")
+            && !mux.contains("&pkt.payload")
+            && !mux.contains("pkt.payload.len()")
+            && !mux.contains("pkt.payload,"),
         "VMess inbound SOCKS5 upstream response bridge should use neutral proxy bridge helpers"
     );
     for forbidden in [
@@ -3753,7 +3758,12 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         assert!(
             !source.contains("socks5::parse_udp_packet")
                 && !source.contains("socks5::decode_udp_associate_response")
-                && source.contains("udp_response::decode_socks5_upstream_response"),
+                && source.contains("udp_response::decode_socks5_upstream_response")
+                && !source.contains("&pkt.target")
+                && !source.contains("pkt.port,")
+                && !source.contains("&pkt.payload")
+                && !source.contains("pkt.payload.len()")
+                && !source.contains("pkt.payload,"),
             "{source_name} should use neutral proxy bridge helpers for upstream response bridging"
         );
     }
@@ -3909,7 +3919,12 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     }
     assert!(
         !inbound.contains("socks5::decode_udp_associate_response")
-            && inbound.contains("udp_response::decode_socks5_upstream_response"),
+            && inbound.contains("udp_response::decode_socks5_upstream_response")
+            && !inbound.contains("&pkt.target")
+            && !inbound.contains("pkt.port,")
+            && !inbound.contains("&pkt.payload")
+            && !inbound.contains("pkt.payload.len()")
+            && !inbound.contains("pkt.payload,"),
         "Trojan inbound SOCKS5 upstream response bridge should use neutral proxy bridge helpers"
     );
 

@@ -251,12 +251,10 @@ impl Proxy {
                             self.record_udp_upstream_packet_received();
                             dispatch.touch_upstream_idle(self.udp_upstream_idle_timeout());
                             if let Some(pkt) = udp_response::decode_socks5_upstream_response(&upstream_buf[..read]) {
-                                if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
-                                    self.record_session_outbound_rx(sid, pkt.payload.len() as u64);
+                                if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
+                                    self.record_session_outbound_rx(sid, pkt.payload().len() as u64);
                                 }
-                                let target = pkt.target;
-                                let port = pkt.port;
-                                let payload = pkt.payload;
+                                let (target, port, payload) = pkt.into_parts();
                                 udp_session.write_response(&mut client, &target, port, &payload).await?;
                                 if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
                                     self.record_session_inbound_tx(sid, payload.len() as u64);

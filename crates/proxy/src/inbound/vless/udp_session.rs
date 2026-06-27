@@ -130,9 +130,9 @@ impl Proxy {
                             if let Some(pkt) = udp_response::decode_socks5_upstream_response(&upstream_buffer[..read]) {
                                 if udp_session.write_response_tokio(
                                     &mut client,
-                                    &pkt.target,
-                                    pkt.port,
-                                    &pkt.payload,
+                                    pkt.target(),
+                                    pkt.port(),
+                                    pkt.payload(),
                                 ).await.is_ok() {
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());
                                 }

@@ -344,18 +344,18 @@ impl Proxy {
                             self.record_udp_upstream_packet_received();
                             dispatch.touch_upstream_idle(timeout);
                             if let Some(pkt) = udp_response::decode_socks5_upstream_response(&upstream_buf[..read]) {
-                                if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
-                                    self.record_session_outbound_rx(sid, pkt.payload.len() as u64);
+                                if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
+                                    self.record_session_outbound_rx(sid, pkt.payload().len() as u64);
                                 }
                                 match udp_session.send_mux_response(
                                     &down_tx,
                                     mux_session_id,
-                                    &pkt.target,
-                                    pkt.port,
-                                    &pkt.payload,
+                                    pkt.target(),
+                                    pkt.port(),
+                                    pkt.payload(),
                                 ) {
                                     Ok(frame_len) => {
-                                        if let Some(sid) = dispatch.session_id_by_target(&pkt.target, pkt.port, None) {
+                                        if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
                                             self.record_session_inbound_tx(sid, frame_len as u64);
                                         }
                                     }
