@@ -558,11 +558,11 @@ fn udp_2022_server_response_flow_all_blake3_ciphers() {
         let decoded_request = server_session
             .decode_request(&request)
             .expect("decode client request");
-        assert_eq!(decoded_request.target, target);
-        assert_eq!(decoded_request.port, 53);
-        assert_eq!(decoded_request.payload, b"query");
+        assert_eq!(decoded_request.target(), &target);
+        assert_eq!(decoded_request.port(), 53);
+        assert_eq!(decoded_request.payload(), b"query");
         let client_session_id = decoded_request
-            .client_session_id
+            .client_session_id()
             .expect("2022 request should carry a session id");
         assert_ne!(client_session_id, 0, "client session id must be non-zero");
 
@@ -570,24 +570,26 @@ fn udp_2022_server_response_flow_all_blake3_ciphers() {
         let response = server_session
             .encode_response_to_client(Some(client_session_id), &target, 53, b"answer")
             .expect("encode server response")
-            .datagram;
+            .into_datagram();
         // Client decodes the response.
         let decoded_response = server_session
             .decode_request(&response)
             .expect("decode server response");
         assert_eq!(
-            decoded_response.target, target,
+            decoded_response.target(),
+            &target,
             "response target cipher: {cipher:?}"
         );
-        assert_eq!(decoded_response.port, 53);
+        assert_eq!(decoded_response.port(), 53);
         assert_eq!(
-            decoded_response.payload, b"answer",
+            decoded_response.payload(),
+            b"answer",
             "response payload cipher: {cipher:?}"
         );
         // The response carries a fresh server session id in its separate header,
         // distinct from the client session id it echoes in the body.
         let server_session_id = decoded_response
-            .client_session_id
+            .client_session_id()
             .expect("2022 response should carry a server session id");
         assert_ne!(
             server_session_id, client_session_id,

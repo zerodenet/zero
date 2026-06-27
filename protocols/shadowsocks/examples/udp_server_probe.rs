@@ -49,10 +49,8 @@ fn main() {
     let decoded = server_session
         .decode_request(resp)
         .expect("decode response");
-    let target = decoded.target;
-    let port = decoded.port;
-    let payload = decoded.payload;
-    let server_ssid = decoded.client_session_id.unwrap_or(0);
+    let (target, port, payload, server_ssid) = decoded.into_parts();
+    let server_ssid = server_ssid.unwrap_or(0);
     eprintln!("response target={target:?} port={port} server_ssid={server_ssid:#x}");
     eprintln!("payload {} bytes", payload.len());
 

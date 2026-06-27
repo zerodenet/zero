@@ -100,17 +100,51 @@ impl ShadowsocksInboundProfile {
 #[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShadowsocksInboundUdpPacket {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
     /// Flow isolation id for SIP022/2022 UDP sessions. `None` for legacy AEAD.
-    pub client_session_id: Option<u64>,
+    client_session_id: Option<u64>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksInboundUdpPacket {
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub fn client_session_id(&self) -> Option<u64> {
+        self.client_session_id
+    }
+
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
+        (self.target, self.port, self.payload, self.client_session_id)
+    }
 }
 
 #[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShadowsocksInboundUdpResponse {
-    pub datagram: Vec<u8>,
+    datagram: Vec<u8>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksInboundUdpResponse {
+    pub fn datagram(&self) -> &[u8] {
+        &self.datagram
+    }
+
+    pub fn into_datagram(self) -> Vec<u8> {
+        self.datagram
+    }
 }
 
 /// Protocol-owned codec/state for Shadowsocks inbound UDP.

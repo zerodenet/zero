@@ -51,20 +51,22 @@ impl Proxy {
 
                     let mut sa = zero_core::SessionAuth::new("shadowsocks");
                     sa.principal_key = Some(profile.principal_key());
+                    let client_session_id = request.client_session_id();
+                    let (target, port, payload, _) = request.into_parts();
                     match UdpPipe::new(self, &mut dispatch)
                         .dispatch(UdpPipeInput {
-                            target: request.target,
-                            port: request.port,
-                            payload: &request.payload,
+                            target,
+                            port,
+                            payload: &payload,
                             protocol: ProtocolType::Shadowsocks,
                             auth: Some(&sa),
-                            client_session_id: request.client_session_id,
+                            client_session_id,
                         })
                         .await
                     {
                         Ok(session_id) => {
                             client_sessions.insert(session_id, client_addr);
-                            if let Some(client_session_id) = request.client_session_id {
+                            if let Some(client_session_id) = client_session_id {
                                 client_ss_session_ids.insert(session_id, client_session_id);
                             }
                         }
@@ -150,6 +152,6 @@ async fn ss_send_protocol_response(response: SsProtocolResponse<'_>) {
     };
     let _ = response
         .socket
-        .send_to(&response_datagram.datagram, response.client)
+        .send_to(response_datagram.datagram(), response.client)
         .await;
 }

@@ -2044,6 +2044,16 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             .expect("read shadowsocks protocol shared source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/shadowsocks/src/lib.rs"))
         .expect("read shadowsocks protocol lib source");
+    let inbound_packet_struct = protocol_inbound
+        .split("pub struct ShadowsocksInboundUdpPacket")
+        .nth(1)
+        .and_then(|content| content.split("impl ShadowsocksInboundUdpPacket").next())
+        .expect("Shadowsocks inbound UDP packet struct section");
+    let inbound_response_struct = protocol_inbound
+        .split("pub struct ShadowsocksInboundUdpResponse")
+        .nth(1)
+        .and_then(|content| content.split("impl ShadowsocksInboundUdpResponse").next())
+        .expect("Shadowsocks inbound UDP response struct section");
     assert!(
         udp.contains("ShadowsocksInboundUdpSession")
             && udp.contains("udp_session.decode_request")
@@ -2054,7 +2064,15 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && protocol_inbound.contains("struct ShadowsocksInboundUdpSession")
             && protocol_inbound.contains("fn decode_request")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpResponse")
-            && protocol_inbound.contains("fn encode_response_to_client"),
+            && protocol_inbound.contains("fn encode_response_to_client")
+            && !inbound_packet_struct.contains("pub target: Address")
+            && !inbound_packet_struct.contains("pub payload: Vec<u8>")
+            && !inbound_packet_struct.contains("pub client_session_id: Option<u64>")
+            && !inbound_response_struct.contains("pub datagram: Vec<u8>")
+            && !udp.contains("request.target,")
+            && !udp.contains("request.payload,")
+            && !udp.contains("request.client_session_id,")
+            && !udp.contains("&response_datagram.datagram"),
         "Shadowsocks inbound UDP should delegate protocol datagram logic through protocols/shadowsocks inbound UDP session"
     );
     for private_helper in [
