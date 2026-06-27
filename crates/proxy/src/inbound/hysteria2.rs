@@ -405,9 +405,13 @@ impl Proxy {
                                 zero_traits::IpAddress::V4(b) => Address::Ipv4(b),
                                 zero_traits::IpAddress::V6(b) => Address::Ipv6(b),
                             };
-                            if let Ok(dg) = hysteria2::Hysteria2InboundUdpCodec.encode_datagram(h2_sid, &target, sender.port(), &direct_buf[..n]) {
-                                let _ = conn.send_datagram(dg.into());
-                            }
+                            let _ = hysteria2::Hysteria2InboundUdpCodec.send_datagram(
+                                &conn,
+                                h2_sid,
+                                &target,
+                                sender.port(),
+                                &direct_buf[..n],
+                            );
                         }
                     }
                 }
@@ -417,9 +421,13 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             if let Some(sid) = session_id {
                                 if let Some(&h2_sid) = h2_flows.get(&sid) {
-                                    if let Ok(dg) = hysteria2::Hysteria2InboundUdpCodec.encode_datagram(h2_sid, &target, port, &payload) {
-                                        let _ = conn.send_datagram(dg.into());
-                                    }
+                                    let _ = hysteria2::Hysteria2InboundUdpCodec.send_datagram(
+                                        &conn,
+                                        h2_sid,
+                                        &target,
+                                        port,
+                                        &payload,
+                                    );
                                 }
                             }
                         }

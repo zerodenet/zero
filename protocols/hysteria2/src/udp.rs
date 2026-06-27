@@ -153,6 +153,22 @@ impl Hysteria2InboundUdpCodec {
     ) -> Result<Vec<u8>, Error> {
         encode_inbound_udp_datagram(session_id, target, port, payload)
     }
+
+    #[cfg(feature = "tokio")]
+    pub fn send_datagram(
+        &self,
+        conn: &quinn::Connection,
+        session_id: u16,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        let datagram = self.encode_datagram(session_id, target, port, payload)?;
+        let len = datagram.len();
+        conn.send_datagram(datagram.into())
+            .map_err(|_| Error::Io("failed to send Hysteria2 UDP datagram"))?;
+        Ok(len)
+    }
 }
 
 pub fn udp_cache_key(

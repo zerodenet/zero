@@ -1018,9 +1018,13 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     }
     assert!(
         inbound.contains("hysteria2::Hysteria2InboundUdpCodec")
+            && inbound.contains("Hysteria2InboundUdpCodec.send_datagram")
+            && !inbound.contains("Hysteria2InboundUdpCodec.encode_datagram")
+            && !inbound.contains("conn.send_datagram")
             && protocol_udp.contains("struct Hysteria2InboundUdpCodec")
             && protocol_udp.contains("fn decode_datagram")
-            && protocol_udp.contains("fn encode_datagram"),
+            && protocol_udp.contains("fn encode_datagram")
+            && protocol_udp.contains("fn send_datagram"),
         "Hysteria2 inbound should delegate UDP datagram framing through the protocol-owned inbound codec"
     );
 }
