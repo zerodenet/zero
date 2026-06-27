@@ -37,6 +37,8 @@ impl TrojanAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
+        let config =
+            trojan::TrojanUdpFlowConfig::new(password, *sni, *insecure, *client_fingerprint);
         dispatch
             .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
                 proxy: Some(proxy),
@@ -46,13 +48,7 @@ impl TrojanAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ManagedUdpFlowResume::new(trojan::TrojanUdpFlowResume::new(
-                    password,
-                    *sni,
-                    *insecure,
-                    *client_fingerprint,
-                    false,
-                )),
+                resume: ManagedUdpFlowResume::new(config.flow_resume(false)),
                 payload,
                 kind: ManagedUdpFlowKind::StreamPacket,
                 outbound: ManagedUdpOutboundKind::StreamPacket,
@@ -81,6 +77,8 @@ impl TrojanAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
+        let config =
+            trojan::TrojanUdpFlowConfig::new(password, *sni, *insecure, *client_fingerprint);
         dispatch
             .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
                 proxy: Some(proxy),
@@ -90,13 +88,7 @@ impl TrojanAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ManagedUdpFlowResume::new(trojan::TrojanUdpFlowResume::new(
-                    password,
-                    *sni,
-                    *insecure,
-                    *client_fingerprint,
-                    true,
-                )),
+                resume: ManagedUdpFlowResume::new(config.flow_resume(true)),
                 payload,
                 kind: ManagedUdpFlowKind::RelayStream,
                 outbound: ManagedUdpOutboundKind::StreamPacket,

@@ -6768,8 +6768,13 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             .expect("read trojan protocol outbound source");
 
     assert!(
-        adapter.contains("TrojanUdpFlowResume::new")
+        !adapter.contains("TrojanUdpFlowResume::new")
+            && adapter.contains("TrojanUdpFlowConfig::new")
+            && adapter.contains(".flow_resume(false)")
+            && adapter.contains(".flow_resume(true)")
             && protocol_outbound.contains("struct TrojanUdpFlowResume")
+            && protocol_outbound.contains("struct TrojanUdpFlowConfig")
+            && protocol_outbound.contains("pub fn flow_resume(&self, relay_chain: bool)")
             && protocol_outbound.contains("pub fn peer_config(&self)")
             && protocol_outbound.contains("pub fn flow_key(&self")
             && protocol_outbound.contains("fn cache_key(&self")

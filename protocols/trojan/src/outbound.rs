@@ -494,6 +494,40 @@ impl TrojanUdpFlowResume {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct TrojanUdpFlowConfig<'a> {
+    password: &'a str,
+    sni: Option<&'a str>,
+    insecure: bool,
+    client_fingerprint: Option<&'a str>,
+}
+
+impl<'a> TrojanUdpFlowConfig<'a> {
+    pub fn new(
+        password: &'a str,
+        sni: Option<&'a str>,
+        insecure: bool,
+        client_fingerprint: Option<&'a str>,
+    ) -> Self {
+        Self {
+            password,
+            sni,
+            insecure,
+            client_fingerprint,
+        }
+    }
+
+    pub fn flow_resume(&self, relay_chain: bool) -> TrojanUdpFlowResume {
+        TrojanUdpFlowResume::new(
+            self.password,
+            self.sni,
+            self.insecure,
+            self.client_fingerprint,
+            relay_chain,
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TrojanUdpFlowKey {
     Leaf(TrojanUdpLeafKey),
