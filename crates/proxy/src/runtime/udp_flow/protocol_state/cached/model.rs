@@ -48,6 +48,13 @@ impl CachedProtocolUdpState {
             .map(|handler| handler.as_mut() as &mut dyn CachedProtocolFlowSender)
     }
 
+    pub(in crate::runtime::udp_flow::protocol_state) fn contains_sender(
+        &self,
+        flow_ref: ManagedUdpFlowRef,
+    ) -> bool {
+        self.senders.contains_key(&flow_ref)
+    }
+
     pub(in crate::runtime::udp_flow::protocol_state) fn push_sender(
         &mut self,
         flow_ref: ManagedUdpFlowRef,

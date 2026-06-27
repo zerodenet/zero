@@ -5757,9 +5757,13 @@ fn udp_dispatch_cached_flow_fast_path_delegates_to_protocol_state() {
 
     assert!(
         !dispatch.contains("send_existing_cached_flow")
-            && forward.contains("send_existing_cached_flow")
+            && !forward.contains("send_existing_cached_flow")
+            && forward.contains(
+                "UdpPathCategory::Datagram | UdpPathCategory::StreamPacket | UdpPathCategory::Cached"
+            )
+            && forward.contains("forward_existing_protocol_flow")
             && outbound.contains("Cached {"),
-        "UDP dispatch should drive cached protocol flow reuse from tracked flow snapshots, not by pre-scanning protocol managers"
+        "UDP dispatch should delegate cached protocol flow reuse to protocol state instead of special-casing cached senders"
     );
 
     let normalized = forward.replace("\r\n", "\n");
@@ -5953,6 +5957,7 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let managed = read("src/runtime/udp_flow/managed/state.rs");
     let cached_state = read("src/runtime/udp_flow/protocol_state/cached.rs");
     let cached_model = read("src/runtime/udp_flow/protocol_state/cached/model.rs");
+    let protocol_forward = read("src/runtime/udp_flow/protocol_state/forward.rs");
     let vless_flow = manifest_dir().join("src/runtime/udp_flow/protocol_state/vless_flow.rs");
     let vmess_flow = manifest_dir().join("src/runtime/udp_flow/protocol_state/vmess_flow.rs");
     let vless_adapter = read("src/adapters/vless/udp.rs");
@@ -5988,6 +5993,10 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && cached_model
                 .contains("HashMap<ManagedUdpFlowRef, Box<dyn CachedProtocolFlowSender>>")
             && cached_model.contains("fn sender(")
+            && cached_model.contains("fn contains_sender(")
+            && protocol_forward.contains("has_cached_flow_sender")
+            && protocol_forward.contains("udp_cached_send")
+            && !cached_state.contains("fn send_existing_cached_flow")
             && !managed.contains("ManagedCachedFlowSender")
             && !cached_model.contains("enum CachedUdpFlowStart")
             && !cached_model.contains("VlessUdpStartFlow")
