@@ -11,40 +11,6 @@ use zero_traits::AsyncSocket;
 
 use crate::transport::ClientStream;
 
-pub(crate) struct VlessInboundUdpPacket {
-    pub(crate) target: zero_core::Address,
-    pub(crate) port: u16,
-    pub(crate) payload: Vec<u8>,
-}
-
-pub(crate) fn decode_vless_udp_packet(
-    packet: &[u8],
-) -> Result<VlessInboundUdpPacket, zero_core::Error> {
-    let packet = vless::VlessInboundUdpCodec.decode_datagram(packet)?;
-    Ok(VlessInboundUdpPacket {
-        target: packet.target,
-        port: packet.port,
-        payload: packet.payload,
-    })
-}
-
-pub(crate) fn encode_vless_udp_response(
-    target: &zero_core::Address,
-    port: u16,
-    payload: &[u8],
-) -> Result<Vec<u8>, zero_core::Error> {
-    vless::VlessInboundUdpCodec.encode_response(target, port, payload)
-}
-
-pub(crate) fn encode_vless_mux_udp_response(
-    mux_session_id: u16,
-    target: &zero_core::Address,
-    port: u16,
-    payload: &[u8],
-) -> Result<Vec<u8>, zero_core::Error> {
-    vless::VlessInboundUdpCodec.encode_mux_response(mux_session_id, target, port, payload)
-}
-
 // ── Fallback helpers ──
 
 /// Wraps an inner stream and records all bytes read, for replay to a

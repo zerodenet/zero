@@ -10,8 +10,6 @@ use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
 
-use super::{decode_vless_udp_packet, encode_vless_udp_response};
-
 impl Proxy {
     pub(crate) async fn handle_vless_udp_session<S>(
         &self,
@@ -101,7 +99,7 @@ impl Proxy {
                         self.record_session_outbound_rx(session_id, n as u64);
                     }
 
-                    match encode_vless_udp_response(&target, port, &udp_buffer[..n]) {
+                    match vless::VlessInboundUdpCodec.encode_response(&target, port, &udp_buffer[..n]) {
                         Ok(packet) => {
                             match client.write_all(&packet).await {
                                 Ok(_) => {
@@ -133,7 +131,7 @@ impl Proxy {
                         Ok(read) => {
                             last_activity = TokioInstant::now();
                             if let Ok(pkt) = socks5::decode_udp_associate_response(&upstream_buffer[..read]) {
-                                if let Ok(packet) = encode_vless_udp_response(&pkt.target, pkt.port, &pkt.payload) {
+                                if let Ok(packet) = vless::VlessInboundUdpCodec.encode_response(&pkt.target, pkt.port, &pkt.payload) {
                                     let _ = client.write_all(&packet).await;
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());
                                 }
@@ -156,7 +154,7 @@ impl Proxy {
                             if let Some(sid) = session_id {
                                 proxy.record_session_outbound_rx(sid, payload.len() as u64);
                             }
-                            if let Ok(packet) = encode_vless_udp_response(&target, port, &payload) {
+                            if let Ok(packet) = vless::VlessInboundUdpCodec.encode_response(&target, port, &payload) {
                                 if let Err(error) = client.write_all(&packet).await {
                                     warn!(error = %error, "failed to write chain response");
                                     break;
@@ -198,7 +196,7 @@ impl Proxy {
         packet: &[u8],
         auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError> {
-        let udp_packet = decode_vless_udp_packet(packet)?;
+        let udp_packet = vless::VlessInboundUdpCodec.decode_datagram(packet)?;
 
         UdpPipe::new(proxy, dispatch)
             .dispatch(UdpPipeInput {
