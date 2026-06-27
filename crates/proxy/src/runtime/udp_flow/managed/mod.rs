@@ -1,6 +1,7 @@
 mod cache;
 mod connection;
 mod datagram;
+mod datagram_manager;
 mod flow;
 pub(crate) mod model;
 pub(crate) mod state;
@@ -16,6 +17,7 @@ pub(crate) use connection::{
     ManagedTupleUdpSender, SharedManagedDatagramUdpConnection, SharedManagedUdpConnection,
 };
 pub(crate) use datagram::{managed_datagram_connection, ManagedDatagramSender};
+pub(crate) use datagram_manager::{ManagedDatagramFlowConnector, ManagedDatagramFlowManager};
 pub(crate) use flow::{ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume};
 pub(crate) use model::{
     ManagedDatagramFlowHandler, ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandler,
