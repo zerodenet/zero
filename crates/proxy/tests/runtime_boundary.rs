@@ -6053,8 +6053,11 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
             && !trojan_manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && mieru_manager_send.contains("resume.flow_cache_key(")
             && trojan_manager_send.contains("resume.flow_cache_key(")
-            && mieru_manager_send.contains("self.upstreams.get(&cache_key)")
-            && trojan_manager_send.contains("self.upstreams.get(&cache_key)"),
+            && mieru_manager_send.contains(".send_or_insert(")
+            && trojan_manager_send.contains(".send_or_insert(")
+            && !mieru_manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
+            && !trojan_manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
+            && managed_cache.contains("self.entries.get(&key)"),
         "stream UDP managers should ask protocol resumes for opaque cache identity instead of choosing protocol key variants"
     );
 }
@@ -7164,7 +7167,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     }
     assert!(
         manager_send.contains("resume.flow_cache_key(")
-            && manager_send.contains("self.upstreams.get(&cache_key)")
+            && manager_send.contains(".send_or_insert(")
+            && !manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
             && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("TrojanUdpPeer")
@@ -7479,7 +7483,8 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
     }
     assert!(
         manager_send.contains("resume.flow_cache_key(")
-            && manager_send.contains("self.upstreams.get(&cache_key)")
+            && manager_send.contains(".send_or_insert(")
+            && !manager_send.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
             && !manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !manager_send.contains("peer.endpoint")
             && !manager_model.contains("MieruUdpPeer")
@@ -7760,6 +7765,7 @@ fn trojan_udp_send_orchestration_lives_outside_manager() {
     let manager = read("src/adapters/trojan/udp/manager.rs");
     let send = manifest_dir().join("src/adapters/trojan/udp/manager/send.rs");
     let send_source = read("src/adapters/trojan/udp/manager/send.rs");
+    let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
 
     for forbidden in [
         "async fn send(",
@@ -7784,9 +7790,10 @@ fn trojan_udp_send_orchestration_lives_outside_manager() {
     assert!(
         !send_source.contains(".sender")
             && !send_source.contains(".responses")
-            && send_source.contains(".spawn_response_bridge(")
+            && send_source.contains(".send_or_insert(")
+            && managed_cache.contains("connection.spawn_response_bridge(chain_tasks, session_id)")
             && !send_source.contains("subscribe_responses()")
-            && send_source.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
+            && managed_cache.contains(".send(packet.target, packet.port, packet.payload)")
             && !send_source.contains("UdpFlowPacket::from_parts")
             && !send_source.contains(".send_tx")
             && !send_source.contains(".recv_tx"),

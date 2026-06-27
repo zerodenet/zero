@@ -30,21 +30,12 @@ impl TrojanChainManager {
         resume: &trojan::TrojanUdpFlowResume,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
         let cache_key = ManagedUdpConnectionCacheKey::new(resume.flow_cache_key(
             endpoint.server,
             endpoint.port,
             session_id,
         ));
-
-        if let Some(entry) = self.upstreams.get(&cache_key) {
-            entry.spawn_response_bridge(ctx.chain_tasks, session_id);
-            let _ = entry
-                .send(packet_ref.target, packet_ref.port, packet_ref.payload)
-                .await;
-            return Ok(sent);
-        }
 
         if resume.flow_requires_relay_upstream() {
             return Err(FlowFailure {
@@ -57,22 +48,20 @@ impl TrojanChainManager {
             });
         }
 
-        let entry = establish::direct(proxy, session, endpoint, resume)
+        self.upstreams
+            .send_or_insert(
+                cache_key,
+                ctx.chain_tasks,
+                session_id,
+                packet_ref,
+                establish::direct(proxy, session, endpoint, resume),
+            )
             .await
             .map_err(|e| FlowFailure {
                 stage: "trojan_establish",
                 error: e,
                 upstream: Some(endpoint.upstream()),
-            })?;
-
-        entry.spawn_response_bridge(ctx.chain_tasks, session_id);
-        self.upstreams.insert(cache_key, entry.clone());
-
-        let _ = entry
-            .send(packet_ref.target, packet_ref.port, packet_ref.payload)
-            .await;
-
-        Ok(sent)
+            })
     }
 
     async fn send_existing(

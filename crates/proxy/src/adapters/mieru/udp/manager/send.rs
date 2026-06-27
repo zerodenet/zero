@@ -30,28 +30,12 @@ impl MieruChainManager {
         relay: bool,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let sent = packet_ref.payload.len();
         let session_id = ctx.session_id;
         let cache_key = ManagedUdpConnectionCacheKey::new(resume.flow_cache_key(
             endpoint.server,
             endpoint.port,
             session_id,
         ));
-
-        if let Some(entry) = self.upstreams.get(&cache_key) {
-            entry.spawn_response_bridge(ctx.chain_tasks, session_id);
-            entry
-                .send(packet_ref.target, packet_ref.port, packet_ref.payload)
-                .await
-                .map_err(|error| FlowFailure {
-                    stage: "mieru_send",
-                    error: EngineError::Io(std::io::Error::other(format!(
-                        "mieru udp send: {error}"
-                    ))),
-                    upstream: Some(endpoint.upstream()),
-                })?;
-            return Ok(sent);
-        }
 
         if relay {
             return Err(FlowFailure {
@@ -64,26 +48,20 @@ impl MieruChainManager {
             });
         }
 
-        let entry = establish::direct(proxy, endpoint, resume)
+        self.upstreams
+            .send_or_insert(
+                cache_key,
+                ctx.chain_tasks,
+                session_id,
+                packet_ref,
+                establish::direct(proxy, endpoint, resume),
+            )
             .await
             .map_err(|e| FlowFailure {
                 stage: "mieru_establish",
                 error: e,
                 upstream: Some(endpoint.upstream()),
-            })?;
-
-        entry.spawn_response_bridge(ctx.chain_tasks, session_id);
-        self.upstreams.insert(cache_key, entry.clone());
-
-        entry
-            .send(packet_ref.target, packet_ref.port, packet_ref.payload)
-            .await
-            .map_err(|error| FlowFailure {
-                stage: "mieru_send",
-                error: EngineError::Io(std::io::Error::other(format!("mieru udp send: {error}"))),
-                upstream: Some(endpoint.upstream()),
-            })?;
-        Ok(sent)
+            })
     }
 
     async fn send_existing(
