@@ -624,6 +624,18 @@ pub fn decode_inbound_udp_datagram(
 pub struct VmessInboundUdpCodec;
 
 impl VmessInboundUdpCodec {
+    pub fn response_mode(&self, state: VmessUdpPayloadState) -> VmessUdpPayloadMode {
+        match state {
+            VmessUdpPayloadState::Unknown
+            | VmessUdpPayloadState::Mode(VmessUdpPayloadMode::VmessPacket) => {
+                VmessUdpPayloadMode::VmessPacket
+            }
+            VmessUdpPayloadState::Mode(VmessUdpPayloadMode::RawDatagram) => {
+                VmessUdpPayloadMode::RawDatagram
+            }
+        }
+    }
+
     pub fn encode_response(
         &self,
         mode: VmessUdpPayloadMode,
@@ -632,6 +644,16 @@ impl VmessInboundUdpCodec {
         payload: &[u8],
     ) -> Result<Vec<u8>, Error> {
         encode_inbound_udp_response(mode, target, port, payload)
+    }
+
+    pub fn encode_response_for_state(
+        &self,
+        state: VmessUdpPayloadState,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.encode_response(self.response_mode(state), target, port, payload)
     }
 
     pub fn encode_mux_response(
@@ -643,6 +665,23 @@ impl VmessInboundUdpCodec {
         payload: &[u8],
     ) -> Result<Vec<u8>, Error> {
         encode_inbound_mux_udp_response(mux_session_id, mode, target, port, payload)
+    }
+
+    pub fn encode_mux_response_for_state(
+        &self,
+        mux_session_id: u16,
+        state: VmessUdpPayloadState,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.encode_mux_response(
+            mux_session_id,
+            self.response_mode(state),
+            target,
+            port,
+            payload,
+        )
     }
 
     pub fn decode_datagram(

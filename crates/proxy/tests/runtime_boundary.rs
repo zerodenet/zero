@@ -2971,15 +2971,21 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !helper.contains("encode_vmess_udp_response")
             && !helper.contains("encode_vmess_mux_udp_response")
             && !helper.contains("vmess::VmessInboundUdpCodec")
+            && !mux.contains("fn vmess_udp_response_mode")
+            && !mux.contains("vmess::VmessUdpPayloadMode")
+            && !mux.contains(".response_mode(payload_mode)")
             && mux.contains("vmess::VmessInboundUdpCodec.decode_datagram")
-            && mux.contains("vmess::VmessInboundUdpCodec.encode_response")
-            && mux.contains("vmess::VmessInboundUdpCodec.encode_mux_response")
+            && mux.contains("vmess::VmessInboundUdpCodec.encode_response_for_state")
+            && mux.contains("vmess::VmessInboundUdpCodec.encode_mux_response_for_state")
             && mux.contains("vmess::VmessUdpPayloadState::Unknown")
             && protocol_udp.contains("struct VmessInboundUdpCodec")
+            && protocol_udp.contains("fn response_mode")
             && protocol_udp.contains("fn encode_response")
+            && protocol_udp.contains("fn encode_response_for_state")
             && protocol_udp.contains("fn encode_mux_response")
+            && protocol_udp.contains("fn encode_mux_response_for_state")
             && protocol_udp.contains("fn decode_datagram"),
-        "VMess inbound UDP packet framing should go directly through the protocols/vmess inbound codec from inbound glue"
+        "VMess inbound UDP packet framing and response mode selection should go through protocols/vmess inbound codec"
     );
 }
 
