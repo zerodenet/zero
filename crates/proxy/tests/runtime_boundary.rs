@@ -7056,8 +7056,13 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         "Mieru ordinary UDP flow codec should be protocol-owned and recovered from the resume descriptor, not carried by the adapter"
     );
     assert!(
-        adapter.contains("MieruUdpFlowResume::new")
+        !adapter.contains("MieruUdpFlowResume::new")
+            && adapter.contains("MieruUdpFlowConfig::new")
+            && adapter.contains(".flow_resume(false)")
+            && adapter.contains(".flow_resume(true)")
             && protocol_udp.contains("struct MieruUdpFlowResume")
+            && protocol_udp.contains("struct MieruUdpFlowConfig")
+            && protocol_udp.contains("pub fn flow_resume(&self, relay_chain: bool)")
             && protocol_udp.contains("pub fn peer_config(&self)")
             && protocol_udp.contains("pub fn flow_key(&self")
             && protocol_udp

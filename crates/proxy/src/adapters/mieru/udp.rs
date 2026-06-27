@@ -35,6 +35,7 @@ impl MieruAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
+        let config = mieru::MieruUdpFlowConfig::new(username, password);
         dispatch
             .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
                 proxy: Some(proxy),
@@ -44,9 +45,7 @@ impl MieruAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ManagedUdpFlowResume::new(mieru::MieruUdpFlowResume::new(
-                    username, password, false,
-                )),
+                resume: ManagedUdpFlowResume::new(config.flow_resume(false)),
                 payload,
                 kind: ManagedUdpFlowKind::StreamPacket,
                 outbound: ManagedUdpOutboundKind::StreamPacket,
@@ -72,6 +71,7 @@ impl MieruAdapter {
         else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
+        let config = mieru::MieruUdpFlowConfig::new(username, password);
         dispatch
             .start_tracked_managed_protocol_udp(ManagedProtocolUdpSend {
                 proxy: None,
@@ -81,9 +81,7 @@ impl MieruAdapter {
                 tls_server_name: None,
                 server,
                 port: *port,
-                resume: ManagedUdpFlowResume::new(mieru::MieruUdpFlowResume::new(
-                    username, password, true,
-                )),
+                resume: ManagedUdpFlowResume::new(config.flow_resume(true)),
                 payload,
                 kind: ManagedUdpFlowKind::RelayStream,
                 outbound: ManagedUdpOutboundKind::StreamPacket,

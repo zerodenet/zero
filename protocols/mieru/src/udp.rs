@@ -201,6 +201,22 @@ impl MieruUdpFlowResume {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct MieruUdpFlowConfig<'a> {
+    username: &'a str,
+    password: &'a str,
+}
+
+impl<'a> MieruUdpFlowConfig<'a> {
+    pub fn new(username: &'a str, password: &'a str) -> Self {
+        Self { username, password }
+    }
+
+    pub fn flow_resume(&self, relay_chain: bool) -> MieruUdpFlowResume {
+        MieruUdpFlowResume::new(self.username, self.password, relay_chain)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MieruUdpFlowKey {
     Leaf(MieruUdpLeafKey),
