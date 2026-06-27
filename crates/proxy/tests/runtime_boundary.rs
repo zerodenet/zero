@@ -5944,8 +5944,8 @@ fn packet_path_traits_are_grouped_by_responsibility() {
             && ss_model.contains("struct SsUdpPeer")
             && !h2_model.contains("struct H2UdpPeer")
             && trojan_model.contains("struct TrojanUdpPeer")
-            && mieru_model.contains("struct MieruUdpPeer"),
-        "protocol UDP peer models should not live under runtime packet-path helpers or protocol_runtime::udp root; Hysteria2 should use neutral OutboundEndpoint directly"
+            && !mieru_model.contains("struct MieruUdpPeer"),
+        "protocol UDP peer models should not live under runtime packet-path helpers or protocol_runtime::udp root; Hysteria2 and Mieru should use neutral OutboundEndpoint directly"
     );
     assert!(
         !packet_path.contains("ProtocolAdapter::"),
@@ -6771,13 +6771,15 @@ fn mieru_udp_packet_codec_lives_outside_manager() {
         );
     }
     assert!(
-        manager_send.contains(".cache_key(peer.endpoint.server, peer.endpoint.port, session_id)")
+        manager_send.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
+            && !manager_send.contains("peer.endpoint")
+            && !manager_model.contains("MieruUdpPeer")
             && manager_send.contains("request.resume.flow_requires_relay_upstream()")
             && !manager_connect.contains("MieruUdpFlowIo::establish_with_resume")
             && manager_establish.contains("stream::spawn_packet_stream(stream, resume)")
             && protocol_outbound.contains("pub async fn establish_with_resume")
             && !protocol_outbound.contains("pub async fn open_udp_flow"),
-        "Mieru UDP manager should consume protocol-owned opaque cache key and UDP establish helper"
+        "Mieru UDP manager should consume protocol-owned opaque cache key through neutral endpoints and UDP establish helper"
     );
 }
 

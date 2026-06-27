@@ -1,16 +1,18 @@
 use super::connect;
-use super::model::{MieruEntry, MieruUdpPeer};
+use super::model::MieruEntry;
 use super::stream;
+use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use zero_engine::EngineError;
 
 pub(super) async fn direct(
     proxy: &Proxy,
-    peer: &MieruUdpPeer<'_>,
+    endpoint: OutboundEndpoint<'_>,
+    resume: &mieru::MieruUdpFlowResume,
 ) -> Result<MieruEntry, EngineError> {
-    let stream = connect::direct_stream(proxy, peer).await?;
-    packet_stream(stream, peer.resume).await
+    let stream = connect::direct_stream(proxy, endpoint).await?;
+    packet_stream(stream, resume).await
 }
 
 pub(super) async fn packet_stream(
