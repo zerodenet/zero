@@ -13,10 +13,10 @@ mod bridge;
 mod entry;
 pub(super) mod model;
 
-use model::{SsKey, SsSendExisting, SsUdpPeer, SsUpstream};
+use model::{SsSendExisting, SsUdpPeer, SsUpstream};
 
 pub(crate) struct SsChainManager {
-    upstreams: HashMap<SsKey, Arc<SsUpstream>>,
+    upstreams: HashMap<shadowsocks::ShadowsocksUdpCacheKey, Arc<SsUpstream>>,
 }
 
 impl SsChainManager {

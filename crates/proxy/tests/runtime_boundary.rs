@@ -7133,7 +7133,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         );
     }
     assert!(
-        manager_model.contains("resume.cache_key(server, port)")
+        manager_send.contains("resume.cache_key(peer.endpoint.server, peer.endpoint.port)")
             && stream.contains("resume.connector_profile()")
             && stream.contains("Hysteria2Connector::new")
             && !transport.contains("request.resume.connector_profile()"),
@@ -7329,6 +7329,7 @@ fn h2_udp_state_model_lives_outside_manager() {
         "struct H2SendExisting",
         "struct H2Key",
         "enum H2Key",
+        "H2Key",
     ] {
         assert!(
             !manager.contains(forbidden),
@@ -7351,6 +7352,7 @@ fn h2_udp_model_details_live_outside_manager_root() {
         "struct H2SendExisting",
         "struct H2Key",
         "enum H2Key",
+        "H2Key",
     ] {
         assert!(
             !manager.contains(forbidden),
@@ -7358,12 +7360,18 @@ fn h2_udp_model_details_live_outside_manager_root() {
         );
     }
 
-    for required in ["struct H2Entry", "struct H2SendExisting", "H2Key"] {
+    for required in ["struct H2Entry", "struct H2SendExisting"] {
         assert!(
             model.contains(required),
             "h2_manager model details should live in h2_manager/model.rs; missing `{required}`"
         );
     }
+    assert!(
+        !model.contains("H2Key")
+            && read("src/adapters/hysteria2/udp/manager.rs")
+                .contains("HashMap<hysteria2::Hysteria2UdpCacheKey, H2Entry>"),
+        "h2_manager should store protocol-owned opaque cache keys without adapter-local H2Key wrappers"
+    );
 }
 
 #[test]
@@ -7375,6 +7383,7 @@ fn h2_udp_send_orchestration_lives_outside_manager() {
         "async fn send(",
         "pub(crate) async fn send_existing",
         "H2Key::from_peer",
+        "H2Key::from_resume",
         "h2_udp_packet",
         "h2_establish",
     ] {
@@ -7548,6 +7557,7 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
         "struct SsUpstream",
         "struct SsSendExisting",
         "struct SsKey",
+        "SsKey",
         "format!(\"{cipher_kind:?}\")",
     ] {
         assert!(
@@ -7608,9 +7618,10 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !shadowsocks_peer_model.contains("password: &'a str")
             && !shadowsocks_peer_model.contains("cache_key: &'a str")
             && !shadowsocks_peer_model.contains("leaf_key:")
-            && shadowsocks_peer_model.contains("SsKey(shadowsocks::ShadowsocksUdpCacheKey)")
-            && shadowsocks_peer_model.contains("fn from_resume(")
-            && shadowsocks_peer_model.contains("socket_flow_cache_key()"),
+            && !shadowsocks_peer_model.contains("SsKey")
+            && !shadowsocks_peer_model.contains("fn from_resume(")
+            && !shadowsocks_peer_model.contains("socket_flow_cache_key()")
+            && manager.contains("HashMap<shadowsocks::ShadowsocksUdpCacheKey, Arc<SsUpstream>>"),
         "ordinary Shadowsocks UDP peer model should carry only protocol-owned opaque cache identity"
     );
     assert!(
@@ -7665,6 +7676,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "cache_key: String",
         "cache_key: &str",
         "SsKey::new(server",
+        "SsKey::from_resume",
     ] {
         assert!(
             !manager.contains(forbidden) && !manager_model.contains(forbidden),

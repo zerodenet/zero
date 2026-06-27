@@ -6,10 +6,10 @@ pub(super) mod model;
 mod send;
 mod stream;
 
-use model::{H2Entry, H2Key};
+use model::H2Entry;
 
 pub(crate) struct H2ChainManager {
-    upstreams: HashMap<H2Key, H2Entry>,
+    upstreams: HashMap<hysteria2::Hysteria2UdpCacheKey, H2Entry>,
 }
 
 impl H2ChainManager {

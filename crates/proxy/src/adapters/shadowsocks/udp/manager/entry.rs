@@ -3,16 +3,16 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use super::bridge::BridgeWaiters;
-use super::model::{SsKey, SsUpstream};
+use super::model::SsUpstream;
 use zero_engine::EngineError;
 use zero_transport::shadowsocks_transport;
 
 pub(super) async fn ensure(
-    upstreams: &mut HashMap<SsKey, Arc<SsUpstream>>,
+    upstreams: &mut HashMap<shadowsocks::ShadowsocksUdpCacheKey, Arc<SsUpstream>>,
     resume: shadowsocks::ShadowsocksUdpFlowResume,
     target_addr: SocketAddr,
 ) -> Result<Arc<SsUpstream>, EngineError> {
-    let key = SsKey::from_resume(&resume);
+    let key = resume.socket_flow_cache_key();
     if let Some(entry) = upstreams.get(&key) {
         return Ok(entry.clone());
     }

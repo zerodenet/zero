@@ -7,15 +7,6 @@ use super::bridge::BridgeWaiters;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::Proxy;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct SsKey(shadowsocks::ShadowsocksUdpCacheKey);
-
-impl SsKey {
-    pub(super) fn from_resume(resume: &shadowsocks::ShadowsocksUdpFlowResume) -> Self {
-        Self(resume.socket_flow_cache_key())
-    }
-}
-
 pub(super) struct SsUpstream {
     pub(super) flow: Arc<ShadowsocksUdpSocketFlow>,
     pub(super) waiters: BridgeWaiters,

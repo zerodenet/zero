@@ -1,4 +1,4 @@
-use super::model::{H2Entry, H2Key, H2SendExisting, H2UdpPeer};
+use super::model::{H2Entry, H2SendExisting, H2UdpPeer};
 use super::{establish, H2ChainManager};
 use crate::protocol_runtime::udp::{
     FlowFailure, ManagedDatagramFlowHandler, ManagedExistingSend, ProtocolUdpFlowResume,
@@ -22,7 +22,7 @@ impl H2ChainManager {
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let sent = packet_ref.payload.len();
-        let key = H2Key::from_resume(&resume, peer.endpoint.server, peer.endpoint.port);
+        let key = resume.cache_key(peer.endpoint.server, peer.endpoint.port);
 
         if let Some(entry) = self.upstreams.get(&key) {
             let packet =
