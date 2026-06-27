@@ -66,6 +66,14 @@ impl MieruInboundUdpRequest {
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
+
+    pub fn target_endpoint(&self) -> (&Address, u16) {
+        (&self.target, self.port)
+    }
+
+    pub fn into_payload(self) -> Vec<u8> {
+        self.payload
+    }
 }
 
 #[cfg(feature = "crypto")]
@@ -86,9 +94,8 @@ impl MieruInboundUdpSession {
             .map(MieruInboundUdpRequest::from_packet)
     }
 
-    pub fn record_target(&mut self, sender: SocketAddr, request: &MieruInboundUdpRequest) {
-        self.targets_by_sender
-            .insert(sender, (request.target.clone(), request.port));
+    pub fn record_target(&mut self, sender: SocketAddr, target: Address, port: u16) {
+        self.targets_by_sender.insert(sender, (target, port));
     }
 
     pub async fn write_response_tokio<W>(

@@ -267,11 +267,12 @@ impl Proxy {
                         Ok(n) => {
                             let data = &read_buf[..n];
                             if let Ok(request) = udp_session.decode_request(data) {
-                                let target_addr = match request.target() {
+                                let (target, port) = request.target_endpoint();
+                                let target_addr = match target {
                                         zero_core::Address::Domain(domain) => {
                                             match self.resolver.resolve(domain).await {
                                                 Ok(ips) => ips.first().copied().map(|ip| {
-                                                    addr_from_ip(ip, request.port())
+                                                    addr_from_ip(ip, port)
                                                 }),
                                                 Err(_) => None,
                                             }
@@ -283,22 +284,24 @@ impl Proxy {
                                                         ip[0], ip[1], ip[2], ip[3],
                                                     ),
                                                 ),
-                                                request.port(),
+                                                port,
                                             ),
                                         ),
                                         zero_core::Address::Ipv6(ip) => Some(
                                             std::net::SocketAddr::new(
-                                                std::net::IpAddr::V6(
-                                                    std::net::Ipv6Addr::from(*ip),
-                                                ),
-                                                request.port(),
+                                                    std::net::IpAddr::V6(
+                                                        std::net::Ipv6Addr::from(*ip),
+                                                    ),
+                                                port,
                                             ),
                                         ),
                                     };
 
                                 if let Some(addr) = target_addr {
-                                    udp_session.record_target(addr, &request);
-                                    let _ = udp_socket.send_to(request.payload(), addr).await;
+                                    let target = target.clone();
+                                    let payload = request.into_payload();
+                                    udp_session.record_target(addr, target, port);
+                                    let _ = udp_socket.send_to(&payload, addr).await;
                                 }
                             }
                         }
