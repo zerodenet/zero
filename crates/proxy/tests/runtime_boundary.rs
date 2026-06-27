@@ -1420,8 +1420,9 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
     }
     for forbidden in [
         "Socks5UdpFlowConfig::new",
-        "config.packet_path()",
         "packet_path.cache_key()",
+        ".packet_path_cache_key()",
+        ".packet_path_association_config()",
         "ManagedUdpSend {",
         "ManagedUdpFlowResume::new",
     ] {
@@ -1432,10 +1433,12 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
     }
     assert!(
         packet_path.contains("Socks5UdpFlowConfig::new")
-            && !packet_path.contains(".packet_path()")
             && !packet_path.contains("packet_path.cache_key()")
-            && packet_path.contains(".packet_path_cache_key()")
-            && packet_path.contains(".association_target()")
+            && packet_path.contains(".packet_path_spec()")
+            && packet_path.contains("spec.cache_key()")
+            && packet_path.contains("spec.association_target()")
+            && !packet_path.contains(".packet_path_cache_key()")
+            && !packet_path.contains("config.association_target()")
             && !packet_path.contains(".packet_path_association_config()")
             && flow.contains("Socks5UdpFlowConfig::new")
             && flow.contains(".flow_resume()")
@@ -9122,10 +9125,18 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         !socks5_adapter.contains("socks5::udp_cache_key")
             && !socks5_adapter.contains("Socks5UdpFlowConfig::new")
             && socks5_packet_path.contains("Socks5UdpFlowConfig::new")
+            && socks5_packet_path.contains(".packet_path_spec()")
+            && socks5_packet_path.contains("spec.cache_key()")
+            && socks5_packet_path.contains("spec.association_target()")
+            && !socks5_packet_path.contains(".packet_path_cache_key()")
             && !socks5_adapter.contains("Socks5UdpFlowConfig {")
             && !socks5_packet_path.contains("Socks5UdpFlowConfig {")
             && socks5_shared.contains("struct Socks5UdpFlowConfig")
-            && socks5_shared.contains("pub fn new("),
+            && socks5_shared.contains("pub fn new(")
+            && socks5_shared.contains("pub struct Socks5UdpPacketPathSpec")
+            && socks5_shared.contains("pub fn packet_path_spec(&self)")
+            && !socks5_shared.contains("pub fn packet_path_cache_key(&self)")
+            && !socks5_shared.contains("pub fn packet_path_association_config(&self)"),
         "SOCKS5 adapter should request packet-path cache identity through a protocol-owned config helper"
     );
     assert!(

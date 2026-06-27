@@ -324,19 +324,34 @@ impl<'a> Socks5UdpFlowConfig<'a> {
         udp_cache_key(self.tag, self.server, self.port, self.username)
     }
 
-    pub fn packet_path_cache_key(&self) -> String {
-        self.cache_key()
-    }
-
-    pub fn packet_path_association_config(&self) -> Socks5UdpAssociationConfig<'a> {
-        self.association_config()
-    }
-
     pub fn association_target(&self) -> Socks5UdpAssociationTarget {
         self.flow_resume().association_target(
             self.tag.to_owned(),
             self.server.to_owned(),
             self.port,
         )
+    }
+
+    pub fn packet_path_spec(&self) -> Socks5UdpPacketPathSpec {
+        Socks5UdpPacketPathSpec {
+            cache_key: self.cache_key(),
+            association_target: self.association_target(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpPacketPathSpec {
+    cache_key: String,
+    association_target: Socks5UdpAssociationTarget,
+}
+
+impl Socks5UdpPacketPathSpec {
+    pub fn cache_key(&self) -> String {
+        self.cache_key.clone()
+    }
+
+    pub fn association_target(&self) -> Socks5UdpAssociationTarget {
+        self.association_target.clone()
     }
 }
