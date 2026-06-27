@@ -4,7 +4,9 @@ use async_trait::async_trait;
 use tokio::time::Instant as TokioInstant;
 use zero_engine::EngineError;
 
-use super::active::ActiveUpstreamSocks5UdpAssociation;
+use super::establish::{
+    self, Socks5UdpAssociationEstablishRequest, Socks5UdpAssociationEstablisher,
+};
 use super::model::{
     BoxedSocks5UdpAssociation, ClosedSocks5UdpAssociation, Socks5UdpAssociation,
     Socks5UdpAssociationView, UpstreamAssociationCloseReason,
@@ -14,10 +16,20 @@ use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
 use crate::runtime::udp_flow::protocol_state::UpstreamAssociationHandler;
 
-#[derive(Default)]
 pub(crate) struct Socks5UdpRuntime {
     pub(super) upstream: Option<BoxedSocks5UdpAssociation>,
     pub(super) idle_deadline: Option<TokioInstant>,
+    establisher: Box<dyn Socks5UdpAssociationEstablisher>,
+}
+
+impl Default for Socks5UdpRuntime {
+    fn default() -> Self {
+        Self {
+            upstream: None,
+            idle_deadline: None,
+            establisher: establish::default_establisher(),
+        }
+    }
 }
 
 impl Socks5UdpRuntime {
@@ -122,15 +134,17 @@ impl Socks5UdpRuntime {
             self.idle_deadline = None;
         }
 
-        match ActiveUpstreamSocks5UdpAssociation::establish_boxed(
-            proxy,
-            &association.outbound_tag,
-            &association.server,
-            association.port,
-            association.config.as_ref(),
-            session_id,
-        )
-        .await
+        match self
+            .establisher
+            .establish_boxed(Socks5UdpAssociationEstablishRequest {
+                proxy,
+                outbound_tag: &association.outbound_tag,
+                server: &association.server,
+                port: association.port,
+                config: association.config.as_ref(),
+                session_id,
+            })
+            .await
         {
             Ok(a) => {
                 proxy.record_udp_upstream_association_created();

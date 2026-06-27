@@ -1929,6 +1929,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let outbound = read("src/outbound/socks5.rs");
     let adapter = read("src/adapters/socks5/udp.rs");
     let active = read("src/adapters/socks5/udp/active.rs");
+    let establish = read("src/adapters/socks5/udp/establish.rs");
     let model = read("src/adapters/socks5/udp/model.rs");
     let packet_path_source = read("src/adapters/socks5/udp/packet_path.rs");
     let send_source = read("src/adapters/socks5/udp/send.rs");
@@ -1973,6 +1974,18 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && active.contains("Socks5UdpAssociation::from_relay_endpoint")
             && active.contains("impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation")
             && active.contains("impl Socks5UdpPacketPathAssociation for ActiveUpstreamSocks5UdpAssociation")
+            && establish.contains("trait Socks5UdpAssociationEstablisher")
+            && establish.contains("struct DefaultSocks5UdpAssociationEstablisher")
+            && establish.contains("fn default_establisher()")
+            && establish.contains("fn establish_shared_packet_path_association")
+            && establish.contains("ActiveUpstreamSocks5UdpAssociation::establish")
+            && runtime_source.contains("Box<dyn Socks5UdpAssociationEstablisher>")
+            && runtime_source.contains("establish::default_establisher()")
+            && !runtime_source.contains("DefaultSocks5UdpAssociationEstablisher")
+            && packet_path_source.contains("establish_shared_packet_path_association")
+            && !packet_path_source.contains("DefaultSocks5UdpAssociationEstablisher")
+            && !runtime_source.contains("use super::active::ActiveUpstreamSocks5UdpAssociation")
+            && !packet_path_source.contains("use super::active::ActiveUpstreamSocks5UdpAssociation")
             && !active.contains("Socks5UdpAssociation::new")
             && !active.contains("Socks5UdpRelay,")
             && !active.contains("Socks5UdpRelayEndpoint")

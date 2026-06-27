@@ -7,8 +7,7 @@ use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
 
 use super::model::{
-    BoxedSocks5UdpAssociation, SharedSocks5UdpPacketPathAssociation, Socks5UdpAssociationHandle,
-    Socks5UdpPacketPathAssociation, UpstreamAssociationCloseReason,
+    Socks5UdpAssociationHandle, Socks5UdpPacketPathAssociation, UpstreamAssociationCloseReason,
 };
 use crate::runtime::Proxy;
 use crate::transport::MeteredStream;
@@ -24,32 +23,6 @@ pub(super) struct ActiveUpstreamSocks5UdpAssociation {
 }
 
 impl ActiveUpstreamSocks5UdpAssociation {
-    pub(super) async fn establish_boxed(
-        proxy: &Proxy,
-        outbound_tag: &str,
-        server: &str,
-        port: u16,
-        config: socks5::Socks5UdpAssociationConfig<'_>,
-        session_id: u64,
-    ) -> Result<BoxedSocks5UdpAssociation, EngineError> {
-        Ok(Box::new(
-            Self::establish(proxy, outbound_tag, server, port, config, session_id).await?,
-        ))
-    }
-
-    pub(super) async fn establish_shared(
-        proxy: &Proxy,
-        outbound_tag: &str,
-        server: &str,
-        port: u16,
-        config: socks5::Socks5UdpAssociationConfig<'_>,
-        session_id: u64,
-    ) -> Result<SharedSocks5UdpPacketPathAssociation, EngineError> {
-        Ok(std::sync::Arc::new(
-            Self::establish(proxy, outbound_tag, server, port, config, session_id).await?,
-        ))
-    }
-
     pub(super) async fn establish(
         proxy: &Proxy,
         outbound_tag: &str,
