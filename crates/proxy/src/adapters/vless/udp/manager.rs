@@ -33,13 +33,13 @@ fn upstream_from_stream(session_id: u64, flow: vless::VlessUdpFlowHandle) -> Vle
 async fn establish_vless_udp_upstream_over_stream(
     proxy: &Proxy,
     session: &Session,
-    identity: vless::VlessUdpIdentity,
+    config: vless::VlessUdpFlowConfig<'_>,
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<VlessUdpUpstream, EngineError> {
-    let established =
-        vless::establish_udp_flow_with_initial_packet(stream, session, identity, initial_payload)
-            .await?;
+    let established = config
+        .establish_flow_with_initial_packet(stream, session, initial_payload)
+        .await?;
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
     Ok(upstream_from_stream(session.id, established.handle))
 }
@@ -50,7 +50,7 @@ async fn establish_vless_udp_upstream(
     session: &Session,
     server: &str,
     port: u16,
-    identity: vless::VlessUdpIdentity,
+    config: vless::VlessUdpFlowConfig<'_>,
     initial_payload: &[u8],
     transport: Option<&crate::transport::VlessUdpTransportOptions<'_>>,
 ) -> Result<VlessUdpUpstream, EngineError> {
@@ -68,8 +68,7 @@ async fn establish_vless_udp_upstream(
         None => socket.into(),
     };
 
-    establish_vless_udp_upstream_over_stream(proxy, session, identity, initial_payload, stream)
-        .await
+    establish_vless_udp_upstream_over_stream(proxy, session, config, initial_payload, stream).await
 }
 
 /// VLESS UDP outbound manager -?manages per-target upstream connections.
@@ -153,7 +152,7 @@ impl VlessUdpOutboundManager {
         let upstream = establish_vless_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.config.identity(),
+            request.config,
             request.payload,
             stream,
         )
@@ -195,7 +194,7 @@ impl VlessUdpOutboundManager {
         let upstream = establish_vless_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.config.identity(),
+            request.config,
             request.payload,
             stream,
         )
@@ -293,7 +292,7 @@ impl VlessUdpOutboundManager {
             request.session,
             request.server,
             request.server_port,
-            request.config.identity(),
+            request.config,
             request.initial_payload,
             request.transport,
         )

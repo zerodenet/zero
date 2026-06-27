@@ -53,6 +53,27 @@ impl<'a> VmessUdpFlowConfig<'a> {
     pub fn cipher_name(&self) -> &'a str {
         self.cipher_name
     }
+
+    pub fn uuid(&self) -> [u8; 16] {
+        self.identity.uuid
+    }
+
+    pub fn cipher(&self) -> VmessCipher {
+        self.identity.cipher
+    }
+
+    pub async fn establish_flow_with_initial_packet<S>(
+        &self,
+        stream: S,
+        session: &Session,
+        initial_payload: &[u8],
+    ) -> Result<VmessEstablishedUdpFlowHandle, Error>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+    {
+        establish_udp_flow_with_initial_packet(stream, session, self.identity, initial_payload)
+            .await
+    }
 }
 
 pub fn parse_udp_identity(id: &str, cipher: &str) -> Result<VmessUdpIdentity, Error> {

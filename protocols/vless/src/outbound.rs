@@ -262,6 +262,20 @@ impl<'a> VlessUdpFlowConfig<'a> {
     pub fn mux_flow_enabled(&self) -> bool {
         self.flow == Some("xtls-rprx-vision") || self.flow == Some("xtls-rprx-vision-udp443")
     }
+
+    #[cfg(feature = "reality")]
+    pub async fn establish_flow_with_initial_packet<S>(
+        &self,
+        stream: S,
+        session: &Session,
+        initial_payload: &[u8],
+    ) -> Result<VlessEstablishedUdpFlowHandle, Error>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+    {
+        establish_udp_flow_with_initial_packet(stream, session, self.identity, initial_payload)
+            .await
+    }
 }
 
 pub fn parse_udp_identity(id: &str) -> Result<VlessUdpIdentity, Error> {

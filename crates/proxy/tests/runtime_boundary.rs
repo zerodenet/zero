@@ -2201,14 +2201,17 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     assert!(
         !runtime.contains("vless::open_udp_flow")
             && !runtime.contains("vless::open_mux_udp_flow")
-            && runtime.contains("vless::establish_udp_flow_with_initial_packet")
+            && runtime.contains(".establish_flow_with_initial_packet(")
+            && !runtime.contains("vless::establish_udp_flow_with_initial_packet")
             && runtime.contains("vless::encode_udp_flow_initial_packet")
             && !runtime.contains("vless::establish_udp_flow_stream")
+            && !runtime.contains("vless::VlessUdpIdentity")
             && !runtime.contains("vless::VlessUdpFlowIo")
             && !runtime.contains("broadcast::channel::<VlessFlowResponse>")
             && model.contains("vless::VlessUdpFlowSession")
             && !model.contains("vless::VlessUdpFlowSender")
             && protocol_outbound.contains("pub async fn establish_udp_flow_with_initial_packet")
+            && protocol_outbound.contains("pub async fn establish_flow_with_initial_packet")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
             && protocol_outbound.contains("tokio::select!")
             && protocol_outbound.contains("struct VlessUdpFlowSender")
@@ -2462,15 +2465,18 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     assert!(
         !runtime.contains("vmess::open_udp_flow")
             && !runtime.contains("vmess::open_mux_udp_flow")
-            && runtime.contains("vmess::establish_udp_flow_with_initial_packet")
+            && runtime.contains(".establish_flow_with_initial_packet(")
+            && !runtime.contains("vmess::establish_udp_flow_with_initial_packet")
             && runtime.contains("vmess::start_udp_flow_with_initial_packet")
             && !runtime.contains("vmess::establish_udp_flow_stream")
             && !runtime.contains("vmess::encode_udp_flow_initial_packet")
+            && !runtime.contains("vmess::VmessUdpIdentity")
             && !runtime.contains("vmess::VmessUdpFlowIo")
             && !runtime.contains("broadcast::channel::<VmessFlowResponse>")
             && model.contains("vmess::VmessUdpFlowSession")
             && !model.contains("vmess::VmessUdpFlowSender")
             && protocol.contains("pub async fn establish_udp_flow_with_initial_packet")
+            && protocol.contains("pub async fn establish_flow_with_initial_packet")
             && protocol.contains("pub fn start_udp_flow_with_initial_packet")
             && protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("tokio::select!")
@@ -6280,12 +6286,12 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
         (
             "src/adapters/vless/udp/manager.rs",
             &vless_runtime,
-            "establish_udp_flow_with_initial_packet",
+            "establish_flow_with_initial_packet",
         ),
         (
             "src/adapters/vmess/udp/manager.rs",
             &vmess_runtime,
-            "establish_udp_flow_with_initial_packet",
+            "establish_flow_with_initial_packet",
         ),
     ] {
         for forbidden in [".encode_packet(", ".decode_packet("] {
@@ -6299,6 +6305,10 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
                 && !content.contains(".read_packet_tokio(")
                 && content.contains(flow_helper),
             "{source} should keep cache/bridge glue and delegate protocol UDP flow pumping"
+        );
+        assert!(
+            !content.contains("::establish_udp_flow_with_initial_packet"),
+            "{source} should call flow pumping through the protocol-owned UDP flow config"
         );
     }
 

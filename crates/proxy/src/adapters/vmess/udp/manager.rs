@@ -30,13 +30,13 @@ fn upstream_from_stream(session_id: u64, flow: vmess::VmessUdpFlowHandle) -> Vme
 async fn establish_vmess_udp_upstream_over_stream(
     proxy: &Proxy,
     session: &Session,
-    identity: vmess::VmessUdpIdentity,
+    config: vmess::VmessUdpFlowConfig<'_>,
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<VmessUdpUpstream, EngineError> {
-    let established =
-        vmess::establish_udp_flow_with_initial_packet(stream, session, identity, initial_payload)
-            .await?;
+    let established = config
+        .establish_flow_with_initial_packet(stream, session, initial_payload)
+        .await?;
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
     Ok(upstream_from_stream(session.id, established.handle))
 }
@@ -52,9 +52,9 @@ async fn establish_vmess_udp_upstream(
                 session: request.session,
                 server: request.server.to_owned(),
                 port: request.server_port,
-                id: request.config.identity().uuid,
+                id: request.config.uuid(),
                 cipher_name: request.config.cipher_name().to_owned(),
-                cipher: request.config.identity().cipher,
+                cipher: request.config.cipher(),
                 tls: request.transport.and_then(|transport| transport.tls),
                 ws: request.transport.and_then(|transport| transport.ws),
                 grpc: request.transport.and_then(|transport| transport.grpc),
@@ -97,7 +97,7 @@ async fn establish_vmess_udp_upstream(
     establish_vmess_udp_upstream_over_stream(
         request.proxy,
         request.session,
-        request.config.identity(),
+        request.config,
         request.initial_payload,
         stream,
     )
@@ -154,7 +154,7 @@ impl VmessUdpOutboundManager {
         let upstream = establish_vmess_udp_upstream_over_stream(
             request.proxy,
             request.session,
-            request.config.identity(),
+            request.config,
             request.payload,
             stream,
         )
