@@ -5,10 +5,12 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 
-use shadowsocks::{ShadowsocksInboundProfile, ShadowsocksInboundUdpSession};
+use shadowsocks::{
+    ShadowsocksInboundProfile, ShadowsocksInboundUdpResponseTarget, ShadowsocksInboundUdpSession,
+};
 use tokio::net::UdpSocket;
 use tracing::warn;
-use zero_core::{Address, ProtocolType};
+use zero_core::ProtocolType;
 use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
@@ -83,9 +85,11 @@ impl Proxy {
                             ss_send_protocol_response(SsProtocolResponse {
                                 socket: udp_socket.as_ref(),
                                 udp_session: &udp_session,
-                                client_session_id: client_ss_session_ids.get(&sid).copied(),
-                                target: &address_from_socket_addr(sender),
-                                port: sender.port(),
+                                response_target: ShadowsocksInboundUdpResponseTarget::from_parts(
+                                    client_ss_session_ids.get(&sid).copied(),
+                                    &address_from_socket_addr(sender),
+                                    sender.port(),
+                                ),
                                 payload: &direct_buf[..n],
                                 client,
                             })
@@ -102,9 +106,11 @@ impl Proxy {
                                     ss_send_protocol_response(SsProtocolResponse {
                                         socket: udp_socket.as_ref(),
                                         udp_session: &udp_session,
-                                        client_session_id: client_ss_session_ids.get(&sid).copied(),
-                                        target: &target,
-                                        port,
+                                        response_target: ShadowsocksInboundUdpResponseTarget::from_parts(
+                                            client_ss_session_ids.get(&sid).copied(),
+                                            &target,
+                                            port,
+                                        ),
                                         payload: &payload,
                                         client,
                                     })
@@ -133,20 +139,15 @@ impl Proxy {
 struct SsProtocolResponse<'a> {
     socket: &'a UdpSocket,
     udp_session: &'a ShadowsocksInboundUdpSession,
-    client_session_id: Option<u64>,
-    target: &'a Address,
-    port: u16,
+    response_target: ShadowsocksInboundUdpResponseTarget,
     payload: &'a [u8],
     client: SocketAddr,
 }
 
 async fn ss_send_protocol_response(response: SsProtocolResponse<'_>) {
-    let resp = response.udp_session.encode_response_to_client(
-        response.client_session_id,
-        response.target,
-        response.port,
-        response.payload,
-    );
+    let resp = response
+        .udp_session
+        .response_frame(&response.response_target, response.payload);
     let Ok(response_datagram) = resp else {
         return;
     };

@@ -2133,14 +2133,19 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
     assert!(
         udp.contains("ShadowsocksInboundUdpSession")
             && udp.contains("udp_session.decode_request")
-            && udp.contains("udp_session.encode_response_to_client")
+            && udp.contains("ShadowsocksInboundUdpResponseTarget")
+            && udp.contains(".response_frame(")
+            && udp.contains("response_target:")
             && !udp.contains("ShadowsocksInboundUdpCodec")
             && !udp.contains(".encode_response(")
+            && !udp.contains("udp_session.encode_response_to_client")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpCodec")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpSession")
             && protocol_inbound.contains("fn decode_request")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpResponse")
+            && protocol_inbound.contains("struct ShadowsocksInboundUdpResponseTarget")
             && protocol_inbound.contains("fn encode_response_to_client")
+            && protocol_inbound.contains("fn response_frame")
             && !inbound_packet_struct.contains("pub target: Address")
             && !inbound_packet_struct.contains("pub payload: Vec<u8>")
             && !inbound_packet_struct.contains("pub client_session_id: Option<u64>")
@@ -2148,6 +2153,8 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && !udp.contains("request.target,")
             && !udp.contains("request.payload,")
             && !udp.contains("request.client_session_id,")
+            && !udp.contains("client_session_id:")
+            && !udp.contains("port:")
             && !udp.contains("&response_datagram.datagram"),
         "Shadowsocks inbound UDP should delegate protocol datagram logic through protocols/shadowsocks inbound UDP session"
     );

@@ -190,6 +190,29 @@ impl ShadowsocksInboundUdpResponse {
     }
 }
 
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksInboundUdpResponseTarget {
+    client_session_id: Option<u64>,
+    target: Address,
+    port: u16,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksInboundUdpResponseTarget {
+    pub fn new(client_session_id: Option<u64>, target: Address, port: u16) -> Self {
+        Self {
+            client_session_id,
+            target,
+            port,
+        }
+    }
+
+    pub fn from_parts(client_session_id: Option<u64>, target: &Address, port: u16) -> Self {
+        Self::new(client_session_id, target.clone(), port)
+    }
+}
+
 /// Protocol-owned codec/state for Shadowsocks inbound UDP.
 ///
 /// Runtime code owns socket I/O and routing, while this type owns
@@ -313,6 +336,19 @@ impl ShadowsocksInboundUdpCodec {
             datagram: self.encode_response(client_session_id, target, port, payload)?,
         })
     }
+
+    pub fn response_frame(
+        &self,
+        target: &ShadowsocksInboundUdpResponseTarget,
+        payload: &[u8],
+    ) -> Result<ShadowsocksInboundUdpResponse, Error> {
+        self.encode_response_to_client(
+            target.client_session_id,
+            &target.target,
+            target.port,
+            payload,
+        )
+    }
 }
 
 #[cfg(feature = "crypto")]
@@ -342,6 +378,14 @@ impl ShadowsocksInboundUdpSession {
     ) -> Result<ShadowsocksInboundUdpResponse, Error> {
         self.codec
             .encode_response_to_client(client_session_id, target, port, payload)
+    }
+
+    pub fn response_frame(
+        &self,
+        target: &ShadowsocksInboundUdpResponseTarget,
+        payload: &[u8],
+    ) -> Result<ShadowsocksInboundUdpResponse, Error> {
+        self.codec.response_frame(target, payload)
     }
 }
 

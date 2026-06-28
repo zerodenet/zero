@@ -15,7 +15,7 @@ pub use inbound::ShadowsocksInbound;
 pub use inbound::{
     ShadowsocksAccept, ShadowsocksInboundProfile, ShadowsocksInboundTcpState,
     ShadowsocksInboundUdpCodec, ShadowsocksInboundUdpPacket, ShadowsocksInboundUdpResponse,
-    ShadowsocksInboundUdpSession,
+    ShadowsocksInboundUdpResponseTarget, ShadowsocksInboundUdpSession,
 };
 pub use metadata::ShadowsocksProtocol;
 pub use outbound::ShadowsocksOutbound;
