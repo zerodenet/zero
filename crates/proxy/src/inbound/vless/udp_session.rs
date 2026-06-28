@@ -126,11 +126,12 @@ impl Proxy {
                     match upstream {
                         Ok(pkt) => {
                             last_activity = TokioInstant::now();
+                            let (target, port, payload) = pkt.into_parts();
                             if udp_session.write_response_tokio(
                                 &mut client,
-                                pkt.target(),
-                                pkt.port(),
-                                pkt.payload(),
+                                &target,
+                                port,
+                                &payload,
                             ).await.is_ok() {
                                 proxy.record_session_inbound_traffic(0, client.drain_traffic());
                             }
