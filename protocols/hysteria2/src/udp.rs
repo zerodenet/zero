@@ -393,6 +393,15 @@ pub struct Hysteria2UdpPacketPathCarrier {
     codec: Hysteria2DatagramCodec,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2UdpPacketPathCarrierBuild {
+    cache_key: String,
+    server: String,
+    port: u16,
+    connector_profile: Hysteria2UdpConnectorProfile,
+    codec: Hysteria2DatagramCodec,
+}
+
 impl Hysteria2UdpPacketPathCarrier {
     pub fn cache_key(&self) -> String {
         self.cache_key.clone()
@@ -430,6 +439,38 @@ impl Hysteria2UdpPacketPathSpec {
             connector_profile: self.connector_profile(),
             codec: Hysteria2DatagramCodec,
         }
+    }
+
+    pub fn carrier_build(&self, server: &str, port: u16) -> Hysteria2UdpPacketPathCarrierBuild {
+        Hysteria2UdpPacketPathCarrierBuild {
+            cache_key: self.carrier_cache_key(),
+            server: server.to_owned(),
+            port,
+            connector_profile: self.connector_profile(),
+            codec: Hysteria2DatagramCodec,
+        }
+    }
+}
+
+impl Hysteria2UdpPacketPathCarrierBuild {
+    pub fn cache_key(&self) -> String {
+        self.cache_key.clone()
+    }
+
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
+        self.connector_profile.clone()
+    }
+
+    pub fn codec(&self) -> Hysteria2DatagramCodec {
+        self.codec
     }
 }
 

@@ -676,6 +676,13 @@ pub struct ShadowsocksUdpPacketPathDatagram {
 }
 
 #[cfg(feature = "crypto")]
+#[derive(Debug, Clone)]
+pub struct ShadowsocksUdpPacketPathDatagramSourceParts {
+    cache_key: alloc::string::String,
+    codec: ShadowsocksDatagramCodec,
+}
+
+#[cfg(feature = "crypto")]
 impl ShadowsocksUdpPacketPathDatagram {
     pub fn cache_key(&self) -> alloc::string::String {
         self.cache_key.clone()
@@ -723,6 +730,16 @@ impl ShadowsocksUdpPacketPathSpec {
             },
         }
     }
+
+    pub fn datagram_source_parts(&self) -> ShadowsocksUdpPacketPathDatagramSourceParts {
+        ShadowsocksUdpPacketPathDatagramSourceParts {
+            cache_key: self.datagram_cache_key(),
+            codec: ShadowsocksDatagramCodec {
+                cipher: self.resume.cipher,
+                password: self.resume.password.clone(),
+            },
+        }
+    }
 }
 
 #[cfg(feature = "crypto")]
@@ -732,9 +749,42 @@ pub struct ShadowsocksUdpPacketPathCarrier {
 }
 
 #[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksUdpPacketPathCarrierBuild {
+    cache_key: alloc::string::String,
+}
+
+#[cfg(feature = "crypto")]
 impl ShadowsocksUdpPacketPathCarrier {
     pub fn cache_key(&self) -> alloc::string::String {
         self.cache_key.clone()
+    }
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpPacketPathSpec {
+    pub fn carrier_build(&self) -> ShadowsocksUdpPacketPathCarrierBuild {
+        ShadowsocksUdpPacketPathCarrierBuild {
+            cache_key: self.carrier_cache_key(),
+        }
+    }
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpPacketPathCarrierBuild {
+    pub fn cache_key(&self) -> alloc::string::String {
+        self.cache_key.clone()
+    }
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpPacketPathDatagramSourceParts {
+    pub fn cache_key(&self) -> alloc::string::String {
+        self.cache_key.clone()
+    }
+
+    pub fn codec(&self) -> ShadowsocksDatagramCodec {
+        self.codec.clone()
     }
 }
 

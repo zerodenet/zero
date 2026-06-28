@@ -34,5 +34,5 @@ pub use udp::{
     Hysteria2InboundUdpCodec, Hysteria2InboundUdpRequest, Hysteria2UdpConnectorProfile,
     Hysteria2UdpFlowConfig, Hysteria2UdpFlowIo, Hysteria2UdpFlowPacket, Hysteria2UdpFlowResume,
     Hysteria2UdpFlowSpec, Hysteria2UdpFlowStore, Hysteria2UdpPacket, Hysteria2UdpPacketPathCarrier,
-    Hysteria2UdpPacketPathSpec, Hysteria2UdpPacketTarget,
+    Hysteria2UdpPacketPathCarrierBuild, Hysteria2UdpPacketPathSpec, Hysteria2UdpPacketTarget,
 };
