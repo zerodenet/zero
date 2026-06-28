@@ -53,71 +53,72 @@ impl Proxy {
 
         loop {
             select! {
-                frame = vmess::read_mux_stream_frame(&mut reader) => {
-                    let frame = match frame {
-                        Ok(frame) => frame,
+                event = vmess::read_mux_server_event(&mut reader) => {
+                    let event = match event {
+                        Ok(event) => event,
                         Err(error) => {
                             warn!(error = %error, "vmess mux frame read failed");
                             break;
                         }
                     };
 
-                    if frame.status == vmess::MUX_STATUS_KEEP_ALIVE {
-                        continue;
-                    }
-
-                    if frame.status == vmess::MUX_STATUS_NEW {
-                        let Some(network) = frame.network else {
-                            warn!("vmess mux new frame missing network");
-                            continue;
-                        };
-                        let (Some(target), Some(port)) = (frame.target.clone(), frame.port) else {
-                            warn!("vmess mux new frame missing target");
-                            let _ = write_tx.send(frame_encoder.end_stream(frame.session_id)?);
-                            continue;
-                        };
-
-                        let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-                        streams.insert(frame.session_id, up_tx.clone());
-                        if !frame.payload.is_empty() {
-                            let _ = up_tx.send(frame.payload);
-                        }
-                        match network {
-                            Network::Tcp => {
-                                self.spawn_vmess_mux_tcp_stream_task(VmessMuxTcpStreamTask {
-                                    tasks: &mut mux_tasks,
-                                    mux_session_id: frame.session_id,
-                                    target,
-                                    port,
-                                    up_rx,
-                                    write_tx: write_tx.clone(),
-                                    frame_encoder,
-                                    inbound_tag: inbound_tag.to_owned(),
-                                })
+                    match event {
+                        vmess::VmessMuxServerEvent::KeepAlive => continue,
+                        vmess::VmessMuxServerEvent::NewStream {
+                            session_id,
+                            network,
+                            target,
+                            port,
+                            payload,
+                        } => {
+                            let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+                            streams.insert(session_id, up_tx.clone());
+                            if !payload.is_empty() {
+                                let _ = up_tx.send(payload);
                             }
-                            Network::Udp => {
-                                self.spawn_vmess_mux_udp_stream_task(VmessMuxUdpStreamTask {
-                                    tasks: &mut mux_tasks,
-                                    mux_session_id: frame.session_id,
-                                    default_target: target,
-                                    default_port: port,
-                                    up_rx,
-                                    write_tx: write_tx.clone(),
-                                    frame_encoder,
-                                    inbound_tag: inbound_tag.to_owned(),
-                                })
+                            match network {
+                                Network::Tcp => {
+                                    self.spawn_vmess_mux_tcp_stream_task(VmessMuxTcpStreamTask {
+                                        tasks: &mut mux_tasks,
+                                        mux_session_id: session_id,
+                                        target,
+                                        port,
+                                        up_rx,
+                                        write_tx: write_tx.clone(),
+                                        frame_encoder,
+                                        inbound_tag: inbound_tag.to_owned(),
+                                    })
+                                }
+                                Network::Udp => {
+                                    self.spawn_vmess_mux_udp_stream_task(VmessMuxUdpStreamTask {
+                                        tasks: &mut mux_tasks,
+                                        mux_session_id: session_id,
+                                        default_target: target,
+                                        default_port: port,
+                                        up_rx,
+                                        write_tx: write_tx.clone(),
+                                        frame_encoder,
+                                        inbound_tag: inbound_tag.to_owned(),
+                                    })
+                                }
                             }
                         }
-                    } else if frame.status == vmess::MUX_STATUS_KEEP {
-                        if let Some(tx) = streams.get(&frame.session_id) {
-                            if !frame.payload.is_empty() {
-                                let _ = tx.send(frame.payload);
+                        vmess::VmessMuxServerEvent::Data {
+                            session_id,
+                            payload,
+                        } => {
+                            if let Some(tx) = streams.get(&session_id) {
+                                if !payload.is_empty() {
+                                    let _ = tx.send(payload);
+                                }
                             }
                         }
-                    } else if frame.status == vmess::MUX_STATUS_END {
-                        if let Some(tx) = streams.remove(&frame.session_id) {
-                            let _ = tx.send(Vec::new());
+                        vmess::VmessMuxServerEvent::End { session_id } => {
+                            if let Some(tx) = streams.remove(&session_id) {
+                                let _ = tx.send(Vec::new());
+                            }
                         }
+                        vmess::VmessMuxServerEvent::Unknown { .. } => {}
                     }
                 }
                 Some(joined) = mux_tasks.join_next(), if !mux_tasks.is_empty() => {

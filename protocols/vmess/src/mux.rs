@@ -123,6 +123,29 @@ pub struct MuxFrame {
     pub payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VmessMuxServerEvent {
+    KeepAlive,
+    NewStream {
+        session_id: u16,
+        network: Network,
+        target: Address,
+        port: u16,
+        payload: Vec<u8>,
+    },
+    Data {
+        session_id: u16,
+        payload: Vec<u8>,
+    },
+    End {
+        session_id: u16,
+    },
+    Unknown {
+        session_id: u16,
+        status: u8,
+    },
+}
+
 pub fn mux_cool_session() -> Session {
     Session::new(
         0,
@@ -252,6 +275,13 @@ where
     read_frame_from_tokio(reader).await
 }
 
+pub async fn read_mux_server_event<R>(reader: &mut R) -> Result<VmessMuxServerEvent, Error>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    read_mux_stream_frame(reader).await?.try_into_server_event()
+}
+
 pub fn decode_metadata(meta: &[u8]) -> Result<MuxFrame, Error> {
     if meta.len() < 4 {
         return Err(Error::Protocol("vmess mux metadata too short"));
@@ -323,6 +353,43 @@ pub fn encode_keep_stream(session_id: u16, payload: &[u8]) -> Result<Vec<u8>, Er
 
 pub fn encode_end_stream(session_id: u16) -> Result<Vec<u8>, Error> {
     encode_frame(session_id, MUX_STATUS_END, 0, None, &[])
+}
+
+impl MuxFrame {
+    pub fn try_into_server_event(self) -> Result<VmessMuxServerEvent, Error> {
+        match self.status {
+            MUX_STATUS_KEEP_ALIVE => Ok(VmessMuxServerEvent::KeepAlive),
+            MUX_STATUS_NEW => {
+                let network = self
+                    .network
+                    .ok_or(Error::Protocol("vmess mux new frame missing network"))?;
+                let target = self
+                    .target
+                    .ok_or(Error::Protocol("vmess mux new frame missing target"))?;
+                let port = self
+                    .port
+                    .ok_or(Error::Protocol("vmess mux new frame missing port"))?;
+                Ok(VmessMuxServerEvent::NewStream {
+                    session_id: self.session_id,
+                    network,
+                    target,
+                    port,
+                    payload: self.payload,
+                })
+            }
+            MUX_STATUS_KEEP => Ok(VmessMuxServerEvent::Data {
+                session_id: self.session_id,
+                payload: self.payload,
+            }),
+            MUX_STATUS_END => Ok(VmessMuxServerEvent::End {
+                session_id: self.session_id,
+            }),
+            status => Ok(VmessMuxServerEvent::Unknown {
+                session_id: self.session_id,
+                status,
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -443,20 +510,41 @@ fn spawn_mux_read_relay<R>(
 {
     tokio::spawn(async move {
         loop {
-            let frame = match read_mux_stream_frame(&mut reader).await {
-                Ok(frame) => frame,
+            let event = match read_mux_server_event(&mut reader).await {
+                Ok(event) => event,
                 Err(_) => break,
             };
-            if frame.status == MUX_STATUS_KEEP_ALIVE {
-                continue;
-            }
-            let tx = streams.lock().unwrap().get(&frame.session_id).cloned();
-            if let Some(tx) = tx {
-                if frame.status == MUX_STATUS_END {
-                    let _ = tx.send(Vec::new());
-                    streams.lock().unwrap().remove(&frame.session_id);
-                } else if !frame.payload.is_empty() {
-                    let _ = tx.send(frame.payload);
+            match event {
+                VmessMuxServerEvent::KeepAlive => continue,
+                VmessMuxServerEvent::Data {
+                    session_id,
+                    payload,
+                }
+                | VmessMuxServerEvent::NewStream {
+                    session_id,
+                    payload,
+                    ..
+                } => {
+                    let tx = streams.lock().unwrap().get(&session_id).cloned();
+                    if let Some(tx) = tx {
+                        if !payload.is_empty() {
+                            let _ = tx.send(payload);
+                        }
+                    }
+                }
+                VmessMuxServerEvent::End { session_id } => {
+                    let tx = streams.lock().unwrap().get(&session_id).cloned();
+                    if let Some(tx) = tx {
+                        let _ = tx.send(Vec::new());
+                        streams.lock().unwrap().remove(&session_id);
+                    }
+                }
+                VmessMuxServerEvent::Unknown { session_id, .. } => {
+                    let tx = streams.lock().unwrap().get(&session_id).cloned();
+                    if let Some(tx) = tx {
+                        let _ = tx.send(Vec::new());
+                        streams.lock().unwrap().remove(&session_id);
+                    }
                 }
             }
         }

@@ -3267,7 +3267,7 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         "fn spawn_mux_write_relay",
         "fn spawn_mux_read_relay",
         "tokio::spawn",
-        "read_mux_stream_frame(&mut reader)",
+        "read_mux_server_event(&mut reader)",
     ] {
         assert!(
             protocol_mux.contains(required),
@@ -3889,8 +3889,32 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         "VMess inbound MUX runtime should use the protocol mux frame reader helper"
     );
     assert!(
-        root.contains("vmess::read_mux_stream_frame"),
-        "VMess inbound MUX runtime should call the protocol mux frame reader helper"
+        root.contains("vmess::read_mux_server_event")
+            && root.contains("vmess::VmessMuxServerEvent"),
+        "VMess inbound MUX runtime should consume protocol-owned mux server events"
+    );
+    for forbidden in [
+        "vmess::read_mux_stream_frame",
+        "vmess::MUX_STATUS_",
+        ".status == vmess::MUX_STATUS_",
+        "frame.status",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "VMess inbound MUX runtime should not inspect raw mux frame status; found `{forbidden}`"
+        );
+    }
+    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
+        .expect("read protocols/vmess/src/mux.rs");
+    for required in ["VmessMuxServerEvent", "read_mux_server_event"] {
+        assert!(
+            protocol_mux.contains(required),
+            "protocols/vmess should own VMess MUX server event API `{required}`"
+        );
+    }
+    assert!(
+        protocol_mux.contains("try_into_server_event"),
+        "protocols/vmess should classify raw VMess MUX frames into server events"
     );
     assert!(
         root.contains("vmess::VmessMuxFrameEncoder")
