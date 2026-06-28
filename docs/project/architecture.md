@@ -94,7 +94,7 @@ Existing protocol UDP flow forwarding keeps `runtime::udp_flow::protocol_state` 
 
 `runtime.rs` owns the `Proxy` shell and run loop. Control-plane handle details live in `runtime/handle.rs`, the spawned runtime handle lives in `runtime/running.rs`, and reload channel bridging lives in `runtime/reload.rs`.
 
-Per-protocol outbound TCP helpers under `src/outbound/<protocol>.rs` are adapter implementation details. Only the owning `src/adapters/<protocol>/tcp.rs` module calls them; generic runtime and protocol-runtime modules dispatch through `ProtocolInventory` and `TcpOutboundCapability`.
+Per-protocol outbound TCP glue lives in the owning `src/adapters/<protocol>/tcp.rs` module after extracting the leaf variant; protocol handshake/session details live in `protocols/*`. `src/outbound/<protocol>.rs` helper modules must not be reintroduced. Generic runtime and protocol-runtime modules dispatch through `ProtocolInventory` and `TcpOutboundCapability`.
 TCP runtime code does not unpack protocol-named `EstablishedTcpOutbound` variants. The transport TCP outbound model owns result normalization, including extracting a neutral relay stream for relay-chain prefix execution.
 
 `UdpPacketPathCapability` owns packet-path carrier descriptor/snapshot construction, carrier build, and datagram-source classification. UDP packet-path cache identity is also adapter-owned. Packet-path runtime may store carrier `cache_key`, datagram `datagram_cache_key`, and parsed protocol values such as `CipherKind`; it must not reconstruct cache identity from raw protocol-private config strings such as Shadowsocks cipher names.

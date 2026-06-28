@@ -8,7 +8,6 @@ mod groups;
 mod inbound;
 mod inventory;
 mod logging;
-mod outbound;
 mod process_lookup;
 mod protocol_capability;
 mod protocol_registry;

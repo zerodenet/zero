@@ -1,6 +1,6 @@
 # Mieru
 
-Mieru 是 socks5-in-tunnel 模型的加密代理协议：先建立 XChaCha20-Poly1305 加密隧道，再在隧道内用 socks5 协商目标（openSession 不携带目标；隧道内 socks5 不做 greeting/auth，因为 mieru 会话即认证）。模块结构与 `protocols/mieru/src/` 对应；socks5 编排在 `crates/proxy/src/outbound/mieru.rs`（出站 `socks5_connect`）与 `crates/proxy/src/inbound/mieru.rs`（入站 `socks5_serve`）。
+Mieru 是 socks5-in-tunnel 模型的加密代理协议：先建立 XChaCha20-Poly1305 加密隧道，再在隧道内用 socks5 协商目标（openSession 不携带目标；隧道内 socks5 不做 greeting/auth，因为 mieru 会话即认证）。模块结构与 `protocols/mieru/src/` 对应；socks5 编排在 `crates/proxy/src/adapters/mieru/tcp.rs`（出站 `socks5_connect`）与 `crates/proxy/src/inbound/mieru.rs`（入站 `socks5_serve`）。
 
 ## 当前能力
 

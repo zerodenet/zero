@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
     managed_stream_connector_flow_from_build, managed_tuple_udp_connection,
-    ManagedStreamConnectorFlow, ManagedStreamFlowConnector, ManagedTupleUdpSender,
-    SharedManagedUdpConnection,
+    ManagedStreamConnectorFlow, ManagedStreamConnectorFlowBuild, ManagedStreamFlowConnector,
+    ManagedTupleUdpSender, SharedManagedUdpConnection,
 };
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -12,6 +12,12 @@ use zero_core::Session;
 use zero_engine::EngineError;
 
 pub(super) struct MieruManagedStreamConnector;
+
+impl ManagedStreamConnectorFlowBuild for mieru::udp::MieruUdpConnectorFlow {
+    fn into_parts(self) -> (String, bool) {
+        self.into_parts()
+    }
+}
 
 #[async_trait::async_trait]
 impl ManagedStreamFlowConnector<mieru::udp::MieruUdpFlowResume> for MieruManagedStreamConnector {

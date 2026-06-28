@@ -57,7 +57,7 @@ src/metadata.rs  — segment metadata 编解码
 src/session.rs   — 会话状态（seq/window/timestamp）
 ```
 
-代理层的 socks5-in-tunnel 编排（目标协商）在 `crates/proxy/src/outbound/mieru.rs`（出站 `socks5_connect`）与 `crates/proxy/src/inbound/mieru.rs`（入站 `socks5_serve`）。
+代理层的 socks5-in-tunnel 编排（目标协商）在 `crates/proxy/src/adapters/mieru/tcp.rs`（出站 `socks5_connect`）与 `crates/proxy/src/inbound/mieru.rs`（入站 `socks5_serve`）。
 
 ## 参考
 

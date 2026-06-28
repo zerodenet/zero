@@ -315,10 +315,9 @@ fn outbound_config_variant_matching_is_confined_to_adapters_and_registry() {
 
 #[test]
 fn direct_udp_helpers_do_not_live_in_outbound_facade() {
-    let outbound_root = read("src/outbound/mod.rs");
     assert!(
-        !outbound_root.contains("mod direct") && !outbound_root.contains("pub mod direct"),
-        "direct UDP helpers should live in runtime::udp_helpers and direct adapter modules, not src/outbound/direct.rs"
+        !manifest_dir().join("src/outbound").exists(),
+        "src/outbound should not remain as an empty compatibility facade"
     );
     assert!(
         !manifest_dir().join("src/outbound/direct.rs").exists(),
@@ -343,79 +342,20 @@ fn direct_udp_helpers_do_not_live_in_outbound_facade() {
 
 #[test]
 fn outbound_protocol_helpers_are_crate_private() {
-    let outbound_root = read("src/outbound/mod.rs");
-
-    let protocol = "mieru";
-    assert!(
-        !outbound_root.contains(&format!("pub mod {protocol};")),
-        "src/outbound/mod.rs should not expose `{protocol}` helpers as public modules"
-    );
-    assert!(
-        outbound_root.contains(&format!("pub(crate) mod {protocol};")),
-        "src/outbound/mod.rs should keep `{protocol}` helpers crate-private"
-    );
+    let outbound_root = manifest_dir().join("src/outbound");
 
     assert!(
-        !outbound_root.contains("vless"),
-        "VLESS outbound protocol glue should not return to src/outbound/mod.rs"
-    );
-    assert!(
-        !outbound_root.contains("hysteria2"),
-        "Hysteria2 outbound protocol glue should not return to src/outbound/mod.rs"
-    );
-    assert!(
-        !outbound_root.contains("socks5"),
-        "SOCKS5 outbound protocol glue should not return to src/outbound/mod.rs"
-    );
-    assert!(
-        !outbound_root.contains("shadowsocks"),
-        "Shadowsocks outbound protocol glue should not return to src/outbound/mod.rs"
-    );
-    assert!(
-        !outbound_root.contains("vmess"),
-        "VMess outbound protocol glue should not return to src/outbound/mod.rs"
-    );
-    assert!(
-        !outbound_root.contains("trojan"),
-        "Trojan outbound protocol glue should not return to src/outbound/mod.rs"
+        !outbound_root.exists(),
+        "protocol outbound helpers should live in adapter/protocol-owned modules, not src/outbound"
     );
 }
 
 #[test]
 fn outbound_root_is_facade_only() {
-    let outbound_root = read("src/outbound/mod.rs");
-
-    let expected = "pub(crate) mod mieru;";
     assert!(
-        outbound_root.contains(expected),
-        "src/outbound/mod.rs should expose outbound facade item `{expected}`"
+        !manifest_dir().join("src/outbound/mod.rs").exists(),
+        "src/outbound/mod.rs should be deleted once protocol-named outbound glue has moved into adapters"
     );
-
-    for line in outbound_root.lines().map(str::trim) {
-        let allowed =
-            line.is_empty() || line.starts_with("#[cfg(") || line.starts_with("pub(crate) mod ");
-        assert!(
-            allowed,
-            "src/outbound/mod.rs should only declare crate-private outbound helper modules; found `{line}`"
-        );
-    }
-
-    for forbidden in [
-        "pub mod ",
-        "pub(crate) use ",
-        "async fn",
-        "fn ",
-        "impl ",
-        "match ",
-        "InboundProtocolConfig::",
-        "OutboundProtocolConfig::",
-        "ResolvedLeafOutbound::",
-    ] {
-        assert!(
-            !outbound_root.contains(forbidden),
-            "src/outbound/mod.rs should remain a facade over outbound helper modules; found `{forbidden}`"
-        );
-    }
 }
 
 #[test]
@@ -1720,12 +1660,7 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
         ),
         (
             "mieru",
-            &[
-                "crate::outbound::mieru::connect_tcp",
-                "crate::outbound::mieru::apply_tcp_hop",
-                "connect_upstream_mieru",
-                "EstablishedTcpOutbound::Mieru",
-            ],
+            &["connect_upstream_mieru", "EstablishedTcpOutbound::Mieru"],
         ),
         (
             "shadowsocks",
@@ -1772,10 +1707,7 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
 
 #[test]
 fn outbound_tcp_helpers_are_called_only_by_adapter_tcp_modules() {
-    let helpers = [
-        "crate::outbound::mieru::connect_tcp",
-        "crate::outbound::mieru::apply_tcp_hop",
-    ];
+    let helpers = ["crate::outbound::"];
 
     for path in rust_sources_under("src") {
         let source = relative(&path);
@@ -1963,6 +1895,26 @@ fn vless_tcp_connect_uses_request_model() {
             && protocol_outbound.contains("parse_uuid")
             && protocol_outbound.contains("parse_flow"),
         "VLESS adapter should ask protocols/vless to parse outbound identity and flow config"
+    );
+}
+
+#[test]
+fn mieru_tcp_connect_glue_lives_in_adapter_tcp_module() {
+    let outbound = manifest_dir().join("src/outbound/mieru.rs");
+    let adapter = read("src/adapters/mieru/tcp.rs");
+
+    assert!(
+        !outbound.exists(),
+        "Mieru should not need a protocol-named proxy outbound module; TCP glue lives in adapters/mieru/tcp.rs and protocol session setup lives in protocols/mieru"
+    );
+    assert!(
+        adapter.contains("struct MieruTcpStream")
+            && adapter.contains("async fn socks5_connect")
+            && adapter.contains("async fn connect_tcp(")
+            && adapter.contains("async fn apply_tcp_hop(")
+            && adapter.contains("TcpSessionProtocol<mieru::MieruTcpTarget>")
+            && adapter.contains("MieruTcpStream::new"),
+        "Mieru adapter TCP module should own the proxy-local encrypted stream wrapper and relay-hop glue"
     );
 }
 
@@ -10223,7 +10175,7 @@ fn udp_build_traits_consume_protocol_parts() {
     let shadowsocks_managed = read("src/adapters/shadowsocks/udp/managed.rs");
     let hysteria2_connector = read("src/adapters/hysteria2/connector.rs");
     let trojan_connector = read("src/adapters/trojan/udp/managed/connector.rs");
-    let mieru_outbound = read("src/outbound/mieru.rs");
+    let mieru_connector = read("src/adapters/mieru/udp/managed/connector.rs");
     let socks5_shared = fs::read_to_string(repo_root().join("protocols/socks5/src/shared.rs"))
         .expect("read socks5 shared source");
     let shadowsocks_protocol =
@@ -10267,12 +10219,12 @@ fn udp_build_traits_consume_protocol_parts() {
     assert!(
         trojan_connector.contains("fn into_parts(self) -> (String, bool)")
             && trojan_connector.contains("self.into_parts()")
-            && mieru_outbound.contains("fn into_parts(self) -> (String, bool)")
-            && mieru_outbound.contains("self.into_parts()")
+            && mieru_connector.contains("fn into_parts(self) -> (String, bool)")
+            && mieru_connector.contains("self.into_parts()")
             && !trojan_connector.contains("self.cache_key()")
             && !trojan_connector.contains("self.requires_relay_upstream()")
-            && !mieru_outbound.contains("self.cache_key()")
-            && !mieru_outbound.contains("self.requires_relay_upstream()")
+            && !mieru_connector.contains("self.cache_key()")
+            && !mieru_connector.contains("self.requires_relay_upstream()")
             && trojan_protocol.contains("pub fn into_parts(self) -> (String, bool)")
             && mieru_protocol.contains("pub fn into_parts(self) -> (alloc::string::String, bool)"),
         "Trojan and Mieru stream connector glue should not read protocol cache-key getters"
