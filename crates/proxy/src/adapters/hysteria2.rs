@@ -18,6 +18,8 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 #[cfg(feature = "hysteria2")]
+mod connector;
+#[cfg(feature = "hysteria2")]
 mod inbound;
 #[cfg(feature = "hysteria2")]
 mod tcp;

@@ -52,7 +52,7 @@ pub(super) async fn build(
         password,
         *client_fingerprint,
     );
-    let (conn, codec) = crate::outbound::hysteria2::open_udp_packet_path_build(build).await?;
+    let (conn, codec) = super::super::connector::open_udp_packet_path_build(build).await?;
     let conn = std::sync::Arc::new(conn);
     crate::runtime::udp_flow::packet_path_chain::carriers::quic_datagram_carrier::build(conn, codec)
         .await

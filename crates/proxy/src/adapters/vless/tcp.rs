@@ -1,12 +1,13 @@
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_platform_tokio::TransportConnector;
 
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::vless::mux_pool::VlessMuxOpenRequest;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
+use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
 fn vless_tcp_config(
     id: &str,
@@ -75,7 +76,7 @@ impl VlessAdapter {
                     upstream_endpoint: Some(((*server).to_string(), *port)),
                 });
         }
-        match crate::outbound::vless::connect_tcp(crate::outbound::vless::VlessTcpConnectRequest {
+        match connect_tcp(VlessTcpConnect {
             proxy,
             session,
             server,
@@ -119,6 +120,125 @@ impl VlessAdapter {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
         let config = vless_tcp_config(id, *flow)?;
-        crate::outbound::vless::apply_tcp_hop(proxy, stream, session, config).await
+        apply_tcp_hop(proxy, stream, session, config).await
     }
+}
+
+struct VlessTcpConnect<'a> {
+    proxy: &'a Proxy,
+    session: &'a Session,
+    server: &'a str,
+    port: u16,
+    config: vless::VlessTcpConnectConfig,
+    mux_concurrency: Option<u32>,
+    mux_idle_timeout_secs: Option<u64>,
+    tls: Option<&'a zero_config::ClientTlsConfig>,
+    reality: Option<&'a zero_config::RealityConfig>,
+    ws: Option<&'a zero_config::WebSocketConfig>,
+    grpc: Option<&'a zero_config::GrpcConfig>,
+    h2: Option<&'a zero_config::H2Config>,
+    http_upgrade: Option<&'a zero_config::HttpUpgradeConfig>,
+    quic: Option<&'a zero_config::QuicConfig>,
+    split_http: Option<&'a zero_config::SplitHttpConfig>,
+}
+
+async fn connect_tcp(request: VlessTcpConnect<'_>) -> Result<TcpRelayStream, EngineError> {
+    let VlessTcpConnect {
+        proxy,
+        session,
+        server,
+        port,
+        config,
+        mux_concurrency,
+        mux_idle_timeout_secs,
+        tls,
+        reality,
+        ws,
+        grpc,
+        h2,
+        http_upgrade,
+        quic,
+        split_http,
+    } = request;
+
+    let _ = mux_concurrency;
+    let _ = mux_idle_timeout_secs;
+
+    if let Some(quic) = quic {
+        let server_name = quic.server_name.as_deref().unwrap_or(server);
+        let quic_stream = crate::transport::connect_quic(server_name, port, quic.insecure).await?;
+        return Ok(TcpRelayStream::new(quic_stream));
+    }
+
+    let socket = proxy
+        .protocols
+        .direct_connector()
+        .connect_host(server, port, proxy.resolver.as_ref())
+        .await?;
+
+    let connector =
+        crate::transport::VlessTransportConnector::new(crate::transport::VlessTransportOptions {
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            source_dir: proxy.config.source_dir(),
+        });
+    let stream = connector.connect(socket, server, port).await?;
+
+    let is_reality = reality.is_some();
+    let mut metered = crate::transport::MeteredStream::new(stream);
+
+    if is_reality {
+        use zero_traits::DeferredTcpTunnelProtocol;
+        vless::VlessOutbound
+            .send_deferred_tcp_tunnel_request(&mut metered, &config.flow_tcp_target(session))
+            .await?;
+        proxy.record_session_outbound_traffic(session.id, metered.drain_traffic());
+
+        Ok(TcpRelayStream::new(
+            vless::DeferredVlessResponseStream::new(metered.into_inner()),
+        ))
+    } else {
+        use zero_traits::TcpTunnelProtocol;
+        <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessFlowTcpTunnelTarget>>::establish_tcp_tunnel(
+            &vless::VlessOutbound,
+            &mut metered,
+            &config.flow_tcp_target(session),
+        )
+        .await?;
+        proxy.record_session_outbound_traffic(session.id, metered.drain_traffic());
+
+        Ok(metered.into_inner())
+    }
+}
+
+async fn apply_tcp_hop(
+    _proxy: &Proxy,
+    mut stream: TcpRelayStream,
+    session: &Session,
+    config: vless::VlessTcpConnectConfig,
+) -> Result<TcpRelayStream, EngineError> {
+    use zero_traits::TcpTunnelProtocol;
+    if config.flow().is_some() {
+        <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessFlowTcpTunnelTarget>>::establish_tcp_tunnel(
+            &vless::VlessOutbound,
+            &mut stream,
+            &config.flow_tcp_target(session),
+        )
+        .await
+        .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
+    } else {
+        <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessTcpTunnelTarget>>::establish_tcp_tunnel(
+            &vless::VlessOutbound,
+            &mut stream,
+            &config.tcp_target(session),
+        )
+        .await
+        .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
+    }
+    Ok(stream)
 }

@@ -345,17 +345,24 @@ fn direct_udp_helpers_do_not_live_in_outbound_facade() {
 fn outbound_protocol_helpers_are_crate_private() {
     let outbound_root = read("src/outbound/mod.rs");
 
-    for protocol in ["hysteria2", "mieru", "vless"] {
-        assert!(
-            !outbound_root.contains(&format!("pub mod {protocol};")),
-            "src/outbound/mod.rs should not expose `{protocol}` helpers as public modules"
-        );
-        assert!(
-            outbound_root.contains(&format!("pub(crate) mod {protocol};")),
-            "src/outbound/mod.rs should keep `{protocol}` helpers crate-private"
-        );
-    }
+    let protocol = "mieru";
+    assert!(
+        !outbound_root.contains(&format!("pub mod {protocol};")),
+        "src/outbound/mod.rs should not expose `{protocol}` helpers as public modules"
+    );
+    assert!(
+        outbound_root.contains(&format!("pub(crate) mod {protocol};")),
+        "src/outbound/mod.rs should keep `{protocol}` helpers crate-private"
+    );
 
+    assert!(
+        !outbound_root.contains("vless"),
+        "VLESS outbound protocol glue should not return to src/outbound/mod.rs"
+    );
+    assert!(
+        !outbound_root.contains("hysteria2"),
+        "Hysteria2 outbound protocol glue should not return to src/outbound/mod.rs"
+    );
     assert!(
         !outbound_root.contains("socks5"),
         "SOCKS5 outbound protocol glue should not return to src/outbound/mod.rs"
@@ -378,16 +385,11 @@ fn outbound_protocol_helpers_are_crate_private() {
 fn outbound_root_is_facade_only() {
     let outbound_root = read("src/outbound/mod.rs");
 
-    for expected in [
-        "pub(crate) mod hysteria2;",
-        "pub(crate) mod mieru;",
-        "pub(crate) mod vless;",
-    ] {
-        assert!(
-            outbound_root.contains(expected),
-            "src/outbound/mod.rs should expose outbound facade item `{expected}`"
-        );
-    }
+    let expected = "pub(crate) mod mieru;";
+    assert!(
+        outbound_root.contains(expected),
+        "src/outbound/mod.rs should expose outbound facade item `{expected}`"
+    );
 
     for line in outbound_root.lines().map(str::trim) {
         let allowed =
@@ -1500,7 +1502,7 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
             && !packet_path.contains("build.codec()")
             && !packet_path.contains(".packet_path_cache_key()")
             && !packet_path.contains(".packet_path_codec()")
-            && packet_path.contains("open_udp_packet_path_build")
+            && packet_path.contains("connector::open_udp_packet_path_build")
             && flow.contains("hysteria2::udp::udp_flow_resume_from_config")
             && !flow.contains("Hysteria2UdpFlowConfig::new")
             && !flow.contains(".flow_resume()")
@@ -1711,7 +1713,7 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
         (
             "hysteria2",
             &[
-                "crate::outbound::hysteria2::connect_tcp",
+                "super::connector::connect_tcp",
                 "connect_upstream_hysteria2",
                 "EstablishedTcpOutbound::Hysteria2",
             ],
@@ -1742,12 +1744,7 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
         ),
         (
             "vless",
-            &[
-                "crate::outbound::vless::connect_tcp",
-                "crate::outbound::vless::apply_tcp_hop",
-                "connect_upstream_vless",
-                "EstablishedTcpOutbound::Vless",
-            ],
+            &["connect_upstream_vless", "EstablishedTcpOutbound::Vless"],
         ),
         (
             "vmess",
@@ -1776,11 +1773,8 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
 #[test]
 fn outbound_tcp_helpers_are_called_only_by_adapter_tcp_modules() {
     let helpers = [
-        "crate::outbound::hysteria2::connect_tcp",
         "crate::outbound::mieru::connect_tcp",
         "crate::outbound::mieru::apply_tcp_hop",
-        "crate::outbound::vless::connect_tcp",
-        "crate::outbound::vless::apply_tcp_hop",
     ];
 
     for path in rust_sources_under("src") {
@@ -1796,6 +1790,33 @@ fn outbound_tcp_helpers_are_called_only_by_adapter_tcp_modules() {
             );
         }
     }
+}
+
+#[test]
+fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_connector() {
+    let outbound = manifest_dir().join("src/outbound/hysteria2.rs");
+    let adapter = read("src/adapters/hysteria2.rs");
+    let tcp = read("src/adapters/hysteria2/tcp.rs");
+    let connector = read("src/adapters/hysteria2/connector.rs");
+    let managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
+
+    assert!(
+        !outbound.exists(),
+        "Hysteria2 should not need a protocol-named proxy outbound module; TCP/UDP connect glue lives in adapters/hysteria2/connector.rs"
+    );
+    assert!(
+        adapter.contains("mod connector;")
+            && tcp.contains("super::connector::connect_tcp")
+            && managed.contains("connector::establish_udp_flow_session")
+            && packet_path.contains("connector::open_udp_packet_path_build")
+            && connector.contains("struct Hysteria2Connector")
+            && connector.contains("open_hysteria2_quic_connection")
+            && connector.contains("hysteria2::Hysteria2Outbound")
+            && connector.contains("authenticate_with_password")
+            && connector.contains("connect_raw_with_udp_profile"),
+        "Hysteria2 adapter connector should own proxy-local QUIC/auth bridge glue for TCP, managed UDP, and packet-path"
+    );
 }
 
 #[test]
@@ -1912,31 +1933,31 @@ fn vmess_tcp_connect_uses_request_model() {
 
 #[test]
 fn vless_tcp_connect_uses_request_model() {
-    let outbound = read("src/outbound/vless.rs");
+    let outbound = manifest_dir().join("src/outbound/vless.rs");
     let adapter = read("src/adapters/vless/tcp.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
         .expect("read vless protocol outbound source");
 
     assert!(
-        !outbound.contains("#[allow(clippy::too_many_arguments)]"),
+        !outbound.exists(),
+        "VLESS should not need a protocol-named proxy outbound module; TCP glue lives in adapters/vless/tcp.rs and protocol session setup lives in protocols/vless"
+    );
+    assert!(
+        !adapter.contains("#[allow(clippy::too_many_arguments)]"),
         "VLESS TCP connect should not need a too_many_arguments allowance"
     );
     assert!(
-        outbound.contains("struct VlessTcpConnectRequest")
-            && outbound.contains("request: VlessTcpConnectRequest<'_>"),
-        "VLESS TCP connect should use VlessTcpConnectRequest"
+        adapter.contains("struct VlessTcpConnect")
+            && adapter.contains("request: VlessTcpConnect<'_>"),
+        "VLESS adapter TCP module should own the request model"
     );
     assert!(
-        adapter.contains("VlessTcpConnectRequest {"),
-        "VLESS adapter TCP module should pass VlessTcpConnectRequest"
-    );
-    assert!(
-        !outbound.contains("parse_uuid") && !adapter.contains("parse_uuid"),
+        !adapter.contains("parse_uuid"),
         "VLESS outbound TCP helper and adapter should receive protocol-parsed identity"
     );
     assert!(
         adapter.contains("VlessTcpConnectConfig::from_config")
-            && outbound.contains("config: vless::VlessTcpConnectConfig")
+            && adapter.contains("config: vless::VlessTcpConnectConfig")
             && protocol_outbound.contains("pub struct VlessTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config")
             && protocol_outbound.contains("parse_uuid")
@@ -3895,12 +3916,12 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         );
     }
     assert!(
-        managed.contains("outbound::hysteria2::establish_udp_flow_session")
+        managed.contains("connector::establish_udp_flow_session")
             && managed.contains("ManagedDatagramFlowManager::new")
             && !managed.contains("Hysteria2Connector::from_udp_profile")
             && !managed.contains("connect_raw_with_udp_profile")
             && !managed.contains("resume.connector_profile()"),
-        "Hysteria2 UDP managed glue should delegate QUIC/profile setup and protocol flow pumping to outbound/hysteria2"
+        "Hysteria2 UDP managed glue should delegate QUIC/profile setup and protocol flow pumping to the adapter connector"
     );
     assert!(
         !managed
@@ -8921,7 +8942,7 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
 #[test]
 fn h2_udp_datagram_codec_lives_outside_manager() {
     let managed = read("src/adapters/hysteria2/udp/managed.rs");
-    let outbound = read("src/outbound/hysteria2.rs");
+    let connector = read("src/adapters/hysteria2/connector.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
     let adapter = read("src/adapters/hysteria2/udp.rs");
@@ -8936,7 +8957,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .expect("read hysteria2 protocol lib source");
     let adapter_flow = read("src/adapters/hysteria2/udp/flow.rs");
     let adapter_packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
-    let profile_connector_uses = outbound
+    let profile_connector_uses = connector
         .matches("Hysteria2Connector::from_udp_profile")
         .count();
 
@@ -9021,7 +9042,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !managed.contains("flow_io.encode_packet")
             && !managed.contains("packet.encode_with(&resume)")
             && !managed.contains("flow_io.decode_packet(&data)")
-            && managed.contains("outbound::hysteria2::establish_udp_flow_session")
+            && managed.contains("connector::establish_udp_flow_session")
             && !managed.contains("hysteria2::udp::spawn_udp_flow")
             && protocol_udp.contains("struct Hysteria2UdpFlowSender")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
@@ -9064,7 +9085,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !adapter_packet_path.contains("build.port()")
             && !adapter_packet_path.contains("build.connector_profile()")
             && !adapter_packet_path.contains("build.codec()")
-            && adapter_packet_path.contains("open_udp_packet_path_build")
+            && adapter_packet_path.contains("connector::open_udp_packet_path_build")
             && !adapter_packet_path.contains(".packet_path_cache_key()")
             && !adapter_packet_path.contains(".packet_path_codec()")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
@@ -9193,23 +9214,23 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !managed.contains("resume.cache_key(endpoint.server, endpoint.port)")
             && !managed.contains("peer.endpoint")
             && !managed.contains("H2UdpPeer")
-            && managed.contains("outbound::hysteria2::establish_udp_flow_session")
+            && managed.contains("connector::establish_udp_flow_session")
             && !managed.contains("Hysteria2Connector::from_udp_profile")
             && !managed.contains("resume.connector_profile()")
             && !managed.contains("connect_raw_with_udp_profile")
-            && outbound.contains("hysteria2::udp::connector_flow_from_resume")
-            && !outbound.contains("resume.connector_flow(endpoint.server, endpoint.port)")
-            && outbound.contains(".into_connection_parts()")
-            && outbound.contains(".into_profile()")
-            && !outbound.contains(".connector_profile()")
-            && !outbound.contains("resume.connector_profile()")
-            && outbound.contains("async fn open_udp_profile_connection")
+            && connector.contains("hysteria2::udp::connector_flow_from_resume")
+            && !connector.contains("resume.connector_flow(endpoint.server, endpoint.port)")
+            && connector.contains(".into_connection_parts()")
+            && connector.contains(".into_profile()")
+            && !connector.contains(".connector_profile()")
+            && !connector.contains("resume.connector_profile()")
+            && connector.contains("async fn open_udp_profile_connection")
             && profile_connector_uses == 1
-            && !outbound.contains("pub(crate) async fn open_udp_packet_path_connection")
-            && outbound.contains("connect_raw_with_udp_profile")
-            && !outbound.contains("profile.password()")
+            && !connector.contains("pub(crate) async fn open_udp_packet_path_connection")
+            && connector.contains("connect_raw_with_udp_profile")
+            && !connector.contains("profile.password()")
             && !transport.contains("request.resume.connector_profile()"),
-        "Hysteria2 UDP managed glue should consume protocol-owned opaque cache keys through neutral endpoints and keep UDP profile/connection setup in outbound/hysteria2"
+        "Hysteria2 UDP managed glue should consume protocol-owned opaque cache keys through neutral endpoints and keep UDP profile/connection setup in the adapter connector"
     );
 }
 
@@ -9224,8 +9245,8 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
         .expect("read hysteria2 protocol udp source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
         .expect("read hysteria2 protocol lib source");
-    let outbound = read("src/outbound/hysteria2.rs");
-    let profile_connector_uses = outbound
+    let connector = read("src/adapters/hysteria2/connector.rs");
+    let profile_connector_uses = connector
         .matches("Hysteria2Connector::from_udp_profile")
         .count();
 
@@ -9278,19 +9299,19 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
             && transport.contains("conn: Arc<quinn::Connection>")
             && !adapter.contains("outbound::hysteria2::open_udp_packet_path_connection")
             && !adapter_packet_path.contains("outbound::hysteria2::open_udp_packet_path_connection")
-            && adapter_packet_path.contains("outbound::hysteria2::open_udp_packet_path_build")
+            && adapter_packet_path.contains("connector::open_udp_packet_path_build")
             && !adapter_packet_path.contains("build.server()")
             && !adapter_packet_path.contains("build.port()")
             && !adapter_packet_path.contains("build.connector_profile()")
             && !adapter_packet_path.contains("build.codec()")
-            && outbound.contains("async fn open_udp_profile_connection")
+            && connector.contains("async fn open_udp_profile_connection")
             && profile_connector_uses == 1
-            && !outbound.contains("pub(crate) async fn open_udp_packet_path_connection")
+            && !connector.contains("pub(crate) async fn open_udp_packet_path_connection")
             && !adapter.contains("Hysteria2Connector")
             && !adapter.contains("connect_raw")
             && !adapter_packet_path.contains("Hysteria2Connector")
             && !adapter_packet_path.contains("connect_raw"),
-        "Hysteria2 packet-path adapter submodule should request protocol-specific QUIC connection setup from outbound/hysteria2 while zero-transport owns connection lifecycle and codec use"
+        "Hysteria2 packet-path adapter submodule should request protocol-specific QUIC connection setup from the adapter connector while zero-transport owns connection lifecycle and codec use"
     );
 }
 
@@ -9333,7 +9354,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         .expect("read hysteria2 protocol udp source");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
-    let outbound = read("src/outbound/hysteria2.rs");
+    let connector = read("src/adapters/hysteria2/connector.rs");
 
     for forbidden in [
         "Hysteria2Connector",
@@ -9366,7 +9387,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        managed.contains("outbound::hysteria2::establish_udp_flow_session")
+        managed.contains("connector::establish_udp_flow_session")
             && !managed.contains("Hysteria2Connector::from_udp_profile")
             && !managed.contains("connect_raw_with_udp_profile")
             && !managed.contains("hysteria2::udp::start_udp_flow_with_initial_packet")
@@ -9392,15 +9413,15 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_udp.contains("tokio::spawn")
             && protocol_udp.contains("send_datagram")
             && protocol_udp.contains("read_datagram")
-            && outbound.contains("hysteria2::udp::start_udp_flow_with_initial_packet")
-            && outbound.contains("Hysteria2Connector::from_udp_profile")
-            && outbound.contains("connect_raw_with_udp_profile")
+            && connector.contains("hysteria2::udp::start_udp_flow_with_initial_packet")
+            && connector.contains("Hysteria2Connector::from_udp_profile")
+            && connector.contains("connect_raw_with_udp_profile")
             && !transport.contains("pub async fn establish_hysteria2_udp_flow_stream")
             && !transport.contains("Hysteria2UdpFlowStreamRequest")
             && !transport.contains("hysteria2::udp_flow_packet")
             && !transport.contains("resume.encode_flow_packet")
             && !transport.contains("resume.decode_flow_packet"),
-        "Hysteria2 UDP flow tasks should stay out of zero-transport and live in protocols/hysteria2 while outbound/hysteria2 owns QUIC connect/cache bridge glue"
+        "Hysteria2 UDP flow tasks should stay out of zero-transport and live in protocols/hysteria2 while the adapter connector owns QUIC connect/cache bridge glue"
     );
 }
 
@@ -9410,7 +9431,7 @@ fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
         .expect("read zero-transport hysteria2_quic source");
     let transport_manifest = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
         .expect("read zero-transport manifest");
-    let outbound = read("src/outbound/hysteria2.rs");
+    let connector = read("src/adapters/hysteria2/connector.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/hysteria2/src/outbound.rs"))
             .expect("read hysteria2 protocol outbound source");
@@ -9435,15 +9456,15 @@ fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
             && transport.contains("pub struct QuicConnectionOptions")
             && transport.contains("pub async fn open_quic_connection")
             && !transport_manifest.contains("hysteria2 = {")
-            && outbound.contains("struct Hysteria2Connector")
-            && outbound.contains("open_hysteria2_quic_connection")
-            && outbound.contains("hysteria2::Hysteria2Outbound")
-            && outbound.contains("authenticate_with_password")
-            && outbound.contains("connect_raw_with_udp_profile")
-            && !outbound.contains("profile.password()")
-            && outbound.contains(".authenticate_with_salt(")
-            && outbound.contains(".send_tcp_connect(")
-            && outbound.contains(".read_connect_response(")
+            && connector.contains("struct Hysteria2Connector")
+            && connector.contains("open_hysteria2_quic_connection")
+            && connector.contains("hysteria2::Hysteria2Outbound")
+            && connector.contains("authenticate_with_password")
+            && connector.contains("connect_raw_with_udp_profile")
+            && !connector.contains("profile.password()")
+            && connector.contains(".authenticate_with_salt(")
+            && connector.contains(".send_tcp_connect(")
+            && connector.contains(".read_connect_response(")
             && protocol_outbound.contains("pub async fn authenticate_with_salt")
             && protocol_outbound.contains("crate::shared::sign_hmac")
             && protocol_outbound.contains("crate::shared::build_auth_frame")
@@ -9568,7 +9589,7 @@ fn h2_udp_establish_logic_lives_outside_manager() {
     assert!(
         !establish.exists()
             && managed.contains("async fn establish(")
-            && managed.contains("outbound::hysteria2::establish_udp_flow_session"),
+            && managed.contains("connector::establish_udp_flow_session"),
         "Hysteria2 UDP establish glue should live in the thin managed connector, not h2_manager/establish.rs"
     );
 }
@@ -10200,7 +10221,7 @@ fn udp_build_traits_consume_protocol_parts() {
     let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
     let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
     let shadowsocks_managed = read("src/adapters/shadowsocks/udp/managed.rs");
-    let hysteria2_outbound = read("src/outbound/hysteria2.rs");
+    let hysteria2_connector = read("src/adapters/hysteria2/connector.rs");
     let trojan_connector = read("src/adapters/trojan/udp/managed/connector.rs");
     let mieru_outbound = read("src/outbound/mieru.rs");
     let socks5_shared = fs::read_to_string(repo_root().join("protocols/socks5/src/shared.rs"))
@@ -10266,11 +10287,11 @@ fn udp_build_traits_consume_protocol_parts() {
             && !datagram_manager.contains("fn cache_key(&self) -> String;")
             && !datagram_manager.contains("fn cache_key(self) -> String")
             && !datagram_manager.contains(".cache_key()")
-            && hysteria2_outbound.contains("fn into_cache_key(self) -> String")
+            && hysteria2_connector.contains("fn into_cache_key(self) -> String")
             && shadowsocks_managed.contains("fn into_cache_key(self) -> String")
-            && hysteria2_outbound.contains("self.into_cache_key()")
+            && hysteria2_connector.contains("self.into_cache_key()")
             && shadowsocks_managed.contains("self.into_cache_key()")
-            && !hysteria2_outbound.contains("self.cache_key()")
+            && !hysteria2_connector.contains("self.cache_key()")
             && !shadowsocks_managed.contains("self.cache_key()"),
         "managed datagram connector flow builds should consume cache identity instead of exposing cache-key getters to proxy"
     );
@@ -10281,13 +10302,13 @@ fn udp_build_traits_consume_protocol_parts() {
             && !packet_path.contains("fn port(&self) -> u16;")
             && socks5_packet_path.contains("self.into_parts()")
             && shadowsocks_packet_path.contains("self.into_parts()")
-            && hysteria2_outbound.contains("self.into_parts()")
+            && hysteria2_connector.contains("self.into_parts()")
             && !socks5_packet_path.contains("self.server()")
             && !socks5_packet_path.contains("self.port()")
             && !shadowsocks_packet_path.contains("self.server()")
             && !shadowsocks_packet_path.contains("self.port()")
-            && !hysteria2_outbound.contains("self.server()")
-            && !hysteria2_outbound.contains("self.port()")
+            && !hysteria2_connector.contains("self.server()")
+            && !hysteria2_connector.contains("self.port()")
             && socks5_shared.contains("pub fn into_parts(self) -> (String, String, u16)")
             && shadowsocks_protocol.contains(
                 "pub fn into_parts(self) -> (alloc::string::String, alloc::string::String, u16)"

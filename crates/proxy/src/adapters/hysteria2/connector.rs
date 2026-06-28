@@ -1,20 +1,12 @@
-//! Hysteria2 outbound — TCP connect.
-//!
-//! TCP outbound connect ([`connect_tcp`]) moved here from `runtime/upstream.rs`
-//! so the runtime dispatches via registered TCP outbound capabilities. UDP datagram
-//! management lives in the Hysteria2 adapter UDP module.
-
 use zero_core::Session;
 use zero_engine::EngineError;
 
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::ManagedDatagramConnectorFlowBuild;
-use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use crate::runtime::udp_flow::packet_path::{DatagramCodec, PacketPathCarrierDescriptorBuild};
-use crate::runtime::Proxy;
 use crate::transport::{Hysteria2Stream, QuicConnectionOptions, TcpRelayStream};
 
-pub(crate) struct Hysteria2Connector {
+pub(super) struct Hysteria2Connector {
     server: String,
     port: u16,
     password: String,
@@ -22,7 +14,7 @@ pub(crate) struct Hysteria2Connector {
 }
 
 impl Hysteria2Connector {
-    pub(crate) fn new(server: &str, port: u16, password: &str) -> Self {
+    pub(super) fn new(server: &str, port: u16, password: &str) -> Self {
         Self {
             server: server.to_owned(),
             port,
@@ -31,12 +23,12 @@ impl Hysteria2Connector {
         }
     }
 
-    pub(crate) fn with_fingerprint(mut self, fingerprint: Option<&str>) -> Self {
+    pub(super) fn with_fingerprint(mut self, fingerprint: Option<&str>) -> Self {
         self.client_fingerprint = fingerprint.map(ToOwned::to_owned);
         self
     }
 
-    pub(crate) fn from_udp_profile(
+    fn from_udp_profile(
         server: &str,
         port: u16,
         profile: hysteria2::udp::Hysteria2UdpConnectorProfile,
@@ -49,7 +41,7 @@ impl Hysteria2Connector {
         }
     }
 
-    pub(crate) async fn connect_raw(&self) -> Result<quinn::Connection, EngineError> {
+    async fn connect_raw(&self) -> Result<quinn::Connection, EngineError> {
         let conn = self.open_quic_connection().await?;
 
         let (send, recv) = conn.open_bi().await.map_err(|error| {
@@ -72,7 +64,7 @@ impl Hysteria2Connector {
         .await
     }
 
-    pub(crate) async fn connect_raw_with_udp_profile(
+    async fn connect_raw_with_udp_profile(
         &self,
         profile: &hysteria2::udp::Hysteria2UdpConnectorProfile,
     ) -> Result<quinn::Connection, EngineError> {
@@ -90,7 +82,7 @@ impl Hysteria2Connector {
         Ok(conn)
     }
 
-    pub(crate) async fn connect(&self, session: &Session) -> Result<Hysteria2Stream, EngineError> {
+    pub(super) async fn connect(&self, session: &Session) -> Result<Hysteria2Stream, EngineError> {
         let conn = self.connect_raw().await?;
         let (send, recv) = conn.open_bi().await.map_err(|error| {
             EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {error}")))
@@ -120,7 +112,7 @@ async fn open_udp_profile_connection(
         .await
 }
 
-pub(crate) async fn open_udp_packet_path_build(
+pub(super) async fn open_udp_packet_path_build(
     build: hysteria2::udp::Hysteria2UdpPacketPathCarrierBuild,
 ) -> Result<
     (
@@ -148,9 +140,11 @@ impl ManagedDatagramConnectorFlowBuild for hysteria2::udp::Hysteria2UdpConnector
     }
 }
 
-pub(crate) async fn establish_udp_flow_session(
+pub(super) async fn establish_udp_flow_session(
     endpoint: OutboundEndpoint<'_>,
-    initial_packet: UdpPacketRef<'_>,
+    target: &zero_core::Address,
+    port: u16,
+    payload: &[u8],
     resume: hysteria2::udp::Hysteria2UdpFlowResume,
 ) -> Result<hysteria2::udp::Hysteria2UdpFlowConnection, EngineError> {
     let flow = hysteria2::udp::connector_flow_from_resume(&resume, endpoint.server, endpoint.port);
@@ -160,11 +154,7 @@ pub(crate) async fn establish_udp_flow_session(
         open_udp_profile_connection(endpoint.server, endpoint.port, connector_profile).await?,
     );
     Ok(hysteria2::udp::start_udp_flow_with_initial_packet(
-        conn,
-        initial_packet.target,
-        initial_packet.port,
-        initial_packet.payload,
-        resume,
+        conn, target, port, payload, resume,
     ))
 }
 
@@ -183,12 +173,7 @@ async fn authenticate_with_password(
         .map_err(EngineError::Core)
 }
 
-/// Establish a Hysteria2 TCP upstream via QUIC.
-///
-/// Moved from `runtime/upstream.rs`. The runtime dispatches via the adapter
-/// trait instead of a per-protocol `connect_via_*` method.
-pub(crate) async fn connect_tcp(
-    _proxy: &Proxy,
+pub(super) async fn connect_tcp(
     session: &Session,
     server: &str,
     port: u16,

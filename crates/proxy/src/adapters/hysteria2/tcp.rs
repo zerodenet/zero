@@ -4,13 +4,12 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_registry::ProtocolSupportCapability;
-use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 impl Hysteria2Adapter {
     pub(super) async fn connect_tcp_impl(
         &self,
-        proxy: &Proxy,
+        _proxy: &crate::runtime::Proxy,
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
@@ -25,15 +24,8 @@ impl Hysteria2Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        match crate::outbound::hysteria2::connect_tcp(
-            proxy,
-            session,
-            server,
-            *port,
-            password,
-            *client_fingerprint,
-        )
-        .await
+        match super::connector::connect_tcp(session, server, *port, password, *client_fingerprint)
+            .await
         {
             Ok(upstream) => Ok(EstablishedTcpOutbound::Hysteria2 {
                 tag: (*tag).to_string(),

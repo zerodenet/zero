@@ -43,9 +43,11 @@ impl ManagedDatagramFlowConnector<hysteria2::udp::Hysteria2UdpFlowResume>
         resume: hysteria2::udp::Hysteria2UdpFlowResume,
         initial_packet: UdpPacketRef<'_>,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
-        let connection = crate::outbound::hysteria2::establish_udp_flow_session(
+        let connection = super::super::connector::establish_udp_flow_session(
             endpoint,
-            initial_packet,
+            initial_packet.target,
+            initial_packet.port,
+            initial_packet.payload,
             resume,
         )
         .await?;
