@@ -312,18 +312,19 @@ impl Proxy {
                                 last_activity = TokioInstant::now();
                                 proxy.record_udp_upstream_packet_received();
                                 dispatch.touch_upstream_idle(proxy.udp_upstream_idle_timeout());
-                                if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
-                                    proxy.record_session_outbound_rx(sid, pkt.payload().len() as u64);
+                                let (target, port, payload) = pkt.into_parts();
+                                if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
+                                    proxy.record_session_outbound_rx(sid, payload.len() as u64);
                                 }
                                 match udp_session.send_mux_response(
                                     &write_tx,
                                     mux_session_id,
-                                    pkt.target(),
-                                    pkt.port(),
-                                    pkt.payload(),
+                                    &target,
+                                    port,
+                                    &payload,
                                 ) {
                                     Ok(frame_len) => {
-                                        if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
+                                        if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
                                             proxy.record_session_inbound_tx(sid, frame_len as u64);
                                         }
                                     }
@@ -470,16 +471,17 @@ impl Proxy {
                             last_activity = TokioInstant::now();
                             self.record_udp_upstream_packet_received();
                             dispatch.touch_upstream_idle(self.udp_upstream_idle_timeout());
-                            if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
-                                self.record_session_outbound_rx(sid, pkt.payload().len() as u64);
+                            let (target, port, payload) = pkt.into_parts();
+                            if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
+                                self.record_session_outbound_rx(sid, payload.len() as u64);
                             }
                             let written = udp_session.write_response_tokio(
                                 &mut client,
-                                pkt.target(),
-                                pkt.port(),
-                                pkt.payload(),
+                                &target,
+                                port,
+                                &payload,
                             ).await?;
-                            if let Some(sid) = dispatch.session_id_by_target(pkt.target(), pkt.port(), None) {
+                            if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
                                 self.record_session_inbound_tx(sid, written as u64);
                             }
                         }
