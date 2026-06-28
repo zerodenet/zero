@@ -29,10 +29,11 @@ pub(super) struct Socks5UdpAssociationTargetSnapshot {
 
 impl Socks5UdpAssociationTargetSnapshot {
     pub(super) fn from_target(target: &socks5::Socks5UdpAssociationTarget) -> Self {
+        let (outbound_tag, server, port) = target.identity().into_parts();
         Self {
-            outbound_tag: target.outbound_tag().to_owned(),
-            server: target.server().to_owned(),
-            port: target.port(),
+            outbound_tag,
+            server,
+            port,
         }
     }
 }

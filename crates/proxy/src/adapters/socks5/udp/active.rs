@@ -25,10 +25,11 @@ impl ActiveUpstreamSocks5UdpAssociation {
         target: socks5::Socks5UdpAssociationTarget,
         session_id: u64,
     ) -> Result<Self, EngineError> {
+        let (server, port) = target.connect_endpoint().into_parts();
         let control = proxy
             .protocols
             .direct_connector()
-            .connect_host(target.server(), target.port(), proxy.resolver.as_ref())
+            .connect_host(&server, port, proxy.resolver.as_ref())
             .await?;
         let mut control = MeteredStream::new(control);
         let relay_target =

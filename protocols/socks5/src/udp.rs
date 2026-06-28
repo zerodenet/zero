@@ -61,6 +61,19 @@ pub struct Socks5UdpAssociationTarget {
     config: Socks5OwnedUdpAssociationConfig,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpAssociationIdentity {
+    outbound_tag: alloc::string::String,
+    server: alloc::string::String,
+    port: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpAssociationEndpoint {
+    server: alloc::string::String,
+    port: u16,
+}
+
 impl Socks5UdpAssociationTarget {
     pub fn new(
         outbound_tag: impl Into<alloc::string::String>,
@@ -92,8 +105,35 @@ impl Socks5UdpAssociationTarget {
         self.config.as_ref()
     }
 
+    pub fn identity(&self) -> Socks5UdpAssociationIdentity {
+        Socks5UdpAssociationIdentity {
+            outbound_tag: self.outbound_tag.clone(),
+            server: self.server.clone(),
+            port: self.port,
+        }
+    }
+
+    pub fn connect_endpoint(&self) -> Socks5UdpAssociationEndpoint {
+        Socks5UdpAssociationEndpoint {
+            server: self.server.clone(),
+            port: self.port,
+        }
+    }
+
     pub fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool {
         self.outbound_tag == outbound_tag && self.server == server && self.port == port
+    }
+}
+
+impl Socks5UdpAssociationIdentity {
+    pub fn into_parts(self) -> (alloc::string::String, alloc::string::String, u16) {
+        (self.outbound_tag, self.server, self.port)
+    }
+}
+
+impl Socks5UdpAssociationEndpoint {
+    pub fn into_parts(self) -> (alloc::string::String, u16) {
+        (self.server, self.port)
     }
 }
 
