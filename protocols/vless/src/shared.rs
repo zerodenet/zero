@@ -221,6 +221,14 @@ pub struct VlessInboundUdpRequest {
     payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VlessInboundUdpDispatchParts {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+    pub client_session_id: Option<u64>,
+}
+
 impl VlessInboundUdpRequest {
     fn from_packet(packet: VlessUdpPacket) -> Self {
         let (target, port, payload) = packet.into_parts();
@@ -245,6 +253,16 @@ impl VlessInboundUdpRequest {
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
         (self.target, self.port, self.payload)
+    }
+
+    pub fn into_dispatch_parts(self) -> VlessInboundUdpDispatchParts {
+        let (target, port, payload) = self.into_parts();
+        VlessInboundUdpDispatchParts {
+            target,
+            port,
+            payload,
+            client_session_id: None,
+        }
     }
 }
 

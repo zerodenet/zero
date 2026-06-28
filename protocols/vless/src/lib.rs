@@ -59,7 +59,7 @@ pub use reality::{
     RealityClientOptions, RealityServerOptions, RealityTlsStream,
 };
 pub use shared::{
-    format_uuid, parse_uuid, VlessInboundUdpCodec, VlessInboundUdpRequest, VlessInboundUdpSession,
-    VlessUdpFlowCodec, VlessUdpFlowIo, VlessUdpFlowPacket, VlessUdpPacket, VlessUdpPacketV2Codec,
-    VLESS_VERSION,
+    format_uuid, parse_uuid, VlessInboundUdpCodec, VlessInboundUdpDispatchParts,
+    VlessInboundUdpRequest, VlessInboundUdpSession, VlessUdpFlowCodec, VlessUdpFlowIo,
+    VlessUdpFlowPacket, VlessUdpPacket, VlessUdpPacketV2Codec, VLESS_VERSION,
 };

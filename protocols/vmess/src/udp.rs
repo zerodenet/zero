@@ -348,6 +348,14 @@ pub struct VmessInboundUdpRequest {
     payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VmessInboundUdpDispatchParts {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+    pub client_session_id: Option<u64>,
+}
+
 impl VmessInboundUdpRequest {
     fn from_payload(payload: VmessInboundUdpPayload) -> (Self, VmessUdpPayloadState) {
         let (state, target, port, payload) = payload.into_parts();
@@ -375,6 +383,16 @@ impl VmessInboundUdpRequest {
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
         (self.target, self.port, self.payload)
+    }
+
+    pub fn into_dispatch_parts(self) -> VmessInboundUdpDispatchParts {
+        let (target, port, payload) = self.into_parts();
+        VmessInboundUdpDispatchParts {
+            target,
+            port,
+            payload,
+            client_session_id: None,
+        }
     }
 }
 
