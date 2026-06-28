@@ -472,12 +472,6 @@ pub struct Socks5UdpPacketPathSpec {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Socks5UdpPacketPathCarrier {
-    cache_key: String,
-    association_target: Socks5UdpAssociationTarget,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Socks5UdpPacketPathCarrierBuild {
     cache_key: String,
     server: String,
@@ -492,48 +486,19 @@ pub struct Socks5UdpPacketPathCarrierDescriptor {
     port: u16,
 }
 
-impl Socks5UdpPacketPathCarrier {
-    pub fn cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn association_target(&self) -> Socks5UdpAssociationTarget {
-        self.association_target.clone()
-    }
-}
-
 impl Socks5UdpPacketPathSpec {
-    pub fn cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn carrier_cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn association_target(&self) -> Socks5UdpAssociationTarget {
-        self.association_target.clone()
-    }
-
-    pub fn carrier(&self) -> Socks5UdpPacketPathCarrier {
-        Socks5UdpPacketPathCarrier {
-            cache_key: self.carrier_cache_key(),
-            association_target: self.association_target(),
-        }
-    }
-
     pub fn carrier_build(&self) -> Socks5UdpPacketPathCarrierBuild {
         Socks5UdpPacketPathCarrierBuild {
-            cache_key: self.carrier_cache_key(),
+            cache_key: self.cache_key.clone(),
             server: self.association_target.server().to_owned(),
             port: self.association_target.port(),
-            association_target: self.association_target(),
+            association_target: self.association_target.clone(),
         }
     }
 
     pub fn carrier_descriptor(&self) -> Socks5UdpPacketPathCarrierDescriptor {
         Socks5UdpPacketPathCarrierDescriptor {
-            cache_key: self.carrier_cache_key(),
+            cache_key: self.cache_key.clone(),
             server: self.association_target.server().to_owned(),
             port: self.association_target.port(),
         }

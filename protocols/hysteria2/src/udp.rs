@@ -408,13 +408,6 @@ pub struct Hysteria2UdpPacketPathSpec {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hysteria2UdpPacketPathCarrier {
-    cache_key: String,
-    connector_profile: Hysteria2UdpConnectorProfile,
-    codec: Hysteria2DatagramCodec,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hysteria2UdpPacketPathCarrierBuild {
     cache_key: String,
     server: String,
@@ -438,51 +431,13 @@ pub struct Hysteria2UdpPacketPathCarrierDescriptor {
     port: u16,
 }
 
-impl Hysteria2UdpPacketPathCarrier {
-    pub fn cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
-        self.connector_profile.clone()
-    }
-
-    pub fn codec(&self) -> Hysteria2DatagramCodec {
-        self.codec
-    }
-}
-
 impl Hysteria2UdpPacketPathSpec {
-    pub fn cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn carrier_cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn codec(&self) -> impl DatagramCodec<Address, Error = Error> {
-        self.resume.codec()
-    }
-
-    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
-        self.resume.connector_profile()
-    }
-
-    pub fn carrier(&self) -> Hysteria2UdpPacketPathCarrier {
-        Hysteria2UdpPacketPathCarrier {
-            cache_key: self.carrier_cache_key(),
-            connector_profile: self.connector_profile(),
-            codec: Hysteria2DatagramCodec,
-        }
-    }
-
     pub fn carrier_build(&self, server: &str, port: u16) -> Hysteria2UdpPacketPathCarrierBuild {
         Hysteria2UdpPacketPathCarrierBuild {
-            cache_key: self.carrier_cache_key(),
+            cache_key: self.cache_key.clone(),
             server: server.to_owned(),
             port,
-            connector_profile: self.connector_profile(),
+            connector_profile: self.resume.connector_profile(),
             codec: Hysteria2DatagramCodec,
         }
     }
@@ -493,7 +448,7 @@ impl Hysteria2UdpPacketPathSpec {
         port: u16,
     ) -> Hysteria2UdpPacketPathCarrierDescriptor {
         Hysteria2UdpPacketPathCarrierDescriptor {
-            cache_key: self.carrier_cache_key(),
+            cache_key: self.cache_key.clone(),
             server: server.to_owned(),
             port,
         }
