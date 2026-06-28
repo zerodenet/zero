@@ -1027,6 +1027,9 @@ impl VmessInboundUdpCodec {
         tokio::io::AsyncWriteExt::write_all(writer, &packet)
             .await
             .map_err(|_| Error::Io("failed to write VMess UDP response"))?;
+        tokio::io::AsyncWriteExt::flush(writer)
+            .await
+            .map_err(|_| Error::Io("failed to flush VMess UDP response"))?;
         Ok(len)
     }
 

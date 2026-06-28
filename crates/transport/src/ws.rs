@@ -131,35 +131,49 @@ where
             let to_copy = available.min(buf.remaining());
             buf.put_slice(&self.read_buffer[self.read_offset..self.read_offset + to_copy]);
             self.read_offset += to_copy;
+            if self.read_offset >= self.read_buffer.len() {
+                self.read_buffer.clear();
+                self.read_offset = 0;
+            }
             return std::task::Poll::Ready(Ok(()));
         }
 
-        match Pin::new(&mut self.inner).poll_next_unpin(cx) {
-            std::task::Poll::Ready(Some(Ok(msg))) => match msg {
-                Message::Binary(data) => {
-                    self.read_buffer = data;
-                    self.read_offset = 0;
-                    let to_copy = self.read_buffer.len().min(buf.remaining());
-                    buf.put_slice(&self.read_buffer[..to_copy]);
-                    self.read_offset = to_copy;
-                    std::task::Poll::Ready(Ok(()))
+        loop {
+            match Pin::new(&mut self.inner).poll_next_unpin(cx) {
+                std::task::Poll::Ready(Some(Ok(msg))) => match msg {
+                    Message::Binary(data) => {
+                        self.read_buffer = data;
+                        self.read_offset = 0;
+                        let to_copy = self.read_buffer.len().min(buf.remaining());
+                        buf.put_slice(&self.read_buffer[..to_copy]);
+                        self.read_offset = to_copy;
+                        if self.read_offset >= self.read_buffer.len() {
+                            self.read_buffer.clear();
+                            self.read_offset = 0;
+                        }
+                        return std::task::Poll::Ready(Ok(()));
+                    }
+                    Message::Text(data) => {
+                        self.read_buffer = data.into_bytes();
+                        self.read_offset = 0;
+                        let to_copy = self.read_buffer.len().min(buf.remaining());
+                        buf.put_slice(&self.read_buffer[..to_copy]);
+                        self.read_offset = to_copy;
+                        if self.read_offset >= self.read_buffer.len() {
+                            self.read_buffer.clear();
+                            self.read_offset = 0;
+                        }
+                        return std::task::Poll::Ready(Ok(()));
+                    }
+                    Message::Close(_) => return std::task::Poll::Ready(Ok(())),
+                    _ => continue,
+                },
+                std::task::Poll::Ready(Some(Err(e))) => {
+                    return std::task::Poll::Ready(Err(std::io::Error::other(e)));
                 }
-                Message::Text(data) => {
-                    self.read_buffer = data.into_bytes();
-                    self.read_offset = 0;
-                    let to_copy = self.read_buffer.len().min(buf.remaining());
-                    buf.put_slice(&self.read_buffer[..to_copy]);
-                    self.read_offset = to_copy;
-                    std::task::Poll::Ready(Ok(()))
-                }
-                Message::Close(_) => std::task::Poll::Ready(Ok(())),
-                _ => std::task::Poll::Pending,
-            },
-            std::task::Poll::Ready(Some(Err(e))) => {
-                std::task::Poll::Ready(Err(std::io::Error::other(e)))
+                std::task::Poll::Ready(None) => return std::task::Poll::Ready(Ok(())),
+                std::task::Poll::Pending => return std::task::Poll::Pending,
             }
-            std::task::Poll::Ready(None) => std::task::Poll::Ready(Ok(())),
-            std::task::Poll::Pending => std::task::Poll::Pending,
         }
     }
 }

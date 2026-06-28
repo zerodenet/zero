@@ -703,6 +703,9 @@ impl VlessInboundUdpCodec {
         tokio::io::AsyncWriteExt::write_all(writer, &packet)
             .await
             .map_err(|_| Error::Io("failed to write VLESS UDP response"))?;
+        tokio::io::AsyncWriteExt::flush(writer)
+            .await
+            .map_err(|_| Error::Io("failed to flush VLESS UDP response"))?;
         Ok(len)
     }
 
