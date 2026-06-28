@@ -8894,10 +8894,13 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         );
     }
     assert!(
-        managed.contains(".connector_flow(endpoint.server, endpoint.port)")
+        managed.contains("ManagedDatagramConnectorFlow::new")
+            && managed.contains(".connector_flow(endpoint.server, endpoint.port)")
             && !managed.contains("resume.flow_cache_key(")
             && !managed.contains("resume.flow(endpoint.server, endpoint.port)")
             && generic_manager.contains("self.upstreams")
+            && generic_manager.contains("ManagedDatagramConnectorFlow")
+            && !generic_manager.contains("fn flow_cache_key")
             && generic_manager.contains(".send_or_insert_pre_sent_key(")
             && !managed.contains(".send_or_insert(")
             && !managed.contains("self.upstreams.get(&cache_key)")
@@ -9568,8 +9571,11 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !managed.contains("fn from_resume(")
             && !managed.contains("socket_flow_cache_key()")
             && generic_manager.contains("ManagedDatagramConnectionCache")
+            && generic_manager.contains("ManagedDatagramSocketConnectorFlow")
+            && !generic_manager.contains("fn flow_cache_key")
             && !managed.contains("ManagedDatagramConnectionCacheKey")
-            && managed.contains("resume.managed_socket_flow().cache_key()")
+            && managed.contains("ManagedDatagramSocketConnectorFlow::new")
+            && managed.contains("flow.cache_key()")
             && managed.contains("resume.managed_socket_flow().codec()")
             && !managed.contains("resume.socket_flow().")
             && !managed.contains("resume.flow_cache_key()")
@@ -9652,7 +9658,6 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         "resume.codec()",
         "request.resume.cache_key()",
         "request.resume.codec()",
-        "cache_key: String",
         "cache_key: &str",
         "SsKey::new(server",
         "SsKey::from_resume",
@@ -9662,6 +9667,10 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             "Shadowsocks UDP managed glue should use a protocol-owned cache key/codec handle instead of unpacking `{forbidden}`"
         );
     }
+    assert!(
+        !managed.contains("cache_key: String"),
+        "Shadowsocks UDP managed glue should not declare protocol cache key fields"
+    );
 }
 
 #[test]

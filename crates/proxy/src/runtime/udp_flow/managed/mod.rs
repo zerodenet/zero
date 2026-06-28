@@ -19,7 +19,8 @@ pub(crate) use connection::{
 };
 pub(crate) use datagram::{managed_datagram_connection, ManagedDatagramSender};
 pub(crate) use datagram_manager::{
-    ManagedDatagramFlowConnector, ManagedDatagramFlowManager, ManagedDatagramSocketFlowConnector,
+    ManagedDatagramConnectorFlow, ManagedDatagramFlowConnector, ManagedDatagramFlowManager,
+    ManagedDatagramSocketConnectorFlow, ManagedDatagramSocketFlowConnector,
     ManagedDatagramSocketFlowManager,
 };
 pub(crate) use flow::{ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume};

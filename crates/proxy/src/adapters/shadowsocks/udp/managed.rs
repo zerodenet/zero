@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
     managed_datagram_connection, ManagedDatagramFlowHandler, ManagedDatagramSender,
-    ManagedDatagramSocketFlowConnector, ManagedDatagramSocketFlowManager,
-    SharedManagedDatagramUdpConnection,
+    ManagedDatagramSocketConnectorFlow, ManagedDatagramSocketFlowConnector,
+    ManagedDatagramSocketFlowManager, SharedManagedDatagramUdpConnection,
 };
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use zero_core::Address;
@@ -27,12 +27,13 @@ pub(super) fn handler() -> Box<dyn ManagedDatagramFlowHandler> {
 impl ManagedDatagramSocketFlowConnector<shadowsocks::ShadowsocksUdpFlowResume>
     for ShadowsocksManagedDatagramConnector
 {
-    fn flow_cache_key(
+    fn connector_flow(
         &self,
         resume: &shadowsocks::ShadowsocksUdpFlowResume,
         _endpoint: OutboundEndpoint<'_>,
-    ) -> String {
-        resume.managed_socket_flow().cache_key()
+    ) -> ManagedDatagramSocketConnectorFlow {
+        let flow = resume.managed_socket_flow();
+        ManagedDatagramSocketConnectorFlow::new(flow.cache_key())
     }
 
     async fn establish(

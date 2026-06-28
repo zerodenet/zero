@@ -17,7 +17,11 @@ use crate::runtime::Proxy;
 pub(crate) trait ManagedDatagramFlowConnector<T>: Send + Sync {
     const INITIAL_PACKET_PRE_SENT: bool;
 
-    fn flow_cache_key(&self, resume: &T, endpoint: OutboundEndpoint<'_>) -> String;
+    fn connector_flow(
+        &self,
+        resume: &T,
+        endpoint: OutboundEndpoint<'_>,
+    ) -> ManagedDatagramConnectorFlow;
 
     async fn establish(
         &self,
@@ -26,6 +30,20 @@ pub(crate) trait ManagedDatagramFlowConnector<T>: Send + Sync {
         resume: T,
         initial_packet: UdpPacketRef<'_>,
     ) -> Result<SharedManagedUdpConnection, EngineError>;
+}
+
+pub(crate) struct ManagedDatagramConnectorFlow {
+    cache_key: String,
+}
+
+impl ManagedDatagramConnectorFlow {
+    pub(crate) fn new(cache_key: String) -> Self {
+        Self { cache_key }
+    }
+
+    fn cache_key(self) -> String {
+        self.cache_key
+    }
 }
 
 pub(crate) struct ManagedDatagramFlowManager<T, C> {
@@ -102,7 +120,7 @@ where
         resume: T,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let cache_key = self.connector.flow_cache_key(&resume, endpoint);
+        let cache_key = self.connector.connector_flow(&resume, endpoint).cache_key();
         let establish = self
             .connector
             .establish(proxy, endpoint, resume, packet_ref);
@@ -169,7 +187,11 @@ where
 
 #[async_trait]
 pub(crate) trait ManagedDatagramSocketFlowConnector<T>: Send + Sync {
-    fn flow_cache_key(&self, resume: &T, endpoint: OutboundEndpoint<'_>) -> String;
+    fn connector_flow(
+        &self,
+        resume: &T,
+        endpoint: OutboundEndpoint<'_>,
+    ) -> ManagedDatagramSocketConnectorFlow;
 
     async fn establish(
         &self,
@@ -178,6 +200,20 @@ pub(crate) trait ManagedDatagramSocketFlowConnector<T>: Send + Sync {
         resume: T,
         initial_packet: UdpPacketRef<'_>,
     ) -> Result<SharedManagedDatagramUdpConnection, EngineError>;
+}
+
+pub(crate) struct ManagedDatagramSocketConnectorFlow {
+    cache_key: String,
+}
+
+impl ManagedDatagramSocketConnectorFlow {
+    pub(crate) fn new(cache_key: String) -> Self {
+        Self { cache_key }
+    }
+
+    fn cache_key(self) -> String {
+        self.cache_key
+    }
 }
 
 impl<T, C> ManagedDatagramSocketFlowManager<T, C>
@@ -197,7 +233,7 @@ where
         resume: T,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let cache_key = self.connector.flow_cache_key(&resume, endpoint);
+        let cache_key = self.connector.connector_flow(&resume, endpoint).cache_key();
         let connection = self
             .upstreams
             .get_or_insert_key(
