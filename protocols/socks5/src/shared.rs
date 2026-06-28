@@ -197,6 +197,14 @@ pub struct Socks5InboundUdpRequest {
     frame_len: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5InboundUdpDispatchParts {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+    pub client_session_id: Option<u64>,
+}
+
 impl Socks5InboundUdpRequest {
     pub(crate) fn from_packet(packet: Socks5UdpPacket, frame_len: usize) -> Self {
         let (target, port, payload) = packet.into_parts();
@@ -226,6 +234,16 @@ impl Socks5InboundUdpRequest {
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
         (self.target, self.port, self.payload)
+    }
+
+    pub fn into_dispatch_parts(self) -> Socks5InboundUdpDispatchParts {
+        let (target, port, payload) = self.into_parts();
+        Socks5InboundUdpDispatchParts {
+            target,
+            port,
+            payload,
+            client_session_id: None,
+        }
     }
 }
 

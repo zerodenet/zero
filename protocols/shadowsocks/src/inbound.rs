@@ -171,6 +171,25 @@ impl ShadowsocksInboundUdpPacket {
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }
+
+    pub fn into_dispatch_parts(self) -> ShadowsocksInboundUdpDispatchParts {
+        let (target, port, payload, client_session_id) = self.into_parts();
+        ShadowsocksInboundUdpDispatchParts {
+            target,
+            port,
+            payload,
+            client_session_id,
+        }
+    }
+}
+
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksInboundUdpDispatchParts {
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+    pub client_session_id: Option<u64>,
 }
 
 #[cfg(feature = "crypto")]

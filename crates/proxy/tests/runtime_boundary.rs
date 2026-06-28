@@ -2136,6 +2136,7 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
     assert!(
         udp.contains("ShadowsocksInboundUdpSession")
             && udp.contains("udp_session.decode_request")
+            && udp.contains("request.into_dispatch_parts()")
             && udp.contains("udp_session.record_proxy_session")
             && udp.contains("response_target_for_proxy_session")
             && udp.contains(".response_frame(")
@@ -2147,6 +2148,8 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && protocol_inbound.contains("struct ShadowsocksInboundUdpSession")
             && protocol_inbound.contains("fn decode_request")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpResponse")
+            && protocol_inbound.contains("struct ShadowsocksInboundUdpDispatchParts")
+            && protocol_inbound.contains("fn into_dispatch_parts")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpResponseTarget")
             && protocol_inbound.contains("fn encode_response_to_client")
             && protocol_inbound.contains("fn response_frame")
@@ -2157,6 +2160,7 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && !inbound_packet_struct.contains("pub payload: Vec<u8>")
             && !inbound_packet_struct.contains("pub client_session_id: Option<u64>")
             && !inbound_response_struct.contains("pub datagram: Vec<u8>")
+            && !udp.contains("request.into_parts()")
             && !udp.contains("request.target,")
             && !udp.contains("request.payload,")
             && !udp.contains("request.client_session_id,")
@@ -4680,6 +4684,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     assert!(
         dispatch.contains("socks5::Socks5Inbound.udp_session()")
             && dispatch.contains("udp_session.decode_request")
+            && dispatch.contains("udp_packet.into_dispatch_parts()")
             && dispatch.contains("protocol_overhead_len")
             && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
             && upstream_response.contains("udp_session.response_key")
@@ -4692,6 +4697,10 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !direct_response.contains("Socks5InboundUdpCodec")
             && !chain_response.contains("Socks5InboundUdpCodec"),
         "SOCKS5 UDP associate dispatch/attribution should use the protocol-owned inbound UDP session"
+    );
+    assert!(
+        !dispatch.contains("udp_packet.into_parts()") && !dispatch.contains("client_session_id: None"),
+        "SOCKS5 UDP associate dispatch should consume protocol-owned dispatch parts instead of rebuilding session facts"
     );
     for forbidden in [
         "udp_session.encode_response_to_client",

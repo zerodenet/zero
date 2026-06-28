@@ -14,8 +14,9 @@ pub use inbound::ShadowsocksInbound;
 #[cfg(feature = "crypto")]
 pub use inbound::{
     ShadowsocksAccept, ShadowsocksInboundProfile, ShadowsocksInboundTcpState,
-    ShadowsocksInboundUdpCodec, ShadowsocksInboundUdpPacket, ShadowsocksInboundUdpResponse,
-    ShadowsocksInboundUdpResponseTarget, ShadowsocksInboundUdpSession,
+    ShadowsocksInboundUdpCodec, ShadowsocksInboundUdpDispatchParts, ShadowsocksInboundUdpPacket,
+    ShadowsocksInboundUdpResponse, ShadowsocksInboundUdpResponseTarget,
+    ShadowsocksInboundUdpSession,
 };
 pub use metadata::ShadowsocksProtocol;
 pub use outbound::ShadowsocksOutbound;

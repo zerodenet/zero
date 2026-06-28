@@ -40,17 +40,17 @@ pub(super) async fn dispatch_packet(
     }
 
     let protocol_overhead_len = udp_packet.protocol_overhead_len() as u64;
-    let (target, port, payload) = udp_packet.into_parts();
+    let request = udp_packet.into_dispatch_parts();
 
     // Generic dispatch.
     let session_id = UdpPipe::new(proxy, dispatch)
         .dispatch(UdpPipeInput {
-            target,
-            port,
-            payload: &payload,
+            target: request.target,
+            port: request.port,
+            payload: &request.payload,
             protocol: ProtocolType::Socks5,
             auth: None,
-            client_session_id: None,
+            client_session_id: request.client_session_id,
         })
         .await?;
 

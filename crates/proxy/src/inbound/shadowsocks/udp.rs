@@ -47,8 +47,12 @@ impl Proxy {
 
                     let mut sa = zero_core::SessionAuth::new("shadowsocks");
                     sa.principal_key = Some(profile.principal_key());
-                    let client_session_id = request.client_session_id();
-                    let (target, port, payload, _) = request.into_parts();
+                    let shadowsocks::ShadowsocksInboundUdpDispatchParts {
+                        target,
+                        port,
+                        payload,
+                        client_session_id,
+                    } = request.into_dispatch_parts();
                     match UdpPipe::new(self, &mut dispatch)
                         .dispatch(UdpPipeInput {
                             target,
