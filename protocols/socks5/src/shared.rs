@@ -577,6 +577,26 @@ pub fn udp_packet_path_spec_from_config(
     Socks5UdpFlowConfig::new(tag, server, port, username, password).packet_path_spec()
 }
 
+pub fn udp_packet_path_carrier_descriptor_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Socks5UdpPacketPathCarrierDescriptor {
+    udp_packet_path_spec_from_config(tag, server, port, username, password).carrier_descriptor()
+}
+
+pub fn udp_packet_path_carrier_build_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Socks5UdpPacketPathCarrierBuild {
+    udp_packet_path_spec_from_config(tag, server, port, username, password).carrier_build()
+}
+
 pub fn udp_flow_resume_from_config(
     tag: &str,
     server: &str,

@@ -43,8 +43,9 @@ pub(super) fn carrier_descriptor(
     else {
         return None;
     };
-    let spec = socks5::udp_packet_path_spec_from_config(tag, server, *port, *username, *password);
-    let descriptor = spec.carrier_descriptor();
+    let descriptor = socks5::udp_packet_path_carrier_descriptor_from_config(
+        tag, server, *port, *username, *password,
+    );
     Some(
         crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor_from_build(
             descriptor,
@@ -68,8 +69,9 @@ pub(super) async fn build(
     else {
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
-    let spec = socks5::udp_packet_path_spec_from_config(tag, server, *port, *username, *password);
-    build_socks5_packet_path(proxy, spec.carrier_build()).await
+    let carrier =
+        socks5::udp_packet_path_carrier_build_from_config(tag, server, *port, *username, *password);
+    build_socks5_packet_path(proxy, carrier).await
 }
 
 pub(crate) async fn build_socks5_packet_path(

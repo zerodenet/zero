@@ -20,6 +20,7 @@ pub use outbound::{
 };
 pub use shared::{
     packet_path_carrier_association_target, udp_flow_resume_from_config,
+    udp_packet_path_carrier_build_from_config, udp_packet_path_carrier_descriptor_from_config,
     udp_packet_path_spec_from_config, Socks5InboundUdpDispatchParts, Socks5InboundUdpRequest,
     Socks5InboundUdpResponse, Socks5Reply, Socks5UdpFlowConfig, Socks5UdpPacketPathCarrier,
     Socks5UdpPacketPathCarrierBuild, Socks5UdpPacketPathCarrierDescriptor, Socks5UdpPacketPathSpec,

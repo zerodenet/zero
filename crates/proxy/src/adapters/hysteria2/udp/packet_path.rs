@@ -21,14 +21,13 @@ pub(super) fn carrier_descriptor(
     else {
         return None;
     };
-    let spec = hysteria2::udp_packet_path_spec_from_config(
+    let descriptor = hysteria2::udp_packet_path_carrier_descriptor_from_config(
         tag,
         server,
         *port,
         password,
         *client_fingerprint,
     );
-    let descriptor = spec.carrier_descriptor(server, *port);
     Some(packet_path_carrier_descriptor_from_build(descriptor))
 }
 
@@ -46,14 +45,13 @@ pub(super) async fn build(
     else {
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
-    let spec = hysteria2::udp_packet_path_spec_from_config(
+    let build = hysteria2::udp_packet_path_carrier_build_from_config(
         "",
         server,
         *port,
         password,
         *client_fingerprint,
     );
-    let build = spec.carrier_build(server, *port);
     let (conn, codec) = crate::outbound::hysteria2::open_udp_packet_path_build(build).await?;
     let conn = std::sync::Arc::new(conn);
     crate::runtime::udp_flow::packet_path_chain::carriers::quic_datagram_carrier::build(conn, codec)

@@ -22,7 +22,8 @@ pub use metadata::ShadowsocksProtocol;
 pub use outbound::ShadowsocksOutbound;
 #[cfg(feature = "crypto")]
 pub use outbound::{
-    parse_udp_cipher, udp_flow_resume_from_config, udp_packet_path_spec_from_config,
+    parse_udp_cipher, udp_flow_resume_from_config, udp_packet_path_carrier_descriptor_from_config,
+    udp_packet_path_datagram_source_build_from_config, udp_packet_path_spec_from_config,
     ShadowsocksDatagramCodec, ShadowsocksOutboundSession, ShadowsocksTcpConnectConfig,
     ShadowsocksTcpTarget, ShadowsocksUdpDecodeContext, ShadowsocksUdpFlowConfig,
     ShadowsocksUdpFlowEntries, ShadowsocksUdpFlowPacket, ShadowsocksUdpFlowResume,

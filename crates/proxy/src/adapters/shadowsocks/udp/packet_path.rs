@@ -22,9 +22,10 @@ pub(super) fn carrier_descriptor(
     else {
         return None;
     };
-    let spec =
-        shadowsocks::udp_packet_path_spec_from_config(tag, server, *port, cipher, password).ok()?;
-    let descriptor = spec.carrier_descriptor(server, *port);
+    let descriptor = shadowsocks::udp_packet_path_carrier_descriptor_from_config(
+        tag, server, *port, cipher, password,
+    )
+    .ok()?;
     Some(packet_path_carrier_descriptor_from_build(descriptor))
 }
 
@@ -43,9 +44,10 @@ pub(super) async fn build(
     else {
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
-    let spec = shadowsocks::udp_packet_path_spec_from_config("", server, *port, cipher, password)
-        .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
-    let datagram = spec.datagram_source_build("", server, *port);
+    let datagram = shadowsocks::udp_packet_path_datagram_source_build_from_config(
+        "", server, *port, cipher, password,
+    )
+    .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
     crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
         proxy,
         server,
@@ -66,8 +68,9 @@ pub(super) fn datagram_source(leaf: &ResolvedLeafOutbound<'_>) -> Option<UdpData
     else {
         return None;
     };
-    let spec =
-        shadowsocks::udp_packet_path_spec_from_config(tag, server, *port, cipher, password).ok()?;
-    let datagram = spec.datagram_source_build(tag, server, *port);
+    let datagram = shadowsocks::udp_packet_path_datagram_source_build_from_config(
+        tag, server, *port, cipher, password,
+    )
+    .ok()?;
     Some(udp_datagram_source_from_build(datagram))
 }

@@ -931,6 +931,34 @@ pub fn udp_packet_path_spec_from_config(
 }
 
 #[cfg(feature = "crypto")]
+pub fn udp_packet_path_carrier_descriptor_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    cipher: &str,
+    password: &str,
+) -> Result<ShadowsocksUdpPacketPathCarrierDescriptor, Error> {
+    Ok(
+        udp_packet_path_spec_from_config(tag, server, port, cipher, password)?
+            .carrier_descriptor(server, port),
+    )
+}
+
+#[cfg(feature = "crypto")]
+pub fn udp_packet_path_datagram_source_build_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    cipher: &str,
+    password: &str,
+) -> Result<ShadowsocksUdpPacketPathDatagramSourceBuild, Error> {
+    Ok(
+        udp_packet_path_spec_from_config(tag, server, port, cipher, password)?
+            .datagram_source_build(tag, server, port),
+    )
+}
+
+#[cfg(feature = "crypto")]
 pub fn udp_flow_resume_from_config(
     tag: &str,
     server: &str,

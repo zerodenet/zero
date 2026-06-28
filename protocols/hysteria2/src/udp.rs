@@ -538,6 +538,28 @@ pub fn udp_packet_path_spec_from_config(
     Hysteria2UdpFlowConfig::new(tag, server, port, password, client_fingerprint).packet_path_spec()
 }
 
+pub fn udp_packet_path_carrier_descriptor_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    password: &str,
+    client_fingerprint: Option<&str>,
+) -> Hysteria2UdpPacketPathCarrierDescriptor {
+    udp_packet_path_spec_from_config(tag, server, port, password, client_fingerprint)
+        .carrier_descriptor(server, port)
+}
+
+pub fn udp_packet_path_carrier_build_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    password: &str,
+    client_fingerprint: Option<&str>,
+) -> Hysteria2UdpPacketPathCarrierBuild {
+    udp_packet_path_spec_from_config(tag, server, port, password, client_fingerprint)
+        .carrier_build(server, port)
+}
+
 pub fn udp_flow_resume_from_config(
     tag: &str,
     server: &str,
