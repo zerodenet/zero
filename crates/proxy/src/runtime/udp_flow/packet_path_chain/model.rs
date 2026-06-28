@@ -18,12 +18,12 @@ pub(super) struct Entry {
     pub(super) datagram_port: u16,
 }
 
-pub(super) struct EntryCandidate<'a> {
+pub(super) struct EntryCandidate {
     pub(super) carrier_desc: PacketPathCarrierDescriptor,
-    pub(super) datagram: UdpDatagramSource<'a>,
+    pub(super) datagram: UdpDatagramSource,
 }
 
-impl EntryCandidate<'_> {
+impl EntryCandidate {
     pub(super) fn key(&self) -> PathKey {
         PathKey::from_sources(&self.carrier_desc, self.datagram.descriptor().key_part())
     }

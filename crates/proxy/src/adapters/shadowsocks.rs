@@ -47,10 +47,10 @@ impl UdpPacketPathCapability for ShadowsocksAdapter {
         self.build_udp_packet_path_impl(ctx.proxy(), leaf).await
     }
 
-    fn udp_datagram_source<'a>(
+    fn udp_datagram_source(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource<'a>> {
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource> {
         self.udp_datagram_source_impl(leaf)
     }
 }

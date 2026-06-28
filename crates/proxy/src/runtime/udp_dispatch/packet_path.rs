@@ -7,7 +7,7 @@ use crate::runtime::Proxy;
 
 impl UdpDispatch {
     pub(super) fn datagram_chain_flow_outbound(
-        flow_binding: PacketPathFlowBinding<'_>,
+        flow_binding: PacketPathFlowBinding,
     ) -> UdpFlowOutbound {
         let (datagram, flow_snapshot) = flow_binding.into_parts();
         let descriptor = datagram.descriptor();

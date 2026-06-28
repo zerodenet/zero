@@ -7,11 +7,11 @@ use crate::runtime::Proxy;
 impl ProtocolInventory {
     /// Return packet-path datagram params and carrier snapshot when the two
     /// relay-chain leaves form a supported packet-path pair.
-    pub(crate) fn udp_packet_path_pair<'a>(
+    pub(crate) fn udp_packet_path_pair(
         &self,
-        carrier_leaf: &zero_engine::ResolvedLeafOutbound<'a>,
-        datagram_leaf: &zero_engine::ResolvedLeafOutbound<'a>,
-    ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathFlowBinding<'a>> {
+        carrier_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
+        datagram_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
+    ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathFlowBinding> {
         let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf).ok()?;
         let datagram_adapter = self.registry.find_outbound_leaf(datagram_leaf).ok()?;
 
@@ -31,14 +31,14 @@ impl ProtocolInventory {
 
     /// Resolve packet-path entry construction params through the carrier and
     /// datagram adapters.
-    pub(crate) fn resolve_udp_packet_path_candidate<'a>(
+    pub(crate) fn resolve_udp_packet_path_candidate(
         &self,
         carrier_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
-        datagram_leaf: &zero_engine::ResolvedLeafOutbound<'a>,
+        datagram_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
     ) -> Result<
         (
             crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor,
-            crate::runtime::udp_flow::packet_path::UdpDatagramSource<'a>,
+            crate::runtime::udp_flow::packet_path::UdpDatagramSource,
         ),
         EngineError,
     > {

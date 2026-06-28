@@ -175,10 +175,10 @@ pub(crate) trait UdpPacketPathCapability {
         Err(super::defaults::packet_path_carrier_unsupported())
     }
 
-    fn udp_datagram_source<'a>(
+    fn udp_datagram_source(
         &self,
-        _leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource<'a>> {
+        _leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource> {
         None
     }
 }

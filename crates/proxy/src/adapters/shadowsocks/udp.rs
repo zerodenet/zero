@@ -33,10 +33,10 @@ impl ShadowsocksAdapter {
         packet_path::build(self, proxy, leaf).await
     }
 
-    pub(super) fn udp_datagram_source_impl<'a>(
+    pub(super) fn udp_datagram_source_impl(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource<'a>> {
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource> {
         packet_path::datagram_source(leaf)
     }
 

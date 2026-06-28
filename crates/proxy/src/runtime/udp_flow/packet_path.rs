@@ -81,18 +81,18 @@ pub(crate) fn packet_path_carrier_descriptor(
 /// Produced by `UdpPacketPathCapability::udp_datagram_source`. The `cache_key`
 /// feeds packet-path cache identity without exposing raw config parsing to the
 /// manager.
-pub(crate) struct UdpDatagramDescriptor<'a> {
-    pub(crate) tag: &'a str,
-    pub(crate) server: &'a str,
+pub(crate) struct UdpDatagramDescriptor {
+    pub(crate) tag: String,
+    pub(crate) server: String,
     pub(crate) port: u16,
     pub(crate) cache_key: String,
 }
 
-impl UdpDatagramDescriptor<'_> {
+impl UdpDatagramDescriptor {
     pub(crate) fn key_part(&self) -> UdpDatagramKey {
         UdpDatagramKey {
-            tag: self.tag.to_owned(),
-            server: self.server.to_owned(),
+            tag: self.tag.clone(),
+            server: self.server.clone(),
             port: self.port,
             cache_key: self.cache_key.clone(),
         }
@@ -103,33 +103,31 @@ impl UdpDatagramDescriptor<'_> {
 ///
 /// The descriptor is the generic chain-management surface. The codec is the
 /// protocol-provided packet framing object for the selected datagram hop.
-pub(crate) struct UdpDatagramSource<'a> {
-    pub(crate) descriptor: UdpDatagramDescriptor<'a>,
+pub(crate) struct UdpDatagramSource {
+    pub(crate) descriptor: UdpDatagramDescriptor,
     pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 }
 
-pub(crate) struct UdpDatagramSourceParts<'a> {
-    pub(crate) tag: &'a str,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) cache_key: String,
-    pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
-}
-
-pub(crate) fn udp_datagram_source<'a>(parts: UdpDatagramSourceParts<'a>) -> UdpDatagramSource<'a> {
+pub(crate) fn udp_datagram_source(
+    tag: &str,
+    server: &str,
+    port: u16,
+    cache_key: String,
+    codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
+) -> UdpDatagramSource {
     UdpDatagramSource {
         descriptor: UdpDatagramDescriptor {
-            tag: parts.tag,
-            server: parts.server,
-            port: parts.port,
-            cache_key: parts.cache_key,
+            tag: tag.to_owned(),
+            server: server.to_owned(),
+            port,
+            cache_key,
         },
-        codec: parts.codec,
+        codec,
     }
 }
 
-impl UdpDatagramSource<'_> {
-    pub(crate) fn descriptor(&self) -> &UdpDatagramDescriptor<'_> {
+impl UdpDatagramSource {
+    pub(crate) fn descriptor(&self) -> &UdpDatagramDescriptor {
         &self.descriptor
     }
 }
@@ -174,14 +172,11 @@ pub(crate) struct PacketPathFlowSnapshot {
 }
 
 impl PacketPathFlowSnapshot {
-    fn from_parts(
-        datagram: &UdpDatagramDescriptor<'_>,
-        carrier: &PacketPathCarrierDescriptor,
-    ) -> Self {
+    fn from_parts(datagram: &UdpDatagramDescriptor, carrier: &PacketPathCarrierDescriptor) -> Self {
         Self {
             carrier_cache_key: carrier.cache_key.clone(),
-            datagram_tag: datagram.tag.to_owned(),
-            datagram_server: datagram.server.to_owned(),
+            datagram_tag: datagram.tag.clone(),
+            datagram_server: datagram.server.clone(),
             datagram_port: datagram.port,
             datagram_cache_key: datagram.cache_key.clone(),
         }
@@ -200,14 +195,14 @@ impl PacketPathFlowSnapshot {
     }
 }
 
-pub(crate) struct PacketPathFlowBinding<'a> {
-    datagram: UdpDatagramSource<'a>,
+pub(crate) struct PacketPathFlowBinding {
+    datagram: UdpDatagramSource,
     flow_snapshot: PacketPathFlowSnapshot,
 }
 
-impl<'a> PacketPathFlowBinding<'a> {
+impl PacketPathFlowBinding {
     pub(crate) fn new(
-        datagram: UdpDatagramSource<'a>,
+        datagram: UdpDatagramSource,
         carrier_desc: &PacketPathCarrierDescriptor,
     ) -> Self {
         let flow_snapshot = PacketPathFlowSnapshot::from_parts(datagram.descriptor(), carrier_desc);
@@ -217,7 +212,7 @@ impl<'a> PacketPathFlowBinding<'a> {
         }
     }
 
-    pub(crate) fn into_parts(self) -> (UdpDatagramSource<'a>, PacketPathFlowSnapshot) {
+    pub(crate) fn into_parts(self) -> (UdpDatagramSource, PacketPathFlowSnapshot) {
         (self.datagram, self.flow_snapshot)
     }
 }

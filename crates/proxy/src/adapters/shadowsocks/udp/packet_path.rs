@@ -7,7 +7,7 @@ use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_flow::packet_path::{
     packet_path_carrier_descriptor, udp_datagram_source, PacketPathCarrier,
-    PacketPathCarrierDescriptor, UdpDatagramSource, UdpDatagramSourceParts,
+    PacketPathCarrierDescriptor, UdpDatagramSource,
 };
 use crate::runtime::Proxy;
 
@@ -52,19 +52,16 @@ pub(super) async fn build(
     let spec = shadowsocks::udp_packet_path_spec_from_config("", server, *port, cipher, password)
         .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
     let datagram = spec.datagram_source_build("", server, *port);
-    let (_, codec) = datagram.into_parts();
     crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
         proxy,
         server,
         *port,
-        Arc::new(codec),
+        Arc::new(datagram.codec()),
     )
     .await
 }
 
-pub(super) fn datagram_source<'a>(
-    leaf: &ResolvedLeafOutbound<'a>,
-) -> Option<UdpDatagramSource<'a>> {
+pub(super) fn datagram_source(leaf: &ResolvedLeafOutbound<'_>) -> Option<UdpDatagramSource> {
     let ResolvedLeafOutbound::Shadowsocks {
         tag,
         server,
@@ -78,12 +75,11 @@ pub(super) fn datagram_source<'a>(
     let spec =
         shadowsocks::udp_packet_path_spec_from_config(tag, server, *port, cipher, password).ok()?;
     let datagram = spec.datagram_source_build(tag, server, *port);
-    let (cache_key, codec) = datagram.into_parts();
-    Some(udp_datagram_source(UdpDatagramSourceParts {
-        tag,
-        server,
-        port: *port,
-        cache_key,
-        codec: Arc::new(codec),
-    }))
+    Some(udp_datagram_source(
+        datagram.tag(),
+        datagram.server(),
+        datagram.port(),
+        datagram.cache_key(),
+        Arc::new(datagram.codec()),
+    ))
 }

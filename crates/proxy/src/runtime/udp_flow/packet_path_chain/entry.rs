@@ -8,11 +8,11 @@ use super::bridge::recv_loop;
 use super::model::{Entry, EntryCandidate};
 use crate::runtime::Proxy;
 
-pub(super) fn resolve_candidate<'a>(
+pub(super) fn resolve_candidate(
     proxy: &Proxy,
     carrier_leaf: &ResolvedLeafOutbound<'_>,
-    datagram_leaf: &ResolvedLeafOutbound<'a>,
-) -> Result<EntryCandidate<'a>, EngineError> {
+    datagram_leaf: &ResolvedLeafOutbound<'_>,
+) -> Result<EntryCandidate, EngineError> {
     let (carrier_desc, datagram) = proxy
         .protocols
         .resolve_udp_packet_path_candidate(carrier_leaf, datagram_leaf)?;
@@ -37,7 +37,7 @@ pub(super) fn resolve_candidate<'a>(
 pub(super) async fn build_entry(
     proxy: &Proxy,
     carrier_leaf: &ResolvedLeafOutbound<'_>,
-    candidate: EntryCandidate<'_>,
+    candidate: EntryCandidate,
 ) -> Result<Entry, EngineError> {
     let path = proxy
         .protocols
@@ -52,7 +52,7 @@ pub(super) async fn build_entry(
         path,
         waiters,
         codec,
-        datagram_server: datagram_desc.server.to_owned(),
+        datagram_server: datagram_desc.server.clone(),
         datagram_port: datagram_desc.port,
     })
 }

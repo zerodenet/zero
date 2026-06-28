@@ -1370,8 +1370,7 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
             && packet_path.contains("spec.carrier_descriptor")
             && packet_path.contains("spec.datagram_source_build")
             && !packet_path.contains("spec.datagram_source_parts()")
-            && !packet_path.contains("datagram.cache_key()")
-            && !packet_path.contains("datagram.codec()")
+            && !packet_path.contains("datagram.into_parts()")
             && !packet_path.contains("spec.carrier()")
             && !packet_path.contains("spec.datagram_source()")
             && !packet_path.contains("spec.cache_key()")
@@ -7538,7 +7537,6 @@ fn packet_path_traits_are_grouped_by_responsibility() {
         "trait PacketPathCarrier",
         "struct PacketPathCarrierDescriptor",
         "struct UdpDatagramSource",
-        "struct UdpDatagramSourceParts",
         "type ChainTask =",
         "struct UdpFlowContext",
         "struct UdpPacketRef",
@@ -7548,6 +7546,15 @@ fn packet_path_traits_are_grouped_by_responsibility() {
             "runtime udp_flow packet_path.rs should own neutral packet-path definition `{required}`"
         );
     }
+    assert!(
+        packet_path.contains("struct UdpDatagramDescriptor")
+            && packet_path.contains("tag: String")
+            && packet_path.contains("server: String")
+            && !packet_path.contains("struct UdpDatagramSourceParts")
+            && !packet_path.contains("UdpDatagramSource<'")
+            && !packet_path.contains("PacketPathFlowBinding<'"),
+        "packet-path datagram source should be an owned neutral runtime object, not a borrowed leaf-shaped parts struct"
+    );
     for forbidden in [
         "PacketPathCarrierDescriptor",
         "UdpDatagramSource",
@@ -9459,8 +9466,7 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && adapter_packet_path.contains("spec.carrier_descriptor")
             && adapter_packet_path.contains("spec.datagram_source_build")
             && !adapter_packet_path.contains("spec.datagram_source_parts()")
-            && !adapter_packet_path.contains("datagram.cache_key()")
-            && !adapter_packet_path.contains("datagram.codec()")
+            && !adapter_packet_path.contains("datagram.into_parts()")
             && !adapter_packet_path.contains("spec.carrier()")
             && !adapter_packet_path.contains("spec.datagram_source()")
             && !adapter_packet_path.contains("spec.cache_key()")
@@ -9869,12 +9875,12 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter_packet_path.contains(".packet_path_spec()")
             && !adapter_packet_path.contains("packet_path.cache_key()")
             && !adapter_packet_path.contains("packet_path.codec()")
-            && adapter_packet_path.contains("UdpDatagramSourceParts")
+            && !adapter_packet_path.contains("UdpDatagramSourceParts")
+            && !adapter_packet_path.contains("datagram.into_parts()")
             && adapter_packet_path.contains("spec.carrier_descriptor")
             && adapter_packet_path.contains("spec.datagram_source_build")
             && !adapter_packet_path.contains("spec.datagram_source_parts()")
-            && !adapter_packet_path.contains("datagram.cache_key()")
-            && !adapter_packet_path.contains("datagram.codec()")
+            && !adapter_packet_path.contains("datagram.into_parts()")
             && !adapter_packet_path.contains("spec.carrier()")
             && !adapter_packet_path.contains("spec.datagram_source()")
             && !adapter_packet_path.contains("spec.cache_key()")
@@ -9907,7 +9913,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !traits.contains("cipher_kind: shadowsocks::CipherKind")
             && traits.contains("struct UdpDatagramDescriptor")
             && traits.contains("cache_key: String")
-            && traits.contains("descriptor: UdpDatagramDescriptor<'a>")
+            && traits.contains("descriptor: UdpDatagramDescriptor")
+            && traits.contains("tag: String")
+            && traits.contains("server: String")
             && !traits.contains("ManagedUdpFlowSnapshot")
             && traits.contains("codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>"),
         "UdpDatagramSource should contain only neutral descriptor identity and adapter-provided packet-path datagram codec"
@@ -9921,8 +9929,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && adapter_packet_path.contains("spec.carrier_descriptor")
             && adapter_packet_path.contains("spec.datagram_source_build")
             && !adapter_packet_path.contains("spec.datagram_source_parts()")
-            && !adapter_packet_path.contains("datagram.cache_key()")
-            && !adapter_packet_path.contains("datagram.codec()")
+            && !adapter_packet_path.contains("datagram.into_parts()")
             && !adapter_packet_path.contains("spec.carrier()")
             && !adapter_packet_path.contains("spec.datagram_source()")
             && !adapter_packet_path.contains("spec.cache_key()")
