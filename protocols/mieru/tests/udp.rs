@@ -3,7 +3,8 @@
 //! Migrated from the inline `#[cfg(test)] mod tests` in
 //! `protocols/mieru/src/udp.rs`.
 
-use mieru::{MieruProtocol, MieruUdpAssociatePacket, MieruUdpFlowCodec};
+use mieru::udp::{MieruUdpAssociatePacket, MieruUdpFlowCodec};
+use mieru::MieruProtocol;
 use zero_core::Address;
 use zero_traits::{DatagramCodec, UdpPacketFraming};
 

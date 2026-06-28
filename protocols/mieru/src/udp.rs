@@ -16,6 +16,13 @@ use std::net::SocketAddr;
 use zero_core::{Address, Error};
 use zero_traits::DatagramCodec;
 
+#[cfg(feature = "crypto")]
+pub use crate::outbound::{
+    establish_udp_flow_with_resume, spawn_udp_flow, MieruUdpFlowConnection, MieruUdpFlowHandle,
+    MieruUdpFlowIo, MieruUdpFlowPacket, MieruUdpFlowResponse, MieruUdpFlowResponseReceiver,
+    MieruUdpFlowSession,
+};
+
 const ATYP_IPV4: u8 = 0x01;
 const ATYP_DOMAIN: u8 = 0x03;
 const ATYP_IPV6: u8 = 0x04;
@@ -457,7 +464,7 @@ impl<T> MieruUdpFlowStore<T> {
 #[cfg(feature = "crypto")]
 #[derive(Default)]
 pub struct MieruUdpFlowSessions {
-    entries: MieruUdpFlowStore<crate::MieruUdpFlowConnection>,
+    entries: MieruUdpFlowStore<crate::outbound::MieruUdpFlowConnection>,
 }
 
 #[cfg(feature = "crypto")]
@@ -474,7 +481,7 @@ impl MieruUdpFlowSessions {
         server: &str,
         port: u16,
         session_id: u64,
-    ) -> Option<&crate::MieruUdpFlowConnection> {
+    ) -> Option<&crate::outbound::MieruUdpFlowConnection> {
         self.entries.get(resume, server, port, session_id)
     }
 
@@ -484,8 +491,8 @@ impl MieruUdpFlowSessions {
         server: &str,
         port: u16,
         session_id: u64,
-        connection: crate::MieruUdpFlowConnection,
-    ) -> Option<crate::MieruUdpFlowConnection> {
+        connection: crate::outbound::MieruUdpFlowConnection,
+    ) -> Option<crate::outbound::MieruUdpFlowConnection> {
         self.entries
             .insert(resume, server, port, session_id, connection)
     }

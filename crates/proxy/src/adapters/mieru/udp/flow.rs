@@ -75,7 +75,7 @@ async fn start_with_carrier(
     else {
         return Err(unreachable_udp_leaf(request.adapter.name(), request.leaf));
     };
-    let resume = mieru::udp_flow_resume_from_config(username, password, request.relay_chain);
+    let resume = mieru::udp::udp_flow_resume_from_config(username, password, request.relay_chain);
     request
         .dispatch
         .start_tracked_managed_stream_packet(ManagedStreamPacketStart {

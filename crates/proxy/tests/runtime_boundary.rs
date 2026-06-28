@@ -1494,7 +1494,7 @@ fn stream_udp_roots_delegate_flow_building() {
         (
             "src/adapters/mieru/udp.rs",
             "src/adapters/mieru/udp/flow.rs",
-            "mieru::udp_flow_resume_from_config",
+            "mieru::udp::udp_flow_resume_from_config",
             ".start_tracked_managed_stream_packet(",
         ),
         (
@@ -3848,9 +3848,9 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
         "flow_io.read_flow_packets",
         "tokio::spawn",
         "mpsc::channel::<UdpFlowPacket>",
-        "mieru::MieruUdpFlowIo::establish_with_resume",
-        "mieru::spawn_udp_flow",
-        "mieru::MieruUdpFlowSession::new",
+        "mieru::udp::MieruUdpFlowIo::establish_with_resume",
+        "mieru::udp::spawn_udp_flow",
+        "mieru::udp::MieruUdpFlowSession::new",
     ] {
         assert!(
             !managed.contains(forbidden)
@@ -3860,13 +3860,13 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
         );
     }
     assert!(
-        !stream.exists() && connector.contains("mieru::establish_udp_flow_with_resume"),
+        !stream.exists() && connector.contains("mieru::udp::establish_udp_flow_with_resume"),
         "Mieru UDP managed glue should call the protocol-owned established flow API without a dedicated stream wrapper"
     );
     assert!(
-        connector.contains("mieru::MieruUdpFlowConnection")
-            && !managed.contains("mieru::MieruUdpFlowConnection")
-            && !managed.contains("mieru::MieruUdpFlowSession"),
+        connector.contains("mieru::udp::MieruUdpFlowConnection")
+            && !managed.contains("mieru::udp::MieruUdpFlowConnection")
+            && !managed.contains("mieru::udp::MieruUdpFlowSession"),
         "Mieru UDP managed glue should return the protocol-owned flow connection wrapper, not a raw flow session"
     );
     assert!(
@@ -4505,7 +4505,7 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("request.payload()")
             && !inbound.contains("record_target(addr, &request)")
             && inbound.contains(".write_response_tokio(&mut client")
-            && !inbound.contains("mieru::MieruUdpFlowCodec")
+            && !inbound.contains("mieru::udp::MieruUdpFlowCodec")
             && !inbound.contains("decode_packet")
             && !inbound.contains(".encode_packet(")
             && !inbound.contains("write_all(&frame)")
@@ -5087,7 +5087,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && !resume_model.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
             && !resume_model.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
             && !resume_model.contains("Trojan(trojan::TrojanUdpFlowResume)")
-            && !resume_model.contains("Mieru(mieru::MieruUdpFlowResume)")
+            && !resume_model.contains("Mieru(mieru::udp::MieruUdpFlowResume)")
             && !resume_model.contains("username: Option<String>")
             && !resume_model.contains("password: String")
             && !resume_model.contains("password: Option<String>")
@@ -5450,9 +5450,9 @@ fn protocol_udp_runtime_channels_store_neutral_packets() {
             "mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>",
             "mpsc::Receiver<hysteria2::Hysteria2UdpFlowPacket>",
             "mpsc::channel::<hysteria2::Hysteria2UdpFlowPacket>",
-            "mpsc::Sender<mieru::MieruUdpFlowPacket>",
-            "mpsc::Receiver<mieru::MieruUdpFlowPacket>",
-            "mpsc::channel::<mieru::MieruUdpFlowPacket>",
+            "mpsc::Sender<mieru::udp::MieruUdpFlowPacket>",
+            "mpsc::Receiver<mieru::udp::MieruUdpFlowPacket>",
+            "mpsc::channel::<mieru::udp::MieruUdpFlowPacket>",
         ] {
             assert!(
                 !content.contains(forbidden),
@@ -7181,19 +7181,19 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     assert!(
         stream_manager.contains("ManagedUdpConnectionCache")
-            && !mieru_managed.contains("mieru::MieruUdpFlowStore")
+            && !mieru_managed.contains("mieru::udp::MieruUdpFlowStore")
             && !trojan_managed.contains("trojan::TrojanUdpFlowStore")
-            && !mieru_managed.contains("mieru::MieruUdpFlowSessions")
+            && !mieru_managed.contains("mieru::udp::MieruUdpFlowSessions")
             && !trojan_managed.contains("trojan::TrojanUdpFlowSessions")
-            && !mieru_managed.contains("mieru::MieruUdpFlowConnection")
+            && !mieru_managed.contains("mieru::udp::MieruUdpFlowConnection")
             && !trojan_managed.contains("trojan::TrojanUdpFlowConnection")
-            && mieru_connector.contains("mieru::MieruUdpFlowConnection")
+            && mieru_connector.contains("mieru::udp::MieruUdpFlowConnection")
             && trojan_connector.contains("trojan::TrojanUdpFlowConnection")
-            && !mieru_managed.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowSession>")
+            && !mieru_managed.contains("mieru::udp::MieruUdpFlowStore<mieru::udp::MieruUdpFlowSession>")
             && !trojan_managed.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>")
-            && !mieru_managed.contains("mieru::MieruUdpFlowStore<mieru::MieruUdpFlowConnection>")
+            && !mieru_managed.contains("mieru::udp::MieruUdpFlowStore<mieru::udp::MieruUdpFlowConnection>")
             && !trojan_managed.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowConnection>")
-            && !mieru_managed.contains("HashMap<mieru::MieruUdpCacheKey")
+            && !mieru_managed.contains("HashMap<mieru::udp::MieruUdpCacheKey")
             && !trojan_managed.contains("HashMap<trojan::TrojanUdpCacheKey")
             && managed_cache.contains("struct ManagedUdpConnectionCache")
             && managed_cache.contains("struct ManagedUdpConnectionCacheKey")
@@ -7205,7 +7205,7 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
             && !trojan_managed.contains("TrojanUdpCacheKey::relay")
             && !mieru_managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !trojan_managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
-            && mieru_connector.contains("mieru::connector_flow_from_resume")
+            && mieru_connector.contains("mieru::udp::connector_flow_from_resume")
             && trojan_connector.contains("trojan::connector_flow_from_resume")
             && !mieru_connector.contains("resume.connector_flow(endpoint.server, endpoint.port, session_id)")
             && !trojan_connector.contains("resume.connector_flow(endpoint.server, endpoint.port, session_id)")
@@ -8572,9 +8572,9 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
     assert!(
         managed.contains("ManagedStreamFlowManager::new")
             && managed.contains("connector::MieruManagedStreamConnector")
-            && !managed.contains("impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume>")
-            && connector.contains("impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume>")
-            && connector.contains("mieru::connector_flow_from_resume")
+            && !managed.contains("impl ManagedStreamFlowConnector<mieru::udp::MieruUdpFlowResume>")
+            && connector.contains("impl ManagedStreamFlowConnector<mieru::udp::MieruUdpFlowResume>")
+            && connector.contains("mieru::udp::connector_flow_from_resume")
             && !connector.contains("resume.connector_flow(endpoint.server, endpoint.port, session_id)")
             && !connector.contains(".flow(endpoint.server, endpoint.port, session_id)")
             && !connector.contains("resume.flow_requirement().requires_relay_upstream()")
@@ -8584,7 +8584,7 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
             && !connector.contains("flow.requires_relay_upstream()")
             && !connector.contains("resume.flow_cache_key(")
             && !connector.contains("resume.flow_requires_relay_upstream()")
-            && connector.contains("mieru::establish_udp_flow_with_resume(stream, &resume)")
+            && connector.contains("mieru::udp::establish_udp_flow_with_resume(stream, &resume)")
             && connector.contains("managed_tuple_udp_connection")
             && connector.contains("impl ManagedTupleUdpSender for MieruManagedUdpSender")
             && stream_manager.contains("ManagedUdpConnectionCache")
@@ -8599,7 +8599,7 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
             && !adapter.contains("mieru::udp_flow_codec")
             && !adapter.contains("MieruUdpFlowResume::new")
             && !adapter.contains("MieruUdpFlowConfig::new")
-            && adapter_flow.contains("mieru::udp_flow_resume_from_config")
+            && adapter_flow.contains("mieru::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("MieruUdpFlowConfig::new")
             && !adapter_flow.contains(".flow_resume(request.relay_chain)")
             && protocol_udp.contains("struct MieruUdpFlowResume")
@@ -8658,7 +8658,7 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
     assert!(
         snapshot.contains("resume: ManagedUdpFlowResume")
             && snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
-            && !snapshot.contains("Mieru(mieru::MieruUdpFlowResume)")
+            && !snapshot.contains("Mieru(mieru::udp::MieruUdpFlowResume)")
             && !snapshot.contains("username: String")
             && !snapshot.contains("relay_chain: bool")
             && forward.contains("ManagedExistingSend")
@@ -8899,11 +8899,11 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
             && !managed.contains("mpsc::channel")
             && !managed.contains("tokio::sync::broadcast::channel")
             && !managed.contains("tokio::spawn")
-            && !managed.contains("mieru::establish_udp_flow_with_resume")
-            && connector.contains("mieru::establish_udp_flow_with_resume")
-            && !managed.contains("mieru::MieruUdpFlowIo::establish_with_resume")
-            && !managed.contains("mieru::spawn_udp_flow")
-            && !managed.contains("mieru::MieruUdpFlowSession::new")
+            && !managed.contains("mieru::udp::establish_udp_flow_with_resume")
+            && connector.contains("mieru::udp::establish_udp_flow_with_resume")
+            && !managed.contains("mieru::udp::MieruUdpFlowIo::establish_with_resume")
+            && !managed.contains("mieru::udp::spawn_udp_flow")
+            && !managed.contains("mieru::udp::MieruUdpFlowSession::new")
             && !managed.contains("flow_io.write_flow_packet")
             && !managed.contains("flow_io.decode_encrypted_response")
             && !managed.contains("flow_io.read_flow_packets")
@@ -10967,7 +10967,33 @@ fn protocol_crate_roots_do_not_reexport_udp_manager_internals() {
             ][..],
         ),
         ("trojan", &["TrojanUdpFlowStore,"][..]),
-        ("mieru", &["MieruUdpFlowStore,"][..]),
+        (
+            "mieru",
+            &[
+                "MieruInboundUdpPacket",
+                "MieruInboundUdpRequest",
+                "MieruInboundUdpSession",
+                "MieruUdpAssociatePacket",
+                "MieruUdpAssociatePayload",
+                "MieruUdpConnectorFlow",
+                "MieruUdpFlowCodec",
+                "MieruUdpFlowConfig",
+                "MieruUdpFlowConnection",
+                "MieruUdpFlowHandle",
+                "MieruUdpFlowIo",
+                "MieruUdpFlowPacket",
+                "MieruUdpFlowResponse",
+                "MieruUdpFlowResponseReceiver",
+                "MieruUdpFlowResume",
+                "MieruUdpFlowSession",
+                "MieruUdpFlowSessions",
+                "MieruUdpFlowStore",
+                "connector_flow_from_resume",
+                "establish_udp_flow_with_resume",
+                "spawn_udp_flow",
+                "udp_flow_resume_from_config",
+            ][..],
+        ),
     ] {
         let protocol_lib =
             fs::read_to_string(repo_root().join(format!("protocols/{protocol}/src/lib.rs")))

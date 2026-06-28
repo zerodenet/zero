@@ -299,7 +299,7 @@ pub(crate) async fn apply_tcp_hop(
     Ok(TcpRelayStream::new(mieru_stream))
 }
 
-impl ManagedStreamConnectorFlowBuild for mieru::MieruUdpConnectorFlow {
+impl ManagedStreamConnectorFlowBuild for mieru::udp::MieruUdpConnectorFlow {
     fn into_parts(self) -> (String, bool) {
         self.into_parts()
     }
