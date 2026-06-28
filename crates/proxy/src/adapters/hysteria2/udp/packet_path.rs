@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::adapters::common::unreachable_leaf;
@@ -41,7 +39,7 @@ pub(super) fn carrier_descriptor(
 pub(super) async fn build(
     adapter: &Hysteria2Adapter,
     leaf: &ResolvedLeafOutbound<'_>,
-) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
+) -> Result<std::sync::Arc<dyn PacketPathCarrier>, EngineError> {
     let ResolvedLeafOutbound::Hysteria2 {
         server,
         port,
@@ -60,15 +58,8 @@ pub(super) async fn build(
         *client_fingerprint,
     );
     let build = spec.carrier_build(server, *port);
-    let codec = Arc::new(build.codec());
-    let conn = Arc::new(
-        crate::outbound::hysteria2::open_udp_packet_path_connection(
-            build.server(),
-            build.port(),
-            build.connector_profile(),
-        )
-        .await?,
-    );
+    let (conn, codec) = crate::outbound::hysteria2::open_udp_packet_path_build(build).await?;
+    let conn = std::sync::Arc::new(conn);
     crate::runtime::udp_flow::packet_path_chain::carriers::quic_datagram_carrier::build(conn, codec)
         .await
 }

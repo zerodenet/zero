@@ -1411,6 +1411,7 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
         "ManagedUdpSend {",
         "ManagedUdpFlowResume::new",
         "open_udp_packet_path_connection",
+        "open_udp_packet_path_build",
     ] {
         assert!(
             !root.contains(forbidden),
@@ -1426,9 +1427,13 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
             && !packet_path.contains("spec.cache_key()")
             && !packet_path.contains("spec.carrier_cache_key()")
             && !packet_path.contains("spec.codec()")
+            && !packet_path.contains("build.server()")
+            && !packet_path.contains("build.port()")
+            && !packet_path.contains("build.connector_profile()")
+            && !packet_path.contains("build.codec()")
             && !packet_path.contains(".packet_path_cache_key()")
             && !packet_path.contains(".packet_path_codec()")
-            && packet_path.contains("open_udp_packet_path_connection")
+            && packet_path.contains("open_udp_packet_path_build")
             && flow.contains("hysteria2::udp_flow_resume_from_config")
             && !flow.contains("Hysteria2UdpFlowConfig::new")
             && !flow.contains(".flow_resume()")
@@ -8923,8 +8928,11 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !adapter_packet_path.contains("spec.cache_key()")
             && !adapter_packet_path.contains("spec.carrier_cache_key()")
             && !adapter_packet_path.contains("spec.codec()")
-            && !adapter_packet_path.contains("carrier.server()")
-            && !adapter_packet_path.contains("carrier.port()")
+            && !adapter_packet_path.contains("build.server()")
+            && !adapter_packet_path.contains("build.port()")
+            && !adapter_packet_path.contains("build.connector_profile()")
+            && !adapter_packet_path.contains("build.codec()")
+            && adapter_packet_path.contains("open_udp_packet_path_build")
             && !adapter_packet_path.contains(".packet_path_cache_key()")
             && !adapter_packet_path.contains(".packet_path_codec()")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
@@ -9122,7 +9130,11 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
             && transport.contains("conn: Arc<quinn::Connection>")
             && !adapter.contains("outbound::hysteria2::open_udp_packet_path_connection")
-            && adapter_packet_path.contains("outbound::hysteria2::open_udp_packet_path_connection")
+            && adapter_packet_path.contains("outbound::hysteria2::open_udp_packet_path_build")
+            && !adapter_packet_path.contains("build.server()")
+            && !adapter_packet_path.contains("build.port()")
+            && !adapter_packet_path.contains("build.connector_profile()")
+            && !adapter_packet_path.contains("build.codec()")
             && !adapter.contains("Hysteria2Connector")
             && !adapter.contains("connect_raw")
             && !adapter_packet_path.contains("Hysteria2Connector")

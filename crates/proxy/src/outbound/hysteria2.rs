@@ -8,6 +8,7 @@ use zero_core::Session;
 use zero_engine::EngineError;
 
 use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_flow::packet_path::DatagramCodec;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use crate::runtime::Proxy;
 use crate::transport::{Hysteria2Stream, QuicConnectionOptions, TcpRelayStream};
@@ -116,6 +117,22 @@ pub(crate) async fn open_udp_packet_path_connection(
     Hysteria2Connector::from_udp_profile(server, port, connector_profile.clone())
         .connect_raw_with_udp_profile(&connector_profile)
         .await
+}
+
+pub(crate) async fn open_udp_packet_path_build(
+    build: hysteria2::Hysteria2UdpPacketPathCarrierBuild,
+) -> Result<
+    (
+        quinn::Connection,
+        std::sync::Arc<dyn DatagramCodec<zero_core::Address, Error = zero_core::Error>>,
+    ),
+    EngineError,
+> {
+    let connector_profile = build.connector_profile();
+    let codec = std::sync::Arc::new(build.codec());
+    let conn =
+        open_udp_packet_path_connection(build.server(), build.port(), connector_profile).await?;
+    Ok((conn, codec))
 }
 
 pub(crate) async fn establish_udp_flow_session(
