@@ -8,8 +8,8 @@ use super::establish::{
     self, Socks5UdpAssociationEstablishRequest, Socks5UdpAssociationEstablisher,
 };
 use super::model::{
-    BoxedSocks5UdpAssociation, ClosedSocks5UdpAssociation, Socks5UdpAssociationView,
-    UpstreamAssociationCloseReason,
+    BoxedSocks5UdpAssociation, ClosedSocks5UdpAssociation, Socks5UdpAssociationSnapshot,
+    Socks5UdpAssociationView, UpstreamAssociationCloseReason,
 };
 use super::send::{self, Socks5UdpSend};
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -111,11 +111,8 @@ impl Socks5UdpRuntime {
             .upstream
             .as_ref()
             .map(|a| {
-                !association.matches(
-                    a.outbound_tag(),
-                    a.upstream_endpoint().0,
-                    a.upstream_endpoint().1,
-                )
+                let active = Socks5UdpAssociationSnapshot::from_association(a.as_ref());
+                !association.matches(&active.outbound_tag, &active.server, active.port)
             })
             .unwrap_or(true);
 
@@ -166,15 +163,13 @@ impl Socks5UdpRuntime {
 
     pub(super) fn drop_after_send_error(&mut self, inbound_tag: &str, error: &EngineError) {
         if let Some(assoc) = self.upstream.take() {
-            let outbound_tag = assoc.outbound_tag().to_owned();
-            let (active_server, active_port) = assoc.upstream_endpoint();
-            let active_server = active_server.to_owned();
+            let active = Socks5UdpAssociationSnapshot::from_association(assoc.as_ref());
             assoc.close(UpstreamAssociationCloseReason::Dropped);
             crate::logging::log_udp_upstream_association_dropped(
                 inbound_tag,
-                &outbound_tag,
-                &active_server,
-                active_port,
+                &active.outbound_tag,
+                &active.server,
+                active.port,
                 error,
             );
         }
@@ -225,28 +220,24 @@ impl Socks5UdpRuntime {
 
     pub(crate) fn close_idle(&mut self) -> Option<ClosedSocks5UdpAssociation> {
         self.take_upstream().map(|association| {
-            let outbound_tag = association.outbound_tag().to_owned();
-            let (server, port) = association.upstream_endpoint();
-            let server = server.to_owned();
+            let active = Socks5UdpAssociationSnapshot::from_association(association.as_ref());
             association.close(UpstreamAssociationCloseReason::IdleTimeout);
             ClosedSocks5UdpAssociation {
-                outbound_tag,
-                server,
-                port,
+                outbound_tag: active.outbound_tag,
+                server: active.server,
+                port: active.port,
             }
         })
     }
 
     pub(crate) fn close_dropped(&mut self) -> Option<ClosedSocks5UdpAssociation> {
         self.take_upstream().map(|association| {
-            let outbound_tag = association.outbound_tag().to_owned();
-            let (server, port) = association.upstream_endpoint();
-            let server = server.to_owned();
+            let active = Socks5UdpAssociationSnapshot::from_association(association.as_ref());
             association.close(UpstreamAssociationCloseReason::Dropped);
             ClosedSocks5UdpAssociation {
-                outbound_tag,
-                server,
-                port,
+                outbound_tag: active.outbound_tag,
+                server: active.server,
+                port: active.port,
             }
         })
     }

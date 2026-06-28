@@ -15,6 +15,23 @@ pub(crate) struct Socks5UdpAssociationView<'a> {
     pub(crate) outbound_tag: &'a str,
 }
 
+pub(super) struct Socks5UdpAssociationSnapshot {
+    pub(super) outbound_tag: String,
+    pub(super) server: String,
+    pub(super) port: u16,
+}
+
+impl Socks5UdpAssociationSnapshot {
+    pub(super) fn from_association(association: &dyn Socks5UdpAssociationHandle) -> Self {
+        let (server, port) = association.upstream_endpoint();
+        Self {
+            outbound_tag: association.outbound_tag().to_owned(),
+            server: server.to_owned(),
+            port,
+        }
+    }
+}
+
 pub(crate) struct ClosedSocks5UdpAssociation {
     pub(crate) outbound_tag: String,
     pub(crate) server: String,
