@@ -76,6 +76,18 @@ pub(crate) fn packet_path_carrier_descriptor(
     }
 }
 
+pub(crate) trait PacketPathCarrierDescriptorBuild {
+    fn cache_key(&self) -> String;
+    fn server(&self) -> &str;
+    fn port(&self) -> u16;
+}
+
+pub(crate) fn packet_path_carrier_descriptor_from_build(
+    build: impl PacketPathCarrierDescriptorBuild,
+) -> PacketPathCarrierDescriptor {
+    packet_path_carrier_descriptor(build.cache_key(), build.server(), build.port())
+}
+
 /// Datagram source params for a relay-chain final hop over a packet path.
 ///
 /// Produced by `UdpPacketPathCapability::udp_datagram_source`. The `cache_key`

@@ -8,7 +8,9 @@ use zero_core::Session;
 use zero_engine::EngineError;
 use zero_traits::TcpSessionProtocol;
 
-use crate::runtime::udp_flow::packet_path::{DatagramCodec, UdpDatagramSourceBuild};
+use crate::runtime::udp_flow::packet_path::{
+    DatagramCodec, PacketPathCarrierDescriptorBuild, UdpDatagramSourceBuild,
+};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
@@ -79,6 +81,20 @@ impl UdpDatagramSourceBuild for shadowsocks::ShadowsocksUdpPacketPathDatagramSou
         self,
     ) -> std::sync::Arc<dyn DatagramCodec<zero_core::Address, Error = zero_core::Error>> {
         std::sync::Arc::new(self.codec())
+    }
+}
+
+impl PacketPathCarrierDescriptorBuild for shadowsocks::ShadowsocksUdpPacketPathCarrierDescriptor {
+    fn cache_key(&self) -> String {
+        self.cache_key()
+    }
+
+    fn server(&self) -> &str {
+        self.server()
+    }
+
+    fn port(&self) -> u16 {
+        self.port()
     }
 }
 

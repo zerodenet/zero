@@ -3,7 +3,9 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_registry::ProtocolSupportCapability;
-use crate::runtime::udp_flow::packet_path::{PacketPathCarrier, PacketPathCarrierDescriptor};
+use crate::runtime::udp_flow::packet_path::{
+    packet_path_carrier_descriptor_from_build, PacketPathCarrier, PacketPathCarrierDescriptor,
+};
 
 pub(super) fn carrier_descriptor(
     leaf: &ResolvedLeafOutbound<'_>,
@@ -27,13 +29,7 @@ pub(super) fn carrier_descriptor(
         *client_fingerprint,
     );
     let descriptor = spec.carrier_descriptor(server, *port);
-    Some(
-        crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
-            descriptor.cache_key(),
-            descriptor.server(),
-            descriptor.port(),
-        ),
-    )
+    Some(packet_path_carrier_descriptor_from_build(descriptor))
 }
 
 pub(super) async fn build(

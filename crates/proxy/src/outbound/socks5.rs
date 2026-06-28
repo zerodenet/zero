@@ -7,6 +7,7 @@ use zero_core::Session;
 use zero_engine::EngineError;
 use zero_traits::TcpTunnelProtocol;
 
+use crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptorBuild;
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
@@ -66,4 +67,18 @@ pub(crate) async fn apply_tcp_hop(
         .await
         .map_err(|e| EngineError::Io(std::io::Error::other(e)))?;
     Ok(stream)
+}
+
+impl PacketPathCarrierDescriptorBuild for socks5::Socks5UdpPacketPathCarrierDescriptor {
+    fn cache_key(&self) -> String {
+        self.cache_key()
+    }
+
+    fn server(&self) -> &str {
+        self.server()
+    }
+
+    fn port(&self) -> u16 {
+        self.port()
+    }
 }

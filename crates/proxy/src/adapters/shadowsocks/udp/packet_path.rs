@@ -4,7 +4,7 @@ use crate::adapters::common::unreachable_leaf;
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_flow::packet_path::{
-    packet_path_carrier_descriptor, udp_datagram_source_from_build, PacketPathCarrier,
+    packet_path_carrier_descriptor_from_build, udp_datagram_source_from_build, PacketPathCarrier,
     PacketPathCarrierDescriptor, UdpDatagramSource,
 };
 use crate::runtime::Proxy;
@@ -25,11 +25,7 @@ pub(super) fn carrier_descriptor(
     let spec =
         shadowsocks::udp_packet_path_spec_from_config(tag, server, *port, cipher, password).ok()?;
     let descriptor = spec.carrier_descriptor(server, *port);
-    Some(packet_path_carrier_descriptor(
-        descriptor.cache_key(),
-        descriptor.server(),
-        descriptor.port(),
-    ))
+    Some(packet_path_carrier_descriptor_from_build(descriptor))
 }
 
 pub(super) async fn build(
