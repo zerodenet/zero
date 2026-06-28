@@ -72,7 +72,18 @@ impl VmessAdapter {
                     upstream_endpoint: Some(((*server).to_string(), *port)),
                 });
         }
-        match connect_tcp(proxy, session, server, *port, config, *tls, *ws, *grpc).await {
+        match connect_tcp(VmessTcpConnect {
+            proxy,
+            session,
+            server,
+            port: *port,
+            config,
+            tls: *tls,
+            ws: *ws,
+            grpc: *grpc,
+        })
+        .await
+        {
             Ok(upstream) => Ok(EstablishedTcpOutbound::Vmess {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
@@ -101,16 +112,29 @@ impl VmessAdapter {
     }
 }
 
-async fn connect_tcp(
-    proxy: &Proxy,
-    session: &Session,
-    server: &str,
+struct VmessTcpConnect<'a> {
+    proxy: &'a Proxy,
+    session: &'a Session,
+    server: &'a str,
     port: u16,
     config: vmess::VmessTcpConnectConfig,
-    tls: Option<&zero_config::ClientTlsConfig>,
-    ws: Option<&zero_config::WebSocketConfig>,
-    grpc: Option<&zero_config::GrpcConfig>,
-) -> Result<TcpRelayStream, EngineError> {
+    tls: Option<&'a zero_config::ClientTlsConfig>,
+    ws: Option<&'a zero_config::WebSocketConfig>,
+    grpc: Option<&'a zero_config::GrpcConfig>,
+}
+
+async fn connect_tcp(request: VmessTcpConnect<'_>) -> Result<TcpRelayStream, EngineError> {
+    let VmessTcpConnect {
+        proxy,
+        session,
+        server,
+        port,
+        config,
+        tls,
+        ws,
+        grpc,
+    } = request;
+
     let socket = proxy
         .protocols
         .direct_connector()
