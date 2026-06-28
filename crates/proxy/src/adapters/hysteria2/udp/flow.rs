@@ -26,8 +26,13 @@ pub(super) async fn start(
     else {
         return Err(unreachable_udp_leaf(adapter.name(), leaf));
     };
-    let resume =
-        hysteria2::udp_flow_resume_from_config(tag, server, *port, password, *client_fingerprint);
+    let resume = hysteria2::udp::udp_flow_resume_from_config(
+        tag,
+        server,
+        *port,
+        password,
+        *client_fingerprint,
+    );
     dispatch
         .start_tracked_managed_datagram(ManagedDatagramStart {
             proxy: None,

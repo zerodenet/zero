@@ -39,7 +39,7 @@ impl Hysteria2Connector {
     pub(crate) fn from_udp_profile(
         server: &str,
         port: u16,
-        profile: hysteria2::Hysteria2UdpConnectorProfile,
+        profile: hysteria2::udp::Hysteria2UdpConnectorProfile,
     ) -> Self {
         Self {
             server: server.to_owned(),
@@ -74,7 +74,7 @@ impl Hysteria2Connector {
 
     pub(crate) async fn connect_raw_with_udp_profile(
         &self,
-        profile: &hysteria2::Hysteria2UdpConnectorProfile,
+        profile: &hysteria2::udp::Hysteria2UdpConnectorProfile,
     ) -> Result<quinn::Connection, EngineError> {
         let conn = self.open_quic_connection().await?;
 
@@ -113,7 +113,7 @@ impl Hysteria2Connector {
 async fn open_udp_profile_connection(
     server: &str,
     port: u16,
-    connector_profile: hysteria2::Hysteria2UdpConnectorProfile,
+    connector_profile: hysteria2::udp::Hysteria2UdpConnectorProfile,
 ) -> Result<quinn::Connection, EngineError> {
     Hysteria2Connector::from_udp_profile(server, port, connector_profile.clone())
         .connect_raw_with_udp_profile(&connector_profile)
@@ -121,7 +121,7 @@ async fn open_udp_profile_connection(
 }
 
 pub(crate) async fn open_udp_packet_path_build(
-    build: hysteria2::Hysteria2UdpPacketPathCarrierBuild,
+    build: hysteria2::udp::Hysteria2UdpPacketPathCarrierBuild,
 ) -> Result<
     (
         quinn::Connection,
@@ -136,13 +136,13 @@ pub(crate) async fn open_udp_packet_path_build(
     Ok((conn, codec))
 }
 
-impl PacketPathCarrierDescriptorBuild for hysteria2::Hysteria2UdpPacketPathCarrierDescriptor {
+impl PacketPathCarrierDescriptorBuild for hysteria2::udp::Hysteria2UdpPacketPathCarrierDescriptor {
     fn into_parts(self) -> (String, String, u16) {
         self.into_parts()
     }
 }
 
-impl ManagedDatagramConnectorFlowBuild for hysteria2::Hysteria2UdpConnectorFlow {
+impl ManagedDatagramConnectorFlowBuild for hysteria2::udp::Hysteria2UdpConnectorFlow {
     fn into_cache_key(self) -> String {
         self.into_cache_key()
     }
@@ -151,15 +151,15 @@ impl ManagedDatagramConnectorFlowBuild for hysteria2::Hysteria2UdpConnectorFlow 
 pub(crate) async fn establish_udp_flow_session(
     endpoint: OutboundEndpoint<'_>,
     initial_packet: UdpPacketRef<'_>,
-    resume: hysteria2::Hysteria2UdpFlowResume,
-) -> Result<hysteria2::Hysteria2UdpFlowConnection, EngineError> {
-    let flow = hysteria2::connector_flow_from_resume(&resume, endpoint.server, endpoint.port);
+    resume: hysteria2::udp::Hysteria2UdpFlowResume,
+) -> Result<hysteria2::udp::Hysteria2UdpFlowConnection, EngineError> {
+    let flow = hysteria2::udp::connector_flow_from_resume(&resume, endpoint.server, endpoint.port);
     let parts = flow.into_connection_parts();
     let connector_profile = parts.into_profile();
     let conn = std::sync::Arc::new(
         open_udp_profile_connection(endpoint.server, endpoint.port, connector_profile).await?,
     );
-    Ok(hysteria2::start_udp_flow_with_initial_packet(
+    Ok(hysteria2::udp::start_udp_flow_with_initial_packet(
         conn,
         initial_packet.target,
         initial_packet.port,

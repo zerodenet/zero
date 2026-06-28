@@ -21,17 +21,18 @@ pub(super) fn handler() -> Box<dyn ManagedDatagramFlowHandler> {
 }
 
 #[async_trait::async_trait]
-impl ManagedDatagramFlowConnector<hysteria2::Hysteria2UdpFlowResume>
+impl ManagedDatagramFlowConnector<hysteria2::udp::Hysteria2UdpFlowResume>
     for Hysteria2ManagedDatagramConnector
 {
     const INITIAL_PACKET_PRE_SENT: bool = true;
 
     fn connector_flow(
         &self,
-        resume: &hysteria2::Hysteria2UdpFlowResume,
+        resume: &hysteria2::udp::Hysteria2UdpFlowResume,
         endpoint: OutboundEndpoint<'_>,
     ) -> ManagedDatagramConnectorFlow {
-        let flow = hysteria2::connector_flow_from_resume(resume, endpoint.server, endpoint.port);
+        let flow =
+            hysteria2::udp::connector_flow_from_resume(resume, endpoint.server, endpoint.port);
         managed_datagram_connector_flow_from_build(flow)
     }
 
@@ -39,7 +40,7 @@ impl ManagedDatagramFlowConnector<hysteria2::Hysteria2UdpFlowResume>
         &self,
         _proxy: Option<&crate::runtime::Proxy>,
         endpoint: OutboundEndpoint<'_>,
-        resume: hysteria2::Hysteria2UdpFlowResume,
+        resume: hysteria2::udp::Hysteria2UdpFlowResume,
         initial_packet: UdpPacketRef<'_>,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
         let connection = crate::outbound::hysteria2::establish_udp_flow_session(
@@ -55,7 +56,7 @@ impl ManagedDatagramFlowConnector<hysteria2::Hysteria2UdpFlowResume>
 }
 
 struct Hysteria2ManagedUdpSender {
-    connection: hysteria2::Hysteria2UdpFlowConnection,
+    connection: hysteria2::udp::Hysteria2UdpFlowConnection,
 }
 
 #[async_trait::async_trait]
@@ -72,7 +73,7 @@ impl ManagedTupleUdpSender for Hysteria2ManagedUdpSender {
             .map_err(|error| EngineError::Io(std::io::Error::other(format!("{error}"))))
     }
 
-    fn subscribe_responses(&self) -> hysteria2::Hysteria2UdpFlowResponseReceiver {
+    fn subscribe_responses(&self) -> hysteria2::udp::Hysteria2UdpFlowResponseReceiver {
         self.connection.subscribe_responses()
     }
 

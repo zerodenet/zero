@@ -22,19 +22,3 @@ pub use shared::{
 };
 #[cfg(feature = "crypto")]
 pub use shared::{derive_salt, sign_hmac, verify_hmac};
-pub use udp::{
-    connector_flow_from_resume, udp_flow_resume_from_config,
-    udp_packet_path_carrier_build_from_config, udp_packet_path_carrier_descriptor_from_config,
-    udp_packet_path_spec_from_config, Hysteria2DatagramCodec, Hysteria2InboundUdpCodec,
-    Hysteria2InboundUdpDispatchParts, Hysteria2InboundUdpRequest, Hysteria2UdpConnectorFlow,
-    Hysteria2UdpConnectorProfile, Hysteria2UdpFlowResume, Hysteria2UdpPacketPathCarrierBuild,
-    Hysteria2UdpPacketPathCarrierBuildParts, Hysteria2UdpPacketPathCarrierDescriptor,
-    Hysteria2UdpPacketPathSpec,
-};
-#[cfg(feature = "tokio")]
-pub use udp::{
-    spawn_udp_flow, start_udp_flow_with_initial_packet, Hysteria2InboundUdpSession,
-    Hysteria2InitialUdpFlowPacket, Hysteria2UdpFlowConnection, Hysteria2UdpFlowHandle,
-    Hysteria2UdpFlowResponse, Hysteria2UdpFlowResponseReceiver, Hysteria2UdpFlowSession,
-    Hysteria2UdpFlowSessions,
-};

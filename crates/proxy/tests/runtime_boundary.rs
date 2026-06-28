@@ -1452,7 +1452,7 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     assert!(
-        packet_path.contains("hysteria2::udp_packet_path_carrier_descriptor_from_config")
+        packet_path.contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
             && !packet_path.contains("Hysteria2UdpFlowConfig::new")
             && !packet_path.contains(".packet_path_spec()")
             && packet_path.contains("udp_packet_path_carrier_build_from_config")
@@ -1471,7 +1471,7 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
             && !packet_path.contains(".packet_path_cache_key()")
             && !packet_path.contains(".packet_path_codec()")
             && packet_path.contains("open_udp_packet_path_build")
-            && flow.contains("hysteria2::udp_flow_resume_from_config")
+            && flow.contains("hysteria2::udp::udp_flow_resume_from_config")
             && !flow.contains("Hysteria2UdpFlowConfig::new")
             && !flow.contains(".flow_resume()")
             && flow.contains("ManagedDatagramStart")
@@ -3909,9 +3909,9 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
         "read_datagram",
         "tokio::spawn",
         "mpsc::channel::<UdpFlowPacket>",
-        "hysteria2::Hysteria2InitialUdpFlowPacket::from_parts",
-        "hysteria2::spawn_udp_flow",
-        "hysteria2::Hysteria2UdpFlowSession::new",
+        "hysteria2::udp::Hysteria2InitialUdpFlowPacket::from_parts",
+        "hysteria2::udp::spawn_udp_flow",
+        "hysteria2::udp::Hysteria2UdpFlowSession::new",
     ] {
         assert!(
             !managed.contains(forbidden),
@@ -3928,10 +3928,10 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
     );
     assert!(
         !managed
-            .contains("impl ManagedUdpConnection for hysteria2::Hysteria2UdpFlowConnection")
+            .contains("impl ManagedUdpConnection for hysteria2::udp::Hysteria2UdpFlowConnection")
             && managed.contains("managed_tuple_udp_connection")
             && managed.contains("SharedManagedUdpConnection")
-            && !managed.contains("hysteria2::Hysteria2UdpFlowSession"),
+            && !managed.contains("hysteria2::udp::Hysteria2UdpFlowSession"),
         "Hysteria2 UDP managed glue should expose a neutral managed connection wrapper, not implement runtime traits on the raw flow session"
     );
     assert!(
@@ -4175,6 +4175,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         .join("protocols/vless/src/shared.rs");
     let protocol_shared =
         fs::read_to_string(protocol_shared).expect("read vless protocol shared source");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
+        .expect("read vless protocol udp source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/vless/src/lib.rs"))
         .expect("read vless protocol lib source");
 
@@ -4315,8 +4317,9 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_shared.contains("pub(crate) fn parse_udp_packet_v2")
             && !protocol_lib.contains("build_udp_packet_v2")
             && !protocol_lib.contains("parse_udp_packet_v2")
-            && protocol_lib.contains("VlessUdpPacketV2Codec"),
-        "VLESS v2 UDP packet helpers should be exposed through VlessUdpPacketV2Codec, not raw root functions"
+            && protocol_udp.contains("VlessUdpPacketV2Codec")
+            && !protocol_lib.contains("VlessUdpPacketV2Codec"),
+        "VLESS v2 UDP packet helpers should be exposed through vless::udp::VlessUdpPacketV2Codec, not the crate root"
     );
 }
 
@@ -5081,7 +5084,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && !resume_model.contains("mieru::")
             && !resume_model.contains("Socks5(socks5::udp::Socks5UdpFlowResume)")
             && !resume_model.contains("Shadowsocks(shadowsocks::udp::ShadowsocksUdpFlowResume)")
-            && !resume_model.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
+            && !resume_model.contains("Hysteria2(hysteria2::udp::Hysteria2UdpFlowResume)")
             && !resume_model.contains("Trojan(trojan::udp::TrojanUdpFlowResume)")
             && !resume_model.contains("Mieru(mieru::udp::MieruUdpFlowResume)")
             && !resume_model.contains("username: Option<String>")
@@ -5443,9 +5446,9 @@ fn protocol_udp_runtime_channels_store_neutral_packets() {
             "mpsc::Sender<vmess::VmessUdpFlowPacket>",
             "mpsc::Receiver<vmess::VmessUdpFlowPacket>",
             "mpsc::channel::<vmess::VmessUdpFlowPacket>",
-            "mpsc::Sender<hysteria2::Hysteria2UdpFlowPacket>",
-            "mpsc::Receiver<hysteria2::Hysteria2UdpFlowPacket>",
-            "mpsc::channel::<hysteria2::Hysteria2UdpFlowPacket>",
+            "mpsc::Sender<hysteria2::udp::Hysteria2UdpFlowPacket>",
+            "mpsc::Receiver<hysteria2::udp::Hysteria2UdpFlowPacket>",
+            "mpsc::channel::<hysteria2::udp::Hysteria2UdpFlowPacket>",
             "mpsc::Sender<mieru::udp::MieruUdpFlowPacket>",
             "mpsc::Receiver<mieru::udp::MieruUdpFlowPacket>",
             "mpsc::channel::<mieru::udp::MieruUdpFlowPacket>",
@@ -8967,10 +8970,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !adapter.contains("Hysteria2UdpFlowConfig")
             && !adapter.contains("Hysteria2UdpFlowConfig::new")
             && !adapter.contains("Hysteria2UdpFlowConfig {")
-            && adapter_flow.contains("hysteria2::udp_flow_resume_from_config")
+            && adapter_flow.contains("hysteria2::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("Hysteria2UdpFlowConfig::new")
             && adapter_packet_path
-                .contains("hysteria2::udp_packet_path_carrier_descriptor_from_config")
+                .contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
             && !adapter_packet_path.contains("Hysteria2UdpFlowConfig::new")
             && protocol_udp.contains("pub(crate) fn udp_flow_codec(")
             && protocol_udp.contains("struct Hysteria2UdpFlowConfig")
@@ -9004,14 +9007,14 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     );
     assert!(
         !managed.contains("struct H2Entry")
-            && !managed.contains("hysteria2::Hysteria2UdpFlowSender")
+            && !managed.contains("hysteria2::udp::Hysteria2UdpFlowSender")
             && !managed.contains("hysteria2::udp_flow_packet")
             && !managed.contains("Hysteria2UdpFlowPacket::from_parts")
             && !managed.contains("use zero_core::UdpFlowPacket")
             && !managed.contains("UdpFlowPacket::from_parts")
             && !managed.contains("zero_core::UdpFlowPacket::from_parts")
             && !managed.contains("let initial_packet = UdpFlowPacket::from_parts")
-            && !managed.contains("hysteria2::Hysteria2InitialUdpFlowPacket::from_parts")
+            && !managed.contains("hysteria2::udp::Hysteria2InitialUdpFlowPacket::from_parts")
             && generic_manager.contains(".send_or_insert_pre_sent_key(")
             && !managed.contains(".send_or_insert(")
             && !managed.contains(".send(packet_ref.target, packet_ref.port, packet_ref.payload)")
@@ -9022,7 +9025,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !managed.contains("packet.encode_with(&resume)")
             && !managed.contains("flow_io.decode_packet(&data)")
             && managed.contains("outbound::hysteria2::establish_udp_flow_session")
-            && !managed.contains("hysteria2::spawn_udp_flow")
+            && !managed.contains("hysteria2::udp::spawn_udp_flow")
             && protocol_udp.contains("struct Hysteria2UdpFlowSender")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSender")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowConnection")
@@ -9049,10 +9052,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         !adapter.contains("Hysteria2UdpFlowResume::new")
             && !adapter.contains(".flow_resume()")
             && !adapter.contains(".packet_path_spec()")
-            && adapter_flow.contains("hysteria2::udp_flow_resume_from_config")
+            && adapter_flow.contains("hysteria2::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains(".flow_resume()")
             && adapter_packet_path
-                .contains("hysteria2::udp_packet_path_carrier_descriptor_from_config")
+                .contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
             && !adapter_packet_path.contains(".packet_path_spec()")
             && adapter_packet_path.contains("udp_packet_path_carrier_build_from_config")
             && adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
@@ -9142,7 +9145,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     assert!(
         snapshot.contains("resume: ManagedUdpFlowResume")
             && snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
-            && !snapshot.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
+            && !snapshot.contains("Hysteria2(hysteria2::udp::Hysteria2UdpFlowResume)")
             && !resume_model.contains("password: String")
             && !resume_model.contains("client_fingerprint: Option<String>"),
         "Hysteria2 protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
@@ -9179,7 +9182,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         managed.contains("managed_datagram_connector_flow_from_build")
             && !managed.contains("ManagedDatagramConnectorFlow::new")
             && !managed.contains("flow.cache_key()")
-            && managed.contains("hysteria2::connector_flow_from_resume")
+            && managed.contains("hysteria2::udp::connector_flow_from_resume")
             && !managed.contains("resume.connector_flow(endpoint.server, endpoint.port)")
             && !managed.contains("resume.flow_cache_key(")
             && !managed.contains("resume.flow(endpoint.server, endpoint.port)")
@@ -9197,7 +9200,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !managed.contains("Hysteria2Connector::from_udp_profile")
             && !managed.contains("resume.connector_profile()")
             && !managed.contains("connect_raw_with_udp_profile")
-            && outbound.contains("hysteria2::connector_flow_from_resume")
+            && outbound.contains("hysteria2::udp::connector_flow_from_resume")
             && !outbound.contains("resume.connector_flow(endpoint.server, endpoint.port)")
             && outbound.contains(".into_connection_parts()")
             && outbound.contains(".into_profile()")
@@ -9233,7 +9236,7 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
         !adapter.contains("hysteria2::udp_flow_codec")
             && !adapter.contains("hysteria2::udp_cache_key")
             && !adapter.contains("Hysteria2UdpFlowConfig")
-            && adapter_packet_path.contains("hysteria2::udp_packet_path_carrier_descriptor_from_config")
+            && adapter_packet_path.contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
             && !adapter_packet_path.contains("Hysteria2UdpFlowConfig"),
         "Hysteria2 packet-path adapter submodule should request protocol-built packet-path cache identity and codec through a protocol config helper"
     );
@@ -9314,7 +9317,7 @@ fn h2_udp_response_bridge_lives_outside_manager() {
     assert!(
         !bridge.exists()
             && !managed_adapter
-                .contains("impl ManagedUdpConnection for hysteria2::Hysteria2UdpFlowConnection")
+                .contains("impl ManagedUdpConnection for hysteria2::udp::Hysteria2UdpFlowConnection")
             && managed_adapter.contains("managed_tuple_udp_connection")
             && !managed_adapter.contains("spawn_tuple_response_bridge")
             && managed.contains("pub(crate) fn managed_tuple_udp_connection")
@@ -9369,9 +9372,9 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         managed.contains("outbound::hysteria2::establish_udp_flow_session")
             && !managed.contains("Hysteria2Connector::from_udp_profile")
             && !managed.contains("connect_raw_with_udp_profile")
-            && !managed.contains("hysteria2::start_udp_flow_with_initial_packet")
-            && !managed.contains("hysteria2::spawn_udp_flow")
-            && !managed.contains("hysteria2::Hysteria2UdpFlowSession::new")
+            && !managed.contains("hysteria2::udp::start_udp_flow_with_initial_packet")
+            && !managed.contains("hysteria2::udp::spawn_udp_flow")
+            && !managed.contains("hysteria2::udp::Hysteria2UdpFlowSession::new")
             && !managed.contains("send_datagram")
             && !managed.contains("read_datagram")
             && !managed.contains("tokio::spawn")
@@ -9392,7 +9395,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_udp.contains("tokio::spawn")
             && protocol_udp.contains("send_datagram")
             && protocol_udp.contains("read_datagram")
-            && outbound.contains("hysteria2::start_udp_flow_with_initial_packet")
+            && outbound.contains("hysteria2::udp::start_udp_flow_with_initial_packet")
             && outbound.contains("Hysteria2Connector::from_udp_profile")
             && outbound.contains("connect_raw_with_udp_profile")
             && !transport.contains("pub async fn establish_hysteria2_udp_flow_stream")
@@ -9509,8 +9512,8 @@ fn h2_udp_model_details_live_outside_manager_root() {
             && generic_manager.contains("ManagedUdpConnectionCache")
             && generic_manager.contains("ManagedUdpConnectionCache::new")
             && managed.contains("OutboundEndpoint<'_>")
-            && !managed.contains("hysteria2::Hysteria2UdpFlowStore")
-            && !managed.contains("hysteria2::Hysteria2UdpFlowSessions"),
+            && !managed.contains("hysteria2::udp::Hysteria2UdpFlowStore")
+            && !managed.contains("hysteria2::udp::Hysteria2UdpFlowSessions"),
         "Hysteria2 UDP should use neutral generic cache storage while the protocol resume owns cache-key identity"
     );
 }
@@ -10928,6 +10931,7 @@ fn protocol_crate_roots_do_not_reexport_udp_manager_internals() {
                 "VlessUdpFlowHandle",
                 "VlessUdpFlowIo",
                 "VlessUdpFlowPacket",
+                "VlessUdpPacketV2Codec",
                 "VlessUdpPacketTarget",
                 "VlessUdpPacketTunnelTarget",
             ][..],
@@ -10947,12 +10951,38 @@ fn protocol_crate_roots_do_not_reexport_udp_manager_internals() {
         (
             "hysteria2",
             &[
+                "Hysteria2DatagramCodec",
+                "Hysteria2InboundUdpCodec",
+                "Hysteria2InboundUdpDispatchParts",
+                "Hysteria2InboundUdpRequest",
+                "Hysteria2InboundUdpSession",
+                "Hysteria2InitialUdpFlowPacket",
+                "Hysteria2UdpConnectorFlow",
+                "Hysteria2UdpConnectorProfile",
                 "Hysteria2UdpFlowConfig,",
+                "Hysteria2UdpFlowConnection",
+                "Hysteria2UdpFlowHandle",
                 "Hysteria2UdpFlowIo,",
                 "Hysteria2UdpFlowPacket,",
+                "Hysteria2UdpFlowResponse",
+                "Hysteria2UdpFlowResponseReceiver",
+                "Hysteria2UdpFlowResume",
+                "Hysteria2UdpFlowSession",
+                "Hysteria2UdpFlowSessions",
                 "Hysteria2UdpFlowStore,",
                 "Hysteria2UdpPacket,",
+                "Hysteria2UdpPacketPathCarrierBuild",
+                "Hysteria2UdpPacketPathCarrierBuildParts",
+                "Hysteria2UdpPacketPathCarrierDescriptor",
+                "Hysteria2UdpPacketPathSpec",
                 "Hysteria2UdpPacketTarget,",
+                "connector_flow_from_resume",
+                "spawn_udp_flow",
+                "start_udp_flow_with_initial_packet",
+                "udp_flow_resume_from_config",
+                "udp_packet_path_carrier_build_from_config",
+                "udp_packet_path_carrier_descriptor_from_config",
+                "udp_packet_path_spec_from_config",
             ][..],
         ),
         (

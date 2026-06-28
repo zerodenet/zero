@@ -1,9 +1,7 @@
 use std::collections::VecDeque;
 
-use vless::{
-    format_uuid, parse_uuid, VlessInbound, VlessOutbound, VlessUdpPacketV2Codec, VlessUser,
-    VlessUserStore,
-};
+use vless::udp::VlessUdpPacketV2Codec;
+use vless::{format_uuid, parse_uuid, VlessInbound, VlessOutbound, VlessUser, VlessUserStore};
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 #[cfg(feature = "reality")]

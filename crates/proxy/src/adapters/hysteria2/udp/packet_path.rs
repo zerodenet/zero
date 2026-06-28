@@ -21,7 +21,7 @@ pub(super) fn carrier_descriptor(
     else {
         return None;
     };
-    let descriptor = hysteria2::udp_packet_path_carrier_descriptor_from_config(
+    let descriptor = hysteria2::udp::udp_packet_path_carrier_descriptor_from_config(
         tag,
         server,
         *port,
@@ -45,7 +45,7 @@ pub(super) async fn build(
     else {
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
-    let build = hysteria2::udp_packet_path_carrier_build_from_config(
+    let build = hysteria2::udp::udp_packet_path_carrier_build_from_config(
         "",
         server,
         *port,
