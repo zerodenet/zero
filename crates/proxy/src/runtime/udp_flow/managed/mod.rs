@@ -25,6 +25,8 @@ pub(crate) use datagram_manager::{
 pub(crate) use flow::{ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume};
 pub(crate) use model::{ManagedDatagramFlowHandler, ManagedStreamFlowHandler};
 pub(crate) use state::{ManagedUdpHandlers, ManagedUdpState};
-pub(crate) use stream_manager::{ManagedStreamFlowConnector, ManagedStreamFlowManager};
+pub(crate) use stream_manager::{
+    ManagedStreamConnectorFlow, ManagedStreamFlowConnector, ManagedStreamFlowManager,
+};
 pub(crate) use stream_packet_manager::ManagedStreamPacketSender;
 pub(crate) use stream_sender::ManagedStreamFlowSender;

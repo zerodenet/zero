@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
-    managed_packet_udp_connection, ManagedPacketUdpSender, ManagedStreamFlowConnector,
-    SharedManagedUdpConnection,
+    managed_packet_udp_connection, ManagedPacketUdpSender, ManagedStreamConnectorFlow,
+    ManagedStreamFlowConnector, SharedManagedUdpConnection,
 };
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -14,19 +14,14 @@ pub(super) struct TrojanManagedStreamConnector;
 
 #[async_trait::async_trait]
 impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume> for TrojanManagedStreamConnector {
-    fn flow_cache_key(
+    fn connector_flow(
         &self,
         resume: &trojan::TrojanUdpFlowResume,
         endpoint: OutboundEndpoint<'_>,
         session_id: u64,
-    ) -> String {
-        resume
-            .flow(endpoint.server, endpoint.port, session_id)
-            .cache_key()
-    }
-
-    fn requires_relay_upstream(&self, resume: &trojan::TrojanUdpFlowResume) -> bool {
-        resume.flow_requirement().requires_relay_upstream()
+    ) -> ManagedStreamConnectorFlow {
+        let flow = resume.connector_flow(endpoint.server, endpoint.port, session_id);
+        ManagedStreamConnectorFlow::new(flow.cache_key(), flow.requires_relay_upstream())
     }
 
     async fn establish_direct(

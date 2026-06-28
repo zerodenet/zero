@@ -124,7 +124,7 @@ pub(crate) async fn establish_udp_flow_session(
     resume: hysteria2::Hysteria2UdpFlowResume,
 ) -> Result<hysteria2::Hysteria2UdpFlowConnection, EngineError> {
     let connector_profile = resume
-        .flow(endpoint.server, endpoint.port)
+        .connector_flow(endpoint.server, endpoint.port)
         .connector_profile();
     let conn = std::sync::Arc::new(
         Hysteria2Connector::from_udp_profile(

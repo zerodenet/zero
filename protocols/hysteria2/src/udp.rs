@@ -750,12 +750,12 @@ pub struct Hysteria2UdpFlowResume {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hysteria2UdpFlowSpec {
+pub struct Hysteria2UdpConnectorFlow {
     cache_key: String,
     connector_profile: Hysteria2UdpConnectorProfile,
 }
 
-impl Hysteria2UdpFlowSpec {
+impl Hysteria2UdpConnectorFlow {
     pub fn cache_key(&self) -> String {
         self.cache_key.clone()
     }
@@ -798,8 +798,8 @@ impl Hysteria2UdpFlowResume {
         )
     }
 
-    pub fn flow(&self, server: &str, port: u16) -> Hysteria2UdpFlowSpec {
-        Hysteria2UdpFlowSpec {
+    pub fn connector_flow(&self, server: &str, port: u16) -> Hysteria2UdpConnectorFlow {
+        Hysteria2UdpConnectorFlow {
             cache_key: self.flow_cache_key(server, port),
             connector_profile: self.connector_profile(),
         }

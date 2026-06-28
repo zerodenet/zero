@@ -56,6 +56,6 @@ pub use udp::MieruInboundUdpSession;
 pub use udp::MieruUdpFlowSessions;
 pub use udp::{
     udp_flow_resume_from_config, MieruInboundUdpPacket, MieruInboundUdpRequest,
-    MieruUdpAssociatePacket, MieruUdpAssociatePayload, MieruUdpFlowCodec, MieruUdpFlowConfig,
-    MieruUdpFlowRequirement, MieruUdpFlowResume, MieruUdpFlowSpec, MieruUdpFlowStore,
+    MieruUdpAssociatePacket, MieruUdpAssociatePayload, MieruUdpConnectorFlow, MieruUdpFlowCodec,
+    MieruUdpFlowConfig, MieruUdpFlowResume, MieruUdpFlowStore,
 };

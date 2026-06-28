@@ -17,10 +17,12 @@ use crate::transport::TcpRelayStream;
 
 #[async_trait]
 pub(crate) trait ManagedStreamFlowConnector<T>: Send + Sync {
-    fn flow_cache_key(&self, resume: &T, endpoint: OutboundEndpoint<'_>, session_id: u64)
-        -> String;
-
-    fn requires_relay_upstream(&self, resume: &T) -> bool;
+    fn connector_flow(
+        &self,
+        resume: &T,
+        endpoint: OutboundEndpoint<'_>,
+        session_id: u64,
+    ) -> ManagedStreamConnectorFlow;
 
     async fn establish_direct(
         &self,
@@ -39,6 +41,28 @@ pub(crate) trait ManagedStreamFlowConnector<T>: Send + Sync {
         endpoint: OutboundEndpoint<'_>,
         resume: T,
     ) -> Result<SharedManagedUdpConnection, EngineError>;
+}
+
+pub(crate) struct ManagedStreamConnectorFlow {
+    cache_key: String,
+    requires_relay_upstream: bool,
+}
+
+impl ManagedStreamConnectorFlow {
+    pub(crate) fn new(cache_key: String, requires_relay_upstream: bool) -> Self {
+        Self {
+            cache_key,
+            requires_relay_upstream,
+        }
+    }
+
+    fn cache_key(self) -> String {
+        self.cache_key
+    }
+
+    fn requires_relay_upstream(&self) -> bool {
+        self.requires_relay_upstream
+    }
 }
 
 pub(crate) struct ManagedStreamFlowManager<T, C> {
@@ -107,7 +131,8 @@ where
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
-        if self.connector.requires_relay_upstream(&resume) {
+        let connector_flow = self.connector.connector_flow(&resume, endpoint, session_id);
+        if connector_flow.requires_relay_upstream() {
             return Err(FlowFailure {
                 stage: self.relay_upstream_stage,
                 error: EngineError::Io(std::io::Error::new(
@@ -117,7 +142,7 @@ where
                 upstream: Some(endpoint.upstream()),
             });
         }
-        let cache_key = self.connector.flow_cache_key(&resume, endpoint, session_id);
+        let cache_key = connector_flow.cache_key();
 
         self.upstreams
             .send_or_insert_key(
@@ -142,9 +167,10 @@ where
     ) -> Result<usize, FlowFailure> {
         let session_id = request.ctx.session_id;
         let upstream = request.endpoint.upstream();
-        let cache_key =
-            self.connector
-                .flow_cache_key(&request.resume, request.endpoint, session_id);
+        let cache_key = self
+            .connector
+            .connector_flow(&request.resume, request.endpoint, session_id)
+            .cache_key();
         let entry = self
             .connector
             .establish_relay(

@@ -628,7 +628,7 @@ impl ShadowsocksUdpFlowResume {
         self.codec()
     }
 
-    pub fn socket_flow(&self) -> ShadowsocksUdpSocketFlowSpec {
+    pub fn managed_socket_flow(&self) -> ShadowsocksUdpSocketFlowSpec {
         ShadowsocksUdpSocketFlowSpec {
             cache_key: self.flow_cache_key(),
             codec: ShadowsocksDatagramCodec {

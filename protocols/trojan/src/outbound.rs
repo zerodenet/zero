@@ -486,18 +486,14 @@ impl TrojanUdpFlowResume {
         )
     }
 
-    pub fn flow(&self, server: &str, port: u16, session_id: u64) -> TrojanUdpFlowSpec {
-        TrojanUdpFlowSpec {
+    pub fn connector_flow(
+        &self,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> TrojanUdpConnectorFlow {
+        TrojanUdpConnectorFlow {
             cache_key: self.flow_cache_key(server, port, session_id),
-            requires_relay_upstream: self.flow_requires_relay_upstream(),
-            sni: self.sni.clone(),
-            insecure: self.insecure,
-            client_fingerprint: self.client_fingerprint.clone(),
-        }
-    }
-
-    pub fn flow_requirement(&self) -> TrojanUdpFlowRequirement {
-        TrojanUdpFlowRequirement {
             requires_relay_upstream: self.flow_requires_relay_upstream(),
         }
     }
@@ -536,42 +532,16 @@ impl TrojanUdpFlowResume {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrojanUdpFlowSpec {
+pub struct TrojanUdpConnectorFlow {
     cache_key: String,
     requires_relay_upstream: bool,
-    sni: Option<String>,
-    insecure: bool,
-    client_fingerprint: Option<String>,
 }
 
-impl TrojanUdpFlowSpec {
+impl TrojanUdpConnectorFlow {
     pub fn cache_key(&self) -> String {
         self.cache_key.clone()
     }
 
-    pub fn requires_relay_upstream(&self) -> bool {
-        self.requires_relay_upstream
-    }
-
-    pub fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
-        TrojanUdpTlsProfile {
-            server_name: self
-                .sni
-                .as_deref()
-                .or(fallback_server_name)
-                .map(ToOwned::to_owned),
-            insecure: self.insecure,
-            client_fingerprint: self.client_fingerprint.clone(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TrojanUdpFlowRequirement {
-    requires_relay_upstream: bool,
-}
-
-impl TrojanUdpFlowRequirement {
     pub fn requires_relay_upstream(&self) -> bool {
         self.requires_relay_upstream
     }

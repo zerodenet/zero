@@ -32,7 +32,7 @@ impl ManagedDatagramSocketFlowConnector<shadowsocks::ShadowsocksUdpFlowResume>
         resume: &shadowsocks::ShadowsocksUdpFlowResume,
         _endpoint: OutboundEndpoint<'_>,
     ) -> String {
-        resume.socket_flow().cache_key()
+        resume.managed_socket_flow().cache_key()
     }
 
     async fn establish(
@@ -60,7 +60,7 @@ impl ManagedDatagramSocketFlowConnector<shadowsocks::ShadowsocksUdpFlowResume>
         let flow = Arc::new(
             shadowsocks_transport::establish_shadowsocks_udp_socket_flow(
                 target_addr,
-                Arc::new(resume.socket_flow().codec()),
+                Arc::new(resume.managed_socket_flow().codec()),
             )
             .await?,
         );
