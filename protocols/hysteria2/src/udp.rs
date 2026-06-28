@@ -600,6 +600,14 @@ pub fn udp_flow_resume_from_config(
     Hysteria2UdpFlowConfig::new(tag, server, port, password, client_fingerprint).flow_resume()
 }
 
+pub fn connector_flow_from_resume(
+    resume: &Hysteria2UdpFlowResume,
+    server: &str,
+    port: u16,
+) -> Hysteria2UdpConnectorFlow {
+    resume.connector_flow(server, port)
+}
+
 /// Codec state for a Hysteria2 UDP datagram chain hop.
 ///
 /// Hysteria2 UDP flow framing has no negotiated per-flow crypto state once the

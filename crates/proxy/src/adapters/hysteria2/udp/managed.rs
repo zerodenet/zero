@@ -31,7 +31,7 @@ impl ManagedDatagramFlowConnector<hysteria2::Hysteria2UdpFlowResume>
         resume: &hysteria2::Hysteria2UdpFlowResume,
         endpoint: OutboundEndpoint<'_>,
     ) -> ManagedDatagramConnectorFlow {
-        let flow = resume.connector_flow(endpoint.server, endpoint.port);
+        let flow = hysteria2::connector_flow_from_resume(resume, endpoint.server, endpoint.port);
         managed_datagram_connector_flow_from_build(flow)
     }
 

@@ -33,7 +33,7 @@ impl ManagedDatagramSocketFlowConnector<shadowsocks::ShadowsocksUdpFlowResume>
         resume: &shadowsocks::ShadowsocksUdpFlowResume,
         _endpoint: OutboundEndpoint<'_>,
     ) -> ManagedDatagramSocketConnectorFlow {
-        let flow = resume.managed_socket_flow();
+        let flow = shadowsocks::managed_socket_flow_from_resume(resume);
         managed_datagram_socket_connector_flow_from_build(flow)
     }
 

@@ -978,6 +978,13 @@ pub fn udp_flow_resume_from_config(
 }
 
 #[cfg(feature = "crypto")]
+pub fn managed_socket_flow_from_resume(
+    resume: &ShadowsocksUdpFlowResume,
+) -> ShadowsocksUdpSocketFlowSpec {
+    resume.managed_socket_flow()
+}
+
+#[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ShadowsocksUdpLeafKey {
     cache_key: alloc::string::String,
