@@ -8,7 +8,8 @@
 use std::net::UdpSocket;
 use std::time::Duration;
 
-use shadowsocks::{CipherKind, ShadowsocksDatagramCodec, ShadowsocksInboundProfile};
+use shadowsocks::udp::ShadowsocksDatagramCodec;
+use shadowsocks::{CipherKind, ShadowsocksInboundProfile};
 use zero_core::Address;
 use zero_traits::DatagramCodec;
 

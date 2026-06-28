@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 
-use shadowsocks::{ShadowsocksInboundProfile, ShadowsocksInboundUdpSession};
+use shadowsocks::udp::ShadowsocksInboundUdpSession;
+use shadowsocks::ShadowsocksInboundProfile;
 use tokio::net::UdpSocket;
 use tracing::warn;
 use zero_core::ProtocolType;
@@ -47,7 +48,7 @@ impl Proxy {
 
                     let mut sa = zero_core::SessionAuth::new("shadowsocks");
                     sa.principal_key = Some(profile.principal_key());
-                    let shadowsocks::ShadowsocksInboundUdpDispatchParts {
+                    let shadowsocks::udp::ShadowsocksInboundUdpDispatchParts {
                         target,
                         port,
                         payload,
@@ -132,7 +133,7 @@ impl Proxy {
 struct SsProtocolResponse<'a> {
     socket: &'a UdpSocket,
     udp_session: &'a ShadowsocksInboundUdpSession,
-    response_target: shadowsocks::ShadowsocksInboundUdpResponseTarget,
+    response_target: shadowsocks::udp::ShadowsocksInboundUdpResponseTarget,
     payload: &'a [u8],
     client: SocketAddr,
 }

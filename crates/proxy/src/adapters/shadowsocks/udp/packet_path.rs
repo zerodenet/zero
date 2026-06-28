@@ -22,7 +22,7 @@ pub(super) fn carrier_descriptor(
     else {
         return None;
     };
-    let descriptor = shadowsocks::udp_packet_path_carrier_descriptor_from_config(
+    let descriptor = shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config(
         tag, server, *port, cipher, password,
     )
     .ok()?;
@@ -44,7 +44,7 @@ pub(super) async fn build(
     else {
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
-    let datagram = shadowsocks::udp_packet_path_datagram_source_build_from_config(
+    let datagram = shadowsocks::udp::udp_packet_path_datagram_source_build_from_config(
         "", server, *port, cipher, password,
     )
     .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
@@ -68,7 +68,7 @@ pub(super) fn datagram_source(leaf: &ResolvedLeafOutbound<'_>) -> Option<UdpData
     else {
         return None;
     };
-    let datagram = shadowsocks::udp_packet_path_datagram_source_build_from_config(
+    let datagram = shadowsocks::udp::udp_packet_path_datagram_source_build_from_config(
         tag, server, *port, cipher, password,
     )
     .ok()?;

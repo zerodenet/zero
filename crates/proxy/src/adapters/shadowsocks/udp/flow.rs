@@ -28,12 +28,13 @@ pub(super) async fn start(
     else {
         return Err(unreachable_udp_leaf(adapter.name(), leaf));
     };
-    let resume = shadowsocks::udp_flow_resume_from_config(tag, server, *port, cipher, password)
-        .map_err(|error| FlowFailure {
-            stage: "udp_shadowsocks_resume",
-            error: zero_engine::EngineError::Io(std::io::Error::other(error.to_string())),
-            upstream: Some((server.to_string(), *port)),
-        })?;
+    let resume =
+        shadowsocks::udp::udp_flow_resume_from_config(tag, server, *port, cipher, password)
+            .map_err(|error| FlowFailure {
+                stage: "udp_shadowsocks_resume",
+                error: zero_engine::EngineError::Io(std::io::Error::other(error.to_string())),
+                upstream: Some((server.to_string(), *port)),
+            })?;
     dispatch
         .start_tracked_managed_datagram(ManagedDatagramStart {
             proxy: Some(proxy),

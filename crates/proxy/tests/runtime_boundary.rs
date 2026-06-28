@@ -1387,7 +1387,7 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     assert!(
-        packet_path.contains("shadowsocks::udp_packet_path_carrier_descriptor_from_config")
+        packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
             && !packet_path.contains("ShadowsocksUdpFlowConfig::new")
             && !packet_path.contains(".packet_path_spec()")
             && packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
@@ -1412,7 +1412,7 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
             && !packet_path.contains("spec.codec()")
             && !packet_path.contains(".packet_path_cache_key()")
             && !packet_path.contains(".packet_path_codec()")
-            && flow.contains("shadowsocks::udp_flow_resume_from_config")
+            && flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !flow.contains("ShadowsocksUdpFlowConfig::new")
             && !flow.contains(".flow_resume()")
             && flow.contains("ManagedDatagramStart")
@@ -5080,7 +5080,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && !resume_model.contains("trojan::")
             && !resume_model.contains("mieru::")
             && !resume_model.contains("Socks5(socks5::udp::Socks5UdpFlowResume)")
-            && !resume_model.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
+            && !resume_model.contains("Shadowsocks(shadowsocks::udp::ShadowsocksUdpFlowResume)")
             && !resume_model.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
             && !resume_model.contains("Trojan(trojan::udp::TrojanUdpFlowResume)")
             && !resume_model.contains("Mieru(mieru::udp::MieruUdpFlowResume)")
@@ -9624,10 +9624,10 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && !adapter.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter.contains(".flow_resume()")
             && !adapter.contains(".packet_path_spec()")
-            && adapter_flow.contains("shadowsocks::udp_flow_resume_from_config")
+            && adapter_flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter_flow.contains(".flow_resume()")
-            && adapter_packet_path.contains("shadowsocks::udp_packet_path_carrier_descriptor_from_config")
+            && adapter_packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
             && !adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter_packet_path.contains(".packet_path_spec()")
             && adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
@@ -9864,7 +9864,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
         !adapter.contains("CipherKind::from_str")
             && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && !adapter.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter_flow.contains("shadowsocks::udp_flow_resume_from_config")
+            && adapter_flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
             && protocol_outbound.contains("pub fn parse_udp_cipher("),
         "Shadowsocks UDP adapter should ask protocols/shadowsocks to parse ordinary UDP flow cipher config"
@@ -9900,7 +9900,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !generic_manager.contains("fn flow_cache_key")
             && !managed.contains("ManagedDatagramConnectionCacheKey")
             && managed.contains("managed_datagram_socket_connector_flow_from_build")
-            && managed.contains("shadowsocks::managed_socket_flow_from_resume")
+            && managed.contains("shadowsocks::udp::managed_socket_flow_from_resume")
             && !managed.contains("ManagedDatagramSocketConnectorFlow::new")
             && !managed.contains("flow.cache_key()")
             && !managed.contains("resume.managed_socket_flow()")
@@ -9921,19 +9921,19 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && managed_cache.contains("async fn get_or_insert_with")
             && !managed_cache.contains("pub(crate) async fn get_or_insert_with")
             && managed_cache.contains("pub(crate) async fn get_or_insert_key")
-            && !managed.contains("shadowsocks::ShadowsocksUdpFlowEntries")
+            && !managed.contains("shadowsocks::udp::ShadowsocksUdpFlowEntries")
             && managed.contains("SharedManagedDatagramUdpConnection")
             && !managed.contains("Arc<SsUpstream>")
             && !managed.contains(".waiters")
-            && !managed.contains("shadowsocks::ShadowsocksUdpFlowStore<Arc<SsUpstream>>")
-            && !managed.contains("HashMap<shadowsocks::ShadowsocksUdpCacheKey"),
+            && !managed.contains("shadowsocks::udp::ShadowsocksUdpFlowStore<Arc<SsUpstream>>")
+            && !managed.contains("HashMap<shadowsocks::udp::ShadowsocksUdpCacheKey"),
         "ordinary Shadowsocks UDP peer model should carry only protocol-owned opaque cache identity and a neutral datagram connection"
     );
     assert!(
         !adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && !adapter.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter.contains(".flow_resume()")
-            && adapter_flow.contains("shadowsocks::udp_flow_resume_from_config")
+            && adapter_flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter_flow.contains(".flow_resume()")
             && !adapter.contains("ShadowsocksUdpFlowResume::new")
@@ -9967,7 +9967,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     assert!(
         snapshot.contains("resume: ManagedUdpFlowResume")
             && snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
-            && !snapshot.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
+            && !snapshot.contains("Shadowsocks(shadowsocks::udp::ShadowsocksUdpFlowResume)")
             && !snapshot.contains("cipher_kind: shadowsocks::CipherKind")
             && !snapshot.contains("datagram_cache_key: String"),
         "Shadowsocks protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
@@ -10042,9 +10042,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         !adapter.contains("CipherKind::from_str")
             && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && !adapter.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter_flow.contains("shadowsocks::udp_flow_resume_from_config")
+            && adapter_flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter_packet_path.contains("shadowsocks::udp_packet_path_carrier_descriptor_from_config")
+            && adapter_packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
             && !adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new"),
         "Shadowsocks adapter should ask protocols/shadowsocks to parse packet-path carrier/datagram cipher config"
     );
@@ -10069,7 +10069,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter.contains("resume.codec()")
             && !adapter.contains("resume.packet_path_codec()")
             && !adapter.contains("config.packet_path_spec()")
-            && adapter_packet_path.contains("shadowsocks::udp_packet_path_carrier_descriptor_from_config")
+            && adapter_packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
             && !adapter_packet_path.contains(".packet_path_spec()")
             && !adapter_packet_path.contains("packet_path.cache_key()")
             && !adapter_packet_path.contains("packet_path.codec()")
@@ -10958,10 +10958,33 @@ fn protocol_crate_roots_do_not_reexport_udp_manager_internals() {
         (
             "shadowsocks",
             &[
-                "ShadowsocksUdpFlowEntries,",
-                "ShadowsocksUdpFlowPacket,",
-                "ShadowsocksUdpFlowStore,",
-                "ShadowsocksUdpLeafKey,",
+                "ShadowsocksDatagramCodec",
+                "ShadowsocksInboundUdpCodec",
+                "ShadowsocksInboundUdpDispatchParts",
+                "ShadowsocksInboundUdpPacket",
+                "ShadowsocksInboundUdpResponse",
+                "ShadowsocksInboundUdpResponseTarget",
+                "ShadowsocksInboundUdpSession",
+                "ShadowsocksUdpDecodeContext",
+                "ShadowsocksUdpFlowConfig",
+                "ShadowsocksUdpFlowEntries",
+                "ShadowsocksUdpFlowPacket",
+                "ShadowsocksUdpFlowResume",
+                "ShadowsocksUdpFlowStore",
+                "ShadowsocksUdpLeafKey",
+                "ShadowsocksUdpPacket",
+                "ShadowsocksUdpPacketPathCarrierBuild",
+                "ShadowsocksUdpPacketPathCarrierDescriptor",
+                "ShadowsocksUdpPacketPathDatagramSourceBuild",
+                "ShadowsocksUdpPacketPathSpec",
+                "ShadowsocksUdpPacketTarget",
+                "ShadowsocksUdpSocketFlowSpec",
+                "managed_socket_flow_from_resume",
+                "parse_udp_cipher",
+                "udp_flow_resume_from_config",
+                "udp_packet_path_carrier_descriptor_from_config",
+                "udp_packet_path_datagram_source_build_from_config",
+                "udp_packet_path_spec_from_config",
             ][..],
         ),
         (

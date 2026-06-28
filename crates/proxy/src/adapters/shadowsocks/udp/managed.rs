@@ -25,15 +25,15 @@ pub(super) fn handler() -> Box<dyn ManagedDatagramFlowHandler> {
 }
 
 #[async_trait::async_trait]
-impl ManagedDatagramSocketFlowConnector<shadowsocks::ShadowsocksUdpFlowResume>
+impl ManagedDatagramSocketFlowConnector<shadowsocks::udp::ShadowsocksUdpFlowResume>
     for ShadowsocksManagedDatagramConnector
 {
     fn connector_flow(
         &self,
-        resume: &shadowsocks::ShadowsocksUdpFlowResume,
+        resume: &shadowsocks::udp::ShadowsocksUdpFlowResume,
         _endpoint: OutboundEndpoint<'_>,
     ) -> ManagedDatagramSocketConnectorFlow {
-        let flow = shadowsocks::managed_socket_flow_from_resume(resume);
+        let flow = shadowsocks::udp::managed_socket_flow_from_resume(resume);
         managed_datagram_socket_connector_flow_from_build(flow)
     }
 
@@ -41,7 +41,7 @@ impl ManagedDatagramSocketFlowConnector<shadowsocks::ShadowsocksUdpFlowResume>
         &self,
         proxy: Option<&crate::runtime::Proxy>,
         endpoint: OutboundEndpoint<'_>,
-        resume: shadowsocks::ShadowsocksUdpFlowResume,
+        resume: shadowsocks::udp::ShadowsocksUdpFlowResume,
         _initial_packet: UdpPacketRef<'_>,
     ) -> Result<SharedManagedDatagramUdpConnection, EngineError> {
         let proxy = proxy.ok_or_else(|| {

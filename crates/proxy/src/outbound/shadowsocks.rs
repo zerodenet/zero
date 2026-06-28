@@ -64,7 +64,7 @@ pub(crate) struct ShadowsocksTcpConnectRequest<'a> {
     pub config: shadowsocks::ShadowsocksTcpConnectConfig,
 }
 
-impl UdpDatagramSourceBuild for shadowsocks::ShadowsocksUdpPacketPathDatagramSourceBuild {
+impl UdpDatagramSourceBuild for shadowsocks::udp::ShadowsocksUdpPacketPathDatagramSourceBuild {
     fn into_parts(
         self,
     ) -> (
@@ -79,13 +79,15 @@ impl UdpDatagramSourceBuild for shadowsocks::ShadowsocksUdpPacketPathDatagramSou
     }
 }
 
-impl PacketPathCarrierDescriptorBuild for shadowsocks::ShadowsocksUdpPacketPathCarrierDescriptor {
+impl PacketPathCarrierDescriptorBuild
+    for shadowsocks::udp::ShadowsocksUdpPacketPathCarrierDescriptor
+{
     fn into_parts(self) -> (String, String, u16) {
         self.into_parts()
     }
 }
 
-impl ManagedDatagramSocketConnectorFlowBuild for shadowsocks::ShadowsocksUdpSocketFlowSpec {
+impl ManagedDatagramSocketConnectorFlowBuild for shadowsocks::udp::ShadowsocksUdpSocketFlowSpec {
     fn into_cache_key(self) -> String {
         self.into_cache_key()
     }
@@ -93,7 +95,7 @@ impl ManagedDatagramSocketConnectorFlowBuild for shadowsocks::ShadowsocksUdpSock
 
 pub(crate) async fn establish_udp_socket_flow(
     target_addr: SocketAddr,
-    resume: shadowsocks::ShadowsocksUdpFlowResume,
+    resume: shadowsocks::udp::ShadowsocksUdpFlowResume,
 ) -> Result<ShadowsocksUdpSocketFlow, EngineError> {
     shadowsocks_transport::establish_shadowsocks_udp_socket_flow(
         target_addr,
