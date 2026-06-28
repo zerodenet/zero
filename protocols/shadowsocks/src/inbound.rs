@@ -193,6 +193,13 @@ pub struct ShadowsocksInboundUdpDispatchParts {
 }
 
 #[cfg(feature = "crypto")]
+impl ShadowsocksInboundUdpDispatchParts {
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
+        (self.target, self.port, self.payload, self.client_session_id)
+    }
+}
+
+#[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShadowsocksInboundUdpResponse {
     datagram: Vec<u8>,
@@ -409,6 +416,18 @@ impl ShadowsocksInboundUdpSession {
         payload: &[u8],
     ) -> Result<ShadowsocksInboundUdpResponse, Error> {
         self.codec.response_frame(target, payload)
+    }
+
+    pub fn response_frame_for_proxy_session(
+        &self,
+        proxy_session_id: u64,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<ShadowsocksInboundUdpResponse, Error> {
+        let response_target =
+            self.response_target_for_proxy_session(proxy_session_id, target, port);
+        self.response_frame(&response_target, payload)
     }
 
     pub fn record_proxy_session(&mut self, proxy_session_id: u64, client_session_id: Option<u64>) {

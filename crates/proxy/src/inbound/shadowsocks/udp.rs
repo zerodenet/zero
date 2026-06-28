@@ -48,12 +48,8 @@ impl Proxy {
 
                     let mut sa = zero_core::SessionAuth::new("shadowsocks");
                     sa.principal_key = Some(profile.principal_key());
-                    let shadowsocks::udp::ShadowsocksInboundUdpDispatchParts {
-                        target,
-                        port,
-                        payload,
-                        client_session_id,
-                    } = request.into_dispatch_parts();
+                    let (target, port, payload, client_session_id) =
+                        request.into_dispatch_parts().into_parts();
                     match UdpPipe::new(self, &mut dispatch)
                         .dispatch(UdpPipeInput {
                             target,
@@ -82,11 +78,9 @@ impl Proxy {
                             ss_send_protocol_response(SsProtocolResponse {
                                 socket: udp_socket.as_ref(),
                                 udp_session: &udp_session,
-                                response_target: udp_session.response_target_for_proxy_session(
-                                    sid,
-                                    &address_from_socket_addr(sender),
-                                    sender.port(),
-                                ),
+                                session_id: sid,
+                                target: &address_from_socket_addr(sender),
+                                port: sender.port(),
                                 payload: &direct_buf[..n],
                                 client,
                             })
@@ -103,8 +97,9 @@ impl Proxy {
                                     ss_send_protocol_response(SsProtocolResponse {
                                         socket: udp_socket.as_ref(),
                                         udp_session: &udp_session,
-                                        response_target: udp_session
-                                            .response_target_for_proxy_session(sid, &target, port),
+                                        session_id: sid,
+                                        target: &target,
+                                        port,
                                         payload: &payload,
                                         client,
                                     })
@@ -133,15 +128,20 @@ impl Proxy {
 struct SsProtocolResponse<'a> {
     socket: &'a UdpSocket,
     udp_session: &'a ShadowsocksInboundUdpSession,
-    response_target: shadowsocks::udp::ShadowsocksInboundUdpResponseTarget,
+    session_id: u64,
+    target: &'a zero_core::Address,
+    port: u16,
     payload: &'a [u8],
     client: SocketAddr,
 }
 
 async fn ss_send_protocol_response(response: SsProtocolResponse<'_>) {
-    let resp = response
-        .udp_session
-        .response_frame(&response.response_target, response.payload);
+    let resp = response.udp_session.response_frame_for_proxy_session(
+        response.session_id,
+        response.target,
+        response.port,
+        response.payload,
+    );
     let Ok(response_datagram) = resp else {
         return;
     };
