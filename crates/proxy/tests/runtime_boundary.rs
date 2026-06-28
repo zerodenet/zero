@@ -170,6 +170,31 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
 }
 
 #[test]
+fn inbound_udp_glue_does_not_name_protocol_private_packet_models() {
+    for path in rust_sources_under("src/inbound") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read inbound source");
+
+        for forbidden in [
+            "InboundUdpCodec",
+            "InboundUdpDispatchParts",
+            "InboundUdpResponseTarget",
+            "InboundUdpPacket",
+            "InboundUdpResponse",
+            "decode_inbound_udp",
+            "encode_inbound_udp",
+            "read_inbound_udp",
+            "write_inbound_udp",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should use protocol-owned UDP sessions instead of naming protocol-private inbound UDP model `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn udp_dispatch_entry_is_only_called_by_udp_pipe() {
     for path in rust_sources_under("src") {
         let source = relative(&path);
