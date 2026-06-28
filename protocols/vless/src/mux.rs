@@ -87,6 +87,31 @@ pub struct MuxTarget {
     pub address: Address,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MuxNetwork {
+    Tcp,
+    Udp,
+}
+
+impl MuxTarget {
+    pub fn network_kind(&self) -> Result<MuxNetwork, Error> {
+        match self.network {
+            NETWORK_TCP => Ok(MuxNetwork::Tcp),
+            NETWORK_UDP => Ok(MuxNetwork::Udp),
+            _ => Err(Error::Protocol("MUX new stream unknown network type")),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum MuxServerEvent {
+    KeepAlive,
+    NewStream { session_id: u16, target: MuxTarget },
+    Data { session_id: u16, payload: Vec<u8> },
+    End { session_id: u16 },
+    Unknown { session_id: u16, status: u8 },
+}
+
 // ── frame encode / decode ──
 
 /// Encode a MUX frame: [length:2(BE)][session_id:2(BE)][status:1][options:1][payload…]
@@ -450,6 +475,7 @@ impl MuxClient {
 
 /// MUX server-side handler — reads frames and dispatches.
 pub struct MuxServer {
+    next_id: u16,
     #[cfg(feature = "reality")]
     crypto: Option<crate::mux_crypto::MuxCrypto>,
 }
@@ -463,6 +489,7 @@ impl Default for MuxServer {
 impl MuxServer {
     pub fn new() -> Self {
         Self {
+            next_id: 1,
             #[cfg(feature = "reality")]
             crypto: None,
         }
@@ -471,8 +498,18 @@ impl MuxServer {
     #[cfg(feature = "reality")]
     pub fn with_encryption(master_uuid: &[u8; 16]) -> Self {
         Self {
+            next_id: 1,
             crypto: Some(crate::mux_crypto::MuxCrypto::new(master_uuid)),
         }
+    }
+
+    pub fn alloc_id(&mut self) -> u16 {
+        let id = self.next_id;
+        self.next_id = self.next_id.wrapping_add(1);
+        if self.next_id == 0 {
+            self.next_id = 1;
+        }
+        id
     }
 
     /// Accept a new stream request, allocate an ID, and send response.
@@ -499,6 +536,68 @@ impl MuxServer {
             .map_err(|_| Error::Io("failed to write MUX new-stream response"))?;
 
         Ok((alloc_id, target.network, target.port, target.address))
+    }
+
+    pub async fn recv_event<S>(&mut self, stream: &mut S) -> Result<MuxServerEvent, Error>
+    where
+        S: AsyncSocket,
+    {
+        let frame = self.recv(stream).await?;
+        match frame.status {
+            STATUS_KEEP_ALIVE => Ok(MuxServerEvent::KeepAlive),
+            STATUS_NEW => {
+                let target = parse_new_stream(&frame.payload)?;
+                let session_id = self.alloc_id();
+                Ok(MuxServerEvent::NewStream { session_id, target })
+            }
+            STATUS_KEEP => Ok(MuxServerEvent::Data {
+                session_id: frame.session_id,
+                payload: frame.payload,
+            }),
+            STATUS_END => Ok(MuxServerEvent::End {
+                session_id: frame.session_id,
+            }),
+            status => Ok(MuxServerEvent::Unknown {
+                session_id: frame.session_id,
+                status,
+            }),
+        }
+    }
+
+    pub async fn write_new_stream_accepted<S>(
+        &self,
+        stream: &mut S,
+        assigned_id: u16,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.write_new_stream_response(stream, assigned_id, MUX_STATUS_OK)
+            .await
+    }
+
+    pub async fn write_new_stream_rejected<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.write_new_stream_response(stream, 0, MUX_STATUS_FAIL)
+            .await
+    }
+
+    async fn write_new_stream_response<S>(
+        &self,
+        stream: &mut S,
+        assigned_id: u16,
+        status: u8,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let resp = encode_new_stream_response(assigned_id, status);
+        stream
+            .write_all(&resp)
+            .await
+            .map_err(|_| Error::Io("failed to write MUX new-stream response"))
     }
 
     /// Read next frame (with decryption for non-control frames).

@@ -3,7 +3,6 @@ use tokio::select;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
-use zero_traits::AsyncSocket;
 
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
@@ -27,17 +26,12 @@ impl Proxy {
         S: ClientStream,
     {
         use tokio::sync::mpsc;
-        use vless::{
-            encode_new_stream_response, parse_new_stream, MuxServer, MUX_STATUS_FAIL,
-            MUX_STATUS_OK, NETWORK_TCP, NETWORK_UDP, STATUS_END, STATUS_KEEP, STATUS_KEEP_ALIVE,
-            STATUS_NEW,
-        };
+        use vless::{MuxNetwork, MuxServer, MuxServerEvent};
 
         vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
 
         let mut mux = MuxServer::with_encryption(&uuid);
-        let mut next_id: u16 = 1;
         let mut up_senders: HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> = HashMap::new();
         let mut relay_tasks = JoinSet::new();
         let (down_tx, mut down_rx) = mpsc::unbounded_channel::<(u16, Vec<u8>)>();
@@ -45,35 +39,28 @@ impl Proxy {
         info!(inbound_tag, "VLESS MUX session started");
         loop {
             tokio::select! {
-                frame_res = mux.recv(&mut client) => {
-                    let frame = match frame_res {
-                        Ok(f) => f,
+                event_res = mux.recv_event(&mut client) => {
+                    let event = match event_res {
+                        Ok(event) => event,
                         Err(_) => break,
                     };
-                    match frame.status {
-                        STATUS_KEEP_ALIVE => {
+                    match event {
+                        MuxServerEvent::KeepAlive => {
                             // Keep-alive -?ignore
                             continue;
                         }
-                        STATUS_NEW => {
-                            // New stream request (session_id == 0)
-                            match parse_new_stream(&frame.payload) {
-                                Ok(target) => {
-                                    let sid = next_id;
-                                    next_id = next_id.wrapping_add(1);
-                                    if next_id == 0 { next_id = 1; }
-
-                                    // Write response directly (not encrypted, not wrapped in keep)
-                                    let resp = encode_new_stream_response(sid, MUX_STATUS_OK);
-                                    if client.write_all(&resp).await.is_err() {
+                        MuxServerEvent::NewStream { session_id: sid, target } => {
+                            match target.network_kind() {
+                                Ok(network) => {
+                                    if mux.write_new_stream_accepted(&mut client, sid).await.is_err() {
                                         break;
                                     }
 
                                     let (up_tx, up_rx) = mpsc::unbounded_channel();
                                     up_senders.insert(sid, up_tx);
 
-                                    match target.network {
-                                        NETWORK_TCP => {
+                                    match network {
+                                        MuxNetwork::Tcp => {
                                             // Route and establish TCP outbound
                                             let mut session = zero_core::Session::new(
                                                 0, target.address, target.port,
@@ -92,10 +79,7 @@ impl Proxy {
                                             {
                                                 Ok(result) => result.upstream,
                                                 Err(_) => {
-                                                    let fail_resp = encode_new_stream_response(
-                                                        0, MUX_STATUS_FAIL,
-                                                    );
-                                                    let _ = client.write_all(&fail_resp).await;
+                                                    let _ = mux.write_new_stream_rejected(&mut client).await;
                                                     up_senders.remove(&sid);
                                                     continue;
                                                 }
@@ -110,7 +94,7 @@ impl Proxy {
                                                 port = target.port, network = "tcp",
                                                 "MUX stream accepted");
                                         }
-                                        NETWORK_UDP => {
+                                        MuxNetwork::Udp => {
                                             let down = down_tx.clone();
                                             let proxy_clone = self.clone();
                                             let inbound_tag_owned = inbound_tag.to_owned();
@@ -133,39 +117,31 @@ impl Proxy {
                                                 port = target.port, network = "udp",
                                                 "MUX stream accepted");
                                         }
-                                        _ => {
-                                            warn!("MUX new stream unknown network {}", target.network);
-                                            let fail_resp = encode_new_stream_response(
-                                                0, MUX_STATUS_FAIL,
-                                            );
-                                            let _ = client.write_all(&fail_resp).await;
-                                        }
                                     }
                                 }
                                 Err(e) => {
                                     warn!(error = %e, "MUX new stream parse failed");
-                                    let resp = encode_new_stream_response(0, MUX_STATUS_FAIL);
-                                    let _ = client.write_all(&resp).await;
+                                    let _ = mux.write_new_stream_rejected(&mut client).await;
                                 }
                             }
                         }
-                        STATUS_KEEP => {
+                        MuxServerEvent::Data { session_id, payload } => {
                             // Data for an existing stream
-                            if let Some(tx) = up_senders.get(&frame.session_id) {
-                                let _ = tx.send(frame.payload);
+                            if let Some(tx) = up_senders.get(&session_id) {
+                                let _ = tx.send(payload);
                             } else {
                                 // Data for unknown stream -?ignore or send END
                                 let _ =
-                                    mux.write_end(&mut client, frame.session_id).await;
+                                    mux.write_end(&mut client, session_id).await;
                             }
                         }
-                        STATUS_END => {
+                        MuxServerEvent::End { session_id } => {
                             // Client terminated this stream
-                            up_senders.remove(&frame.session_id);
-                            info!(mux_stream_id = frame.session_id,
+                            up_senders.remove(&session_id);
+                            info!(mux_stream_id = session_id,
                                 "MUX stream ended by client");
                         }
-                        _ => {
+                        MuxServerEvent::Unknown { .. } => {
                             // Unknown status -?ignore
                         }
                     }

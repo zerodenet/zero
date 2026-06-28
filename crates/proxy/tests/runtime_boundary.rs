@@ -181,6 +181,47 @@ fn ordinary_tcp_inbounds_use_tcp_pipe_for_route_execution() {
 }
 
 #[test]
+fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
+    let inbound = read("src/inbound/vless/mux.rs");
+    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
+        .expect("read protocols/vless/src/mux.rs");
+
+    for forbidden in [
+        "encode_new_stream_response",
+        "parse_new_stream",
+        "MUX_STATUS_",
+        "NETWORK_TCP",
+        "NETWORK_UDP",
+        "STATUS_NEW",
+        "STATUS_KEEP",
+        "STATUS_END",
+        "STATUS_KEEP_ALIVE",
+        "let mut next_id",
+    ] {
+        assert!(
+            !inbound.contains(forbidden),
+            "VLESS inbound mux should delegate protocol MUX frame/state detail to protocols/vless; found `{forbidden}`"
+        );
+    }
+
+    for required in [
+        "MuxServerEvent",
+        "recv_event",
+        "write_new_stream_accepted",
+        "write_new_stream_rejected",
+    ] {
+        assert!(
+            inbound.contains(required),
+            "VLESS inbound mux should consume protocol-owned MUX server APIs; missing `{required}`"
+        );
+        assert!(
+            protocol_mux.contains(required),
+            "protocols/vless should own VLESS MUX server API `{required}`"
+        );
+    }
+}
+
+#[test]
 fn tcp_outbound_resolution_helper_stays_inside_tcp_dispatch() {
     for path in rust_sources_under("src") {
         let source = relative(&path);
