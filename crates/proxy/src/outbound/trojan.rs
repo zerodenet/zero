@@ -85,7 +85,7 @@ pub(crate) struct TrojanTcpConnectRequest<'a> {
 pub(crate) async fn open_udp_tls_stream(
     proxy: &Proxy,
     endpoint: OutboundEndpoint<'_>,
-    resume: &trojan::TrojanUdpFlowResume,
+    resume: &trojan::udp::TrojanUdpFlowResume,
 ) -> Result<TcpRelayStream, EngineError> {
     let upstream = proxy
         .protocols
@@ -105,7 +105,7 @@ pub(crate) async fn open_udp_tls_relay_stream(
     tls_server_name: Option<&str>,
     proxy: &Proxy,
     endpoint: OutboundEndpoint<'_>,
-    resume: &trojan::TrojanUdpFlowResume,
+    resume: &trojan::udp::TrojanUdpFlowResume,
 ) -> Result<TcpRelayStream, EngineError> {
     open_trojan_udp_tls_relay_stream(
         stream,
@@ -121,7 +121,7 @@ pub(crate) async fn open_udp_tls_relay_stream(
 fn udp_tls_options<'a>(
     proxy: &'a Proxy,
     endpoint: OutboundEndpoint<'a>,
-    tls_profile: trojan::TrojanUdpTlsProfile,
+    tls_profile: trojan::udp::TrojanUdpTlsProfile,
 ) -> TrojanUdpTlsOptions<'a> {
     trojan_tls_options(proxy, endpoint.server, udp_tls_config(tls_profile))
 }
@@ -153,7 +153,7 @@ fn trojan_tcp_tls_config(
     }
 }
 
-fn udp_tls_config(tls_profile: trojan::TrojanUdpTlsProfile) -> ClientTlsConfig {
+fn udp_tls_config(tls_profile: trojan::udp::TrojanUdpTlsProfile) -> ClientTlsConfig {
     ClientTlsConfig {
         server_name: tls_profile.server_name().map(ToOwned::to_owned),
         disable_sni: false,
@@ -164,7 +164,7 @@ fn udp_tls_config(tls_profile: trojan::TrojanUdpTlsProfile) -> ClientTlsConfig {
     }
 }
 
-impl ManagedStreamConnectorFlowBuild for trojan::TrojanUdpConnectorFlow {
+impl ManagedStreamConnectorFlowBuild for trojan::udp::TrojanUdpConnectorFlow {
     fn into_parts(self) -> (String, bool) {
         self.into_parts()
     }

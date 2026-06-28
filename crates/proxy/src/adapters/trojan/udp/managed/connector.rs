@@ -14,15 +14,19 @@ use zero_engine::EngineError;
 pub(super) struct TrojanManagedStreamConnector;
 
 #[async_trait::async_trait]
-impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume> for TrojanManagedStreamConnector {
+impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume> for TrojanManagedStreamConnector {
     fn connector_flow(
         &self,
-        resume: &trojan::TrojanUdpFlowResume,
+        resume: &trojan::udp::TrojanUdpFlowResume,
         endpoint: OutboundEndpoint<'_>,
         session_id: u64,
     ) -> ManagedStreamConnectorFlow {
-        let flow =
-            trojan::connector_flow_from_resume(resume, endpoint.server, endpoint.port, session_id);
+        let flow = trojan::udp::connector_flow_from_resume(
+            resume,
+            endpoint.server,
+            endpoint.port,
+            session_id,
+        );
         managed_stream_connector_flow_from_build(flow)
     }
 
@@ -31,7 +35,7 @@ impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume> for TrojanManagedSt
         proxy: &Proxy,
         session: &Session,
         endpoint: OutboundEndpoint<'_>,
-        resume: trojan::TrojanUdpFlowResume,
+        resume: trojan::udp::TrojanUdpFlowResume,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
         let tls_stream =
             crate::outbound::trojan::open_udp_tls_stream(proxy, endpoint, &resume).await?;
@@ -45,7 +49,7 @@ impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume> for TrojanManagedSt
         proxy: Option<&Proxy>,
         session: &Session,
         endpoint: OutboundEndpoint<'_>,
-        resume: trojan::TrojanUdpFlowResume,
+        resume: trojan::udp::TrojanUdpFlowResume,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
         let proxy = proxy.ok_or_else(|| {
             EngineError::Io(std::io::Error::other(
@@ -67,9 +71,9 @@ impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume> for TrojanManagedSt
 async fn packet_stream(
     session: &Session,
     stream: TcpRelayStream,
-    resume: trojan::TrojanUdpFlowResume,
+    resume: trojan::udp::TrojanUdpFlowResume,
 ) -> Result<SharedManagedUdpConnection, EngineError> {
-    let connection = trojan::establish_udp_flow_with_resume(stream, session, &resume)
+    let connection = trojan::udp::establish_udp_flow_with_resume(stream, session, &resume)
         .await
         .map_err(|error| EngineError::Io(std::io::Error::other(format!("{error}"))))?;
     Ok(managed_packet_udp_connection(Arc::new(
@@ -78,7 +82,7 @@ async fn packet_stream(
 }
 
 struct TrojanManagedUdpSender {
-    connection: trojan::TrojanUdpFlowConnection,
+    connection: trojan::udp::TrojanUdpFlowConnection,
 }
 
 #[async_trait::async_trait]
@@ -95,7 +99,7 @@ impl ManagedPacketUdpSender for TrojanManagedUdpSender {
             .map_err(|error| EngineError::Io(std::io::Error::other(format!("{error}"))))
     }
 
-    fn subscribe_responses(&self) -> trojan::TrojanUdpFlowResponseReceiver {
+    fn subscribe_responses(&self) -> trojan::udp::TrojanUdpFlowResponseReceiver {
         self.connection.subscribe_responses()
     }
 

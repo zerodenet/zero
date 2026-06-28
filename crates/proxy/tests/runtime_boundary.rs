@@ -1488,7 +1488,7 @@ fn stream_udp_roots_delegate_flow_building() {
         (
             "src/adapters/trojan/udp.rs",
             "src/adapters/trojan/udp/flow.rs",
-            "trojan::udp_flow_resume_from_config",
+            "trojan::udp::udp_flow_resume_from_config",
             ".start_tracked_managed_stream_packet(",
         ),
         (
@@ -5086,7 +5086,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && !resume_model.contains("Socks5(socks5::Socks5UdpFlowResume)")
             && !resume_model.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
             && !resume_model.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
-            && !resume_model.contains("Trojan(trojan::TrojanUdpFlowResume)")
+            && !resume_model.contains("Trojan(trojan::udp::TrojanUdpFlowResume)")
             && !resume_model.contains("Mieru(mieru::udp::MieruUdpFlowResume)")
             && !resume_model.contains("username: Option<String>")
             && !resume_model.contains("password: String")
@@ -7182,19 +7182,19 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
     assert!(
         stream_manager.contains("ManagedUdpConnectionCache")
             && !mieru_managed.contains("mieru::udp::MieruUdpFlowStore")
-            && !trojan_managed.contains("trojan::TrojanUdpFlowStore")
+            && !trojan_managed.contains("trojan::udp::TrojanUdpFlowStore")
             && !mieru_managed.contains("mieru::udp::MieruUdpFlowSessions")
-            && !trojan_managed.contains("trojan::TrojanUdpFlowSessions")
+            && !trojan_managed.contains("trojan::udp::TrojanUdpFlowSessions")
             && !mieru_managed.contains("mieru::udp::MieruUdpFlowConnection")
-            && !trojan_managed.contains("trojan::TrojanUdpFlowConnection")
+            && !trojan_managed.contains("trojan::udp::TrojanUdpFlowConnection")
             && mieru_connector.contains("mieru::udp::MieruUdpFlowConnection")
-            && trojan_connector.contains("trojan::TrojanUdpFlowConnection")
+            && trojan_connector.contains("trojan::udp::TrojanUdpFlowConnection")
             && !mieru_managed.contains("mieru::udp::MieruUdpFlowStore<mieru::udp::MieruUdpFlowSession>")
-            && !trojan_managed.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowSession>")
+            && !trojan_managed.contains("trojan::udp::TrojanUdpFlowStore<trojan::udp::TrojanUdpFlowSession>")
             && !mieru_managed.contains("mieru::udp::MieruUdpFlowStore<mieru::udp::MieruUdpFlowConnection>")
-            && !trojan_managed.contains("trojan::TrojanUdpFlowStore<trojan::TrojanUdpFlowConnection>")
+            && !trojan_managed.contains("trojan::udp::TrojanUdpFlowStore<trojan::udp::TrojanUdpFlowConnection>")
             && !mieru_managed.contains("HashMap<mieru::udp::MieruUdpCacheKey")
-            && !trojan_managed.contains("HashMap<trojan::TrojanUdpCacheKey")
+            && !trojan_managed.contains("HashMap<trojan::udp::TrojanUdpCacheKey")
             && managed_cache.contains("struct ManagedUdpConnectionCache")
             && managed_cache.contains("struct ManagedUdpConnectionCacheKey")
             && !managed_cache.contains("pub(crate) struct ManagedUdpConnectionCacheKey"),
@@ -7206,7 +7206,7 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
             && !mieru_managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && !trojan_managed.contains("resume.cache_key(endpoint.server, endpoint.port, session_id)")
             && mieru_connector.contains("mieru::udp::connector_flow_from_resume")
-            && trojan_connector.contains("trojan::connector_flow_from_resume")
+            && trojan_connector.contains("trojan::udp::connector_flow_from_resume")
             && !mieru_connector.contains("resume.connector_flow(endpoint.server, endpoint.port, session_id)")
             && !trojan_connector.contains("resume.connector_flow(endpoint.server, endpoint.port, session_id)")
             && !mieru_connector.contains(".flow(endpoint.server, endpoint.port, session_id)")
@@ -8141,7 +8141,7 @@ fn trojan_udp_response_bridge_lives_outside_manager() {
             && !trojan_managed.contains("self.upstreams.insert(")
             && !trojan_managed.contains("spawn_trojan_response_bridge")
             && !trojan_managed.contains("spawn_response_bridge(\n")
-            && !trojan_managed.contains("impl ManagedUdpConnection for trojan::TrojanUdpFlowConnection")
+            && !trojan_managed.contains("impl ManagedUdpConnection for trojan::udp::TrojanUdpFlowConnection")
             && !trojan_managed.contains("managed_packet_udp_connection")
             && connector.contains("managed_packet_udp_connection")
             && !trojan_managed.contains("spawn_response_bridge")
@@ -8242,7 +8242,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && !adapter.contains("TrojanUdpFlowConfig::new")
             && !adapter.contains(".flow_resume(false)")
             && !adapter.contains(".flow_resume(true)")
-            && adapter_flow.contains("trojan::udp_flow_resume_from_config")
+            && adapter_flow.contains("trojan::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("TrojanUdpFlowConfig::new")
             && !adapter_flow.contains(".flow_resume(request.relay_chain)")
             && protocol_outbound.contains("struct TrojanUdpFlowResume")
@@ -8306,7 +8306,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     assert!(
         snapshot.contains("resume: ManagedUdpFlowResume")
             && snapshot.contains("inner: Arc<dyn ManagedUdpFlowResumeObject>")
-            && !snapshot.contains("Trojan(trojan::TrojanUdpFlowResume)")
+            && !snapshot.contains("Trojan(trojan::udp::TrojanUdpFlowResume)")
             && !snapshot.contains("password: String")
             && !snapshot.contains("client_fingerprint: Option<String>")
             && !snapshot.contains("relay_chain: bool"),
@@ -8360,7 +8360,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     assert!(
         !managed.contains("resume.flow_cache_key(")
             && !connector.contains("resume.flow_cache_key(")
-            && connector.contains("trojan::connector_flow_from_resume")
+            && connector.contains("trojan::udp::connector_flow_from_resume")
             && !connector.contains("resume.connector_flow(endpoint.server, endpoint.port, session_id)")
             && !connector.contains(".flow(endpoint.server, endpoint.port, session_id)")
             && !connector.contains("resume.flow_requirement().requires_relay_upstream()")
@@ -8384,9 +8384,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && !managed.contains("crate::outbound::trojan::open_udp_tls_stream")
             && connector.contains("crate::outbound::trojan::open_udp_tls_stream")
             && !manager_stream.exists()
-            && !managed.contains("trojan::establish_udp_flow_with_resume")
-            && connector.contains("trojan::establish_udp_flow_with_resume")
-            && !managed.contains("trojan::TrojanUdpFlowIo")
+            && !managed.contains("trojan::udp::establish_udp_flow_with_resume")
+            && connector.contains("trojan::udp::establish_udp_flow_with_resume")
+            && !managed.contains("trojan::udp::TrojanUdpFlowIo")
             && !managed.contains(".establish_with_resume(")
             && protocol_outbound.contains("pub async fn establish_with_resume")
             && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
@@ -8420,9 +8420,9 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         "establish_udp_packet_tunnel",
         "TrojanUdpFlowIo",
         ".establish_with_resume(",
-        "trojan::spawn_udp_flow",
+        "trojan::udp::spawn_udp_flow",
         "TrojanUdpPacket {",
-        "trojan::TrojanUdpPacket",
+        "trojan::udp::TrojanUdpPacket",
     ] {
         assert!(
             !managed.contains(forbidden)
@@ -8431,7 +8431,7 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             "Trojan managed UDP glue should delegate Trojan packet framing to protocols/trojan helpers; found `{forbidden}`"
         );
     }
-    for forbidden in ["TrojanUdpPacket {", "trojan::TrojanUdpPacket"] {
+    for forbidden in ["TrojanUdpPacket {", "trojan::udp::TrojanUdpPacket"] {
         assert!(
             !managed.contains(forbidden)
                 && !connector.contains(forbidden)
@@ -8457,11 +8457,11 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
         );
     }
     assert!(
-        !managed.contains("trojan::establish_udp_flow_with_resume")
-            && connector.contains("trojan::establish_udp_flow_with_resume")
-            && !managed.contains("trojan::TrojanUdpFlowConnection")
-            && connector.contains("trojan::TrojanUdpFlowConnection")
-            && !managed.contains("trojan::TrojanUdpFlowSession")
+        !managed.contains("trojan::udp::establish_udp_flow_with_resume")
+            && connector.contains("trojan::udp::establish_udp_flow_with_resume")
+            && !managed.contains("trojan::udp::TrojanUdpFlowConnection")
+            && connector.contains("trojan::udp::TrojanUdpFlowConnection")
+            && !managed.contains("trojan::udp::TrojanUdpFlowSession")
             && !managed.contains("tokio::io::split")
             && !managed.contains("tokio::spawn")
             && !managed.contains(".write_flow_packet(")
@@ -8469,9 +8469,9 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && !managed.contains("&mut send_stream")
             && !managed.contains(".read_flow_packet(")
             && !managed.contains("&mut recv_stream")
-            && !managed.contains("trojan::TrojanUdpFlowSession::new")
-            && !managed.contains("trojan::TrojanUdpFlowSender")
-            && !managed.contains("trojan::TrojanUdpFlowResponses")
+            && !managed.contains("trojan::udp::TrojanUdpFlowSession::new")
+            && !managed.contains("trojan::udp::TrojanUdpFlowSender")
+            && !managed.contains("trojan::udp::TrojanUdpFlowResponses")
             && !managed.contains("broadcast::Sender<UdpFlowPacket>")
             && !managed.contains("mpsc::Sender<UdpFlowPacket>")
             && protocol_outbound.contains("pub fn spawn_udp_flow")
@@ -8763,9 +8763,9 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
         "self.upstreams.insert(",
         "entry.spawn_response_bridge(",
         "TrojanUdpPacket {",
-        "trojan::TrojanUdpPacket",
+        "trojan::udp::TrojanUdpPacket",
         "TrojanUdpFlowIo",
-        "trojan::spawn_udp_flow",
+        "trojan::udp::spawn_udp_flow",
         "TrojanUdpFlowSession::new",
         "mpsc::Sender<UdpFlowPacket>",
         "broadcast::Sender<UdpFlowPacket>",
@@ -8783,9 +8783,9 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
     assert!(
         managed.contains("ManagedStreamFlowManager::new")
             && managed.contains("connector::TrojanManagedStreamConnector")
-            && !managed.contains("impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume>")
-            && connector.contains("impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume>")
-            && connector.contains("trojan::connector_flow_from_resume")
+            && !managed.contains("impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume>")
+            && connector.contains("impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume>")
+            && connector.contains("trojan::udp::connector_flow_from_resume")
             && !connector.contains("resume.connector_flow(endpoint.server, endpoint.port, session_id)")
             && !connector.contains(".flow(endpoint.server, endpoint.port, session_id)")
             && !connector.contains("resume.flow_requirement().requires_relay_upstream()")
@@ -8797,7 +8797,7 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
             && !connector.contains("resume.flow_requires_relay_upstream()")
             && connector.contains("crate::outbound::trojan::open_udp_tls_stream")
             && connector.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
-            && connector.contains("trojan::establish_udp_flow_with_resume")
+            && connector.contains("trojan::udp::establish_udp_flow_with_resume")
             && connector.contains("managed_packet_udp_connection")
             && connector.contains("impl ManagedPacketUdpSender for TrojanManagedUdpSender")
             && stream_manager.contains("ManagedUdpConnectionCache")
@@ -8820,7 +8820,7 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
             && !protocol_outbound.contains("pub async fn open_udp_flow")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("trojan::udp_flow_packet")
-            && !transport.contains("trojan::TrojanUdpFlowIo"),
+            && !transport.contains("trojan::udp::TrojanUdpFlowIo"),
         "Trojan UDP packet conversion and flow channels should stay protocol-owned and out of zero-transport"
     );
 }
@@ -10966,7 +10966,35 @@ fn protocol_crate_roots_do_not_reexport_udp_manager_internals() {
                 "ShadowsocksUdpLeafKey,",
             ][..],
         ),
-        ("trojan", &["TrojanUdpFlowStore,"][..]),
+        (
+            "trojan",
+            &[
+                "TrojanInboundUdpCodec",
+                "TrojanInboundUdpDispatchParts",
+                "TrojanInboundUdpRequest",
+                "TrojanInboundUdpSession",
+                "TrojanUdpConnectorFlow",
+                "TrojanUdpFlowConfig",
+                "TrojanUdpFlowConnection",
+                "TrojanUdpFlowHandle",
+                "TrojanUdpFlowIo",
+                "TrojanUdpFlowResponseReceiver",
+                "TrojanUdpFlowResume",
+                "TrojanUdpFlowSession",
+                "TrojanUdpFlowSessions",
+                "TrojanUdpFlowStore",
+                "TrojanUdpPacket",
+                "TrojanUdpPacketTunnelTarget",
+                "TrojanUdpTlsProfile",
+                "TrojanUdpTlsProfileSpec",
+                "build_udp_request",
+                "connector_flow_from_resume",
+                "establish_udp_flow_with_resume",
+                "establish_udp_packet_tunnel",
+                "spawn_udp_flow",
+                "udp_flow_resume_from_config",
+            ][..],
+        ),
         (
             "mieru",
             &[

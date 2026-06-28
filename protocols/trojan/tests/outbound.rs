@@ -2,10 +2,8 @@
 
 use std::io;
 
-use trojan::{
-    TrojanInboundUdpSession, TrojanOutbound, TrojanUdpPacket, TrojanUdpPacketTunnelTarget, CMD_TCP,
-    CMD_UDP, CRLF, PASSWORD_HASH_LEN,
-};
+use trojan::udp::{TrojanInboundUdpSession, TrojanUdpPacket, TrojanUdpPacketTunnelTarget};
+use trojan::{TrojanOutbound, CMD_TCP, CMD_UDP, CRLF, PASSWORD_HASH_LEN};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, UdpPacketStreamFraming, UdpPacketTunnelProtocol};
 

@@ -78,7 +78,7 @@ async fn start_with_carrier(
     else {
         return Err(unreachable_udp_leaf(request.adapter.name(), request.leaf));
     };
-    let resume = trojan::udp_flow_resume_from_config(
+    let resume = trojan::udp::udp_flow_resume_from_config(
         password,
         *sni,
         *insecure,
