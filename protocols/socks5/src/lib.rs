@@ -9,10 +9,7 @@ mod outbound;
 mod shared;
 pub mod udp;
 
-pub use inbound::{
-    NoSocks5PasswordAuth, Socks5Inbound, Socks5PasswordAuth, Socks5Request,
-    Socks5UdpAssociateRequest,
-};
+pub use inbound::{NoSocks5PasswordAuth, Socks5Inbound, Socks5PasswordAuth, Socks5Request};
 pub use metadata::Socks5Protocol;
 pub use outbound::{
     Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth, Socks5TcpTunnelTarget,

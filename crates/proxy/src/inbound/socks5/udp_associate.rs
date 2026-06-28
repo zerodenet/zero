@@ -7,7 +7,7 @@ mod relay_socket;
 mod setup;
 mod upstream_response;
 
-use socks5::Socks5UdpAssociateRequest;
+use socks5::udp::Socks5UdpAssociateRequest;
 use std::net::SocketAddr;
 use tokio::select;
 use zero_traits::AsyncSocket;

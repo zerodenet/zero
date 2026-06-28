@@ -9,6 +9,7 @@ use crate::shared::{
     encode_udp_associate_response_to_client,
 };
 
+pub use crate::inbound::Socks5UdpAssociateRequest;
 pub use crate::outbound::{
     Socks5UdpAssociationSend, Socks5UdpFlowResume, Socks5UdpFlowSpec, Socks5UdpRelayTarget,
 };

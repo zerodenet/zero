@@ -11028,6 +11028,7 @@ fn protocol_crate_roots_do_not_reexport_udp_manager_internals() {
                 "Socks5InboundUdpResponseFrame",
                 "Socks5InboundUdpResponseKey",
                 "Socks5InboundUdpSession",
+                "Socks5UdpAssociateRequest",
                 "Socks5OwnedUdpAssociationConfig",
                 "Socks5UdpAssociation",
                 "Socks5UdpAssociationConfig",
