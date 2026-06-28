@@ -10,9 +10,17 @@ use crate::runtime::udp_flow::managed::{
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use zero_core::Address;
 use zero_engine::EngineError;
-use zero_transport::ShadowsocksUdpSocketFlow;
+use zero_transport::shadowsocks_transport::{self, ShadowsocksUdpSocketFlow};
 
 struct ShadowsocksManagedDatagramConnector;
+
+impl crate::runtime::udp_flow::managed::ManagedDatagramSocketConnectorFlowBuild
+    for shadowsocks::udp::ShadowsocksUdpSocketFlowSpec
+{
+    fn into_cache_key(self) -> String {
+        self.into_cache_key()
+    }
+}
 
 pub(super) fn handler() -> Box<dyn ManagedDatagramFlowHandler> {
     Box::new(ManagedDatagramSocketFlowManager::new(
@@ -59,9 +67,7 @@ impl ManagedDatagramSocketFlowConnector<shadowsocks::udp::ShadowsocksUdpFlowResu
                 "failed to resolve shadowsocks udp upstream",
             )
             .await?;
-        let flow = Arc::new(
-            crate::outbound::shadowsocks::establish_udp_socket_flow(target_addr, resume).await?,
-        );
+        let flow = Arc::new(establish_udp_socket_flow(target_addr, resume).await?);
         Ok(managed_datagram_connection(
             Arc::new(ShadowsocksDatagramSender { flow: flow.clone() }),
             flow.subscribe(),
@@ -84,4 +90,15 @@ impl ManagedDatagramSender for ShadowsocksDatagramSender {
     ) -> Result<(), EngineError> {
         self.flow.send_datagram(target, port, payload).await
     }
+}
+
+async fn establish_udp_socket_flow(
+    target_addr: std::net::SocketAddr,
+    resume: shadowsocks::udp::ShadowsocksUdpFlowResume,
+) -> Result<ShadowsocksUdpSocketFlow, EngineError> {
+    shadowsocks_transport::establish_shadowsocks_udp_socket_flow(
+        target_addr,
+        std::sync::Arc::new(resume.into_managed_socket_flow_codec()),
+    )
+    .await
 }

@@ -345,14 +345,7 @@ fn direct_udp_helpers_do_not_live_in_outbound_facade() {
 fn outbound_protocol_helpers_are_crate_private() {
     let outbound_root = read("src/outbound/mod.rs");
 
-    for protocol in [
-        "hysteria2",
-        "mieru",
-        "shadowsocks",
-        "trojan",
-        "vless",
-        "vmess",
-    ] {
+    for protocol in ["hysteria2", "mieru", "trojan", "vless", "vmess"] {
         assert!(
             !outbound_root.contains(&format!("pub mod {protocol};")),
             "src/outbound/mod.rs should not expose `{protocol}` helpers as public modules"
@@ -367,6 +360,10 @@ fn outbound_protocol_helpers_are_crate_private() {
         !outbound_root.contains("socks5"),
         "SOCKS5 outbound protocol glue should not return to src/outbound/mod.rs"
     );
+    assert!(
+        !outbound_root.contains("shadowsocks"),
+        "Shadowsocks outbound protocol glue should not return to src/outbound/mod.rs"
+    );
 }
 
 #[test]
@@ -376,7 +373,6 @@ fn outbound_root_is_facade_only() {
     for expected in [
         "pub(crate) mod hysteria2;",
         "pub(crate) mod mieru;",
-        "pub(crate) mod shadowsocks;",
         "pub(crate) mod trojan;",
         "pub(crate) mod vless;",
         "pub(crate) mod vmess;",
@@ -1726,8 +1722,6 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
         (
             "shadowsocks",
             &[
-                "crate::outbound::shadowsocks::connect_tcp",
-                "crate::outbound::shadowsocks::apply_tcp_hop",
                 "connect_upstream_shadowsocks",
                 "EstablishedTcpOutbound::Shadowsocks",
             ],
@@ -1789,8 +1783,6 @@ fn outbound_tcp_helpers_are_called_only_by_adapter_tcp_modules() {
         "crate::outbound::hysteria2::connect_tcp",
         "crate::outbound::mieru::connect_tcp",
         "crate::outbound::mieru::apply_tcp_hop",
-        "crate::outbound::shadowsocks::connect_tcp",
-        "crate::outbound::shadowsocks::apply_tcp_hop",
         "crate::outbound::trojan::connect_tcp",
         "crate::outbound::trojan::apply_tcp_hop",
         "crate::outbound::vless::connect_tcp",
@@ -1847,37 +1839,30 @@ fn trojan_tcp_connect_uses_request_model() {
 
 #[test]
 fn shadowsocks_tcp_connect_uses_request_model() {
-    let outbound = read("src/outbound/shadowsocks.rs");
+    let outbound = manifest_dir().join("src/outbound/shadowsocks.rs");
     let adapter = read("src/adapters/shadowsocks/tcp.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
 
     assert!(
-        !outbound.contains("#[allow(clippy::too_many_arguments)]"),
-        "Shadowsocks TCP connect should not need a too_many_arguments allowance"
+        !outbound.exists(),
+        "Shadowsocks should not need a protocol-named proxy outbound module; TCP glue lives in adapters/shadowsocks/tcp.rs and protocol session setup lives in protocols/shadowsocks"
     );
     assert!(
-        outbound.contains("struct ShadowsocksTcpConnectRequest")
-            && outbound.contains("request: ShadowsocksTcpConnectRequest<'_>"),
-        "Shadowsocks TCP connect should use ShadowsocksTcpConnectRequest"
-    );
-    assert!(
-        adapter.contains("ShadowsocksTcpConnectRequest {"),
-        "Shadowsocks adapter TCP module should pass ShadowsocksTcpConnectRequest"
-    );
-    assert!(
-        !outbound.contains("CipherKind::from_str"),
-        "Shadowsocks outbound TCP helper should receive a protocol-built TCP config"
+        adapter.contains("async fn connect_tcp(")
+            && adapter.contains("async fn apply_tcp_hop(")
+            && adapter.contains("ShadowsocksTcpConnectConfig::from_config"),
+        "Shadowsocks adapter TCP module should own proxy glue while using protocol-built TCP config"
     );
     assert!(
         !adapter.contains("CipherKind::from_str")
             && !adapter.contains("shadowsocks::CipherKind")
             && adapter.contains("ShadowsocksTcpConnectConfig::from_config")
-            && outbound.contains("config: shadowsocks::ShadowsocksTcpConnectConfig")
-            && !outbound.contains("cipher: shadowsocks::CipherKind")
-            && !outbound.contains("ShadowsocksTcpTarget {")
-            && outbound.contains("config.tcp_target(session)")
+            && adapter.contains("config: shadowsocks::ShadowsocksTcpConnectConfig")
+            && !adapter.contains("cipher: shadowsocks::CipherKind")
+            && !adapter.contains("ShadowsocksTcpTarget {")
+            && adapter.contains("config.tcp_target(session)")
             && protocol_outbound.contains("pub struct ShadowsocksTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config")
             && protocol_outbound.contains("CipherKind::from_str")
@@ -9613,7 +9598,7 @@ fn h2_udp_establish_logic_lives_outside_manager() {
 #[test]
 fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let managed = read("src/adapters/shadowsocks/udp/managed.rs");
-    let outbound = read("src/outbound/shadowsocks.rs");
+    let outbound = manifest_dir().join("src/outbound/shadowsocks.rs");
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let adapter_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
@@ -9635,14 +9620,16 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
         "ShadowsocksUdpDecodeContext",
         "ShadowsocksUdpPacket",
         "resume.managed_socket_flow().codec()",
-        "establish_shadowsocks_udp_socket_flow",
-        "shadowsocks_transport::",
     ] {
         assert!(
             !managed.contains(forbidden),
             "Shadowsocks UDP managed glue should not own datagram codec details; found `{forbidden}`"
         );
     }
+    assert!(
+        !outbound.exists(),
+        "Shadowsocks UDP socket flow glue should not require src/outbound/shadowsocks.rs"
+    );
     for removed in [
         "src/adapters/shadowsocks/udp/manager.rs",
         "src/adapters/shadowsocks/udp/manager/model.rs",
@@ -9678,8 +9665,9 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
             && !adapter_packet_path.contains("datagram.cache_key()")
             && !adapter_packet_path.contains("datagram.codec()")
-            && outbound.contains("let (tag, server, port, cache_key, codec) = self.into_parts();")
-            && !outbound.contains("self.codec()")
+            && adapter_packet_path
+                .contains("let (tag, server, port, cache_key, codec) = self.into_parts();")
+            && !adapter_packet_path.contains("self.codec()")
             && !adapter_packet_path.contains("datagram.tag()")
             && !adapter_packet_path.contains("datagram.server()")
             && !adapter_packet_path.contains("datagram.port()")
@@ -9722,9 +9710,9 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && transport.contains("send_packet(&self, packet: UdpFlowPacket)")
             && transport.contains("pub async fn send_datagram(")
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
-            && outbound.contains("pub(crate) async fn establish_udp_socket_flow")
-            && outbound.contains("resume.into_managed_socket_flow_codec()")
-            && !outbound.contains("resume.managed_socket_flow().codec()")
+            && managed.contains("async fn establish_udp_socket_flow")
+            && managed.contains("resume.into_managed_socket_flow_codec()")
+            && !managed.contains("resume.managed_socket_flow().codec()")
             && !transport.contains("shadowsocks::")
             && !transport_manifest.contains("dep:shadowsocks")
             && !transport_manifest.contains("shadowsocks = { path = \"../../protocols/shadowsocks\"")
@@ -9887,7 +9875,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let flows = read("src/runtime/udp_flow/managed/flow.rs");
     let managed = read("src/adapters/shadowsocks/udp/managed.rs");
-    let outbound = read("src/outbound/shadowsocks.rs");
+    let outbound = manifest_dir().join("src/outbound/shadowsocks.rs");
     let generic_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let snapshot = read("src/runtime/udp_flow/managed/flow.rs");
@@ -9942,12 +9930,11 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && !managed.contains("flow.cache_key()")
             && !managed.contains("resume.managed_socket_flow()")
             && !managed.contains("resume.managed_socket_flow().codec()")
-            && !managed.contains("establish_shadowsocks_udp_socket_flow")
-            && !managed.contains("shadowsocks_transport::")
-            && managed.contains("outbound::shadowsocks::establish_udp_socket_flow")
-            && outbound.contains("pub(crate) async fn establish_udp_socket_flow")
-            && outbound.contains("resume.into_managed_socket_flow_codec()")
-            && !outbound.contains("resume.managed_socket_flow().codec()")
+            && managed.contains("async fn establish_udp_socket_flow")
+            && managed.contains("shadowsocks_transport::establish_shadowsocks_udp_socket_flow")
+            && managed.contains("resume.into_managed_socket_flow_codec()")
+            && !managed.contains("outbound::shadowsocks::establish_udp_socket_flow")
+            && !outbound.exists()
             && !managed.contains("resume.socket_flow().")
             && !managed.contains("resume.flow_cache_key()")
             && !managed.contains("resume.socket_flow_codec()")
@@ -10070,7 +10057,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let traits = read("src/runtime/udp_flow/packet_path.rs");
     let key = read("src/runtime/udp_flow/packet_path_chain/key.rs");
     let outbound = read("src/runtime/udp_flow/outbound.rs");
-    let shadowsocks_outbound = read("src/outbound/shadowsocks.rs");
+    let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
     let carrier_snapshot = read("src/runtime/udp_flow/packet_path.rs");
     let snapshot = read("src/runtime/udp_flow/packet_path_chain/snapshot.rs");
     let forward = read("src/runtime/udp_flow/managed/datagram.rs");
@@ -10123,9 +10110,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
             && !adapter_packet_path.contains("datagram.cache_key()")
             && !adapter_packet_path.contains("datagram.codec()")
-            && shadowsocks_outbound
+            && shadowsocks_packet_path
                 .contains("let (tag, server, port, cache_key, codec) = self.into_parts();")
-            && !shadowsocks_outbound.contains("self.codec()")
+            && !shadowsocks_packet_path.contains("self.codec()")
             && !adapter_packet_path.contains("datagram.tag()")
             && !adapter_packet_path.contains("datagram.server()")
             && !adapter_packet_path.contains("datagram.port()")
@@ -10233,7 +10220,8 @@ fn udp_build_traits_consume_protocol_parts() {
     let datagram_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let packet_path = read("src/runtime/udp_flow/packet_path.rs");
     let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
-    let shadowsocks_outbound = read("src/outbound/shadowsocks.rs");
+    let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
+    let shadowsocks_managed = read("src/adapters/shadowsocks/udp/managed.rs");
     let hysteria2_outbound = read("src/outbound/hysteria2.rs");
     let trojan_outbound = read("src/outbound/trojan.rs");
     let mieru_outbound = read("src/outbound/mieru.rs");
@@ -10301,11 +10289,11 @@ fn udp_build_traits_consume_protocol_parts() {
             && !datagram_manager.contains("fn cache_key(self) -> String")
             && !datagram_manager.contains(".cache_key()")
             && hysteria2_outbound.contains("fn into_cache_key(self) -> String")
-            && shadowsocks_outbound.contains("fn into_cache_key(self) -> String")
+            && shadowsocks_managed.contains("fn into_cache_key(self) -> String")
             && hysteria2_outbound.contains("self.into_cache_key()")
-            && shadowsocks_outbound.contains("self.into_cache_key()")
+            && shadowsocks_managed.contains("self.into_cache_key()")
             && !hysteria2_outbound.contains("self.cache_key()")
-            && !shadowsocks_outbound.contains("self.cache_key()"),
+            && !shadowsocks_managed.contains("self.cache_key()"),
         "managed datagram connector flow builds should consume cache identity instead of exposing cache-key getters to proxy"
     );
     assert!(
@@ -10314,12 +10302,12 @@ fn udp_build_traits_consume_protocol_parts() {
             && !packet_path.contains("fn server(&self) -> &str;")
             && !packet_path.contains("fn port(&self) -> u16;")
             && socks5_packet_path.contains("self.into_parts()")
-            && shadowsocks_outbound.contains("self.into_parts()")
+            && shadowsocks_packet_path.contains("self.into_parts()")
             && hysteria2_outbound.contains("self.into_parts()")
             && !socks5_packet_path.contains("self.server()")
             && !socks5_packet_path.contains("self.port()")
-            && !shadowsocks_outbound.contains("self.server()")
-            && !shadowsocks_outbound.contains("self.port()")
+            && !shadowsocks_packet_path.contains("self.server()")
+            && !shadowsocks_packet_path.contains("self.port()")
             && !hysteria2_outbound.contains("self.server()")
             && !hysteria2_outbound.contains("self.port()")
             && socks5_shared.contains("pub fn into_parts(self) -> (String, String, u16)")
@@ -10374,9 +10362,9 @@ fn udp_build_traits_consume_protocol_parts() {
                 .contains("let (tag, server, port, cache_key, codec) = build.into_parts();")
             && !packet_path.contains("fn tag(&self) -> &str;")
             && !packet_path.contains("fn cache_key(&self) -> String;")
-            && shadowsocks_outbound
+            && shadowsocks_packet_path
                 .contains("let (tag, server, port, cache_key, codec) = self.into_parts();")
-            && !shadowsocks_outbound.contains("self.into_codec()")
+            && !shadowsocks_packet_path.contains("self.into_codec()")
             && shadowsocks_protocol.contains("pub fn into_parts(")
             && shadowsocks_protocol.contains("self.tag, self.server, self.port, self.cache_key"),
         "packet-path datagram sources should consume protocol-built source parts and codec in one step"

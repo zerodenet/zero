@@ -2,8 +2,6 @@
 pub(crate) mod hysteria2;
 #[cfg(feature = "mieru")]
 pub(crate) mod mieru;
-#[cfg(feature = "shadowsocks")]
-pub(crate) mod shadowsocks;
 #[cfg(feature = "trojan")]
 pub(crate) mod trojan;
 #[cfg(feature = "vless")]
