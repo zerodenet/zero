@@ -110,7 +110,7 @@ impl Hysteria2Connector {
     }
 }
 
-pub(crate) async fn open_udp_packet_path_connection(
+async fn open_udp_profile_connection(
     server: &str,
     port: u16,
     connector_profile: hysteria2::Hysteria2UdpConnectorProfile,
@@ -131,8 +131,7 @@ pub(crate) async fn open_udp_packet_path_build(
 > {
     let connector_profile = build.connector_profile();
     let codec = std::sync::Arc::new(build.codec());
-    let conn =
-        open_udp_packet_path_connection(build.server(), build.port(), connector_profile).await?;
+    let conn = open_udp_profile_connection(build.server(), build.port(), connector_profile).await?;
     Ok((conn, codec))
 }
 
@@ -165,13 +164,7 @@ pub(crate) async fn establish_udp_flow_session(
         .connector_flow(endpoint.server, endpoint.port)
         .connector_profile();
     let conn = std::sync::Arc::new(
-        Hysteria2Connector::from_udp_profile(
-            endpoint.server,
-            endpoint.port,
-            connector_profile.clone(),
-        )
-        .connect_raw_with_udp_profile(&connector_profile)
-        .await?,
+        open_udp_profile_connection(endpoint.server, endpoint.port, connector_profile).await?,
     );
     Ok(hysteria2::start_udp_flow_with_initial_packet(
         conn,

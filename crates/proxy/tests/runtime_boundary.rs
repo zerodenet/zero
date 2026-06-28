@@ -8841,6 +8841,9 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         .expect("read hysteria2 protocol lib source");
     let adapter_flow = read("src/adapters/hysteria2/udp/flow.rs");
     let adapter_packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
+    let profile_connector_uses = outbound
+        .matches("Hysteria2Connector::from_udp_profile")
+        .count();
 
     for forbidden in [
         "UdpDatagramFraming",
@@ -9097,6 +9100,9 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && outbound.contains(".connector_flow(endpoint.server, endpoint.port)")
             && outbound.contains(".connector_profile()")
             && !outbound.contains("resume.connector_profile()")
+            && outbound.contains("async fn open_udp_profile_connection")
+            && profile_connector_uses == 1
+            && !outbound.contains("pub(crate) async fn open_udp_packet_path_connection")
             && outbound.contains("connect_raw_with_udp_profile")
             && !outbound.contains("profile.password()")
             && !transport.contains("request.resume.connector_profile()"),
@@ -9115,6 +9121,10 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
         .expect("read hysteria2 protocol udp source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
         .expect("read hysteria2 protocol lib source");
+    let outbound = read("src/outbound/hysteria2.rs");
+    let profile_connector_uses = outbound
+        .matches("Hysteria2Connector::from_udp_profile")
+        .count();
 
     assert!(
         !adapter.contains("hysteria2::udp_flow_codec")
@@ -9164,11 +9174,15 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
             && transport.contains("conn: Arc<quinn::Connection>")
             && !adapter.contains("outbound::hysteria2::open_udp_packet_path_connection")
+            && !adapter_packet_path.contains("outbound::hysteria2::open_udp_packet_path_connection")
             && adapter_packet_path.contains("outbound::hysteria2::open_udp_packet_path_build")
             && !adapter_packet_path.contains("build.server()")
             && !adapter_packet_path.contains("build.port()")
             && !adapter_packet_path.contains("build.connector_profile()")
             && !adapter_packet_path.contains("build.codec()")
+            && outbound.contains("async fn open_udp_profile_connection")
+            && profile_connector_uses == 1
+            && !outbound.contains("pub(crate) async fn open_udp_packet_path_connection")
             && !adapter.contains("Hysteria2Connector")
             && !adapter.contains("connect_raw")
             && !adapter_packet_path.contains("Hysteria2Connector")
