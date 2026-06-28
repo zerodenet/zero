@@ -148,6 +148,22 @@ impl ManagedUdpConnectionCache {
         )
         .await
     }
+
+    pub(crate) async fn send_existing_key(
+        &self,
+        key: impl Into<String>,
+        chain_tasks: &mut tokio::task::JoinSet<ChainTask>,
+        session_id: u64,
+        packet: UdpPacketRef<'_>,
+    ) -> Result<Option<usize>, EngineError> {
+        let key = ManagedUdpConnectionCacheKey::new(key);
+        let Some(connection) = self.entries.get(&key) else {
+            return Ok(None);
+        };
+        send_managed_udp_connection(connection, chain_tasks, session_id, packet)
+            .await
+            .map(Some)
+    }
 }
 
 async fn send_managed_udp_connection(

@@ -141,6 +141,18 @@ where
         let connector_flow = self.connector.connector_flow(&resume, endpoint, session_id);
         let (cache_key, requires_relay_upstream) = connector_flow.into_parts();
         if requires_relay_upstream {
+            if let Some(sent) = self
+                .upstreams
+                .send_existing_key(cache_key, ctx.chain_tasks, session_id, packet_ref)
+                .await
+                .map_err(|error| FlowFailure {
+                    stage: self.relay_send_stage,
+                    error,
+                    upstream: Some(endpoint.upstream()),
+                })?
+            {
+                return Ok(sent);
+            }
             return Err(FlowFailure {
                 stage: self.relay_upstream_stage,
                 error: EngineError::Io(std::io::Error::new(

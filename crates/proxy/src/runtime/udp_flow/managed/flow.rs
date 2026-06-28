@@ -95,7 +95,7 @@ impl ManagedUdpFlowResume {
     where
         T: Any,
     {
-        self.inner.as_any().downcast_ref::<T>()
+        self.inner.as_ref().as_any().downcast_ref::<T>()
     }
 
     pub(crate) fn cloned<T>(self) -> Option<T>

@@ -28,7 +28,7 @@ pub(super) async fn start(
     else {
         return Err(unreachable_udp_leaf(adapter.name(), leaf));
     };
-    let resume =
+    let resume: shadowsocks::udp::ShadowsocksUdpFlowResume =
         shadowsocks::udp::udp_flow_resume_from_config(tag, server, *port, cipher, password)
             .map_err(|error| FlowFailure {
                 stage: "udp_shadowsocks_resume",
