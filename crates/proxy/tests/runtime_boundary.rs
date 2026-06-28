@@ -9459,6 +9459,7 @@ fn h2_udp_establish_logic_lives_outside_manager() {
 #[test]
 fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let outbound = read("src/outbound/shadowsocks.rs");
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let adapter_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
@@ -9479,6 +9480,9 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
         "ShadowsocksUdpPacketTarget",
         "ShadowsocksUdpDecodeContext",
         "ShadowsocksUdpPacket",
+        "resume.managed_socket_flow().codec()",
+        "establish_shadowsocks_udp_socket_flow",
+        "shadowsocks_transport::",
     ] {
         assert!(
             !managed.contains(forbidden),
@@ -9563,6 +9567,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && transport.contains("send_packet(&self, packet: UdpFlowPacket)")
             && transport.contains("pub async fn send_datagram(")
             && transport.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
+            && outbound.contains("pub(crate) async fn establish_udp_socket_flow")
+            && outbound.contains("resume.managed_socket_flow().codec()")
             && !transport.contains("shadowsocks::")
             && !transport_manifest.contains("dep:shadowsocks")
             && !transport_manifest.contains("shadowsocks = { path = \"../../protocols/shadowsocks\"")
@@ -9725,6 +9731,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let flows = read("src/runtime/udp_flow/managed/flow.rs");
     let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let outbound = read("src/outbound/shadowsocks.rs");
     let generic_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let snapshot = read("src/runtime/udp_flow/managed/flow.rs");
@@ -9775,7 +9782,12 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && managed.contains("managed_datagram_socket_connector_flow_from_build")
             && !managed.contains("ManagedDatagramSocketConnectorFlow::new")
             && !managed.contains("flow.cache_key()")
-            && managed.contains("resume.managed_socket_flow().codec()")
+            && !managed.contains("resume.managed_socket_flow().codec()")
+            && !managed.contains("establish_shadowsocks_udp_socket_flow")
+            && !managed.contains("shadowsocks_transport::")
+            && managed.contains("outbound::shadowsocks::establish_udp_socket_flow")
+            && outbound.contains("pub(crate) async fn establish_udp_socket_flow")
+            && outbound.contains("resume.managed_socket_flow().codec()")
             && !managed.contains("resume.socket_flow().")
             && !managed.contains("resume.flow_cache_key()")
             && !managed.contains("resume.socket_flow_codec()")

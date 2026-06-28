@@ -4,6 +4,8 @@
 //! so the runtime dispatches via registered TCP outbound capabilities. UDP datagram
 //! management lives in the Shadowsocks adapter UDP module.
 
+use std::net::SocketAddr;
+
 use zero_core::Session;
 use zero_engine::EngineError;
 use zero_traits::TcpSessionProtocol;
@@ -14,6 +16,7 @@ use crate::runtime::udp_flow::packet_path::{
 };
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
+use zero_transport::shadowsocks_transport::{self, ShadowsocksUdpSocketFlow};
 
 /// Establish a Shadowsocks TCP upstream: dial the server, run the AEAD
 /// session handshake, wrap the stream with the SS AEAD codec.
@@ -103,6 +106,17 @@ impl ManagedDatagramSocketConnectorFlowBuild for shadowsocks::ShadowsocksUdpSock
     fn cache_key(&self) -> String {
         self.cache_key()
     }
+}
+
+pub(crate) async fn establish_udp_socket_flow(
+    target_addr: SocketAddr,
+    resume: shadowsocks::ShadowsocksUdpFlowResume,
+) -> Result<ShadowsocksUdpSocketFlow, EngineError> {
+    shadowsocks_transport::establish_shadowsocks_udp_socket_flow(
+        target_addr,
+        std::sync::Arc::new(resume.managed_socket_flow().codec()),
+    )
+    .await
 }
 
 /// Wrap a relay stream with the Shadowsocks AEAD outbound codec.

@@ -10,7 +10,7 @@ use crate::runtime::udp_flow::managed::{
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use zero_core::Address;
 use zero_engine::EngineError;
-use zero_transport::shadowsocks_transport::{self, ShadowsocksUdpSocketFlow};
+use zero_transport::ShadowsocksUdpSocketFlow;
 
 struct ShadowsocksManagedDatagramConnector;
 
@@ -60,11 +60,7 @@ impl ManagedDatagramSocketFlowConnector<shadowsocks::ShadowsocksUdpFlowResume>
             )
             .await?;
         let flow = Arc::new(
-            shadowsocks_transport::establish_shadowsocks_udp_socket_flow(
-                target_addr,
-                Arc::new(resume.managed_socket_flow().codec()),
-            )
-            .await?,
+            crate::outbound::shadowsocks::establish_udp_socket_flow(target_addr, resume).await?,
         );
         Ok(managed_datagram_connection(
             Arc::new(ShadowsocksDatagramSender { flow: flow.clone() }),

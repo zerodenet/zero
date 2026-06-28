@@ -14,6 +14,8 @@ pub mod hysteria2_quic;
 pub mod quic;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks_transport;
+#[cfg(feature = "shadowsocks")]
+pub use shadowsocks_transport::ShadowsocksUdpSocketFlow;
 #[cfg(feature = "split_http")]
 pub mod split_http;
 #[cfg(feature = "tls")]
