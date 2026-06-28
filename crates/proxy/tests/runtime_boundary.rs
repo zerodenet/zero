@@ -3851,6 +3851,15 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         root.contains("vmess::read_mux_stream_frame"),
         "VMess inbound MUX runtime should call the protocol mux frame reader helper"
     );
+    assert!(
+        root.contains("vmess::VmessMuxFrameEncoder")
+            && root.contains("frame_encoder.end_stream")
+            && root.contains("frame_encoder.keep_stream")
+            && model.contains("frame_encoder: vmess::VmessMuxFrameEncoder")
+            && !root.contains("vmess::encode_mux_end_stream")
+            && !root.contains("vmess::encode_mux_keep_stream"),
+        "VMess inbound MUX runtime should use protocol-owned mux frame encoder helpers"
+    );
 }
 
 #[test]

@@ -325,6 +325,19 @@ pub fn encode_end_stream(session_id: u16) -> Result<Vec<u8>, Error> {
     encode_frame(session_id, MUX_STATUS_END, 0, None, &[])
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct VmessMuxFrameEncoder;
+
+impl VmessMuxFrameEncoder {
+    pub fn keep_stream(&self, session_id: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
+        encode_keep_stream(session_id, payload)
+    }
+
+    pub fn end_stream(&self, session_id: u16) -> Result<Vec<u8>, Error> {
+        encode_end_stream(session_id)
+    }
+}
+
 pub struct VmessMuxStream {
     session_id: u16,
     target: Address,
