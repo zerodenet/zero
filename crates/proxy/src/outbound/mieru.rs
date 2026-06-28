@@ -14,6 +14,7 @@ use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_traits::TcpSessionProtocol;
 
+use crate::runtime::udp_flow::managed::ManagedStreamConnectorFlowBuild;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
@@ -296,4 +297,14 @@ pub(crate) async fn apply_tcp_hop(
         .await
         .map_err(|e| EngineError::Io(io::Error::other(format!("mieru socks5: {e}"))))?;
     Ok(TcpRelayStream::new(mieru_stream))
+}
+
+impl ManagedStreamConnectorFlowBuild for mieru::MieruUdpConnectorFlow {
+    fn cache_key(&self) -> String {
+        self.cache_key()
+    }
+
+    fn requires_relay_upstream(&self) -> bool {
+        self.requires_relay_upstream()
+    }
 }

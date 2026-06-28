@@ -8,6 +8,7 @@ use zero_core::Session;
 use zero_engine::EngineError;
 
 use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_flow::managed::ManagedDatagramConnectorFlowBuild;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use crate::runtime::udp_flow::packet_path::{DatagramCodec, PacketPathCarrierDescriptorBuild};
 use crate::runtime::Proxy;
@@ -146,6 +147,12 @@ impl PacketPathCarrierDescriptorBuild for hysteria2::Hysteria2UdpPacketPathCarri
 
     fn port(&self) -> u16 {
         self.port()
+    }
+}
+
+impl ManagedDatagramConnectorFlowBuild for hysteria2::Hysteria2UdpConnectorFlow {
+    fn cache_key(&self) -> String {
+        self.cache_key()
     }
 }
 

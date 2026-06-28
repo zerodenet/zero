@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
-    managed_tuple_udp_connection, ManagedDatagramConnectorFlow, ManagedDatagramFlowConnector,
-    ManagedDatagramFlowHandler, ManagedDatagramFlowManager, ManagedTupleUdpSender,
-    SharedManagedUdpConnection,
+    managed_datagram_connector_flow_from_build, managed_tuple_udp_connection,
+    ManagedDatagramConnectorFlow, ManagedDatagramFlowConnector, ManagedDatagramFlowHandler,
+    ManagedDatagramFlowManager, ManagedTupleUdpSender, SharedManagedUdpConnection,
 };
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use zero_engine::EngineError;
@@ -32,7 +32,7 @@ impl ManagedDatagramFlowConnector<hysteria2::Hysteria2UdpFlowResume>
         endpoint: OutboundEndpoint<'_>,
     ) -> ManagedDatagramConnectorFlow {
         let flow = resume.connector_flow(endpoint.server, endpoint.port);
-        ManagedDatagramConnectorFlow::new(flow.cache_key())
+        managed_datagram_connector_flow_from_build(flow)
     }
 
     async fn establish(

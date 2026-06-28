@@ -11,6 +11,7 @@ use zero_engine::EngineError;
 use zero_traits::TcpTunnelProtocol;
 
 use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_flow::managed::ManagedStreamConnectorFlowBuild;
 use crate::runtime::Proxy;
 use crate::transport::{
     open_trojan_udp_tls_relay_stream, open_trojan_udp_tls_stream, MeteredStream, TcpRelayStream,
@@ -160,6 +161,16 @@ fn udp_tls_config(tls_profile: trojan::TrojanUdpTlsProfile) -> ClientTlsConfig {
         insecure: tls_profile.insecure(),
         alpn: Vec::new(),
         client_fingerprint: tls_profile.client_fingerprint().map(ToOwned::to_owned),
+    }
+}
+
+impl ManagedStreamConnectorFlowBuild for trojan::TrojanUdpConnectorFlow {
+    fn cache_key(&self) -> String {
+        self.cache_key()
+    }
+
+    fn requires_relay_upstream(&self) -> bool {
+        self.requires_relay_upstream()
     }
 }
 

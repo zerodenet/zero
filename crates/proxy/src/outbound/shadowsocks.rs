@@ -8,6 +8,7 @@ use zero_core::Session;
 use zero_engine::EngineError;
 use zero_traits::TcpSessionProtocol;
 
+use crate::runtime::udp_flow::managed::ManagedDatagramSocketConnectorFlowBuild;
 use crate::runtime::udp_flow::packet_path::{
     DatagramCodec, PacketPathCarrierDescriptorBuild, UdpDatagramSourceBuild,
 };
@@ -95,6 +96,12 @@ impl PacketPathCarrierDescriptorBuild for shadowsocks::ShadowsocksUdpPacketPathC
 
     fn port(&self) -> u16 {
         self.port()
+    }
+}
+
+impl ManagedDatagramSocketConnectorFlowBuild for shadowsocks::ShadowsocksUdpSocketFlowSpec {
+    fn cache_key(&self) -> String {
+        self.cache_key()
     }
 }
 

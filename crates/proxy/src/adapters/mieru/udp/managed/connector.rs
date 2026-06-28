@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
-    managed_tuple_udp_connection, ManagedStreamConnectorFlow, ManagedStreamFlowConnector,
-    ManagedTupleUdpSender, SharedManagedUdpConnection,
+    managed_stream_connector_flow_from_build, managed_tuple_udp_connection,
+    ManagedStreamConnectorFlow, ManagedStreamFlowConnector, ManagedTupleUdpSender,
+    SharedManagedUdpConnection,
 };
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -21,7 +22,7 @@ impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume> for MieruManagedStrea
         session_id: u64,
     ) -> ManagedStreamConnectorFlow {
         let flow = resume.connector_flow(endpoint.server, endpoint.port, session_id);
-        ManagedStreamConnectorFlow::new(flow.cache_key(), flow.requires_relay_upstream())
+        managed_stream_connector_flow_from_build(flow)
     }
 
     async fn establish_direct(

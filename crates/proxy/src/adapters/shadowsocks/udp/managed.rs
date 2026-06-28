@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
-    managed_datagram_connection, ManagedDatagramFlowHandler, ManagedDatagramSender,
-    ManagedDatagramSocketConnectorFlow, ManagedDatagramSocketFlowConnector,
-    ManagedDatagramSocketFlowManager, SharedManagedDatagramUdpConnection,
+    managed_datagram_connection, managed_datagram_socket_connector_flow_from_build,
+    ManagedDatagramFlowHandler, ManagedDatagramSender, ManagedDatagramSocketConnectorFlow,
+    ManagedDatagramSocketFlowConnector, ManagedDatagramSocketFlowManager,
+    SharedManagedDatagramUdpConnection,
 };
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use zero_core::Address;
@@ -33,7 +34,7 @@ impl ManagedDatagramSocketFlowConnector<shadowsocks::ShadowsocksUdpFlowResume>
         _endpoint: OutboundEndpoint<'_>,
     ) -> ManagedDatagramSocketConnectorFlow {
         let flow = resume.managed_socket_flow();
-        ManagedDatagramSocketConnectorFlow::new(flow.cache_key())
+        managed_datagram_socket_connector_flow_from_build(flow)
     }
 
     async fn establish(

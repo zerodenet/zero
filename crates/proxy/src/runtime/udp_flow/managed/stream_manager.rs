@@ -65,6 +65,17 @@ impl ManagedStreamConnectorFlow {
     }
 }
 
+pub(crate) trait ManagedStreamConnectorFlowBuild {
+    fn cache_key(&self) -> String;
+    fn requires_relay_upstream(&self) -> bool;
+}
+
+pub(crate) fn managed_stream_connector_flow_from_build(
+    build: impl ManagedStreamConnectorFlowBuild,
+) -> ManagedStreamConnectorFlow {
+    ManagedStreamConnectorFlow::new(build.cache_key(), build.requires_relay_upstream())
+}
+
 pub(crate) struct ManagedStreamFlowManager<T, C> {
     upstreams: ManagedUdpConnectionCache,
     connector: C,

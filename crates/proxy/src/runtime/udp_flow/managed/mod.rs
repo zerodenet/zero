@@ -19,15 +19,18 @@ pub(crate) use connection::{
 };
 pub(crate) use datagram::{managed_datagram_connection, ManagedDatagramSender};
 pub(crate) use datagram_manager::{
-    ManagedDatagramConnectorFlow, ManagedDatagramFlowConnector, ManagedDatagramFlowManager,
-    ManagedDatagramSocketConnectorFlow, ManagedDatagramSocketFlowConnector,
+    managed_datagram_connector_flow_from_build, managed_datagram_socket_connector_flow_from_build,
+    ManagedDatagramConnectorFlow, ManagedDatagramConnectorFlowBuild, ManagedDatagramFlowConnector,
+    ManagedDatagramFlowManager, ManagedDatagramSocketConnectorFlow,
+    ManagedDatagramSocketConnectorFlowBuild, ManagedDatagramSocketFlowConnector,
     ManagedDatagramSocketFlowManager,
 };
 pub(crate) use flow::{ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume};
 pub(crate) use model::{ManagedDatagramFlowHandler, ManagedStreamFlowHandler};
 pub(crate) use state::{ManagedUdpHandlers, ManagedUdpState};
 pub(crate) use stream_manager::{
-    ManagedStreamConnectorFlow, ManagedStreamFlowConnector, ManagedStreamFlowManager,
+    managed_stream_connector_flow_from_build, ManagedStreamConnectorFlow,
+    ManagedStreamConnectorFlowBuild, ManagedStreamFlowConnector, ManagedStreamFlowManager,
 };
 pub(crate) use stream_packet_manager::ManagedStreamPacketSender;
 pub(crate) use stream_sender::ManagedStreamFlowSender;
