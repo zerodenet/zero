@@ -9943,19 +9943,18 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && protocol_outbound.contains("pub fn flow_resume(&self)")
             && protocol_outbound.contains("pub fn udp_flow_resume_from_config(")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowResume")
-            && protocol_outbound.contains("struct ShadowsocksUdpCacheKey")
+            && !protocol_outbound.contains("struct ShadowsocksUdpCacheKey")
             && protocol_outbound.contains("pub struct ShadowsocksUdpSocketFlowSpec")
             && !socket_flow_spec_impl.contains("pub fn cache_key(&self)")
             && !socket_flow_spec_impl.contains("pub fn codec(&self)")
             && socket_flow_spec_impl.contains("pub fn into_cache_key")
             && socket_flow_spec_impl
                 .contains("pub fn into_codec(self) -> ShadowsocksDatagramCodec")
-            && protocol_outbound.contains("pub struct ShadowsocksUdpFlowStore")
-            && protocol_outbound.contains("pub struct ShadowsocksUdpFlowEntries")
-            && protocol_outbound.contains("fn socket_flow_cache_key(&self)")
             && protocol_outbound.contains("pub fn flow_cache_key(&self)")
             && !protocol_outbound.contains("pub struct ShadowsocksUdpCacheKey")
-            && !protocol_outbound.contains("pub fn socket_flow_cache_key(&self)")
+            && !protocol_outbound.contains("pub struct ShadowsocksUdpFlowStore")
+            && !protocol_outbound.contains("pub struct ShadowsocksUdpFlowEntries")
+            && !protocol_outbound.contains("socket_flow_cache_key")
             && protocol_outbound.contains("pub fn socket_flow_codec(&self)")
             && protocol_outbound.contains("pub fn managed_socket_flow(&self)")
             && protocol_outbound.contains("pub fn managed_socket_flow_from_resume(")
@@ -10915,6 +10914,44 @@ fn managed_udp_resume_variants_are_confined_to_managed_flow_model() {
             assert!(
                 !content.contains(forbidden),
                 "{source} should use ManagedUdpFlowResume constructors/accessors instead of matching variant `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
+fn protocol_crate_roots_do_not_reexport_udp_manager_internals() {
+    for (protocol, forbidden) in [
+        (
+            "hysteria2",
+            &[
+                "Hysteria2UdpFlowConfig,",
+                "Hysteria2UdpFlowIo,",
+                "Hysteria2UdpFlowPacket,",
+                "Hysteria2UdpFlowStore,",
+                "Hysteria2UdpPacket,",
+                "Hysteria2UdpPacketTarget,",
+            ][..],
+        ),
+        (
+            "shadowsocks",
+            &[
+                "ShadowsocksUdpFlowEntries,",
+                "ShadowsocksUdpFlowPacket,",
+                "ShadowsocksUdpFlowStore,",
+                "ShadowsocksUdpLeafKey,",
+            ][..],
+        ),
+        ("trojan", &["TrojanUdpFlowStore,"][..]),
+        ("mieru", &["MieruUdpFlowStore,"][..]),
+    ] {
+        let protocol_lib =
+            fs::read_to_string(repo_root().join(format!("protocols/{protocol}/src/lib.rs")))
+                .unwrap_or_else(|error| panic!("read protocols/{protocol}/src/lib.rs: {error}"));
+        for forbidden_item in forbidden {
+            assert!(
+                !protocol_lib.contains(forbidden_item),
+                "protocols/{protocol} crate root should not re-export UDP manager/internal model `{forbidden_item}`"
             );
         }
     }

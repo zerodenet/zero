@@ -3,7 +3,8 @@
 //! Migrated from the inline `#[cfg(test)] mod tests` in
 //! `protocols/hysteria2/src/udp.rs`.
 
-use hysteria2::{Hysteria2DatagramCodec, Hysteria2Outbound, Hysteria2UdpPacketTarget};
+use hysteria2::udp::Hysteria2UdpPacketTarget;
+use hysteria2::{Hysteria2DatagramCodec, Hysteria2Outbound};
 use zero_core::Address;
 use zero_traits::{DatagramCodec, UdpDatagramFraming};
 

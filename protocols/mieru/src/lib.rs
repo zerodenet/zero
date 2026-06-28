@@ -58,5 +58,4 @@ pub use udp::{
     connector_flow_from_resume, udp_flow_resume_from_config, MieruInboundUdpPacket,
     MieruInboundUdpRequest, MieruUdpAssociatePacket, MieruUdpAssociatePayload,
     MieruUdpConnectorFlow, MieruUdpFlowCodec, MieruUdpFlowConfig, MieruUdpFlowResume,
-    MieruUdpFlowStore,
 };

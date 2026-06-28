@@ -480,12 +480,6 @@ fn udp_flow_codec(
 }
 
 #[cfg(feature = "crypto")]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct ShadowsocksUdpCacheKey {
-    cache_key: alloc::string::String,
-}
-
-#[cfg(feature = "crypto")]
 #[derive(Debug, Clone)]
 pub struct ShadowsocksUdpSocketFlowSpec {
     cache_key: alloc::string::String,
@@ -500,66 +494,6 @@ impl ShadowsocksUdpSocketFlowSpec {
 
     pub fn into_codec(self) -> ShadowsocksDatagramCodec {
         self.codec
-    }
-}
-
-#[cfg(feature = "crypto")]
-pub struct ShadowsocksUdpFlowStore<T> {
-    entries: std::collections::HashMap<ShadowsocksUdpCacheKey, T>,
-}
-
-#[cfg(feature = "crypto")]
-impl<T> Default for ShadowsocksUdpFlowStore<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(feature = "crypto")]
-impl<T> ShadowsocksUdpFlowStore<T> {
-    pub fn new() -> Self {
-        Self {
-            entries: std::collections::HashMap::new(),
-        }
-    }
-
-    pub fn get(&self, resume: &ShadowsocksUdpFlowResume) -> Option<&T> {
-        let key = resume.socket_flow_cache_key();
-        self.entries.get(&key)
-    }
-
-    pub fn insert(&mut self, resume: &ShadowsocksUdpFlowResume, value: T) -> Option<T> {
-        let key = resume.socket_flow_cache_key();
-        self.entries.insert(key, value)
-    }
-}
-
-#[cfg(feature = "crypto")]
-pub struct ShadowsocksUdpFlowEntries<T> {
-    entries: ShadowsocksUdpFlowStore<T>,
-}
-
-#[cfg(feature = "crypto")]
-impl<T> Default for ShadowsocksUdpFlowEntries<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(feature = "crypto")]
-impl<T> ShadowsocksUdpFlowEntries<T> {
-    pub fn new() -> Self {
-        Self {
-            entries: ShadowsocksUdpFlowStore::new(),
-        }
-    }
-
-    pub fn get(&self, resume: &ShadowsocksUdpFlowResume) -> Option<&T> {
-        self.entries.get(resume)
-    }
-
-    pub fn insert(&mut self, resume: &ShadowsocksUdpFlowResume, value: T) -> Option<T> {
-        self.entries.insert(resume, value)
     }
 }
 
@@ -606,12 +540,6 @@ impl ShadowsocksUdpFlowResume {
 
     pub fn leaf_cache_key(&self) -> ShadowsocksUdpLeafKey {
         ShadowsocksUdpLeafKey {
-            cache_key: self.cache_key.clone(),
-        }
-    }
-
-    fn socket_flow_cache_key(&self) -> ShadowsocksUdpCacheKey {
-        ShadowsocksUdpCacheKey {
             cache_key: self.cache_key.clone(),
         }
     }

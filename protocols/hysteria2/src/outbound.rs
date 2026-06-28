@@ -3,7 +3,7 @@
 use alloc::vec::Vec;
 
 use crate::shared::build_tcp_connect_header;
-use crate::{Hysteria2UdpPacket, Hysteria2UdpPacketTarget};
+use crate::udp::{Hysteria2UdpPacket, Hysteria2UdpPacketTarget};
 use zero_core::{Error, ProtocolType, Session};
 use zero_traits::{AsyncSocket, UdpDatagramFraming};
 
