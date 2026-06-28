@@ -7776,6 +7776,7 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
     assert!(
         vless_shared.contains("pub async fn write_packet_tokio")
             && vless_shared.contains("pub async fn read_packet_tokio")
+            && vless_shared.contains("failed to flush VLESS UDP response")
             && vless_outbound.contains("pub fn spawn_udp_flow")
             && vless_outbound.contains("fn spawn_udp_flow_task")
             && vless_outbound.contains(".write_packet_tokio(")
@@ -7785,11 +7786,27 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
     assert!(
         vmess_protocol.contains("pub async fn write_packet_tokio")
             && vmess_protocol.contains("pub async fn read_packet_tokio")
+            && vmess_protocol.contains("failed to flush VMess UDP response")
             && vmess_protocol.contains("pub fn spawn_udp_flow")
             && vmess_protocol.contains("fn spawn_udp_flow_task")
             && vmess_protocol.contains(".write_packet_tokio(")
             && vmess_protocol.contains(".read_packet_tokio("),
         "protocols/vmess should own async stream packet IO helpers and UDP flow pumping"
+    );
+}
+
+#[test]
+fn websocket_transport_stream_reader_preserves_frame_progress() {
+    let ws = fs::read_to_string(repo_root().join("crates/transport/src/ws.rs"))
+        .expect("read websocket transport source");
+
+    assert!(
+        ws.contains("self.read_buffer.clear();")
+            && ws.contains("self.read_offset = 0;")
+            && ws.contains("Message::Binary(data)")
+            && ws.contains("Message::Text(data)")
+            && ws.contains("_ => continue"),
+        "WebSocket transport should clear consumed frame buffers and skip control frames without stalling stream-carried UDP responses"
     );
 }
 
