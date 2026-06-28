@@ -7,11 +7,23 @@ use crate::runtime::udp_flow::managed::{
     SharedManagedUdpConnection,
 };
 use crate::runtime::Proxy;
-use crate::transport::TcpRelayStream;
+use crate::transport::{
+    open_trojan_udp_tls_relay_stream, open_trojan_udp_tls_stream, TcpRelayStream,
+    TrojanUdpTlsOptions,
+};
+use zero_config::ClientTlsConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
 
 pub(super) struct TrojanManagedStreamConnector;
+
+impl crate::runtime::udp_flow::managed::ManagedStreamConnectorFlowBuild
+    for trojan::udp::TrojanUdpConnectorFlow
+{
+    fn into_parts(self) -> (String, bool) {
+        self.into_parts()
+    }
+}
 
 #[async_trait::async_trait]
 impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume> for TrojanManagedStreamConnector {
@@ -37,8 +49,7 @@ impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume> for TrojanMana
         endpoint: OutboundEndpoint<'_>,
         resume: trojan::udp::TrojanUdpFlowResume,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
-        let tls_stream =
-            crate::outbound::trojan::open_udp_tls_stream(proxy, endpoint, &resume).await?;
+        let tls_stream = open_udp_tls_stream(proxy, endpoint, &resume).await?;
         packet_stream(session, tls_stream, resume).await
     }
 
@@ -56,15 +67,68 @@ impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume> for TrojanMana
                 "expected proxy context for Trojan UDP relay flow",
             ))
         })?;
-        let tls_stream = crate::outbound::trojan::open_udp_tls_relay_stream(
-            stream,
-            tls_server_name,
+        let tls_stream =
+            open_udp_tls_relay_stream(stream, tls_server_name, proxy, endpoint, &resume).await?;
+        packet_stream(session, tls_stream, resume).await
+    }
+}
+
+async fn open_udp_tls_stream(
+    proxy: &Proxy,
+    endpoint: OutboundEndpoint<'_>,
+    resume: &trojan::udp::TrojanUdpFlowResume,
+) -> Result<TcpRelayStream, EngineError> {
+    let upstream = proxy
+        .protocols
+        .direct_connector()
+        .connect_host(endpoint.server, endpoint.port, proxy.resolver.as_ref())
+        .await?;
+
+    open_trojan_udp_tls_stream(
+        upstream,
+        udp_tls_options(proxy, endpoint, resume.tls_profile_spec().tls_profile(None)),
+    )
+    .await
+}
+
+async fn open_udp_tls_relay_stream(
+    stream: TcpRelayStream,
+    tls_server_name: Option<&str>,
+    proxy: &Proxy,
+    endpoint: OutboundEndpoint<'_>,
+    resume: &trojan::udp::TrojanUdpFlowResume,
+) -> Result<TcpRelayStream, EngineError> {
+    open_trojan_udp_tls_relay_stream(
+        stream,
+        udp_tls_options(
             proxy,
             endpoint,
-            &resume,
-        )
-        .await?;
-        packet_stream(session, tls_stream, resume).await
+            resume.tls_profile_spec().tls_profile(tls_server_name),
+        ),
+    )
+    .await
+}
+
+fn udp_tls_options<'a>(
+    proxy: &'a Proxy,
+    endpoint: OutboundEndpoint<'a>,
+    tls_profile: trojan::udp::TrojanUdpTlsProfile,
+) -> TrojanUdpTlsOptions<'a> {
+    TrojanUdpTlsOptions {
+        tls_config: udp_tls_config(tls_profile),
+        source_dir: proxy.config.source_dir(),
+        server: endpoint.server,
+    }
+}
+
+fn udp_tls_config(tls_profile: trojan::udp::TrojanUdpTlsProfile) -> ClientTlsConfig {
+    ClientTlsConfig {
+        server_name: tls_profile.server_name().map(ToOwned::to_owned),
+        disable_sni: false,
+        ca_cert_path: None,
+        insecure: tls_profile.insecure(),
+        alpn: Vec::new(),
+        client_fingerprint: tls_profile.client_fingerprint().map(ToOwned::to_owned),
     }
 }
 

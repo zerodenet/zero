@@ -345,7 +345,7 @@ fn direct_udp_helpers_do_not_live_in_outbound_facade() {
 fn outbound_protocol_helpers_are_crate_private() {
     let outbound_root = read("src/outbound/mod.rs");
 
-    for protocol in ["hysteria2", "mieru", "trojan", "vless"] {
+    for protocol in ["hysteria2", "mieru", "vless"] {
         assert!(
             !outbound_root.contains(&format!("pub mod {protocol};")),
             "src/outbound/mod.rs should not expose `{protocol}` helpers as public modules"
@@ -368,6 +368,10 @@ fn outbound_protocol_helpers_are_crate_private() {
         !outbound_root.contains("vmess"),
         "VMess outbound protocol glue should not return to src/outbound/mod.rs"
     );
+    assert!(
+        !outbound_root.contains("trojan"),
+        "Trojan outbound protocol glue should not return to src/outbound/mod.rs"
+    );
 }
 
 #[test]
@@ -377,7 +381,6 @@ fn outbound_root_is_facade_only() {
     for expected in [
         "pub(crate) mod hysteria2;",
         "pub(crate) mod mieru;",
-        "pub(crate) mod trojan;",
         "pub(crate) mod vless;",
     ] {
         assert!(
@@ -1735,12 +1738,7 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
         ),
         (
             "trojan",
-            &[
-                "crate::outbound::trojan::connect_tcp",
-                "crate::outbound::trojan::apply_tcp_hop",
-                "connect_upstream_trojan",
-                "EstablishedTcpOutbound::Trojan",
-            ],
+            &["connect_upstream_trojan", "EstablishedTcpOutbound::Trojan"],
         ),
         (
             "vless",
@@ -1781,8 +1779,6 @@ fn outbound_tcp_helpers_are_called_only_by_adapter_tcp_modules() {
         "crate::outbound::hysteria2::connect_tcp",
         "crate::outbound::mieru::connect_tcp",
         "crate::outbound::mieru::apply_tcp_hop",
-        "crate::outbound::trojan::connect_tcp",
-        "crate::outbound::trojan::apply_tcp_hop",
         "crate::outbound::vless::connect_tcp",
         "crate::outbound::vless::apply_tcp_hop",
     ];
@@ -1804,32 +1800,23 @@ fn outbound_tcp_helpers_are_called_only_by_adapter_tcp_modules() {
 
 #[test]
 fn trojan_tcp_connect_uses_request_model() {
-    let outbound = read("src/outbound/trojan.rs");
+    let outbound = manifest_dir().join("src/outbound/trojan.rs");
     let adapter = read("src/adapters/trojan/tcp.rs");
 
     assert!(
-        !outbound.contains("#[allow(clippy::too_many_arguments)]"),
-        "Trojan TCP connect should not need a too_many_arguments allowance"
-    );
-    assert!(
-        outbound.contains("struct TrojanTcpConnectRequest")
-            && outbound.contains("request: TrojanTcpConnectRequest<'_>"),
-        "Trojan TCP connect should use TrojanTcpConnectRequest"
-    );
-    assert!(
-        adapter.contains("TrojanTcpConnectRequest {"),
-        "Trojan adapter TCP module should pass TrojanTcpConnectRequest"
+        !outbound.exists(),
+        "Trojan should not need a protocol-named proxy outbound module; TCP glue lives in adapters/trojan/tcp.rs and protocol handshake lives in protocols/trojan"
     );
     let forbidden = "zero_transport::tls::connect_tls_upstream";
     assert!(
-        !outbound.contains(forbidden),
-        "Trojan TCP connect should request TLS stream opening through the transport facade; found `{forbidden}`"
+        !adapter.contains(forbidden),
+        "Trojan adapter TCP glue should request TLS stream opening through the transport facade; found `{forbidden}`"
     );
     assert!(
-        outbound.contains("open_trojan_udp_tls_stream")
-            && outbound.contains("trojan_tcp_tls_config(")
-            && outbound.contains("trojan_tls_options("),
-        "Trojan TCP connect should share the Trojan transport TLS opening path with UDP while keeping config/profile conversion in outbound/trojan.rs"
+        adapter.contains("open_trojan_udp_tls_stream")
+            && adapter.contains("trojan_tcp_tls_config(")
+            && adapter.contains("trojan_tls_options("),
+        "Trojan adapter TCP glue should share the Trojan transport TLS opening path with UDP while keeping config/profile conversion outside runtime"
     );
 }
 
@@ -8164,7 +8151,7 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
     let connect_path = manifest_dir().join("src/adapters/trojan/udp/manager/connect.rs");
     let managed = read("src/adapters/trojan/udp/managed.rs");
     let connector = read("src/adapters/trojan/udp/managed/connector.rs");
-    let outbound = read("src/outbound/trojan.rs");
+    let outbound = manifest_dir().join("src/outbound/trojan.rs");
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
@@ -8195,23 +8182,24 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
     ] {
         assert!(
             !managed.contains(forbidden),
-            "Trojan managed.rs should delegate only raw TLS stream opening through outbound/trojan.rs; found `{forbidden}`"
+            "Trojan managed.rs should delegate only raw TLS stream opening through the connector; found `{forbidden}`"
         );
     }
     assert!(
         !managed.contains("crate::outbound::trojan::open_udp_tls_stream")
-            && connector.contains("crate::outbound::trojan::open_udp_tls_stream")
-            && connector.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
-            && outbound.contains("open_trojan_udp_tls_stream")
-            && outbound.contains("open_trojan_udp_tls_relay_stream")
-            && outbound.contains("TrojanUdpTlsOptions")
-            && outbound.contains("fn udp_tls_config(")
-            && outbound.contains("ClientTlsConfig {")
-            && outbound.contains("tls_profile_spec().tls_profile(")
-            && !outbound.contains("resume.tls_profile(")
-            && outbound.contains("tls_profile.server_name()")
-            && outbound.contains("tls_profile.insecure()")
-            && outbound.contains("tls_profile.client_fingerprint()")
+            && !connector.contains("crate::outbound::trojan::open_udp_tls_stream")
+            && !connector.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
+            && !outbound.exists()
+            && connector.contains("open_trojan_udp_tls_stream")
+            && connector.contains("open_trojan_udp_tls_relay_stream")
+            && connector.contains("TrojanUdpTlsOptions")
+            && connector.contains("fn udp_tls_config(")
+            && connector.contains("ClientTlsConfig {")
+            && connector.contains("tls_profile_spec().tls_profile(")
+            && !connector.contains("resume.tls_profile(")
+            && connector.contains("tls_profile.server_name()")
+            && connector.contains("tls_profile.insecure()")
+            && connector.contains("tls_profile.client_fingerprint()")
             && transport.contains("pub struct TrojanUdpTlsOptions")
             && transport.contains("ClientTlsConfig")
             && transport.contains("tls_config: ClientTlsConfig")
@@ -8220,7 +8208,7 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
             && !transport.contains("trojan::")
             && !transport.contains("TrojanUdpTlsProfile")
             && !transport.contains("tls_profile."),
-        "zero-transport should own only neutral TLS stream opening; Trojan TLS profile conversion stays in outbound/trojan boundary"
+        "zero-transport should own only neutral TLS stream opening; Trojan TLS profile conversion stays in the adapter UDP connector boundary"
     );
 }
 
@@ -8389,7 +8377,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && !managed.contains("resume.tls_profile(")
             && !managed.contains("TrojanUdpTlsOptions")
             && !managed.contains("crate::outbound::trojan::open_udp_tls_stream")
-            && connector.contains("crate::outbound::trojan::open_udp_tls_stream")
+            && connector.contains("open_udp_tls_stream")
             && !manager_stream.exists()
             && !managed.contains("trojan::udp::establish_udp_flow_with_resume")
             && connector.contains("trojan::udp::establish_udp_flow_with_resume")
@@ -8779,13 +8767,16 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
         "trojan::udp_flow_packet",
         "resume.cache_key(endpoint.server, endpoint.port, session_id)",
         "resume.tls_profile(",
-        "TrojanUdpTlsOptions",
     ] {
         assert!(
             !managed.contains(forbidden) && !connector.contains(forbidden),
             "Trojan managed.rs should not own protocol-private/cache/runtime orchestration detail `{forbidden}`"
         );
     }
+    assert!(
+        !managed.contains("TrojanUdpTlsOptions") && connector.contains("TrojanUdpTlsOptions"),
+        "Trojan UDP TLS transport options should live in the connector glue, not the managed root"
+    );
 
     assert!(
         managed.contains("ManagedStreamFlowManager::new")
@@ -8802,8 +8793,8 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
             && !connector.contains("flow.requires_relay_upstream()")
             && !connector.contains("resume.flow_cache_key(")
             && !connector.contains("resume.flow_requires_relay_upstream()")
-            && connector.contains("crate::outbound::trojan::open_udp_tls_stream")
-            && connector.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
+            && connector.contains("open_udp_tls_stream")
+            && connector.contains("open_udp_tls_relay_stream")
             && connector.contains("trojan::udp::establish_udp_flow_with_resume")
             && connector.contains("managed_packet_udp_connection")
             && connector.contains("impl ManagedPacketUdpSender for TrojanManagedUdpSender")
@@ -10210,7 +10201,7 @@ fn udp_build_traits_consume_protocol_parts() {
     let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
     let shadowsocks_managed = read("src/adapters/shadowsocks/udp/managed.rs");
     let hysteria2_outbound = read("src/outbound/hysteria2.rs");
-    let trojan_outbound = read("src/outbound/trojan.rs");
+    let trojan_connector = read("src/adapters/trojan/udp/managed/connector.rs");
     let mieru_outbound = read("src/outbound/mieru.rs");
     let socks5_shared = fs::read_to_string(repo_root().join("protocols/socks5/src/shared.rs"))
         .expect("read socks5 shared source");
@@ -10253,12 +10244,12 @@ fn udp_build_traits_consume_protocol_parts() {
         "managed stream connector flow builds should consume protocol-provided parts instead of exposing getter traits"
     );
     assert!(
-        trojan_outbound.contains("fn into_parts(self) -> (String, bool)")
-            && trojan_outbound.contains("self.into_parts()")
+        trojan_connector.contains("fn into_parts(self) -> (String, bool)")
+            && trojan_connector.contains("self.into_parts()")
             && mieru_outbound.contains("fn into_parts(self) -> (String, bool)")
             && mieru_outbound.contains("self.into_parts()")
-            && !trojan_outbound.contains("self.cache_key()")
-            && !trojan_outbound.contains("self.requires_relay_upstream()")
+            && !trojan_connector.contains("self.cache_key()")
+            && !trojan_connector.contains("self.requires_relay_upstream()")
             && !mieru_outbound.contains("self.cache_key()")
             && !mieru_outbound.contains("self.requires_relay_upstream()")
             && trojan_protocol.contains("pub fn into_parts(self) -> (String, bool)")
