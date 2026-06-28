@@ -114,7 +114,7 @@ pub(crate) async fn establish_udp_socket_flow(
 ) -> Result<ShadowsocksUdpSocketFlow, EngineError> {
     shadowsocks_transport::establish_shadowsocks_udp_socket_flow(
         target_addr,
-        std::sync::Arc::new(resume.managed_socket_flow().codec()),
+        std::sync::Arc::new(resume.into_managed_socket_flow_codec()),
     )
     .await
 }

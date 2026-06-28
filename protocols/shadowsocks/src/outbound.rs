@@ -501,6 +501,10 @@ impl ShadowsocksUdpSocketFlowSpec {
     pub fn codec(&self) -> ShadowsocksDatagramCodec {
         self.codec.clone()
     }
+
+    pub fn into_codec(self) -> ShadowsocksDatagramCodec {
+        self.codec
+    }
 }
 
 #[cfg(feature = "crypto")]
@@ -636,6 +640,10 @@ impl ShadowsocksUdpFlowResume {
                 password: self.password.clone(),
             },
         }
+    }
+
+    pub fn into_managed_socket_flow_codec(self) -> ShadowsocksDatagramCodec {
+        self.managed_socket_flow().into_codec()
     }
 
     fn encode_flow_packet(

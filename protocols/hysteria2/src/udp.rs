@@ -424,6 +424,14 @@ pub struct Hysteria2UdpPacketPathCarrierBuild {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2UdpPacketPathCarrierBuildParts {
+    server: String,
+    port: u16,
+    connector_profile: Hysteria2UdpConnectorProfile,
+    codec: Hysteria2DatagramCodec,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hysteria2UdpPacketPathCarrierDescriptor {
     cache_key: String,
     server: String,
@@ -511,6 +519,28 @@ impl Hysteria2UdpPacketPathCarrierBuild {
 
     pub fn codec(&self) -> Hysteria2DatagramCodec {
         self.codec
+    }
+
+    pub fn into_connection_parts(self) -> Hysteria2UdpPacketPathCarrierBuildParts {
+        Hysteria2UdpPacketPathCarrierBuildParts {
+            server: self.server,
+            port: self.port,
+            connector_profile: self.connector_profile,
+            codec: self.codec,
+        }
+    }
+}
+
+impl Hysteria2UdpPacketPathCarrierBuildParts {
+    pub fn into_parts(
+        self,
+    ) -> (
+        alloc::string::String,
+        u16,
+        Hysteria2UdpConnectorProfile,
+        Hysteria2DatagramCodec,
+    ) {
+        (self.server, self.port, self.connector_profile, self.codec)
     }
 }
 
@@ -831,6 +861,11 @@ pub struct Hysteria2UdpConnectorFlow {
     connector_profile: Hysteria2UdpConnectorProfile,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2UdpConnectorFlowParts {
+    connector_profile: Hysteria2UdpConnectorProfile,
+}
+
 impl Hysteria2UdpConnectorFlow {
     pub fn cache_key(&self) -> String {
         self.cache_key.clone()
@@ -838,6 +873,18 @@ impl Hysteria2UdpConnectorFlow {
 
     pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
         self.connector_profile.clone()
+    }
+
+    pub fn into_connection_parts(self) -> Hysteria2UdpConnectorFlowParts {
+        Hysteria2UdpConnectorFlowParts {
+            connector_profile: self.connector_profile,
+        }
+    }
+}
+
+impl Hysteria2UdpConnectorFlowParts {
+    pub fn into_profile(self) -> Hysteria2UdpConnectorProfile {
+        self.connector_profile
     }
 }
 

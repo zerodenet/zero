@@ -129,9 +129,10 @@ pub(crate) async fn open_udp_packet_path_build(
     ),
     EngineError,
 > {
-    let connector_profile = build.connector_profile();
-    let codec = std::sync::Arc::new(build.codec());
-    let conn = open_udp_profile_connection(build.server(), build.port(), connector_profile).await?;
+    let parts = build.into_connection_parts();
+    let (server, port, connector_profile, codec) = parts.into_parts();
+    let codec = std::sync::Arc::new(codec);
+    let conn = open_udp_profile_connection(&server, port, connector_profile).await?;
     Ok((conn, codec))
 }
 
@@ -160,9 +161,9 @@ pub(crate) async fn establish_udp_flow_session(
     initial_packet: UdpPacketRef<'_>,
     resume: hysteria2::Hysteria2UdpFlowResume,
 ) -> Result<hysteria2::Hysteria2UdpFlowConnection, EngineError> {
-    let connector_profile = resume
-        .connector_flow(endpoint.server, endpoint.port)
-        .connector_profile();
+    let flow = resume.connector_flow(endpoint.server, endpoint.port);
+    let parts = flow.into_connection_parts();
+    let connector_profile = parts.into_profile();
     let conn = std::sync::Arc::new(
         open_udp_profile_connection(endpoint.server, endpoint.port, connector_profile).await?,
     );
