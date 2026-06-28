@@ -450,6 +450,13 @@ pub struct Socks5UdpPacketPathCarrierBuild {
     association_target: Socks5UdpAssociationTarget,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpPacketPathCarrierDescriptor {
+    cache_key: String,
+    server: String,
+    port: u16,
+}
+
 impl Socks5UdpPacketPathCarrier {
     pub fn cache_key(&self) -> String {
         self.cache_key.clone()
@@ -488,6 +495,14 @@ impl Socks5UdpPacketPathSpec {
             association_target: self.association_target(),
         }
     }
+
+    pub fn carrier_descriptor(&self) -> Socks5UdpPacketPathCarrierDescriptor {
+        Socks5UdpPacketPathCarrierDescriptor {
+            cache_key: self.carrier_cache_key(),
+            server: self.association_target.server().to_owned(),
+            port: self.association_target.port(),
+        }
+    }
 }
 
 impl Socks5UdpPacketPathCarrierBuild {
@@ -505,6 +520,20 @@ impl Socks5UdpPacketPathCarrierBuild {
 
     pub fn association_target(&self) -> Socks5UdpAssociationTarget {
         self.association_target.clone()
+    }
+}
+
+impl Socks5UdpPacketPathCarrierDescriptor {
+    pub fn cache_key(&self) -> String {
+        self.cache_key.clone()
+    }
+
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
     }
 }
 

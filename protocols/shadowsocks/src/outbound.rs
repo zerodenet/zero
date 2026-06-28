@@ -755,6 +755,14 @@ pub struct ShadowsocksUdpPacketPathCarrierBuild {
 }
 
 #[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowsocksUdpPacketPathCarrierDescriptor {
+    cache_key: alloc::string::String,
+    server: alloc::string::String,
+    port: u16,
+}
+
+#[cfg(feature = "crypto")]
 impl ShadowsocksUdpPacketPathCarrier {
     pub fn cache_key(&self) -> alloc::string::String {
         self.cache_key.clone()
@@ -768,12 +776,39 @@ impl ShadowsocksUdpPacketPathSpec {
             cache_key: self.carrier_cache_key(),
         }
     }
+
+    pub fn carrier_descriptor(
+        &self,
+        server: &str,
+        port: u16,
+    ) -> ShadowsocksUdpPacketPathCarrierDescriptor {
+        ShadowsocksUdpPacketPathCarrierDescriptor {
+            cache_key: self.carrier_cache_key(),
+            server: server.to_owned(),
+            port,
+        }
+    }
 }
 
 #[cfg(feature = "crypto")]
 impl ShadowsocksUdpPacketPathCarrierBuild {
     pub fn cache_key(&self) -> alloc::string::String {
         self.cache_key.clone()
+    }
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksUdpPacketPathCarrierDescriptor {
+    pub fn cache_key(&self) -> alloc::string::String {
+        self.cache_key.clone()
+    }
+
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
     }
 }
 

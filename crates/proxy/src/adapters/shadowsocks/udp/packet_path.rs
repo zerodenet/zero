@@ -26,11 +26,11 @@ pub(super) fn carrier_descriptor(
     };
     let spec =
         shadowsocks::udp_packet_path_spec_from_config(tag, server, *port, cipher, password).ok()?;
-    let carrier = spec.carrier_build();
+    let descriptor = spec.carrier_descriptor(server, *port);
     Some(packet_path_carrier_descriptor(
-        carrier.cache_key(),
-        server,
-        *port,
+        descriptor.cache_key(),
+        descriptor.server(),
+        descriptor.port(),
     ))
 }
 

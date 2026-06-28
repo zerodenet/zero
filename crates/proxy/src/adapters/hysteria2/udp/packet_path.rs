@@ -28,12 +28,12 @@ pub(super) fn carrier_descriptor(
         password,
         *client_fingerprint,
     );
-    let carrier = spec.carrier_build(server, *port);
+    let descriptor = spec.carrier_descriptor(server, *port);
     Some(
         crate::runtime::udp_flow::packet_path::packet_path_carrier_descriptor(
-            carrier.cache_key(),
-            carrier.server(),
-            carrier.port(),
+            descriptor.cache_key(),
+            descriptor.server(),
+            descriptor.port(),
         ),
     )
 }
@@ -59,13 +59,13 @@ pub(super) async fn build(
         password,
         *client_fingerprint,
     );
-    let carrier = spec.carrier_build(server, *port);
-    let codec = Arc::new(carrier.codec());
+    let build = spec.carrier_build(server, *port);
+    let codec = Arc::new(build.codec());
     let conn = Arc::new(
         crate::outbound::hysteria2::open_udp_packet_path_connection(
-            carrier.server(),
-            carrier.port(),
-            carrier.connector_profile(),
+            build.server(),
+            build.port(),
+            build.connector_profile(),
         )
         .await?,
     );
