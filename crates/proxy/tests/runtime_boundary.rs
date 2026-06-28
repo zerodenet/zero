@@ -2365,6 +2365,8 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let model = read("src/adapters/socks5/udp/model.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/socks5/src/udp.rs"))
         .expect("read socks5 udp");
+    let socks5_lib = fs::read_to_string(repo_root().join("protocols/socks5/src/lib.rs"))
+        .expect("read socks5 lib");
     let packet_path_source = read("src/adapters/socks5/udp/packet_path.rs");
     let send_source = read("src/adapters/socks5/udp/send.rs");
     let send = manifest_dir().join("src/adapters/socks5/udp/send.rs");
@@ -2414,7 +2416,8 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && establish.contains("fn default_establisher()")
             && establish.contains("fn establish_shared_packet_path_association")
             && establish.contains("fn establish_shared_packet_path_carrier")
-            && establish.contains("carrier.into_association_target()")
+            && establish.contains("packet_path_carrier_association_target")
+            && !establish.contains("carrier.into_association_target()")
             && establish.contains("ActiveUpstreamSocks5UdpAssociation::establish")
             && runtime_source.contains("Box<dyn Socks5UdpAssociationEstablisher>")
             && runtime_source.contains("establish::default_establisher()")
@@ -2422,6 +2425,10 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && packet_path_source.contains("establish_shared_packet_path_carrier")
             && !packet_path_source.contains("establish_shared_packet_path_association")
             && !packet_path_source.contains("into_association_target()")
+            && !runtime_source.contains("response.into_parts()")
+            && runtime_source.contains("upstream_response_from_socks5")
+            && runtime_source.contains("response.target().clone()")
+            && runtime_source.contains("response.payload().to_vec()")
             && !packet_path_source.contains("DefaultSocks5UdpAssociationEstablisher")
             && !runtime_source.contains("use super::active::ActiveUpstreamSocks5UdpAssociation")
             && !packet_path_source.contains("use super::active::ActiveUpstreamSocks5UdpAssociation")
@@ -2475,6 +2482,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && protocol_udp.contains("struct Socks5UdpAssociationTarget")
             && protocol_udp.contains("struct Socks5EstablishedUdpAssociation")
             && protocol_udp.contains("outbound_tag: alloc::string::String")
+            && socks5_lib.contains("packet_path_carrier_association_target")
             && protocol_udp.contains("pub fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool"),
         "SOCKS5 UDP association handles should live under adapters/socks5/udp/model.rs while protocol association targets stay in protocols/socks5"
     );
@@ -10164,6 +10172,8 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
             && !socks5_packet_path.contains("spec.carrier_build().association_target()")
             && !socks5_packet_path.contains("carrier.association_target()")
             && !socks5_packet_path.contains("into_association_target()")
+            && socks5_shared.contains("pub fn packet_path_carrier_association_target")
+            && socks5_shared.contains("carrier.into_association_target()")
             && !socks5_packet_path.contains(".packet_path_cache_key()")
             && !socks5_adapter.contains("Socks5UdpFlowConfig {")
             && !socks5_packet_path.contains("Socks5UdpFlowConfig {")

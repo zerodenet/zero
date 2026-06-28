@@ -45,7 +45,7 @@ pub(super) async fn establish_shared_packet_path_carrier(
 ) -> Result<SharedSocks5UdpPacketPathAssociation, EngineError> {
     establish_shared_packet_path_association(Socks5UdpAssociationEstablishRequest {
         proxy,
-        target: carrier.into_association_target(),
+        target: socks5::packet_path_carrier_association_target(carrier),
         session_id: 0,
     })
     .await

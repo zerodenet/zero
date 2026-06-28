@@ -547,6 +547,12 @@ impl Socks5UdpPacketPathCarrierBuild {
     }
 }
 
+pub fn packet_path_carrier_association_target(
+    carrier: Socks5UdpPacketPathCarrierBuild,
+) -> Socks5UdpAssociationTarget {
+    carrier.into_association_target()
+}
+
 impl Socks5UdpPacketPathCarrierDescriptor {
     pub fn cache_key(&self) -> String {
         self.cache_key.clone()
