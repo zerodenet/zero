@@ -8,6 +8,7 @@ use zero_core::Session;
 use zero_engine::EngineError;
 use zero_traits::TcpSessionProtocol;
 
+use crate::runtime::udp_flow::packet_path::{DatagramCodec, UdpDatagramSourceBuild};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
@@ -55,6 +56,30 @@ pub(crate) struct ShadowsocksTcpConnectRequest<'a> {
     pub server: &'a str,
     pub port: u16,
     pub config: shadowsocks::ShadowsocksTcpConnectConfig,
+}
+
+impl UdpDatagramSourceBuild for shadowsocks::ShadowsocksUdpPacketPathDatagramSourceBuild {
+    fn tag(&self) -> &str {
+        self.tag()
+    }
+
+    fn server(&self) -> &str {
+        self.server()
+    }
+
+    fn port(&self) -> u16 {
+        self.port()
+    }
+
+    fn cache_key(&self) -> String {
+        self.cache_key()
+    }
+
+    fn into_codec(
+        self,
+    ) -> std::sync::Arc<dyn DatagramCodec<zero_core::Address, Error = zero_core::Error>> {
+        std::sync::Arc::new(self.codec())
+    }
 }
 
 /// Wrap a relay stream with the Shadowsocks AEAD outbound codec.

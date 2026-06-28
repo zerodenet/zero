@@ -126,9 +126,31 @@ pub(crate) fn udp_datagram_source(
     }
 }
 
+pub(crate) trait UdpDatagramSourceBuild {
+    fn tag(&self) -> &str;
+    fn server(&self) -> &str;
+    fn port(&self) -> u16;
+    fn cache_key(&self) -> String;
+    fn into_codec(self) -> Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>;
+}
+
+pub(crate) fn udp_datagram_source_from_build(
+    build: impl UdpDatagramSourceBuild,
+) -> UdpDatagramSource {
+    let tag = build.tag().to_owned();
+    let server = build.server().to_owned();
+    let port = build.port();
+    let cache_key = build.cache_key();
+    udp_datagram_source(&tag, &server, port, cache_key, build.into_codec())
+}
+
 impl UdpDatagramSource {
     pub(crate) fn descriptor(&self) -> &UdpDatagramDescriptor {
         &self.descriptor
+    }
+
+    pub(crate) fn into_codec(self) -> Arc<dyn DatagramCodec<Address, Error = zero_core::Error>> {
+        self.codec
     }
 }
 
