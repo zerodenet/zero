@@ -35,7 +35,9 @@ impl Default for Socks5UdpRuntime {
 
 impl Socks5UdpRuntime {
     pub(crate) fn handles_resume(&self, resume: &ManagedUdpFlowResume) -> bool {
-        resume.as_ref::<socks5::Socks5UdpFlowResume>().is_some()
+        resume
+            .as_ref::<socks5::udp::Socks5UdpFlowResume>()
+            .is_some()
     }
 
     pub(crate) fn idle_deadline(&self) -> Option<TokioInstant> {
@@ -71,7 +73,7 @@ impl Socks5UdpRuntime {
         &mut self,
         proxy: &crate::runtime::Proxy,
         inbound_tag: &str,
-        association: socks5::Socks5UdpAssociationTarget,
+        association: socks5::udp::Socks5UdpAssociationTarget,
         session: &zero_core::Session,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
@@ -104,7 +106,7 @@ impl Socks5UdpRuntime {
         &mut self,
         proxy: &crate::runtime::Proxy,
         inbound_tag: &str,
-        association: socks5::Socks5UdpAssociationTarget,
+        association: socks5::udp::Socks5UdpAssociationTarget,
         session_id: u64,
     ) -> Result<(), EngineError> {
         let target = Socks5UdpAssociationTargetSnapshot::from_target(&association);
@@ -273,7 +275,7 @@ impl Socks5UdpRuntime {
 }
 
 fn upstream_response_from_socks5(
-    response: socks5::Socks5InboundUdpResponse,
+    response: socks5::udp::Socks5InboundUdpResponse,
 ) -> UpstreamUdpResponse {
     let (target, port, payload) = response.into_parts();
     UpstreamUdpResponse::new(target, port, payload)

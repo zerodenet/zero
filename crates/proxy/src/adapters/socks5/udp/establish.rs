@@ -7,7 +7,7 @@ use zero_engine::EngineError;
 
 pub(super) struct Socks5UdpAssociationEstablishRequest<'a> {
     pub(super) proxy: &'a Proxy,
-    pub(super) target: socks5::Socks5UdpAssociationTarget,
+    pub(super) target: socks5::udp::Socks5UdpAssociationTarget,
     pub(super) session_id: u64,
 }
 
@@ -41,11 +41,11 @@ pub(super) async fn establish_shared_packet_path_association(
 
 pub(super) async fn establish_shared_packet_path_carrier(
     proxy: &Proxy,
-    carrier: socks5::Socks5UdpPacketPathCarrierBuild,
+    carrier: socks5::udp::Socks5UdpPacketPathCarrierBuild,
 ) -> Result<SharedSocks5UdpPacketPathAssociation, EngineError> {
     establish_shared_packet_path_association(Socks5UdpAssociationEstablishRequest {
         proxy,
-        target: socks5::packet_path_carrier_association_target(carrier),
+        target: socks5::udp::packet_path_carrier_association_target(carrier),
         session_id: 0,
     })
     .await

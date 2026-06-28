@@ -1573,7 +1573,7 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     assert!(
-        packet_path.contains("socks5::udp_packet_path_carrier_descriptor_from_config")
+        packet_path.contains("socks5::udp::udp_packet_path_carrier_descriptor_from_config")
             && !packet_path.contains("Socks5UdpFlowConfig::new")
             && !packet_path.contains("packet_path.cache_key()")
             && !packet_path.contains(".packet_path_spec()")
@@ -1590,7 +1590,7 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
             && !packet_path.contains(".packet_path_cache_key()")
             && !packet_path.contains("config.association_target()")
             && !packet_path.contains(".packet_path_association_config()")
-            && flow.contains("socks5::udp_flow_resume_from_config")
+            && flow.contains("socks5::udp::udp_flow_resume_from_config")
             && !flow.contains("Socks5UdpFlowConfig::new")
             && !flow.contains(".flow_resume()")
             && flow.contains("ManagedRelayStart")
@@ -2388,8 +2388,6 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let model = read("src/adapters/socks5/udp/model.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/socks5/src/udp.rs"))
         .expect("read socks5 udp");
-    let socks5_lib = fs::read_to_string(repo_root().join("protocols/socks5/src/lib.rs"))
-        .expect("read socks5 lib");
     let packet_path_source = read("src/adapters/socks5/udp/packet_path.rs");
     let send_source = read("src/adapters/socks5/udp/send.rs");
     let send = manifest_dir().join("src/adapters/socks5/udp/send.rs");
@@ -2466,7 +2464,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && !active.contains("Socks5OwnedUdpAssociationConfig")
             && !active.contains("Socks5UdpRelay,")
             && !active.contains("Socks5UdpRelayEndpoint")
-            && active.contains("socks5::establish_udp_relay_with_control")
+            && active.contains("socks5::udp::establish_udp_relay_with_control")
             && !active.contains("_control:")
             && !active.contains("relay:")
             && !active.contains("Socks5UdpRelayTarget")
@@ -2508,7 +2506,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && model.contains("struct Socks5UdpAssociationSnapshot")
             && model.contains("fn from_association(association: &dyn Socks5UdpAssociationHandle)")
             && model.contains("struct Socks5UdpAssociationTargetSnapshot")
-            && model.contains("fn from_target(target: &socks5::Socks5UdpAssociationTarget)")
+            && model.contains("fn from_target(target: &socks5::udp::Socks5UdpAssociationTarget)")
             && model.contains("association.upstream_endpoint()")
             && model.contains("target.identity().into_parts()")
             && !model.contains("target.outbound_tag().to_owned()")
@@ -2527,7 +2525,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && !active.contains("target.port()")
             && protocol_udp.contains("struct Socks5EstablishedUdpAssociation")
             && protocol_udp.contains("outbound_tag: alloc::string::String")
-            && socks5_lib.contains("packet_path_carrier_association_target")
+            && protocol_udp.contains("packet_path_carrier_association_target")
             && protocol_udp.contains("pub fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool"),
         "SOCKS5 UDP association handles should live under adapters/socks5/udp/model.rs while protocol association targets stay in protocols/socks5"
     );
@@ -4577,8 +4575,6 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/socks5/src/outbound.rs"))
             .expect("read socks5 outbound");
-    let protocol_lib = fs::read_to_string(repo_root().join("protocols/socks5/src/lib.rs"))
-        .expect("read socks5 lib");
     let upstream = read("src/runtime/udp_flow/registered/upstream.rs");
     let response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
 
@@ -4595,8 +4591,8 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
             && protocol_outbound.contains("pub fn into_target(self) -> Socks5UdpAssociationTarget")
             && protocol_outbound.contains("pub struct Socks5UdpFlowSpec")
             && protocol_outbound.contains("pub fn flow(")
-            && protocol_lib.contains("Socks5UdpAssociationSend")
-            && protocol_lib.contains("Socks5UdpFlowSpec")
+            && protocol_udp.contains("Socks5UdpAssociationSend")
+            && protocol_udp.contains("Socks5UdpFlowSpec")
             && protocol_udp.contains("outbound_tag: alloc::string::String")
             && !model
                 .lines()
@@ -5083,7 +5079,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
             && !resume_model.contains("hysteria2::")
             && !resume_model.contains("trojan::")
             && !resume_model.contains("mieru::")
-            && !resume_model.contains("Socks5(socks5::Socks5UdpFlowResume)")
+            && !resume_model.contains("Socks5(socks5::udp::Socks5UdpFlowResume)")
             && !resume_model.contains("Shadowsocks(shadowsocks::ShadowsocksUdpFlowResume)")
             && !resume_model.contains("Hysteria2(hysteria2::Hysteria2UdpFlowResume)")
             && !resume_model.contains("Trojan(trojan::udp::TrojanUdpFlowResume)")
@@ -7388,7 +7384,9 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
             && upstream.contains("fn handles_resume")
             && upstream.contains("handler.supports_upstream_resume(resume)")
             && socks5_runtime.contains("fn supports_upstream_resume(&self, resume: &ManagedUdpFlowResume)")
-            && socks5_runtime.contains("resume.as_ref::<socks5::Socks5UdpFlowResume>()")
+            && socks5_runtime
+                .replace(char::is_whitespace, "")
+                .contains("resume.as_ref::<socks5::udp::Socks5UdpFlowResume>()")
             && managed.contains("fn forward_existing_flow")
             && managed.contains("is_upstream_resume(snapshot.resume())")
             && !forward.contains("managed_flow_snapshot")
@@ -10410,10 +10408,10 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         .expect("read proxy test support source");
     assert!(
         socks5_shared.contains("pub(crate) struct Socks5UdpPacket")
-            && socks5_lib.contains("Socks5InboundUdpRequest")
-            && socks5_lib.contains("Socks5InboundUdpResponse")
+            && socks5_shared.contains("Socks5InboundUdpRequest")
+            && socks5_shared.contains("Socks5InboundUdpResponse")
             && !socks5_lib.contains("Socks5UdpPacket,")
-            && !proxy_test_support.contains("socks5::Socks5UdpPacket"),
+            && !proxy_test_support.contains("socks5::udp::Socks5UdpPacket"),
         "SOCKS5 raw UDP packet model should remain protocol-private; public callers use inbound UDP request/response views"
     );
     for private_helper in [
@@ -10435,7 +10433,7 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     assert!(
         !socks5_adapter.contains("socks5::udp_cache_key")
             && !socks5_adapter.contains("Socks5UdpFlowConfig::new")
-            && socks5_packet_path.contains("socks5::udp_packet_path_carrier_descriptor_from_config")
+            && socks5_packet_path.contains("socks5::udp::udp_packet_path_carrier_descriptor_from_config")
             && !socks5_packet_path.contains("Socks5UdpFlowConfig::new")
             && !socks5_packet_path.contains(".packet_path_spec()")
             && socks5_packet_path.contains("udp_packet_path_carrier_build_from_config")
@@ -10828,7 +10826,7 @@ fn managed_udp_flow_snapshot_constructors_live_in_runtime_udp_flow() {
             && !snapshot.contains("hysteria2::")
             && !snapshot.contains("trojan::")
             && !snapshot.contains("mieru::")
-            && !snapshot.contains("Socks5(socks5::Socks5UdpFlowResume)")
+            && !snapshot.contains("Socks5(socks5::udp::Socks5UdpFlowResume)")
             && snapshot.contains("Self::Managed {"),
         "SOCKS5 UDP snapshot state should use the unified ManagedUdpFlowResume wrapper"
     );
@@ -10964,6 +10962,42 @@ fn protocol_crate_roots_do_not_reexport_udp_manager_internals() {
                 "ShadowsocksUdpFlowPacket,",
                 "ShadowsocksUdpFlowStore,",
                 "ShadowsocksUdpLeafKey,",
+            ][..],
+        ),
+        (
+            "socks5",
+            &[
+                "Socks5EstablishedUdpAssociation",
+                "Socks5InboundUdpCodec",
+                "Socks5InboundUdpDispatchParts",
+                "Socks5InboundUdpRequest",
+                "Socks5InboundUdpResponse",
+                "Socks5InboundUdpResponseFrame",
+                "Socks5InboundUdpResponseKey",
+                "Socks5InboundUdpSession",
+                "Socks5OwnedUdpAssociationConfig",
+                "Socks5UdpAssociation",
+                "Socks5UdpAssociationConfig",
+                "Socks5UdpAssociationEndpoint",
+                "Socks5UdpAssociationIdentity",
+                "Socks5UdpAssociationSend",
+                "Socks5UdpAssociationTarget",
+                "Socks5UdpFlowConfig",
+                "Socks5UdpFlowResume",
+                "Socks5UdpFlowSpec",
+                "Socks5UdpPacketPathCarrierBuild",
+                "Socks5UdpPacketPathCarrierDescriptor",
+                "Socks5UdpPacketPathSpec",
+                "Socks5UdpRelay",
+                "Socks5UdpRelayEndpoint",
+                "Socks5UdpRelayError",
+                "Socks5UdpRelayTargetAddress",
+                "establish_udp_relay_with_control",
+                "packet_path_carrier_association_target",
+                "udp_flow_resume_from_config",
+                "udp_packet_path_carrier_build_from_config",
+                "udp_packet_path_carrier_descriptor_from_config",
+                "udp_packet_path_spec_from_config",
             ][..],
         ),
         (

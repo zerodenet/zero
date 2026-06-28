@@ -69,7 +69,7 @@ pub(crate) async fn apply_tcp_hop(
     Ok(stream)
 }
 
-impl PacketPathCarrierDescriptorBuild for socks5::Socks5UdpPacketPathCarrierDescriptor {
+impl PacketPathCarrierDescriptorBuild for socks5::udp::Socks5UdpPacketPathCarrierDescriptor {
     fn into_parts(self) -> (String, String, u16) {
         self.into_parts()
     }

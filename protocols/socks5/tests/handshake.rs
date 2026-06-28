@@ -1,9 +1,11 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+use socks5::udp::{
+    Socks5InboundUdpCodec, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError,
+};
 use socks5::{
-    Socks5Inbound, Socks5InboundUdpCodec, Socks5Outbound, Socks5OutboundAuth, Socks5PasswordAuth,
-    Socks5Request, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError,
+    Socks5Inbound, Socks5Outbound, Socks5OutboundAuth, Socks5PasswordAuth, Socks5Request,
 };
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, DatagramSocket, IpAddress};

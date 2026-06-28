@@ -7,7 +7,7 @@ mod inbound;
 mod metadata;
 mod outbound;
 mod shared;
-mod udp;
+pub mod udp;
 
 pub use inbound::{
     NoSocks5PasswordAuth, Socks5Inbound, Socks5PasswordAuth, Socks5Request,
@@ -16,19 +16,5 @@ pub use inbound::{
 pub use metadata::Socks5Protocol;
 pub use outbound::{
     Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth, Socks5TcpTunnelTarget,
-    Socks5UdpAssociationSend, Socks5UdpFlowResume, Socks5UdpFlowSpec, Socks5UdpRelayTarget,
 };
-pub use shared::{
-    packet_path_carrier_association_target, udp_flow_resume_from_config,
-    udp_packet_path_carrier_build_from_config, udp_packet_path_carrier_descriptor_from_config,
-    udp_packet_path_spec_from_config, Socks5InboundUdpDispatchParts, Socks5InboundUdpRequest,
-    Socks5InboundUdpResponse, Socks5Reply, Socks5UdpFlowConfig, Socks5UdpPacketPathCarrierBuild,
-    Socks5UdpPacketPathCarrierDescriptor, Socks5UdpPacketPathSpec,
-};
-pub use udp::{
-    establish_udp_relay_with_control, Socks5EstablishedUdpAssociation, Socks5InboundUdpCodec,
-    Socks5InboundUdpResponseFrame, Socks5InboundUdpResponseKey, Socks5InboundUdpSession,
-    Socks5OwnedUdpAssociationConfig, Socks5UdpAssociation, Socks5UdpAssociationConfig,
-    Socks5UdpAssociationEndpoint, Socks5UdpAssociationIdentity, Socks5UdpAssociationTarget,
-    Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError, Socks5UdpRelayTargetAddress,
-};
+pub use shared::Socks5Reply;

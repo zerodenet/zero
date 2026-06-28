@@ -1,7 +1,7 @@
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use socks5::{Socks5EstablishedUdpAssociation, Socks5UdpRelayError};
+use socks5::udp::{Socks5EstablishedUdpAssociation, Socks5UdpRelayError};
 use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
@@ -22,7 +22,7 @@ pub(super) struct ActiveUpstreamSocks5UdpAssociation {
 impl ActiveUpstreamSocks5UdpAssociation {
     pub(super) async fn establish(
         proxy: &Proxy,
-        target: socks5::Socks5UdpAssociationTarget,
+        target: socks5::udp::Socks5UdpAssociationTarget,
         session_id: u64,
     ) -> Result<Self, EngineError> {
         let (server, port) = target.connect_endpoint().into_parts();
@@ -32,9 +32,11 @@ impl ActiveUpstreamSocks5UdpAssociation {
             .connect_host(&server, port, proxy.resolver.as_ref())
             .await?;
         let mut control = MeteredStream::new(control);
-        let relay_target =
-            socks5::establish_udp_relay_with_control(&mut control, target.association_config())
-                .await?;
+        let relay_target = socks5::udp::establish_udp_relay_with_control(
+            &mut control,
+            target.association_config(),
+        )
+        .await?;
         proxy.record_session_outbound_traffic(session_id, control.drain_traffic());
         let control = control.into_inner();
         let relay_addr = proxy

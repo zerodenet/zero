@@ -3,12 +3,21 @@ use alloc::vec::Vec;
 use zero_core::{Address, Error};
 use zero_traits::{AsyncSocket, DatagramSocket, IpAddress, UdpRelayProtocol};
 
-use crate::outbound::{
-    Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth, Socks5UdpRelayTarget,
-};
+use crate::outbound::{Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth};
 use crate::shared::{
     build_udp_packet, decode_udp_associate_request, decode_udp_associate_response,
-    encode_udp_associate_response_to_client, Socks5InboundUdpRequest, Socks5InboundUdpResponse,
+    encode_udp_associate_response_to_client,
+};
+
+pub use crate::outbound::{
+    Socks5UdpAssociationSend, Socks5UdpFlowResume, Socks5UdpFlowSpec, Socks5UdpRelayTarget,
+};
+pub use crate::shared::{
+    packet_path_carrier_association_target, udp_flow_resume_from_config,
+    udp_packet_path_carrier_build_from_config, udp_packet_path_carrier_descriptor_from_config,
+    udp_packet_path_spec_from_config, Socks5InboundUdpDispatchParts, Socks5InboundUdpRequest,
+    Socks5InboundUdpResponse, Socks5UdpFlowConfig, Socks5UdpPacketPathCarrierBuild,
+    Socks5UdpPacketPathCarrierDescriptor, Socks5UdpPacketPathSpec,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

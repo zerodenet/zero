@@ -65,7 +65,7 @@ pub fn spawn_engine(engine: Engine) -> RunningEngine {
 }
 
 pub fn build_udp_packet(address: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
-    socks5::Socks5InboundUdpCodec.encode_response_to_client(address, port, payload)
+    socks5::udp::Socks5InboundUdpCodec.encode_response_to_client(address, port, payload)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,7 +76,7 @@ pub struct DecodedUdpPacket {
 }
 
 pub fn parse_udp_packet(packet: &[u8]) -> Result<DecodedUdpPacket, Error> {
-    socks5::Socks5InboundUdpCodec
+    socks5::udp::Socks5InboundUdpCodec
         .decode_response(packet)
         .map(|response| {
             let (target, port, payload) = response.into_parts();

@@ -43,7 +43,7 @@ pub(super) fn carrier_descriptor(
     else {
         return None;
     };
-    let descriptor = socks5::udp_packet_path_carrier_descriptor_from_config(
+    let descriptor = socks5::udp::udp_packet_path_carrier_descriptor_from_config(
         tag, server, *port, *username, *password,
     );
     Some(
@@ -69,14 +69,15 @@ pub(super) async fn build(
     else {
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
-    let carrier =
-        socks5::udp_packet_path_carrier_build_from_config(tag, server, *port, *username, *password);
+    let carrier = socks5::udp::udp_packet_path_carrier_build_from_config(
+        tag, server, *port, *username, *password,
+    );
     build_socks5_packet_path(proxy, carrier).await
 }
 
 pub(crate) async fn build_socks5_packet_path(
     proxy: &Proxy,
-    carrier: socks5::Socks5UdpPacketPathCarrierBuild,
+    carrier: socks5::udp::Socks5UdpPacketPathCarrierBuild,
 ) -> Result<std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
 {
     let association = establish_shared_packet_path_carrier(proxy, carrier).await?;
