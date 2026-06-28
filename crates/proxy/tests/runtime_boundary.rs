@@ -345,7 +345,7 @@ fn direct_udp_helpers_do_not_live_in_outbound_facade() {
 fn outbound_protocol_helpers_are_crate_private() {
     let outbound_root = read("src/outbound/mod.rs");
 
-    for protocol in ["hysteria2", "mieru", "trojan", "vless", "vmess"] {
+    for protocol in ["hysteria2", "mieru", "trojan", "vless"] {
         assert!(
             !outbound_root.contains(&format!("pub mod {protocol};")),
             "src/outbound/mod.rs should not expose `{protocol}` helpers as public modules"
@@ -364,6 +364,10 @@ fn outbound_protocol_helpers_are_crate_private() {
         !outbound_root.contains("shadowsocks"),
         "Shadowsocks outbound protocol glue should not return to src/outbound/mod.rs"
     );
+    assert!(
+        !outbound_root.contains("vmess"),
+        "VMess outbound protocol glue should not return to src/outbound/mod.rs"
+    );
 }
 
 #[test]
@@ -375,7 +379,6 @@ fn outbound_root_is_facade_only() {
         "pub(crate) mod mieru;",
         "pub(crate) mod trojan;",
         "pub(crate) mod vless;",
-        "pub(crate) mod vmess;",
     ] {
         assert!(
             outbound_root.contains(expected),
@@ -1750,12 +1753,7 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
         ),
         (
             "vmess",
-            &[
-                "crate::outbound::vmess::connect_tcp",
-                "crate::outbound::vmess::apply_tcp_hop",
-                "connect_upstream_vmess",
-                "EstablishedTcpOutbound::Vmess",
-            ],
+            &["connect_upstream_vmess", "EstablishedTcpOutbound::Vmess"],
         ),
     ];
 
@@ -1787,8 +1785,6 @@ fn outbound_tcp_helpers_are_called_only_by_adapter_tcp_modules() {
         "crate::outbound::trojan::apply_tcp_hop",
         "crate::outbound::vless::connect_tcp",
         "crate::outbound::vless::apply_tcp_hop",
-        "crate::outbound::vmess::connect_tcp",
-        "crate::outbound::vmess::apply_tcp_hop",
     ];
 
     for path in rust_sources_under("src") {
@@ -1873,23 +1869,14 @@ fn shadowsocks_tcp_connect_uses_request_model() {
 
 #[test]
 fn vmess_tcp_connect_uses_request_model() {
-    let outbound = read("src/outbound/vmess.rs");
+    let outbound = manifest_dir().join("src/outbound/vmess.rs");
     let adapter = read("src/adapters/vmess/tcp.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vmess/src/outbound.rs"))
         .expect("read vmess protocol outbound source");
 
     assert!(
-        !outbound.contains("#[allow(clippy::too_many_arguments)]"),
-        "VMess TCP connect should not need a too_many_arguments allowance"
-    );
-    assert!(
-        outbound.contains("struct VmessTcpConnectRequest")
-            && outbound.contains("request: VmessTcpConnectRequest<'_>"),
-        "VMess TCP connect should use VmessTcpConnectRequest"
-    );
-    assert!(
-        adapter.contains("VmessTcpConnectRequest {"),
-        "VMess adapter TCP module should pass VmessTcpConnectRequest"
+        !outbound.exists(),
+        "VMess should not need a protocol-named proxy outbound module; TCP glue lives in adapters/vmess/tcp.rs and protocol session setup lives in protocols/vmess"
     );
     for forbidden in [
         "parse_uuid",
@@ -1903,7 +1890,7 @@ fn vmess_tcp_connect_uses_request_model() {
         "zero_transport::ws::connect_ws",
     ] {
         assert!(
-            !outbound.contains(forbidden),
+            !adapter.contains(forbidden),
             "VMess outbound TCP helper should receive adapter-parsed identity and transport-built streams; found `{forbidden}`"
         );
     }
@@ -1919,20 +1906,20 @@ fn vmess_tcp_connect_uses_request_model() {
     }
     assert!(
         adapter.contains("VmessTcpConnectConfig::from_config")
-            && outbound.contains("config: vmess::VmessTcpConnectConfig")
+            && adapter.contains("config: vmess::VmessTcpConnectConfig")
             && protocol_outbound.contains("pub struct VmessTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config"),
         "VMess adapter should ask protocols/vmess to parse TCP identity config"
     );
     assert!(
-        outbound.contains("vmess::establish_tcp_outbound_stream"),
-        "VMess outbound TCP helper should delegate VMess session and AEAD setup to protocols/vmess"
+        adapter.contains("vmess::establish_tcp_outbound_stream"),
+        "VMess adapter TCP glue should delegate VMess session and AEAD setup to protocols/vmess"
     );
     assert!(
-        outbound.contains("crate::transport::build_vmess_outbound_transport")
-            && outbound.contains("crate::transport::VmessOutboundTransportRequest")
-            && outbound.contains("crate::transport::VmessTransportOptions"),
-        "VMess outbound TCP helper should request VMess transport building through zero-transport"
+        adapter.contains("crate::transport::build_vmess_outbound_transport")
+            && adapter.contains("crate::transport::VmessOutboundTransportRequest")
+            && adapter.contains("crate::transport::VmessTransportOptions"),
+        "VMess adapter TCP glue should request VMess transport building through zero-transport"
     );
 }
 

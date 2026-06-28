@@ -6,7 +6,7 @@ use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
 use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
+use crate::transport::{EstablishedTcpOutbound, MeteredStream, TcpOutboundFailure, TcpRelayStream};
 
 fn vmess_tcp_config(id: &str, cipher: &str) -> Result<vmess::VmessTcpConnectConfig, EngineError> {
     vmess::VmessTcpConnectConfig::from_config(id, cipher).map_err(|error| {
@@ -28,7 +28,7 @@ impl VmessAdapter {
             id,
             cipher,
             mux_concurrency,
-            mux_idle_timeout_secs,
+            mux_idle_timeout_secs: _,
             tls,
             ws,
             grpc,
@@ -72,20 +72,7 @@ impl VmessAdapter {
                     upstream_endpoint: Some(((*server).to_string(), *port)),
                 });
         }
-        match crate::outbound::vmess::connect_tcp(crate::outbound::vmess::VmessTcpConnectRequest {
-            proxy,
-            session,
-            server,
-            port: *port,
-            config,
-            mux_concurrency: *mux_concurrency,
-            mux_idle_timeout_secs: *mux_idle_timeout_secs,
-            tls: *tls,
-            ws: *ws,
-            grpc: *grpc,
-        })
-        .await
-        {
+        match connect_tcp(proxy, session, server, *port, config, *tls, *ws, *grpc).await {
             Ok(upstream) => Ok(EstablishedTcpOutbound::Vmess {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
@@ -110,6 +97,60 @@ impl VmessAdapter {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
         let config = vmess_tcp_config(id, cipher)?;
-        crate::outbound::vmess::apply_tcp_hop(stream, session, config).await
+        apply_tcp_hop(stream, session, config).await
     }
+}
+
+async fn connect_tcp(
+    proxy: &Proxy,
+    session: &Session,
+    server: &str,
+    port: u16,
+    config: vmess::VmessTcpConnectConfig,
+    tls: Option<&zero_config::ClientTlsConfig>,
+    ws: Option<&zero_config::WebSocketConfig>,
+    grpc: Option<&zero_config::GrpcConfig>,
+) -> Result<TcpRelayStream, EngineError> {
+    let socket = proxy
+        .protocols
+        .direct_connector()
+        .connect_host(server, port, proxy.resolver.as_ref())
+        .await?;
+
+    let stream = crate::transport::build_vmess_outbound_transport(
+        crate::transport::VmessOutboundTransportRequest {
+            socket,
+            options: crate::transport::VmessTransportOptions {
+                tls,
+                ws,
+                grpc,
+                source_dir: proxy.config.source_dir(),
+            },
+            server,
+            port,
+        },
+    )
+    .await?;
+
+    let mut sock = MeteredStream::new(stream);
+    let vmess_session =
+        vmess::establish_tcp_outbound_session(&mut sock, session, &config.uuid(), config.cipher())
+            .await?;
+    proxy.record_session_outbound_traffic(session.id, sock.drain_traffic());
+    Ok(TcpRelayStream::new(vmess::wrap_tcp_outbound_stream(
+        sock.into_inner(),
+        vmess_session,
+    )?))
+}
+
+async fn apply_tcp_hop(
+    stream: TcpRelayStream,
+    session: &Session,
+    config: vmess::VmessTcpConnectConfig,
+) -> Result<TcpRelayStream, EngineError> {
+    Ok(TcpRelayStream::new(
+        vmess::establish_tcp_outbound_stream(stream, session, &config.uuid(), config.cipher())
+            .await
+            .map_err(|error| EngineError::Io(std::io::Error::other(error)))?,
+    ))
 }

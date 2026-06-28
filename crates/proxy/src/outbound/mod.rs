@@ -6,5 +6,3 @@ pub(crate) mod mieru;
 pub(crate) mod trojan;
 #[cfg(feature = "vless")]
 pub(crate) mod vless;
-#[cfg(feature = "vmess")]
-pub(crate) mod vmess;
