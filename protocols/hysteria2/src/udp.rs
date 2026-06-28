@@ -96,6 +96,15 @@ pub struct Hysteria2InboundUdpRequest {
     payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2InboundUdpDispatchParts {
+    pub request_session_id: u16,
+    pub target: Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+    pub client_session_id: Option<u64>,
+}
+
 impl Hysteria2InboundUdpRequest {
     fn from_packet(packet: Hysteria2UdpPacket) -> Self {
         let (session_id, _, target, port, payload) = packet.into_parts();
@@ -125,6 +134,18 @@ impl Hysteria2InboundUdpRequest {
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
         (self.target, self.port, self.payload)
+    }
+
+    pub fn into_dispatch_parts(self) -> Hysteria2InboundUdpDispatchParts {
+        let session_id = self.session_id;
+        let (target, port, payload) = self.into_parts();
+        Hysteria2InboundUdpDispatchParts {
+            request_session_id: session_id,
+            target,
+            port,
+            payload,
+            client_session_id: None,
+        }
     }
 }
 

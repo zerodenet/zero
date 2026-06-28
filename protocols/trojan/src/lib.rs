@@ -12,8 +12,8 @@ mod outbound;
 pub mod shared;
 
 pub use inbound::{
-    TrojanAccept, TrojanInbound, TrojanInboundUdpCodec, TrojanInboundUdpRequest,
-    TrojanInboundUdpSession,
+    TrojanAccept, TrojanInbound, TrojanInboundUdpCodec, TrojanInboundUdpDispatchParts,
+    TrojanInboundUdpRequest, TrojanInboundUdpSession,
 };
 pub use metadata::TrojanProtocol;
 pub use outbound::{

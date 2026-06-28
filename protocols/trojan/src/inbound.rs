@@ -23,6 +23,14 @@ pub struct TrojanInboundUdpRequest {
     payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanInboundUdpDispatchParts {
+    pub target: zero_core::Address,
+    pub port: u16,
+    pub payload: Vec<u8>,
+    pub client_session_id: Option<u64>,
+}
+
 impl TrojanInboundUdpRequest {
     fn from_packet(packet: TrojanUdpPacket) -> Self {
         let (target, port, payload) = packet.into_parts();
@@ -47,6 +55,16 @@ impl TrojanInboundUdpRequest {
 
     pub fn into_parts(self) -> (zero_core::Address, u16, Vec<u8>) {
         (self.target, self.port, self.payload)
+    }
+
+    pub fn into_dispatch_parts(self) -> TrojanInboundUdpDispatchParts {
+        let (target, port, payload) = self.into_parts();
+        TrojanInboundUdpDispatchParts {
+            target,
+            port,
+            payload,
+            client_session_id: None,
+        }
     }
 }
 

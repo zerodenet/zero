@@ -206,15 +206,15 @@ impl Proxy {
                     match packet {
                         Ok(request) => {
                             last_activity = TokioInstant::now();
-                            let (target, port, payload) = request.into_parts();
+                            let request = request.into_dispatch_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target,
-                                    port,
-                                    payload: &payload,
+                                    target: request.target,
+                                    port: request.port,
+                                    payload: &request.payload,
                                     protocol: zero_core::ProtocolType::Trojan,
                                     auth: auth.as_ref(),
-                                    client_session_id: None,
+                                    client_session_id: request.client_session_id,
                                 })
                                 .await
                             {
