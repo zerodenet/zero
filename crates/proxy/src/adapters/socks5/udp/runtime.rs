@@ -71,7 +71,7 @@ impl Socks5UdpRuntime {
         &mut self,
         proxy: &crate::runtime::Proxy,
         inbound_tag: &str,
-        association: &socks5::Socks5UdpAssociationTarget,
+        association: socks5::Socks5UdpAssociationTarget,
         session: &zero_core::Session,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
@@ -104,10 +104,10 @@ impl Socks5UdpRuntime {
         &mut self,
         proxy: &crate::runtime::Proxy,
         inbound_tag: &str,
-        association: &socks5::Socks5UdpAssociationTarget,
+        association: socks5::Socks5UdpAssociationTarget,
         session_id: u64,
     ) -> Result<(), EngineError> {
-        let target = Socks5UdpAssociationTargetSnapshot::from_target(association);
+        let target = Socks5UdpAssociationTargetSnapshot::from_target(&association);
         let needs_new_association = self
             .upstream
             .as_ref()
@@ -139,7 +139,7 @@ impl Socks5UdpRuntime {
             .establisher
             .establish_boxed(Socks5UdpAssociationEstablishRequest {
                 proxy,
-                target: association.clone(),
+                target: association,
                 session_id,
             })
             .await
@@ -275,11 +275,8 @@ impl Socks5UdpRuntime {
 fn upstream_response_from_socks5(
     response: socks5::Socks5InboundUdpResponse,
 ) -> UpstreamUdpResponse {
-    UpstreamUdpResponse::new(
-        response.target().clone(),
-        response.port(),
-        response.payload().to_vec(),
-    )
+    let (target, port, payload) = response.into_parts();
+    UpstreamUdpResponse::new(target, port, payload)
 }
 
 #[async_trait]

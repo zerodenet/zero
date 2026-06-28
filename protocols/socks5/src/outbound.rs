@@ -116,6 +116,10 @@ impl Socks5UdpAssociationSend {
     pub fn target(&self) -> Socks5UdpAssociationTarget {
         self.association_target.clone()
     }
+
+    pub fn into_target(self) -> Socks5UdpAssociationTarget {
+        self.association_target
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

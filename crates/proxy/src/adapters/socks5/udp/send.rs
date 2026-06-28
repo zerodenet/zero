@@ -35,7 +35,7 @@ pub(crate) async fn send(
         .send_packet(
             request.proxy,
             inbound_tag,
-            &association.target(),
+            association.into_target(),
             request.session,
             request.payload,
         )
