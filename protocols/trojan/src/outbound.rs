@@ -612,6 +612,15 @@ pub fn udp_flow_resume_from_config(
     TrojanUdpFlowConfig::new(password, sni, insecure, client_fingerprint).flow_resume(relay_chain)
 }
 
+pub fn connector_flow_from_resume(
+    resume: &TrojanUdpFlowResume,
+    server: &str,
+    port: u16,
+    session_id: u64,
+) -> TrojanUdpConnectorFlow {
+    resume.connector_flow(server, port, session_id)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum TrojanUdpFlowKey {
     Leaf(TrojanUdpLeafKey),

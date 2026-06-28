@@ -387,6 +387,15 @@ pub fn udp_flow_resume_from_config(
     MieruUdpFlowConfig::new(username, password).flow_resume(relay_chain)
 }
 
+pub fn connector_flow_from_resume(
+    resume: &MieruUdpFlowResume,
+    server: &str,
+    port: u16,
+    session_id: u64,
+) -> MieruUdpConnectorFlow {
+    resume.connector_flow(server, port, session_id)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum MieruUdpFlowKey {
     Leaf(MieruUdpLeafKey),

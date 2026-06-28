@@ -21,7 +21,8 @@ impl ManagedStreamFlowConnector<trojan::TrojanUdpFlowResume> for TrojanManagedSt
         endpoint: OutboundEndpoint<'_>,
         session_id: u64,
     ) -> ManagedStreamConnectorFlow {
-        let flow = resume.connector_flow(endpoint.server, endpoint.port, session_id);
+        let flow =
+            trojan::connector_flow_from_resume(resume, endpoint.server, endpoint.port, session_id);
         managed_stream_connector_flow_from_build(flow)
     }
 

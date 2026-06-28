@@ -21,7 +21,8 @@ impl ManagedStreamFlowConnector<mieru::MieruUdpFlowResume> for MieruManagedStrea
         endpoint: OutboundEndpoint<'_>,
         session_id: u64,
     ) -> ManagedStreamConnectorFlow {
-        let flow = resume.connector_flow(endpoint.server, endpoint.port, session_id);
+        let flow =
+            mieru::connector_flow_from_resume(resume, endpoint.server, endpoint.port, session_id);
         managed_stream_connector_flow_from_build(flow)
     }
 
