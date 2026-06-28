@@ -84,7 +84,7 @@ pub(crate) async fn build_socks5_packet_path(
     let association =
         establish_shared_packet_path_association(Socks5UdpAssociationEstablishRequest {
             proxy,
-            target: carrier.association_target(),
+            target: carrier.into_association_target(),
             session_id: 0,
         })
         .await?;

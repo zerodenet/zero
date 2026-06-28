@@ -4385,12 +4385,16 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
     let response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
 
     assert!(
-        send.contains(".flow(")
-            && send.contains(".association_target()")
+        send.contains("resume.association_send(")
+            && !send.contains(".flow(")
+            && !send.contains(".association_target()")
             && !send.contains("resume.association_target(")
             && protocol_udp.contains("struct Socks5UdpAssociationTarget")
+            && protocol_outbound.contains("pub struct Socks5UdpAssociationSend")
+            && protocol_outbound.contains("pub fn association_send(")
             && protocol_outbound.contains("pub struct Socks5UdpFlowSpec")
             && protocol_outbound.contains("pub fn flow(")
+            && protocol_lib.contains("Socks5UdpAssociationSend")
             && protocol_lib.contains("Socks5UdpFlowSpec")
             && protocol_udp.contains("outbound_tag: alloc::string::String")
             && !model
@@ -4409,8 +4413,9 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
         "SOCKS5 UDP runtime must pass the outbound tag into the upstream association through neutral upstream dispatch"
     );
     assert!(
-        send.contains(".flow(")
+        send.contains("resume.association_send(")
             && !send.contains("resume.association_target(")
+            && !send.contains(".association_target()")
             && runtime.contains("association.outbound_tag()")
             && !send.contains("association.tag"),
         "SOCKS5 UDP runtime state should store and match the relay outbound tag"
@@ -9927,6 +9932,7 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
             && !socks5_packet_path.contains("spec.carrier_cache_key()")
             && !socks5_packet_path.contains("spec.association_target()")
             && !socks5_packet_path.contains("spec.carrier_build().association_target()")
+            && !socks5_packet_path.contains("carrier.association_target()")
             && !socks5_packet_path.contains(".packet_path_cache_key()")
             && !socks5_adapter.contains("Socks5UdpFlowConfig {")
             && !socks5_packet_path.contains("Socks5UdpFlowConfig {")

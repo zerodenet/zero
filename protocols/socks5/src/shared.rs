@@ -518,8 +518,8 @@ impl Socks5UdpPacketPathCarrierBuild {
         self.port
     }
 
-    pub fn association_target(&self) -> Socks5UdpAssociationTarget {
-        self.association_target.clone()
+    pub fn into_association_target(self) -> Socks5UdpAssociationTarget {
+        self.association_target
     }
 }
 
