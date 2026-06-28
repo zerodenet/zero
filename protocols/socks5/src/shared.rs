@@ -565,6 +565,10 @@ impl Socks5UdpPacketPathCarrierDescriptor {
     pub fn port(&self) -> u16 {
         self.port
     }
+
+    pub fn into_parts(self) -> (String, String, u16) {
+        (self.cache_key, self.server, self.port)
+    }
 }
 
 pub fn udp_packet_path_spec_from_config(

@@ -556,6 +556,10 @@ impl Hysteria2UdpPacketPathCarrierDescriptor {
     pub fn port(&self) -> u16 {
         self.port
     }
+
+    pub fn into_parts(self) -> (String, String, u16) {
+        (self.cache_key, self.server, self.port)
+    }
 }
 
 pub fn udp_packet_path_spec_from_config(
@@ -877,6 +881,10 @@ pub struct Hysteria2UdpConnectorFlowParts {
 impl Hysteria2UdpConnectorFlow {
     pub fn cache_key(&self) -> String {
         self.cache_key.clone()
+    }
+
+    pub fn into_cache_key(self) -> String {
+        self.cache_key
     }
 
     pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {

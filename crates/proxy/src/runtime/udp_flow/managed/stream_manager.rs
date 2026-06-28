@@ -56,24 +56,20 @@ impl ManagedStreamConnectorFlow {
         }
     }
 
-    fn cache_key(self) -> String {
-        self.cache_key
-    }
-
-    fn requires_relay_upstream(&self) -> bool {
-        self.requires_relay_upstream
+    fn into_parts(self) -> (String, bool) {
+        (self.cache_key, self.requires_relay_upstream)
     }
 }
 
 pub(crate) trait ManagedStreamConnectorFlowBuild {
-    fn cache_key(&self) -> String;
-    fn requires_relay_upstream(&self) -> bool;
+    fn into_parts(self) -> (String, bool);
 }
 
 pub(crate) fn managed_stream_connector_flow_from_build(
     build: impl ManagedStreamConnectorFlowBuild,
 ) -> ManagedStreamConnectorFlow {
-    ManagedStreamConnectorFlow::new(build.cache_key(), build.requires_relay_upstream())
+    let (cache_key, requires_relay_upstream) = build.into_parts();
+    ManagedStreamConnectorFlow::new(cache_key, requires_relay_upstream)
 }
 
 pub(crate) struct ManagedStreamFlowManager<T, C> {
@@ -143,7 +139,8 @@ where
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
         let connector_flow = self.connector.connector_flow(&resume, endpoint, session_id);
-        if connector_flow.requires_relay_upstream() {
+        let (cache_key, requires_relay_upstream) = connector_flow.into_parts();
+        if requires_relay_upstream {
             return Err(FlowFailure {
                 stage: self.relay_upstream_stage,
                 error: EngineError::Io(std::io::Error::new(
@@ -153,7 +150,6 @@ where
                 upstream: Some(endpoint.upstream()),
             });
         }
-        let cache_key = connector_flow.cache_key();
 
         self.upstreams
             .send_or_insert_key(
@@ -178,10 +174,10 @@ where
     ) -> Result<usize, FlowFailure> {
         let session_id = request.ctx.session_id;
         let upstream = request.endpoint.upstream();
-        let cache_key = self
+        let (cache_key, _) = self
             .connector
             .connector_flow(&request.resume, request.endpoint, session_id)
-            .cache_key();
+            .into_parts();
         let entry = self
             .connector
             .establish_relay(

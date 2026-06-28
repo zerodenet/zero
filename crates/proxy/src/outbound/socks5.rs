@@ -70,15 +70,7 @@ pub(crate) async fn apply_tcp_hop(
 }
 
 impl PacketPathCarrierDescriptorBuild for socks5::Socks5UdpPacketPathCarrierDescriptor {
-    fn cache_key(&self) -> String {
-        self.cache_key()
-    }
-
-    fn server(&self) -> &str {
-        self.server()
-    }
-
-    fn port(&self) -> u16 {
-        self.port()
+    fn into_parts(self) -> (String, String, u16) {
+        self.into_parts()
     }
 }

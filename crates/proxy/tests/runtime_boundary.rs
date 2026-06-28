@@ -9568,10 +9568,10 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && adapter_packet_path.contains("udp_packet_path_datagram_source_build_from_config")
             && adapter_packet_path.contains("udp_datagram_source_from_build")
             && !adapter_packet_path.contains("spec.datagram_source_parts()")
-            && !adapter_packet_path.contains("datagram.into_parts()")
+            && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
             && !adapter_packet_path.contains("datagram.cache_key()")
             && !adapter_packet_path.contains("datagram.codec()")
-            && outbound.contains("self.into_codec()")
+            && outbound.contains("let (tag, server, port, cache_key, codec) = self.into_parts();")
             && !outbound.contains("self.codec()")
             && !adapter_packet_path.contains("datagram.tag()")
             && !adapter_packet_path.contains("datagram.server()")
@@ -10000,7 +10000,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter_packet_path.contains("packet_path.cache_key()")
             && !adapter_packet_path.contains("packet_path.codec()")
             && !adapter_packet_path.contains("UdpDatagramSourceParts")
-            && !adapter_packet_path.contains("datagram.into_parts()")
+            && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
             && adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
             && adapter_packet_path.contains("packet_path_carrier_descriptor_from_build")
             && !adapter_packet_path.contains("descriptor.cache_key()")
@@ -10009,10 +10009,11 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && adapter_packet_path.contains("udp_packet_path_datagram_source_build_from_config")
             && adapter_packet_path.contains("udp_datagram_source_from_build")
             && !adapter_packet_path.contains("spec.datagram_source_parts()")
-            && !adapter_packet_path.contains("datagram.into_parts()")
+            && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
             && !adapter_packet_path.contains("datagram.cache_key()")
             && !adapter_packet_path.contains("datagram.codec()")
-            && shadowsocks_outbound.contains("self.into_codec()")
+            && shadowsocks_outbound
+                .contains("let (tag, server, port, cache_key, codec) = self.into_parts();")
             && !shadowsocks_outbound.contains("self.codec()")
             && !adapter_packet_path.contains("datagram.tag()")
             && !adapter_packet_path.contains("datagram.server()")
@@ -10069,7 +10070,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter_packet_path.contains("descriptor.port()")
             && adapter_packet_path.contains("udp_packet_path_datagram_source_build_from_config")
             && !adapter_packet_path.contains("spec.datagram_source_parts()")
-            && !adapter_packet_path.contains("datagram.into_parts()")
+            && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
             && !adapter_packet_path.contains("spec.carrier()")
             && !adapter_packet_path.contains("spec.datagram_source()")
             && !adapter_packet_path.contains("spec.cache_key()")
@@ -10113,6 +10114,105 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
         !carrier_snapshot.contains("cipher: String")
             && !carrier_snapshot.contains("enum UdpPacketPathCarrier"),
         "packet-path carrier snapshots should use neutral adapter-built cache keys instead of protocol-specific payload fields"
+    );
+}
+
+#[test]
+fn udp_build_traits_consume_protocol_parts() {
+    let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
+    let datagram_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
+    let packet_path = read("src/runtime/udp_flow/packet_path.rs");
+    let socks5_outbound = read("src/outbound/socks5.rs");
+    let shadowsocks_outbound = read("src/outbound/shadowsocks.rs");
+    let hysteria2_outbound = read("src/outbound/hysteria2.rs");
+    let trojan_outbound = read("src/outbound/trojan.rs");
+    let mieru_outbound = read("src/outbound/mieru.rs");
+    let socks5_shared = fs::read_to_string(repo_root().join("protocols/socks5/src/shared.rs"))
+        .expect("read socks5 shared source");
+    let shadowsocks_protocol =
+        fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
+            .expect("read shadowsocks protocol outbound source");
+    let hysteria2_protocol = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
+        .expect("read hysteria2 protocol udp source");
+    let trojan_protocol = fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
+        .expect("read trojan protocol outbound source");
+    let mieru_protocol = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
+        .expect("read mieru protocol udp source");
+
+    assert!(
+        stream_manager.contains("fn into_parts(self) -> (String, bool);")
+            && stream_manager
+                .contains("let (cache_key, requires_relay_upstream) = build.into_parts();")
+            && stream_manager
+                .contains("let (cache_key, requires_relay_upstream) = connector_flow.into_parts();")
+            && !stream_manager.contains("fn cache_key(&self) -> String;")
+            && !stream_manager.contains("fn requires_relay_upstream(&self) -> bool;")
+            && !stream_manager.contains("connector_flow.cache_key()")
+            && !stream_manager.contains("connector_flow.requires_relay_upstream()"),
+        "managed stream connector flow builds should consume protocol-provided parts instead of exposing getter traits"
+    );
+    assert!(
+        trojan_outbound.contains("fn into_parts(self) -> (String, bool)")
+            && trojan_outbound.contains("self.into_parts()")
+            && mieru_outbound.contains("fn into_parts(self) -> (String, bool)")
+            && mieru_outbound.contains("self.into_parts()")
+            && !trojan_outbound.contains("self.cache_key()")
+            && !trojan_outbound.contains("self.requires_relay_upstream()")
+            && !mieru_outbound.contains("self.cache_key()")
+            && !mieru_outbound.contains("self.requires_relay_upstream()")
+            && trojan_protocol.contains("pub fn into_parts(self) -> (String, bool)")
+            && mieru_protocol.contains("pub fn into_parts(self) -> (alloc::string::String, bool)"),
+        "Trojan and Mieru stream connector glue should not read protocol cache-key getters"
+    );
+    assert!(
+        datagram_manager.contains("fn into_cache_key(self) -> String;")
+            && datagram_manager
+                .contains("ManagedDatagramConnectorFlow::new(build.into_cache_key())")
+            && datagram_manager
+                .contains("ManagedDatagramSocketConnectorFlow::new(build.into_cache_key())")
+            && !datagram_manager.contains("fn cache_key(&self) -> String;")
+            && hysteria2_outbound.contains("fn into_cache_key(self) -> String")
+            && shadowsocks_outbound.contains("fn into_cache_key(self) -> String")
+            && hysteria2_outbound.contains("self.into_cache_key()")
+            && shadowsocks_outbound.contains("self.into_cache_key()")
+            && !hysteria2_outbound.contains("self.cache_key()")
+            && !shadowsocks_outbound.contains("self.cache_key()"),
+        "managed datagram connector flow builds should consume cache identity instead of exposing cache-key getters to proxy"
+    );
+    assert!(
+        packet_path.contains("fn into_parts(self) -> (String, String, u16);")
+            && packet_path.contains("let (cache_key, server, port) = build.into_parts();")
+            && !packet_path.contains("fn server(&self) -> &str;")
+            && !packet_path.contains("fn port(&self) -> u16;")
+            && socks5_outbound.contains("self.into_parts()")
+            && shadowsocks_outbound.contains("self.into_parts()")
+            && hysteria2_outbound.contains("self.into_parts()")
+            && !socks5_outbound.contains("self.server()")
+            && !socks5_outbound.contains("self.port()")
+            && !shadowsocks_outbound.contains("self.server()")
+            && !shadowsocks_outbound.contains("self.port()")
+            && !hysteria2_outbound.contains("self.server()")
+            && !hysteria2_outbound.contains("self.port()")
+            && socks5_shared.contains("pub fn into_parts(self) -> (String, String, u16)")
+            && shadowsocks_protocol.contains(
+                "pub fn into_parts(self) -> (alloc::string::String, alloc::string::String, u16)"
+            )
+            && hysteria2_protocol.contains("pub fn into_parts(self) -> (String, String, u16)"),
+        "packet-path carrier descriptors should cross into proxy as consumed neutral parts"
+    );
+    assert!(
+        packet_path.contains("trait UdpDatagramSourceBuild")
+            && packet_path.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
+            && packet_path
+                .contains("let (tag, server, port, cache_key, codec) = build.into_parts();")
+            && !packet_path.contains("fn tag(&self) -> &str;")
+            && !packet_path.contains("fn cache_key(&self) -> String;")
+            && shadowsocks_outbound
+                .contains("let (tag, server, port, cache_key, codec) = self.into_parts();")
+            && !shadowsocks_outbound.contains("self.into_codec()")
+            && shadowsocks_protocol.contains("pub fn into_parts(")
+            && shadowsocks_protocol.contains("self.tag, self.server, self.port, self.cache_key"),
+        "packet-path datagram sources should consume protocol-built source parts and codec in one step"
     );
 }
 

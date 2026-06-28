@@ -300,11 +300,7 @@ pub(crate) async fn apply_tcp_hop(
 }
 
 impl ManagedStreamConnectorFlowBuild for mieru::MieruUdpConnectorFlow {
-    fn cache_key(&self) -> String {
-        self.cache_key()
-    }
-
-    fn requires_relay_upstream(&self) -> bool {
-        self.requires_relay_upstream()
+    fn into_parts(self) -> (String, bool) {
+        self.into_parts()
     }
 }

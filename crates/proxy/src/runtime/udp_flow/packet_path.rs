@@ -77,15 +77,14 @@ pub(crate) fn packet_path_carrier_descriptor(
 }
 
 pub(crate) trait PacketPathCarrierDescriptorBuild {
-    fn cache_key(&self) -> String;
-    fn server(&self) -> &str;
-    fn port(&self) -> u16;
+    fn into_parts(self) -> (String, String, u16);
 }
 
 pub(crate) fn packet_path_carrier_descriptor_from_build(
     build: impl PacketPathCarrierDescriptorBuild,
 ) -> PacketPathCarrierDescriptor {
-    packet_path_carrier_descriptor(build.cache_key(), build.server(), build.port())
+    let (cache_key, server, port) = build.into_parts();
+    packet_path_carrier_descriptor(cache_key, &server, port)
 }
 
 /// Datagram source params for a relay-chain final hop over a packet path.
@@ -139,21 +138,22 @@ pub(crate) fn udp_datagram_source(
 }
 
 pub(crate) trait UdpDatagramSourceBuild {
-    fn tag(&self) -> &str;
-    fn server(&self) -> &str;
-    fn port(&self) -> u16;
-    fn cache_key(&self) -> String;
-    fn into_codec(self) -> Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>;
+    fn into_parts(
+        self,
+    ) -> (
+        String,
+        String,
+        u16,
+        String,
+        Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
+    );
 }
 
 pub(crate) fn udp_datagram_source_from_build(
     build: impl UdpDatagramSourceBuild,
 ) -> UdpDatagramSource {
-    let tag = build.tag().to_owned();
-    let server = build.server().to_owned();
-    let port = build.port();
-    let cache_key = build.cache_key();
-    udp_datagram_source(&tag, &server, port, cache_key, build.into_codec())
+    let (tag, server, port, cache_key, codec) = build.into_parts();
+    udp_datagram_source(&tag, &server, port, cache_key, codec)
 }
 
 impl UdpDatagramSource {

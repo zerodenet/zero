@@ -47,13 +47,13 @@ impl ManagedDatagramConnectorFlow {
 }
 
 pub(crate) trait ManagedDatagramConnectorFlowBuild {
-    fn cache_key(&self) -> String;
+    fn into_cache_key(self) -> String;
 }
 
 pub(crate) fn managed_datagram_connector_flow_from_build(
     build: impl ManagedDatagramConnectorFlowBuild,
 ) -> ManagedDatagramConnectorFlow {
-    ManagedDatagramConnectorFlow::new(build.cache_key())
+    ManagedDatagramConnectorFlow::new(build.into_cache_key())
 }
 
 pub(crate) struct ManagedDatagramFlowManager<T, C> {
@@ -227,13 +227,13 @@ impl ManagedDatagramSocketConnectorFlow {
 }
 
 pub(crate) trait ManagedDatagramSocketConnectorFlowBuild {
-    fn cache_key(&self) -> String;
+    fn into_cache_key(self) -> String;
 }
 
 pub(crate) fn managed_datagram_socket_connector_flow_from_build(
     build: impl ManagedDatagramSocketConnectorFlowBuild,
 ) -> ManagedDatagramSocketConnectorFlow {
-    ManagedDatagramSocketConnectorFlow::new(build.cache_key())
+    ManagedDatagramSocketConnectorFlow::new(build.into_cache_key())
 }
 
 impl<T, C> ManagedDatagramSocketFlowManager<T, C>

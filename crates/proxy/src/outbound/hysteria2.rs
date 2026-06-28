@@ -137,22 +137,14 @@ pub(crate) async fn open_udp_packet_path_build(
 }
 
 impl PacketPathCarrierDescriptorBuild for hysteria2::Hysteria2UdpPacketPathCarrierDescriptor {
-    fn cache_key(&self) -> String {
-        self.cache_key()
-    }
-
-    fn server(&self) -> &str {
-        self.server()
-    }
-
-    fn port(&self) -> u16 {
-        self.port()
+    fn into_parts(self) -> (String, String, u16) {
+        self.into_parts()
     }
 }
 
 impl ManagedDatagramConnectorFlowBuild for hysteria2::Hysteria2UdpConnectorFlow {
-    fn cache_key(&self) -> String {
-        self.cache_key()
+    fn into_cache_key(self) -> String {
+        self.into_cache_key()
     }
 }
 

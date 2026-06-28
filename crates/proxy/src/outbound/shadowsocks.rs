@@ -65,46 +65,29 @@ pub(crate) struct ShadowsocksTcpConnectRequest<'a> {
 }
 
 impl UdpDatagramSourceBuild for shadowsocks::ShadowsocksUdpPacketPathDatagramSourceBuild {
-    fn tag(&self) -> &str {
-        self.tag()
-    }
-
-    fn server(&self) -> &str {
-        self.server()
-    }
-
-    fn port(&self) -> u16 {
-        self.port()
-    }
-
-    fn cache_key(&self) -> String {
-        self.cache_key()
-    }
-
-    fn into_codec(
+    fn into_parts(
         self,
-    ) -> std::sync::Arc<dyn DatagramCodec<zero_core::Address, Error = zero_core::Error>> {
-        std::sync::Arc::new(self.into_codec())
+    ) -> (
+        String,
+        String,
+        u16,
+        String,
+        std::sync::Arc<dyn DatagramCodec<zero_core::Address, Error = zero_core::Error>>,
+    ) {
+        let (tag, server, port, cache_key, codec) = self.into_parts();
+        (tag, server, port, cache_key, std::sync::Arc::new(codec))
     }
 }
 
 impl PacketPathCarrierDescriptorBuild for shadowsocks::ShadowsocksUdpPacketPathCarrierDescriptor {
-    fn cache_key(&self) -> String {
-        self.cache_key()
-    }
-
-    fn server(&self) -> &str {
-        self.server()
-    }
-
-    fn port(&self) -> u16 {
-        self.port()
+    fn into_parts(self) -> (String, String, u16) {
+        self.into_parts()
     }
 }
 
 impl ManagedDatagramSocketConnectorFlowBuild for shadowsocks::ShadowsocksUdpSocketFlowSpec {
-    fn cache_key(&self) -> String {
-        self.cache_key()
+    fn into_cache_key(self) -> String {
+        self.into_cache_key()
     }
 }
 
