@@ -84,7 +84,7 @@ impl UdpDatagramSourceBuild for shadowsocks::ShadowsocksUdpPacketPathDatagramSou
     fn into_codec(
         self,
     ) -> std::sync::Arc<dyn DatagramCodec<zero_core::Address, Error = zero_core::Error>> {
-        std::sync::Arc::new(self.codec())
+        std::sync::Arc::new(self.into_codec())
     }
 }
 

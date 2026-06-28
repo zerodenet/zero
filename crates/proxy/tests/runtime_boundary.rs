@@ -9571,6 +9571,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && !adapter_packet_path.contains("datagram.into_parts()")
             && !adapter_packet_path.contains("datagram.cache_key()")
             && !adapter_packet_path.contains("datagram.codec()")
+            && outbound.contains("self.into_codec()")
+            && !outbound.contains("self.codec()")
             && !adapter_packet_path.contains("datagram.tag()")
             && !adapter_packet_path.contains("datagram.server()")
             && !adapter_packet_path.contains("datagram.port()")
@@ -9957,6 +9959,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     let traits = read("src/runtime/udp_flow/packet_path.rs");
     let key = read("src/runtime/udp_flow/packet_path_chain/key.rs");
     let outbound = read("src/runtime/udp_flow/outbound.rs");
+    let shadowsocks_outbound = read("src/outbound/shadowsocks.rs");
     let carrier_snapshot = read("src/runtime/udp_flow/packet_path.rs");
     let snapshot = read("src/runtime/udp_flow/packet_path_chain/snapshot.rs");
     let forward = read("src/runtime/udp_flow/managed/datagram.rs");
@@ -10009,6 +10012,8 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter_packet_path.contains("datagram.into_parts()")
             && !adapter_packet_path.contains("datagram.cache_key()")
             && !adapter_packet_path.contains("datagram.codec()")
+            && shadowsocks_outbound.contains("self.into_codec()")
+            && !shadowsocks_outbound.contains("self.codec()")
             && !adapter_packet_path.contains("datagram.tag()")
             && !adapter_packet_path.contains("datagram.server()")
             && !adapter_packet_path.contains("datagram.port()")

@@ -882,6 +882,10 @@ impl ShadowsocksUdpPacketPathDatagramSourceBuild {
     pub fn codec(&self) -> ShadowsocksDatagramCodec {
         self.codec.clone()
     }
+
+    pub fn into_codec(self) -> ShadowsocksDatagramCodec {
+        self.codec
+    }
 }
 
 #[cfg(feature = "crypto")]
