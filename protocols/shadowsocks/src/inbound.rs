@@ -354,12 +354,16 @@ impl ShadowsocksInboundUdpCodec {
 #[cfg(feature = "crypto")]
 pub struct ShadowsocksInboundUdpSession {
     codec: ShadowsocksInboundUdpCodec,
+    proxy_sessions: std::collections::HashMap<u64, Option<u64>>,
 }
 
 #[cfg(feature = "crypto")]
 impl ShadowsocksInboundUdpSession {
     pub fn new(codec: ShadowsocksInboundUdpCodec) -> Self {
-        Self { codec }
+        Self {
+            codec,
+            proxy_sessions: std::collections::HashMap::new(),
+        }
     }
 
     pub fn decode_request(
@@ -386,6 +390,29 @@ impl ShadowsocksInboundUdpSession {
         payload: &[u8],
     ) -> Result<ShadowsocksInboundUdpResponse, Error> {
         self.codec.response_frame(target, payload)
+    }
+
+    pub fn record_proxy_session(&mut self, proxy_session_id: u64, client_session_id: Option<u64>) {
+        if client_session_id.is_some() {
+            self.proxy_sessions
+                .insert(proxy_session_id, client_session_id);
+        }
+    }
+
+    pub fn response_target_for_proxy_session(
+        &self,
+        proxy_session_id: u64,
+        target: &Address,
+        port: u16,
+    ) -> ShadowsocksInboundUdpResponseTarget {
+        ShadowsocksInboundUdpResponseTarget::from_parts(
+            self.proxy_sessions
+                .get(&proxy_session_id)
+                .copied()
+                .flatten(),
+            target,
+            port,
+        )
     }
 }
 

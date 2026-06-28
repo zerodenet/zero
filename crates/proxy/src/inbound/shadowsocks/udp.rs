@@ -5,9 +5,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 
-use shadowsocks::{
-    ShadowsocksInboundProfile, ShadowsocksInboundUdpResponseTarget, ShadowsocksInboundUdpSession,
-};
+use shadowsocks::{ShadowsocksInboundProfile, ShadowsocksInboundUdpSession};
 use tokio::net::UdpSocket;
 use tracing::warn;
 use zero_core::ProtocolType;
@@ -28,10 +26,6 @@ impl Proxy {
         let mut udp_session = profile.udp_session();
         // Map session_id -> client_addr for response delivery.
         let mut client_sessions: HashMap<u64, SocketAddr> = HashMap::new();
-        // For 2022 (blake3): map internal dispatch session_id -> the client's
-        // SIP022 session id, so server-to-client responses can echo it.
-        let mut client_ss_session_ids: HashMap<u64, u64> = HashMap::new();
-
         let mut buf = [0u8; 65536];
         let mut direct_buf = [0u8; 65536];
 
@@ -68,9 +62,7 @@ impl Proxy {
                     {
                         Ok(session_id) => {
                             client_sessions.insert(session_id, client_addr);
-                            if let Some(client_session_id) = client_session_id {
-                                client_ss_session_ids.insert(session_id, client_session_id);
-                            }
+                            udp_session.record_proxy_session(session_id, client_session_id);
                         }
                         Err(error) => {
                             warn!(error = %error, "ss udp dispatch failed");
@@ -85,8 +77,8 @@ impl Proxy {
                             ss_send_protocol_response(SsProtocolResponse {
                                 socket: udp_socket.as_ref(),
                                 udp_session: &udp_session,
-                                response_target: ShadowsocksInboundUdpResponseTarget::from_parts(
-                                    client_ss_session_ids.get(&sid).copied(),
+                                response_target: udp_session.response_target_for_proxy_session(
+                                    sid,
                                     &address_from_socket_addr(sender),
                                     sender.port(),
                                 ),
@@ -106,11 +98,8 @@ impl Proxy {
                                     ss_send_protocol_response(SsProtocolResponse {
                                         socket: udp_socket.as_ref(),
                                         udp_session: &udp_session,
-                                        response_target: ShadowsocksInboundUdpResponseTarget::from_parts(
-                                            client_ss_session_ids.get(&sid).copied(),
-                                            &target,
-                                            port,
-                                        ),
+                                        response_target: udp_session
+                                            .response_target_for_proxy_session(sid, &target, port),
                                         payload: &payload,
                                         client,
                                     })
@@ -139,7 +128,7 @@ impl Proxy {
 struct SsProtocolResponse<'a> {
     socket: &'a UdpSocket,
     udp_session: &'a ShadowsocksInboundUdpSession,
-    response_target: ShadowsocksInboundUdpResponseTarget,
+    response_target: shadowsocks::ShadowsocksInboundUdpResponseTarget,
     payload: &'a [u8],
     client: SocketAddr,
 }
