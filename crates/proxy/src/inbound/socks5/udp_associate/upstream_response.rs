@@ -80,11 +80,10 @@ fn upstream_response_session_id(
     let association = dispatch.upstream_association_view()?;
     let udp_session = socks5::Socks5Inbound.udp_session();
     match udp_session.response_key(payload) {
-        Ok(response) => dispatch.upstream_response_session_id(
-            association.outbound_tag,
-            response.target(),
-            response.port(),
-        ),
+        Ok(response) => {
+            let (target, port) = response.into_parts();
+            dispatch.upstream_response_session_id(association.outbound_tag, &target, port)
+        }
         Err(error) => {
             debug!(
                 inbound_tag = inbound_tag,

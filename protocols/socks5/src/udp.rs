@@ -221,6 +221,10 @@ impl Socks5InboundUdpResponseKey {
     pub fn port(&self) -> u16 {
         self.port
     }
+
+    pub fn into_parts(self) -> (Address, u16) {
+        (self.target, self.port)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -266,10 +270,8 @@ impl Socks5InboundUdpSession {
 
     pub fn response_key(&self, packet: &[u8]) -> Result<Socks5InboundUdpResponseKey, Error> {
         let response = self.decode_response(packet)?;
-        Ok(Socks5InboundUdpResponseKey {
-            target: response.target().clone(),
-            port: response.port(),
-        })
+        let (target, port, _) = response.into_parts();
+        Ok(Socks5InboundUdpResponseKey { target, port })
     }
 }
 

@@ -228,6 +228,17 @@ impl Socks5InboundUdpRequest {
         &self.payload
     }
 
+    pub fn is_dns_domain_request(&self) -> bool {
+        matches!(&self.target, Address::Domain(_)) && self.port == 53
+    }
+
+    pub fn dns_domain_request(&self) -> Option<&str> {
+        match (&self.target, self.port) {
+            (Address::Domain(domain), 53) => Some(domain),
+            _ => None,
+        }
+    }
+
     pub fn protocol_overhead_len(&self) -> usize {
         self.frame_len.saturating_sub(self.payload.len())
     }

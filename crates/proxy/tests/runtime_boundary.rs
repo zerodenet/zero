@@ -4748,10 +4748,12 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     assert!(
         dispatch.contains("socks5::Socks5Inbound.udp_session()")
             && dispatch.contains("udp_session.decode_request")
+            && dispatch.contains("udp_packet.dns_domain_request()")
             && dispatch.contains("udp_packet.into_dispatch_parts()")
             && dispatch.contains("protocol_overhead_len")
             && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
             && upstream_response.contains("udp_session.response_key")
+            && upstream_response.contains("response.into_parts()")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
             && direct_response.contains("udp_session.response_frame")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
@@ -4763,7 +4765,12 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         "SOCKS5 UDP associate dispatch/attribution should use the protocol-owned inbound UDP session"
     );
     assert!(
-        !dispatch.contains("udp_packet.into_parts()") && !dispatch.contains("client_session_id: None"),
+        !dispatch.contains("udp_packet.into_parts()")
+            && !dispatch.contains("client_session_id: None")
+            && !dispatch.contains("udp_packet.target()")
+            && !dispatch.contains("udp_packet.port()")
+            && !upstream_response.contains("response.target()")
+            && !upstream_response.contains("response.port()"),
         "SOCKS5 UDP associate dispatch should consume protocol-owned dispatch parts instead of rebuilding session facts"
     );
     for forbidden in [

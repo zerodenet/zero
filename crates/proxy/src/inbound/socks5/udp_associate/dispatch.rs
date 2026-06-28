@@ -1,4 +1,4 @@
-use zero_core::{Address, ProtocolType};
+use zero_core::ProtocolType;
 use zero_engine::EngineError;
 use zero_traits::DnsResolver;
 
@@ -21,22 +21,16 @@ pub(super) async fn dispatch_packet(
     // DNS interception.
     // Intercept UDP packets to port 53 with a domain target.
     // Resolve locally through DnsSystem and reply directly.
-    if udp_packet.port() == 53 {
-        if let Address::Domain(domain) = udp_packet.target() {
-            match proxy.resolver.resolve(domain).await {
-                Ok(_ips) => {
-                    // DNS resolved locally; build response and return.
-                    // The caller will forward via the relay socket if
-                    // available. For now, skip dispatch and return Ok.
-                    // The DNS response is sent inline in the main loop.
-                    return Ok(());
-                }
-                Err(_) => {
-                    // Resolution failed; silently drop.
-                    return Ok(());
-                }
-            }
+    if let Some(domain) = udp_packet.dns_domain_request() {
+        if let Ok(_ips) = proxy.resolver.resolve(domain).await {
+            // DNS resolved locally; build response and return.
+            // The caller will forward via the relay socket if
+            // available. For now, skip dispatch and return Ok.
+            // The DNS response is sent inline in the main loop.
+            return Ok(());
         }
+        // Resolution failed; silently drop.
+        return Ok(());
     }
 
     let protocol_overhead_len = udp_packet.protocol_overhead_len() as u64;
