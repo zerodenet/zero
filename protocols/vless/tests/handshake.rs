@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 
 use vless::{
-    format_uuid, parse_uuid, VlessInbound, VlessInboundUdpCodec, VlessInboundUdpSession,
-    VlessOutbound, VlessUdpPacketTarget, VlessUdpPacketV2Codec, VlessUser, VlessUserStore,
+    format_uuid, parse_uuid, VlessInbound, VlessOutbound, VlessUdpPacketV2Codec, VlessUser,
+    VlessUserStore,
 };
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
@@ -226,10 +226,10 @@ async fn outbound_establishes_udp_packet_tunnel_and_consumes_response() {
         ProtocolType::Vless,
     );
 
-    <VlessOutbound as UdpPacketTunnelProtocol<vless::VlessUdpPacketTunnelTarget>>::establish_udp_packet_tunnel(
+    <VlessOutbound as UdpPacketTunnelProtocol<vless::udp::VlessUdpPacketTunnelTarget>>::establish_udp_packet_tunnel(
         &VlessOutbound,
         &mut socket,
-        &vless::VlessUdpPacketTunnelTarget {
+        &vless::udp::VlessUdpPacketTunnelTarget {
             session: &session,
             id: &id,
         },
@@ -279,20 +279,22 @@ async fn inbound_accepts_authorized_udp_request_with_ipv4_target() {
 
 #[test]
 fn parse_udp_packet_with_ipv4() {
-    let packet = <VlessOutbound as UdpPacketFraming<VlessUdpPacketTarget>>::encode_udp_packet(
-        &VlessOutbound,
-        &VlessUdpPacketTarget {
-            address: &Address::Ipv4([8, 8, 8, 8]),
-            port: 53,
-            payload: b"dns query",
-        },
-    )
-    .expect("build");
-    let parsed = <VlessOutbound as UdpPacketFraming<VlessUdpPacketTarget>>::decode_udp_packet(
-        &VlessOutbound,
-        &packet,
-    )
-    .expect("parse");
+    let packet =
+        <VlessOutbound as UdpPacketFraming<vless::udp::VlessUdpPacketTarget>>::encode_udp_packet(
+            &VlessOutbound,
+            &vless::udp::VlessUdpPacketTarget {
+                address: &Address::Ipv4([8, 8, 8, 8]),
+                port: 53,
+                payload: b"dns query",
+            },
+        )
+        .expect("build");
+    let parsed =
+        <VlessOutbound as UdpPacketFraming<vless::udp::VlessUdpPacketTarget>>::decode_udp_packet(
+            &VlessOutbound,
+            &packet,
+        )
+        .expect("parse");
     assert_eq!(parsed.target(), &Address::Ipv4([8, 8, 8, 8]));
     assert_eq!(parsed.port(), 53);
     assert_eq!(parsed.payload(), b"dns query");
@@ -300,20 +302,22 @@ fn parse_udp_packet_with_ipv4() {
 
 #[test]
 fn parse_udp_packet_with_domain() {
-    let packet = <VlessOutbound as UdpPacketFraming<VlessUdpPacketTarget>>::encode_udp_packet(
-        &VlessOutbound,
-        &VlessUdpPacketTarget {
-            address: &Address::Domain("example.com".into()),
-            port: 443,
-            payload: b"udp payload",
-        },
-    )
-    .expect("build");
-    let parsed = <VlessOutbound as UdpPacketFraming<VlessUdpPacketTarget>>::decode_udp_packet(
-        &VlessOutbound,
-        &packet,
-    )
-    .expect("parse");
+    let packet =
+        <VlessOutbound as UdpPacketFraming<vless::udp::VlessUdpPacketTarget>>::encode_udp_packet(
+            &VlessOutbound,
+            &vless::udp::VlessUdpPacketTarget {
+                address: &Address::Domain("example.com".into()),
+                port: 443,
+                payload: b"udp payload",
+            },
+        )
+        .expect("build");
+    let parsed =
+        <VlessOutbound as UdpPacketFraming<vless::udp::VlessUdpPacketTarget>>::decode_udp_packet(
+            &VlessOutbound,
+            &packet,
+        )
+        .expect("parse");
     assert_eq!(parsed.target(), &Address::Domain("example.com".into()));
     assert_eq!(parsed.port(), 443);
     assert_eq!(parsed.payload(), b"udp payload");
@@ -323,21 +327,23 @@ fn parse_udp_packet_with_domain() {
 fn build_udp_packet_with_ipv6() {
     let payload = b"hello v6";
     let address = Address::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
-    let packet = <VlessOutbound as UdpPacketFraming<VlessUdpPacketTarget>>::encode_udp_packet(
-        &VlessOutbound,
-        &VlessUdpPacketTarget {
-            address: &address,
-            port: 53,
-            payload,
-        },
-    )
-    .expect("build");
+    let packet =
+        <VlessOutbound as UdpPacketFraming<vless::udp::VlessUdpPacketTarget>>::encode_udp_packet(
+            &VlessOutbound,
+            &vless::udp::VlessUdpPacketTarget {
+                address: &address,
+                port: 53,
+                payload,
+            },
+        )
+        .expect("build");
 
-    let parsed = <VlessOutbound as UdpPacketFraming<VlessUdpPacketTarget>>::decode_udp_packet(
-        &VlessOutbound,
-        &packet,
-    )
-    .expect("parse");
+    let parsed =
+        <VlessOutbound as UdpPacketFraming<vless::udp::VlessUdpPacketTarget>>::decode_udp_packet(
+            &VlessOutbound,
+            &packet,
+        )
+        .expect("parse");
     assert_eq!(
         parsed.target(),
         &Address::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
@@ -452,17 +458,18 @@ fn build_udp_v2_omit_address() {
 
 #[test]
 fn inbound_udp_decoder_parses_client_packet() {
-    let packet = <VlessOutbound as UdpPacketFraming<VlessUdpPacketTarget>>::encode_udp_packet(
-        &VlessOutbound,
-        &VlessUdpPacketTarget {
-            address: &Address::Domain("dns.example".into()),
-            port: 5353,
-            payload: b"query",
-        },
-    )
-    .expect("build packet");
+    let packet =
+        <VlessOutbound as UdpPacketFraming<vless::udp::VlessUdpPacketTarget>>::encode_udp_packet(
+            &VlessOutbound,
+            &vless::udp::VlessUdpPacketTarget {
+                address: &Address::Domain("dns.example".into()),
+                port: 5353,
+                payload: b"query",
+            },
+        )
+        .expect("build packet");
 
-    let parsed = VlessInboundUdpSession::new()
+    let parsed = vless::udp::VlessInboundUdpSession::new()
         .decode_request(&packet)
         .expect("decode inbound packet");
 
@@ -473,15 +480,16 @@ fn inbound_udp_decoder_parses_client_packet() {
 
 #[test]
 fn udp_response_encoder_builds_response_packet() {
-    let packet = VlessInboundUdpCodec
+    let packet = vless::udp::VlessInboundUdpCodec
         .encode_response(&Address::Ipv4([1, 1, 1, 1]), 53, b"answer")
         .expect("encode response");
 
-    let parsed = <VlessOutbound as UdpPacketFraming<VlessUdpPacketTarget>>::decode_udp_packet(
-        &VlessOutbound,
-        &packet,
-    )
-    .expect("parse response packet");
+    let parsed =
+        <VlessOutbound as UdpPacketFraming<vless::udp::VlessUdpPacketTarget>>::decode_udp_packet(
+            &VlessOutbound,
+            &packet,
+        )
+        .expect("parse response packet");
     assert_eq!(parsed.target(), &Address::Ipv4([1, 1, 1, 1]));
     assert_eq!(parsed.port(), 53);
     assert_eq!(parsed.payload(), b"answer");
@@ -489,7 +497,7 @@ fn udp_response_encoder_builds_response_packet() {
 
 #[test]
 fn mux_udp_response_encoder_wraps_vless_packet() {
-    let frame = VlessInboundUdpCodec
+    let frame = vless::udp::VlessInboundUdpCodec
         .encode_mux_response(7, &Address::Ipv4([8, 8, 8, 8]), 53, b"dns")
         .expect("encode mux response");
 
@@ -498,11 +506,12 @@ fn mux_udp_response_encoder_wraps_vless_packet() {
     assert_eq!(frame[4], vless::STATUS_KEEP);
     assert_eq!(frame[5], vless::OPTION_DATA);
 
-    let parsed = <VlessOutbound as UdpPacketFraming<VlessUdpPacketTarget>>::decode_udp_packet(
-        &VlessOutbound,
-        &frame[6..],
-    )
-    .expect("parse mux payload");
+    let parsed =
+        <VlessOutbound as UdpPacketFraming<vless::udp::VlessUdpPacketTarget>>::decode_udp_packet(
+            &VlessOutbound,
+            &frame[6..],
+        )
+        .expect("parse mux payload");
     assert_eq!(parsed.target(), &Address::Ipv4([8, 8, 8, 8]));
     assert_eq!(parsed.port(), 53);
     assert_eq!(parsed.payload(), b"dns");

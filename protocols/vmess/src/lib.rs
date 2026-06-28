@@ -5,7 +5,7 @@ mod mux;
 mod outbound;
 mod shared;
 mod stream;
-mod udp;
+pub mod udp;
 
 pub use inbound::{VmessAccept, VmessInbound, VmessUser};
 pub use metadata::VmessProtocol;
@@ -29,15 +29,3 @@ pub use shared::{
     MUX_COOL_PORT, VERSION,
 };
 pub use stream::VmessAeadStream;
-pub use udp::{
-    establish_udp_flow, establish_udp_flow_stream, establish_udp_flow_with_initial_packet,
-    establish_udp_outbound_stream, parse_udp_identity, spawn_udp_flow,
-    start_udp_flow_with_initial_packet, udp_flow_config_from_config, VmessEstablishedUdpFlow,
-    VmessEstablishedUdpFlowHandle, VmessInboundUdpCodec, VmessInboundUdpDispatchParts,
-    VmessInboundUdpPayload, VmessInboundUdpRequest, VmessInboundUdpSession,
-    VmessInitialUdpFlowPacket, VmessUdpFlowCodec, VmessUdpFlowConfig, VmessUdpFlowConnection,
-    VmessUdpFlowHandle, VmessUdpFlowIo, VmessUdpFlowPacket, VmessUdpFlowResponse,
-    VmessUdpFlowResponseReceiver, VmessUdpFlowSession, VmessUdpIdentity, VmessUdpMuxOpenIdentity,
-    VmessUdpPacket, VmessUdpPacketTarget, VmessUdpPacketTunnelTarget, VmessUdpPayloadMode,
-    VmessUdpPayloadState,
-};

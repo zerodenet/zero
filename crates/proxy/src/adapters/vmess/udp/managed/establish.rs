@@ -15,7 +15,7 @@ use crate::transport::TcpRelayStream;
 pub(super) async fn over_stream(
     proxy: &Proxy,
     session: &Session,
-    config: vmess::VmessUdpFlowConfig<'_>,
+    config: vmess::udp::VmessUdpFlowConfig<'_>,
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<ManagedStreamConnection, EngineError> {
@@ -98,7 +98,7 @@ pub(super) async fn direct_flow(
 }
 
 struct VmessManagedUdpSender {
-    connection: vmess::VmessUdpFlowConnection,
+    connection: vmess::udp::VmessUdpFlowConnection,
 }
 
 #[async_trait::async_trait]
@@ -115,7 +115,7 @@ impl ManagedTupleUdpSender for VmessManagedUdpSender {
             .map_err(EngineError::from)
     }
 
-    fn subscribe_responses(&self) -> vmess::VmessUdpFlowResponseReceiver {
+    fn subscribe_responses(&self) -> vmess::udp::VmessUdpFlowResponseReceiver {
         self.connection.subscribe_responses()
     }
 

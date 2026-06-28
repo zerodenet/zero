@@ -54,7 +54,7 @@ pub(super) async fn start_mux_fast_path(
 pub(super) async fn over_stream(
     proxy: &Proxy,
     session: &Session,
-    config: vless::VlessUdpFlowConfig<'_>,
+    config: vless::udp::VlessUdpFlowConfig<'_>,
     initial_payload: &[u8],
     stream: TcpRelayStream,
 ) -> Result<ManagedStreamConnection, EngineError> {
@@ -100,7 +100,7 @@ pub(super) async fn direct_flow(
 }
 
 struct VlessManagedUdpSender {
-    connection: vless::VlessUdpFlowConnection,
+    connection: vless::udp::VlessUdpFlowConnection,
 }
 
 #[async_trait::async_trait]
@@ -117,7 +117,7 @@ impl ManagedTupleUdpSender for VlessManagedUdpSender {
             .map_err(EngineError::from)
     }
 
-    fn subscribe_responses(&self) -> vless::VlessUdpFlowResponseReceiver {
+    fn subscribe_responses(&self) -> vless::udp::VlessUdpFlowResponseReceiver {
         self.connection.subscribe_responses()
     }
 

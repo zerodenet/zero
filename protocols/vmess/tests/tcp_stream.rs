@@ -6,10 +6,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
-use vmess::{
-    parse_uuid, VmessAeadStream, VmessCipher, VmessInbound, VmessInboundUdpSession, VmessOutbound,
-    VmessUdpPacketTarget, VmessUser,
-};
+use vmess::{parse_uuid, VmessAeadStream, VmessCipher, VmessInbound, VmessOutbound, VmessUser};
 use zero_traits::UdpPacketFraming;
 
 struct TestSocket(DuplexStream);
@@ -93,9 +90,9 @@ fn udp_packet_framing_roundtrips_domain_target() {
     let target = Address::Domain("example.com".to_owned());
     let payload = b"vmess udp payload";
     let encoded =
-        <VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::encode_udp_packet(
+        <VmessOutbound as UdpPacketFraming<vmess::udp::VmessUdpPacketTarget>>::encode_udp_packet(
             &VmessOutbound,
-            &vmess::VmessUdpPacketTarget {
+            &vmess::udp::VmessUdpPacketTarget {
                 address: &target,
                 port: 53,
                 payload,
@@ -104,7 +101,7 @@ fn udp_packet_framing_roundtrips_domain_target() {
         .expect("encode vmess udp packet");
 
     let decoded =
-        <VmessOutbound as UdpPacketFraming<vmess::VmessUdpPacketTarget>>::decode_udp_packet(
+        <VmessOutbound as UdpPacketFraming<vmess::udp::VmessUdpPacketTarget>>::decode_udp_packet(
             &VmessOutbound,
             &encoded,
         )
@@ -119,16 +116,17 @@ fn udp_packet_framing_roundtrips_domain_target() {
 async fn udp_response_encoding_wraps_packet_mode_and_preserves_raw_mode() {
     let target = Address::Domain("example.com".to_owned());
     let default_target = Address::Domain("fallback.example".to_owned());
-    let request = <VmessOutbound as UdpPacketFraming<VmessUdpPacketTarget>>::encode_udp_packet(
-        &VmessOutbound,
-        &VmessUdpPacketTarget {
-            address: &Address::Domain("packet.example".to_owned()),
-            port: 5353,
-            payload: b"dns",
-        },
-    )
-    .expect("build packet");
-    let mut udp_session = VmessInboundUdpSession::new(default_target, 53);
+    let request =
+        <VmessOutbound as UdpPacketFraming<vmess::udp::VmessUdpPacketTarget>>::encode_udp_packet(
+            &VmessOutbound,
+            &vmess::udp::VmessUdpPacketTarget {
+                address: &Address::Domain("packet.example".to_owned()),
+                port: 5353,
+                payload: b"dns",
+            },
+        )
+        .expect("build packet");
+    let mut udp_session = vmess::udp::VmessInboundUdpSession::new(default_target, 53);
     udp_session
         .decode_request(&request)
         .expect("enter packet response mode");
@@ -144,16 +142,18 @@ async fn udp_response_encoding_wraps_packet_mode_and_preserves_raw_mode() {
         .read_to_end(&mut packet)
         .await
         .expect("read packet response");
-    let decoded = <VmessOutbound as UdpPacketFraming<VmessUdpPacketTarget>>::decode_udp_packet(
-        &VmessOutbound,
-        &packet,
-    )
-    .expect("decode packet response");
+    let decoded =
+        <VmessOutbound as UdpPacketFraming<vmess::udp::VmessUdpPacketTarget>>::decode_udp_packet(
+            &VmessOutbound,
+            &packet,
+        )
+        .expect("decode packet response");
     assert_eq!(decoded.target(), &target);
     assert_eq!(decoded.port(), 5353);
     assert_eq!(decoded.payload(), b"dns");
 
-    let mut raw_session = VmessInboundUdpSession::new(Address::Ipv4([127, 0, 0, 1]), 53);
+    let mut raw_session =
+        vmess::udp::VmessInboundUdpSession::new(Address::Ipv4([127, 0, 0, 1]), 53);
     raw_session
         .decode_request(b"raw")
         .expect("enter raw response mode");
@@ -174,16 +174,17 @@ async fn udp_response_encoding_wraps_packet_mode_and_preserves_raw_mode() {
 #[test]
 fn inbound_udp_payload_decoder_detects_packet_mode_then_requires_packets() {
     let default_target = Address::Domain("fallback.example".to_owned());
-    let packet = <VmessOutbound as UdpPacketFraming<VmessUdpPacketTarget>>::encode_udp_packet(
-        &VmessOutbound,
-        &VmessUdpPacketTarget {
-            address: &Address::Domain("packet.example".to_owned()),
-            port: 5353,
-            payload: b"dns",
-        },
-    )
-    .expect("build packet");
-    let mut udp_session = VmessInboundUdpSession::new(default_target, 53);
+    let packet =
+        <VmessOutbound as UdpPacketFraming<vmess::udp::VmessUdpPacketTarget>>::encode_udp_packet(
+            &VmessOutbound,
+            &vmess::udp::VmessUdpPacketTarget {
+                address: &Address::Domain("packet.example".to_owned()),
+                port: 5353,
+                payload: b"dns",
+            },
+        )
+        .expect("build packet");
+    let mut udp_session = vmess::udp::VmessInboundUdpSession::new(default_target, 53);
     let decoded = udp_session
         .decode_request(&packet)
         .expect("decode packet payload");
@@ -200,7 +201,7 @@ fn inbound_udp_payload_decoder_detects_packet_mode_then_requires_packets() {
 #[test]
 fn inbound_udp_payload_decoder_falls_back_to_raw_mode() {
     let default_target = Address::Ipv4([10, 0, 0, 1]);
-    let mut udp_session = VmessInboundUdpSession::new(default_target.clone(), 9999);
+    let mut udp_session = vmess::udp::VmessInboundUdpSession::new(default_target.clone(), 9999);
     let decoded = udp_session
         .decode_request(b"raw")
         .expect("decode raw payload");
@@ -213,16 +214,17 @@ fn inbound_udp_payload_decoder_falls_back_to_raw_mode() {
 async fn mux_udp_response_encoding_wraps_packet_mode_before_mux_frame() {
     let target = Address::Ipv4([8, 8, 8, 8]);
     let (write_tx, mut write_rx) = tokio::sync::mpsc::unbounded_channel();
-    let request = <VmessOutbound as UdpPacketFraming<VmessUdpPacketTarget>>::encode_udp_packet(
-        &VmessOutbound,
-        &VmessUdpPacketTarget {
-            address: &target,
-            port: 53,
-            payload: b"query",
-        },
-    )
-    .expect("build packet");
-    let mut udp_session = VmessInboundUdpSession::new(target.clone(), 53);
+    let request =
+        <VmessOutbound as UdpPacketFraming<vmess::udp::VmessUdpPacketTarget>>::encode_udp_packet(
+            &VmessOutbound,
+            &vmess::udp::VmessUdpPacketTarget {
+                address: &target,
+                port: 53,
+                payload: b"query",
+            },
+        )
+        .expect("build packet");
+    let mut udp_session = vmess::udp::VmessInboundUdpSession::new(target.clone(), 53);
     udp_session
         .decode_request(&request)
         .expect("enter packet mux response mode");
@@ -241,11 +243,12 @@ async fn mux_udp_response_encoding_wraps_packet_mode_before_mux_frame() {
         .expect("decode mux frame");
     assert_eq!(decoded.session_id, 7);
     write.await.expect("writer task");
-    let packet = <VmessOutbound as UdpPacketFraming<VmessUdpPacketTarget>>::decode_udp_packet(
-        &VmessOutbound,
-        &decoded.payload,
-    )
-    .expect("decode mux udp payload");
+    let packet =
+        <VmessOutbound as UdpPacketFraming<vmess::udp::VmessUdpPacketTarget>>::decode_udp_packet(
+            &VmessOutbound,
+            &decoded.payload,
+        )
+        .expect("decode mux udp payload");
     assert_eq!(packet.target(), &target);
     assert_eq!(packet.port(), 53);
     assert_eq!(packet.payload(), b"query");

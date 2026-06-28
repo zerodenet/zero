@@ -18,6 +18,7 @@ mod outbound;
 #[cfg(feature = "reality")]
 pub mod reality;
 mod shared;
+pub mod udp;
 
 #[cfg(feature = "reality")]
 pub use deferred_response::DeferredVlessResponseStream;
@@ -40,26 +41,11 @@ pub use mux::{
 pub use mux_crypto::MuxCrypto;
 #[cfg(feature = "reality")]
 pub use outbound::VlessFlowTcpTunnelTarget;
-#[cfg(feature = "reality")]
-pub use outbound::{
-    establish_udp_flow, establish_udp_flow_with_initial_packet, spawn_udp_flow,
-    VlessEstablishedUdpFlow, VlessEstablishedUdpFlowHandle, VlessInitialUdpFlowPacket,
-    VlessMuxInitialUdpFlowPacket, VlessUdpFlowConnection, VlessUdpFlowHandle, VlessUdpFlowResponse,
-    VlessUdpFlowResponseReceiver, VlessUdpFlowSession,
-};
-pub use outbound::{
-    establish_udp_flow_stream, establish_udp_packet_tunnel, parse_udp_identity,
-    udp_flow_config_from_config, VlessOutbound, VlessTcpConnectConfig, VlessTcpTunnelTarget,
-    VlessUdpFlowConfig, VlessUdpIdentity, VlessUdpMuxOpenIdentity, VlessUdpPacketTarget,
-    VlessUdpPacketTunnelTarget,
-};
+pub use outbound::VlessOutbound;
+pub use outbound::{VlessTcpConnectConfig, VlessTcpTunnelTarget};
 #[cfg(feature = "reality")]
 pub use reality::{
     generate_reality_key_pair, upgrade_reality_client, upgrade_reality_server,
     RealityClientOptions, RealityServerOptions, RealityTlsStream,
 };
-pub use shared::{
-    format_uuid, parse_uuid, VlessInboundUdpCodec, VlessInboundUdpDispatchParts,
-    VlessInboundUdpRequest, VlessInboundUdpSession, VlessUdpFlowCodec, VlessUdpFlowIo,
-    VlessUdpFlowPacket, VlessUdpPacket, VlessUdpPacketV2Codec, VLESS_VERSION,
-};
+pub use shared::{format_uuid, parse_uuid, VlessUdpPacketV2Codec, VLESS_VERSION};

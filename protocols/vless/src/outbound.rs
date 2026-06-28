@@ -11,12 +11,9 @@ use zero_traits::{AsyncSocket, TcpTunnelProtocol, UdpPacketFraming, UdpPacketTun
 use crate::flow::flow_build_request;
 use crate::mux::MuxClient;
 use crate::shared::{
-    build_udp_packet, parse_udp_packet, parse_uuid, read_addon, read_exact, write_address, CMD_MUX,
-    VLESS_VERSION,
+    build_udp_packet, parse_udp_packet, parse_uuid, read_addon, read_exact, write_address,
+    VlessUdpFlowIo, VlessUdpFlowPacket, VlessUdpPacket, CMD_MUX, VLESS_VERSION,
 };
-#[cfg(feature = "reality")]
-use crate::VlessUdpFlowIo;
-use crate::VlessUdpPacket;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VlessOutbound;
@@ -603,7 +600,7 @@ impl VlessEstablishedUdpFlow {
         &self,
         stream: &mut S,
         buffer: &mut [u8],
-    ) -> Result<Option<crate::VlessUdpFlowPacket>, Error>
+    ) -> Result<Option<VlessUdpFlowPacket>, Error>
     where
         S: tokio::io::AsyncRead + Unpin,
     {

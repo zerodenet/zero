@@ -1500,13 +1500,13 @@ fn stream_udp_roots_delegate_flow_building() {
         (
             "src/adapters/vless/udp.rs",
             "src/adapters/vless/udp/flow.rs",
-            "vless::udp_flow_config_from_config",
+            "vless::udp::udp_flow_config_from_config",
             "register_managed_stream_packet_flow",
         ),
         (
             "src/adapters/vmess/udp.rs",
             "src/adapters/vmess/udp/flow.rs",
-            "vmess::udp_flow_config_from_config",
+            "vmess::udp::udp_flow_config_from_config",
             "register_managed_stream_packet_flow",
         ),
     ] {
@@ -2698,7 +2698,7 @@ fn vless_udp_identity_is_protocol_parsed() {
         "VLESS UDP runtime should receive protocol-parsed UUIDs"
     );
     assert!(
-        !model.contains("id: &'a str") && model.contains("vless::VlessUdpFlowConfig"),
+        !model.contains("id: &'a str") && model.contains("vless::udp::VlessUdpFlowConfig"),
         "VLESS UDP request models should carry protocol-owned flow config instead of raw config IDs"
     );
     for forbidden in [
@@ -2716,8 +2716,8 @@ fn vless_udp_identity_is_protocol_parsed() {
         !adapter.contains("parse_uuid")
             && !adapter.contains("vless::parse_udp_identity")
             && !adapter.contains("VlessUdpFlowConfig::new")
-            && flow.contains("vless::udp_flow_config_from_config")
-            && !flow.contains("vless::VlessUdpFlowConfig::new"),
+            && flow.contains("vless::udp::udp_flow_config_from_config")
+            && !flow.contains("vless::udp::VlessUdpFlowConfig::new"),
         "VLESS UDP flow glue should use the protocol-owned flow config parser while the root stays a facade"
     );
     assert!(
@@ -3057,8 +3057,8 @@ fn vmess_udp_identity_is_protocol_parsed() {
     assert!(
         !adapter.contains("vmess::parse_udp_identity")
             && !adapter.contains("VmessUdpFlowConfig::new")
-            && flow.contains("vmess::udp_flow_config_from_config")
-            && !flow.contains("vmess::VmessUdpFlowConfig::new"),
+            && flow.contains("vmess::udp::udp_flow_config_from_config")
+            && !flow.contains("vmess::udp::VmessUdpFlowConfig::new"),
         "VMess UDP flow glue should use the protocol-owned flow config parser while the root stays a facade"
     );
     assert!(
@@ -3091,7 +3091,7 @@ fn vmess_udp_identity_is_protocol_parsed() {
         );
     }
     assert!(
-        model.contains("vmess::VmessUdpFlowConfig") && !model.contains("vmess::VmessUdpIdentity"),
+        model.contains("vmess::udp::VmessUdpFlowConfig") && !model.contains("vmess::VmessUdpIdentity"),
         "VMess UDP request models should carry protocol-owned flow config for identity and mux keying"
     );
 }
@@ -3594,8 +3594,8 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
         !tcp_adapter.contains("VmessCipher::from_name")
             && tcp_adapter.contains("VmessTcpConnectConfig::from_config")
             && protocol_outbound.contains("VmessCipher::from_name")
-            && udp_flow.contains("vmess::udp_flow_config_from_config")
-            && !udp_flow.contains("vmess::VmessUdpFlowConfig::new")
+            && udp_flow.contains("vmess::udp::udp_flow_config_from_config")
+            && !udp_flow.contains("vmess::udp::VmessUdpFlowConfig::new")
             && !udp_root.contains("vmess::parse_udp_identity")
             && !udp_root.contains("VmessCipher::from_name")
             && !udp_root.contains("VmessUdpFlowConfig::new"),
@@ -10922,6 +10922,30 @@ fn managed_udp_resume_variants_are_confined_to_managed_flow_model() {
 #[test]
 fn protocol_crate_roots_do_not_reexport_udp_manager_internals() {
     for (protocol, forbidden) in [
+        (
+            "vless",
+            &[
+                "VlessUdpFlowConfig",
+                "VlessUdpFlowConnection",
+                "VlessUdpFlowHandle",
+                "VlessUdpFlowIo",
+                "VlessUdpFlowPacket",
+                "VlessUdpPacketTarget",
+                "VlessUdpPacketTunnelTarget",
+            ][..],
+        ),
+        (
+            "vmess",
+            &[
+                "VmessUdpFlowConfig",
+                "VmessUdpFlowConnection",
+                "VmessUdpFlowHandle",
+                "VmessUdpFlowIo",
+                "VmessUdpFlowPacket",
+                "VmessUdpPacketTarget",
+                "VmessUdpPacketTunnelTarget",
+            ][..],
+        ),
         (
             "hysteria2",
             &[
