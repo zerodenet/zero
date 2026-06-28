@@ -21,6 +21,22 @@ pub(super) struct Socks5UdpAssociationSnapshot {
     pub(super) port: u16,
 }
 
+pub(super) struct Socks5UdpAssociationTargetSnapshot {
+    pub(super) outbound_tag: String,
+    pub(super) server: String,
+    pub(super) port: u16,
+}
+
+impl Socks5UdpAssociationTargetSnapshot {
+    pub(super) fn from_target(target: &socks5::Socks5UdpAssociationTarget) -> Self {
+        Self {
+            outbound_tag: target.outbound_tag().to_owned(),
+            server: target.server().to_owned(),
+            port: target.port(),
+        }
+    }
+}
+
 impl Socks5UdpAssociationSnapshot {
     pub(super) fn from_association(association: &dyn Socks5UdpAssociationHandle) -> Self {
         let (server, port) = association.upstream_endpoint();

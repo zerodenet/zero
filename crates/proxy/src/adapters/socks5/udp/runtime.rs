@@ -9,7 +9,7 @@ use super::establish::{
 };
 use super::model::{
     BoxedSocks5UdpAssociation, ClosedSocks5UdpAssociation, Socks5UdpAssociationSnapshot,
-    Socks5UdpAssociationView, UpstreamAssociationCloseReason,
+    Socks5UdpAssociationTargetSnapshot, Socks5UdpAssociationView, UpstreamAssociationCloseReason,
 };
 use super::send::{self, Socks5UdpSend};
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -54,8 +54,8 @@ impl Socks5UdpRuntime {
     pub(crate) fn upstream_view(&self) -> Option<Socks5UdpAssociationView<'_>> {
         self.upstream
             .as_ref()
-            .map(|association| Socks5UdpAssociationView {
-                outbound_tag: association.outbound_tag(),
+            .map(|upstream| Socks5UdpAssociationView {
+                outbound_tag: upstream.outbound_tag(),
             })
     }
 
@@ -107,12 +107,15 @@ impl Socks5UdpRuntime {
         association: &socks5::Socks5UdpAssociationTarget,
         session_id: u64,
     ) -> Result<(), EngineError> {
+        let target = Socks5UdpAssociationTargetSnapshot::from_target(association);
         let needs_new_association = self
             .upstream
             .as_ref()
             .map(|a| {
                 let active = Socks5UdpAssociationSnapshot::from_association(a.as_ref());
-                !association.matches(&active.outbound_tag, &active.server, active.port)
+                active.outbound_tag != target.outbound_tag
+                    || active.server != target.server
+                    || active.port != target.port
             })
             .unwrap_or(true);
 
@@ -120,9 +123,9 @@ impl Socks5UdpRuntime {
             proxy.record_udp_upstream_association_reused();
             crate::logging::log_udp_upstream_association_reused(
                 inbound_tag,
-                association.outbound_tag(),
-                association.server(),
-                association.port(),
+                &target.outbound_tag,
+                &target.server,
+                target.port,
             );
             return Ok(());
         }
@@ -146,9 +149,9 @@ impl Socks5UdpRuntime {
                 self.idle_deadline = Some(TokioInstant::now() + proxy.udp_upstream_idle_timeout());
                 crate::logging::log_udp_upstream_association_created(
                     inbound_tag,
-                    association.outbound_tag(),
-                    association.server(),
-                    association.port(),
+                    &target.outbound_tag,
+                    &target.server,
+                    target.port,
                     proxy.udp_upstream_idle_timeout(),
                 );
                 self.upstream = Some(a);

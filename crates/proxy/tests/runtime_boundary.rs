@@ -2430,7 +2430,11 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && runtime_source.contains("response.target().clone()")
             && runtime_source.contains("response.payload().to_vec()")
             && runtime_source.contains("Socks5UdpAssociationSnapshot::from_association")
+            && runtime_source.contains("Socks5UdpAssociationTargetSnapshot::from_target")
             && !runtime_source.contains(".upstream_endpoint()")
+            && !runtime_source.contains("association.outbound_tag()")
+            && !runtime_source.contains("association.server()")
+            && !runtime_source.contains("association.port()")
             && !packet_path_source.contains("DefaultSocks5UdpAssociationEstablisher")
             && !runtime_source.contains("use super::active::ActiveUpstreamSocks5UdpAssociation")
             && !packet_path_source.contains("use super::active::ActiveUpstreamSocks5UdpAssociation")
@@ -2480,7 +2484,10 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && model.contains("trait Socks5UdpAssociationHandle")
             && model.contains("struct Socks5UdpAssociationSnapshot")
             && model.contains("fn from_association(association: &dyn Socks5UdpAssociationHandle)")
+            && model.contains("struct Socks5UdpAssociationTargetSnapshot")
+            && model.contains("fn from_target(target: &socks5::Socks5UdpAssociationTarget)")
             && model.contains("association.upstream_endpoint()")
+            && model.contains("target.outbound_tag().to_owned()")
             && model.contains("type BoxedSocks5UdpAssociation")
             && model.contains("trait Socks5UdpPacketPathAssociation")
             && model.contains("type SharedSocks5UdpPacketPathAssociation")
@@ -4559,7 +4566,9 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
         send.contains("resume.association_send(")
             && !send.contains("resume.association_target(")
             && !send.contains(".association_target()")
-            && runtime.contains("association.outbound_tag()")
+            && runtime.contains("Socks5UdpAssociationTargetSnapshot::from_target")
+            && runtime.contains("active.outbound_tag != target.outbound_tag")
+            && runtime.contains("&target.outbound_tag")
             && !send.contains("association.tag"),
         "SOCKS5 UDP runtime state should store and match the relay outbound tag"
     );
