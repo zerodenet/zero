@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use zero_core::Address;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use super::establish::{
-    establish_shared_packet_path_association, Socks5UdpAssociationEstablishRequest,
-};
+use super::establish::establish_shared_packet_path_carrier;
 use super::model::SharedSocks5UdpPacketPathAssociation;
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::socks5::Socks5Adapter;
@@ -81,12 +79,6 @@ pub(crate) async fn build_socks5_packet_path(
     carrier: socks5::Socks5UdpPacketPathCarrierBuild,
 ) -> Result<std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
 {
-    let association =
-        establish_shared_packet_path_association(Socks5UdpAssociationEstablishRequest {
-            proxy,
-            target: carrier.into_association_target(),
-            session_id: 0,
-        })
-        .await?;
+    let association = establish_shared_packet_path_carrier(proxy, carrier).await?;
     Ok(std::sync::Arc::new(Socks5PacketPath { association }))
 }

@@ -39,6 +39,18 @@ pub(super) async fn establish_shared_packet_path_association(
         .await
 }
 
+pub(super) async fn establish_shared_packet_path_carrier(
+    proxy: &Proxy,
+    carrier: socks5::Socks5UdpPacketPathCarrierBuild,
+) -> Result<SharedSocks5UdpPacketPathAssociation, EngineError> {
+    establish_shared_packet_path_association(Socks5UdpAssociationEstablishRequest {
+        proxy,
+        target: carrier.into_association_target(),
+        session_id: 0,
+    })
+    .await
+}
+
 #[async_trait]
 impl Socks5UdpAssociationEstablisher for DefaultSocks5UdpAssociationEstablisher {
     async fn establish_boxed(
