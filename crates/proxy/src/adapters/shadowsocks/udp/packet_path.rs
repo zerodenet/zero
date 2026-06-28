@@ -51,10 +51,13 @@ pub(super) async fn build(
     };
     let spec = shadowsocks::udp_packet_path_spec_from_config("", server, *port, cipher, password)
         .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
-    let datagram = spec.datagram_source_parts();
-    let codec = Arc::new(datagram.codec());
+    let datagram = spec.datagram_source_build("", server, *port);
+    let (_, codec) = datagram.into_parts();
     crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
-        proxy, server, *port, codec,
+        proxy,
+        server,
+        *port,
+        Arc::new(codec),
     )
     .await
 }
@@ -74,13 +77,13 @@ pub(super) fn datagram_source<'a>(
     };
     let spec =
         shadowsocks::udp_packet_path_spec_from_config(tag, server, *port, cipher, password).ok()?;
-    let datagram = spec.datagram_source_parts();
-    let codec = Arc::new(datagram.codec());
+    let datagram = spec.datagram_source_build(tag, server, *port);
+    let (cache_key, codec) = datagram.into_parts();
     Some(udp_datagram_source(UdpDatagramSourceParts {
         tag,
         server,
         port: *port,
-        cache_key: datagram.cache_key(),
-        codec,
+        cache_key,
+        codec: Arc::new(codec),
     }))
 }

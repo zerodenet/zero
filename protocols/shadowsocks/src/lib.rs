@@ -28,8 +28,8 @@ pub use outbound::{
     ShadowsocksUdpFlowStore, ShadowsocksUdpLeafKey, ShadowsocksUdpPacket,
     ShadowsocksUdpPacketPathCarrier, ShadowsocksUdpPacketPathCarrierBuild,
     ShadowsocksUdpPacketPathCarrierDescriptor, ShadowsocksUdpPacketPathDatagram,
-    ShadowsocksUdpPacketPathDatagramSourceParts, ShadowsocksUdpPacketPathSpec,
-    ShadowsocksUdpPacketTarget, ShadowsocksUdpSocketFlowSpec,
+    ShadowsocksUdpPacketPathDatagramSourceBuild, ShadowsocksUdpPacketPathDatagramSourceParts,
+    ShadowsocksUdpPacketPathSpec, ShadowsocksUdpPacketTarget, ShadowsocksUdpSocketFlowSpec,
 };
 #[cfg(feature = "crypto")]
 pub use shared::{
