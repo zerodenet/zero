@@ -541,18 +541,6 @@ impl Socks5UdpPacketPathSpec {
 }
 
 impl Socks5UdpPacketPathCarrierBuild {
-    pub fn cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn server(&self) -> &str {
-        &self.server
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
     pub fn into_association_target(self) -> Socks5UdpAssociationTarget {
         self.association_target
     }
@@ -565,18 +553,6 @@ pub fn packet_path_carrier_association_target(
 }
 
 impl Socks5UdpPacketPathCarrierDescriptor {
-    pub fn cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn server(&self) -> &str {
-        &self.server
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
     pub fn into_parts(self) -> (String, String, u16) {
         (self.cache_key, self.server, self.port)
     }

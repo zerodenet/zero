@@ -501,26 +501,6 @@ impl Hysteria2UdpPacketPathSpec {
 }
 
 impl Hysteria2UdpPacketPathCarrierBuild {
-    pub fn cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn server(&self) -> &str {
-        &self.server
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
-    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
-        self.connector_profile.clone()
-    }
-
-    pub fn codec(&self) -> Hysteria2DatagramCodec {
-        self.codec
-    }
-
     pub fn into_connection_parts(self) -> Hysteria2UdpPacketPathCarrierBuildParts {
         Hysteria2UdpPacketPathCarrierBuildParts {
             server: self.server,
@@ -545,18 +525,6 @@ impl Hysteria2UdpPacketPathCarrierBuildParts {
 }
 
 impl Hysteria2UdpPacketPathCarrierDescriptor {
-    pub fn cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn server(&self) -> &str {
-        &self.server
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
     pub fn into_parts(self) -> (String, String, u16) {
         (self.cache_key, self.server, self.port)
     }

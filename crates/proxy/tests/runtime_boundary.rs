@@ -10218,6 +10218,22 @@ fn udp_build_traits_consume_protocol_parts() {
         .expect("read trojan protocol outbound source");
     let mieru_protocol = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
         .expect("read mieru protocol udp source");
+    let socks5_descriptor_impl = impl_block(&socks5_shared, "Socks5UdpPacketPathCarrierDescriptor");
+    let socks5_build_impl = impl_block(&socks5_shared, "Socks5UdpPacketPathCarrierBuild");
+    let shadowsocks_descriptor_impl = impl_block(
+        &shadowsocks_protocol,
+        "ShadowsocksUdpPacketPathCarrierDescriptor",
+    );
+    let shadowsocks_datagram_build_impl = impl_block(
+        &shadowsocks_protocol,
+        "ShadowsocksUdpPacketPathDatagramSourceBuild",
+    );
+    let hysteria2_descriptor_impl = impl_block(
+        &hysteria2_protocol,
+        "Hysteria2UdpPacketPathCarrierDescriptor",
+    );
+    let hysteria2_build_impl =
+        impl_block(&hysteria2_protocol, "Hysteria2UdpPacketPathCarrierBuild");
 
     assert!(
         stream_manager.contains("fn into_parts(self) -> (String, bool);")
@@ -10283,6 +10299,44 @@ fn udp_build_traits_consume_protocol_parts() {
             && hysteria2_protocol.contains("pub fn into_parts(self) -> (String, String, u16)"),
         "packet-path carrier descriptors should cross into proxy as consumed neutral parts"
     );
+    for (name, source) in [
+        ("socks5 descriptor", &socks5_descriptor_impl),
+        ("shadowsocks descriptor", &shadowsocks_descriptor_impl),
+        ("hysteria2 descriptor", &hysteria2_descriptor_impl),
+    ] {
+        for forbidden in [
+            "pub fn cache_key(&self)",
+            "pub fn server(&self)",
+            "pub fn port(&self)",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{name} should expose consumed packet-path identity parts instead of getter `{forbidden}`"
+            );
+        }
+    }
+    for (name, source) in [
+        ("socks5 carrier build", &socks5_build_impl),
+        ("hysteria2 carrier build", &hysteria2_build_impl),
+    ] {
+        for forbidden in [
+            "pub fn cache_key(&self)",
+            "pub fn server(&self)",
+            "pub fn port(&self)",
+            "pub fn connector_profile(&self)",
+            "pub fn codec(&self)",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{name} should hand packet-path carrier state to proxy through consuming helpers, not getter `{forbidden}`"
+            );
+        }
+    }
+    assert!(
+        !shadowsocks_protocol.contains("impl ShadowsocksUdpPacketPathCarrierBuild")
+            && shadowsocks_protocol.contains("pub struct ShadowsocksUdpPacketPathCarrierBuild"),
+        "Shadowsocks packet-path carrier build should be opaque data with no public getter impl"
+    );
     assert!(
         packet_path.contains("trait UdpDatagramSourceBuild")
             && packet_path.contains("Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>")
@@ -10297,6 +10351,18 @@ fn udp_build_traits_consume_protocol_parts() {
             && shadowsocks_protocol.contains("self.tag, self.server, self.port, self.cache_key"),
         "packet-path datagram sources should consume protocol-built source parts and codec in one step"
     );
+    for forbidden in [
+        "pub fn tag(&self)",
+        "pub fn server(&self)",
+        "pub fn port(&self)",
+        "pub fn cache_key(&self)",
+        "pub fn codec(&self)",
+    ] {
+        assert!(
+            !shadowsocks_datagram_build_impl.contains(forbidden),
+            "Shadowsocks datagram source build should expose consumed parts instead of getter `{forbidden}`"
+        );
+    }
 }
 
 #[test]

@@ -821,26 +821,7 @@ impl ShadowsocksUdpPacketPathSpec {
 }
 
 #[cfg(feature = "crypto")]
-impl ShadowsocksUdpPacketPathCarrierBuild {
-    pub fn cache_key(&self) -> alloc::string::String {
-        self.cache_key.clone()
-    }
-}
-
-#[cfg(feature = "crypto")]
 impl ShadowsocksUdpPacketPathCarrierDescriptor {
-    pub fn cache_key(&self) -> alloc::string::String {
-        self.cache_key.clone()
-    }
-
-    pub fn server(&self) -> &str {
-        &self.server
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
     pub fn into_parts(self) -> (alloc::string::String, alloc::string::String, u16) {
         (self.cache_key, self.server, self.port)
     }
@@ -869,26 +850,6 @@ impl ShadowsocksUdpPacketPathDatagramSourceBuild {
         ShadowsocksDatagramCodec,
     ) {
         (self.tag, self.server, self.port, self.cache_key, self.codec)
-    }
-
-    pub fn tag(&self) -> &str {
-        &self.tag
-    }
-
-    pub fn server(&self) -> &str {
-        &self.server
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
-    pub fn cache_key(&self) -> alloc::string::String {
-        self.cache_key.clone()
-    }
-
-    pub fn codec(&self) -> ShadowsocksDatagramCodec {
-        self.codec.clone()
     }
 
     pub fn into_codec(self) -> ShadowsocksDatagramCodec {
