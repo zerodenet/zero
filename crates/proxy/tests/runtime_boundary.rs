@@ -19,6 +19,29 @@ fn read(relative: &str) -> String {
     fs::read_to_string(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
 }
 
+fn impl_block(source: &str, type_name: &str) -> String {
+    let normalized = source.replace("\r\n", "\n");
+    let needle = format!("impl {type_name} {{");
+    let start = normalized
+        .find(&needle)
+        .unwrap_or_else(|| panic!("missing impl block for {type_name}"));
+    let body_start = start + needle.len();
+    let mut depth = 1usize;
+    for (offset, ch) in normalized[body_start..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return normalized[start..body_start + offset + 1].to_owned();
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("unterminated impl block for {type_name}")
+}
+
 fn rust_sources_under(relative: &str) -> Vec<PathBuf> {
     let root = manifest_dir().join(relative);
     let mut pending = vec![root];
@@ -8212,6 +8235,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
             .expect("read trojan protocol outbound source");
+    let connector_flow_impl = impl_block(&protocol_outbound, "TrojanUdpConnectorFlow");
 
     assert!(
         !adapter.contains("TrojanUdpFlowResume::new")
@@ -8226,6 +8250,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && protocol_outbound.contains("pub fn flow_resume(&self, relay_chain: bool)")
             && protocol_outbound.contains("pub fn udp_flow_resume_from_config(")
             && protocol_outbound.contains("pub struct TrojanUdpConnectorFlow")
+            && !connector_flow_impl.contains("pub fn cache_key(&self)")
+            && !connector_flow_impl.contains("pub fn requires_relay_upstream(&self)")
+            && connector_flow_impl.contains("pub fn into_parts(self) -> (String, bool)")
             && protocol_outbound.contains("pub struct TrojanUdpTlsProfileSpec")
             && protocol_outbound.contains("pub fn connector_flow(")
             && !protocol_outbound.contains("pub struct TrojanUdpFlowSpec")
@@ -8489,6 +8516,7 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
         .expect("read mieru protocol lib source");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
         .expect("read mieru protocol udp source");
+    let connector_flow_impl = impl_block(&protocol_udp, "MieruUdpConnectorFlow");
 
     for removed in [
         "src/adapters/mieru/udp/manager.rs",
@@ -8577,6 +8605,10 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
             && protocol_udp.contains("struct MieruUdpFlowResume")
             && protocol_udp.contains("pub fn udp_flow_resume_from_config(")
             && protocol_udp.contains("pub struct MieruUdpConnectorFlow")
+            && !connector_flow_impl.contains("pub fn cache_key(&self)")
+            && !connector_flow_impl.contains("pub fn requires_relay_upstream(&self)")
+            && connector_flow_impl
+                .contains("pub fn into_parts(self) -> (alloc::string::String, bool)")
             && protocol_udp.contains("pub fn connector_flow(")
             && !protocol_udp.contains("pub struct MieruUdpFlowSpec")
             && !protocol_udp.contains("pub struct MieruUdpFlowRequirement")
@@ -8901,6 +8933,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     let generic_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
+    let connector_flow_impl = impl_block(&protocol_udp, "Hysteria2UdpConnectorFlow");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
         .expect("read hysteria2 protocol lib source");
     let adapter_flow = read("src/adapters/hysteria2/udp/flow.rs");
@@ -9038,6 +9071,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !adapter_packet_path.contains(".packet_path_codec()")
             && protocol_udp.contains("struct Hysteria2UdpFlowResume")
             && protocol_udp.contains("pub struct Hysteria2UdpConnectorFlow")
+            && !connector_flow_impl.contains("pub fn cache_key(&self)")
+            && !connector_flow_impl.contains("pub fn connector_profile(&self)")
+            && connector_flow_impl.contains("pub fn into_cache_key(self) -> String")
+            && connector_flow_impl.contains("pub fn into_connection_parts(self)")
             && !protocol_udp.contains("pub struct Hysteria2UdpFlowSpec")
             && protocol_udp.contains("pub fn connector_profile(&self)")
             && protocol_udp.contains("pub struct Hysteria2UdpPacketPathSpec")
@@ -9826,6 +9863,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
+    let socket_flow_spec_impl = impl_block(&protocol_outbound, "ShadowsocksUdpSocketFlowSpec");
 
     assert!(
         !adapter.contains("CipherKind::from_str")
@@ -9910,6 +9948,11 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
             && protocol_outbound.contains("struct ShadowsocksUdpFlowResume")
             && protocol_outbound.contains("struct ShadowsocksUdpCacheKey")
             && protocol_outbound.contains("pub struct ShadowsocksUdpSocketFlowSpec")
+            && !socket_flow_spec_impl.contains("pub fn cache_key(&self)")
+            && !socket_flow_spec_impl.contains("pub fn codec(&self)")
+            && socket_flow_spec_impl.contains("pub fn into_cache_key")
+            && socket_flow_spec_impl
+                .contains("pub fn into_codec(self) -> ShadowsocksDatagramCodec")
             && protocol_outbound.contains("pub struct ShadowsocksUdpFlowStore")
             && protocol_outbound.contains("pub struct ShadowsocksUdpFlowEntries")
             && protocol_outbound.contains("fn socket_flow_cache_key(&self)")
@@ -10207,7 +10250,10 @@ fn udp_build_traits_consume_protocol_parts() {
                 .contains("ManagedDatagramConnectorFlow::new(build.into_cache_key())")
             && datagram_manager
                 .contains("ManagedDatagramSocketConnectorFlow::new(build.into_cache_key())")
+            && datagram_manager.contains(".into_cache_key()")
             && !datagram_manager.contains("fn cache_key(&self) -> String;")
+            && !datagram_manager.contains("fn cache_key(self) -> String")
+            && !datagram_manager.contains(".cache_key()")
             && hysteria2_outbound.contains("fn into_cache_key(self) -> String")
             && shadowsocks_outbound.contains("fn into_cache_key(self) -> String")
             && hysteria2_outbound.contains("self.into_cache_key()")

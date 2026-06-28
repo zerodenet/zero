@@ -354,14 +354,6 @@ pub struct MieruUdpConnectorFlow {
 }
 
 impl MieruUdpConnectorFlow {
-    pub fn cache_key(&self) -> alloc::string::String {
-        self.cache_key.clone()
-    }
-
-    pub fn requires_relay_upstream(&self) -> bool {
-        self.requires_relay_upstream
-    }
-
     pub fn into_parts(self) -> (alloc::string::String, bool) {
         (self.cache_key, self.requires_relay_upstream)
     }

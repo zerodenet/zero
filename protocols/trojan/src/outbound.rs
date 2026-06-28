@@ -538,14 +538,6 @@ pub struct TrojanUdpConnectorFlow {
 }
 
 impl TrojanUdpConnectorFlow {
-    pub fn cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
-    pub fn requires_relay_upstream(&self) -> bool {
-        self.requires_relay_upstream
-    }
-
     pub fn into_parts(self) -> (String, bool) {
         (self.cache_key, self.requires_relay_upstream)
     }

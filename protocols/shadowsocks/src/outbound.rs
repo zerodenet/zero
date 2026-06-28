@@ -494,16 +494,8 @@ pub struct ShadowsocksUdpSocketFlowSpec {
 
 #[cfg(feature = "crypto")]
 impl ShadowsocksUdpSocketFlowSpec {
-    pub fn cache_key(&self) -> alloc::string::String {
-        self.cache_key.clone()
-    }
-
     pub fn into_cache_key(self) -> alloc::string::String {
         self.cache_key
-    }
-
-    pub fn codec(&self) -> ShadowsocksDatagramCodec {
-        self.codec.clone()
     }
 
     pub fn into_codec(self) -> ShadowsocksDatagramCodec {

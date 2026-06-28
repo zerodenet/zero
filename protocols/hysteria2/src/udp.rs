@@ -879,16 +879,8 @@ pub struct Hysteria2UdpConnectorFlowParts {
 }
 
 impl Hysteria2UdpConnectorFlow {
-    pub fn cache_key(&self) -> String {
-        self.cache_key.clone()
-    }
-
     pub fn into_cache_key(self) -> String {
         self.cache_key
-    }
-
-    pub fn connector_profile(&self) -> Hysteria2UdpConnectorProfile {
-        self.connector_profile.clone()
     }
 
     pub fn into_connection_parts(self) -> Hysteria2UdpConnectorFlowParts {

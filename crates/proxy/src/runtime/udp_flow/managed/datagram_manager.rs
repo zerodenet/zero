@@ -41,7 +41,7 @@ impl ManagedDatagramConnectorFlow {
         Self { cache_key }
     }
 
-    fn cache_key(self) -> String {
+    fn into_cache_key(self) -> String {
         self.cache_key
     }
 }
@@ -130,7 +130,10 @@ where
         resume: T,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let cache_key = self.connector.connector_flow(&resume, endpoint).cache_key();
+        let cache_key = self
+            .connector
+            .connector_flow(&resume, endpoint)
+            .into_cache_key();
         let establish = self
             .connector
             .establish(proxy, endpoint, resume, packet_ref);
@@ -221,7 +224,7 @@ impl ManagedDatagramSocketConnectorFlow {
         Self { cache_key }
     }
 
-    fn cache_key(self) -> String {
+    fn into_cache_key(self) -> String {
         self.cache_key
     }
 }
@@ -253,7 +256,10 @@ where
         resume: T,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
-        let cache_key = self.connector.connector_flow(&resume, endpoint).cache_key();
+        let cache_key = self
+            .connector
+            .connector_flow(&resume, endpoint)
+            .into_cache_key();
         let connection = self
             .upstreams
             .get_or_insert_key(
