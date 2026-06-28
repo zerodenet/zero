@@ -1,11 +1,12 @@
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_traits::TcpTunnelProtocol;
 
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::socks5::Socks5Adapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
+use crate::transport::{EstablishedTcpOutbound, MeteredStream, TcpOutboundFailure, TcpRelayStream};
 
 impl Socks5Adapter {
     pub(super) async fn connect_tcp_impl(
@@ -24,15 +25,7 @@ impl Socks5Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        match crate::outbound::socks5::connect_tcp(
-            proxy,
-            session,
-            server,
-            *port,
-            username.zip(*password),
-        )
-        .await
-        {
+        match connect_tcp(proxy, session, server, *port, username.zip(*password)).await {
             Ok(upstream) => Ok(EstablishedTcpOutbound::Socks5 {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
@@ -60,7 +53,55 @@ impl Socks5Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        crate::outbound::socks5::apply_tcp_hop(proxy, stream, session, username.zip(*password))
-            .await
+        apply_tcp_hop(proxy, stream, session, username.zip(*password)).await
     }
+}
+
+async fn connect_tcp(
+    proxy: &Proxy,
+    session: &Session,
+    server: &str,
+    port: u16,
+    auth: Option<(&str, &str)>,
+) -> Result<TcpRelayStream, EngineError> {
+    let upstream = proxy
+        .protocols
+        .direct_connector()
+        .connect_host(server, port, proxy.resolver.as_ref())
+        .await?;
+    let mut upstream = MeteredStream::new(upstream);
+
+    socks5::Socks5Outbound
+        .establish_tcp_tunnel(
+            &mut upstream,
+            &socks5::Socks5TcpTunnelTarget {
+                session,
+                auth: auth
+                    .map(|(username, password)| socks5::Socks5OutboundAuth { username, password }),
+            },
+        )
+        .await?;
+    proxy.record_session_outbound_traffic(session.id, upstream.drain_traffic());
+
+    Ok(upstream.into_inner().into())
+}
+
+async fn apply_tcp_hop(
+    _proxy: &Proxy,
+    mut stream: TcpRelayStream,
+    session: &Session,
+    auth: Option<(&str, &str)>,
+) -> Result<TcpRelayStream, EngineError> {
+    socks5::Socks5Outbound
+        .establish_tcp_tunnel(
+            &mut stream,
+            &socks5::Socks5TcpTunnelTarget {
+                session,
+                auth: auth
+                    .map(|(username, password)| socks5::Socks5OutboundAuth { username, password }),
+            },
+        )
+        .await
+        .map_err(|error| EngineError::Io(std::io::Error::other(error)))?;
+    Ok(stream)
 }

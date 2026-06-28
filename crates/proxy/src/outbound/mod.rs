@@ -4,7 +4,6 @@ pub(crate) mod hysteria2;
 pub(crate) mod mieru;
 #[cfg(feature = "shadowsocks")]
 pub(crate) mod shadowsocks;
-pub(crate) mod socks5;
 #[cfg(feature = "trojan")]
 pub(crate) mod trojan;
 #[cfg(feature = "vless")]

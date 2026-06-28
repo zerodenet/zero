@@ -289,10 +289,10 @@ fn protocol_config_variant_matching_is_confined_to_adapters_and_protocol_entrypo
     assert_src_pattern_confined(
         "InboundProtocolConfig::",
         &[
-            "src/protocol_registry.rs",
-            "src/protocol_registry/registry.rs",
+            "src/protocol_registry/mod.rs",
+            "src/protocol_registry/registry/mod.rs",
             "src/protocol_registry/registry/metadata.rs",
-            "src/protocol_registry/registry/tests.rs",
+            "src/protocol_registry/registry/tests/mod.rs",
             "src/protocol_registry/registry/tests/fixtures.rs",
         ],
         &["src/adapters/"],
@@ -305,7 +305,7 @@ fn outbound_config_variant_matching_is_confined_to_adapters_and_registry() {
     assert_src_pattern_confined(
         "OutboundProtocolConfig::",
         &[
-            "src/protocol_registry/registry.rs",
+            "src/protocol_registry/registry/mod.rs",
             "src/protocol_registry/registry/support.rs",
         ],
         &["src/adapters/"],
@@ -349,7 +349,6 @@ fn outbound_protocol_helpers_are_crate_private() {
         "hysteria2",
         "mieru",
         "shadowsocks",
-        "socks5",
         "trojan",
         "vless",
         "vmess",
@@ -363,6 +362,11 @@ fn outbound_protocol_helpers_are_crate_private() {
             "src/outbound/mod.rs should keep `{protocol}` helpers crate-private"
         );
     }
+
+    assert!(
+        !outbound_root.contains("socks5"),
+        "SOCKS5 outbound protocol glue should not return to src/outbound/mod.rs"
+    );
 }
 
 #[test]
@@ -373,7 +377,6 @@ fn outbound_root_is_facade_only() {
         "pub(crate) mod hysteria2;",
         "pub(crate) mod mieru;",
         "pub(crate) mod shadowsocks;",
-        "pub(crate) mod socks5;",
         "pub(crate) mod trojan;",
         "pub(crate) mod vless;",
         "pub(crate) mod vmess;",
@@ -809,10 +812,10 @@ fn resolved_outbound_variant_matching_is_confined_to_adapters_and_registry() {
     assert_src_pattern_confined(
         "ResolvedLeafOutbound::",
         &[
-            "src/protocol_registry.rs",
-            "src/protocol_registry/registry.rs",
+            "src/protocol_registry/mod.rs",
+            "src/protocol_registry/registry/mod.rs",
             "src/protocol_registry/registry/outbound.rs",
-            "src/protocol_registry/registry/tests.rs",
+            "src/protocol_registry/registry/tests/mod.rs",
             "src/protocol_registry/registry/tests/fixtures.rs",
             "src/protocol_registry/registry/tests/outbound.rs",
         ],
@@ -1731,12 +1734,7 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
         ),
         (
             "socks5",
-            &[
-                "crate::outbound::socks5::connect_tcp",
-                "crate::outbound::socks5::apply_tcp_hop",
-                "connect_upstream_socks5",
-                "EstablishedTcpOutbound::Socks5",
-            ],
+            &["connect_upstream_socks5", "EstablishedTcpOutbound::Socks5"],
         ),
         (
             "trojan",
@@ -1793,8 +1791,6 @@ fn outbound_tcp_helpers_are_called_only_by_adapter_tcp_modules() {
         "crate::outbound::mieru::apply_tcp_hop",
         "crate::outbound::shadowsocks::connect_tcp",
         "crate::outbound::shadowsocks::apply_tcp_hop",
-        "crate::outbound::socks5::connect_tcp",
-        "crate::outbound::socks5::apply_tcp_hop",
         "crate::outbound::trojan::connect_tcp",
         "crate::outbound::trojan::apply_tcp_hop",
         "crate::outbound::vless::connect_tcp",
@@ -2411,7 +2407,7 @@ fn inventory_does_not_expose_concrete_protocol_accessors() {
 
 #[test]
 fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
-    let outbound = read("src/outbound/socks5.rs");
+    let outbound = manifest_dir().join("src/outbound/socks5.rs");
     let adapter = read("src/adapters/socks5/udp.rs");
     let active = read("src/adapters/socks5/udp/active.rs");
     let establish = read("src/adapters/socks5/udp/establish.rs");
@@ -2427,19 +2423,10 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let old_protocol_runtime = manifest_dir().join("src/protocol_runtime/socks5_udp.rs");
     let old_protocol_runtime_dir = manifest_dir().join("src/protocol_runtime/socks5_udp");
 
-    for forbidden in [
-        "ActiveUpstreamSocks5UdpAssociation",
-        "Socks5UdpAssociation",
-        "UpstreamAssociationCloseReason",
-        "send_socks5_udp_packet",
-        "ensure_socks5_udp_association",
-        "Socks5UdpRelay",
-    ] {
-        assert!(
-            !outbound.contains(forbidden),
-            "src/outbound/socks5.rs should stay focused on TCP handshake; found `{forbidden}`"
-        );
-    }
+    assert!(
+        !outbound.exists(),
+        "SOCKS5 should not need a protocol-named proxy outbound module; TCP glue lives in adapters/socks5/tcp.rs and protocol handshake lives in protocols/socks5"
+    );
 
     for forbidden in [
         "Socks5UdpRelay",
@@ -5780,18 +5767,18 @@ fn udp_dispatch_does_not_keep_protocol_start_wrappers() {
 
 #[test]
 fn protocol_registry_tests_live_outside_logic_file() {
-    let registry = read("src/protocol_registry/registry.rs");
-    let tests = manifest_dir().join("src/protocol_registry/registry/tests.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
+    let tests = manifest_dir().join("src/protocol_registry/registry/tests/mod.rs");
 
     assert!(
         !registry.contains("mod tests {"),
-        "protocol registry tests should live in src/protocol_registry/registry/tests.rs"
+        "protocol registry tests should live in src/protocol_registry/registry/tests/mod.rs"
     );
     assert!(
         tests.exists(),
         "protocol registry boundary tests should stay in a sibling tests module"
     );
-    let tests_content = read("src/protocol_registry/registry/tests.rs");
+    let tests_content = read("src/protocol_registry/registry/tests/mod.rs");
     assert!(
         !tests_content.contains("use super::*;"),
         "protocol registry tests should import registry dependencies explicitly"
@@ -5800,7 +5787,7 @@ fn protocol_registry_tests_live_outside_logic_file() {
 
 #[test]
 fn protocol_registry_tests_root_is_facade_only() {
-    let tests = read("src/protocol_registry/registry/tests.rs");
+    let tests = read("src/protocol_registry/registry/tests/mod.rs");
     let fixtures = read("src/protocol_registry/registry/tests/fixtures.rs");
     let inbound = read("src/protocol_registry/registry/tests/inbound.rs");
     let outbound = read("src/protocol_registry/registry/tests/outbound.rs");
@@ -5808,7 +5795,7 @@ fn protocol_registry_tests_root_is_facade_only() {
     for expected in ["mod fixtures;", "mod inbound;", "mod outbound;"] {
         assert!(
             tests.contains(expected),
-            "src/protocol_registry/registry/tests.rs should expose test facade item `{expected}`"
+            "src/protocol_registry/registry/tests/mod.rs should expose test facade item `{expected}`"
         );
     }
 
@@ -5824,7 +5811,7 @@ fn protocol_registry_tests_root_is_facade_only() {
     ] {
         assert!(
             !tests.contains(forbidden),
-            "src/protocol_registry/registry/tests.rs should remain a facade over fixtures/inbound/outbound test modules; found `{forbidden}`"
+            "src/protocol_registry/registry/tests/mod.rs should remain a facade over fixtures/inbound/outbound test modules; found `{forbidden}`"
         );
     }
 
@@ -5848,7 +5835,7 @@ fn protocol_registry_tests_root_is_facade_only() {
 
 #[test]
 fn protocol_registry_struct_root_is_facade_only() {
-    let registry = read("src/protocol_registry/registry.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
 
     for expected in [
         "mod build;",
@@ -5864,7 +5851,7 @@ fn protocol_registry_struct_root_is_facade_only() {
     ] {
         assert!(
             registry.contains(expected),
-            "src/protocol_registry/registry.rs should expose registry facade item `{expected}`"
+            "src/protocol_registry/registry/mod.rs should expose registry facade item `{expected}`"
         );
     }
 
@@ -5888,7 +5875,7 @@ fn protocol_registry_struct_root_is_facade_only() {
     ] {
         assert!(
             !registry.contains(forbidden),
-            "src/protocol_registry/registry.rs should remain a facade over registry submodules; found `{forbidden}`"
+            "src/protocol_registry/registry/mod.rs should remain a facade over registry submodules; found `{forbidden}`"
         );
     }
 }
@@ -5896,7 +5883,7 @@ fn protocol_registry_struct_root_is_facade_only() {
 #[test]
 fn protocol_registry_build_lives_in_register_surface() {
     let adapters = read("src/adapters/mod.rs");
-    let registry = read("src/protocol_registry/registry.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
     let build = read("src/protocol_registry/registry/build.rs");
     let register = read("src/register.rs");
     let inventory = read("src/inventory.rs");
@@ -5907,7 +5894,7 @@ fn protocol_registry_build_lives_in_register_surface() {
     );
     assert!(
         !registry.contains("pub(crate) fn build() -> Self"),
-        "src/protocol_registry/registry.rs should keep registry construction out of the registry facade"
+        "src/protocol_registry/registry/mod.rs should keep registry construction out of the registry facade"
     );
     assert!(
         !build.contains("pub(crate) fn build() -> Self"),
@@ -5925,7 +5912,7 @@ fn protocol_registry_build_lives_in_register_surface() {
 
 #[test]
 fn protocol_registry_imports_live_in_register_surface() {
-    let registry = read("src/protocol_registry/registry.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
     let build = read("src/protocol_registry/registry/build.rs");
     let register = read("src/register.rs");
 
@@ -5954,12 +5941,12 @@ fn protocol_registry_imports_live_in_register_surface() {
 
 #[test]
 fn protocol_registry_register_helper_stays_in_build_module() {
-    let registry = read("src/protocol_registry/registry.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
     let build = read("src/protocol_registry/registry/build.rs");
 
     assert!(
         !registry.contains("pub(crate) fn register("),
-        "src/protocol_registry/registry.rs should keep register helper in src/protocol_registry/registry/build.rs"
+        "src/protocol_registry/registry/mod.rs should keep register helper in src/protocol_registry/registry/build.rs"
     );
     assert!(
         build.contains("pub(crate) fn register<T>(&mut self, adapter: std::sync::Arc<T>)"),
@@ -5974,7 +5961,7 @@ fn protocol_registry_register_helper_stays_in_build_module() {
 
 #[test]
 fn protocol_registry_metadata_lives_in_metadata_module() {
-    let registry = read("src/protocol_registry/registry.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
     let metadata = read("src/protocol_registry/registry/metadata.rs");
 
     for forbidden in [
@@ -5984,7 +5971,7 @@ fn protocol_registry_metadata_lives_in_metadata_module() {
     ] {
         assert!(
             !registry.contains(forbidden),
-            "src/protocol_registry/registry.rs should keep metadata methods in src/protocol_registry/registry/metadata.rs; found `{forbidden}`"
+            "src/protocol_registry/registry/mod.rs should keep metadata methods in src/protocol_registry/registry/metadata.rs; found `{forbidden}`"
         );
         assert!(
             metadata.contains(forbidden),
@@ -5995,7 +5982,7 @@ fn protocol_registry_metadata_lives_in_metadata_module() {
 
 #[test]
 fn protocol_registry_support_lives_in_support_module() {
-    let registry = read("src/protocol_registry/registry.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
     let metadata = read("src/protocol_registry/registry/metadata.rs");
     let support = read("src/protocol_registry/registry/support.rs");
 
@@ -6009,7 +5996,7 @@ fn protocol_registry_support_lives_in_support_module() {
     ] {
         assert!(
             !registry.contains(forbidden),
-            "src/protocol_registry/registry.rs should keep support methods in src/protocol_registry/registry/support.rs; found `{forbidden}`"
+            "src/protocol_registry/registry/mod.rs should keep support methods in src/protocol_registry/registry/support.rs; found `{forbidden}`"
         );
         assert!(
             !metadata.contains(forbidden),
@@ -6024,7 +6011,7 @@ fn protocol_registry_support_lives_in_support_module() {
 
 #[test]
 fn protocol_registry_validation_lives_in_validation_module() {
-    let registry = read("src/protocol_registry/registry.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
     let metadata = read("src/protocol_registry/registry/metadata.rs");
     let validation = read("src/protocol_registry/registry/validation.rs");
 
@@ -6034,7 +6021,7 @@ fn protocol_registry_validation_lives_in_validation_module() {
     ] {
         assert!(
             !registry.contains(forbidden),
-            "src/protocol_registry/registry.rs should keep validation methods in src/protocol_registry/registry/validation.rs; found `{forbidden}`"
+            "src/protocol_registry/registry/mod.rs should keep validation methods in src/protocol_registry/registry/validation.rs; found `{forbidden}`"
         );
         assert!(
             !metadata.contains(forbidden),
@@ -6049,7 +6036,7 @@ fn protocol_registry_validation_lives_in_validation_module() {
 
 #[test]
 fn protocol_registry_outbound_dispatch_lives_in_outbound_module() {
-    let registry = read("src/protocol_registry/registry.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
     let outbound = read("src/protocol_registry/registry/outbound.rs");
 
     for forbidden in [
@@ -6060,7 +6047,7 @@ fn protocol_registry_outbound_dispatch_lives_in_outbound_module() {
     ] {
         assert!(
             !registry.contains(forbidden),
-            "src/protocol_registry/registry.rs should keep outbound dispatch in src/protocol_registry/registry/outbound.rs; found `{forbidden}`"
+            "src/protocol_registry/registry/mod.rs should keep outbound dispatch in src/protocol_registry/registry/outbound.rs; found `{forbidden}`"
         );
         assert!(
             outbound.contains(forbidden),
@@ -6071,7 +6058,7 @@ fn protocol_registry_outbound_dispatch_lives_in_outbound_module() {
 
 #[test]
 fn protocol_registry_inbound_dispatch_lives_in_inbound_module() {
-    let registry = read("src/protocol_registry/registry.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
     let inbound = read("src/protocol_registry/registry/inbound.rs");
 
     for forbidden in [
@@ -6081,7 +6068,7 @@ fn protocol_registry_inbound_dispatch_lives_in_inbound_module() {
     ] {
         assert!(
             !registry.contains(forbidden),
-            "src/protocol_registry/registry.rs should keep inbound dispatch in src/protocol_registry/registry/inbound.rs; found `{forbidden}`"
+            "src/protocol_registry/registry/mod.rs should keep inbound dispatch in src/protocol_registry/registry/inbound.rs; found `{forbidden}`"
         );
         assert!(
             inbound.contains(forbidden),
@@ -6092,8 +6079,8 @@ fn protocol_registry_inbound_dispatch_lives_in_inbound_module() {
 
 #[test]
 fn protocol_registry_dispatch_is_not_public_api() {
-    let root = read("src/protocol_registry.rs");
-    let registry = read("src/protocol_registry/registry.rs");
+    let root = read("src/protocol_registry/mod.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
     let capability = read("src/protocol_registry/capability.rs");
     let old_adapter = manifest_dir().join("src/protocol_registry/adapter.rs");
 
@@ -6109,7 +6096,7 @@ fn protocol_registry_dispatch_is_not_public_api() {
 
     assert!(
         root.contains("pub(crate) use registry::ProtocolRegistry;"),
-        "src/protocol_registry.rs should keep ProtocolRegistry visible only inside zero-proxy"
+        "src/protocol_registry/mod.rs should keep ProtocolRegistry visible only inside zero-proxy"
     );
     assert!(
         !old_adapter.exists()
@@ -6125,13 +6112,13 @@ fn protocol_registry_dispatch_is_not_public_api() {
     );
     assert!(
         registry.contains("pub(crate) struct ProtocolRegistry"),
-        "src/protocol_registry/registry.rs should keep ProtocolRegistry visible only inside zero-proxy"
+        "src/protocol_registry/registry/mod.rs should keep ProtocolRegistry visible only inside zero-proxy"
     );
 }
 
 #[test]
 fn protocol_registry_root_is_facade_only() {
-    let root = read("src/protocol_registry.rs");
+    let root = read("src/protocol_registry/mod.rs");
 
     for expected in [
         "mod capability;",
@@ -6146,7 +6133,7 @@ fn protocol_registry_root_is_facade_only() {
     ] {
         assert!(
             root.contains(expected),
-            "src/protocol_registry.rs should expose facade item `{expected}`"
+            "src/protocol_registry/mod.rs should expose facade item `{expected}`"
         );
     }
 
@@ -6165,14 +6152,14 @@ fn protocol_registry_root_is_facade_only() {
     ] {
         assert!(
             !root.contains(forbidden),
-            "src/protocol_registry.rs should remain a facade over adapter/defaults/model/registry modules; found `{forbidden}`"
+            "src/protocol_registry/mod.rs should remain a facade over adapter/defaults/model/registry modules; found `{forbidden}`"
         );
     }
 }
 
 #[test]
 fn protocol_registry_capabilities_are_split_by_responsibility() {
-    let root = read("src/protocol_registry.rs");
+    let root = read("src/protocol_registry/mod.rs");
     let capability = read("src/protocol_registry/capability.rs");
     let context = read("src/protocol_registry/context.rs");
     let old_adapter = manifest_dir().join("src/protocol_registry/adapter.rs");
@@ -6193,11 +6180,11 @@ fn protocol_registry_capabilities_are_split_by_responsibility() {
 
     assert!(
         root.contains("mod capability;"),
-        "src/protocol_registry.rs should wire the capability trait module"
+        "src/protocol_registry/mod.rs should wire the capability trait module"
     );
     assert!(
         root.contains("mod context;"),
-        "src/protocol_registry.rs should wire the adapter context module"
+        "src/protocol_registry/mod.rs should wire the adapter context module"
     );
     for expected in [
         "pub(crate) struct InboundAdapterContext",
@@ -6492,7 +6479,7 @@ fn registered_adapters_implement_tcp_outbound_capability_explicitly() {
 
 #[test]
 fn protocol_registry_stores_capability_objects() {
-    let registry = read("src/protocol_registry/registry.rs");
+    let registry = read("src/protocol_registry/registry/mod.rs");
     let inbound = read("src/protocol_registry/registry/inbound.rs");
     let outbound = read("src/protocol_registry/registry/outbound.rs");
 
@@ -6541,15 +6528,15 @@ fn protocol_registry_capabilities_use_contexts_not_proxy() {
 
 #[test]
 fn protocol_registry_models_live_outside_trait_root() {
-    let root = read("src/protocol_registry.rs");
-    let model = read("src/protocol_registry/model.rs");
+    let root = read("src/protocol_registry/mod.rs");
+    let model = read("src/protocol_registry/model/mod.rs");
     let inbound = read("src/protocol_registry/model/inbound.rs");
     let outbound = read("src/protocol_registry/model/outbound.rs");
 
     for forbidden in ["pub(crate) enum BoundInbound", "impl BoundInbound"] {
         assert!(
             !root.contains(forbidden) && !model.contains(forbidden),
-            "src/protocol_registry.rs and src/protocol_registry/model.rs should keep inbound adapter models in src/protocol_registry/model/inbound.rs; found `{forbidden}`"
+            "src/protocol_registry/mod.rs and src/protocol_registry/model/mod.rs should keep inbound adapter models in src/protocol_registry/model/inbound.rs; found `{forbidden}`"
         );
         assert!(
             inbound.contains(forbidden),
@@ -6563,7 +6550,7 @@ fn protocol_registry_models_live_outside_trait_root() {
     ] {
         assert!(
             !root.contains(forbidden) && !model.contains(forbidden),
-            "src/protocol_registry.rs and src/protocol_registry/model.rs should keep outbound adapter models in src/protocol_registry/model/outbound.rs; found `{forbidden}`"
+            "src/protocol_registry/mod.rs and src/protocol_registry/model/mod.rs should keep outbound adapter models in src/protocol_registry/model/outbound.rs; found `{forbidden}`"
         );
         assert!(
             outbound.contains(forbidden),
@@ -6579,18 +6566,18 @@ fn protocol_registry_models_live_outside_trait_root() {
     ] {
         assert!(
             !root.contains(forbidden),
-            "src/protocol_registry.rs should keep adapter models in src/protocol_registry/model.rs; found `{forbidden}`"
+            "src/protocol_registry/mod.rs should keep adapter models in src/protocol_registry/model/mod.rs; found `{forbidden}`"
         );
     }
     assert!(
         root.contains("pub(crate) use model::{BoundInbound, OutboundLeafRuntime};"),
-        "src/protocol_registry.rs should re-export adapter models crate-privately"
+        "src/protocol_registry/mod.rs should re-export adapter models crate-privately"
     );
 }
 
 #[test]
 fn protocol_registry_model_root_is_facade_only() {
-    let model = read("src/protocol_registry/model.rs");
+    let model = read("src/protocol_registry/model/mod.rs");
 
     for expected in [
         "mod inbound;",
@@ -6600,7 +6587,7 @@ fn protocol_registry_model_root_is_facade_only() {
     ] {
         assert!(
             model.contains(expected),
-            "src/protocol_registry/model.rs should expose model facade item `{expected}`"
+            "src/protocol_registry/model/mod.rs should expose model facade item `{expected}`"
         );
     }
 
@@ -6616,15 +6603,15 @@ fn protocol_registry_model_root_is_facade_only() {
     ] {
         assert!(
             !model.contains(forbidden),
-            "src/protocol_registry/model.rs should remain a facade over inbound/outbound model modules; found `{forbidden}`"
+            "src/protocol_registry/model/mod.rs should remain a facade over inbound/outbound model modules; found `{forbidden}`"
         );
     }
 }
 
 #[test]
 fn protocol_registry_default_errors_live_outside_trait_root() {
-    let root = read("src/protocol_registry.rs");
-    let defaults = read("src/protocol_registry/defaults.rs");
+    let root = read("src/protocol_registry/mod.rs");
+    let defaults = read("src/protocol_registry/defaults/mod.rs");
     let errors = read("src/protocol_registry/defaults/errors.rs");
 
     for forbidden in [
@@ -6638,11 +6625,11 @@ fn protocol_registry_default_errors_live_outside_trait_root() {
     ] {
         assert!(
             !root.contains(forbidden),
-            "src/protocol_registry.rs should keep default unsupported error construction in src/protocol_registry/defaults/errors.rs; found `{forbidden}`"
+            "src/protocol_registry/mod.rs should keep default unsupported error construction in src/protocol_registry/defaults/errors.rs; found `{forbidden}`"
         );
         assert!(
             !defaults.contains(forbidden),
-            "src/protocol_registry/defaults.rs should keep default unsupported error construction in src/protocol_registry/defaults/errors.rs; found `{forbidden}`"
+            "src/protocol_registry/defaults/mod.rs should keep default unsupported error construction in src/protocol_registry/defaults/errors.rs; found `{forbidden}`"
         );
         assert!(
             errors.contains(forbidden),
@@ -6653,18 +6640,18 @@ fn protocol_registry_default_errors_live_outside_trait_root() {
 
 #[test]
 fn protocol_registry_default_tcp_bind_lives_outside_trait_root() {
-    let root = read("src/protocol_registry.rs");
-    let defaults = read("src/protocol_registry/defaults.rs");
+    let root = read("src/protocol_registry/mod.rs");
+    let defaults = read("src/protocol_registry/defaults/mod.rs");
     let bind = read("src/protocol_registry/defaults/bind.rs");
 
     for forbidden in ["TokioListener::bind", "BoundInbound::Tcp"] {
         assert!(
             !root.contains(forbidden),
-            "src/protocol_registry.rs should keep default TCP bind construction in src/protocol_registry/defaults/bind.rs; found `{forbidden}`"
+            "src/protocol_registry/mod.rs should keep default TCP bind construction in src/protocol_registry/defaults/bind.rs; found `{forbidden}`"
         );
         assert!(
             !defaults.contains(forbidden),
-            "src/protocol_registry/defaults.rs should keep default TCP bind construction in src/protocol_registry/defaults/bind.rs; found `{forbidden}`"
+            "src/protocol_registry/defaults/mod.rs should keep default TCP bind construction in src/protocol_registry/defaults/bind.rs; found `{forbidden}`"
         );
         assert!(
             bind.contains(forbidden),
@@ -6675,7 +6662,7 @@ fn protocol_registry_default_tcp_bind_lives_outside_trait_root() {
 
 #[test]
 fn protocol_registry_defaults_root_is_facade_only() {
-    let defaults = read("src/protocol_registry/defaults.rs");
+    let defaults = read("src/protocol_registry/defaults/mod.rs");
 
     for expected in [
         "mod bind;",
@@ -6685,7 +6672,7 @@ fn protocol_registry_defaults_root_is_facade_only() {
     ] {
         assert!(
             defaults.contains(expected),
-            "src/protocol_registry/defaults.rs should expose defaults facade item `{expected}`"
+            "src/protocol_registry/defaults/mod.rs should expose defaults facade item `{expected}`"
         );
     }
 
@@ -6701,7 +6688,7 @@ fn protocol_registry_defaults_root_is_facade_only() {
     ] {
         assert!(
             !defaults.contains(forbidden),
-            "src/protocol_registry/defaults.rs should remain a facade over bind/errors modules; found `{forbidden}`"
+            "src/protocol_registry/defaults/mod.rs should remain a facade over bind/errors modules; found `{forbidden}`"
         );
     }
 }
@@ -10245,7 +10232,7 @@ fn udp_build_traits_consume_protocol_parts() {
     let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let datagram_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let packet_path = read("src/runtime/udp_flow/packet_path.rs");
-    let socks5_outbound = read("src/outbound/socks5.rs");
+    let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
     let shadowsocks_outbound = read("src/outbound/shadowsocks.rs");
     let hysteria2_outbound = read("src/outbound/hysteria2.rs");
     let trojan_outbound = read("src/outbound/trojan.rs");
@@ -10326,11 +10313,11 @@ fn udp_build_traits_consume_protocol_parts() {
             && packet_path.contains("let (cache_key, server, port) = build.into_parts();")
             && !packet_path.contains("fn server(&self) -> &str;")
             && !packet_path.contains("fn port(&self) -> u16;")
-            && socks5_outbound.contains("self.into_parts()")
+            && socks5_packet_path.contains("self.into_parts()")
             && shadowsocks_outbound.contains("self.into_parts()")
             && hysteria2_outbound.contains("self.into_parts()")
-            && !socks5_outbound.contains("self.server()")
-            && !socks5_outbound.contains("self.port()")
+            && !socks5_packet_path.contains("self.server()")
+            && !socks5_packet_path.contains("self.port()")
             && !shadowsocks_outbound.contains("self.server()")
             && !shadowsocks_outbound.contains("self.port()")
             && !hysteria2_outbound.contains("self.server()")

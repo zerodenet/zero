@@ -13,6 +13,14 @@ pub(crate) struct Socks5PacketPath {
     association: SharedSocks5UdpPacketPathAssociation,
 }
 
+impl crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptorBuild
+    for socks5::udp::Socks5UdpPacketPathCarrierDescriptor
+{
+    fn into_parts(self) -> (String, String, u16) {
+        self.into_parts()
+    }
+}
+
 #[async_trait]
 impl crate::runtime::udp_flow::packet_path::PacketPathCarrier for Socks5PacketPath {
     async fn send_to(
