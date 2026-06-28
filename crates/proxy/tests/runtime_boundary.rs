@@ -4605,7 +4605,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("direct_response_session_id")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
-            && direct_response.contains("udp_session.encode_response_to_client")
+            && direct_response.contains("udp_session.response_frame")
             && !direct_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("socks5::encode_udp_associate_response("),
         "SOCKS5 UDP direct response metering and framing should live in inbound/socks5/udp_associate/direct_response.rs"
@@ -4615,7 +4615,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && chain_response.contains("pub(super) struct ChainResponseRequest")
             && chain_response.contains("struct ForwardChainResponseRequest")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
-            && chain_response.contains("udp_session.encode_response_to_client")
+            && chain_response.contains("udp_session.response_frame")
             && !chain_response.contains("Socks5InboundUdpCodec")
             && !chain_response.contains("socks5::encode_udp_associate_response(")
             && chain_response.contains("failed to send UDP chain response to client")
@@ -4655,18 +4655,32 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     assert!(
         dispatch.contains("socks5::Socks5Inbound.udp_session()")
             && dispatch.contains("udp_session.decode_request")
+            && dispatch.contains("protocol_overhead_len")
             && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
-            && upstream_response.contains("udp_session.decode_response")
+            && upstream_response.contains("udp_session.response_key")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
-            && direct_response.contains("udp_session.encode_response_to_client")
+            && direct_response.contains("udp_session.response_frame")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
-            && chain_response.contains("udp_session.encode_response_to_client")
+            && chain_response.contains("udp_session.response_frame")
             && !dispatch.contains("Socks5InboundUdpCodec")
             && !upstream_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("Socks5InboundUdpCodec")
             && !chain_response.contains("Socks5InboundUdpCodec"),
         "SOCKS5 UDP associate dispatch/attribution should use the protocol-owned inbound UDP session"
     );
+    for forbidden in [
+        "udp_session.encode_response_to_client",
+        "udp_session.decode_response",
+        "packet.len() as u64 -",
+    ] {
+        assert!(
+            !dispatch.contains(forbidden)
+                && !upstream_response.contains(forbidden)
+                && !direct_response.contains(forbidden)
+                && !chain_response.contains(forbidden),
+            "SOCKS5 UDP associate glue should not rebuild protocol packet accounting/framing detail `{forbidden}`"
+        );
+    }
     assert!(
         upstream_response.contains("async fn handle_upstream_response")
             && upstream_response.contains("upstream_association_view")

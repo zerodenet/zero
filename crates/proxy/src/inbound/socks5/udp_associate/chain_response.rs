@@ -64,8 +64,12 @@ async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
     };
 
     let udp_session = socks5::Socks5Inbound.udp_session();
-    match udp_session.encode_response_to_client(request.target, request.port, request.payload) {
-        Ok(frame) => match request.relay.send_to_addr(&frame, client_addr).await {
+    match udp_session.response_frame(request.target, request.port, request.payload) {
+        Ok(frame) => match request
+            .relay
+            .send_to_addr(frame.as_slice(), client_addr)
+            .await
+        {
             Ok(sent) => {
                 if let Some(sid) = request.session_id {
                     request.proxy.record_session_inbound_tx(sid, sent as u64);

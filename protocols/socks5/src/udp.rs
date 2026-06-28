@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use zero_core::{Address, Error};
 use zero_traits::{AsyncSocket, DatagramSocket, IpAddress, UdpRelayProtocol};
 
@@ -124,7 +126,8 @@ pub struct Socks5InboundUdpCodec;
 
 impl Socks5InboundUdpCodec {
     pub fn decode_request(&self, packet: &[u8]) -> Result<Socks5InboundUdpRequest, Error> {
-        decode_udp_associate_request(packet).map(Socks5InboundUdpRequest::from_packet)
+        decode_udp_associate_request(packet)
+            .map(|decoded| Socks5InboundUdpRequest::from_packet(decoded, packet.len()))
     }
 
     pub fn decode_response(&self, packet: &[u8]) -> Result<Socks5InboundUdpResponse, Error> {
@@ -138,6 +141,45 @@ impl Socks5InboundUdpCodec {
         payload: &[u8],
     ) -> Result<alloc::vec::Vec<u8>, Error> {
         encode_udp_associate_response_to_client(upstream_address, upstream_port, payload)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5InboundUdpResponseFrame {
+    packet: Vec<u8>,
+}
+
+impl Socks5InboundUdpResponseFrame {
+    pub fn len(&self) -> usize {
+        self.packet.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.packet.is_empty()
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.packet
+    }
+
+    pub fn into_packet(self) -> Vec<u8> {
+        self.packet
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5InboundUdpResponseKey {
+    target: Address,
+    port: u16,
+}
+
+impl Socks5InboundUdpResponseKey {
+    pub fn target(&self) -> &Address {
+        &self.target
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
     }
 }
 
@@ -169,6 +211,25 @@ impl Socks5InboundUdpSession {
     ) -> Result<alloc::vec::Vec<u8>, Error> {
         self.codec
             .encode_response_to_client(upstream_address, upstream_port, payload)
+    }
+
+    pub fn response_frame(
+        &self,
+        upstream_address: &Address,
+        upstream_port: u16,
+        payload: &[u8],
+    ) -> Result<Socks5InboundUdpResponseFrame, Error> {
+        Ok(Socks5InboundUdpResponseFrame {
+            packet: self.encode_response_to_client(upstream_address, upstream_port, payload)?,
+        })
+    }
+
+    pub fn response_key(&self, packet: &[u8]) -> Result<Socks5InboundUdpResponseKey, Error> {
+        let response = self.decode_response(packet)?;
+        Ok(Socks5InboundUdpResponseKey {
+            target: response.target().clone(),
+            port: response.port(),
+        })
     }
 }
 

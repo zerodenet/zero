@@ -25,7 +25,8 @@ pub use shared::{
 };
 pub use udp::{
     establish_udp_relay_with_control, Socks5EstablishedUdpAssociation, Socks5InboundUdpCodec,
-    Socks5InboundUdpSession, Socks5OwnedUdpAssociationConfig, Socks5UdpAssociation,
-    Socks5UdpAssociationConfig, Socks5UdpAssociationTarget, Socks5UdpRelay, Socks5UdpRelayEndpoint,
-    Socks5UdpRelayError, Socks5UdpRelayTargetAddress,
+    Socks5InboundUdpResponseFrame, Socks5InboundUdpResponseKey, Socks5InboundUdpSession,
+    Socks5OwnedUdpAssociationConfig, Socks5UdpAssociation, Socks5UdpAssociationConfig,
+    Socks5UdpAssociationTarget, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError,
+    Socks5UdpRelayTargetAddress,
 };

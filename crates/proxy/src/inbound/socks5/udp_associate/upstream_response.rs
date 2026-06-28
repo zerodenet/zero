@@ -79,11 +79,11 @@ fn upstream_response_session_id(
 ) -> Option<u64> {
     let association = dispatch.upstream_association_view()?;
     let udp_session = socks5::Socks5Inbound.udp_session();
-    match udp_session.decode_response(payload) {
-        Ok(packet) => dispatch.upstream_response_session_id(
+    match udp_session.response_key(payload) {
+        Ok(response) => dispatch.upstream_response_session_id(
             association.outbound_tag,
-            packet.target(),
-            packet.port(),
+            response.target(),
+            response.port(),
         ),
         Err(error) => {
             debug!(

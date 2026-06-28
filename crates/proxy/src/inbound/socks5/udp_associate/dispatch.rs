@@ -39,7 +39,7 @@ pub(super) async fn dispatch_packet(
         }
     }
 
-    let payload_len = udp_packet.payload().len() as u64;
+    let protocol_overhead_len = udp_packet.protocol_overhead_len() as u64;
     let (target, port, payload) = udp_packet.into_parts();
 
     // Generic dispatch.
@@ -58,8 +58,7 @@ pub(super) async fn dispatch_packet(
     // SOCKS5 framing bytes (payload is already tracked by dispatch).
     proxy.record_session_inbound_traffic(session_id, *pending_control_traffic);
     *pending_control_traffic = StreamTraffic::default();
-    let framing_bytes = packet.len() as u64 - payload_len;
-    proxy.record_session_inbound_rx(session_id, framing_bytes);
+    proxy.record_session_inbound_rx(session_id, protocol_overhead_len);
 
     Ok(())
 }

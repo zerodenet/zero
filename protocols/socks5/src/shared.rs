@@ -194,15 +194,17 @@ pub struct Socks5InboundUdpRequest {
     target: Address,
     port: u16,
     payload: Vec<u8>,
+    frame_len: usize,
 }
 
 impl Socks5InboundUdpRequest {
-    pub(crate) fn from_packet(packet: Socks5UdpPacket) -> Self {
+    pub(crate) fn from_packet(packet: Socks5UdpPacket, frame_len: usize) -> Self {
         let (target, port, payload) = packet.into_parts();
         Self {
             target,
             port,
             payload,
+            frame_len,
         }
     }
 
@@ -216,6 +218,10 @@ impl Socks5InboundUdpRequest {
 
     pub fn payload(&self) -> &[u8] {
         &self.payload
+    }
+
+    pub fn protocol_overhead_len(&self) -> usize {
+        self.frame_len.saturating_sub(self.payload.len())
     }
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
