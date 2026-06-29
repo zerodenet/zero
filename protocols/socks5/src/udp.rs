@@ -16,7 +16,8 @@ pub use crate::outbound::{
 pub use crate::shared::{
     packet_path_carrier_association_target, udp_flow_resume_from_config,
     udp_packet_path_carrier_build_from_config, udp_packet_path_carrier_descriptor_from_config,
-    udp_packet_path_spec_from_config, Socks5InboundUdpDispatchParts, Socks5InboundUdpRequest,
+    udp_packet_path_spec_from_config, Socks5InboundUdpDispatchAction,
+    Socks5InboundUdpDispatchParts, Socks5InboundUdpDispatchView, Socks5InboundUdpRequest,
     Socks5InboundUdpResponse, Socks5UdpFlowConfig, Socks5UdpPacketPathCarrierBuild,
     Socks5UdpPacketPathCarrierDescriptor, Socks5UdpPacketPathSpec,
 };
@@ -277,6 +278,14 @@ impl Socks5InboundUdpSession {
     ) -> Result<Socks5InboundUdpDispatchParts, Error> {
         self.decode_request(packet)
             .map(Socks5InboundUdpRequest::into_dispatch_parts)
+    }
+
+    pub fn decode_dispatch_action(
+        &self,
+        packet: &[u8],
+    ) -> Result<Socks5InboundUdpDispatchAction, Error> {
+        self.decode_request(packet)
+            .map(Socks5InboundUdpRequest::into_dispatch_action)
     }
 
     pub fn request_dispatch_parts(

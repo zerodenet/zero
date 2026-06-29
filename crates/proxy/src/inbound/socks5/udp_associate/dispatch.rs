@@ -16,25 +16,22 @@ pub(super) async fn dispatch_packet(
     pending_control_traffic: &mut StreamTraffic,
 ) -> Result<(), EngineError> {
     let udp_session = socks5::Socks5Inbound.udp_session();
-    let udp_packet = udp_session.decode_request(packet)?;
+    let dispatch_action = udp_session.decode_dispatch_action(packet)?;
 
-    // DNS interception.
-    // Intercept UDP packets to port 53 with a domain target.
-    // Resolve locally through DnsSystem and reply directly.
-    if let Some(domain) = udp_session.local_dns_domain_request(&udp_packet) {
-        if let Ok(_ips) = proxy.resolver.resolve(domain).await {
-            // DNS resolved locally; build response and return.
-            // The caller will forward via the relay socket if
-            // available. For now, skip dispatch and return Ok.
-            // The DNS response is sent inline in the main loop.
+    let (request, protocol_overhead_len) = match dispatch_action {
+        socks5::udp::Socks5InboundUdpDispatchAction::LocalDns { domain } => {
+            if let Ok(_ips) = proxy.resolver.resolve(&domain).await {
+                // DNS resolved locally; build response and return.
+                // The caller will forward via the relay socket if
+                // available. For now, skip dispatch and return Ok.
+                // The DNS response is sent inline in the main loop.
+                return Ok(());
+            }
+            // Resolution failed; silently drop.
             return Ok(());
         }
-        // Resolution failed; silently drop.
-        return Ok(());
-    }
-
-    let protocol_overhead_len = udp_packet.protocol_overhead_len() as u64;
-    let request = udp_session.request_dispatch_parts(udp_packet);
+        socks5::udp::Socks5InboundUdpDispatchAction::Dispatch(view) => view.into_parts(),
+    };
 
     // Generic dispatch.
     let session_id = UdpPipe::new(proxy, dispatch)
@@ -52,7 +49,7 @@ pub(super) async fn dispatch_packet(
     // SOCKS5 framing bytes (payload is already tracked by dispatch).
     proxy.record_session_inbound_traffic(session_id, *pending_control_traffic);
     *pending_control_traffic = StreamTraffic::default();
-    proxy.record_session_inbound_rx(session_id, protocol_overhead_len);
+    proxy.record_session_inbound_rx(session_id, protocol_overhead_len as u64);
 
     Ok(())
 }

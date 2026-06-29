@@ -5334,9 +5334,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     }
     assert!(
         dispatch.contains("socks5::Socks5Inbound.udp_session()")
-            && dispatch.contains("udp_session.decode_request")
-            && dispatch.contains("udp_session.local_dns_domain_request(&udp_packet)")
-            && dispatch.contains("udp_session.request_dispatch_parts(udp_packet)")
+            && dispatch.contains("udp_session.decode_dispatch_action")
+            && dispatch.contains("Socks5InboundUdpDispatchAction::LocalDns")
+            && dispatch.contains("Socks5InboundUdpDispatchAction::Dispatch")
             && !dispatch.contains("udp_packet.into_dispatch_parts()")
             && dispatch.contains("protocol_overhead_len")
             && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
@@ -5355,6 +5355,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     );
     assert!(
         !dispatch.contains("udp_packet.into_parts()")
+            && !dispatch.contains("udp_session.decode_request")
+            && !dispatch.contains("udp_session.local_dns_domain_request")
+            && !dispatch.contains("udp_session.request_dispatch_parts")
             && !dispatch.contains("client_session_id: None")
             && !dispatch.contains("udp_packet.target()")
             && !dispatch.contains("udp_packet.port()")
@@ -5369,6 +5372,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         protocol_udp.contains("pub async fn send_response_to_client")
             && protocol_udp.contains("pub async fn send_response_to_client_endpoint")
             && protocol_udp.contains("fn address_from_ip")
+            && protocol_udp.contains("pub fn decode_dispatch_action")
             && protocol_udp.contains("pub fn local_dns_domain_request")
             && protocol_udp.contains("pub fn response_session_key_parts")
             && protocol_udp.contains("response_frame(")

@@ -205,6 +205,24 @@ pub struct Socks5InboundUdpDispatchParts {
     pub client_session_id: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5InboundUdpDispatchView {
+    parts: Socks5InboundUdpDispatchParts,
+    protocol_overhead_len: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Socks5InboundUdpDispatchAction {
+    LocalDns { domain: String },
+    Dispatch(Socks5InboundUdpDispatchView),
+}
+
+impl Socks5InboundUdpDispatchView {
+    pub fn into_parts(self) -> (Socks5InboundUdpDispatchParts, usize) {
+        (self.parts, self.protocol_overhead_len)
+    }
+}
+
 impl Socks5InboundUdpRequest {
     pub(crate) fn from_packet(packet: Socks5UdpPacket, frame_len: usize) -> Self {
         let (target, port, payload) = packet.into_parts();
@@ -255,6 +273,20 @@ impl Socks5InboundUdpRequest {
             payload,
             client_session_id: None,
         }
+    }
+
+    pub fn into_dispatch_action(self) -> Socks5InboundUdpDispatchAction {
+        if let (Address::Domain(domain), 53) = (&self.target, self.port) {
+            return Socks5InboundUdpDispatchAction::LocalDns {
+                domain: domain.clone(),
+            };
+        }
+
+        let protocol_overhead_len = self.protocol_overhead_len();
+        Socks5InboundUdpDispatchAction::Dispatch(Socks5InboundUdpDispatchView {
+            parts: self.into_dispatch_parts(),
+            protocol_overhead_len,
+        })
     }
 }
 
