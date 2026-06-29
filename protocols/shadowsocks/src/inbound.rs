@@ -516,6 +516,15 @@ impl ShadowsocksInboundUdpSession {
         self.record_client_session(proxy_session_id, dispatch_parts.client_session_id, client);
     }
 
+    pub fn record_dispatch_success(
+        &mut self,
+        proxy_session_id: u64,
+        dispatch_parts: &ShadowsocksInboundUdpDispatchParts,
+        client: std::net::SocketAddr,
+    ) {
+        self.record_dispatched_client_session(proxy_session_id, dispatch_parts, client);
+    }
+
     pub async fn send_proxy_session_response_to_client_tokio(
         &self,
         socket: &tokio::net::UdpSocket,
