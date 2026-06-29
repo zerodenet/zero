@@ -72,6 +72,12 @@ impl<'a> VlessUdpTransportOptions<'a> {
     }
 }
 
+pub fn vless_udp_relay_needs_two_streams(split_http: Option<&SplitHttpConfig>) -> bool {
+    split_http
+        .map(|config| !split_http::XhttpMode::parse(&config.mode).is_single_connection())
+        .unwrap_or(false)
+}
+
 pub struct VlessUdpOutboundTransportRequest<'a> {
     pub socket: TokioSocket,
     pub options: VlessUdpTransportOptions<'a>,

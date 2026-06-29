@@ -27,7 +27,7 @@ impl VlessAdapter {
             ResolvedLeafOutbound::Vless {
                 split_http: Some(cfg),
                 ..
-            } if !zero_transport::split_http::XhttpMode::parse(&cfg.mode).is_single_connection()
+            } if crate::transport::vless_udp_relay_needs_two_streams(Some(cfg))
         )
     }
 

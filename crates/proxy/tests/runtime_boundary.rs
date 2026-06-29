@@ -3519,6 +3519,8 @@ fn vless_udp_identity_is_protocol_parsed() {
     let model = read("src/adapters/vless/udp/managed/model.rs");
     let adapter = read("src/adapters/vless/udp.rs");
     let flow = read("src/adapters/vless/udp/flow.rs");
+    let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
+        .expect("read zero-transport vless transport source");
     let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
         .expect("read protocols/vless/src/outbound.rs");
 
@@ -3545,9 +3547,13 @@ fn vless_udp_identity_is_protocol_parsed() {
         !adapter.contains("parse_uuid")
             && !adapter.contains("vless::parse_udp_identity")
             && !adapter.contains("VlessUdpFlowConfig::new")
+            && !adapter.contains("XhttpMode::parse")
+            && adapter.contains("crate::transport::vless_udp_relay_needs_two_streams")
+            && transport.contains("pub fn vless_udp_relay_needs_two_streams")
+            && transport.contains("XhttpMode::parse(&config.mode)")
             && flow.contains("vless::udp::udp_flow_config_from_config")
             && !flow.contains("vless::udp::VlessUdpFlowConfig::new"),
-        "VLESS UDP flow glue should use the protocol-owned flow config parser while the root stays a facade"
+        "VLESS UDP flow glue should use protocol/transport-owned parsers while the root stays a facade"
     );
     assert!(
         protocol.contains("struct VlessUdpIdentity")
