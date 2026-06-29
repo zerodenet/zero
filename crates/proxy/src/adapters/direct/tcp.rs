@@ -23,10 +23,10 @@ impl DirectAdapter {
             .connect(session, proxy.resolver.as_ref())
             .await
         {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Direct {
-                tag: (*tag).unwrap_or("direct").to_string(),
-                upstream: upstream.into(),
-            }),
+            Ok(upstream) => Ok(EstablishedTcpOutbound::direct(
+                (*tag).unwrap_or("direct"),
+                upstream.into(),
+            )),
             Err(error) => Err(TcpOutboundFailure {
                 stage: "connect_direct",
                 error: error.into(),

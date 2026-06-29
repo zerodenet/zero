@@ -39,6 +39,17 @@ pub(crate) enum EstablishedTcpOutbound {
 }
 
 impl EstablishedTcpOutbound {
+    pub(crate) fn direct(tag: impl Into<String>, upstream: TcpRelayStream) -> Self {
+        Self::Direct {
+            tag: tag.into(),
+            upstream,
+        }
+    }
+
+    pub(crate) fn block(tag: impl Into<String>) -> Self {
+        Self::Block { tag: tag.into() }
+    }
+
     pub(crate) fn proxied(
         tag: impl Into<String>,
         server: impl Into<String>,
@@ -51,6 +62,10 @@ impl EstablishedTcpOutbound {
             port,
             upstream,
         }
+    }
+
+    pub(crate) fn relay(upstream: TcpRelayStream) -> Self {
+        Self::Relay { upstream }
     }
 
     pub(crate) fn into_relay_stream(self) -> Result<TcpRelayStream, EngineError> {

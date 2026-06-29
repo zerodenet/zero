@@ -101,9 +101,9 @@ impl Proxy {
         // Block is kernel-level (no adapter owns it): reject immediately.
         // Direct and every proxy protocol go through the adapter registry -?        // adding a protocol = register an adapter, zero changes here.
         let result = if matches!(path_category, TcpPathCategory::Block) {
-            Ok(EstablishedTcpOutbound::Block {
-                tag: runtime.kernel_tag.unwrap_or("block").to_string(),
-            })
+            Ok(EstablishedTcpOutbound::block(
+                runtime.kernel_tag.unwrap_or("block"),
+            ))
         } else {
             self.protocols
                 .connect_tcp_leaf(self, session, &candidate)
@@ -136,7 +136,7 @@ impl Proxy {
                 upstream_endpoint: None,
             })?;
 
-        Ok(EstablishedTcpOutbound::Relay { upstream: stream })
+        Ok(EstablishedTcpOutbound::relay(stream))
     }
 
     /// Establish all relay hops before the final protocol hop.

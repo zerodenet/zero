@@ -899,6 +899,13 @@ fn tcp_runtime_does_not_match_protocol_outbound_results() {
             && tcp_outbound.contains("pub(crate) fn proxied("),
         "TCP outbound results should expose neutral relay/proxied stream normalization"
     );
+    assert!(
+        tcp_dispatch.contains("EstablishedTcpOutbound::block(")
+            && tcp_dispatch.contains("EstablishedTcpOutbound::relay(")
+            && !tcp_dispatch.contains("EstablishedTcpOutbound::Block {")
+            && !tcp_dispatch.contains("EstablishedTcpOutbound::Relay {"),
+        "TCP runtime should construct neutral TCP outbound results through helper constructors"
+    );
 }
 
 #[test]
@@ -2663,8 +2670,9 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
                 ".direct_connector()\n            .connect(",
                 "connect_direct",
                 "EstablishedTcpOutbound::Proxied",
+                "EstablishedTcpOutbound::Direct {",
             ],
-            &["EstablishedTcpOutbound::Direct"],
+            &["EstablishedTcpOutbound::direct("],
         ),
         (
             "hysteria2",
