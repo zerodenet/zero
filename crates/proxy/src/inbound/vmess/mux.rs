@@ -9,7 +9,7 @@ use zero_core::{Network, ProtocolType, Session};
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
-use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
+use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
     log_completed_udp_flow, record_udp_inbound_response_rx, record_udp_inbound_response_tx,
@@ -155,8 +155,13 @@ impl Proxy {
                 Session::new(0, target, port, Network::Tcp, ProtocolType::Vmess);
             proxy.prepare_session(&mut session, &inbound_tag, None);
 
-            let route = match proxy.dispatch_tcp(&mut session).await {
-                Ok(route) => route,
+            let upstream = match TcpPipe::new(&proxy)
+                .dispatch(TcpPipeInput {
+                    session: &mut session,
+                })
+                .await
+            {
+                Ok(result) => result.upstream,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux dispatch failed");
                     let _ = writer.end(mux_session_id);
@@ -164,7 +169,7 @@ impl Proxy {
                 }
             };
 
-            let mut upstream = route.upstream;
+            let mut upstream = upstream;
             let mut buf = vec![0_u8; 16 * 1024];
             loop {
                 select! {

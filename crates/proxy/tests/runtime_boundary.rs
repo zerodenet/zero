@@ -271,6 +271,7 @@ fn ordinary_tcp_inbounds_use_tcp_pipe_for_route_execution() {
     );
 
     let vless = read("src/inbound/vless/mux.rs");
+    let vmess = read("src/inbound/vmess/mux.rs");
     assert!(
         vless.contains("TcpPipe::new") && vless.contains("TcpPipeInput"),
         "VLESS MUX sub-streams should route through TcpPipe"
@@ -278,6 +279,12 @@ fn ordinary_tcp_inbounds_use_tcp_pipe_for_route_execution() {
     assert!(
         !vless.contains("dispatch_tcp_outbound"),
         "VLESS inbound should not bypass TcpPipe through TCP outbound helpers"
+    );
+    assert!(
+        vmess.contains("TcpPipe::new")
+            && vmess.contains("TcpPipeInput")
+            && !vmess.contains("dispatch_tcp("),
+        "VMess MUX sub-streams should route through TcpPipe"
     );
 }
 
