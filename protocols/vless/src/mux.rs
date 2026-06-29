@@ -655,6 +655,22 @@ impl VlessInboundMuxSession {
         self.send_data(stream, sid, payload).await
     }
 
+    pub async fn send_inbound_stream_payload<S>(
+        &mut self,
+        stream: &mut S,
+        sid: u16,
+        payload: &[u8],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        if payload.is_empty() {
+            self.end_inbound_stream(stream, sid).await
+        } else {
+            self.send_inbound_stream_data(stream, sid, payload).await
+        }
+    }
+
     pub async fn end_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
     where
         S: AsyncSocket,

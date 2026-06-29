@@ -319,7 +319,7 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         "read_inbound_action",
         "accept_inbound_stream",
         "reject_inbound_stream",
-        "send_inbound_stream_data",
+        "send_inbound_stream_payload",
         "end_inbound_stream",
     ] {
         assert!(
@@ -348,6 +348,8 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         "pub async fn accept_stream",
         "pub async fn reject_stream",
         "pub async fn send_data",
+        "pub async fn send_inbound_stream_data",
+        "pub async fn send_inbound_stream_payload",
         "pub async fn end_stream",
         "pub fn end_inbound_stream",
     ] {
@@ -381,6 +383,15 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
             "VLESS inbound mux should use VlessInboundMuxSession instead of low-level MUX server API `{forbidden}`"
         );
     }
+    assert!(
+        inbound.contains("mux.send_inbound_stream_payload(&mut client, sid, &payload)")
+            && !inbound.contains("mux.send_inbound_stream_data(&mut client, sid, &payload)")
+            && !inbound.contains("mux.end_inbound_stream(&mut client, sid)")
+            && protocol_mux.contains("if payload.is_empty()")
+            && protocol_mux.contains("self.end_inbound_stream(stream, sid).await")
+            && protocol_mux.contains("self.send_inbound_stream_data(stream, sid, payload).await"),
+        "VLESS inbound mux downstream payload to DATA/END frame selection should live in protocols/vless"
+    );
 }
 
 #[test]
@@ -4990,6 +5001,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && mux.contains("udp_session.send_mux_response")
             && mux.contains("udp_session.send_mux_response_to_socket_addr")
             && mux.contains("writer.end_inbound_stream")
+            && mux.contains("mux.send_inbound_stream_payload")
             && !mux.contains("writer.end(")
             && !mux.contains("request.into_dispatch_parts()")
             && mux.contains("pkt.into_parts()")

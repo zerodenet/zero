@@ -144,12 +144,10 @@ impl Proxy {
                 down = down_rx.recv() => {
                     if let Some((sid, payload)) = down {
                         if up_senders.contains_key(&sid) {
-                            if payload.is_empty() {
-                                // Upstream closed -?send END frame and clean up
-                                let _ = mux.end_inbound_stream(&mut client, sid).await;
+                            let closed = payload.is_empty();
+                            let _ = mux.send_inbound_stream_payload(&mut client, sid, &payload).await;
+                            if closed {
                                 up_senders.remove(&sid);
-                            } else {
-                                let _ = mux.send_inbound_stream_data(&mut client, sid, &payload).await;
                             }
                         }
                     }
