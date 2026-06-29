@@ -77,14 +77,31 @@ pub struct QuicConnectionOptions<'a> {
     pub server: &'a str,
     pub port: u16,
     pub alpn: Vec<Vec<u8>>,
-    pub client_fingerprint: Option<&'a str>,
+    pub quic_profile: Hysteria2QuicProfile,
     pub datagram_receive_buffer_size: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2QuicProfile {
+    client_fingerprint: Option<String>,
+}
+
+impl Hysteria2QuicProfile {
+    pub fn from_parts(client_fingerprint: Option<&str>) -> Self {
+        Self {
+            client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
+        }
+    }
+
+    fn client_fingerprint(&self) -> Option<&str> {
+        self.client_fingerprint.as_deref()
+    }
 }
 
 pub async fn open_quic_connection(
     options: QuicConnectionOptions<'_>,
 ) -> Result<quinn::Connection, EngineError> {
-    let config_base = if let Some(fp_name) = options.client_fingerprint {
+    let config_base = if let Some(fp_name) = options.quic_profile.client_fingerprint() {
         if let Some(preset) = crate::fingerprint::lookup_fingerprint(fp_name) {
             let provider = std::sync::Arc::new(crate::fingerprint::build_provider(&preset));
             tracing::debug!(

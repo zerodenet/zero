@@ -4,12 +4,14 @@ use zero_engine::EngineError;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::ManagedDatagramConnectorFlowBuild;
 use crate::runtime::udp_flow::packet_path::{DatagramCodec, PacketPathCarrierDescriptorBuild};
-use crate::transport::{Hysteria2Stream, QuicConnectionOptions, TcpRelayStream};
+use crate::transport::{
+    Hysteria2QuicProfile, Hysteria2Stream, QuicConnectionOptions, TcpRelayStream,
+};
 
 pub(super) struct Hysteria2Connector {
     server: String,
     port: u16,
-    client_fingerprint: Option<String>,
+    quic_profile: Hysteria2QuicProfile,
 }
 
 impl Hysteria2Connector {
@@ -17,7 +19,7 @@ impl Hysteria2Connector {
         Self {
             server: server.to_owned(),
             port,
-            client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
+            quic_profile: Hysteria2QuicProfile::from_parts(client_fingerprint),
         }
     }
 
@@ -29,7 +31,7 @@ impl Hysteria2Connector {
         Self {
             server: server.to_owned(),
             port,
-            client_fingerprint: profile.client_fingerprint().map(ToOwned::to_owned),
+            quic_profile: Hysteria2QuicProfile::from_parts(profile.client_fingerprint()),
         }
     }
 
@@ -56,7 +58,7 @@ impl Hysteria2Connector {
             server: &self.server,
             port: self.port,
             alpn: vec![b"hysteria2".to_vec()],
-            client_fingerprint: self.client_fingerprint.as_deref(),
+            quic_profile: self.quic_profile.clone(),
             datagram_receive_buffer_size: Some(65536),
         })
         .await
