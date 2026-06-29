@@ -441,6 +441,23 @@ impl VmessInboundUdpSession {
             .map(VmessInboundUdpRequest::into_dispatch_parts)
     }
 
+    pub async fn read_dispatch_parts_tokio<R>(
+        &mut self,
+        reader: &mut R,
+        buf: &mut [u8],
+    ) -> Result<Option<VmessInboundUdpDispatchParts>, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        let n = tokio::io::AsyncReadExt::read(reader, buf)
+            .await
+            .map_err(|_| Error::Io("failed to read VMess UDP request"))?;
+        if n == 0 {
+            return Ok(None);
+        }
+        self.decode_dispatch_parts(&buf[..n]).map(Some)
+    }
+
     pub async fn write_response_tokio<W>(
         &self,
         writer: &mut W,

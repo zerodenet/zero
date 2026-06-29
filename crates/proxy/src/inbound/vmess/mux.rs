@@ -7,7 +7,6 @@ use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 use zero_core::{Network, ProtocolType, Session};
 use zero_engine::EngineError;
-use zero_traits::AsyncSocket;
 
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
@@ -395,18 +394,11 @@ impl Proxy {
                     );
                     break;
                 }
-                read = client.read(&mut client_buf) => {
+                read = udp_session.read_dispatch_parts_tokio(&mut client, &mut client_buf) => {
                     match read {
-                        Ok(0) => break,
-                        Ok(n) => {
+                        Ok(None) => break,
+                        Ok(Some(request)) => {
                             last_activity = TokioInstant::now();
-                            let request = match udp_session.decode_dispatch_parts(&client_buf[..n]) {
-                                Ok(request) => request,
-                                Err(error) => {
-                                    warn!(error = %error, "vmess udp client packet parse error");
-                                    break;
-                                }
-                            };
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
                                     target: request.target,
@@ -422,7 +414,7 @@ impl Proxy {
                             }
                         }
                         Err(error) => {
-                            warn!(error = %error, "vmess udp client read error");
+                            warn!(error = %error, "vmess udp client read/decode error");
                             break;
                         }
                     }
