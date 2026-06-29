@@ -213,6 +213,9 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         "src/inbound/vmess/mux.rs",
         "src/inbound/trojan.rs",
         "src/inbound/mieru.rs",
+        "src/inbound/socks5/udp_associate/direct_response.rs",
+        "src/inbound/socks5/udp_associate/chain_response.rs",
+        "src/inbound/socks5/udp_associate/upstream_response.rs",
     ] {
         let content = read(source);
         assert!(
@@ -227,6 +230,21 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             "{source} should use udp_response_session_id instead of querying dispatch response sessions directly"
         );
     }
+
+    let hysteria2 = read("src/inbound/hysteria2.rs");
+    let datagram_loop = hysteria2
+        .split("async fn hysteria2_datagram_loop")
+        .nth(1)
+        .expect("hysteria2 datagram loop");
+    assert!(
+        datagram_loop.contains("record_udp_inbound_response_rx")
+            && datagram_loop.contains("record_udp_inbound_response_tx")
+            && datagram_loop.contains("udp_response_session_id")
+            && !datagram_loop.contains("record_session_outbound_rx")
+            && !datagram_loop.contains("record_session_inbound_tx")
+            && !datagram_loop.contains("session_id_by_target"),
+        "Hysteria2 datagram loop should use neutral UDP response accounting helpers without affecting TCP stream relay accounting"
+    );
 }
 
 #[test]
