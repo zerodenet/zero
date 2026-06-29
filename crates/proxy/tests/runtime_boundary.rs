@@ -4483,8 +4483,14 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
     assert!(
         model.contains("identity: vmess::mux::VmessMuxIdentity")
             && root.contains("vmess::mux::VmessMuxPoolKey::from_identity")
+            && root.contains("vmess::mux::transport_key_from_config")
+            && !root.contains("VmessMuxTransportKey::Grpc")
+            && !root.contains("VmessMuxTransportKey::Ws")
+            && !root.contains("VmessMuxTransportKey::RawTls")
+            && !root.contains("service_names: grpc.service_names.clone()")
+            && !root.contains("path: ws.path.clone()")
             && !model.contains("struct VmessMuxPoolKey"),
-        "VMess mux pool request should carry parsed identity to a protocol-owned key builder"
+        "VMess mux pool request should carry parsed identity and ask protocols/vmess to build transport cache identity"
     );
     assert!(
         !tcp_adapter.contains("VmessCipher::from_name")

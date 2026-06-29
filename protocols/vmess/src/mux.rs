@@ -129,6 +129,27 @@ impl VmessMuxPoolKey {
     }
 }
 
+pub fn transport_key_from_config(
+    tls_server_name: Option<&str>,
+    ws_path: Option<&str>,
+    grpc_service_names: Option<Vec<String>>,
+) -> Result<VmessMuxTransportKey, Error> {
+    match (grpc_service_names, ws_path, tls_server_name) {
+        (Some(service_names), None, server_name) => Ok(VmessMuxTransportKey::Grpc {
+            server_name: server_name.map(ToOwned::to_owned),
+            service_names,
+        }),
+        (None, Some(path), server_name) => Ok(VmessMuxTransportKey::Ws {
+            server_name: server_name.map(ToOwned::to_owned),
+            path: path.to_owned(),
+        }),
+        (None, None, server_name) => Ok(VmessMuxTransportKey::RawTls {
+            server_name: server_name.map(ToOwned::to_owned),
+        }),
+        _ => Err(Error::Protocol("vmess: ws and grpc are mutually exclusive")),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MuxFrame {
     pub session_id: u16,

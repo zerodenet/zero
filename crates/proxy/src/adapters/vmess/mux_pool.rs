@@ -3,7 +3,6 @@ mod model;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::Network;
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
@@ -109,25 +108,14 @@ impl VmessMuxConnectionPool {
 }
 
 fn transport_key(
-    tls: Option<&ClientTlsConfig>,
-    ws: Option<&WebSocketConfig>,
-    grpc: Option<&GrpcConfig>,
+    tls: Option<&zero_config::ClientTlsConfig>,
+    ws: Option<&zero_config::WebSocketConfig>,
+    grpc: Option<&zero_config::GrpcConfig>,
 ) -> Result<vmess::mux::VmessMuxTransportKey, EngineError> {
-    match (grpc, ws, tls) {
-        (Some(grpc), None, tls) => Ok(vmess::mux::VmessMuxTransportKey::Grpc {
-            server_name: tls.and_then(|tls| tls.server_name.clone()),
-            service_names: grpc.service_names.clone(),
-        }),
-        (None, Some(ws), tls) => Ok(vmess::mux::VmessMuxTransportKey::Ws {
-            server_name: tls.and_then(|tls| tls.server_name.clone()),
-            path: ws.path.clone(),
-        }),
-        (None, None, tls) => Ok(vmess::mux::VmessMuxTransportKey::RawTls {
-            server_name: tls.and_then(|tls| tls.server_name.clone()),
-        }),
-        _ => Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "vmess: ws and grpc are mutually exclusive",
-        ))),
-    }
+    vmess::mux::transport_key_from_config(
+        tls.and_then(|tls| tls.server_name.as_deref()),
+        ws.map(|ws| ws.path.as_str()),
+        grpc.map(|grpc| grpc.service_names.clone()),
+    )
+    .map_err(|error| EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error)))
 }
