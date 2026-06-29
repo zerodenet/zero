@@ -1,6 +1,5 @@
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_traits::TcpTunnelProtocol;
 
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::socks5::Socks5Adapter;
@@ -72,12 +71,8 @@ async fn connect_tcp(
         .await?;
     let mut upstream = MeteredStream::new(upstream);
 
-    socks5::Socks5Outbound
-        .establish_tcp_tunnel(
-            &mut upstream,
-            &socks5::Socks5TcpTunnelTarget::new(session, username, password),
-        )
-        .await?;
+    let profile = socks5::Socks5TcpOutboundProfile::from_config_parts(username, password);
+    profile.establish_tcp_tunnel(&mut upstream, session).await?;
     proxy.record_session_outbound_traffic(session.id, upstream.drain_traffic());
 
     Ok(upstream.into_inner().into())
@@ -90,11 +85,9 @@ async fn apply_tcp_hop(
     username: Option<&str>,
     password: Option<&str>,
 ) -> Result<TcpRelayStream, EngineError> {
-    socks5::Socks5Outbound
-        .establish_tcp_tunnel(
-            &mut stream,
-            &socks5::Socks5TcpTunnelTarget::new(session, username, password),
-        )
+    let profile = socks5::Socks5TcpOutboundProfile::from_config_parts(username, password);
+    profile
+        .establish_tcp_tunnel(&mut stream, session)
         .await
         .map_err(|error| EngineError::Io(std::io::Error::other(error)))?;
     Ok(stream)

@@ -1,4 +1,5 @@
 use alloc::borrow::ToOwned;
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -134,6 +135,41 @@ impl<'a> Socks5TcpTunnelTarget<'a> {
             session,
             auth: outbound_auth(username, password),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5TcpOutboundProfile {
+    username: Option<String>,
+    password: Option<String>,
+}
+
+impl Socks5TcpOutboundProfile {
+    pub fn from_config_parts(username: Option<&str>, password: Option<&str>) -> Self {
+        Self {
+            username: username.map(ToOwned::to_owned),
+            password: password.map(ToOwned::to_owned),
+        }
+    }
+
+    pub async fn establish_tcp_tunnel<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        Socks5Outbound
+            .establish_tcp_tunnel(
+                stream,
+                &Socks5TcpTunnelTarget::new(
+                    session,
+                    self.username.as_deref(),
+                    self.password.as_deref(),
+                ),
+            )
+            .await
     }
 }
 

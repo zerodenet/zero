@@ -2324,18 +2324,23 @@ fn socks5_tcp_adapter_uses_protocol_target_model() {
             .expect("read socks5 protocol outbound source");
 
     assert!(
-        adapter.contains("Socks5TcpTunnelTarget::new")
-            && adapter.contains("session, username, password")
+        adapter.contains("Socks5TcpOutboundProfile::from_config_parts")
+            && adapter.contains(".establish_tcp_tunnel(")
+            && !adapter.contains("Socks5TcpTunnelTarget::new")
+            && !adapter.contains("Socks5TcpTunnelTarget {")
             && !adapter.contains("Socks5OutboundAuth")
             && !adapter.contains("username.zip"),
-        "SOCKS5 TCP adapter should pass raw leaf auth into protocol-owned target construction"
+        "SOCKS5 TCP adapter should use a protocol-owned outbound profile and avoid constructing tunnel targets directly"
     );
     assert!(
-        protocol_outbound.contains("impl<'a> Socks5TcpTunnelTarget<'a>")
+        protocol_outbound.contains("pub struct Socks5TcpOutboundProfile")
+            && protocol_outbound.contains("pub fn from_config_parts")
+            && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
+            && protocol_outbound.contains("impl<'a> Socks5TcpTunnelTarget<'a>")
             && protocol_outbound.contains("pub fn outbound_auth")
             && protocol_outbound.contains(".zip(password)")
             && protocol_outbound.contains("Socks5OutboundAuth { username, password }"),
-        "SOCKS5 protocol crate should own TCP target auth construction"
+        "SOCKS5 protocol crate should own TCP profile, target auth construction, and tunnel establishment details"
     );
 }
 
