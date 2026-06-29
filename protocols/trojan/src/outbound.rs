@@ -1,5 +1,7 @@
 //! Trojan outbound protocol handler.
 
+use std::string::String;
+
 #[cfg(feature = "tokio")]
 use std::io;
 
@@ -17,6 +19,32 @@ use super::shared::{CMD_TCP, CMD_UDP};
 /// Trojan outbound handler.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrojanOutbound;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanTcpOutboundProfile {
+    password: String,
+}
+
+impl TrojanTcpOutboundProfile {
+    pub fn from_config_parts(password: impl Into<String>) -> Self {
+        Self {
+            password: password.into(),
+        }
+    }
+
+    pub async fn establish_tcp_tunnel<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        TrojanOutbound
+            .establish_tcp_tunnel(stream, &TrojanTcpTunnelTarget::new(session, &self.password))
+            .await
+    }
+}
 
 impl TrojanOutbound {
     pub fn protocol(&self) -> ProtocolType {

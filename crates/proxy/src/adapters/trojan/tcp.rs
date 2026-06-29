@@ -2,7 +2,6 @@ use tokio::io::AsyncWriteExt;
 use zero_config::ClientTlsConfig;
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_traits::TcpTunnelProtocol;
 
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::trojan::TrojanAdapter;
@@ -110,12 +109,8 @@ async fn connect_tcp(request: TrojanTcpConnect<'_>) -> Result<TcpRelayStream, En
     )
     .await?;
     let mut metered = MeteredStream::new(tls_stream);
-    trojan::TrojanOutbound
-        .establish_tcp_tunnel(
-            &mut metered,
-            &trojan::TrojanTcpTunnelTarget::new(session, password),
-        )
-        .await?;
+    let profile = trojan::TrojanTcpOutboundProfile::from_config_parts(password.to_owned());
+    profile.establish_tcp_tunnel(&mut metered, session).await?;
     metered.flush().await?;
     let traffic = metered.drain_traffic();
     tracing::debug!(
@@ -162,11 +157,9 @@ async fn apply_tcp_hop(
     session: &Session,
     password: &str,
 ) -> Result<TcpRelayStream, EngineError> {
-    trojan::TrojanOutbound
-        .establish_tcp_tunnel(
-            &mut stream,
-            &trojan::TrojanTcpTunnelTarget::new(session, password),
-        )
+    let profile = trojan::TrojanTcpOutboundProfile::from_config_parts(password.to_owned());
+    profile
+        .establish_tcp_tunnel(&mut stream, session)
         .await
         .map_err(|error| EngineError::Io(std::io::Error::other(error)))?;
     Ok(stream)

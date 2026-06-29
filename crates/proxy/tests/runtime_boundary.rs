@@ -2141,14 +2141,18 @@ fn trojan_tcp_connect_uses_request_model() {
         "Trojan adapter TCP glue should share the Trojan transport TLS opening path with UDP while keeping config/profile conversion outside runtime"
     );
     assert!(
-        adapter.contains("TrojanTcpTunnelTarget::new")
+        adapter.contains("TrojanTcpOutboundProfile::from_config_parts")
+            && !adapter.contains("TrojanTcpTunnelTarget::new")
             && !adapter.contains("TrojanTcpTunnelTarget {"),
-        "Trojan adapter TCP glue should use protocol-owned target construction"
+        "Trojan adapter TCP glue should use a protocol-owned outbound profile instead of constructing TCP targets directly"
     );
     assert!(
-        protocol_outbound.contains("impl<'a> TrojanTcpTunnelTarget<'a>")
+        protocol_outbound.contains("struct TrojanTcpOutboundProfile")
+            && protocol_outbound.contains("pub fn from_config_parts")
+            && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
+            && protocol_outbound.contains("impl<'a> TrojanTcpTunnelTarget<'a>")
             && protocol_outbound.contains("pub fn new(session: &'a Session, password: &'a str)"),
-        "Trojan protocol crate should own TCP target construction"
+        "Trojan protocol crate should own TCP target construction and profile-backed handshake"
     );
 }
 
