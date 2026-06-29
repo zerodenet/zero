@@ -3058,7 +3058,8 @@ fn http_connect_redirect_response_framing_stays_in_protocol_crate() {
             .expect("read http-connect protocol inbound source");
 
     assert!(
-        inbound.contains("build_redirect_response")
+        inbound.contains("select_redirect_target")
+            && !inbound.contains("build_redirect_response")
             && inbound.contains("send_redirect_response")
             && inbound.contains("Some((status, location))")
             && !inbound.contains("HTTP/1.1 {status} Found")

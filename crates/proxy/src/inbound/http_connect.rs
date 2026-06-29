@@ -114,7 +114,7 @@ pub(crate) async fn run_http_connect_listener_with_bound(
                             {
                                 Ok(session) => {
                                     // Check for HTTP redirect rewrite rules.
-                                    if let Some((status, location)) = build_redirect_response(
+                                    if let Some((status, location)) = select_redirect_target(
                                         &engine.config.route.url_rewrite,
                                         &session,
                                     ) {
@@ -182,7 +182,7 @@ pub(crate) async fn run_http_connect_listener_with_bound(
 
 /// Check url_rewrite rules for a redirect (with `status_code` set).
 /// Returns redirect status and location, or None if no redirect rule matches.
-fn build_redirect_response(
+fn select_redirect_target(
     rules: &[zero_config::UrlRewriteRule],
     session: &Session,
 ) -> Option<(u16, String)> {
