@@ -792,6 +792,24 @@ impl VlessInboundUdpSession {
     }
 
     #[cfg(feature = "reality")]
+    pub async fn read_dispatch_parts_tokio<R>(
+        &self,
+        reader: &mut R,
+        buf: &mut [u8],
+    ) -> Result<Option<VlessInboundUdpDispatchParts>, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        let n = tokio::io::AsyncReadExt::read(reader, buf)
+            .await
+            .map_err(|_| Error::Io("failed to read VLESS UDP request"))?;
+        if n == 0 {
+            return Ok(None);
+        }
+        self.decode_dispatch_parts(&buf[..n]).map(Some)
+    }
+
+    #[cfg(feature = "reality")]
     pub async fn write_response_tokio<W>(
         &self,
         writer: &mut W,

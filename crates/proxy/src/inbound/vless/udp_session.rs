@@ -1,7 +1,6 @@
 use tokio::select;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
-use zero_traits::AsyncSocket;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
@@ -59,19 +58,24 @@ impl Proxy {
                     );
                     break;
                 }
-                read = client.read(&mut buffer) => {
+                read = udp_session.read_dispatch_parts_tokio(&mut client, &mut buffer) => {
                     match read {
-                        Ok(0) => break,
-                        Ok(n) => {
+                        Ok(None) => break,
+                        Ok(Some(request)) => {
                             last_activity = TokioInstant::now();
                             self.record_session_inbound_traffic(0, client.drain_traffic());
 
-                            if let Err(error) = Self::vless_dispatch_packet(
-                                &proxy,
-                                &mut dispatch,
-                                &buffer[..n],
-                                auth,
-                            ).await {
+                            if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
+                                .dispatch(UdpPipeInput {
+                                    target: request.target,
+                                    port: request.port,
+                                    payload: &request.payload,
+                                    protocol: zero_core::ProtocolType::Vless,
+                                    auth: auth.as_ref(),
+                                    client_session_id: request.client_session_id,
+                                })
+                                .await
+                            {
                                 warn!(
                                     error = %error,
                                     "failed to process vless udp packet"
@@ -185,28 +189,5 @@ impl Proxy {
         );
 
         Ok(())
-    }
-
-    /// Parse a VLESS UDP packet and dispatch via the UDP kernel pipe.
-    pub(crate) async fn vless_dispatch_packet(
-        proxy: &Proxy,
-        dispatch: &mut UdpDispatch,
-        packet: &[u8],
-        auth: &Option<zero_core::SessionAuth>,
-    ) -> Result<(), EngineError> {
-        let udp_session = vless::VlessInbound.udp_session();
-        let request = udp_session.decode_dispatch_parts(packet)?;
-
-        UdpPipe::new(proxy, dispatch)
-            .dispatch(UdpPipeInput {
-                target: request.target,
-                port: request.port,
-                payload: &request.payload,
-                protocol: zero_core::ProtocolType::Vless,
-                auth: auth.as_ref(),
-                client_session_id: request.client_session_id,
-            })
-            .await
-            .map(|_| ())
     }
 }
