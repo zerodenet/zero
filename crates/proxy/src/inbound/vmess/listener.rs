@@ -20,7 +20,7 @@ pub(crate) async fn run_vmess_listener_with_bound(
     let VmessInboundRequest {
         inbound,
         profile,
-        tls: tls_cfg,
+        tls_acceptor,
         ws: ws_config,
         grpc: grpc_config,
     } = request;
@@ -31,19 +31,12 @@ pub(crate) async fn run_vmess_listener_with_bound(
         )));
     }
 
-    let tls_cfg = tls_cfg.ok_or_else(|| {
-        EngineError::Io(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "vmess requires TLS",
-        ))
-    })?;
-    let acceptor = crate::transport::build_tls_acceptor(&tls_cfg, proxy.config.source_dir())?;
     let tag = inbound.tag.clone();
 
     let handler = VmessInboundHandler {
         vmess_inbound: VmessInbound,
         profile,
-        tls_acceptor: acceptor,
+        tls_acceptor,
     };
 
     let transport = match (&ws_config, &grpc_config) {

@@ -30,6 +30,14 @@ impl VmessAdapter {
                     )));
                 }
             };
+            let tls_cfg = tls.ok_or_else(|| {
+                EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "vmess requires TLS",
+                ))
+            })?;
+            let tls_acceptor =
+                crate::transport::build_tls_acceptor(&tls_cfg, p.config.source_dir())?;
             let profile = vmess::VmessInboundProfile::from_config_parts(users.iter().map(|user| {
                 (
                     user.id.clone(),
@@ -48,7 +56,7 @@ impl VmessAdapter {
                 crate::inbound::vmess::model::VmessInboundRequest {
                     inbound,
                     profile,
-                    tls,
+                    tls_acceptor,
                     ws,
                     grpc,
                 },
