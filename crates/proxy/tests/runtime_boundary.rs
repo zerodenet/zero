@@ -42,6 +42,15 @@ fn impl_block(source: &str, type_name: &str) -> String {
     panic!("unterminated impl block for {type_name}")
 }
 
+fn struct_block<'a>(source: &'a str, type_name: &str) -> &'a str {
+    let needle = format!("pub struct {type_name}");
+    source
+        .split(&needle)
+        .nth(1)
+        .and_then(|content| content.split(&format!("impl {type_name}")).next())
+        .unwrap_or_else(|| panic!("missing struct block for {type_name}"))
+}
+
 fn rust_sources_under(relative: &str) -> Vec<PathBuf> {
     let root = manifest_dir().join(relative);
     let mut pending = vec![root];
@@ -4937,6 +4946,7 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     let protocol_udp = fs::read_to_string(protocol_udp).expect("read vmess protocol udp source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/vmess/src/lib.rs"))
         .expect("read vmess protocol lib source");
+    let protocol_dispatch_parts = struct_block(&protocol_udp, "VmessInboundUdpDispatchParts");
 
     assert!(
         !helper.contains("vmess::build_udp_packet"),
@@ -4996,6 +5006,11 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && mux.contains("udp_session.write_response_to_socket_addr_tokio")
             && mux.contains("udp_session.write_mux_response_to_socket_addr")
             && !mux.contains("udp_session(session.target.clone(), session.port)")
+            && !mux.contains("request.target")
+            && !mux.contains("request.port")
+            && !mux.contains("request.payload")
+            && !mux.contains("request.client_session_id")
+            && mux.contains("request.into_parts()")
             && !mux.contains("request.into_dispatch_parts()")
             && mux.contains("pkt.into_parts()")
             && !mux.contains("client_session_id: None")
@@ -5011,6 +5026,10 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && protocol_udp.contains("struct VmessInboundUdpSession")
             && protocol_udp.contains("struct VmessInboundUdpRequest")
             && protocol_udp.contains("struct VmessInboundUdpDispatchParts")
+            && !protocol_dispatch_parts.contains("pub target: Address")
+            && !protocol_dispatch_parts.contains("pub port: u16")
+            && !protocol_dispatch_parts.contains("pub payload: Vec<u8>")
+            && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>")
             && protocol_udp.contains("fn into_parts")
             && protocol_udp.contains("fn into_dispatch_parts")
             && protocol_udp.contains("pub fn decode_request")
@@ -5104,6 +5123,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         .expect("read vless protocol udp source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/vless/src/lib.rs"))
         .expect("read vless protocol lib source");
+    let protocol_dispatch_parts = struct_block(&protocol_shared, "VlessInboundUdpDispatchParts");
 
     for (source_name, source) in [
         ("inbound/vless/helpers.rs", helper.as_str()),
@@ -5163,6 +5183,11 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !udp_session.contains("decode_dispatch_parts(&buffer[..n])")
             && udp_session.contains("udp_session.write_response_tokio")
             && udp_session.contains("udp_session.write_response_to_socket_addr_tokio")
+            && !udp_session.contains("request.target")
+            && !udp_session.contains("request.port")
+            && !udp_session.contains("request.payload")
+            && !udp_session.contains("request.client_session_id")
+            && udp_session.contains("request.into_parts()")
             && !udp_session.contains("request.into_dispatch_parts()")
             && udp_session.contains("pkt.into_parts()")
             && !udp_session.contains("client_session_id: None")
@@ -5181,6 +5206,11 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && mux.contains("writer.end_inbound_stream")
             && mux.contains("mux.send_inbound_stream_payload")
             && !mux.contains("writer.end(")
+            && !mux.contains("request.target")
+            && !mux.contains("request.port")
+            && !mux.contains("request.payload")
+            && !mux.contains("request.client_session_id")
+            && mux.contains("request.into_parts()")
             && !mux.contains("request.into_dispatch_parts()")
             && mux.contains("pkt.into_parts()")
             && !mux.contains("client_session_id: None")
@@ -5197,6 +5227,10 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_shared.contains("struct VlessInboundUdpSession")
             && protocol_shared.contains("struct VlessInboundUdpRequest")
             && protocol_shared.contains("struct VlessInboundUdpDispatchParts")
+            && !protocol_dispatch_parts.contains("pub target: Address")
+            && !protocol_dispatch_parts.contains("pub port: u16")
+            && !protocol_dispatch_parts.contains("pub payload: Vec<u8>")
+            && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>")
             && protocol_shared.contains("fn into_parts")
             && protocol_shared.contains("fn into_dispatch_parts")
             && protocol_shared.contains("fn decode_request")

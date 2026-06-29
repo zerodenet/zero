@@ -223,10 +223,10 @@ pub struct VlessInboundUdpRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessInboundUdpDispatchParts {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
-    pub client_session_id: Option<u64>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+    client_session_id: Option<u64>,
 }
 
 impl VlessInboundUdpRequest {
@@ -263,6 +263,12 @@ impl VlessInboundUdpRequest {
             payload,
             client_session_id: None,
         }
+    }
+}
+
+impl VlessInboundUdpDispatchParts {
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
+        (self.target, self.port, self.payload, self.client_session_id)
     }
 }
 

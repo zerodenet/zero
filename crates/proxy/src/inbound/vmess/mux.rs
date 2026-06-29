@@ -249,18 +249,19 @@ impl Proxy {
                                 break;
                             }
                         };
+                        let (target, port, payload, client_session_id) = request.into_parts();
                         if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
                             .dispatch(UdpPipeInput {
-                                target: request.target,
-                                port: request.port,
-                                payload: &request.payload,
+                                target,
+                                port,
+                                payload: &payload,
                                 protocol: ProtocolType::Vmess,
                                 auth: None,
-                                client_session_id: request.client_session_id,
+                                client_session_id,
                             })
                             .await
                         {
-                            warn!(%error, mux_session_id, "vmess mux udp packet dispatch failed");
+                                warn!(%error, mux_session_id, "vmess mux udp packet dispatch failed");
                         }
                     }
                     recv = direct_sock.recv_from_addr(&mut direct_buf) => {
@@ -393,14 +394,15 @@ impl Proxy {
                         Ok(None) => break,
                         Ok(Some(request)) => {
                             last_activity = TokioInstant::now();
+                            let (target, port, payload, client_session_id) = request.into_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target: request.target,
-                                    port: request.port,
-                                    payload: &request.payload,
+                                    target,
+                                    port,
+                                    payload: &payload,
                                     protocol: ProtocolType::Vmess,
                                     auth: auth.as_ref(),
-                                    client_session_id: request.client_session_id,
+                                    client_session_id,
                                 })
                                 .await
                             {
