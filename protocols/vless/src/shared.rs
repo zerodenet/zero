@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "reality")]
 use std::net::SocketAddr;
 
-use zero_core::{Address, Error, ProtocolType};
+use zero_core::{Address, Error, InboundUdpDispatch, ProtocolType};
 use zero_traits::{AsyncSocket, IpAddress};
 
 pub const VLESS_VERSION: u8 = 0x00;
@@ -282,6 +282,16 @@ impl VlessInboundUdpDispatchParts {
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
+    }
+
+    pub fn into_inbound_dispatch(self) -> InboundUdpDispatch {
+        InboundUdpDispatch::new(
+            ProtocolType::Vless,
+            self.target,
+            self.port,
+            self.payload,
+            self.client_session_id,
+        )
     }
 }
 
@@ -846,6 +856,11 @@ impl VlessInboundUdpSession {
         self.decode_dispatch_parts(payload)
     }
 
+    pub fn decode_mux_inbound_dispatch(&self, payload: &[u8]) -> Result<InboundUdpDispatch, Error> {
+        self.decode_mux_dispatch_parts(payload)
+            .map(VlessInboundUdpDispatchParts::into_inbound_dispatch)
+    }
+
     #[cfg(feature = "reality")]
     pub async fn read_dispatch_parts_tokio<R>(
         &self,
@@ -862,6 +877,20 @@ impl VlessInboundUdpSession {
             return Ok(None);
         }
         self.decode_dispatch_parts(&buf[..n]).map(Some)
+    }
+
+    #[cfg(feature = "reality")]
+    pub async fn read_inbound_dispatch_tokio<R>(
+        &self,
+        reader: &mut R,
+        buf: &mut [u8],
+    ) -> Result<Option<InboundUdpDispatch>, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        self.read_dispatch_parts_tokio(reader, buf)
+            .await
+            .map(|parts| parts.map(VlessInboundUdpDispatchParts::into_inbound_dispatch))
     }
 
     #[cfg(feature = "reality")]

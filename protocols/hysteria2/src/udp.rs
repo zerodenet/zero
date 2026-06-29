@@ -6,7 +6,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error, ProtocolType, UdpFlowPacket};
+use zero_core::{Address, Error, InboundUdpDispatch, ProtocolType, UdpFlowPacket};
 use zero_traits::{DatagramCodec, IpAddress};
 
 #[cfg(feature = "tokio")]
@@ -124,6 +124,32 @@ impl Hysteria2InboundUdpDispatchParts {
     pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }
+
+    pub fn into_tracked_inbound_dispatch(self) -> Hysteria2InboundUdpTrackedDispatch {
+        let request_session_id = self.request_session_id;
+        Hysteria2InboundUdpTrackedDispatch {
+            request_session_id,
+            dispatch: InboundUdpDispatch::new(
+                ProtocolType::Hysteria2,
+                self.target,
+                self.port,
+                self.payload,
+                self.client_session_id,
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2InboundUdpTrackedDispatch {
+    request_session_id: u16,
+    dispatch: InboundUdpDispatch,
+}
+
+impl Hysteria2InboundUdpTrackedDispatch {
+    pub fn dispatch(&self) -> &InboundUdpDispatch {
+        &self.dispatch
+    }
 }
 
 impl Hysteria2InboundUdpRequest {
@@ -209,25 +235,34 @@ impl Hysteria2InboundUdpSession {
         self.decode_dispatch_parts(&data)
     }
 
+    pub async fn read_inbound_dispatch_from_datagram(
+        &self,
+        conn: &quinn::Connection,
+    ) -> Result<Hysteria2InboundUdpTrackedDispatch, Error> {
+        self.read_dispatch_parts_from_datagram(conn)
+            .await
+            .map(Hysteria2InboundUdpDispatchParts::into_tracked_inbound_dispatch)
+    }
+
     fn record_proxy_session(&mut self, proxy_session_id: u64, request_session_id: u16) {
         self.h2_sessions_by_proxy_session
             .insert(proxy_session_id, request_session_id);
     }
 
-    fn record_proxy_session_for_parts(
+    fn record_proxy_session_for_tracked_dispatch(
         &mut self,
         proxy_session_id: u64,
-        parts: &Hysteria2InboundUdpDispatchParts,
+        tracked: &Hysteria2InboundUdpTrackedDispatch,
     ) {
-        self.record_proxy_session(proxy_session_id, parts.request_session_id);
+        self.record_proxy_session(proxy_session_id, tracked.request_session_id);
     }
 
     pub fn record_dispatch_success(
         &mut self,
         proxy_session_id: u64,
-        parts: &Hysteria2InboundUdpDispatchParts,
+        tracked: &Hysteria2InboundUdpTrackedDispatch,
     ) {
-        self.record_proxy_session_for_parts(proxy_session_id, parts);
+        self.record_proxy_session_for_tracked_dispatch(proxy_session_id, tracked);
     }
 
     pub fn send_response(

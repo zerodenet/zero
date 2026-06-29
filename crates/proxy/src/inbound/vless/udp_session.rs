@@ -59,23 +59,18 @@ impl Proxy {
                     );
                     break;
                 }
-                read = udp_session.read_dispatch_parts_tokio(&mut client, &mut buffer) => {
+                read = udp_session.read_inbound_dispatch_tokio(&mut client, &mut buffer) => {
                     match read {
                         Ok(None) => break,
-                        Ok(Some(request)) => {
+                        Ok(Some(inbound_dispatch)) => {
                             last_activity = TokioInstant::now();
                             self.record_session_inbound_traffic(0, client.drain_traffic());
-                            let (target, port, payload, client_session_id) = request.pipe_parts();
 
                             if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
-                                .dispatch(UdpPipeInput {
-                                    target: target.clone(),
-                                    port,
-                                    payload,
-                                    protocol: request.protocol(),
-                                    auth: auth.as_ref(),
-                                    client_session_id,
-                                })
+                                .dispatch(UdpPipeInput::from_inbound_dispatch(
+                                    &inbound_dispatch,
+                                    auth.as_ref(),
+                                ))
                                 .await
                             {
                                 warn!(

@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 use tokio::sync::{broadcast, mpsc, oneshot};
-use zero_core::{Address, Error, Network, ProtocolType, Session};
+use zero_core::{Address, Error, InboundUdpDispatch, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, IpAddress, UdpPacketFraming, UdpPacketTunnelProtocol};
 
 use crate::outbound::{VmessOutbound, VmessOutboundSession};
@@ -422,6 +422,16 @@ impl VmessInboundUdpDispatchParts {
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }
+
+    pub fn into_inbound_dispatch(self) -> InboundUdpDispatch {
+        InboundUdpDispatch::new(
+            ProtocolType::Vmess,
+            self.target,
+            self.port,
+            self.payload,
+            self.client_session_id,
+        )
+    }
 }
 
 /// Stateful inbound UDP codec wrapper for VMess packet/raw payload detection.
@@ -468,6 +478,14 @@ impl VmessInboundUdpSession {
         self.decode_dispatch_parts(payload)
     }
 
+    pub fn decode_mux_inbound_dispatch(
+        &mut self,
+        payload: &[u8],
+    ) -> Result<InboundUdpDispatch, Error> {
+        self.decode_mux_dispatch_parts(payload)
+            .map(VmessInboundUdpDispatchParts::into_inbound_dispatch)
+    }
+
     pub async fn read_dispatch_parts_tokio<R>(
         &mut self,
         reader: &mut R,
@@ -483,6 +501,19 @@ impl VmessInboundUdpSession {
             return Ok(None);
         }
         self.decode_dispatch_parts(&buf[..n]).map(Some)
+    }
+
+    pub async fn read_inbound_dispatch_tokio<R>(
+        &mut self,
+        reader: &mut R,
+        buf: &mut [u8],
+    ) -> Result<Option<InboundUdpDispatch>, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        self.read_dispatch_parts_tokio(reader, buf)
+            .await
+            .map(|parts| parts.map(VmessInboundUdpDispatchParts::into_inbound_dispatch))
     }
 
     pub async fn write_response_tokio<W>(

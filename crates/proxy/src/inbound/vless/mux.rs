@@ -164,23 +164,18 @@ impl Proxy {
                         break;
                     }
                     last_activity = TokioInstant::now();
-                    let request = match udp_session.decode_mux_dispatch_parts(&payload) {
-                        Ok(request) => request,
+                    let inbound_dispatch = match udp_session.decode_mux_inbound_dispatch(&payload) {
+                        Ok(inbound_dispatch) => inbound_dispatch,
                         Err(error) => {
                             warn!(%error, mux_session_id, "vless mux udp packet parse failed");
                             continue;
                         }
                     };
-                    let (target, port, payload, client_session_id) = request.pipe_parts();
                     if let Err(error) = UdpPipe::new(self, &mut dispatch)
-                        .dispatch(UdpPipeInput {
-                            target: target.clone(),
-                            port,
-                            payload,
-                            protocol: request.protocol(),
+                        .dispatch(UdpPipeInput::from_inbound_dispatch(
+                            &inbound_dispatch,
                             auth,
-                            client_session_id,
-                        })
+                        ))
                         .await
                     {
                         warn!(%error, mux_session_id, "vless mux udp packet dispatch failed");

@@ -161,23 +161,18 @@ impl Proxy {
                             break;
                         }
                         last_activity = TokioInstant::now();
-                        let request = match udp_session.decode_mux_dispatch_parts(&payload) {
-                            Ok(request) => request,
+                        let inbound_dispatch = match udp_session.decode_mux_inbound_dispatch(&payload) {
+                            Ok(inbound_dispatch) => inbound_dispatch,
                             Err(error) => {
                                 warn!(%error, mux_session_id, "vmess mux udp packet parse failed");
                                 break;
                             }
                         };
-                        let (target, port, payload, client_session_id) = request.pipe_parts();
                         if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
-                            .dispatch(UdpPipeInput {
-                                target: target.clone(),
-                                port,
-                                payload,
-                                protocol: request.protocol(),
-                                auth: None,
-                                client_session_id,
-                            })
+                            .dispatch(UdpPipeInput::from_inbound_dispatch(
+                                &inbound_dispatch,
+                                None,
+                            ))
                             .await
                         {
                                 warn!(%error, mux_session_id, "vmess mux udp packet dispatch failed");
@@ -310,21 +305,16 @@ impl Proxy {
                     );
                     break;
                 }
-                read = udp_session.read_dispatch_parts_tokio(&mut client, &mut client_buf) => {
+                read = udp_session.read_inbound_dispatch_tokio(&mut client, &mut client_buf) => {
                     match read {
                         Ok(None) => break,
-                        Ok(Some(request)) => {
+                        Ok(Some(inbound_dispatch)) => {
                             last_activity = TokioInstant::now();
-                            let (target, port, payload, client_session_id) = request.pipe_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
-                                .dispatch(UdpPipeInput {
-                                    target: target.clone(),
-                                    port,
-                                    payload,
-                                    protocol: request.protocol(),
-                                    auth: auth.as_ref(),
-                                    client_session_id,
-                                })
+                                .dispatch(UdpPipeInput::from_inbound_dispatch(
+                                    &inbound_dispatch,
+                                    auth.as_ref(),
+                                ))
                                 .await
                             {
                                 warn!(error = %error, "failed to process vmess udp packet");
