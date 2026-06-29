@@ -146,6 +146,39 @@ pub struct Hysteria2InboundUdpTrackedDispatch {
     dispatch: InboundUdpDispatch,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Hysteria2InboundUdpClientResponse<'a> {
+    target: &'a Address,
+    port: u16,
+    payload: &'a [u8],
+}
+
+impl<'a> Hysteria2InboundUdpClientResponse<'a> {
+    pub fn new(target: &'a Address, port: u16, payload: &'a [u8]) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn target(&self) -> &'a Address {
+        self.target
+    }
+
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    fn payload(&self) -> &'a [u8] {
+        self.payload
+    }
+}
+
 impl Hysteria2InboundUdpTrackedDispatch {
     pub fn dispatch(&self) -> &InboundUdpDispatch {
         &self.dispatch
@@ -316,6 +349,21 @@ impl Hysteria2InboundUdpSession {
             return Ok(None);
         };
         self.send_response(conn, proxy_session_id, target, port, payload)
+    }
+
+    pub fn send_client_response_for_proxy_session(
+        &self,
+        conn: &quinn::Connection,
+        proxy_session_id: Option<u64>,
+        response: Hysteria2InboundUdpClientResponse<'_>,
+    ) -> Result<Option<usize>, Error> {
+        self.send_response_for_proxy_session(
+            conn,
+            proxy_session_id,
+            response.target(),
+            response.port(),
+            response.payload(),
+        )
     }
 
     pub fn send_response_to_socket_addr_for_proxy_session(

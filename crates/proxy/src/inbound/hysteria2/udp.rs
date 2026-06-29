@@ -73,12 +73,16 @@ impl Proxy {
                                 proxy.udp_upstream_idle_timeout(),
                                 pkt,
                             );
-                            if let Ok(Some(written)) = udp_session.send_response_for_proxy_session(
+                            let client_response =
+                                hysteria2::udp::Hysteria2InboundUdpClientResponse::new(
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
+                                );
+                            if let Ok(Some(written)) = udp_session.send_client_response_for_proxy_session(
                                 &conn,
                                 response.accounting.session_id(),
-                                &response.target,
-                                response.port,
-                                &response.payload,
+                                client_response,
                             ) {
                                 response.accounting.record_sent(written);
                             }
@@ -92,14 +96,22 @@ impl Proxy {
                 Some(chain_result) = chain_tasks.join_next() => {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
+                            let client_response =
+                                hysteria2::udp::Hysteria2InboundUdpClientResponse::new(
+                                    &target,
+                                    port,
+                                    &payload,
+                                );
                             let response_accounting =
-                                record_chain_udp_response_received(&proxy, session_id, payload.len());
-                            if let Ok(Some(written)) = udp_session.send_response_for_proxy_session(
+                                record_chain_udp_response_received(
+                                    &proxy,
+                                    session_id,
+                                    client_response.payload_len(),
+                                );
+                            if let Ok(Some(written)) = udp_session.send_client_response_for_proxy_session(
                                 &conn,
                                 session_id,
-                                &target,
-                                port,
-                                &payload,
+                                client_response,
                             ) {
                                 response_accounting.record_sent(written);
                             }
