@@ -6,26 +6,9 @@ use async_trait::async_trait;
 use vmess::{VmessInbound, VmessInboundProfile};
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_traits::AsyncSocket;
 
 use crate::runtime::inbound_protocol::InboundProtocol;
-use crate::transport::TcpRelayStream;
-
-/// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
-struct TlsStream(tokio_rustls::server::TlsStream<TcpRelayStream>);
-
-impl AsyncSocket for TlsStream {
-    type Error = io::Error;
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        tokio::io::AsyncReadExt::read(&mut self.0, buf).await
-    }
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        tokio::io::AsyncWriteExt::write_all(&mut self.0, buf).await
-    }
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
-        tokio::io::AsyncWriteExt::shutdown(&mut self.0).await
-    }
-}
+use crate::transport::{AsyncSocketStream, TcpRelayStream};
 
 // Trait-based handler (raw TLS path).
 
@@ -49,14 +32,14 @@ impl InboundProtocol for VmessInboundHandler {
             .accept(stream)
             .await
             .map_err(|e| EngineError::Io(io::Error::other(e)))?;
-        let mut sock = TlsStream(tls);
+        let mut sock = AsyncSocketStream::new(tls);
         let accepted = self
             .profile
             .accept_tcp(self.vmess_inbound, &mut sock)
             .await?;
         let session = accepted.session.clone();
         let client = TcpRelayStream::new(vmess::wrap_tcp_inbound_stream(
-            TcpRelayStream::new(sock.0),
+            TcpRelayStream::new(sock.into_inner()),
             accepted,
         )?);
         Ok((session, client))

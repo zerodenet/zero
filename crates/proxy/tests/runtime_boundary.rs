@@ -3403,6 +3403,29 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
 }
 
 #[test]
+fn tcp_tls_async_socket_bridge_lives_in_transport_layer() {
+    let transport = read("src/transport/stream.rs");
+    assert!(
+        transport.contains("struct AsyncSocketStream")
+            && transport.contains("impl<S> AsyncSocket for AsyncSocketStream<S>")
+            && transport.contains("pub(crate) fn into_inner(self) -> S"),
+        "generic tokio AsyncRead/AsyncWrite to AsyncSocket bridge should live in transport glue"
+    );
+
+    for source_path in ["src/inbound/trojan.rs", "src/inbound/vmess/mod.rs"] {
+        let source = read(source_path);
+        assert!(
+            source.contains("AsyncSocketStream::new")
+                && !source.contains("struct TlsStream")
+                && !source.contains("impl AsyncSocket for TlsStream")
+                && !source.contains("tokio::io::AsyncReadExt::read(&mut self")
+                && !source.contains("tokio::io::AsyncWriteExt::write_all(&mut self"),
+            "{source_path} should reuse transport AsyncSocketStream instead of owning TLS stream socket glue"
+        );
+    }
+}
+
+#[test]
 fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
     for path in rust_sources_under("src/inbound/mieru") {
         let source = relative(&path);

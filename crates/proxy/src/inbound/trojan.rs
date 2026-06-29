@@ -13,32 +13,15 @@ use trojan::{TrojanInbound, TrojanInboundProfile};
 use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_traits::AsyncSocket;
 
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
-use crate::transport::TcpRelayStream;
+use crate::transport::{AsyncSocketStream, TcpRelayStream};
 
 pub(crate) struct TrojanInboundRequest {
     pub(crate) inbound: InboundConfig,
     pub(crate) profile: TrojanInboundProfile,
     pub(crate) tls_acceptor: crate::transport::TlsAcceptor,
-}
-
-/// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
-struct TlsStream(tokio_rustls::server::TlsStream<TcpRelayStream>);
-
-impl AsyncSocket for TlsStream {
-    type Error = io::Error;
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        tokio::io::AsyncReadExt::read(&mut self.0, buf).await
-    }
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        tokio::io::AsyncWriteExt::write_all(&mut self.0, buf).await
-    }
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
-        tokio::io::AsyncWriteExt::shutdown(&mut self.0).await
-    }
 }
 
 // Trait-based handler.
@@ -65,11 +48,11 @@ impl InboundProtocol for TrojanInboundHandler {
             .await
             .map_err(|e| EngineError::Io(io::Error::other(e)))?;
         // Trojan protocol auth
-        let mut sock = TlsStream(tls);
+        let mut sock = AsyncSocketStream::new(tls);
         let accept = self.profile.accept(self.trojan_inbound, &mut sock).await?;
         let mut session: Session = accept.session;
         session.apply_auth(self.profile.inbound_auth());
-        Ok((session, TcpRelayStream::new(sock.0)))
+        Ok((session, TcpRelayStream::new(sock.into_inner())))
     }
 
     async fn send_ok(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {

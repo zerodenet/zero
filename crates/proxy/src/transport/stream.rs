@@ -12,6 +12,40 @@ use std::task::{Context, Poll};
 pub(crate) use zero_platform_tokio::{ClientStream, RelayCarrier, TcpRelayStream};
 
 #[derive(Debug)]
+pub(crate) struct AsyncSocketStream<S> {
+    inner: S,
+}
+
+impl<S> AsyncSocketStream<S> {
+    pub(crate) fn new(inner: S) -> Self {
+        Self { inner }
+    }
+
+    pub(crate) fn into_inner(self) -> S {
+        self.inner
+    }
+}
+
+impl<S> AsyncSocket for AsyncSocketStream<S>
+where
+    S: AsyncRead + AsyncWrite + Send + Sync + Unpin,
+{
+    type Error = io::Error;
+
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        tokio::io::AsyncReadExt::read(&mut self.inner, buf).await
+    }
+
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        tokio::io::AsyncWriteExt::write_all(&mut self.inner, buf).await
+    }
+
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        tokio::io::AsyncWriteExt::shutdown(&mut self.inner).await
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct PrefixedSocket {
     prefix: Vec<u8>,
     offset: usize,
