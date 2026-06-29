@@ -871,14 +871,16 @@ fn tcp_runtime_does_not_match_protocol_outbound_results() {
             "src/runtime/tcp_dispatch.rs should not unpack protocol TCP outbound variants; found `{forbidden}`"
         );
         assert!(
-            tcp_outbound.contains(forbidden),
-            "src/transport/tcp_outbound.rs should own TCP outbound result normalization for `{forbidden}`"
+            !tcp_outbound.contains(forbidden),
+            "src/transport/tcp_outbound.rs should normalize TCP outbound results through neutral variants; found `{forbidden}`"
         );
     }
 
     assert!(
-        tcp_dispatch.contains(".into_relay_stream()"),
-        "src/runtime/tcp_dispatch.rs should ask EstablishedTcpOutbound for a neutral relay stream"
+        tcp_dispatch.contains(".into_relay_stream()")
+            && tcp_outbound.contains("Proxied")
+            && tcp_outbound.contains("pub(crate) fn proxied("),
+        "TCP outbound results should expose neutral relay/proxied stream normalization"
     );
 }
 
@@ -2615,14 +2617,15 @@ fn adapter_root_is_facade_only() {
 
 #[test]
 fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
-    let cases: &[(&str, &[&str])] = &[
+    let cases: &[(&str, &[&str], &[&str])] = &[
         (
             "direct",
             &[
                 ".direct_connector()\n            .connect(",
                 "connect_direct",
-                "EstablishedTcpOutbound::Direct",
+                "EstablishedTcpOutbound::Proxied",
             ],
+            &["EstablishedTcpOutbound::Direct"],
         ),
         (
             "hysteria2",
@@ -2631,10 +2634,12 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
                 "connect_upstream_hysteria2",
                 "EstablishedTcpOutbound::Hysteria2",
             ],
+            &["EstablishedTcpOutbound::proxied"],
         ),
         (
             "mieru",
             &["connect_upstream_mieru", "EstablishedTcpOutbound::Mieru"],
+            &["EstablishedTcpOutbound::proxied"],
         ),
         (
             "shadowsocks",
@@ -2642,34 +2647,46 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
                 "connect_upstream_shadowsocks",
                 "EstablishedTcpOutbound::Shadowsocks",
             ],
+            &["EstablishedTcpOutbound::proxied"],
         ),
         (
             "socks5",
             &["connect_upstream_socks5", "EstablishedTcpOutbound::Socks5"],
+            &["EstablishedTcpOutbound::proxied"],
         ),
         (
             "trojan",
             &["connect_upstream_trojan", "EstablishedTcpOutbound::Trojan"],
+            &["EstablishedTcpOutbound::proxied"],
         ),
         (
             "vless",
             &["connect_upstream_vless", "EstablishedTcpOutbound::Vless"],
+            &["EstablishedTcpOutbound::proxied"],
         ),
         (
             "vmess",
             &["connect_upstream_vmess", "EstablishedTcpOutbound::Vmess"],
+            &["EstablishedTcpOutbound::proxied"],
         ),
     ];
 
-    for (adapter_name, forbidden_patterns) in cases {
+    for (adapter_name, forbidden_patterns, required_patterns) in cases {
         let adapter_path = format!("src/adapters/{adapter_name}.rs");
         let adapter = read(&adapter_path);
         let tcp = manifest_dir().join(format!("src/adapters/{adapter_name}/tcp.rs"));
+        let tcp_source = fs::read_to_string(&tcp).unwrap_or_default();
 
         for forbidden in *forbidden_patterns {
             assert!(
                 !adapter.contains(forbidden),
                 "{adapter_path} should keep TCP runtime details in src/adapters/{adapter_name}/tcp.rs; found `{forbidden}`"
+            );
+        }
+        for required in *required_patterns {
+            assert!(
+                tcp_source.contains(required),
+                "src/adapters/{adapter_name}/tcp.rs should own TCP runtime detail `{required}`"
             );
         }
         assert!(

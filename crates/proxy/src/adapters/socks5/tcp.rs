@@ -25,12 +25,9 @@ impl Socks5Adapter {
             return Err(unreachable_leaf(self.name(), leaf));
         };
         match connect_tcp(proxy, session, server, *port, *username, *password).await {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Socks5 {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                upstream,
-            }),
+            Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
+                *tag, *server, *port, upstream,
+            )),
             Err(error) => Err(TcpOutboundFailure {
                 stage: "connect_upstream_socks5",
                 error,

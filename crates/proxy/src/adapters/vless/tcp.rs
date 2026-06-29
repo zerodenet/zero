@@ -64,12 +64,7 @@ impl VlessAdapter {
                     max_concurrency: mux_concurrency.unwrap_or(8),
                 })
                 .await
-                .map(|upstream| EstablishedTcpOutbound::Vless {
-                    tag: (*tag).to_string(),
-                    server: (*server).to_string(),
-                    port: *port,
-                    upstream,
-                })
+                .map(|upstream| EstablishedTcpOutbound::proxied(*tag, *server, *port, upstream))
                 .map_err(|error| TcpOutboundFailure {
                     stage: "connect_upstream_vless",
                     error,
@@ -95,12 +90,9 @@ impl VlessAdapter {
         })
         .await
         {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Vless {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                upstream,
-            }),
+            Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
+                *tag, *server, *port, upstream,
+            )),
             Err(error) => Err(TcpOutboundFailure {
                 stage: "connect_upstream_vless",
                 error,

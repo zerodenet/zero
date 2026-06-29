@@ -56,12 +56,7 @@ impl VmessAdapter {
                     max_concurrency: *max_concurrency,
                 })
                 .await
-                .map(|upstream| EstablishedTcpOutbound::Vmess {
-                    tag: (*tag).to_string(),
-                    server: (*server).to_string(),
-                    port: *port,
-                    upstream,
-                })
+                .map(|upstream| EstablishedTcpOutbound::proxied(*tag, *server, *port, upstream))
                 .map_err(|error| TcpOutboundFailure {
                     stage: "connect_upstream_vmess",
                     error,
@@ -80,12 +75,9 @@ impl VmessAdapter {
         })
         .await
         {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Vmess {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                upstream,
-            }),
+            Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
+                *tag, *server, *port, upstream,
+            )),
             Err(error) => Err(TcpOutboundFailure {
                 stage: "connect_upstream_vmess",
                 error,

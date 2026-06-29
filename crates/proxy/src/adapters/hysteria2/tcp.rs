@@ -27,12 +27,9 @@ impl Hysteria2Adapter {
         match super::connector::connect_tcp(session, server, *port, password, *client_fingerprint)
             .await
         {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Hysteria2 {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                upstream,
-            }),
+            Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
+                *tag, *server, *port, upstream,
+            )),
             Err(error) => Err(TcpOutboundFailure {
                 stage: "connect_upstream_hysteria2",
                 error,

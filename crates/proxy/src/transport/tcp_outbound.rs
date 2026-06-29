@@ -27,43 +27,7 @@ pub(crate) enum EstablishedTcpOutbound {
     Block {
         tag: String,
     },
-    Socks5 {
-        tag: String,
-        server: String,
-        port: u16,
-        upstream: TcpRelayStream,
-    },
-    Vless {
-        tag: String,
-        server: String,
-        port: u16,
-        upstream: TcpRelayStream,
-    },
-    Hysteria2 {
-        tag: String,
-        server: String,
-        port: u16,
-        upstream: TcpRelayStream,
-    },
-    Shadowsocks {
-        tag: String,
-        server: String,
-        port: u16,
-        upstream: TcpRelayStream,
-    },
-    Trojan {
-        tag: String,
-        server: String,
-        port: u16,
-        upstream: TcpRelayStream,
-    },
-    Vmess {
-        tag: String,
-        server: String,
-        port: u16,
-        upstream: TcpRelayStream,
-    },
-    Mieru {
+    Proxied {
         tag: String,
         server: String,
         port: u16,
@@ -75,16 +39,24 @@ pub(crate) enum EstablishedTcpOutbound {
 }
 
 impl EstablishedTcpOutbound {
+    pub(crate) fn proxied(
+        tag: impl Into<String>,
+        server: impl Into<String>,
+        port: u16,
+        upstream: TcpRelayStream,
+    ) -> Self {
+        Self::Proxied {
+            tag: tag.into(),
+            server: server.into(),
+            port,
+            upstream,
+        }
+    }
+
     pub(crate) fn into_relay_stream(self) -> Result<TcpRelayStream, EngineError> {
         match self {
             Self::Direct { upstream, .. }
-            | Self::Socks5 { upstream, .. }
-            | Self::Vless { upstream, .. }
-            | Self::Hysteria2 { upstream, .. }
-            | Self::Shadowsocks { upstream, .. }
-            | Self::Trojan { upstream, .. }
-            | Self::Vmess { upstream, .. }
-            | Self::Mieru { upstream, .. }
+            | Self::Proxied { upstream, .. }
             | Self::Relay { upstream } => Ok(upstream),
             Self::Block { .. } => Err(EngineError::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -119,43 +91,7 @@ pub(crate) fn extract_tcp_stream(
             io::ErrorKind::ConnectionRefused,
             "blocked",
         ))),
-        EstablishedTcpOutbound::Socks5 {
-            tag,
-            server,
-            port,
-            upstream,
-        }
-        | EstablishedTcpOutbound::Vless {
-            tag,
-            server,
-            port,
-            upstream,
-        }
-        | EstablishedTcpOutbound::Hysteria2 {
-            tag,
-            server,
-            port,
-            upstream,
-        }
-        | EstablishedTcpOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            upstream,
-        }
-        | EstablishedTcpOutbound::Trojan {
-            tag,
-            server,
-            port,
-            upstream,
-        }
-        | EstablishedTcpOutbound::Vmess {
-            tag,
-            server,
-            port,
-            upstream,
-        }
-        | EstablishedTcpOutbound::Mieru {
+        EstablishedTcpOutbound::Proxied {
             tag,
             server,
             port,

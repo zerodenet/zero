@@ -42,12 +42,9 @@ impl TrojanAdapter {
         })
         .await
         {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::Trojan {
-                tag: (*tag).to_string(),
-                server: (*server).to_string(),
-                port: *port,
-                upstream,
-            }),
+            Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
+                *tag, *server, *port, upstream,
+            )),
             Err(error) => Err(TcpOutboundFailure {
                 stage: "connect_upstream_trojan",
                 error,
