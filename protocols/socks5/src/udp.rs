@@ -325,6 +325,11 @@ impl Socks5InboundUdpSession {
         self.codec.decode_response(packet)
     }
 
+    pub fn decode_response_parts(&self, packet: &[u8]) -> Result<(Address, u16, Vec<u8>), Error> {
+        self.decode_response(packet)
+            .map(Socks5InboundUdpResponse::into_parts)
+    }
+
     pub fn encode_response_to_client(
         &self,
         upstream_address: &Address,

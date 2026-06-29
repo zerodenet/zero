@@ -251,10 +251,10 @@ impl Socks5UdpRuntime {
         match self.upstream.as_ref() {
             Some(association) => {
                 let read = association.recv_packet(buf).await?;
-                let response = socks5::Socks5Inbound
+                let (target, port, payload) = socks5::Socks5Inbound
                     .udp_session()
-                    .decode_response(&buf[..read])?;
-                Ok(upstream_response_from_socks5(response))
+                    .decode_response_parts(&buf[..read])?;
+                Ok(UpstreamUdpResponse::new(target, port, payload))
             }
             None => std::future::pending::<Result<UpstreamUdpResponse, EngineError>>().await,
         }
@@ -269,13 +269,6 @@ impl Socks5UdpRuntime {
             None => std::future::pending::<Result<usize, EngineError>>().await,
         }
     }
-}
-
-fn upstream_response_from_socks5(
-    response: socks5::udp::Socks5InboundUdpResponse,
-) -> UpstreamUdpResponse {
-    let (target, port, payload) = response.into_parts();
-    UpstreamUdpResponse::new(target, port, payload)
 }
 
 #[async_trait]

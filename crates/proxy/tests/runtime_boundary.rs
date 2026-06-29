@@ -3229,8 +3229,10 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && packet_path_source.contains("establish_shared_packet_path_carrier")
             && !packet_path_source.contains("establish_shared_packet_path_association")
             && !packet_path_source.contains("into_association_target()")
-            && runtime_source.contains("response.into_parts()")
-            && runtime_source.contains("upstream_response_from_socks5")
+            && runtime_source.contains(".decode_response_parts(&buf[..read])")
+            && !runtime_source.contains("response.into_parts()")
+            && !runtime_source.contains("upstream_response_from_socks5")
+            && !runtime_source.contains("Socks5InboundUdpResponse")
             && !runtime_source.contains("response.target().clone()")
             && !runtime_source.contains("response.payload().to_vec()")
             && runtime_source.contains("let target = association.identity()")
@@ -5266,9 +5268,10 @@ fn upstream_udp_response_decode_lives_behind_registered_handler() {
             && upstream.contains("Result<UpstreamUdpResponse, EngineError>")
             && state.contains("recv_response")
             && socks5_runtime.contains("socks5::Socks5Inbound")
-            && socks5_runtime.contains(".decode_response(&buf[..read])")
-            && !socks5_runtime.contains("Socks5InboundUdpCodec"),
-        "registered upstream handlers should decode protocol responses into neutral UpstreamUdpResponse values"
+            && socks5_runtime.contains(".decode_response_parts(&buf[..read])")
+            && !socks5_runtime.contains("Socks5InboundUdpCodec")
+            && !socks5_runtime.contains("Socks5InboundUdpResponse"),
+        "registered upstream handlers should consume protocol-owned response parts and expose neutral UpstreamUdpResponse values"
     );
 }
 
