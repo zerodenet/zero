@@ -4883,7 +4883,11 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     assert!(
         root.contains("VmessInboundMuxAction::OpenStream")
             && protocol_mux.contains("ProtocolType::Vmess")
-            && !root.contains("network,"),
+            && !root.contains("network,")
+            && !root.contains("Session::new(0,")
+            && model.contains("pub(crate) session: Session")
+            && !model.contains("pub(crate) target: Address")
+            && !model.contains("pub(crate) port: u16"),
         "VMess inbound MUX new-stream Session conversion should be protocol-owned and exposed as an action"
     );
     assert!(
@@ -4981,7 +4985,7 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("input.state")
             && !mux.contains("VmessInboundUdpCodec.decode_datagram")
             && !mux.contains(".response_mode(payload_mode)")
-            && mux.contains("vmess::VmessInbound.udp_session")
+            && mux.contains("vmess::VmessInbound.udp_session_for(&session)")
             && mux.contains("udp_session.read_dispatch_parts_tokio")
             && mux.contains("udp_session.decode_mux_dispatch_parts")
             && !mux.contains("decode_dispatch_parts(&payload)")
@@ -4991,6 +4995,7 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && mux.contains("udp_session.write_mux_response")
             && mux.contains("udp_session.write_response_to_socket_addr_tokio")
             && mux.contains("udp_session.write_mux_response_to_socket_addr")
+            && !mux.contains("udp_session(session.target.clone(), session.port)")
             && !mux.contains("request.into_dispatch_parts()")
             && mux.contains("pkt.into_parts()")
             && !mux.contains("client_session_id: None")

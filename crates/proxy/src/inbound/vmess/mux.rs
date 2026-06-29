@@ -83,8 +83,7 @@ impl Proxy {
                                     self.spawn_vmess_mux_tcp_stream_task(VmessMuxTcpStreamTask {
                                         tasks: &mut mux_tasks,
                                         mux_session_id: session_id,
-                                        target: session.target,
-                                        port: session.port,
+                                        session,
                                         up_rx,
                                         writer: mux_writer.clone(),
                                         inbound_tag: inbound_tag.to_owned(),
@@ -94,8 +93,7 @@ impl Proxy {
                                     self.spawn_vmess_mux_udp_stream_task(VmessMuxUdpStreamTask {
                                         tasks: &mut mux_tasks,
                                         mux_session_id: session_id,
-                                        default_target: session.target,
-                                        default_port: session.port,
+                                        session,
                                         up_rx,
                                         writer: mux_writer.clone(),
                                         inbound_tag: inbound_tag.to_owned(),
@@ -141,8 +139,7 @@ impl Proxy {
         let VmessMuxTcpStreamTask {
             tasks,
             mux_session_id,
-            target,
-            port,
+            session,
             up_rx,
             writer,
             inbound_tag,
@@ -151,8 +148,7 @@ impl Proxy {
         let proxy = self.clone();
         tasks.spawn(async move {
             let mux_session = vmess::mux::VmessInboundMuxSession::new();
-            let mut session =
-                Session::new(0, target, port, Network::Tcp, ProtocolType::Vmess);
+            let mut session = session;
             proxy.prepare_session(&mut session, &inbound_tag, None);
 
             let upstream = match TcpPipe::new(&proxy)
@@ -213,8 +209,7 @@ impl Proxy {
         let VmessMuxUdpStreamTask {
             tasks,
             mux_session_id,
-            default_target,
-            default_port,
+            session,
             up_rx,
             writer,
             inbound_tag,
@@ -223,8 +218,7 @@ impl Proxy {
         let proxy = self.clone();
         tasks.spawn(async move {
             let mux_session = vmess::mux::VmessInboundMuxSession::new();
-            let mut udp_session =
-                vmess::VmessInbound.udp_session(default_target, default_port);
+            let mut udp_session = vmess::VmessInbound.udp_session_for(&session);
             let mut dispatch = match UdpDispatch::new(&inbound_tag).await {
                 Ok(dispatch) => dispatch,
                 Err(error) => {
@@ -368,7 +362,7 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let mut dispatch = UdpDispatch::new(inbound_tag).await?;
         let auth = session.auth.clone();
-        let mut udp_session = vmess::VmessInbound.udp_session(session.target.clone(), session.port);
+        let mut udp_session = vmess::VmessInbound.udp_session_for(&session);
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
 
