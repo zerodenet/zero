@@ -282,6 +282,39 @@ where
     read_mux_stream_frame(reader).await?.try_into_server_event()
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct VmessInboundMuxSession;
+
+impl VmessInboundMuxSession {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub async fn next_event<R>(&self, reader: &mut R) -> Result<VmessMuxServerEvent, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        read_mux_server_event(reader).await
+    }
+
+    pub fn queue_data(
+        &self,
+        write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+        session_id: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        queue_keep_stream(write_tx, session_id, payload)
+    }
+
+    pub fn queue_end(
+        &self,
+        write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+        session_id: u16,
+    ) -> Result<usize, Error> {
+        queue_end_stream(write_tx, session_id)
+    }
+}
+
 pub fn decode_metadata(meta: &[u8]) -> Result<MuxFrame, Error> {
     if meta.len() < 4 {
         return Err(Error::Protocol("vmess mux metadata too short"));

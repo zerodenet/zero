@@ -4079,7 +4079,8 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         "VMess inbound MUX runtime should use the protocol mux frame reader helper"
     );
     assert!(
-        root.contains("vmess::read_mux_server_event")
+        root.contains("vmess::VmessInboundMuxSession::new()")
+            && root.contains("mux_session.next_event(&mut reader)")
             && root.contains("vmess::VmessMuxServerEvent"),
         "VMess inbound MUX runtime should consume protocol-owned mux server events"
     );
@@ -4096,7 +4097,13 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     }
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
         .expect("read protocols/vmess/src/mux.rs");
-    for required in ["VmessMuxServerEvent", "read_mux_server_event"] {
+    for required in [
+        "VmessInboundMuxSession",
+        "VmessMuxServerEvent",
+        "read_mux_server_event",
+        "pub fn queue_data",
+        "pub fn queue_end",
+    ] {
         assert!(
             protocol_mux.contains(required),
             "protocols/vmess should own VMess MUX server event API `{required}`"
@@ -4107,14 +4114,17 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         "protocols/vmess should classify raw VMess MUX frames into server events"
     );
     assert!(
-        root.contains("vmess::queue_mux_end_stream")
-            && root.contains("vmess::queue_mux_keep_stream")
+        root.contains(".queue_end(&write_tx, mux_session_id)")
+            && root.contains(".queue_data(&write_tx, mux_session_id")
             && !root.contains("vmess::VmessMuxFrameEncoder")
             && !root.contains("frame_encoder.")
             && !model.contains("VmessMuxFrameEncoder")
+            && !root.contains("vmess::read_mux_server_event")
+            && !root.contains("vmess::queue_mux_end_stream")
+            && !root.contains("vmess::queue_mux_keep_stream")
             && !root.contains("vmess::encode_mux_end_stream")
             && !root.contains("vmess::encode_mux_keep_stream"),
-        "VMess inbound MUX runtime should queue frames through protocol-owned writer helpers"
+        "VMess inbound MUX runtime should use the protocol-owned inbound MUX session wrapper"
     );
     for required in ["queue_keep_stream", "queue_end_stream"] {
         assert!(

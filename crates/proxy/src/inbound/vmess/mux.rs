@@ -26,6 +26,7 @@ impl Proxy {
         let (mut reader, mut writer) = tokio::io::split(client);
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let mut mux_tasks: JoinSet<()> = JoinSet::new();
+        let mux_session = vmess::VmessInboundMuxSession::new();
         let mut streams: std::collections::HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> =
             std::collections::HashMap::new();
 
@@ -52,7 +53,7 @@ impl Proxy {
 
         loop {
             select! {
-                event = vmess::read_mux_server_event(&mut reader) => {
+                event = mux_session.next_event(&mut reader) => {
                     let event = match event {
                         Ok(event) => event,
                         Err(error) => {
@@ -155,7 +156,7 @@ impl Proxy {
                 Ok(route) => route,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux dispatch failed");
-                    let _ = vmess::queue_mux_end_stream(&write_tx, mux_session_id);
+                    let _ = vmess::VmessInboundMuxSession::new().queue_end(&write_tx, mux_session_id);
                     return;
                 }
             };
@@ -180,7 +181,7 @@ impl Proxy {
                         match read {
                             Ok(0) => break,
                             Ok(n) => {
-                                match vmess::queue_mux_keep_stream(&write_tx, mux_session_id, &buf[..n]) {
+                                match vmess::VmessInboundMuxSession::new().queue_data(&write_tx, mux_session_id, &buf[..n]) {
                                     Ok(_) => {}
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux response encode failed");
@@ -196,7 +197,7 @@ impl Proxy {
                     }
                 }
             }
-            let _ = vmess::queue_mux_end_stream(&write_tx, mux_session_id);
+            let _ = vmess::VmessInboundMuxSession::new().queue_end(&write_tx, mux_session_id);
         });
     }
 
@@ -219,7 +220,7 @@ impl Proxy {
                 Ok(dispatch) => dispatch,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux udp dispatch init failed");
-                    let _ = vmess::queue_mux_end_stream(&write_tx, mux_session_id);
+                    let _ = vmess::VmessInboundMuxSession::new().queue_end(&write_tx, mux_session_id);
                     return;
                 }
             };
@@ -359,7 +360,7 @@ impl Proxy {
             for completed in dispatch.finish_all() {
                 log_completed_udp_flow(completed);
             }
-            let _ = vmess::queue_mux_end_stream(&write_tx, mux_session_id);
+            let _ = vmess::VmessInboundMuxSession::new().queue_end(&write_tx, mux_session_id);
         });
     }
 
