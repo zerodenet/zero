@@ -3,7 +3,7 @@
 //! Migrated from the inline `#[cfg(test)] mod tests` in
 //! `protocols/hysteria2/src/shared.rs`.
 
-use hysteria2::{
+use hysteria2::shared::{
     build_auth_error, build_auth_frame, build_auth_ok, build_connect_error, build_connect_ok,
     build_tcp_connect_header, parse_auth_frame, parse_auth_response, parse_tcp_connect_header,
 };

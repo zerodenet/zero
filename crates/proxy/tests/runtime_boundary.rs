@@ -1480,6 +1480,8 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     let protocol_inbound =
         fs::read_to_string(repo_root().join("protocols/hysteria2/src/inbound.rs"))
             .expect("read hysteria2 protocol inbound source");
+    let protocol_shared = fs::read_to_string(repo_root().join("protocols/hysteria2/src/shared.rs"))
+        .expect("read hysteria2 protocol shared source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
         .expect("read hysteria2 protocol lib source");
 
@@ -1549,6 +1551,26 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && protocol_inbound.contains("self.accept_tcp_connect_header(&header_buf[..n])"),
         "Hysteria2 protocol crate should own auth stream and TCP connect header IO while proxy only orchestrates QUIC tasks"
     );
+    for private_helper in [
+        "build_auth_error",
+        "build_auth_frame",
+        "build_auth_ok",
+        "build_connect_error",
+        "build_connect_ok",
+        "build_tcp_connect_header",
+        "parse_auth_frame",
+        "parse_auth_response",
+        "parse_tcp_connect_header",
+        "derive_salt",
+        "sign_hmac",
+        "verify_hmac",
+    ] {
+        assert!(
+            protocol_shared.contains(&format!("pub fn {private_helper}"))
+                && !protocol_lib.contains(private_helper),
+            "Hysteria2 low-level shared helper `{private_helper}` should stay off the crate root"
+        );
+    }
     for forbidden in [
         "build_udp_datagram",
         "parse_udp_datagram",
