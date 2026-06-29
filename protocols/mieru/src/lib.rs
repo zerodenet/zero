@@ -27,8 +27,8 @@ mod outbound;
 
 #[cfg(feature = "crypto")]
 pub use inbound::{
-    classify_inbound_session, IntoMieruInboundUserConfig, MieruAccept, MieruInbound,
-    MieruInboundProfile, MieruInboundSessionKind, MieruInboundStream,
+    classify_inbound_session, inbound_profile_from_config_users, IntoMieruInboundUserConfig,
+    MieruAccept, MieruInbound, MieruInboundProfile, MieruInboundSessionKind, MieruInboundStream,
 };
 #[cfg(feature = "crypto")]
 pub use outbound::{

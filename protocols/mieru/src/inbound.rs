@@ -59,6 +59,14 @@ impl MieruInboundProfile {
     }
 }
 
+pub fn inbound_profile_from_config_users<I, U>(users: I) -> MieruInboundProfile
+where
+    I: IntoIterator<Item = U>,
+    U: IntoMieruInboundUserConfig,
+{
+    MieruInboundProfile::from_config_users(users)
+}
+
 pub trait IntoMieruInboundUserConfig {
     fn into_mieru_inbound_user_config(self) -> (String, String);
 }

@@ -17,13 +17,11 @@ impl MieruAdapter {
         let p = proxy.clone();
         listeners.spawn(async move {
             let profile = match &inbound.protocol {
-                InboundProtocolConfig::Mieru { users } => {
-                    mieru::MieruInboundProfile::from_config_users(
-                        users
-                            .iter()
-                            .map(|user| (user.username.as_str(), user.password.as_str())),
-                    )
-                }
+                InboundProtocolConfig::Mieru { users } => mieru::inbound_profile_from_config_users(
+                    users
+                        .iter()
+                        .map(|user| (user.username.as_str(), user.password.as_str())),
+                ),
                 _ => {
                     return Err(EngineError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
