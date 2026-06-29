@@ -207,6 +207,14 @@ impl VlessTcpConnectConfig {
             flow: self.flow,
         }
     }
+
+    #[cfg(feature = "reality")]
+    pub fn wrap_deferred_response_stream<S>(
+        &self,
+        stream: S,
+    ) -> crate::DeferredVlessResponseStream<S> {
+        crate::DeferredVlessResponseStream::new(stream)
+    }
 }
 
 impl<'a> TcpTunnelProtocol<VlessTcpTunnelTarget<'a>> for VlessOutbound {

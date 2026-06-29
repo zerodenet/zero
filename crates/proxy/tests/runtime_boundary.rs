@@ -2076,13 +2076,17 @@ fn vless_tcp_connect_uses_request_model() {
         adapter.contains("VlessTcpConnectConfig::from_config")
             && adapter.contains("config: vless::VlessTcpConnectConfig")
             && adapter.contains("config.mux_pool_identity()")
+            && adapter.contains("config.wrap_deferred_response_stream(")
+            && !adapter.contains("DeferredVlessResponseStream::new")
             && !adapter.contains("MuxIdentity::from_uuid")
             && protocol_outbound.contains("pub struct VlessTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config")
             && protocol_outbound.contains("pub fn mux_pool_identity")
+            && protocol_outbound.contains("pub fn wrap_deferred_response_stream")
+            && protocol_outbound.contains("DeferredVlessResponseStream::new")
             && protocol_outbound.contains("parse_uuid")
             && protocol_outbound.contains("parse_flow"),
-        "VLESS adapter should ask protocols/vless to parse outbound identity/flow config and build MUX identity"
+        "VLESS adapter should ask protocols/vless to parse outbound identity/flow config, build MUX identity, and wrap deferred response streams"
     );
 }
 

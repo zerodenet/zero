@@ -200,7 +200,7 @@ async fn connect_tcp(request: VlessTcpConnect<'_>) -> Result<TcpRelayStream, Eng
         proxy.record_session_outbound_traffic(session.id, metered.drain_traffic());
 
         Ok(TcpRelayStream::new(
-            vless::DeferredVlessResponseStream::new(metered.into_inner()),
+            config.wrap_deferred_response_stream(metered.into_inner()),
         ))
     } else {
         use zero_traits::TcpTunnelProtocol;
