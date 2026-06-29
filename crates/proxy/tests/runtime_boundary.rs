@@ -2311,6 +2311,27 @@ fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
 }
 
 #[test]
+fn http_connect_redirect_response_framing_stays_in_protocol_crate() {
+    let inbound = read("src/inbound/http_connect.rs");
+    let protocol_inbound =
+        fs::read_to_string(repo_root().join("protocols/http-connect/src/inbound.rs"))
+            .expect("read http-connect protocol inbound source");
+
+    assert!(
+        inbound.contains("build_redirect_response")
+            && inbound.contains("send_redirect_response")
+            && inbound.contains("Some((status, location))")
+            && !inbound.contains("HTTP/1.1 {status} Found")
+            && !inbound.contains("Location: {location}")
+            && protocol_inbound.contains("pub fn redirect_response")
+            && protocol_inbound.contains("pub async fn send_redirect_response")
+            && protocol_inbound.contains("HTTP/1.1 {status} Found")
+            && protocol_inbound.contains("Location: {location}"),
+        "HTTP CONNECT redirect wire response framing should live in protocols/http-connect; proxy should only select status/location"
+    );
+}
+
+#[test]
 fn protocol_inventory_keeps_protocol_instances_private() {
     let content = read("src/inventory.rs");
     let protocols = read("src/inventory/protocols.rs");

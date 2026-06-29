@@ -1,3 +1,5 @@
+use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use zero_core::{Error, Network, ProtocolType, Session};
@@ -74,6 +76,26 @@ impl HttpConnectInbound {
             .write_all(response.status_line().as_bytes())
             .await
             .map_err(|_| Error::Io("failed to write HTTP CONNECT response"))
+    }
+
+    pub fn redirect_response(&self, status: u16, location: &str) -> String {
+        format!("HTTP/1.1 {status} Found\r\nLocation: {location}\r\nConnection: close\r\n\r\n")
+    }
+
+    pub async fn send_redirect_response<S>(
+        &self,
+        stream: &mut S,
+        status: u16,
+        location: &str,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let response = self.redirect_response(status, location);
+        stream
+            .write_all(response.as_bytes())
+            .await
+            .map_err(|_| Error::Io("failed to write HTTP CONNECT redirect response"))
     }
 
     pub async fn handshake<S>(&self, stream: &mut S) -> Result<Session, Error>

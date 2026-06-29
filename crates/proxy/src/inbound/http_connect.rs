@@ -114,11 +114,18 @@ pub(crate) async fn run_http_connect_listener_with_bound(
                             {
                                 Ok(session) => {
                                     // Check for HTTP redirect rewrite rules.
-                                    if let Some(resp) = build_redirect_response(
+                                    if let Some((status, location)) = build_redirect_response(
                                         &engine.config.route.url_rewrite,
                                         &session,
                                     ) {
-                                        let _ = metered.write_all(resp.as_bytes()).await;
+                                        let _ = handler
+                                            .http_connect_inbound
+                                            .send_redirect_response(
+                                                &mut metered,
+                                                status,
+                                                &location,
+                                            )
+                                            .await;
                                     } else {
                                         let _ = serve_inbound(
                                             &engine, session, metered.into_inner(),
@@ -174,11 +181,11 @@ pub(crate) async fn run_http_connect_listener_with_bound(
 }
 
 /// Check url_rewrite rules for a redirect (with `status_code` set).
-/// Returns the HTTP response string to send, or None if no redirect rule matches.
+/// Returns redirect status and location, or None if no redirect rule matches.
 fn build_redirect_response(
     rules: &[zero_config::UrlRewriteRule],
     session: &Session,
-) -> Option<String> {
+) -> Option<(u16, String)> {
     let domain = match &session.target {
         zero_core::Address::Domain(d) => d,
         _ => return None,
@@ -196,9 +203,7 @@ fn build_redirect_response(
         };
         if matched {
             let location = format!("https://{}:{}", rule.to, session.port);
-            return Some(format!(
-                "HTTP/1.1 {status} Found\r\nLocation: {location}\r\nConnection: close\r\n\r\n"
-            ));
+            return Some((status, location));
         }
     }
     None
