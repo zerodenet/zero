@@ -21,16 +21,17 @@ pub(super) async fn dispatch_packet(
     else {
         return Ok(());
     };
+    let (target, port, payload, client_session_id) = request.into_parts();
 
     // Generic dispatch.
     let session_id = UdpPipe::new(proxy, dispatch)
         .dispatch(UdpPipeInput {
-            target: request.target,
-            port: request.port,
-            payload: &request.payload,
+            target,
+            port,
+            payload: &payload,
             protocol: ProtocolType::Socks5,
             auth: None,
-            client_session_id: request.client_session_id,
+            client_session_id,
         })
         .await?;
 

@@ -199,10 +199,10 @@ pub struct Socks5InboundUdpRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Socks5InboundUdpDispatchParts {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
-    pub client_session_id: Option<u64>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+    client_session_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -220,6 +220,12 @@ pub enum Socks5InboundUdpDispatchAction {
 impl Socks5InboundUdpDispatchView {
     pub fn into_parts(self) -> (Socks5InboundUdpDispatchParts, usize) {
         (self.parts, self.protocol_overhead_len)
+    }
+}
+
+impl Socks5InboundUdpDispatchParts {
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
+        (self.target, self.port, self.payload, self.client_session_id)
     }
 }
 

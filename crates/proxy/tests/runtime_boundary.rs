@@ -5776,6 +5776,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     let setup = read("src/inbound/socks5/udp_associate/setup.rs");
     let upstream_response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
     let adapter_active = read("src/adapters/socks5/udp/active.rs");
+    let protocol_shared = fs::read_to_string(repo_root().join("protocols/socks5/src/shared.rs"))
+        .expect("read protocols/socks5/src/shared.rs");
+    let protocol_dispatch_parts = struct_block(&protocol_shared, "Socks5InboundUdpDispatchParts");
 
     for forbidden in [
         "UdpPipeInput",
@@ -5907,6 +5910,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         dispatch.contains("socks5::Socks5Inbound.udp_session()")
             && dispatch.contains("udp_session")
             && dispatch.contains(".decode_dispatch_parts_or_resolve_local_dns(")
+            && dispatch.contains("request.into_parts()")
             && !dispatch.contains("Socks5InboundUdpDispatchAction")
             && !dispatch.contains("decode_dispatch_action")
             && !dispatch.contains("udp_packet.into_dispatch_parts()")
@@ -5931,6 +5935,10 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !dispatch.contains("udp_session.local_dns_domain_request")
             && !dispatch.contains("udp_session.request_dispatch_parts")
             && !dispatch.contains("client_session_id: None")
+            && !dispatch.contains("request.target")
+            && !dispatch.contains("request.port")
+            && !dispatch.contains("request.payload")
+            && !dispatch.contains("request.client_session_id")
             && !dispatch.contains("udp_packet.target()")
             && !dispatch.contains("udp_packet.port()")
             && !dispatch.contains("udp_packet.dns_domain_request()")
@@ -5955,6 +5963,14 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && protocol_udp.contains("response_frame(")
             && protocol_udp.contains("response_key("),
         "protocols/socks5 should own UDP associate response framing and response attribution helpers"
+    );
+    assert!(
+        !protocol_dispatch_parts.contains("pub target: Address")
+            && !protocol_dispatch_parts.contains("pub port: u16")
+            && !protocol_dispatch_parts.contains("pub payload: Vec<u8>")
+            && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>")
+            && protocol_shared.contains("fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>)"),
+        "SOCKS5 inbound UDP dispatch parts should expose a one-shot neutral parts API instead of public fields"
     );
     assert!(
         adapter_active.contains("into_mapped(EngineError::from)")
