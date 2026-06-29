@@ -518,29 +518,6 @@ impl Socks5InboundUdpSession {
         Ok(frame_len)
     }
 
-    pub async fn send_response_to_client_endpoint<S>(
-        &self,
-        socket: &S,
-        client: IpAddress,
-        client_port: u16,
-        upstream: Socks5UdpRelayEndpoint,
-        payload: &[u8],
-    ) -> Result<usize, Socks5UdpRelayError<S::Error>>
-    where
-        S: DatagramSocket,
-    {
-        let upstream_address = address_from_ip(upstream.address);
-        self.send_response_to_client(
-            socket,
-            client,
-            client_port,
-            &upstream_address,
-            upstream.port,
-            payload,
-        )
-        .await
-    }
-
     pub async fn send_response_to_client_target<S>(
         &self,
         socket: &S,
@@ -572,44 +549,15 @@ impl Socks5InboundUdpSession {
     where
         S: DatagramSocket,
     {
-        self.send_response_to_client_target(
+        self.send_response_to_client(
             socket,
-            client,
+            client.ip,
+            client.port,
             response.upstream_address(),
             response.upstream_port(),
             response.payload(),
         )
         .await
-    }
-
-    pub async fn send_response_to_client_socket_addr<S>(
-        &self,
-        socket: &S,
-        client: SocketAddress,
-        upstream: SocketAddress,
-        payload: &[u8],
-    ) -> Result<usize, Socks5UdpRelayError<S::Error>>
-    where
-        S: DatagramSocket,
-    {
-        self.send_response_to_client_endpoint(
-            socket,
-            client.ip,
-            client.port,
-            Socks5UdpRelayEndpoint {
-                address: upstream.ip,
-                port: upstream.port,
-            },
-            payload,
-        )
-        .await
-    }
-}
-
-fn address_from_ip(ip: IpAddress) -> Address {
-    match ip {
-        IpAddress::V4(bytes) => Address::Ipv4(bytes),
-        IpAddress::V6(bytes) => Address::Ipv6(bytes),
     }
 }
 
