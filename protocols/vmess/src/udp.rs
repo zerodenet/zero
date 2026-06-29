@@ -441,6 +441,13 @@ impl VmessInboundUdpSession {
             .map(VmessInboundUdpRequest::into_dispatch_parts)
     }
 
+    pub fn decode_mux_dispatch_parts(
+        &mut self,
+        payload: &[u8],
+    ) -> Result<VmessInboundUdpDispatchParts, Error> {
+        self.decode_dispatch_parts(payload)
+    }
+
     pub async fn read_dispatch_parts_tokio<R>(
         &mut self,
         reader: &mut R,

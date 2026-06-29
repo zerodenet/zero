@@ -791,6 +791,13 @@ impl VlessInboundUdpSession {
         self.codec.decode_dispatch_parts(packet)
     }
 
+    pub fn decode_mux_dispatch_parts(
+        &self,
+        payload: &[u8],
+    ) -> Result<VlessInboundUdpDispatchParts, Error> {
+        self.decode_dispatch_parts(payload)
+    }
+
     #[cfg(feature = "reality")]
     pub async fn read_dispatch_parts_tokio<R>(
         &self,
