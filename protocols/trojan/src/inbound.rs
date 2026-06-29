@@ -1,5 +1,7 @@
 //! Trojan inbound protocol handler.
 
+#[cfg(feature = "tokio")]
+use std::net::SocketAddr;
 use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::{AsyncSocket, IpAddress};
 
@@ -202,6 +204,25 @@ impl TrojanInboundUdpSession {
         let target = address_from_ip(ip);
         self.write_response(stream, &target, port, payload).await
     }
+
+    #[cfg(feature = "tokio")]
+    pub async fn write_response_to_socket_addr_tokio<S>(
+        &self,
+        stream: &mut S,
+        sender: SocketAddr,
+        payload: &[u8],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.write_response(
+            stream,
+            &address_from_socket_addr(sender),
+            sender.port(),
+            payload,
+        )
+        .await
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -234,6 +255,14 @@ fn address_from_ip(ip: IpAddress) -> Address {
     match ip {
         IpAddress::V4(bytes) => Address::Ipv4(bytes),
         IpAddress::V6(bytes) => Address::Ipv6(bytes),
+    }
+}
+
+#[cfg(feature = "tokio")]
+fn address_from_socket_addr(addr: SocketAddr) -> Address {
+    match addr.ip() {
+        std::net::IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
+        std::net::IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
     }
 }
 

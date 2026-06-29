@@ -1182,6 +1182,31 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
 }
 
 #[test]
+fn stream_udp_inbound_direct_response_target_conversion_is_protocol_owned() {
+    let trojan_inbound = read("src/inbound/trojan.rs");
+    let mieru_inbound = read("src/inbound/mieru.rs");
+    let trojan_protocol = fs::read_to_string(repo_root().join("protocols/trojan/src/inbound.rs"))
+        .expect("read trojan protocol inbound source");
+    let mieru_protocol = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
+        .expect("read mieru protocol udp source");
+
+    assert!(
+        trojan_inbound.contains("write_response_to_socket_addr_tokio")
+            && !trojan_inbound.contains("socket_addr_to_ip(sender)")
+            && trojan_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
+            && trojan_protocol.contains("fn address_from_socket_addr"),
+        "Trojan inbound UDP direct response target conversion should live behind the protocol UDP session"
+    );
+    assert!(
+        mieru_inbound.contains("write_response_for_sender_tokio")
+            && !mieru_inbound.contains("address_from_socket_addr(sender)")
+            && mieru_protocol.contains("pub async fn write_response_for_sender_tokio")
+            && mieru_protocol.contains("fn address_from_socket_addr"),
+        "Mieru inbound UDP direct response target conversion should live behind the protocol UDP session"
+    );
+}
+
+#[test]
 fn trojan_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/trojan.rs");
     let adapter = read("src/adapters/trojan/inbound.rs");
@@ -5033,7 +5058,8 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && inbound.contains("view.pipe_parts()")
             && !inbound.contains("udp_session.read_dispatch_parts(&mut client)")
             && inbound.contains("udp_session.write_response(&mut client")
-            && inbound.contains("udp_session.write_response_to_ip(&mut client")
+            && inbound.contains("udp_session")
+            && inbound.contains(".write_response_to_socket_addr_tokio(&mut client")
             && !inbound.contains("request.into_dispatch_parts()")
             && !inbound.contains("request.client_session_id")
             && inbound.contains("pkt.into_parts()")
@@ -5062,6 +5088,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_inbound.contains("fn read_packet")
             && protocol_inbound.contains("fn write_response")
             && protocol_inbound.contains("fn write_response_to_ip")
+            && protocol_inbound.contains("fn write_response_to_socket_addr_tokio")
             && protocol_outbound.contains("read_udp_flow_packet")
             && !protocol_outbound.contains("pub async fn read_udp_flow_packet")
             && protocol_outbound.contains("write_udp_flow_packet"),

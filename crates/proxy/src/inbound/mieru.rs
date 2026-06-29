@@ -242,16 +242,10 @@ impl Proxy {
                     let (n, sender) = recv?;
                     last_activity = TokioInstant::now();
 
-                    let target = crate::runtime::udp_flow::helpers::address_from_socket_addr(sender);
                     let session_id = dispatch.direct_response_session_id(sender);
                     record_udp_inbound_response_rx(self, session_id, n);
                     let written = udp_session
-                        .write_response_for_target_tokio(
-                            &mut client,
-                            &target,
-                            sender.port(),
-                            &direct_buf[..n],
-                        )
+                        .write_response_for_sender_tokio(&mut client, sender, &direct_buf[..n])
                         .await?;
                     record_udp_inbound_response_tx(self, session_id, written);
                 }
