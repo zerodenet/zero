@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 
-use shadowsocks::udp::ShadowsocksInboundUdpSession;
 use shadowsocks::ShadowsocksInboundProfile;
 use tokio::net::UdpSocket;
 use tracing::warn;
@@ -13,7 +12,6 @@ use zero_core::ProtocolType;
 use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
-use crate::runtime::udp_flow::helpers::address_from_socket_addr;
 use crate::runtime::Proxy;
 
 impl Proxy {
@@ -75,15 +73,16 @@ impl Proxy {
                     let (n, sender) = recv?;
                     if let Some(sid) = dispatch.direct_response_session_id(sender) {
                         if let Some(&client) = client_sessions.get(&sid) {
-                            ss_send_protocol_response(SsProtocolResponse {
-                                socket: udp_socket.as_ref(),
-                                udp_session: &udp_session,
-                                session_id: sid,
-                                target: &address_from_socket_addr(sender),
-                                port: sender.port(),
-                                payload: &direct_buf[..n],
+                            let target = crate::runtime::udp_flow::helpers::address_from_socket_addr(sender);
+                            ss_send_protocol_response(
+                                &udp_session,
+                                udp_socket.as_ref(),
+                                sid,
+                                &target,
+                                sender.port(),
+                                &direct_buf[..n],
                                 client,
-                            })
+                            )
                             .await;
                         }
                     }
@@ -94,15 +93,15 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             if let Some(sid) = session_id {
                                 if let Some(&client) = client_sessions.get(&sid) {
-                                    ss_send_protocol_response(SsProtocolResponse {
-                                        socket: udp_socket.as_ref(),
-                                        udp_session: &udp_session,
-                                        session_id: sid,
-                                        target: &target,
+                                    ss_send_protocol_response(
+                                        &udp_session,
+                                        udp_socket.as_ref(),
+                                        sid,
+                                        &target,
                                         port,
-                                        payload: &payload,
+                                        &payload,
                                         client,
-                                    })
+                                    )
                                     .await;
                                 }
                             }
@@ -120,33 +119,19 @@ impl Proxy {
     }
 }
 
-/// Encode and send one Shadowsocks UDP response datagram.
-///
-/// For 2022 (blake3) ciphers this produces a server-to-client response that
-/// echoes `client_session_id` (SIP022 3.2.3); for legacy AEAD it produces the
-/// stateless datagram via the shared codec.
-struct SsProtocolResponse<'a> {
-    socket: &'a UdpSocket,
-    udp_session: &'a ShadowsocksInboundUdpSession,
+async fn ss_send_protocol_response(
+    udp_session: &shadowsocks::udp::ShadowsocksInboundUdpSession,
+    socket: &UdpSocket,
     session_id: u64,
-    target: &'a zero_core::Address,
+    target: &zero_core::Address,
     port: u16,
-    payload: &'a [u8],
+    payload: &[u8],
     client: SocketAddr,
-}
-
-async fn ss_send_protocol_response(response: SsProtocolResponse<'_>) {
-    let resp = response.udp_session.response_frame_for_proxy_session(
-        response.session_id,
-        response.target,
-        response.port,
-        response.payload,
-    );
-    let Ok(response_datagram) = resp else {
+) {
+    let Ok(datagram) =
+        udp_session.response_datagram_for_proxy_session(session_id, target, port, payload)
+    else {
         return;
     };
-    let _ = response
-        .socket
-        .send_to(response_datagram.datagram(), response.client)
-        .await;
+    let _ = socket.send_to(datagram.as_slice(), client).await;
 }

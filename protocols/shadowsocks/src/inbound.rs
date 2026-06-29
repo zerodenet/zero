@@ -430,6 +430,20 @@ impl ShadowsocksInboundUdpSession {
         self.response_frame(&response_target, payload)
     }
 
+    pub fn response_datagram_for_proxy_session(
+        &self,
+        proxy_session_id: u64,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<ShadowsocksInboundUdpResponseDatagram, Error> {
+        let datagram =
+            self.response_frame_for_proxy_session(proxy_session_id, target, port, payload)?;
+        Ok(ShadowsocksInboundUdpResponseDatagram {
+            datagram: datagram.into_datagram(),
+        })
+    }
+
     pub fn record_proxy_session(&mut self, proxy_session_id: u64, client_session_id: Option<u64>) {
         if client_session_id.is_some() {
             self.proxy_sessions
@@ -451,6 +465,31 @@ impl ShadowsocksInboundUdpSession {
             target,
             port,
         )
+    }
+}
+
+#[cfg(feature = "crypto")]
+#[derive(Debug)]
+pub struct ShadowsocksInboundUdpResponseDatagram {
+    datagram: Vec<u8>,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksInboundUdpResponseDatagram {
+    pub fn len(&self) -> usize {
+        self.datagram.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.datagram.is_empty()
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.datagram
+    }
+
+    pub fn into_datagram(self) -> Vec<u8> {
+        self.datagram
     }
 }
 
