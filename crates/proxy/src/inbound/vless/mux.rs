@@ -15,8 +15,6 @@ use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
 
-use super::model::VlessMuxUdpStreamTask;
-
 impl Proxy {
     pub(crate) async fn handle_vless_mux_session<S>(
         &self,
@@ -91,13 +89,11 @@ impl Proxy {
                                     relay_tasks.spawn(async move {
                                         proxy_clone
                                             .spawn_vless_mux_udp_stream_task(
-                                                VlessMuxUdpStreamTask {
-                                                    mux_session_id: sid,
-                                                    up_rx,
-                                                    writer,
-                                                    inbound_tag: &inbound_tag_owned,
-                                                    auth: auth_clone.as_ref(),
-                                                },
+                                                sid,
+                                                up_rx,
+                                                writer,
+                                                &inbound_tag_owned,
+                                                auth_clone.as_ref(),
                                             )
                                             .await;
                                     });
@@ -128,14 +124,14 @@ impl Proxy {
         Ok(())
     }
 
-    pub(crate) async fn spawn_vless_mux_udp_stream_task(&self, request: VlessMuxUdpStreamTask<'_>) {
-        let VlessMuxUdpStreamTask {
-            mux_session_id,
-            up_rx,
-            writer,
-            inbound_tag,
-            auth,
-        } = request;
+    pub(crate) async fn spawn_vless_mux_udp_stream_task(
+        &self,
+        mux_session_id: u16,
+        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+        writer: vless::mux::VlessInboundMuxWriter,
+        inbound_tag: &str,
+        auth: Option<&zero_core::SessionAuth>,
+    ) {
         let mut up_rx = up_rx;
         let mut dispatch = match UdpDispatch::new(inbound_tag).await {
             Ok(dispatch) => dispatch,

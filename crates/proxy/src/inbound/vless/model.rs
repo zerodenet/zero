@@ -1,5 +1,3 @@
-use zero_core::SessionAuth;
-
 pub(crate) struct VlessInboundRequest {
     pub(crate) inbound: zero_config::InboundConfig,
     pub(crate) profile: vless::VlessInboundProfile,
@@ -11,12 +9,4 @@ pub(crate) struct VlessInboundRequest {
     pub(crate) http_upgrade: Option<Box<zero_config::HttpUpgradeConfig>>,
     pub(crate) split_http: Option<Box<zero_config::SplitHttpConfig>>,
     pub(crate) fallback: Option<Box<zero_config::FallbackConfig>>,
-}
-
-pub(crate) struct VlessMuxUdpStreamTask<'a> {
-    pub(crate) mux_session_id: u16,
-    pub(crate) up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-    pub(crate) writer: vless::mux::VlessInboundMuxWriter,
-    pub(crate) inbound_tag: &'a str,
-    pub(crate) auth: Option<&'a SessionAuth>,
 }

@@ -5136,7 +5136,7 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
 }
 
 #[test]
-fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
+fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
     let root = read("src/inbound/vmess/mux.rs");
     let model = read("src/inbound/vmess/model.rs");
 
@@ -5145,18 +5145,20 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         "struct VmessMuxUdpStreamTask",
     ] {
         assert!(
-            !root.contains(forbidden),
-            "inbound/vmess/mux.rs should keep MUX task models in inbound/vmess/model.rs; found `{forbidden}`"
+            !root.contains(forbidden) && !model.contains(forbidden),
+            "VMess inbound MUX task models should not be proxy model-layer structs; found `{forbidden}`"
         );
     }
 
-    for required in [
-        "struct VmessMuxTcpStreamTask",
-        "struct VmessMuxUdpStreamTask",
+    for forbidden in [
+        "writer: vmess::mux::VmessInboundMuxWriter",
+        "mpsc::UnboundedReceiver<Vec<u8>>",
+        "tasks: &'a mut JoinSet<()>",
+        "pub(crate) session: Session",
     ] {
         assert!(
-            model.contains(required),
-            "VMess inbound MUX task model should live in inbound/vmess/model.rs; missing `{required}`"
+            !model.contains(forbidden),
+            "inbound/vmess/model.rs should only keep inbound request models, not MUX runtime task fields `{forbidden}`"
         );
     }
     assert!(
@@ -5213,7 +5215,6 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
             && protocol_mux.contains("ProtocolType::Vmess")
             && !root.contains("network,")
             && !root.contains("Session::new(0,")
-            && model.contains("pub(crate) session: Session")
             && !model.contains("pub(crate) target: Address")
             && !model.contains("pub(crate) port: u16"),
         "VMess inbound MUX new-stream Session conversion should be protocol-owned and exposed as an action"
@@ -5432,20 +5433,19 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
 }
 
 #[test]
-fn inbound_vless_mux_task_model_lives_outside_mux_root() {
+fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
     let root = read("src/inbound/vless/mux.rs");
     let model = read("src/inbound/vless/model.rs");
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
         .expect("read protocols/vless/src/mux.rs");
 
     assert!(
-        !root.contains("struct VlessMuxUdpStreamTask"),
-        "inbound/vless/mux.rs should keep MUX task models in inbound/vless/model.rs"
-    );
-
-    assert!(
-        model.contains("struct VlessMuxUdpStreamTask"),
-        "VLESS inbound MUX task model should live in inbound/vless/model.rs"
+        !root.contains("struct VlessMuxUdpStreamTask")
+            && !model.contains("struct VlessMuxUdpStreamTask")
+            && !model.contains("writer: vless::mux::VlessInboundMuxWriter")
+            && !model.contains("tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>")
+            && !model.contains("SessionAuth"),
+        "VLESS inbound MUX task model should not be a proxy model-layer struct"
     );
     assert!(
         root.contains("VlessInboundMuxWriter::channel")
@@ -5459,7 +5459,6 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
             && !root.contains("AsyncReadExt")
             && !root.contains("writer.data(")
             && !root.contains("writer.end(")
-            && model.contains("writer: vless::mux::VlessInboundMuxWriter")
             && !root.contains("mpsc::unbounded_channel::<(u16, Vec<u8>)>")
             && !root.contains("HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>")
             && !root.contains("mpsc::unbounded_channel()")
@@ -5479,7 +5478,7 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
             && protocol_mux.contains("pub fn channel()")
             && protocol_mux.contains("pub fn write_inbound_stream_payload")
             && protocol_mux.contains("mpsc::unbounded_channel::<VlessInboundMuxDownlink>()"),
-        "VLESS inbound MUX task model should carry protocol-owned writer/stream relay state and keep raw channel shapes in protocols/vless"
+        "VLESS inbound MUX glue should rely on protocol-owned writer/stream relay state and keep raw channel shapes in protocols/vless"
     );
 }
 
