@@ -4,8 +4,8 @@ use crate::adapters::common::unreachable_leaf;
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_flow::packet_path::{
-    packet_path_carrier_descriptor_from_build, udp_datagram_source_from_build, DatagramCodec,
-    PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
+    packet_path_carrier_descriptor_from_build, udp_datagram_source_from_build, PacketPathCarrier,
+    PacketPathCarrierDescriptor, UdpDatagramSource,
 };
 use crate::runtime::Proxy;
 
@@ -19,10 +19,11 @@ impl crate::runtime::udp_flow::packet_path::UdpDatagramSourceBuild
         String,
         u16,
         String,
-        std::sync::Arc<dyn DatagramCodec<zero_core::Address, Error = zero_core::Error>>,
+        std::sync::Arc<
+            dyn zero_traits::DatagramCodec<zero_core::Address, Error = zero_core::Error>,
+        >,
     ) {
-        let (tag, server, port, cache_key, codec) = self.into_parts();
-        (tag, server, port, cache_key, std::sync::Arc::new(codec))
+        self.into_shared_codec_parts()
     }
 }
 

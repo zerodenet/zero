@@ -10263,7 +10263,9 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
             && !adapter_packet_path.contains("datagram.cache_key()")
             && !adapter_packet_path.contains("datagram.codec()")
-            && adapter_packet_path
+            && adapter_packet_path.contains("self.into_shared_codec_parts()")
+            && !adapter_packet_path.contains("Arc::new(codec)")
+            && !adapter_packet_path
                 .contains("let (tag, server, port, cache_key, codec) = self.into_parts();")
             && !adapter_packet_path.contains("self.codec()")
             && !adapter_packet_path.contains("datagram.tag()")
@@ -10281,6 +10283,7 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && !protocol_outbound.contains("pub fn udp_flow_codec(")
             && protocol_outbound.contains("struct ShadowsocksUdpFlowConfig")
             && protocol_outbound.contains("pub fn flow_resume(&self)")
+            && protocol_outbound.contains("pub fn into_shared_codec_parts")
             && protocol_outbound.contains("pub fn udp_flow_resume_from_config(")
             && protocol_outbound.contains("pub fn packet_path_spec(&self)")
             && protocol_outbound.contains("pub fn udp_packet_path_spec_from_config(")
@@ -10708,7 +10711,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
             && !adapter_packet_path.contains("datagram.cache_key()")
             && !adapter_packet_path.contains("datagram.codec()")
-            && shadowsocks_packet_path
+            && shadowsocks_packet_path.contains("self.into_shared_codec_parts()")
+            && !shadowsocks_packet_path.contains("Arc::new(codec)")
+            && !shadowsocks_packet_path
                 .contains("let (tag, server, port, cache_key, codec) = self.into_parts();")
             && !shadowsocks_packet_path.contains("self.codec()")
             && !adapter_packet_path.contains("datagram.tag()")
@@ -10721,7 +10726,9 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
             && !adapter_packet_path.contains("spec.datagram_cache_key()")
             && !adapter_packet_path.contains("spec.codec()")
             && !adapter_packet_path.contains(".packet_path_cache_key()")
-            && !adapter_packet_path.contains(".packet_path_codec()"),
+            && !adapter_packet_path.contains(".packet_path_codec()")
+            && protocol_outbound.contains("pub fn into_shared_codec_parts")
+            && protocol_outbound.contains("Arc::new(codec)"),
         "Shadowsocks adapter should request protocol-built packet-path bundles through explicit protocol packet-path helpers"
     );
     assert!(
@@ -10960,9 +10967,13 @@ fn udp_build_traits_consume_protocol_parts() {
                 .contains("let (tag, server, port, cache_key, codec) = build.into_parts();")
             && !packet_path.contains("fn tag(&self) -> &str;")
             && !packet_path.contains("fn cache_key(&self) -> String;")
-            && shadowsocks_packet_path
+            && shadowsocks_packet_path.contains("self.into_shared_codec_parts()")
+            && !shadowsocks_packet_path
                 .contains("let (tag, server, port, cache_key, codec) = self.into_parts();")
             && !shadowsocks_packet_path.contains("self.into_codec()")
+            && !shadowsocks_packet_path.contains("Arc::new(codec)")
+            && shadowsocks_protocol.contains("pub fn into_shared_codec_parts")
+            && shadowsocks_protocol.contains("Arc::new(codec)")
             && shadowsocks_protocol.contains("pub fn into_parts(")
             && shadowsocks_protocol.contains("self.tag, self.server, self.port, self.cache_key"),
         "packet-path datagram sources should consume protocol-built source parts and codec in one step"

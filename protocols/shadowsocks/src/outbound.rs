@@ -698,6 +698,19 @@ impl ShadowsocksUdpPacketPathDatagramSourceBuild {
     pub fn into_codec(self) -> ShadowsocksDatagramCodec {
         self.codec
     }
+
+    pub fn into_shared_codec_parts(
+        self,
+    ) -> (
+        alloc::string::String,
+        alloc::string::String,
+        u16,
+        alloc::string::String,
+        alloc::sync::Arc<dyn DatagramCodec<Address, Error = Error>>,
+    ) {
+        let (tag, server, port, cache_key, codec) = self.into_parts();
+        (tag, server, port, cache_key, alloc::sync::Arc::new(codec))
+    }
 }
 
 #[cfg(feature = "crypto")]
