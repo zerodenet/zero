@@ -28,6 +28,10 @@ impl TrojanInboundProfile {
         Self::from_config(password)
     }
 
+    pub fn from_config_password(password: impl Into<String>) -> Self {
+        Self::from_config_parts(password)
+    }
+
     pub fn inbound_auth(&self) -> SessionAuth {
         TrojanInbound.inbound_auth(self.password.clone())
     }

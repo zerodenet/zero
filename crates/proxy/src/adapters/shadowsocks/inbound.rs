@@ -27,14 +27,16 @@ impl ShadowsocksAdapter {
                     )));
                 }
             };
-            let profile =
-                shadowsocks::ShadowsocksInboundProfile::from_config_parts(&cipher_name, &password)
-                    .map_err(|error| {
-                        EngineError::Io(std::io::Error::new(
-                            std::io::ErrorKind::InvalidInput,
-                            format!("invalid shadowsocks inbound profile: {error}"),
-                        ))
-                    })?;
+            let profile = shadowsocks::ShadowsocksInboundProfile::from_config_cipher_password(
+                &cipher_name,
+                &password,
+            )
+            .map_err(|error| {
+                EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("invalid shadowsocks inbound profile: {error}"),
+                ))
+            })?;
             crate::inbound::run_shadowsocks_listener_with_bound(
                 &p,
                 crate::inbound::shadowsocks::ShadowsocksInboundRequest { inbound, profile },

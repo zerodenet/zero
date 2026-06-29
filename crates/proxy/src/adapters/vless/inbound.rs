@@ -29,7 +29,7 @@ fn parse_inbound_profile(
 
 fn parse_reality_profile(inbound: &InboundConfig) -> Option<vless::VlessRealityServerProfile> {
     inbound.protocol.vless_reality().map(|reality| {
-        vless::VlessRealityServerProfile::from_config_parts(
+        vless::VlessRealityServerProfile::from_config_server(
             reality.private_key.clone(),
             reality.short_ids.clone(),
             reality.server_name.clone(),

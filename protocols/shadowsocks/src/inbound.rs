@@ -100,6 +100,10 @@ impl ShadowsocksInboundProfile {
         Self::from_config(cipher_name, password)
     }
 
+    pub fn from_config_cipher_password(cipher_name: &str, password: &str) -> Result<Self, Error> {
+        Self::from_config_parts(cipher_name, password)
+    }
+
     pub fn cipher_name(&self) -> &str {
         &self.cipher_name
     }

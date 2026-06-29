@@ -26,7 +26,9 @@ mod inbound;
 mod outbound;
 
 #[cfg(feature = "crypto")]
-pub use inbound::{MieruAccept, MieruInbound, MieruInboundProfile, MieruInboundStream};
+pub use inbound::{
+    IntoMieruInboundUserConfig, MieruAccept, MieruInbound, MieruInboundProfile, MieruInboundStream,
+};
 #[cfg(feature = "crypto")]
 pub use outbound::{
     establish_tcp_tunnel, MieruOutbound, MieruTcpOutboundProfile, MieruTcpStream, MieruTcpTarget,

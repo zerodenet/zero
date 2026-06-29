@@ -38,6 +38,14 @@ impl MieruInboundProfile {
         Self::from_config(users.into_iter().collect())
     }
 
+    pub fn from_config_users<I, U>(users: I) -> Self
+    where
+        I: IntoIterator<Item = U>,
+        U: IntoMieruInboundUserConfig,
+    {
+        Self::from_config_parts(users.into_iter().map(U::into_mieru_inbound_user_config))
+    }
+
     pub fn inbound_auth(&self) -> SessionAuth {
         MieruInbound.inbound_auth()
     }
@@ -48,6 +56,16 @@ impl MieruInboundProfile {
         stream: &mut S,
     ) -> Result<MieruAccept, Error> {
         inbound.accept_request(stream, &self.users).await
+    }
+}
+
+pub trait IntoMieruInboundUserConfig {
+    fn into_mieru_inbound_user_config(self) -> (String, String);
+}
+
+impl IntoMieruInboundUserConfig for (String, String) {
+    fn into_mieru_inbound_user_config(self) -> (String, String) {
+        self
     }
 }
 

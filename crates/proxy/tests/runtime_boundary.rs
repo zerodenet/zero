@@ -1165,6 +1165,8 @@ fn socks5_inbound_uses_adapter_request_model() {
 fn mieru_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/mieru.rs");
     let adapter = read("src/adapters/mieru/inbound.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
+        .expect("read mieru protocol inbound source");
 
     assert!(
         inbound.contains("struct MieruInboundRequest")
@@ -1188,7 +1190,9 @@ fn mieru_inbound_uses_adapter_request_model() {
             && !inbound.contains("pub(crate) users: Vec<(String, String)>")
             && !inbound.contains("users: Vec<(String, String)>")
             && !inbound.contains("accept_request(&mut metered, &self.users)")
-            && adapter.contains("MieruInboundProfile::from_config_parts")
+            && adapter.contains("MieruInboundProfile::from_config_users")
+            && !adapter.contains("MieruInboundProfile::from_config_parts")
+            && protocol_inbound.contains("pub fn from_config_users")
             && !adapter.contains(".collect::<Vec<_>>()")
             && !adapter.contains("MieruInboundProfile::from_config(profile)"),
         "Mieru inbound listener should receive a protocol-owned profile instead of raw user/password tuples"
@@ -1200,6 +1204,9 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/shadowsocks.rs");
     let udp = read("src/inbound/shadowsocks/udp.rs");
     let adapter = read("src/adapters/shadowsocks/inbound.rs");
+    let protocol_inbound =
+        fs::read_to_string(repo_root().join("protocols/shadowsocks/src/inbound.rs"))
+            .expect("read shadowsocks protocol inbound source");
 
     assert!(
         inbound.contains("struct ShadowsocksInboundRequest")
@@ -1232,8 +1239,10 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         "Shadowsocks inbound listener should delegate TCP replay state and salt checks to the protocol crate"
     );
     assert!(
-        adapter.contains("ShadowsocksInboundProfile::from_config_parts")
-            && !adapter.contains("CipherKind::from_str"),
+        adapter.contains("ShadowsocksInboundProfile::from_config_cipher_password")
+            && !adapter.contains("ShadowsocksInboundProfile::from_config_parts")
+            && !adapter.contains("CipherKind::from_str")
+            && protocol_inbound.contains("pub fn from_config_cipher_password"),
         "Shadowsocks adapter should delegate inbound profile validation to the protocol crate"
     );
     assert!(
@@ -1416,7 +1425,8 @@ fn trojan_inbound_uses_adapter_request_model() {
             && !inbound.contains("build_tls_acceptor")
             && !inbound.contains("zero_config::TlsConfig")
             && !inbound.contains("std::slice::from_ref(&self.password)")
-            && adapter.contains("TrojanInboundProfile::from_config_parts")
+            && adapter.contains("TrojanInboundProfile::from_config_password")
+            && !adapter.contains("TrojanInboundProfile::from_config_parts")
             && adapter.contains("crate::transport::build_tls_acceptor")
             && adapter.contains("tls_acceptor")
             && !adapter.contains("password.clone(), tls.clone()"),
@@ -1598,7 +1608,8 @@ fn vless_inbound_users_are_adapter_parsed() {
             && adapter.contains("parse_reality_profile")
             && adapter.contains("crate::transport::build_tls_acceptor")
             && adapter.contains("tls_acceptor")
-            && adapter.contains("VlessRealityServerProfile::from_config_parts")
+            && adapter.contains("VlessRealityServerProfile::from_config_server")
+            && !adapter.contains("VlessRealityServerProfile::from_config_parts")
             && !adapter.contains("VlessRealityServerProfile::new")
             && !listener.contains("build_tls_acceptor")
             && !listener.contains("zero_config::TlsConfig")
@@ -1669,7 +1680,8 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && !inbound.contains("pub(crate) password: String")
             && !adapter.contains("up_bps")
             && !adapter.contains("down_bps")
-            && adapter.contains("Hysteria2InboundProfile::from_config_parts"),
+            && adapter.contains("Hysteria2InboundProfile::from_config_password")
+            && !adapter.contains("Hysteria2InboundProfile::from_config_parts"),
         "Hysteria2 inbound listener should receive only protocol-owned profile data, not raw password or unused rate-limit config"
     );
     for forbidden in [

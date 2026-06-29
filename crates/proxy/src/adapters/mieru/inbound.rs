@@ -18,7 +18,7 @@ impl MieruAdapter {
         listeners.spawn(async move {
             let profile = match &inbound.protocol {
                 InboundProtocolConfig::Mieru { users } => {
-                    mieru::MieruInboundProfile::from_config_parts(
+                    mieru::MieruInboundProfile::from_config_users(
                         users
                             .iter()
                             .map(|user| (user.username.clone(), user.password.clone())),
