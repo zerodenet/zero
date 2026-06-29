@@ -310,11 +310,13 @@ impl Proxy {
                                     auth: None,
                                     client_session_id,
                                 })
-                                .await.inspect(|sid| {
-                                parts.record_dispatch_success(&mut udp_session, *sid);
-                            }).inspect_err(|e| {
-                                warn!(error = %e, "h2 udp dispatch failed");
-                            });
+                                .await
+                                .inspect(|sid| {
+                                    udp_session.record_dispatch_success(*sid, &parts);
+                                })
+                                .inspect_err(|e| {
+                                    warn!(error = %e, "h2 udp dispatch failed");
+                                });
                         }
                         Err(e) => {
                             warn!(error = %e, "hysteria2 datagram read/decode error");

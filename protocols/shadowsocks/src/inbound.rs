@@ -224,15 +224,6 @@ impl ShadowsocksInboundUdpDispatchParts {
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }
-
-    pub fn record_dispatch_success(
-        &self,
-        udp_session: &mut ShadowsocksInboundUdpSession,
-        proxy_session_id: u64,
-        client: std::net::SocketAddr,
-    ) {
-        udp_session.record_dispatched_client_session(proxy_session_id, self, client);
-    }
 }
 
 #[cfg(feature = "crypto")]
@@ -524,7 +515,7 @@ impl ShadowsocksInboundUdpSession {
         self.proxy_clients.insert(proxy_session_id, client);
     }
 
-    fn record_dispatched_client_session(
+    pub fn record_dispatch_success(
         &mut self,
         proxy_session_id: u64,
         dispatch_parts: &ShadowsocksInboundUdpDispatchParts,

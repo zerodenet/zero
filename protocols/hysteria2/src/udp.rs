@@ -124,14 +124,6 @@ impl Hysteria2InboundUdpDispatchParts {
     pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }
-
-    pub fn record_dispatch_success(
-        &self,
-        udp_session: &mut Hysteria2InboundUdpSession,
-        proxy_session_id: u64,
-    ) {
-        udp_session.record_dispatched_proxy_session(proxy_session_id, self);
-    }
 }
 
 impl Hysteria2InboundUdpRequest {
@@ -230,7 +222,7 @@ impl Hysteria2InboundUdpSession {
         self.record_proxy_session(proxy_session_id, parts.request_session_id);
     }
 
-    fn record_dispatched_proxy_session(
+    pub fn record_dispatch_success(
         &mut self,
         proxy_session_id: u64,
         parts: &Hysteria2InboundUdpDispatchParts,
