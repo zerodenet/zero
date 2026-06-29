@@ -189,6 +189,22 @@ impl ShadowsocksTcpConnectConfig {
         }
     }
 
+    pub async fn establish_tcp_session<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+    ) -> Result<ShadowsocksOutboundSession, Error>
+    where
+        S: AsyncSocket,
+    {
+        <ShadowsocksOutbound as TcpSessionProtocol<ShadowsocksTcpTarget<'_>>>::establish_tcp_session(
+            &ShadowsocksOutbound,
+            stream,
+            &self.tcp_target(session),
+        )
+        .await
+    }
+
     pub fn wrap_outbound_stream<S>(
         &self,
         stream: S,

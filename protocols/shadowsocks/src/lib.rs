@@ -17,7 +17,7 @@ pub use inbound::{ShadowsocksAccept, ShadowsocksInboundProfile, ShadowsocksInbou
 pub use metadata::ShadowsocksProtocol;
 pub use outbound::ShadowsocksOutbound;
 #[cfg(feature = "crypto")]
-pub use outbound::{ShadowsocksOutboundSession, ShadowsocksTcpConnectConfig, ShadowsocksTcpTarget};
+pub use outbound::{ShadowsocksOutboundSession, ShadowsocksTcpConnectConfig};
 #[cfg(feature = "crypto")]
 pub use shared::{
     aead_decrypt, aead_encrypt, decrypt_tcp_chunk_length, decrypt_tcp_chunk_payload,

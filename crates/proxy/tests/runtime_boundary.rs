@@ -2427,7 +2427,10 @@ fn shadowsocks_tcp_connect_uses_request_model() {
             && adapter.contains("config: shadowsocks::ShadowsocksTcpConnectConfig")
             && !adapter.contains("cipher: shadowsocks::CipherKind")
             && !adapter.contains("ShadowsocksTcpTarget {")
-            && adapter.contains("config.tcp_target(session)")
+            && !adapter.contains("ShadowsocksTcpTarget")
+            && !adapter.contains("TcpSessionProtocol")
+            && !adapter.contains("config.tcp_target(session)")
+            && adapter.contains("config.establish_tcp_session(")
             && adapter.contains("config.wrap_outbound_stream(")
             && !adapter.contains("password_bytes()")
             && !adapter.contains("ShadowsocksAeadStream::outbound")
@@ -2435,9 +2438,10 @@ fn shadowsocks_tcp_connect_uses_request_model() {
             && protocol_outbound.contains("pub fn from_config")
             && protocol_outbound.contains("CipherKind::from_str")
             && protocol_outbound.contains("pub fn tcp_target")
+            && protocol_outbound.contains("pub async fn establish_tcp_session")
             && protocol_outbound.contains("pub fn wrap_outbound_stream")
             && protocol_outbound.contains("ShadowsocksAeadStream::outbound"),
-        "Shadowsocks TCP adapter should ask protocols/shadowsocks to parse cipher config, build TCP targets, and wrap outbound streams"
+        "Shadowsocks TCP adapter should ask protocols/shadowsocks to parse cipher config, establish TCP sessions, and wrap outbound streams"
     );
 }
 

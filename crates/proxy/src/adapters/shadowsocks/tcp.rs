@@ -1,6 +1,5 @@
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_traits::TcpSessionProtocol;
 
 use crate::adapters::common::unreachable_leaf;
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
@@ -91,14 +90,7 @@ async fn connect_tcp(
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
     let mut metered = MeteredStream::new(upstream);
-    let ss_session = <shadowsocks::ShadowsocksOutbound as TcpSessionProtocol<
-        shadowsocks::ShadowsocksTcpTarget,
-    >>::establish_tcp_session(
-        &shadowsocks::ShadowsocksOutbound,
-        &mut metered,
-        &config.tcp_target(session),
-    )
-    .await?;
+    let ss_session = config.establish_tcp_session(&mut metered, session).await?;
     proxy.record_session_outbound_traffic(session.id, metered.drain_traffic());
     let upstream = TcpRelayStream::from(metered.into_inner());
     Ok(TcpRelayStream::new(
@@ -111,15 +103,10 @@ async fn apply_tcp_hop(
     session: &Session,
     config: shadowsocks::ShadowsocksTcpConnectConfig,
 ) -> Result<TcpRelayStream, EngineError> {
-    let ss_session = <shadowsocks::ShadowsocksOutbound as TcpSessionProtocol<
-        shadowsocks::ShadowsocksTcpTarget,
-    >>::establish_tcp_session(
-        &shadowsocks::ShadowsocksOutbound,
-        &mut stream,
-        &config.tcp_target(session),
-    )
-    .await
-    .map_err(|error| EngineError::Io(std::io::Error::other(error)))?;
+    let ss_session = config
+        .establish_tcp_session(&mut stream, session)
+        .await
+        .map_err(|error| EngineError::Io(std::io::Error::other(error)))?;
     Ok(TcpRelayStream::new(
         config.wrap_outbound_stream(stream, ss_session),
     ))
