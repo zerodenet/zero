@@ -2,10 +2,11 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use mieru::{
-    build_data_segment, derive_key, DataMetadata, MieruCipher, MieruOutbound, MieruSession,
-    DATA_SERVER_TO_CLIENT,
-};
+use mieru::crypto::{derive_key, MieruCipher};
+use mieru::metadata::{DataMetadata, DATA_SERVER_TO_CLIENT};
+use mieru::segment::build_data_segment;
+use mieru::session::MieruSession;
+use mieru::MieruOutbound;
 
 #[test]
 fn decrypt_server_data_waits_for_complete_segment() {

@@ -5292,6 +5292,16 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
     let root = read("src/inbound/mieru.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/mieru/src/lib.rs"))
+        .expect("read mieru protocol lib source");
+    let protocol_crypto = fs::read_to_string(repo_root().join("protocols/mieru/src/crypto.rs"))
+        .expect("read mieru protocol crypto source");
+    let protocol_segment = fs::read_to_string(repo_root().join("protocols/mieru/src/segment.rs"))
+        .expect("read mieru protocol segment source");
+    let protocol_session = fs::read_to_string(repo_root().join("protocols/mieru/src/session.rs"))
+        .expect("read mieru protocol session source");
+    let protocol_metadata = fs::read_to_string(repo_root().join("protocols/mieru/src/metadata.rs"))
+        .expect("read mieru protocol metadata source");
 
     for forbidden in [
         "struct MieruClientStream",
@@ -5317,6 +5327,39 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
     assert!(
         !manifest_dir().join("src/inbound/mieru/model.rs").exists(),
         "Mieru proxy inbound should not keep a protocol data-phase stream model"
+    );
+
+    for forbidden in [
+        "MieruInboundDataCodec",
+        "MieruCipher",
+        "derive_key",
+        "try_derive_keys",
+        "NonceConfig",
+        "NoncePattern",
+        "USER_HINT_LEN",
+        "build_data_segment",
+        "build_session_segment",
+        "parse_segment",
+        "Segment",
+        "MAX_FRAGMENT",
+        "MieruSession",
+        "DataMetadata",
+        "SessionMetadata",
+        "METADATA_LEN",
+    ] {
+        assert!(
+            !protocol_lib.contains(forbidden),
+            "protocols/mieru crate root should not re-export data-phase private detail `{forbidden}`"
+        );
+    }
+    assert!(
+        protocol_crypto.contains("pub struct MieruCipher")
+            && protocol_crypto.contains("pub fn derive_key")
+            && protocol_segment.contains("pub fn build_data_segment")
+            && protocol_segment.contains("pub fn parse_segment")
+            && protocol_session.contains("pub struct MieruSession")
+            && protocol_metadata.contains("pub struct DataMetadata"),
+        "Mieru data-phase details should remain available from protocol-owned submodules"
     );
 }
 
