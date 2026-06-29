@@ -1943,19 +1943,33 @@ fn socks5_tcp_adapter_uses_protocol_target_model() {
 fn mieru_tcp_connect_glue_lives_in_adapter_tcp_module() {
     let outbound = manifest_dir().join("src/outbound/mieru.rs");
     let adapter = read("src/adapters/mieru/tcp.rs");
+    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
+        .expect("read mieru protocol outbound source");
 
     assert!(
         !outbound.exists(),
         "Mieru should not need a protocol-named proxy outbound module; TCP glue lives in adapters/mieru/tcp.rs and protocol session setup lives in protocols/mieru"
     );
     assert!(
-        adapter.contains("struct MieruTcpStream")
-            && adapter.contains("async fn socks5_connect")
-            && adapter.contains("async fn connect_tcp(")
+        adapter.contains("async fn connect_tcp(")
             && adapter.contains("async fn apply_tcp_hop(")
-            && adapter.contains("TcpSessionProtocol<mieru::MieruTcpTarget>")
-            && adapter.contains("MieruTcpStream::new"),
-        "Mieru adapter TCP module should own the proxy-local encrypted stream wrapper and relay-hop glue"
+            && adapter.contains("mieru::establish_tcp_tunnel")
+            && adapter.contains("MieruTcpTunnelTarget::new")
+            && !adapter.contains("struct MieruTcpStream")
+            && !adapter.contains("async fn socks5_connect")
+            && !adapter.contains("encrypt_client_data")
+            && !adapter.contains("decrypt_server_data_with_consumed")
+            && !adapter.contains("TcpSessionProtocol<mieru::MieruTcpTarget>"),
+        "Mieru adapter TCP module should be thin connect/hop glue and delegate tunneled session details to protocols/mieru"
+    );
+    assert!(
+        protocol_outbound.contains("pub struct MieruTcpStream")
+            && protocol_outbound.contains("pub struct MieruTcpTunnelTarget")
+            && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
+            && protocol_outbound.contains("async fn socks5_connect")
+            && protocol_outbound.contains("encrypt_client_data")
+            && protocol_outbound.contains("decrypt_server_data_with_consumed"),
+        "Mieru protocol crate should own TCP encrypted stream and tunneled SOCKS5 connect details"
     );
 }
 
