@@ -1514,6 +1514,18 @@ fn vless_inbound_users_are_adapter_parsed() {
             && protocol_inbound.contains("pub struct VlessInboundProfile"),
         "VLESS inbound request model should live in inbound/vless/model.rs"
     );
+    let transport_split_http =
+        fs::read_to_string(repo_root().join("crates/transport/src/split_http.rs"))
+            .expect("read transport split_http source");
+    assert!(
+        session.contains("crate::transport::accept_xhttp_inbound")
+            && !session.contains("XhttpMode::parse")
+            && !session.contains("accept_xhttp_stream_one")
+            && !session.contains("accept_split_http")
+            && transport_split_http.contains("pub async fn accept_xhttp_inbound")
+            && transport_split_http.contains("XhttpMode::parse(&config.mode)"),
+        "VLESS inbound session glue should delegate XHTTP mode selection to the transport layer"
+    );
     let protocol_reality =
         fs::read_to_string(repo_root().join("protocols/vless/src/reality/stream.rs"))
             .expect("read vless reality stream source");

@@ -137,24 +137,19 @@ impl Proxy {
         } = transport;
 
         if let Some(cfg) = split_http_config {
-            // stream-one / auto: a single bidirectional connection. The server
-            // reads the client's POST, responds on the same socket, and the
-            // same stream carries upload + download. No registry needed.
-            if zero_transport::split_http::XhttpMode::parse(&cfg.mode).is_single_connection() {
-                let stream_one = crate::transport::accept_xhttp_stream_one(stream, cfg).await?;
-                return self
-                    .handle_vless_client(stream_one, inbound_tag, profile, fallback, sni)
-                    .await;
-            }
-        }
-        if let (Some(cfg), Some(reg)) = (split_http_config, split_http_registry) {
-            match crate::transport::accept_split_http(stream, cfg, reg).await? {
-                Some(split_stream) => {
+            let Some(reg) = split_http_registry else {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "vless inbound: split-http registry is required",
+                )));
+            };
+            match crate::transport::accept_xhttp_inbound(stream, cfg, reg).await? {
+                Some(xhttp_stream) => {
                     return self
-                        .handle_vless_client(split_stream, inbound_tag, profile, fallback, sni)
+                        .handle_vless_client(xhttp_stream, inbound_tag, profile, fallback, sni)
                         .await;
                 }
-                None => return Ok(()), // consumed by partner connection
+                None => return Ok(()),
             }
         }
         if let Some(cfg) = http_upgrade_config {

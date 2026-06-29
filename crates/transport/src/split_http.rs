@@ -297,6 +297,83 @@ impl<R, W> SplitHttpPairedStream<R, W> {
     }
 }
 
+/// Accepted inbound XHTTP/SplitHTTP stream.
+pub enum AcceptedSplitHttpInboundStream<S> {
+    StreamOne(XhttpStreamOne<S>),
+    Paired(SplitHttpStream<S>),
+}
+
+impl<S> AsyncRead for AcceptedSplitHttpInboundStream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+{
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            Self::StreamOne(stream) => Pin::new(stream).poll_read(cx, buf),
+            Self::Paired(stream) => Pin::new(stream).poll_read(cx, buf),
+        }
+    }
+}
+
+impl<S> AsyncWrite for AcceptedSplitHttpInboundStream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+{
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            Self::StreamOne(stream) => Pin::new(stream).poll_write(cx, buf),
+            Self::Paired(stream) => Pin::new(stream).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            Self::StreamOne(stream) => Pin::new(stream).poll_flush(cx),
+            Self::Paired(stream) => Pin::new(stream).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            Self::StreamOne(stream) => Pin::new(stream).poll_shutdown(cx),
+            Self::Paired(stream) => Pin::new(stream).poll_shutdown(cx),
+        }
+    }
+}
+
+impl<S> AsyncSocket for AcceptedSplitHttpInboundStream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+{
+    type Error = io::Error;
+
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        AsyncReadExt::read(self, buf).await
+    }
+
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        AsyncWriteExt::write_all(self, buf).await?;
+        AsyncWriteExt::flush(self).await
+    }
+
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        AsyncWriteExt::shutdown(self).await
+    }
+}
+
+impl<S> ClientStream for AcceptedSplitHttpInboundStream<S> where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync
+{
+}
+
 // ── client (outbound) connect ──
 
 /// Connect via SplitHTTP.
@@ -526,6 +603,27 @@ where
 }
 
 // ── AsyncRead (chunked decoder from reader) ──
+
+/// Accept either XHTTP stream-one or paired SplitHTTP inbound transport.
+pub async fn accept_xhttp_inbound<S>(
+    stream: S,
+    config: &SplitHttpConfig,
+    registry: &SplitHttpRegistry,
+) -> Result<Option<AcceptedSplitHttpInboundStream<S>>, EngineError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    if XhttpMode::parse(&config.mode).is_single_connection() {
+        return accept_xhttp_stream_one(stream, config)
+            .await
+            .map(AcceptedSplitHttpInboundStream::StreamOne)
+            .map(Some);
+    }
+
+    accept_split_http(stream, config, registry)
+        .await
+        .map(|stream| stream.map(AcceptedSplitHttpInboundStream::Paired))
+}
 
 impl<R, W> AsyncRead for SplitHttpPairedStream<R, W>
 where

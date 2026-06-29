@@ -32,9 +32,7 @@ pub(crate) use zero_transport::hysteria2_quic::{
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::quic::{connect_quic, QuicInbound};
 #[cfg(feature = "vless")]
-pub(crate) use zero_transport::split_http::{
-    accept_split_http, accept_xhttp_stream_one, SplitHttpRegistry,
-};
+pub(crate) use zero_transport::split_http::{accept_xhttp_inbound, SplitHttpRegistry};
 #[cfg(any(feature = "vless", feature = "trojan", feature = "vmess"))]
 pub(crate) use zero_transport::tls::build_tls_acceptor;
 #[cfg(feature = "vless")]
