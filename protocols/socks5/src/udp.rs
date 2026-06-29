@@ -383,6 +383,28 @@ impl Socks5InboundUdpSession {
         .await
     }
 
+    pub async fn send_response_to_client_target<S>(
+        &self,
+        socket: &S,
+        client: SocketAddress,
+        upstream_address: &Address,
+        upstream_port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>>
+    where
+        S: DatagramSocket,
+    {
+        self.send_response_to_client(
+            socket,
+            client.ip,
+            client.port,
+            upstream_address,
+            upstream_port,
+            payload,
+        )
+        .await
+    }
+
     pub async fn send_response_to_client_socket_addr<S>(
         &self,
         socket: &S,

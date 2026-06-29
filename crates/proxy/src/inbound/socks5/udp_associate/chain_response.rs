@@ -64,10 +64,9 @@ async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
 
     let udp_session = socks5::Socks5Inbound.udp_session();
     match udp_session
-        .send_response_to_client(
+        .send_response_to_client_target(
             request.relay,
-            zero_platform_tokio::socket_addr_to_ip(client_addr),
-            client_addr.port(),
+            zero_platform_tokio::socket_addr_to_socket_address(client_addr),
             request.target,
             request.port,
             request.payload,

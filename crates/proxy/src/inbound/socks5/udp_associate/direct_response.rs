@@ -3,7 +3,6 @@ use std::net::SocketAddr;
 use tracing::warn;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
-use zero_traits::{IpAddress, SocketAddress};
 
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
@@ -68,23 +67,12 @@ pub(super) async fn forward_direct_udp_response(
     udp_session
         .send_response_to_client_socket_addr(
             relay,
-            socket_address_from_std(client_addr),
-            socket_address_from_std(sender),
+            zero_platform_tokio::socket_addr_to_socket_address(client_addr),
+            zero_platform_tokio::socket_addr_to_socket_address(sender),
             payload,
         )
         .await
         .map_err(socks5_udp_relay_error_to_engine)
-}
-
-fn socket_address_from_std(addr: SocketAddr) -> SocketAddress {
-    SocketAddress::new(ip_address_from_std(addr.ip()), addr.port())
-}
-
-fn ip_address_from_std(ip: std::net::IpAddr) -> IpAddress {
-    match ip {
-        std::net::IpAddr::V4(ip) => IpAddress::V4(ip.octets()),
-        std::net::IpAddr::V6(ip) => IpAddress::V6(ip.octets()),
-    }
 }
 
 fn socks5_udp_relay_error_to_engine(

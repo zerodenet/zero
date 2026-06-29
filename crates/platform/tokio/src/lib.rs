@@ -6,7 +6,7 @@ use std::task::{Context, Poll};
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{lookup_host, TcpListener as TokioTcpListener, TcpStream, UdpSocket};
 use zero_traits::{
-    AsyncSocket, DatagramSocket as DatagramSocketTrait, DnsResolver, IpAddress,
+    AsyncSocket, DatagramSocket as DatagramSocketTrait, DnsResolver, IpAddress, SocketAddress,
     TcpListener as TcpListenerTrait,
 };
 
@@ -139,6 +139,10 @@ impl DnsResolver for TokioResolver {
 
 pub fn socket_addr_to_ip(addr: SocketAddr) -> IpAddress {
     ip_addr_to_ip(addr.ip())
+}
+
+pub fn socket_addr_to_socket_address(addr: SocketAddr) -> SocketAddress {
+    SocketAddress::new(socket_addr_to_ip(addr), addr.port())
 }
 
 fn ip_addr_to_ip(addr: IpAddr) -> IpAddress {
