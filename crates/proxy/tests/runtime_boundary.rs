@@ -1183,10 +1183,13 @@ fn vless_inbound_users_are_adapter_parsed() {
         "VLESS adapter should not hand-build protocol users"
     );
     assert!(
-        helpers.contains("struct ConfiguredVlessUser")
-            && helpers.contains("user: VlessUser")
-            && helpers.contains("user.user.clone()"),
-        "VLESS user store should look up pre-parsed protocol users"
+        !helpers.contains("ConfiguredVlessUser")
+            && !helpers.contains("VlessUserStore")
+            && session.contains("vless::VlessConfiguredUsers::new(users)")
+            && protocol_inbound.contains("pub struct VlessConfiguredUsers")
+            && protocol_inbound.contains("impl VlessUserStore for VlessConfiguredUsers")
+            && protocol_inbound.contains("user.user.clone()"),
+        "VLESS user store should live in protocols/vless, not proxy inbound helpers"
     );
     assert!(
         model.contains("struct VlessInboundRequest")

@@ -8,7 +8,7 @@ use crate::transport::QuicInbound;
 
 fn parse_inbound_users(
     inbound: &InboundConfig,
-) -> Result<std::sync::Arc<[crate::inbound::vless::ConfiguredVlessUser]>, EngineError> {
+) -> Result<std::sync::Arc<[vless::VlessConfiguredUser]>, EngineError> {
     inbound
         .protocol
         .vless_users()
@@ -22,10 +22,6 @@ fn parse_inbound_users(
                 user.up_bps,
                 user.down_bps,
             )
-            .map(|user| crate::inbound::vless::ConfiguredVlessUser {
-                id: user.id,
-                user: user.user,
-            })
             .map_err(EngineError::from)
         })
         .collect::<Result<Vec<_>, EngineError>>()

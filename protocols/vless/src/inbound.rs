@@ -95,6 +95,25 @@ impl VlessConfiguredUser {
     }
 }
 
+pub struct VlessConfiguredUsers<'a> {
+    users: &'a [VlessConfiguredUser],
+}
+
+impl<'a> VlessConfiguredUsers<'a> {
+    pub fn new(users: &'a [VlessConfiguredUser]) -> Self {
+        Self { users }
+    }
+}
+
+impl VlessUserStore for VlessConfiguredUsers<'_> {
+    fn find_user(&self, id: &[u8; 16]) -> Option<VlessUser> {
+        self.users
+            .iter()
+            .find(|user| &user.id == id)
+            .map(|user| user.user.clone())
+    }
+}
+
 impl VlessInbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Vless

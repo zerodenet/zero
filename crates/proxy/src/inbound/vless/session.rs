@@ -9,7 +9,7 @@ use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_engine::EngineError;
 
-use super::{ConfiguredVlessUser, ConfiguredVlessUsers, RecordingStream, VlessInboundHandler};
+use super::{RecordingStream, VlessInboundHandler};
 
 #[derive(Clone, Copy)]
 pub(crate) struct VlessStreamTransport<'a> {
@@ -24,7 +24,7 @@ pub(crate) struct VlessStreamTransport<'a> {
 pub(crate) struct VlessStreamRequest<'a, S> {
     pub(crate) stream: S,
     pub(crate) inbound_tag: &'a str,
-    pub(crate) users: &'a [ConfiguredVlessUser],
+    pub(crate) users: &'a [vless::VlessConfiguredUser],
     pub(crate) transport: VlessStreamTransport<'a>,
     pub(crate) fallback: Option<&'a zero_config::FallbackConfig>,
     pub(crate) sni: Option<String>,
@@ -37,7 +37,7 @@ impl Proxy {
         quic_inbound: &crate::transport::QuicInbound,
         shutdown: &mut watch::Receiver<bool>,
         connections: &mut JoinSet<Result<(), EngineError>>,
-        vless_users: Arc<[ConfiguredVlessUser]>,
+        vless_users: Arc<[vless::VlessConfiguredUser]>,
         fallback_config: Option<zero_config::FallbackConfig>,
     ) -> Result<(), EngineError> {
         loop {
@@ -174,7 +174,7 @@ impl Proxy {
                 let engine = self.clone();
                 let tag = inbound_tag.to_owned();
                 let service_names = grpc.service_names.clone();
-                let users_arc: Arc<[ConfiguredVlessUser]> = users.into();
+                let users_arc: Arc<[vless::VlessConfiguredUser]> = users.into();
                 let fb_clone = fallback.cloned();
                 return crate::transport::serve_grpc(stream, &service_names, move |grpc_stream| {
                     let engine = engine.clone();
@@ -209,7 +209,7 @@ impl Proxy {
         &self,
         client: S,
         inbound_tag: &str,
-        users: &[ConfiguredVlessUser],
+        users: &[vless::VlessConfiguredUser],
         fallback: Option<&zero_config::FallbackConfig>,
         sni: Option<String>,
     ) -> Result<(), EngineError>
@@ -217,7 +217,7 @@ impl Proxy {
         S: ClientStream + 'static,
     {
         let mut metered = MeteredStream::new(RecordingStream::new(client));
-        let auth = ConfiguredVlessUsers { users };
+        let auth = vless::VlessConfiguredUsers::new(users);
         let result = vless::VlessInbound
             .accept_tcp_with_auth_and_id(&mut metered, &auth)
             .await;

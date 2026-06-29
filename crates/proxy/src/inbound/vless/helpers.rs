@@ -5,7 +5,6 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use vless::RealityServerOptions;
-use vless::{VlessUser, VlessUserStore};
 use zero_config::InboundRealityConfig;
 use zero_traits::AsyncSocket;
 
@@ -120,23 +119,4 @@ where
         },
     )
     .await
-}
-
-#[derive(Clone)]
-pub(crate) struct ConfiguredVlessUser {
-    pub(crate) id: [u8; 16],
-    pub(crate) user: VlessUser,
-}
-
-pub(crate) struct ConfiguredVlessUsers<'a> {
-    pub(crate) users: &'a [ConfiguredVlessUser],
-}
-
-impl VlessUserStore for ConfiguredVlessUsers<'_> {
-    fn find_user(&self, id: &[u8; 16]) -> Option<VlessUser> {
-        self.users
-            .iter()
-            .find(|user| &user.id == id)
-            .map(|user| user.user.clone())
-    }
 }

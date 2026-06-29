@@ -1,10 +1,8 @@
 use zero_core::SessionAuth;
 
-use super::ConfiguredVlessUser;
-
 pub(crate) struct VlessInboundRequest {
     pub(crate) inbound: zero_config::InboundConfig,
-    pub(crate) users: std::sync::Arc<[ConfiguredVlessUser]>,
+    pub(crate) users: std::sync::Arc<[vless::VlessConfiguredUser]>,
 }
 
 pub(crate) struct VlessMuxUdpStreamTask<'a> {
