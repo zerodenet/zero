@@ -81,6 +81,39 @@ pub struct TrojanInboundUdpDispatchParts {
     client_session_id: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct TrojanInboundUdpClientResponse<'a> {
+    target: &'a Address,
+    port: u16,
+    payload: &'a [u8],
+}
+
+impl<'a> TrojanInboundUdpClientResponse<'a> {
+    pub fn new(target: &'a Address, port: u16, payload: &'a [u8]) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn target(&self) -> &'a Address {
+        self.target
+    }
+
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    fn payload(&self) -> &'a [u8] {
+        self.payload
+    }
+}
+
 impl TrojanInboundUdpDispatchParts {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Trojan
@@ -204,6 +237,23 @@ impl TrojanInboundUdpSession {
         self.codec
             .write_response(stream, target, port, payload)
             .await
+    }
+
+    pub async fn write_client_response<S>(
+        &self,
+        stream: &mut S,
+        response: TrojanInboundUdpClientResponse<'_>,
+    ) -> Result<usize, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.write_response(
+            stream,
+            response.target(),
+            response.port(),
+            response.payload(),
+        )
+        .await
     }
 
     pub async fn write_response_to_ip<S>(

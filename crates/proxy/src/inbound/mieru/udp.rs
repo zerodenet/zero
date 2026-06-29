@@ -90,13 +90,13 @@ impl Proxy {
                                 self.udp_upstream_idle_timeout(),
                                 pkt,
                             );
+                            let client_response = mieru::udp::MieruInboundUdpClientResponse::new(
+                                &response.target,
+                                response.port,
+                                &response.payload,
+                            );
                             let written = udp_session
-                                .write_response_for_target_tokio(
-                                    &mut client,
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                )
+                                .write_client_response_tokio(&mut client, client_response)
                                 .await?;
                             response.accounting.record_sent(written);
                         }
@@ -110,10 +110,16 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
+                            let client_response =
+                                mieru::udp::MieruInboundUdpClientResponse::new(&target, port, &payload);
                             let response_accounting =
-                                record_chain_udp_response_received(self, session_id, payload.len());
+                                record_chain_udp_response_received(
+                                    self,
+                                    session_id,
+                                    client_response.payload_len(),
+                                );
                             let written = udp_session
-                                .write_response_for_target_tokio(&mut client, &target, port, &payload)
+                                .write_client_response_tokio(&mut client, client_response)
                                 .await?;
                             response_accounting.record_sent(written);
                         }

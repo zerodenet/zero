@@ -104,6 +104,39 @@ pub struct MieruInboundUdpDispatchParts {
     client_session_id: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct MieruInboundUdpClientResponse<'a> {
+    target: &'a Address,
+    port: u16,
+    payload: &'a [u8],
+}
+
+impl<'a> MieruInboundUdpClientResponse<'a> {
+    pub fn new(target: &'a Address, port: u16, payload: &'a [u8]) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn target(&self) -> &'a Address {
+        self.target
+    }
+
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    fn payload(&self) -> &'a [u8] {
+        self.payload
+    }
+}
+
 impl MieruInboundUdpDispatchParts {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Mieru
@@ -296,6 +329,23 @@ impl MieruInboundUdpSession {
         MieruUdpFlowCodec
             .write_response_tokio(writer, target, port, payload)
             .await
+    }
+
+    pub async fn write_client_response_tokio<W>(
+        &self,
+        writer: &mut W,
+        response: MieruInboundUdpClientResponse<'_>,
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        self.write_response_for_target_tokio(
+            writer,
+            response.target(),
+            response.port(),
+            response.payload(),
+        )
+        .await
     }
 
     pub async fn write_response_for_sender_tokio<W>(

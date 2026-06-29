@@ -89,12 +89,14 @@ impl Proxy {
                                 self.udp_upstream_idle_timeout(),
                                 pkt,
                             );
-                            let written = udp_session.write_response(
-                                &mut client,
+                            let client_response = trojan::TrojanInboundUdpClientResponse::new(
                                 &response.target,
                                 response.port,
                                 &response.payload,
-                            ).await?;
+                            );
+                            let written = udp_session
+                                .write_client_response(&mut client, client_response)
+                                .await?;
                             response.accounting.record_sent(written);
                         }
                         Err(error) => {
@@ -107,9 +109,17 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
+                            let client_response =
+                                trojan::TrojanInboundUdpClientResponse::new(&target, port, &payload);
                             let response_accounting =
-                                record_chain_udp_response_received(self, session_id, payload.len());
-                            let written = udp_session.write_response(&mut client, &target, port, &payload).await?;
+                                record_chain_udp_response_received(
+                                    self,
+                                    session_id,
+                                    client_response.payload_len(),
+                                );
+                            let written = udp_session
+                                .write_client_response(&mut client, client_response)
+                                .await?;
                             response_accounting.record_sent(written);
                         }
                         Ok(Err(error)) => warn!(error = %error, "trojan udp chain response error"),
