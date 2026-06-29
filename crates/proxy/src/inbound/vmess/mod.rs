@@ -111,6 +111,7 @@ impl InboundProtocol for VmessTransportHandler {
 mod listener;
 pub(crate) mod model;
 mod mux;
+mod mux_udp;
 mod transport;
 
 pub(crate) use listener::run_vmess_listener_with_bound;

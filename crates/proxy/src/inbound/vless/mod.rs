@@ -53,6 +53,7 @@ mod helpers;
 mod listener;
 pub(crate) mod model;
 mod mux;
+mod mux_udp;
 mod session;
 mod udp_session;
 
