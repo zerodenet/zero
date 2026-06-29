@@ -429,7 +429,7 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
             "VLESS low-level mux detail `{private_root_item}` should stay under vless::mux instead of the crate root"
         );
     }
-    for required_root_item in [
+    for private_root_item in [
         "MuxClient",
         "MuxClientStream",
         "MuxServer",
@@ -438,8 +438,8 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         "VlessInboundMuxWriter",
     ] {
         assert!(
-            protocol_lib.contains(required_root_item),
-            "VLESS semantic mux API `{required_root_item}` should remain available from the crate root"
+            protocol_mux.contains(private_root_item) && !protocol_lib.contains(private_root_item),
+            "VLESS MUX API `{private_root_item}` should stay under vless::mux instead of the crate root"
         );
     }
 }
@@ -5054,7 +5054,7 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
         root.contains("VlessInboundMuxWriter::new")
             && root.contains("let writer = mux_writer.clone()")
             && root.contains("writer,")
-            && model.contains("writer: vless::VlessInboundMuxWriter")
+            && model.contains("writer: vless::mux::VlessInboundMuxWriter")
             && !model.contains("mpsc::UnboundedSender<(u16, Vec<u8>)>"),
         "VLESS inbound MUX task model should carry a protocol-owned writer instead of exposing the raw downlink channel"
     );

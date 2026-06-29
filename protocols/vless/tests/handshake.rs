@@ -496,7 +496,7 @@ fn udp_response_encoder_builds_response_packet() {
 #[test]
 fn mux_udp_response_encoder_wraps_vless_packet() {
     let (down_tx, mut down_rx) = tokio::sync::mpsc::unbounded_channel::<(u16, Vec<u8>)>();
-    let writer = vless::VlessInboundMuxWriter::new(down_tx);
+    let writer = vless::mux::VlessInboundMuxWriter::new(down_tx);
     vless::udp::VlessInboundUdpCodec
         .send_mux_response(&writer, 7, &Address::Ipv4([8, 8, 8, 8]), 53, b"dns")
         .expect("encode mux response");

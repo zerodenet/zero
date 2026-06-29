@@ -761,7 +761,7 @@ impl VlessInboundUdpCodec {
     #[cfg(feature = "reality")]
     pub fn send_mux_response(
         &self,
-        writer: &crate::VlessInboundMuxWriter,
+        writer: &crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
         target: &Address,
         port: u16,
@@ -774,7 +774,7 @@ impl VlessInboundUdpCodec {
     #[cfg(feature = "reality")]
     pub fn send_mux_response_to_ip(
         &self,
-        writer: &crate::VlessInboundMuxWriter,
+        writer: &crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
         ip: IpAddress,
         port: u16,
@@ -787,7 +787,7 @@ impl VlessInboundUdpCodec {
     #[cfg(feature = "reality")]
     pub fn send_mux_response_to_socket_addr(
         &self,
-        writer: &crate::VlessInboundMuxWriter,
+        writer: &crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
         sender: SocketAddr,
         payload: &[u8],
@@ -895,7 +895,7 @@ impl VlessInboundUdpSession {
     #[cfg(feature = "reality")]
     pub fn send_mux_response(
         &self,
-        writer: &crate::VlessInboundMuxWriter,
+        writer: &crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
         target: &Address,
         port: u16,
@@ -908,7 +908,7 @@ impl VlessInboundUdpSession {
     #[cfg(feature = "reality")]
     pub fn send_mux_response_to_ip(
         &self,
-        writer: &crate::VlessInboundMuxWriter,
+        writer: &crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
         ip: IpAddress,
         port: u16,
@@ -921,7 +921,7 @@ impl VlessInboundUdpSession {
     #[cfg(feature = "reality")]
     pub fn send_mux_response_to_socket_addr(
         &self,
-        writer: &crate::VlessInboundMuxWriter,
+        writer: &crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
         sender: SocketAddr,
         payload: &[u8],

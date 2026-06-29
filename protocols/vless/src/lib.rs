@@ -32,10 +32,6 @@ pub use inbound::{
     VlessUserStore,
 };
 pub use metadata::VlessProtocol;
-pub use mux::{
-    MuxClient, MuxClientStream, MuxServer, VlessInboundMuxAction, VlessInboundMuxSession,
-    VlessInboundMuxWriter,
-};
 #[cfg(feature = "reality")]
 pub use mux_crypto::MuxCrypto;
 #[cfg(feature = "reality")]

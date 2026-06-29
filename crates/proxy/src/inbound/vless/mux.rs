@@ -29,7 +29,7 @@ impl Proxy {
         S: ClientStream,
     {
         use tokio::sync::mpsc;
-        use vless::{VlessInboundMuxAction, VlessInboundMuxSession};
+        use vless::mux::{VlessInboundMuxAction, VlessInboundMuxSession};
 
         vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
@@ -38,7 +38,7 @@ impl Proxy {
         let mut up_senders: HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> = HashMap::new();
         let mut relay_tasks = JoinSet::new();
         let (down_tx, mut down_rx) = mpsc::unbounded_channel::<(u16, Vec<u8>)>();
-        let mux_writer = vless::VlessInboundMuxWriter::new(down_tx.clone());
+        let mux_writer = vless::mux::VlessInboundMuxWriter::new(down_tx.clone());
 
         info!(inbound_tag, "VLESS MUX session started");
         loop {
