@@ -1,5 +1,7 @@
 // Hysteria2 outbound protocol — outbound.rs
 
+use alloc::borrow::ToOwned;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::shared::build_tcp_connect_header;
@@ -10,6 +12,41 @@ use zero_traits::{AsyncSocket, UdpDatagramFraming};
 /// Hysteria2 outbound handler — sends auth and opens streams.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Hysteria2Outbound;
+
+#[cfg(feature = "crypto")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2OutboundProfile {
+    password: String,
+    client_fingerprint: Option<String>,
+}
+
+#[cfg(feature = "crypto")]
+impl Hysteria2OutboundProfile {
+    pub fn from_config_parts(password: &str, client_fingerprint: Option<&str>) -> Self {
+        Self {
+            password: password.to_owned(),
+            client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
+        }
+    }
+
+    pub fn client_fingerprint(&self) -> Option<&str> {
+        self.client_fingerprint.as_deref()
+    }
+
+    #[cfg(feature = "tokio")]
+    pub async fn authenticate_connection<S>(
+        &self,
+        conn: &quinn::Connection,
+        stream: &mut S,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        Hysteria2Outbound
+            .authenticate_connection(conn, stream, &self.password)
+            .await
+    }
+}
 
 impl Hysteria2Outbound {
     pub fn protocol(&self) -> ProtocolType {

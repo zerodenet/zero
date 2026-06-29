@@ -9,23 +9,16 @@ use crate::transport::{Hysteria2Stream, QuicConnectionOptions, TcpRelayStream};
 pub(super) struct Hysteria2Connector {
     server: String,
     port: u16,
-    password: String,
     client_fingerprint: Option<String>,
 }
 
 impl Hysteria2Connector {
-    pub(super) fn new(server: &str, port: u16, password: &str) -> Self {
+    pub(super) fn new(server: &str, port: u16, client_fingerprint: Option<&str>) -> Self {
         Self {
             server: server.to_owned(),
             port,
-            password: password.to_owned(),
-            client_fingerprint: None,
+            client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
         }
-    }
-
-    pub(super) fn with_fingerprint(mut self, fingerprint: Option<&str>) -> Self {
-        self.client_fingerprint = fingerprint.map(ToOwned::to_owned);
-        self
     }
 
     fn from_udp_profile(
@@ -36,20 +29,22 @@ impl Hysteria2Connector {
         Self {
             server: server.to_owned(),
             port,
-            password: String::new(),
             client_fingerprint: profile.client_fingerprint().map(ToOwned::to_owned),
         }
     }
 
-    async fn connect_raw(&self) -> Result<quinn::Connection, EngineError> {
+    async fn connect_raw(
+        &self,
+        profile: &hysteria2::Hysteria2OutboundProfile,
+    ) -> Result<quinn::Connection, EngineError> {
         let conn = self.open_quic_connection().await?;
 
         let (send, recv) = conn.open_bi().await.map_err(|error| {
             EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {error}")))
         })?;
         let mut stream = Hysteria2Stream::new(send, recv);
-        hysteria2::Hysteria2Outbound
-            .authenticate_connection(&conn, &mut stream, &self.password)
+        profile
+            .authenticate_connection(&conn, &mut stream)
             .await
             .map_err(EngineError::Core)?;
 
@@ -85,8 +80,12 @@ impl Hysteria2Connector {
         Ok(conn)
     }
 
-    pub(super) async fn connect(&self, session: &Session) -> Result<Hysteria2Stream, EngineError> {
-        let conn = self.connect_raw().await?;
+    pub(super) async fn connect(
+        &self,
+        session: &Session,
+        profile: &hysteria2::Hysteria2OutboundProfile,
+    ) -> Result<Hysteria2Stream, EngineError> {
+        let conn = self.connect_raw(profile).await?;
         let (send, recv) = conn.open_bi().await.map_err(|error| {
             EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {error}")))
         })?;
@@ -163,8 +162,9 @@ pub(super) async fn connect_tcp(
     password: &str,
     client_fingerprint: Option<&str>,
 ) -> Result<TcpRelayStream, EngineError> {
-    let connector =
-        Hysteria2Connector::new(server, port, password).with_fingerprint(client_fingerprint);
-    let stream = connector.connect(session).await?;
+    let profile =
+        hysteria2::Hysteria2OutboundProfile::from_config_parts(password, client_fingerprint);
+    let connector = Hysteria2Connector::new(server, port, profile.client_fingerprint());
+    let stream = connector.connect(session, &profile).await?;
     Ok(TcpRelayStream::new(stream))
 }

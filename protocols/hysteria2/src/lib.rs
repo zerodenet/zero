@@ -14,6 +14,8 @@ pub use inbound::Hysteria2InboundProfile;
 pub use inbound::{Hysteria2Inbound, Hysteria2User, Hysteria2UserStore};
 pub use metadata::Hysteria2Protocol;
 pub use outbound::Hysteria2Outbound;
+#[cfg(feature = "crypto")]
+pub use outbound::Hysteria2OutboundProfile;
 pub use shared::{
     build_auth_error, build_auth_frame, build_auth_ok, build_connect_error, build_connect_ok,
     build_tcp_connect_header, parse_auth_frame, parse_auth_response, parse_tcp_connect_header,
