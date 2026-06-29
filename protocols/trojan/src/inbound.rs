@@ -53,6 +53,19 @@ pub struct TrojanAccept {
     pub command: u8,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrojanInboundSessionKind {
+    Tcp,
+    Udp,
+}
+
+pub fn classify_inbound_session(session: &Session) -> TrojanInboundSessionKind {
+    match session.network {
+        Network::Udp => TrojanInboundSessionKind::Udp,
+        Network::Tcp => TrojanInboundSessionKind::Tcp,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrojanInboundUdpRequest {
     target: zero_core::Address,

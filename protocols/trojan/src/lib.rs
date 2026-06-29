@@ -12,7 +12,10 @@ mod outbound;
 pub mod shared;
 pub mod udp;
 
-pub use inbound::{TrojanAccept, TrojanInbound, TrojanInboundProfile};
+pub use inbound::{
+    classify_inbound_session, TrojanAccept, TrojanInbound, TrojanInboundProfile,
+    TrojanInboundSessionKind,
+};
 pub use metadata::TrojanProtocol;
 pub use outbound::{
     TrojanOutbound, TrojanTcpOutboundProfile, TrojanTcpTlsProfile, TrojanTcpTunnelTarget,

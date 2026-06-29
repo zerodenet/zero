@@ -122,16 +122,22 @@ pub(crate) async fn run_mieru_listener_with_bound(
                         connections.spawn(async move {
                             match handler.accept(stream.into()).await {
                                 Ok((session, client)) => {
-                                    if session.network == zero_core::Network::Udp {
-                                        let _ = engine.run_mieru_udp_relay(
-                                            client, &session, &tag,
-                                        ).await;
-                                    } else {
-                                        let _ = serve_inbound(
-                                            &engine, session, client, &handler,
-                                            &tag, source_addr,
-                                        ).await;
-                                    }
+                                    let _ = match mieru::classify_inbound_session(&session) {
+                                        mieru::MieruInboundSessionKind::Udp => {
+                                            engine.run_mieru_udp_relay(client, &session, &tag).await
+                                        }
+                                        mieru::MieruInboundSessionKind::Tcp => {
+                                            serve_inbound(
+                                                &engine,
+                                                session,
+                                                client,
+                                                &handler,
+                                                &tag,
+                                                source_addr,
+                                            )
+                                            .await
+                                        }
+                                    };
                                 }
                                 Err(error) => {
                                     log_listener_connection_error(

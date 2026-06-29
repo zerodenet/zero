@@ -130,10 +130,13 @@ pub(crate) async fn run_trojan_listener_with_bound(
                 conns.spawn(async move {
                     match h.accept(s.into()).await {
                         Ok((session, client)) => {
-                            let result = if session.network == zero_core::Network::Udp {
-                                p.run_trojan_udp_relay(client, session, &t).await
-                            } else {
-                                serve_inbound(&p, session, client, &h, &t, source_addr).await
+                            let result = match trojan::classify_inbound_session(&session) {
+                                trojan::TrojanInboundSessionKind::Udp => {
+                                    p.run_trojan_udp_relay(client, session, &t).await
+                                }
+                                trojan::TrojanInboundSessionKind::Tcp => {
+                                    serve_inbound(&p, session, client, &h, &t, source_addr).await
+                                }
                             };
                             if let Err(e) = result {
                                 if !matches!(&e, EngineError::Io(io) if matches!(io.kind(),

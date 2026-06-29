@@ -84,6 +84,19 @@ pub struct MieruAccept {
     remaining_payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MieruInboundSessionKind {
+    Tcp,
+    Udp,
+}
+
+pub fn classify_inbound_session(session: &Session) -> MieruInboundSessionKind {
+    match session.network {
+        Network::Udp => MieruInboundSessionKind::Udp,
+        Network::Tcp => MieruInboundSessionKind::Tcp,
+    }
+}
+
 fn segment_wire_len(segment: &Segment, has_nonce: bool) -> usize {
     let nonce_len = if has_nonce { 24 } else { 0 };
     let meta_len = METADATA_LEN + 16;

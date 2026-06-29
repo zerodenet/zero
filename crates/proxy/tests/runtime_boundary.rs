@@ -1282,6 +1282,8 @@ fn mieru_inbound_uses_adapter_request_model() {
     let adapter = read("src/adapters/mieru/inbound.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/mieru/src/lib.rs"))
+        .expect("read mieru protocol lib source");
 
     assert!(
         inbound.contains("struct MieruInboundRequest")
@@ -1311,6 +1313,17 @@ fn mieru_inbound_uses_adapter_request_model() {
             && !adapter.contains(".collect::<Vec<_>>()")
             && !adapter.contains("MieruInboundProfile::from_config(profile)"),
         "Mieru inbound listener should receive a protocol-owned profile instead of raw user/password tuples"
+    );
+    assert!(
+        inbound.contains("mieru::classify_inbound_session(&session)")
+            && inbound.contains("mieru::MieruInboundSessionKind::Udp")
+            && inbound.contains("mieru::MieruInboundSessionKind::Tcp")
+            && !inbound.contains("session.network")
+            && protocol_inbound.contains("pub enum MieruInboundSessionKind")
+            && protocol_inbound.contains("pub fn classify_inbound_session")
+            && protocol_lib.contains("classify_inbound_session")
+            && protocol_lib.contains("MieruInboundSessionKind"),
+        "Mieru inbound glue should ask protocols/mieru to classify accepted sessions"
     );
 }
 
@@ -1513,6 +1526,10 @@ fn stream_udp_inbound_direct_response_target_conversion_is_protocol_owned() {
 fn trojan_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/trojan.rs");
     let adapter = read("src/adapters/trojan/inbound.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/trojan/src/inbound.rs"))
+        .expect("read trojan protocol inbound source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/trojan/src/lib.rs"))
+        .expect("read trojan protocol lib source");
 
     assert!(
         inbound.contains("struct TrojanInboundRequest")
@@ -1546,6 +1563,17 @@ fn trojan_inbound_uses_adapter_request_model() {
             && adapter.contains("tls_acceptor")
             && !adapter.contains("password.clone(), tls.clone()"),
         "Trojan inbound listener should receive protocol-owned profile plus adapter-built TLS acceptor instead of raw password/TLS config"
+    );
+    assert!(
+        inbound.contains("trojan::classify_inbound_session(&session)")
+            && inbound.contains("trojan::TrojanInboundSessionKind::Udp")
+            && inbound.contains("trojan::TrojanInboundSessionKind::Tcp")
+            && !inbound.contains("session.network")
+            && protocol_inbound.contains("pub enum TrojanInboundSessionKind")
+            && protocol_inbound.contains("pub fn classify_inbound_session")
+            && protocol_lib.contains("classify_inbound_session")
+            && protocol_lib.contains("TrojanInboundSessionKind"),
+        "Trojan inbound glue should ask protocols/trojan to classify accepted sessions"
     );
 }
 
