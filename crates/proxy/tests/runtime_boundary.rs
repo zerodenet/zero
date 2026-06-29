@@ -1623,8 +1623,9 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && trojan_udp_inbound.contains("TrojanInboundUdpClientResponse::new")
             && trojan_udp_inbound.contains(".write_client_response")
             && !trojan_udp_inbound.contains("write_response_to_socket_addr_tokio")
-            && trojan_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
-            && trojan_protocol.contains("fn address_from_socket_addr"),
+            && trojan_protocol.contains("pub async fn write_client_response")
+            && !trojan_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
+            && !trojan_protocol.contains("fn address_from_socket_addr"),
         "Trojan inbound UDP direct response glue should pass a protocol-owned client response model"
     );
     assert!(
@@ -1632,8 +1633,9 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && mieru_udp_inbound.contains("MieruInboundUdpClientResponse::new")
             && mieru_udp_inbound.contains(".write_client_response_tokio")
             && !mieru_udp_inbound.contains("write_response_for_sender_tokio")
-            && mieru_protocol.contains("pub async fn write_response_for_sender_tokio")
-            && mieru_protocol.contains("fn address_from_socket_addr"),
+            && mieru_protocol.contains("pub async fn write_client_response_tokio")
+            && !mieru_protocol.contains("pub async fn write_response_for_sender_tokio")
+            && !mieru_protocol.contains("fn address_from_socket_addr"),
         "Mieru inbound UDP direct response glue should pass a protocol-owned client response model"
     );
     assert!(
@@ -1641,8 +1643,9 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && hysteria2_inbound.contains("Hysteria2InboundUdpClientResponse::new")
             && hysteria2_inbound.contains("send_client_response_for_proxy_session")
             && !hysteria2_inbound.contains("send_response_to_socket_addr_for_proxy_session")
-            && hysteria2_protocol.contains("pub fn send_response_to_socket_addr")
-            && hysteria2_protocol.contains("fn address_from_socket_addr"),
+            && hysteria2_protocol.contains("pub fn send_client_response_for_proxy_session")
+            && !hysteria2_protocol.contains("pub fn send_response_to_socket_addr")
+            && !hysteria2_protocol.contains("fn address_from_socket_addr"),
         "Hysteria2 inbound UDP direct response glue should pass a protocol-owned client response model"
     );
     assert!(
@@ -1654,9 +1657,11 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vless_mux_inbound.contains(".send_mux_client_response")
             && !vless_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && !vless_mux_inbound.contains("send_mux_response_to_socket_addr")
-            && vless_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
-            && vless_protocol.contains("pub fn send_mux_response_to_socket_addr")
-            && vless_protocol.contains("fn address_from_socket_addr"),
+            && vless_protocol.contains("pub async fn write_client_response_tokio")
+            && vless_protocol.contains("pub fn send_mux_client_response")
+            && !vless_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
+            && !vless_protocol.contains("pub fn send_mux_response_to_socket_addr")
+            && !vless_protocol.contains("fn address_from_socket_addr"),
         "VLESS inbound UDP direct response glue should pass protocol-owned client response models"
     );
     assert!(
@@ -1668,9 +1673,11 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vmess_mux_inbound.contains(".write_mux_client_response")
             && !vmess_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && !vmess_mux_inbound.contains("write_mux_response_to_socket_addr")
-            && vmess_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
-            && vmess_protocol.contains("pub fn write_mux_response_to_socket_addr")
-            && vmess_protocol.contains("fn address_from_socket_addr"),
+            && vmess_protocol.contains("pub async fn write_client_response_tokio")
+            && vmess_protocol.contains("pub fn write_mux_client_response")
+            && !vmess_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
+            && !vmess_protocol.contains("pub fn write_mux_response_to_socket_addr")
+            && !vmess_protocol.contains("fn address_from_socket_addr"),
         "VMess inbound UDP direct response glue should pass protocol-owned client response models"
     );
 }
@@ -2192,10 +2199,10 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && protocol_udp.contains("pub fn record_dispatch_success")
             && protocol_udp.contains("fn send_response")
             && protocol_udp.contains("fn send_response_to_ip")
-            && protocol_udp.contains("fn send_response_to_socket_addr")
             && protocol_udp.contains("fn send_response_for_proxy_session")
             && protocol_udp.contains("fn send_client_response_for_proxy_session")
-            && protocol_udp.contains("fn send_response_to_socket_addr_for_proxy_session")
+            && !protocol_udp.contains("fn send_response_to_socket_addr")
+            && !protocol_udp.contains("fn send_response_to_socket_addr_for_proxy_session")
             && protocol_udp.contains("fn decode_datagram")
             && protocol_udp.contains("fn encode_datagram")
             && protocol_udp.contains("fn send_datagram"),
@@ -3540,8 +3547,11 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && protocol_inbound.contains("fn response_datagram_for_proxy_session")
             && protocol_inbound.contains("fn send_response_to_client_tokio")
             && protocol_inbound.contains("fn send_proxy_session_response_to_client_tokio")
-            && protocol_inbound.contains("fn send_response_for_proxy_session_to_client_tokio")
-            && protocol_inbound.contains("fn send_response_for_proxy_session_to_sender_tokio")
+            && protocol_inbound.contains("fn send_client_response_to_client_tokio")
+            && protocol_inbound.contains("fn send_proxy_session_client_response_to_client_tokio")
+            && protocol_inbound.contains("fn send_client_response_for_proxy_session_to_client_tokio")
+            && !protocol_inbound.contains("fn send_response_for_proxy_session_to_client_tokio")
+            && !protocol_inbound.contains("fn send_response_for_proxy_session_to_sender_tokio")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpResponseDatagram")
             && protocol_inbound.contains("proxy_sessions:")
             && protocol_inbound.contains("proxy_clients:")
@@ -5834,13 +5844,13 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && protocol_udp.contains("fn write_response_tokio")
             && protocol_udp.contains("fn write_client_response_tokio")
             && protocol_udp.contains("fn write_response_to_ip_tokio")
-            && protocol_udp.contains("fn write_response_to_socket_addr_tokio")
             && protocol_udp.contains("fn encode_mux_response")
             && protocol_udp.contains("fn encode_mux_response_for_state")
             && protocol_udp.contains("fn write_mux_response")
             && protocol_udp.contains("fn write_mux_client_response")
             && protocol_udp.contains("fn write_mux_response_to_ip")
-            && protocol_udp.contains("fn write_mux_response_to_socket_addr")
+            && !protocol_udp.contains("fn write_response_to_socket_addr_tokio")
+            && !protocol_udp.contains("fn write_mux_response_to_socket_addr")
             && protocol_udp.contains("fn decode_datagram"),
         "VMess inbound UDP packet framing and response mode selection should go through protocols/vmess inbound codec"
     );
@@ -6109,12 +6119,12 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_shared.contains("fn write_response_tokio")
             && protocol_shared.contains("fn write_client_response_tokio")
             && protocol_shared.contains("fn write_response_to_ip_tokio")
-            && protocol_shared.contains("fn write_response_to_socket_addr_tokio")
             && protocol_shared.contains("fn encode_mux_response")
             && protocol_shared.contains("fn send_mux_response")
             && protocol_shared.contains("fn send_mux_client_response")
             && protocol_shared.contains("fn send_mux_response_to_ip")
-            && protocol_shared.contains("fn send_mux_response_to_socket_addr"),
+            && !protocol_shared.contains("fn write_response_to_socket_addr_tokio")
+            && !protocol_shared.contains("fn send_mux_response_to_socket_addr"),
         "VLESS inbound UDP packet framing should go directly through the protocols/vless inbound codec from inbound glue"
     );
     assert!(
@@ -6320,7 +6330,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_inbound.contains("struct TrojanInboundUdpClientResponse")
             && protocol_inbound.contains("fn write_client_response")
             && protocol_inbound.contains("fn write_response_to_ip")
-            && protocol_inbound.contains("fn write_response_to_socket_addr_tokio")
+            && !protocol_inbound.contains("fn write_response_to_socket_addr_tokio")
             && protocol_inbound.contains(") -> Result<usize, Error>")
             && protocol_outbound.contains("read_udp_flow_packet")
             && !protocol_outbound.contains("pub async fn read_udp_flow_packet")

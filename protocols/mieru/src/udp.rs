@@ -347,20 +347,6 @@ impl MieruInboundUdpSession {
         )
         .await
     }
-
-    pub async fn write_response_for_sender_tokio<W>(
-        &self,
-        writer: &mut W,
-        sender: SocketAddr,
-        payload: &[u8],
-    ) -> Result<usize, Error>
-    where
-        W: tokio::io::AsyncWrite + Unpin,
-    {
-        let target = address_from_socket_addr(sender);
-        self.write_response_for_target_tokio(writer, &target, sender.port(), payload)
-            .await
-    }
 }
 
 #[cfg(feature = "crypto")]
@@ -375,14 +361,6 @@ fn socket_addr_from_target(target: &Address, port: u16) -> Option<SocketAddr> {
             port,
         )),
         Address::Domain(_) => None,
-    }
-}
-
-#[cfg(feature = "crypto")]
-fn address_from_socket_addr(addr: SocketAddr) -> Address {
-    match addr.ip() {
-        std::net::IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
-        std::net::IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
     }
 }
 
