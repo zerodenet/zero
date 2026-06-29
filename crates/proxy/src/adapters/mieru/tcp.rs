@@ -70,12 +70,11 @@ async fn connect_tcp(
         .await?;
 
     let stream = TcpRelayStream::new(socket);
-    let mieru_stream = mieru::establish_tcp_tunnel(
-        stream,
-        &mieru::MieruTcpTunnelTarget::new(session, username, password),
-    )
-    .await
-    .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru tcp tunnel: {e}"))))?;
+    let profile = mieru::MieruTcpOutboundProfile::from_config_parts(username, password);
+    let mieru_stream = profile
+        .establish_tcp_tunnel(stream, session)
+        .await
+        .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru tcp tunnel: {e}"))))?;
     Ok(TcpRelayStream::new(mieru_stream))
 }
 
@@ -85,11 +84,10 @@ async fn apply_tcp_hop(
     username: &str,
     password: &str,
 ) -> Result<TcpRelayStream, EngineError> {
-    let mieru_stream = mieru::establish_tcp_tunnel(
-        stream,
-        &mieru::MieruTcpTunnelTarget::new(session, username, password),
-    )
-    .await
-    .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru tcp tunnel: {e}"))))?;
+    let profile = mieru::MieruTcpOutboundProfile::from_config_parts(username, password);
+    let mieru_stream = profile
+        .establish_tcp_tunnel(stream, session)
+        .await
+        .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru tcp tunnel: {e}"))))?;
     Ok(TcpRelayStream::new(mieru_stream))
 }

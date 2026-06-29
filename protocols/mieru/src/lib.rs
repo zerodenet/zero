@@ -41,7 +41,8 @@ pub use metadata::{
 };
 #[cfg(feature = "crypto")]
 pub use outbound::{
-    establish_tcp_tunnel, MieruOutbound, MieruTcpStream, MieruTcpTarget, MieruTcpTunnelTarget,
+    establish_tcp_tunnel, MieruOutbound, MieruTcpOutboundProfile, MieruTcpStream, MieruTcpTarget,
+    MieruTcpTunnelTarget,
 };
 pub use protocol::MieruProtocol;
 #[cfg(feature = "crypto")]

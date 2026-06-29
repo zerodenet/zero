@@ -3,6 +3,7 @@
 use alloc::vec::Vec;
 use std::io;
 use std::pin::Pin;
+use std::string::String;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
@@ -49,6 +50,36 @@ impl<'a> MieruTcpTunnelTarget<'a> {
             target: &session.target,
             port: session.port,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MieruTcpOutboundProfile {
+    username: String,
+    password: String,
+}
+
+impl MieruTcpOutboundProfile {
+    pub fn from_config_parts(username: impl Into<String>, password: impl Into<String>) -> Self {
+        Self {
+            username: username.into(),
+            password: password.into(),
+        }
+    }
+
+    pub async fn establish_tcp_tunnel<S>(
+        &self,
+        stream: S,
+        session: &Session,
+    ) -> Result<MieruTcpStream<S>, Error>
+    where
+        S: AsyncSocket + AsyncRead + AsyncWrite + Unpin,
+    {
+        establish_tcp_tunnel(
+            stream,
+            &MieruTcpTunnelTarget::new(session, &self.username, &self.password),
+        )
+        .await
     }
 }
 

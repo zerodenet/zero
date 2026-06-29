@@ -2353,17 +2353,22 @@ fn mieru_tcp_connect_glue_lives_in_adapter_tcp_module() {
     assert!(
         adapter.contains("async fn connect_tcp(")
             && adapter.contains("async fn apply_tcp_hop(")
-            && adapter.contains("mieru::establish_tcp_tunnel")
-            && adapter.contains("MieruTcpTunnelTarget::new")
+            && adapter.contains("MieruTcpOutboundProfile::from_config_parts")
+            && adapter.contains(".establish_tcp_tunnel(")
+            && !adapter.contains("MieruTcpTunnelTarget::new")
+            && !adapter.contains("MieruTcpTunnelTarget {")
             && !adapter.contains("struct MieruTcpStream")
             && !adapter.contains("async fn socks5_connect")
             && !adapter.contains("encrypt_client_data")
             && !adapter.contains("decrypt_server_data_with_consumed")
             && !adapter.contains("TcpSessionProtocol<mieru::MieruTcpTarget>"),
-        "Mieru adapter TCP module should be thin connect/hop glue and delegate tunneled session details to protocols/mieru"
+        "Mieru adapter TCP module should use a protocol-owned outbound profile and delegate tunneled session details to protocols/mieru"
     );
     assert!(
-        protocol_outbound.contains("pub struct MieruTcpStream")
+        protocol_outbound.contains("pub struct MieruTcpOutboundProfile")
+            && protocol_outbound.contains("pub fn from_config_parts")
+            && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
+            && protocol_outbound.contains("pub struct MieruTcpStream")
             && protocol_outbound.contains("pub struct MieruTcpTunnelTarget")
             && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
             && protocol_outbound.contains("async fn socks5_connect")
