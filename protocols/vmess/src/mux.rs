@@ -317,6 +317,16 @@ impl VmessInboundMuxSession {
         read_mux_server_event(reader).await.map(Into::into)
     }
 
+    pub async fn read_inbound_action<R>(
+        &self,
+        reader: &mut R,
+    ) -> Result<VmessInboundMuxAction, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        self.next_action(reader).await
+    }
+
     pub fn write_data(
         &self,
         writer: &VmessInboundMuxWriter,
@@ -326,12 +336,29 @@ impl VmessInboundMuxSession {
         writer.data(session_id, payload)
     }
 
+    pub fn write_inbound_stream_data(
+        &self,
+        writer: &VmessInboundMuxWriter,
+        session_id: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.write_data(writer, session_id, payload)
+    }
+
     pub fn write_end(
         &self,
         writer: &VmessInboundMuxWriter,
         session_id: u16,
     ) -> Result<usize, Error> {
         writer.end(session_id)
+    }
+
+    pub fn end_inbound_stream(
+        &self,
+        writer: &VmessInboundMuxWriter,
+        session_id: u16,
+    ) -> Result<usize, Error> {
+        self.write_end(writer, session_id)
     }
 }
 

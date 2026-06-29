@@ -4543,9 +4543,9 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     );
     assert!(
         root.contains("vmess::VmessInboundMuxSession::new()")
-            && root.contains("mux_session.next_action(&mut reader)")
+            && root.contains("mux_session.read_inbound_action(&mut reader)")
             && root.contains("vmess::VmessInboundMuxAction"),
-        "VMess inbound MUX runtime should consume protocol-owned mux actions"
+        "VMess inbound MUX runtime should consume protocol-owned semantic mux actions"
     );
     for forbidden in [
         "vmess::read_mux_stream_frame",
@@ -4567,7 +4567,9 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         "VmessInboundMuxWriter",
         "VmessMuxServerEvent",
         "read_mux_server_event",
-        "pub async fn next_action",
+        "pub async fn read_inbound_action",
+        "pub fn write_inbound_stream_data",
+        "pub fn end_inbound_stream",
         "pub fn data",
         "pub fn end",
         "pub(crate) fn frame",
@@ -4588,9 +4590,12 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         "VMess inbound MUX new-stream Session conversion should be protocol-owned and exposed as an action"
     );
     assert!(
-        root.contains(".end(mux_session_id)")
-            && root.contains(".data(mux_session_id")
+        root.contains(".end_inbound_stream(&writer, mux_session_id)")
+            && root.contains(".write_inbound_stream_data(&writer, mux_session_id")
             && root.contains("VmessInboundMuxWriter::new")
+            && !root.contains("writer.end(")
+            && !root.contains("writer.data(")
+            && !root.contains("mux_session.next_action(")
             && !root.contains("vmess::VmessMuxFrameEncoder")
             && !root.contains("frame_encoder.")
             && !model.contains("VmessMuxFrameEncoder")

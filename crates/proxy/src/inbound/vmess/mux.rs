@@ -56,7 +56,7 @@ impl Proxy {
 
         loop {
             select! {
-                action = mux_session.next_action(&mut reader) => {
+                action = mux_session.read_inbound_action(&mut reader) => {
                     let action = match action {
                         Ok(action) => action,
                         Err(error) => {
@@ -150,6 +150,7 @@ impl Proxy {
         let mut up_rx = up_rx;
         let proxy = self.clone();
         tasks.spawn(async move {
+            let mux_session = vmess::VmessInboundMuxSession::new();
             let mut session =
                 Session::new(0, target, port, Network::Tcp, ProtocolType::Vmess);
             proxy.prepare_session(&mut session, &inbound_tag, None);
@@ -163,7 +164,7 @@ impl Proxy {
                 Ok(result) => result.upstream,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux dispatch failed");
-                    let _ = writer.end(mux_session_id);
+                    let _ = mux_session.end_inbound_stream(&writer, mux_session_id);
                     return;
                 }
             };
@@ -188,7 +189,7 @@ impl Proxy {
                         match read {
                             Ok(0) => break,
                             Ok(n) => {
-                                match writer.data(mux_session_id, &buf[..n]) {
+                                match mux_session.write_inbound_stream_data(&writer, mux_session_id, &buf[..n]) {
                                     Ok(_) => {}
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux response encode failed");
@@ -204,7 +205,7 @@ impl Proxy {
                     }
                 }
             }
-            let _ = writer.end(mux_session_id);
+            let _ = mux_session.end_inbound_stream(&writer, mux_session_id);
         });
     }
 
@@ -221,13 +222,14 @@ impl Proxy {
         let mut up_rx = up_rx;
         let proxy = self.clone();
         tasks.spawn(async move {
+            let mux_session = vmess::VmessInboundMuxSession::new();
             let mut udp_session =
                 vmess::VmessInbound.udp_session(default_target, default_port);
             let mut dispatch = match UdpDispatch::new(&inbound_tag).await {
                 Ok(dispatch) => dispatch,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux udp dispatch init failed");
-                    let _ = writer.end(mux_session_id);
+                    let _ = mux_session.end_inbound_stream(&writer, mux_session_id);
                     return;
                 }
             };
@@ -356,7 +358,7 @@ impl Proxy {
             for completed in dispatch.finish_all() {
                 log_completed_udp_flow(completed);
             }
-            let _ = writer.end(mux_session_id);
+            let _ = mux_session.end_inbound_stream(&writer, mux_session_id);
         });
     }
 
