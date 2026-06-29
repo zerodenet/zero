@@ -9,20 +9,19 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::managed::ManagedStreamPacketSender;
 use crate::runtime::Proxy;
 
-fn vless_udp_flow_config<'a>(
-    id: &str,
-    flow: Option<&'a str>,
+fn invalid_vless_udp_config(
+    error: impl std::fmt::Display,
     stage: &'static str,
     upstream: Option<(&str, u16)>,
-) -> Result<vless::udp::VlessUdpFlowConfig<'a>, FlowFailure> {
-    vless::udp::udp_flow_config_from_config(id, flow).map_err(|error| FlowFailure {
+) -> FlowFailure {
+    FlowFailure {
         stage,
         error: zero_engine::EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!("invalid VLESS UDP config: {error}"),
         )),
         upstream: upstream.map(|(server, port)| (server.to_string(), port)),
-    })
+    }
 }
 
 pub(super) async fn start(
@@ -52,7 +51,9 @@ pub(super) async fn start(
     else {
         return Err(unreachable_udp_leaf(adapter.name(), leaf));
     };
-    let config = vless_udp_flow_config(id, *flow, "udp_vless_parse_config", Some((server, *port)))?;
+    let config = vless::udp::udp_flow_config_from_config(id, *flow).map_err(|error| {
+        invalid_vless_udp_config(error, "udp_vless_parse_config", Some((server, *port)))
+    })?;
 
     let transport = crate::transport::VlessUdpTransportOptions {
         tls: *tls,
@@ -127,7 +128,9 @@ pub(super) async fn start_relay_two_stream(
     else {
         return Err(unreachable_udp_leaf(adapter.name(), &final_hop));
     };
-    let config = vless_udp_flow_config(id, None, "udp_vless_relay_two_stream_parse_config", None)?;
+    let config = vless::udp::udp_flow_config_from_config(id, None).map_err(|error| {
+        invalid_vless_udp_config(error, "udp_vless_relay_two_stream_parse_config", None)
+    })?;
     let split_http_cfg = split_http
         .as_ref()
         .expect("udp_relay_needs_two_streams checked split_http is Some");
@@ -192,7 +195,9 @@ pub(super) async fn start_relay_final_hop(
         });
     }
 
-    let config = vless_udp_flow_config(id, None, "udp_vless_relay_final_hop_parse_config", None)?;
+    let config = vless::udp::udp_flow_config_from_config(id, None).map_err(|error| {
+        invalid_vless_udp_config(error, "udp_vless_relay_final_hop_parse_config", None)
+    })?;
     let transport = crate::transport::VlessUdpTransportOptions {
         tls: *tls,
         reality: *reality,

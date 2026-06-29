@@ -174,6 +174,13 @@ impl VmessTcpConnectConfig {
     }
 }
 
+pub fn tcp_connect_config_from_config(
+    id: &str,
+    cipher: &str,
+) -> Result<VmessTcpConnectConfig, Error> {
+    VmessTcpConnectConfig::from_config(id, cipher)
+}
+
 impl<'a> TcpSessionProtocol<VmessTcpSessionTarget<'a>> for VmessOutbound {
     type Error = Error;
     type Session = VmessOutboundSession;

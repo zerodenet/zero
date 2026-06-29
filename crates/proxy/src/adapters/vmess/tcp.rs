@@ -8,12 +8,6 @@ use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, MeteredStream, TcpOutboundFailure, TcpRelayStream};
 
-fn vmess_tcp_config(id: &str, cipher: &str) -> Result<vmess::VmessTcpConnectConfig, EngineError> {
-    vmess::VmessTcpConnectConfig::from_config(id, cipher).map_err(|error| {
-        EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
-    })
-}
-
 impl VmessAdapter {
     pub(super) async fn connect_tcp_impl(
         &self,
@@ -36,10 +30,15 @@ impl VmessAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        let config = vmess_tcp_config(id, cipher).map_err(|error| TcpOutboundFailure {
-            stage: "connect_upstream_vmess",
-            error,
-            upstream_endpoint: Some(((*server).to_string(), *port)),
+        let config = vmess::tcp_connect_config_from_config(id, cipher).map_err(|error| {
+            TcpOutboundFailure {
+                stage: "connect_upstream_vmess",
+                error: EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    error,
+                )),
+                upstream_endpoint: Some(((*server).to_string(), *port)),
+            }
         })?;
         if let Some(max_concurrency) = mux_concurrency {
             return self
@@ -95,7 +94,9 @@ impl VmessAdapter {
         let ResolvedLeafOutbound::Vmess { id, cipher, .. } = leaf else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let config = vmess_tcp_config(id, cipher)?;
+        let config = vmess::tcp_connect_config_from_config(id, cipher).map_err(|error| {
+            EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
+        })?;
         apply_tcp_hop(stream, session, config).await
     }
 }

@@ -230,6 +230,13 @@ impl VlessTcpConnectConfig {
     }
 }
 
+pub fn tcp_connect_config_from_config(
+    id: &str,
+    flow: Option<&str>,
+) -> Result<VlessTcpConnectConfig, Error> {
+    VlessTcpConnectConfig::from_config(id, flow)
+}
+
 impl<'a> TcpTunnelProtocol<VlessTcpTunnelTarget<'a>> for VlessOutbound {
     type Error = Error;
 

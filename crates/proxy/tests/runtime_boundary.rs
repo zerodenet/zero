@@ -2592,6 +2592,8 @@ fn stream_udp_roots_delegate_flow_building() {
         assert!(
             flow.contains(config)
                 && flow.contains(start_bridge)
+                && !flow.contains("fn vless_udp_flow_config")
+                && !flow.contains("fn vmess_udp_flow_config")
                 && !flow.contains("ManagedUdpSend {")
                 && !flow.contains("ManagedUdpFlowResume::new"),
             "{flow_path} should own stream UDP flow and relay-final-hop resume construction"
@@ -3003,17 +3005,20 @@ fn vmess_tcp_connect_uses_request_model() {
         );
     }
     assert!(
-        adapter.contains("VmessTcpConnectConfig::from_config")
+        adapter.contains("vmess::tcp_connect_config_from_config")
             && adapter.contains("config: vmess::VmessTcpConnectConfig")
             && adapter.contains("config.mux_pool_identity()")
             && !adapter.contains("config.mux_pool_identity(cipher)")
             && !adapter.contains("VmessMuxIdentity::from_parts")
+            && !adapter.contains("fn vmess_tcp_config")
+            && !adapter.contains("VmessTcpConnectConfig::from_config")
             && protocol_outbound.contains("pub struct VmessTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config")
+            && protocol_outbound.contains("pub fn tcp_connect_config_from_config")
             && protocol_outbound.contains("cipher_name: String")
             && protocol_outbound.contains("cipher_name: cipher.name().to_owned()")
             && protocol_outbound.contains("pub fn mux_pool_identity(&self)"),
-        "VMess adapter should ask protocols/vmess to parse TCP identity config and build MUX identity without passing raw cipher strings back into protocol APIs"
+        "VMess adapter should use a protocol-owned TCP config builder and build MUX identity without passing raw cipher strings back into protocol APIs"
     );
     assert!(
         adapter.contains(".establish_tcp_outbound_session(")
@@ -3057,7 +3062,7 @@ fn vless_tcp_connect_uses_request_model() {
         "VLESS outbound TCP helper and adapter should receive protocol-parsed identity"
     );
     assert!(
-        adapter.contains("VlessTcpConnectConfig::from_config")
+        adapter.contains("vless::tcp_connect_config_from_config")
             && adapter.contains("config: vless::VlessTcpConnectConfig")
             && adapter.contains("config.should_open_mux_pool_for_tcp()")
             && adapter.contains("config.has_flow()")
@@ -3067,8 +3072,11 @@ fn vless_tcp_connect_uses_request_model() {
             && adapter.contains("config.wrap_deferred_response_stream(")
             && !adapter.contains("DeferredVlessResponseStream::new")
             && !adapter.contains("MuxIdentity::from_uuid")
+            && !adapter.contains("fn vless_tcp_config")
+            && !adapter.contains("VlessTcpConnectConfig::from_config")
             && protocol_outbound.contains("pub struct VlessTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config")
+            && protocol_outbound.contains("pub fn tcp_connect_config_from_config")
             && protocol_outbound.contains("pub fn should_open_mux_pool_for_tcp")
             && protocol_outbound.contains("pub fn has_flow")
             && protocol_outbound.contains("FLOW_XTLS_RPRX_VISION")
@@ -3077,7 +3085,7 @@ fn vless_tcp_connect_uses_request_model() {
             && protocol_outbound.contains("DeferredVlessResponseStream::new")
             && protocol_outbound.contains("parse_uuid")
             && protocol_outbound.contains("parse_flow"),
-        "VLESS adapter should ask protocols/vless to parse outbound identity/flow config, classify flow behavior, build MUX identity, and wrap deferred response streams"
+        "VLESS adapter should use a protocol-owned TCP config builder, classify flow behavior, build MUX identity, and wrap deferred response streams"
     );
 }
 
@@ -4219,6 +4227,7 @@ fn vless_udp_identity_is_protocol_parsed() {
             && transport.contains("pub fn vless_udp_relay_needs_two_streams")
             && transport.contains("XhttpMode::parse(&config.mode)")
             && flow.contains("vless::udp::udp_flow_config_from_config")
+            && !flow.contains("fn vless_udp_flow_config")
             && !flow.contains("vless::udp::VlessUdpFlowConfig::new"),
         "VLESS UDP flow glue should use protocol/transport-owned parsers while the root stays a facade"
     );
@@ -4563,6 +4572,7 @@ fn vmess_udp_identity_is_protocol_parsed() {
         !adapter.contains("vmess::parse_udp_identity")
             && !adapter.contains("VmessUdpFlowConfig::new")
             && flow.contains("vmess::udp::udp_flow_config_from_config")
+            && !flow.contains("fn vmess_udp_flow_config")
             && !flow.contains("vmess::udp::VmessUdpFlowConfig::new"),
         "VMess UDP flow glue should use the protocol-owned flow config parser while the root stays a facade"
     );
@@ -5161,9 +5171,12 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
     );
     assert!(
         !tcp_adapter.contains("VmessCipher::from_name")
-            && tcp_adapter.contains("VmessTcpConnectConfig::from_config")
+            && tcp_adapter.contains("vmess::tcp_connect_config_from_config")
+            && !tcp_adapter.contains("fn vmess_tcp_config")
+            && !tcp_adapter.contains("VmessTcpConnectConfig::from_config")
             && protocol_outbound.contains("VmessCipher::from_name")
             && udp_flow.contains("vmess::udp::udp_flow_config_from_config")
+            && !udp_flow.contains("fn vmess_udp_flow_config")
             && !udp_flow.contains("vmess::udp::VmessUdpFlowConfig::new")
             && !udp_root.contains("vmess::parse_udp_identity")
             && !udp_root.contains("VmessCipher::from_name")

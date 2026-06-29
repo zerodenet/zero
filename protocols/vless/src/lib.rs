@@ -37,7 +37,7 @@ pub use metadata::VlessProtocol;
 pub use mux_crypto::MuxCrypto;
 #[cfg(feature = "reality")]
 pub use outbound::VlessFlowTcpTunnelTarget;
-pub use outbound::VlessOutbound;
+pub use outbound::{tcp_connect_config_from_config, VlessOutbound};
 pub use outbound::{VlessTcpConnectConfig, VlessTcpTunnelTarget};
 #[cfg(feature = "reality")]
 pub use reality::{

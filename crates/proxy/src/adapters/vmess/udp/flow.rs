@@ -9,20 +9,19 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::managed::ManagedStreamPacketSender;
 use crate::runtime::Proxy;
 
-fn vmess_udp_flow_config<'a>(
-    id: &str,
-    cipher: &'a str,
+fn invalid_vmess_udp_config(
+    error: impl std::fmt::Display,
     stage: &'static str,
     upstream: Option<(&str, u16)>,
-) -> Result<vmess::udp::VmessUdpFlowConfig<'a>, FlowFailure> {
-    vmess::udp::udp_flow_config_from_config(id, cipher).map_err(|error| FlowFailure {
+) -> FlowFailure {
+    FlowFailure {
         stage,
         error: zero_engine::EngineError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!("invalid VMess UDP config: {error}"),
         )),
         upstream: upstream.map(|(server, port)| (server.to_string(), port)),
-    })
+    }
 }
 
 pub(super) async fn start(
@@ -48,8 +47,9 @@ pub(super) async fn start(
     else {
         return Err(unreachable_udp_leaf(adapter.name(), leaf));
     };
-    let config =
-        vmess_udp_flow_config(id, cipher, "udp_vmess_parse_config", Some((server, *port)))?;
+    let config = vmess::udp::udp_flow_config_from_config(id, cipher).map_err(|error| {
+        invalid_vmess_udp_config(error, "udp_vmess_parse_config", Some((server, *port)))
+    })?;
     let transport = crate::transport::VmessTransportOptions {
         tls: *tls,
         ws: *ws,
@@ -104,12 +104,13 @@ pub(super) async fn start_relay_final_hop(
     else {
         return Err(unreachable_udp_leaf(adapter.name(), leaf));
     };
-    let config = vmess_udp_flow_config(
-        id,
-        cipher,
-        "udp_vmess_relay_final_hop_parse_config",
-        Some((server, *port)),
-    )?;
+    let config = vmess::udp::udp_flow_config_from_config(id, cipher).map_err(|error| {
+        invalid_vmess_udp_config(
+            error,
+            "udp_vmess_relay_final_hop_parse_config",
+            Some((server, *port)),
+        )
+    })?;
     let transport = crate::transport::VmessTransportOptions {
         tls: *tls,
         ws: *ws,

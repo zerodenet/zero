@@ -9,15 +9,6 @@ use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
-fn vless_tcp_config(
-    id: &str,
-    flow: Option<&str>,
-) -> Result<vless::VlessTcpConnectConfig, EngineError> {
-    vless::VlessTcpConnectConfig::from_config(id, flow).map_err(|error| {
-        EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
-    })
-}
-
 impl VlessAdapter {
     pub(super) async fn connect_tcp_impl(
         &self,
@@ -45,10 +36,15 @@ impl VlessAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        let config = vless_tcp_config(id, *flow).map_err(|error| TcpOutboundFailure {
-            stage: "connect_upstream_vless",
-            error,
-            upstream_endpoint: Some(((*server).to_string(), *port)),
+        let config = vless::tcp_connect_config_from_config(id, *flow).map_err(|error| {
+            TcpOutboundFailure {
+                stage: "connect_upstream_vless",
+                error: EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    error,
+                )),
+                upstream_endpoint: Some(((*server).to_string(), *port)),
+            }
         })?;
         if config.should_open_mux_pool_for_tcp() {
             return self
@@ -111,7 +107,9 @@ impl VlessAdapter {
         let ResolvedLeafOutbound::Vless { id, flow, .. } = leaf else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let config = vless_tcp_config(id, *flow)?;
+        let config = vless::tcp_connect_config_from_config(id, *flow).map_err(|error| {
+            EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
+        })?;
         apply_tcp_hop(proxy, stream, session, config).await
     }
 }
