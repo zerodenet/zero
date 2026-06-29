@@ -39,15 +39,19 @@ fn socks5_auth_from_config(
             "socks5 adapter received non-socks5 inbound config",
         )));
     };
-    Ok(socks5::ConfiguredSocks5PasswordAuth::from_config_parts(
-        users.iter().map(|user| {
-            (
-                user.username.clone(),
-                user.password.clone(),
-                user.principal_key.clone(),
-                user.up_bps,
-                user.down_bps,
-            )
-        }),
-    ))
+    Ok(socks5_password_auth_from_users(users))
+}
+
+pub(in crate::adapters) fn socks5_password_auth_from_users(
+    users: &[zero_config::Socks5UserConfig],
+) -> socks5::ConfiguredSocks5PasswordAuth {
+    socks5::ConfiguredSocks5PasswordAuth::from_config_parts(users.iter().map(|user| {
+        (
+            user.username.clone(),
+            user.password.clone(),
+            user.principal_key.clone(),
+            user.up_bps,
+            user.down_bps,
+        )
+    }))
 }
