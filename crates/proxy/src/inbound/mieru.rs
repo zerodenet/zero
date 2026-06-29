@@ -215,12 +215,12 @@ impl Proxy {
                         Ok(Some(dispatch_parts)) => {
                             last_activity = TokioInstant::now();
                             let (target, port, payload, client_session_id) =
-                                dispatch_parts.into_parts();
+                                dispatch_parts.pipe_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target,
+                                    target: target.clone(),
                                     port,
-                                    payload: &payload,
+                                    payload,
                                     protocol: zero_core::ProtocolType::Mieru,
                                     auth: auth.as_ref(),
                                     client_session_id,

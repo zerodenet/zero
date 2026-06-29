@@ -204,6 +204,15 @@ pub struct ShadowsocksInboundUdpDispatchParts {
 
 #[cfg(feature = "crypto")]
 impl ShadowsocksInboundUdpDispatchParts {
+    pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
+        (
+            &self.target,
+            self.port,
+            &self.payload,
+            self.client_session_id,
+        )
+    }
+
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }

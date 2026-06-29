@@ -40,12 +40,12 @@ impl Proxy {
                     };
 
                     let sa = profile.inbound_auth();
-                    let (target, port, payload, client_session_id) = dispatch_parts.into_parts();
+                    let (target, port, payload, client_session_id) = dispatch_parts.pipe_parts();
                     match UdpPipe::new(self, &mut dispatch)
                         .dispatch(UdpPipeInput {
-                            target,
+                            target: target.clone(),
                             port,
-                            payload: &payload,
+                            payload,
                             protocol: ProtocolType::Shadowsocks,
                             auth: Some(&sa),
                             client_session_id,

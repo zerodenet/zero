@@ -104,20 +104,22 @@ pub struct MieruInboundUdpDispatchParts {
     client_session_id: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MieruInboundUdpDispatchView {
-    parts: MieruInboundUdpDispatchParts,
-}
-
 impl MieruInboundUdpDispatchParts {
+    pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
+        (
+            &self.target,
+            self.port,
+            &self.payload,
+            self.client_session_id,
+        )
+    }
+
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }
-}
 
-impl MieruInboundUdpDispatchView {
     pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
-        self.parts.into_parts()
+        self.into_parts()
     }
 }
 
@@ -154,12 +156,6 @@ impl MieruInboundUdpRequest {
             port: self.port,
             payload: self.payload,
             client_session_id: None,
-        }
-    }
-
-    pub fn into_dispatch_view(self) -> MieruInboundUdpDispatchView {
-        MieruInboundUdpDispatchView {
-            parts: self.into_dispatch_parts(),
         }
     }
 
@@ -214,28 +210,6 @@ impl MieruInboundUdpSession {
     ) -> Result<MieruInboundUdpDispatchParts, Error> {
         self.decode_request(data)
             .map(MieruInboundUdpRequest::into_dispatch_parts)
-    }
-
-    pub fn decode_dispatch_view(&self, data: &[u8]) -> Result<MieruInboundUdpDispatchView, Error> {
-        self.decode_request(data)
-            .map(MieruInboundUdpRequest::into_dispatch_view)
-    }
-
-    pub async fn read_dispatch_view_tokio<R>(
-        &self,
-        reader: &mut R,
-        buf: &mut [u8],
-    ) -> Result<Option<MieruInboundUdpDispatchView>, Error>
-    where
-        R: tokio::io::AsyncRead + Unpin,
-    {
-        let n = tokio::io::AsyncReadExt::read(reader, buf)
-            .await
-            .map_err(|_| Error::Io("failed to read Mieru UDP request"))?;
-        if n == 0 {
-            return Ok(None);
-        }
-        self.decode_dispatch_view(&buf[..n]).map(Some)
     }
 
     pub async fn read_dispatch_parts_tokio<R>(
