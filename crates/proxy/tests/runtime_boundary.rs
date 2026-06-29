@@ -1109,8 +1109,9 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     assert!(
         udp.contains("async fn ss_udp_relay_loop")
             && !udp.contains("struct SsProtocolResponse")
-            && udp.contains(".send_proxy_session_response_to_client_tokio")
+            && udp.contains(".send_proxy_session_response_to_sender_tokio")
             && !udp.contains("response_datagram_for_proxy_session")
+            && !udp.contains("address_from_socket_addr(sender)")
             && udp.contains("UdpPipe::new"),
         "Shadowsocks UDP relay should live in src/inbound/shadowsocks/udp.rs, route through UdpPipe, and delegate response framing to protocols/shadowsocks"
     );
@@ -5484,9 +5485,11 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("direct_response_session_id")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
-            && direct_response.contains(".send_response_to_client_endpoint")
-            && direct_response.contains("Socks5UdpRelayEndpoint")
+            && direct_response.contains(".send_response_to_client_socket_addr")
+            && direct_response.contains("socket_address_from_std")
+            && !direct_response.contains("Socks5UdpRelayEndpoint")
             && !direct_response.contains("address_from_socket_addr(sender)")
+            && !direct_response.contains("socket_addr_to_ip(sender)")
             && !direct_response.contains("udp_session.response_frame")
             && !direct_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("socks5::encode_udp_associate_response("),
@@ -5553,7 +5556,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !upstream_response.contains("udp_session.response_key")
             && !upstream_response.contains("response.into_parts()")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
-            && direct_response.contains(".send_response_to_client_endpoint")
+            && direct_response.contains(".send_response_to_client_socket_addr")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
             && chain_response.contains(".send_response_to_client")
             && !dispatch.contains("Socks5InboundUdpCodec")
@@ -5580,6 +5583,8 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     assert!(
         protocol_udp.contains("pub async fn send_response_to_client")
             && protocol_udp.contains("pub async fn send_response_to_client_endpoint")
+            && protocol_udp.contains("pub async fn send_response_to_client_socket_addr")
+            && protocol_udp.contains("SocketAddress")
             && protocol_udp.contains("fn address_from_ip")
             && protocol_udp.contains("pub fn decode_dispatch_action")
             && protocol_udp.contains("pub fn local_dns_domain_request")

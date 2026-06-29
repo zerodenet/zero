@@ -514,6 +514,24 @@ impl ShadowsocksInboundUdpSession {
             .map(Some)
     }
 
+    pub async fn send_proxy_session_response_to_sender_tokio(
+        &self,
+        socket: &tokio::net::UdpSocket,
+        proxy_session_id: u64,
+        sender: std::net::SocketAddr,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        let target = address_from_socket_addr(sender);
+        self.send_proxy_session_response_to_client_tokio(
+            socket,
+            proxy_session_id,
+            &target,
+            sender.port(),
+            payload,
+        )
+        .await
+    }
+
     pub fn response_target_for_proxy_session(
         &self,
         proxy_session_id: u64,
@@ -528,6 +546,14 @@ impl ShadowsocksInboundUdpSession {
             target,
             port,
         )
+    }
+}
+
+#[cfg(feature = "crypto")]
+fn address_from_socket_addr(addr: std::net::SocketAddr) -> Address {
+    match addr.ip() {
+        std::net::IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
+        std::net::IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
     }
 }
 

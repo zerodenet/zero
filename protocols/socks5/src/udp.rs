@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use zero_core::{Address, Error};
-use zero_traits::{AsyncSocket, DatagramSocket, IpAddress, UdpRelayProtocol};
+use zero_traits::{AsyncSocket, DatagramSocket, IpAddress, SocketAddress, UdpRelayProtocol};
 
 use crate::outbound::{Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth};
 use crate::shared::{
@@ -378,6 +378,29 @@ impl Socks5InboundUdpSession {
             client_port,
             &upstream_address,
             upstream.port,
+            payload,
+        )
+        .await
+    }
+
+    pub async fn send_response_to_client_socket_addr<S>(
+        &self,
+        socket: &S,
+        client: SocketAddress,
+        upstream: SocketAddress,
+        payload: &[u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>>
+    where
+        S: DatagramSocket,
+    {
+        self.send_response_to_client_endpoint(
+            socket,
+            client.ip,
+            client.port,
+            Socks5UdpRelayEndpoint {
+                address: upstream.ip,
+                port: upstream.port,
+            },
             payload,
         )
         .await

@@ -68,13 +68,11 @@ impl Proxy {
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                        let target = crate::runtime::udp_flow::helpers::address_from_socket_addr(sender);
                         let _ = udp_session
-                            .send_proxy_session_response_to_client_tokio(
+                            .send_proxy_session_response_to_sender_tokio(
                                 udp_socket.as_ref(),
                                 sid,
-                                &target,
-                                sender.port(),
+                                sender,
                                 &direct_buf[..n],
                             )
                             .await;
