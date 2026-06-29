@@ -4,7 +4,6 @@ use std::net::SocketAddr;
 
 use async_trait::async_trait;
 use mieru::{MieruInbound, MieruInboundProfile};
-use tokio::io::AsyncReadExt;
 use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -212,19 +211,11 @@ impl Proxy {
                     );
                     break;
                 }
-                read = client.read(&mut read_buf) => {
+                read = udp_session.read_dispatch_view_tokio(&mut client, &mut read_buf) => {
                     match read {
-                        Ok(0) => break,
-                        Ok(n) => {
+                        Ok(None) => break,
+                        Ok(Some(dispatch_view)) => {
                             last_activity = TokioInstant::now();
-                            let dispatch_view =
-                                match udp_session.decode_dispatch_view(&read_buf[..n]) {
-                                    Ok(dispatch_view) => dispatch_view,
-                                    Err(error) => {
-                                        tracing::warn!(error = %error, "mieru udp request decode failed");
-                                        continue;
-                                    }
-                                };
                             let (target, port, payload, client_session_id) =
                                 dispatch_view.into_pipe_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
@@ -241,8 +232,8 @@ impl Proxy {
                                 tracing::warn!(error = %error, "failed to process mieru udp packet");
                             }
                         }
-                        Err(e) => {
-                            tracing::warn!(error = %e, "mieru udp read error");
+                        Err(error) => {
+                            tracing::warn!(error = %error, "mieru udp request read/decode failed");
                             break;
                         }
                     }

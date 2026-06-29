@@ -5040,7 +5040,10 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
 
     assert!(
         inbound.contains("mieru::MieruInbound.udp_session()")
-            && inbound.contains("udp_session.decode_dispatch_view")
+            && inbound.contains("udp_session.read_dispatch_view_tokio")
+            && !inbound.contains("udp_session.decode_dispatch_view")
+            && !inbound.contains("client.read(&mut read_buf)")
+            && !inbound.contains("decode_dispatch_view(&read_buf[..n])")
             && inbound.contains("dispatch_view.into_pipe_parts()")
             && !inbound.contains("dispatch_parts.into_parts()")
             && !inbound.contains("request.into_dispatch_parts().into_parts()")
@@ -5082,6 +5085,7 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_udp.contains("fn decode_request")
             && protocol_udp.contains("fn decode_dispatch_parts")
             && protocol_udp.contains("fn decode_dispatch_view")
+            && protocol_udp.contains("fn read_dispatch_view_tokio")
             && protocol_udp.contains("fn record_target")
             && protocol_udp.contains("fn record_request_target")
             && protocol_udp.contains("struct MieruUdpFlowCodec")
