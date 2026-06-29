@@ -316,19 +316,43 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         "VlessInboundMuxSession",
         "VlessInboundMuxAction",
         "VlessInboundMuxWriter",
-        "next_action",
-        "accept_stream",
-        "reject_stream",
-        "send_data",
-        "end_stream",
+        "read_inbound_action",
+        "accept_inbound_stream",
+        "reject_inbound_stream",
+        "send_inbound_stream_data",
+        "end_inbound_stream",
     ] {
         assert!(
             inbound.contains(required),
-            "VLESS inbound mux should consume protocol-owned MUX server APIs; missing `{required}`"
+            "VLESS inbound mux should consume protocol-owned semantic MUX server APIs; missing `{required}`"
         );
         assert!(
             protocol_mux.contains(required),
-            "protocols/vless should own VLESS MUX server API `{required}`"
+            "protocols/vless should own VLESS semantic MUX server API `{required}`"
+        );
+    }
+    for forbidden in [
+        ".next_action(",
+        ".accept_stream(",
+        ".reject_stream(",
+        ".send_data(",
+        ".end_stream(",
+    ] {
+        assert!(
+            !inbound.contains(forbidden),
+            "VLESS inbound mux glue should not call low-level MUX frame operations directly; found `{forbidden}`"
+        );
+    }
+    for required in [
+        "pub async fn next_action",
+        "pub async fn accept_stream",
+        "pub async fn reject_stream",
+        "pub async fn send_data",
+        "pub async fn end_stream",
+    ] {
+        assert!(
+            protocol_mux.contains(required),
+            "protocols/vless should keep low-level MUX frame operation `{required}`"
         );
     }
     assert!(

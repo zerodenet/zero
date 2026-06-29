@@ -589,6 +589,16 @@ impl VlessInboundMuxSession {
         self.next_event(stream).await.map(Into::into)
     }
 
+    pub async fn read_inbound_action<S>(
+        &mut self,
+        stream: &mut S,
+    ) -> Result<VlessInboundMuxAction, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.next_action(stream).await
+    }
+
     pub async fn accept_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
     where
         S: AsyncSocket,
@@ -596,11 +606,25 @@ impl VlessInboundMuxSession {
         self.server.write_new_stream_accepted(stream, sid).await
     }
 
+    pub async fn accept_inbound_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.accept_stream(stream, sid).await
+    }
+
     pub async fn reject_stream<S>(&mut self, stream: &mut S) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
         self.server.write_new_stream_rejected(stream).await
+    }
+
+    pub async fn reject_inbound_stream<S>(&mut self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.reject_stream(stream).await
     }
 
     pub async fn send_data<S>(
@@ -615,11 +639,30 @@ impl VlessInboundMuxSession {
         self.server.write_data(stream, sid, payload).await
     }
 
+    pub async fn send_inbound_stream_data<S>(
+        &mut self,
+        stream: &mut S,
+        sid: u16,
+        payload: &[u8],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_data(stream, sid, payload).await
+    }
+
     pub async fn end_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
         self.server.write_end(stream, sid).await
+    }
+
+    pub async fn end_inbound_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.end_stream(stream, sid).await
     }
 }
 

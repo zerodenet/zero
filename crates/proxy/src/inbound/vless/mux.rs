@@ -43,7 +43,7 @@ impl Proxy {
         info!(inbound_tag, "VLESS MUX session started");
         loop {
             tokio::select! {
-                action_res = mux.next_action(&mut client) => {
+                action_res = mux.read_inbound_action(&mut client) => {
                     let action = match action_res {
                         Ok(action) => action,
                         Err(_) => break,
@@ -55,7 +55,7 @@ impl Proxy {
                         }
                         VlessInboundMuxAction::OpenStream { session_id: sid, session } => {
                             let mut session = *session;
-                            if mux.accept_stream(&mut client, sid).await.is_err() {
+                            if mux.accept_inbound_stream(&mut client, sid).await.is_err() {
                                 break;
                             }
 
@@ -77,7 +77,7 @@ impl Proxy {
                                     {
                                         Ok(result) => result.upstream,
                                         Err(_) => {
-                                            let _ = mux.reject_stream(&mut client).await;
+                                            let _ = mux.reject_inbound_stream(&mut client).await;
                                             up_senders.remove(&sid);
                                             continue;
                                         }
@@ -124,7 +124,7 @@ impl Proxy {
                             } else {
                                 // Data for unknown stream -?ignore or send END
                                 let _ =
-                                    mux.end_stream(&mut client, session_id).await;
+                                    mux.end_inbound_stream(&mut client, session_id).await;
                             }
                         }
                         VlessInboundMuxAction::End { session_id } => {
@@ -135,7 +135,7 @@ impl Proxy {
                         }
                         VlessInboundMuxAction::Unknown { session_id } => {
                             // Unknown status -?ignore
-                            let _ = mux.reject_stream(&mut client).await;
+                            let _ = mux.reject_inbound_stream(&mut client).await;
                             up_senders.remove(&session_id);
                         }
                     }
@@ -146,10 +146,10 @@ impl Proxy {
                         if up_senders.contains_key(&sid) {
                             if payload.is_empty() {
                                 // Upstream closed -?send END frame and clean up
-                                let _ = mux.end_stream(&mut client, sid).await;
+                                let _ = mux.end_inbound_stream(&mut client, sid).await;
                                 up_senders.remove(&sid);
                             } else {
-                                let _ = mux.send_data(&mut client, sid, &payload).await;
+                                let _ = mux.send_inbound_stream_data(&mut client, sid, &payload).await;
                             }
                         }
                     }
