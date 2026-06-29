@@ -294,7 +294,7 @@ impl Socks5InboundUdpSession {
         &self,
         packet: &[u8],
         resolver: &R,
-    ) -> Result<Option<(Socks5InboundUdpDispatchParts, usize)>, Error>
+    ) -> Result<Option<Socks5InboundUdpDispatchView>, Error>
     where
         R: DnsResolver + ?Sized,
     {
@@ -303,7 +303,7 @@ impl Socks5InboundUdpSession {
                 let _ = resolver.resolve(&domain).await;
                 Ok(None)
             }
-            Socks5InboundUdpDispatchAction::Dispatch(view) => Ok(Some(view.into_parts())),
+            Socks5InboundUdpDispatchAction::Dispatch(view) => Ok(Some(view)),
         }
     }
 

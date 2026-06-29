@@ -217,9 +217,29 @@ impl Socks5InboundUdpDispatchView {
     pub fn into_parts(self) -> (Socks5InboundUdpDispatchParts, usize) {
         (self.parts, self.protocol_overhead_len)
     }
+
+    pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
+        self.parts.pipe_parts()
+    }
+
+    pub fn record_protocol_overhead<F>(&self, session_id: u64, record: F)
+    where
+        F: FnOnce(u64, u64),
+    {
+        record(session_id, self.protocol_overhead_len as u64);
+    }
 }
 
 impl Socks5InboundUdpDispatchParts {
+    pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
+        (
+            &self.target,
+            self.port,
+            &self.payload,
+            self.client_session_id,
+        )
+    }
+
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }
