@@ -67,32 +67,29 @@ impl Proxy {
 
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
-                    if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                        let _ = udp_session
-                            .send_proxy_session_response_to_sender_tokio(
-                                udp_socket.as_ref(),
-                                sid,
-                                sender,
-                                &direct_buf[..n],
-                            )
-                            .await;
-                    }
+                    let session_id = dispatch.direct_response_session_id(sender);
+                    let _ = udp_session
+                        .send_response_for_proxy_session_to_sender_tokio(
+                            udp_socket.as_ref(),
+                            session_id,
+                            sender,
+                            &direct_buf[..n],
+                        )
+                        .await;
                 }
 
                 Some(chain_result) = chain_tasks.join_next() => {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
-                            if let Some(sid) = session_id {
-                                let _ = udp_session
-                                    .send_proxy_session_response_to_client_tokio(
-                                        udp_socket.as_ref(),
-                                        sid,
-                                        &target,
-                                        port,
-                                        &payload,
-                                    )
-                                    .await;
-                            }
+                            let _ = udp_session
+                                .send_response_for_proxy_session_to_client_tokio(
+                                    udp_socket.as_ref(),
+                                    session_id,
+                                    &target,
+                                    port,
+                                    &payload,
+                                )
+                                .await;
                         }
                         Ok(Err(error)) => {
                             warn!(error = %error, "ss chain response error");
