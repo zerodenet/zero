@@ -44,6 +44,24 @@ pub enum TransportKey {
     },
 }
 
+pub fn transport_key_from_config(
+    tls_server_name: Option<&str>,
+    reality_public_key: Option<&str>,
+    reality_server_name: Option<&str>,
+    fallback_server: &str,
+) -> TransportKey {
+    match (tls_server_name, reality_public_key, reality_server_name) {
+        (Some(server_name), None, _) => TransportKey::Tls {
+            server_name: Some(server_name.to_owned()),
+        },
+        (None, Some(public_key), server_name) => TransportKey::Reality {
+            public_key: public_key.to_owned(),
+            server_name: server_name.unwrap_or(fallback_server).to_owned(),
+        },
+        _ => TransportKey::Raw,
+    }
+}
+
 impl MuxIdentity {
     pub fn from_uuid(uuid: [u8; 16]) -> Self {
         Self { uuid }

@@ -4543,6 +4543,7 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         "impl MuxIdentity",
         "impl PoolKey",
         "pub fn from_identity",
+        "pub fn transport_key_from_config(",
     ] {
         assert!(
             protocol_mux_pool.contains(required),
@@ -4581,10 +4582,23 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         "open_mux_udp_stream",
         "establish_mux_connection",
         "into_pool_conn",
+        "vless::mux_pool::transport_key_from_config",
     ] {
         assert!(
             root.contains(required),
             "VLESS adapter mux pool should delegate protocol MUX stream mechanics through `{required}`"
+        );
+    }
+    for forbidden in [
+        "TransportKey::Tls",
+        "TransportKey::Reality",
+        "TransportKey::Raw",
+        "public_key: r.public_key.clone()",
+        "server_name.clone().unwrap_or_else",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "VLESS adapter mux pool should ask protocols/vless to build transport cache identity; found `{forbidden}`"
         );
     }
     assert!(

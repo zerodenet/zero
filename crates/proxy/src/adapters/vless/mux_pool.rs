@@ -19,9 +19,7 @@ use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 pub(crate) use model::{MuxConnectionPool, VlessMuxOpenRequest};
-use vless::mux_pool::{
-    open_mux_tcp_stream, open_mux_udp_stream, MuxPoolConn, PoolKey, TransportKey,
-};
+use vless::mux_pool::{open_mux_tcp_stream, open_mux_udp_stream, MuxPoolConn, PoolKey};
 
 impl std::fmt::Debug for MuxConnectionPool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -50,25 +48,18 @@ impl MuxConnectionPool {
         &self,
         request: &VlessMuxOpenRequest<'_>,
     ) -> Result<Arc<MuxPoolConn>, EngineError> {
-        let transport = match (request.tls, request.reality) {
-            (Some(t), None) => TransportKey::Tls {
-                server_name: t.server_name.clone(),
-            },
-            (None, Some(r)) => TransportKey::Reality {
-                public_key: r.public_key.clone(),
-                server_name: r
-                    .server_name
-                    .clone()
-                    .unwrap_or_else(|| request.server.to_owned()),
-            },
-            _ => TransportKey::Raw,
-        };
-
         let key = PoolKey::from_identity(
             request.server.to_owned(),
             request.port,
             request.identity.clone(),
-            transport,
+            vless::mux_pool::transport_key_from_config(
+                request.tls.and_then(|tls| tls.server_name.as_deref()),
+                request.reality.map(|reality| reality.public_key.as_str()),
+                request
+                    .reality
+                    .and_then(|reality| reality.server_name.as_deref()),
+                request.server,
+            ),
         );
 
         let conn = {
