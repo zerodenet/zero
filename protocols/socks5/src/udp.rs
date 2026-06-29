@@ -335,6 +335,36 @@ impl Socks5InboundUdpSession {
             .map_err(Socks5UdpRelayError::Socket)?;
         Ok(frame_len)
     }
+
+    pub async fn send_response_to_client_endpoint<S>(
+        &self,
+        socket: &S,
+        client: IpAddress,
+        client_port: u16,
+        upstream: Socks5UdpRelayEndpoint,
+        payload: &[u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>>
+    where
+        S: DatagramSocket,
+    {
+        let upstream_address = address_from_ip(upstream.address);
+        self.send_response_to_client(
+            socket,
+            client,
+            client_port,
+            &upstream_address,
+            upstream.port,
+            payload,
+        )
+        .await
+    }
+}
+
+fn address_from_ip(ip: IpAddress) -> Address {
+    match ip {
+        IpAddress::V4(bytes) => Address::Ipv4(bytes),
+        IpAddress::V6(bytes) => Address::Ipv6(bytes),
+    }
 }
 
 impl<C, S> Socks5UdpAssociation<C, S> {

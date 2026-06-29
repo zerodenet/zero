@@ -5113,7 +5113,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("direct_response_session_id")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
-            && direct_response.contains(".send_response_to_client")
+            && direct_response.contains(".send_response_to_client_endpoint")
+            && direct_response.contains("Socks5UdpRelayEndpoint")
+            && !direct_response.contains("address_from_socket_addr(sender)")
             && !direct_response.contains("udp_session.response_frame")
             && !direct_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("socks5::encode_udp_associate_response("),
@@ -5173,7 +5175,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !upstream_response.contains("udp_session.response_key")
             && !upstream_response.contains("response.into_parts()")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
-            && direct_response.contains(".send_response_to_client")
+            && direct_response.contains(".send_response_to_client_endpoint")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
             && chain_response.contains(".send_response_to_client")
             && !dispatch.contains("Socks5InboundUdpCodec")
@@ -5196,6 +5198,8 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         .expect("read protocols/socks5/src/udp.rs");
     assert!(
         protocol_udp.contains("pub async fn send_response_to_client")
+            && protocol_udp.contains("pub async fn send_response_to_client_endpoint")
+            && protocol_udp.contains("fn address_from_ip")
             && protocol_udp.contains("pub fn local_dns_domain_request")
             && protocol_udp.contains("pub fn response_session_key_parts")
             && protocol_udp.contains("response_frame(")

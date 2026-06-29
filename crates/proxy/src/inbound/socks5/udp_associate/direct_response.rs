@@ -64,14 +64,15 @@ pub(super) async fn forward_direct_udp_response(
     payload: &[u8],
 ) -> Result<usize, EngineError> {
     let udp_session = socks5::Socks5Inbound.udp_session();
-    let upstream_address = crate::runtime::udp_flow::helpers::address_from_socket_addr(sender);
     udp_session
-        .send_response_to_client(
+        .send_response_to_client_endpoint(
             relay,
             zero_platform_tokio::socket_addr_to_ip(client_addr),
             client_addr.port(),
-            &upstream_address,
-            sender.port(),
+            socks5::udp::Socks5UdpRelayEndpoint {
+                address: zero_platform_tokio::socket_addr_to_ip(sender),
+                port: sender.port(),
+            },
             payload,
         )
         .await
