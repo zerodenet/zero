@@ -1,6 +1,6 @@
 //! Trojan inbound protocol handler.
 
-use zero_core::{Address, Error, Network, ProtocolType, Session};
+use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::{AsyncSocket, IpAddress};
 
 use super::outbound::TrojanUdpPacket;
@@ -154,6 +154,12 @@ fn address_from_ip(ip: IpAddress) -> Address {
 impl TrojanInbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Trojan
+    }
+
+    pub fn inbound_auth(&self, password: impl Into<String>) -> SessionAuth {
+        let mut auth = SessionAuth::new("trojan");
+        auth.principal_key = Some(password.into());
+        auth
     }
 
     pub fn udp_session(&self) -> TrojanInboundUdpSession {

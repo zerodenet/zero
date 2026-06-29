@@ -6,7 +6,7 @@ use core::task::{Context, Poll};
 use std::io;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use zero_core::{Address, Error, Network, ProtocolType, Session};
+use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::AsyncSocket;
 
 use crate::crypto::{try_derive_keys, MieruCipher};
@@ -398,6 +398,12 @@ where
 impl MieruInbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Mieru
+    }
+
+    pub fn inbound_auth(&self) -> SessionAuth {
+        let mut auth = SessionAuth::new("mieru");
+        auth.principal_key = Some("mieru".to_owned());
+        auth
     }
 
     pub fn udp_session(&self) -> crate::udp::MieruInboundUdpSession {

@@ -54,9 +54,7 @@ impl InboundProtocol for MieruInboundHandler {
         let mut client = mieru::MieruInboundStream::new(metered.into_inner(), accept);
 
         let mut session = client.accept_tunneled_socks5_session().await?;
-        let mut sa = zero_core::SessionAuth::new("mieru");
-        sa.principal_key = Some("mieru".to_owned());
-        session.apply_auth(sa);
+        session.apply_auth(self.mieru_inbound.inbound_auth());
 
         Ok((session, client))
     }

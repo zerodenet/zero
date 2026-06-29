@@ -44,8 +44,7 @@ impl Proxy {
                         Err(_) => continue,
                     };
 
-                    let mut sa = zero_core::SessionAuth::new("shadowsocks");
-                    sa.principal_key = Some(profile.principal_key());
+                    let sa = profile.inbound_auth();
                     let (target, port, payload, client_session_id) =
                         request.into_dispatch_parts().into_parts();
                     match UdpPipe::new(self, &mut dispatch)

@@ -54,9 +54,7 @@ impl InboundProtocol for ShadowsocksInboundHandler {
         self.tcp_state.check_accept_replay(&accept)?;
 
         let mut session = accept.session.clone();
-        let mut sa = zero_core::SessionAuth::new("shadowsocks");
-        sa.principal_key = Some(self.profile.principal_key());
-        session.apply_auth(sa);
+        session.apply_auth(self.profile.inbound_auth());
 
         let client = self
             .profile

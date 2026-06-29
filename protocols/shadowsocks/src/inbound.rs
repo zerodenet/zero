@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use zero_core::Address;
 use zero_core::ProtocolType;
 #[cfg(feature = "crypto")]
-use zero_core::{Error, Network, Session};
+use zero_core::{Error, Network, Session, SessionAuth};
 #[cfg(feature = "crypto")]
 use zero_traits::{DatagramCodec, UdpDatagramFraming};
 
@@ -100,8 +100,14 @@ impl ShadowsocksInboundProfile {
         &self.cipher_name
     }
 
-    pub fn principal_key(&self) -> String {
+    fn principal_key(&self) -> String {
         String::from_utf8_lossy(&self.password).to_string()
+    }
+
+    pub fn inbound_auth(&self) -> SessionAuth {
+        let mut auth = SessionAuth::new("shadowsocks");
+        auth.principal_key = Some(self.principal_key());
+        auth
     }
 
     pub fn is_2022(&self) -> bool {

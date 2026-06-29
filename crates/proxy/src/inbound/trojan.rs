@@ -74,9 +74,7 @@ impl InboundProtocol for TrojanInboundHandler {
             .accept(&mut sock, std::slice::from_ref(&self.password))
             .await?;
         let mut session: Session = accept.session;
-        let mut sa = zero_core::SessionAuth::new("trojan");
-        sa.principal_key = Some(self.password.clone());
-        session.apply_auth(sa);
+        session.apply_auth(self.trojan_inbound.inbound_auth(self.password.clone()));
         Ok((session, TcpRelayStream::new(sock.0)))
     }
 

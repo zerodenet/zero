@@ -941,11 +941,68 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     assert!(
         udp.contains("ShadowsocksInboundProfile")
             && udp.contains("profile.udp_session()")
-            && udp.contains("profile.principal_key()")
+            && udp.contains("profile.inbound_auth()")
+            && !udp.contains("profile.principal_key()")
             && !udp.contains("CipherKind")
             && !udp.contains("password: &str")
             && !udp.contains("ShadowsocksInboundUdpCodec::new"),
         "Shadowsocks UDP relay should delegate protocol-private UDP session/auth construction to the profile"
+    );
+}
+
+#[test]
+fn inbound_auth_identity_stays_in_protocol_crates() {
+    let shadowsocks_inbound = read("src/inbound/shadowsocks.rs");
+    let shadowsocks_udp = read("src/inbound/shadowsocks/udp.rs");
+    let trojan_inbound = read("src/inbound/trojan.rs");
+    let mieru_inbound = read("src/inbound/mieru.rs");
+
+    let shadowsocks_protocol =
+        fs::read_to_string(repo_root().join("protocols/shadowsocks/src/inbound.rs"))
+            .expect("read shadowsocks protocol inbound source");
+    let trojan_protocol = fs::read_to_string(repo_root().join("protocols/trojan/src/inbound.rs"))
+        .expect("read trojan protocol inbound source");
+    let mieru_protocol = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
+        .expect("read mieru protocol inbound source");
+
+    for (source_name, source, required) in [
+        (
+            "src/inbound/shadowsocks.rs",
+            shadowsocks_inbound.as_str(),
+            "profile.inbound_auth()",
+        ),
+        (
+            "src/inbound/shadowsocks/udp.rs",
+            shadowsocks_udp.as_str(),
+            "profile.inbound_auth()",
+        ),
+        (
+            "src/inbound/trojan.rs",
+            trojan_inbound.as_str(),
+            "self.trojan_inbound.inbound_auth",
+        ),
+        (
+            "src/inbound/mieru.rs",
+            mieru_inbound.as_str(),
+            "self.mieru_inbound.inbound_auth()",
+        ),
+    ] {
+        assert!(
+            source.contains(required)
+                && !source.contains("SessionAuth::new(\"shadowsocks\")")
+                && !source.contains("SessionAuth::new(\"trojan\")")
+                && !source.contains("SessionAuth::new(\"mieru\")")
+                && !source.contains("principal_key = Some"),
+            "{source_name} should apply protocol-built inbound auth instead of constructing protocol identity in proxy"
+        );
+    }
+
+    assert!(
+        shadowsocks_protocol.contains("pub fn inbound_auth(&self) -> SessionAuth")
+            && trojan_protocol
+                .contains("pub fn inbound_auth(&self, password: impl Into<String>) -> SessionAuth")
+            && mieru_protocol.contains("pub fn inbound_auth(&self) -> SessionAuth"),
+        "protocol crates should own their inbound auth identity construction"
     );
 }
 
