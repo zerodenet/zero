@@ -25,7 +25,7 @@ impl Socks5Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        match connect_tcp(proxy, session, server, *port, username.zip(*password)).await {
+        match connect_tcp(proxy, session, server, *port, *username, *password).await {
             Ok(upstream) => Ok(EstablishedTcpOutbound::Socks5 {
                 tag: (*tag).to_string(),
                 server: (*server).to_string(),
@@ -53,7 +53,7 @@ impl Socks5Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        apply_tcp_hop(proxy, stream, session, username.zip(*password)).await
+        apply_tcp_hop(proxy, stream, session, *username, *password).await
     }
 }
 
@@ -62,7 +62,8 @@ async fn connect_tcp(
     session: &Session,
     server: &str,
     port: u16,
-    auth: Option<(&str, &str)>,
+    username: Option<&str>,
+    password: Option<&str>,
 ) -> Result<TcpRelayStream, EngineError> {
     let upstream = proxy
         .protocols
@@ -74,11 +75,7 @@ async fn connect_tcp(
     socks5::Socks5Outbound
         .establish_tcp_tunnel(
             &mut upstream,
-            &socks5::Socks5TcpTunnelTarget {
-                session,
-                auth: auth
-                    .map(|(username, password)| socks5::Socks5OutboundAuth { username, password }),
-            },
+            &socks5::Socks5TcpTunnelTarget::new(session, username, password),
         )
         .await?;
     proxy.record_session_outbound_traffic(session.id, upstream.drain_traffic());
@@ -90,16 +87,13 @@ async fn apply_tcp_hop(
     _proxy: &Proxy,
     mut stream: TcpRelayStream,
     session: &Session,
-    auth: Option<(&str, &str)>,
+    username: Option<&str>,
+    password: Option<&str>,
 ) -> Result<TcpRelayStream, EngineError> {
     socks5::Socks5Outbound
         .establish_tcp_tunnel(
             &mut stream,
-            &socks5::Socks5TcpTunnelTarget {
-                session,
-                auth: auth
-                    .map(|(username, password)| socks5::Socks5OutboundAuth { username, password }),
-            },
+            &socks5::Socks5TcpTunnelTarget::new(session, username, password),
         )
         .await
         .map_err(|error| EngineError::Io(std::io::Error::other(error)))?;

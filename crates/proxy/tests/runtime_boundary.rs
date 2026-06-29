@@ -1904,6 +1904,29 @@ fn vless_tcp_connect_uses_request_model() {
 }
 
 #[test]
+fn socks5_tcp_adapter_uses_protocol_target_model() {
+    let adapter = read("src/adapters/socks5/tcp.rs");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/socks5/src/outbound.rs"))
+            .expect("read socks5 protocol outbound source");
+
+    assert!(
+        adapter.contains("Socks5TcpTunnelTarget::new")
+            && adapter.contains("session, username, password")
+            && !adapter.contains("Socks5OutboundAuth")
+            && !adapter.contains("username.zip"),
+        "SOCKS5 TCP adapter should pass raw leaf auth into protocol-owned target construction"
+    );
+    assert!(
+        protocol_outbound.contains("impl<'a> Socks5TcpTunnelTarget<'a>")
+            && protocol_outbound.contains("pub fn outbound_auth")
+            && protocol_outbound.contains(".zip(password)")
+            && protocol_outbound.contains("Socks5OutboundAuth { username, password }"),
+        "SOCKS5 protocol crate should own TCP target auth construction"
+    );
+}
+
+#[test]
 fn mieru_tcp_connect_glue_lives_in_adapter_tcp_module() {
     let outbound = manifest_dir().join("src/outbound/mieru.rs");
     let adapter = read("src/adapters/mieru/tcp.rs");

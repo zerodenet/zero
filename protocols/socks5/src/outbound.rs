@@ -128,6 +128,24 @@ pub struct Socks5TcpTunnelTarget<'a> {
     pub auth: Option<Socks5OutboundAuth<'a>>,
 }
 
+impl<'a> Socks5TcpTunnelTarget<'a> {
+    pub fn new(session: &'a Session, username: Option<&'a str>, password: Option<&'a str>) -> Self {
+        Self {
+            session,
+            auth: outbound_auth(username, password),
+        }
+    }
+}
+
+pub fn outbound_auth<'a>(
+    username: Option<&'a str>,
+    password: Option<&'a str>,
+) -> Option<Socks5OutboundAuth<'a>> {
+    username
+        .zip(password)
+        .map(|(username, password)| Socks5OutboundAuth { username, password })
+}
+
 impl Socks5Outbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Socks5
