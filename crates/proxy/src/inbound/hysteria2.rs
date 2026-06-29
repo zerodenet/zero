@@ -326,16 +326,14 @@ impl Proxy {
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     let session_id = dispatch.direct_response_session_id(sender);
-                    if let Some(sid) = session_id {
-                        record_udp_inbound_response_rx(&proxy, session_id, n);
-                        if let Ok(Some(written)) = udp_session.send_response_to_socket_addr(
-                            &conn,
-                            sid,
-                            sender,
-                            &direct_buf[..n],
-                        ) {
-                            record_udp_inbound_response_tx(&proxy, session_id, written);
-                        }
+                    record_udp_inbound_response_rx(&proxy, session_id, n);
+                    if let Ok(Some(written)) = udp_session.send_response_to_socket_addr_for_proxy_session(
+                        &conn,
+                        session_id,
+                        sender,
+                        &direct_buf[..n],
+                    ) {
+                        record_udp_inbound_response_tx(&proxy, session_id, written);
                     }
                 }
 
@@ -346,11 +344,15 @@ impl Proxy {
                             dispatch.touch_upstream_idle(proxy.udp_upstream_idle_timeout());
                             let (target, port, payload) = pkt.into_parts();
                             let session_id = udp_response_session_id(&dispatch, &target, port);
-                            if let Some(sid) = session_id {
-                                record_udp_inbound_response_rx(&proxy, session_id, payload.len());
-                                if let Ok(Some(written)) = udp_session.send_response(&conn, sid, &target, port, &payload) {
-                                    record_udp_inbound_response_tx(&proxy, session_id, written);
-                                }
+                            record_udp_inbound_response_rx(&proxy, session_id, payload.len());
+                            if let Ok(Some(written)) = udp_session.send_response_for_proxy_session(
+                                &conn,
+                                session_id,
+                                &target,
+                                port,
+                                &payload,
+                            ) {
+                                record_udp_inbound_response_tx(&proxy, session_id, written);
                             }
                         }
                         Err(error) => warn!(error = %error, "h2 upstream response error"),
@@ -362,11 +364,15 @@ impl Proxy {
                 Some(chain_result) = chain_tasks.join_next() => {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
-                            if let Some(sid) = session_id {
-                                record_udp_inbound_response_rx(&proxy, session_id, payload.len());
-                                if let Ok(Some(written)) = udp_session.send_response(&conn, sid, &target, port, &payload) {
-                                    record_udp_inbound_response_tx(&proxy, session_id, written);
-                                }
+                            record_udp_inbound_response_rx(&proxy, session_id, payload.len());
+                            if let Ok(Some(written)) = udp_session.send_response_for_proxy_session(
+                                &conn,
+                                session_id,
+                                &target,
+                                port,
+                                &payload,
+                            ) {
+                                record_udp_inbound_response_tx(&proxy, session_id, written);
                             }
                         }
                         Ok(Err(error)) => warn!(error = %error, "h2 chain response error"),

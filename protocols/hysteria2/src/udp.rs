@@ -12,7 +12,7 @@ use zero_traits::{DatagramCodec, IpAddress};
 #[cfg(feature = "tokio")]
 use alloc::sync::Arc;
 #[cfg(feature = "tokio")]
-use std::net::SocketAddr;
+use core::net::{IpAddr, SocketAddr};
 #[cfg(feature = "tokio")]
 use tokio::sync::{broadcast, mpsc};
 #[cfg(all(feature = "tokio", feature = "crypto"))]
@@ -264,6 +264,33 @@ impl Hysteria2InboundUdpSession {
         let target = address_from_socket_addr(sender);
         self.send_response(conn, proxy_session_id, &target, sender.port(), payload)
     }
+
+    pub fn send_response_for_proxy_session(
+        &self,
+        conn: &quinn::Connection,
+        proxy_session_id: Option<u64>,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        let Some(proxy_session_id) = proxy_session_id else {
+            return Ok(None);
+        };
+        self.send_response(conn, proxy_session_id, target, port, payload)
+    }
+
+    pub fn send_response_to_socket_addr_for_proxy_session(
+        &self,
+        conn: &quinn::Connection,
+        proxy_session_id: Option<u64>,
+        sender: SocketAddr,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        let Some(proxy_session_id) = proxy_session_id else {
+            return Ok(None);
+        };
+        self.send_response_to_socket_addr(conn, proxy_session_id, sender, payload)
+    }
 }
 
 #[cfg(feature = "tokio")]
@@ -283,8 +310,8 @@ fn address_from_ip(ip: IpAddress) -> Address {
 #[cfg(feature = "tokio")]
 fn address_from_socket_addr(addr: SocketAddr) -> Address {
     match addr.ip() {
-        std::net::IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
-        std::net::IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
+        IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
+        IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
     }
 }
 
