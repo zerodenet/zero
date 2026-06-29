@@ -1,4 +1,4 @@
-use zero_config::{InboundConfig, InboundProtocolConfig, Socks5UserConfig};
+use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
 use crate::adapters::socks5::Socks5Adapter;
@@ -39,22 +39,15 @@ fn socks5_auth_from_config(
             "socks5 adapter received non-socks5 inbound config",
         )));
     };
-    Ok(socks5::ConfiguredSocks5PasswordAuth::from_users(
-        socks5_users_from_config(users),
-    ))
-}
-
-fn socks5_users_from_config(users: &[Socks5UserConfig]) -> Vec<socks5::ConfiguredSocks5User> {
-    users
-        .iter()
-        .map(|user| {
-            socks5::ConfiguredSocks5User::new(
+    Ok(socks5::ConfiguredSocks5PasswordAuth::from_config_parts(
+        users.iter().map(|user| {
+            (
                 user.username.clone(),
                 user.password.clone(),
                 user.principal_key.clone(),
                 user.up_bps,
                 user.down_bps,
             )
-        })
-        .collect()
+        }),
+    ))
 }

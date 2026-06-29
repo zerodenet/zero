@@ -67,6 +67,16 @@ impl ConfiguredSocks5User {
             down_bps,
         }
     }
+
+    pub fn from_config_parts(
+        username: String,
+        password: String,
+        principal_key: Option<String>,
+        up_bps: Option<u64>,
+        down_bps: Option<u64>,
+    ) -> Self {
+        Self::new(username, password, principal_key, up_bps, down_bps)
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -77,6 +87,26 @@ pub struct ConfiguredSocks5PasswordAuth {
 impl ConfiguredSocks5PasswordAuth {
     pub fn from_users(users: Vec<ConfiguredSocks5User>) -> Self {
         Self { users }
+    }
+
+    pub fn from_config_parts<I>(users: I) -> Self
+    where
+        I: IntoIterator<Item = (String, String, Option<String>, Option<u64>, Option<u64>)>,
+    {
+        Self::from_users(
+            users
+                .into_iter()
+                .map(|(username, password, principal_key, up_bps, down_bps)| {
+                    ConfiguredSocks5User::from_config_parts(
+                        username,
+                        password,
+                        principal_key,
+                        up_bps,
+                        down_bps,
+                    )
+                })
+                .collect(),
+        )
     }
 }
 
