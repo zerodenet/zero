@@ -3,11 +3,9 @@
 //! TCP stream relay uses the `InboundProtocol` trait with a custom relay
 //! that handles QUIC stream I/O (not raw TCP).
 
-use std::io;
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use hysteria2::{Hysteria2Inbound, Hysteria2InboundProfile};
+use std::io;
 use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -19,6 +17,7 @@ use zero_traits::AsyncSocket;
 
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
+use crate::runtime::udp_flow::helpers::wait_for_upstream_idle;
 use crate::runtime::Proxy;
 use crate::transport::{copy_one_way, Hysteria2Stream};
 
@@ -168,12 +167,11 @@ pub(crate) async fn run_hysteria2_listener_with_bound(
                         let engine = proxy.clone();
                         let tag = inbound.tag.clone();
                         let profile = profile.clone();
-                        let resolver = Arc::clone(&proxy.resolver);
                         let handler = stream_handler.clone();
 
                         connections.spawn(async move {
                             if let Err(error) = engine.handle_hysteria2_connection(
-                                conn, &tag, profile, &handler, resolver,
+                                conn, &tag, profile, &handler,
                             ).await {
                                 error!(error = %error, "hysteria2 connection error");
                             }
@@ -217,7 +215,6 @@ impl Proxy {
         inbound_tag: &str,
         profile: Hysteria2InboundProfile,
         stream_handler: &Hysteria2StreamHandler,
-        resolver: Arc<zero_dns::DnsSystem>,
     ) -> Result<(), EngineError> {
         // Derive salt from TLS keying material
         let mut salt = [0u8; 32];
@@ -247,28 +244,14 @@ impl Proxy {
 
         info!(inbound_tag, "hysteria2 auth success");
 
-        // Open local UDP socket for datagram forwarding
-        let udp_socket = match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
-            Ok(s) => Some(Arc::new(s)),
-            Err(e) => {
-                warn!(error = %e, "hysteria2: failed to bind UDP socket, datagrams disabled");
-                None
-            }
-        };
-
         let mut stream_tasks = JoinSet::new();
-        let conn = Arc::new(conn);
+        let conn = std::sync::Arc::new(conn);
 
-        // Spawn datagram reader task
-        if let Some(ref udp) = udp_socket {
-            let conn_dg = conn.clone();
-            let udp_dg = udp.clone();
-            let tag = inbound_tag.to_owned();
-            let engine_for_h2 = self.clone();
-            stream_tasks.spawn(async move {
-                Self::hysteria2_datagram_loop(conn_dg, udp_dg, tag, resolver, engine_for_h2).await
-            });
-        }
+        let conn_dg = conn.clone();
+        let tag = inbound_tag.to_owned();
+        let engine_for_h2 = self.clone();
+        stream_tasks
+            .spawn(async move { Self::hysteria2_datagram_loop(conn_dg, tag, engine_for_h2).await });
 
         loop {
             select! {
@@ -314,19 +297,18 @@ impl Proxy {
 
     /// Datagram forwarding loop (unchanged).
     async fn hysteria2_datagram_loop(
-        conn: Arc<quinn::Connection>,
-        _udp_socket: Arc<tokio::net::UdpSocket>,
+        conn: std::sync::Arc<quinn::Connection>,
         inbound_tag: String,
-        _resolver: Arc<zero_dns::DnsSystem>,
         proxy: Proxy,
     ) -> Result<(), EngineError> {
         let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(&inbound_tag).await?;
         let mut udp_session = hysteria2::Hysteria2Inbound.udp_session();
 
         let mut direct_buf = [0u8; 65536];
+        let mut upstream_buf = [0u8; 65536];
 
         loop {
-            let (direct_sock, chain_tasks) = dispatch.poll_sockets();
+            let (direct_sock, upstream_udp, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
                 dg = conn.read_datagram() => {
@@ -370,6 +352,22 @@ impl Proxy {
                         );
                     }
                 }
+
+                upstream = upstream_udp.recv_response(&mut upstream_buf) => {
+                    match upstream {
+                        Ok(pkt) => {
+                            proxy.record_udp_upstream_packet_received();
+                            dispatch.touch_upstream_idle(proxy.udp_upstream_idle_timeout());
+                            let (target, port, payload) = pkt.into_parts();
+                            if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
+                                let _ = udp_session.send_response(&conn, sid, &target, port, &payload);
+                            }
+                        }
+                        Err(error) => warn!(error = %error, "h2 upstream response error"),
+                    }
+                }
+
+                _ = wait_for_upstream_idle(socks5_idle) => {}
 
                 Some(chain_result) = chain_tasks.join_next() => {
                     match chain_result {
