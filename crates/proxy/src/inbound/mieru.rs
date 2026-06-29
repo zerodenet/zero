@@ -200,40 +200,23 @@ impl Proxy {
                         Ok(n) => {
                             let data = &read_buf[..n];
                             if let Ok(request) = udp_session.decode_request(data) {
-                                let (target, port) = request.target_endpoint();
-                                let target_addr = match target {
-                                        zero_core::Address::Domain(domain) => {
-                                            match self.resolver.resolve(domain).await {
-                                                Ok(ips) => ips.first().copied().map(|ip| {
-                                                    addr_from_ip(ip, port)
-                                                }),
-                                                Err(_) => None,
-                                            }
-                                        }
-                                        zero_core::Address::Ipv4(ip) => Some(
-                                            std::net::SocketAddr::new(
-                                                std::net::IpAddr::V4(
-                                                    std::net::Ipv4Addr::new(
-                                                        ip[0], ip[1], ip[2], ip[3],
-                                                    ),
-                                                ),
-                                                port,
-                                            ),
-                                        ),
-                                        zero_core::Address::Ipv6(ip) => Some(
-                                            std::net::SocketAddr::new(
-                                                    std::net::IpAddr::V6(
-                                                        std::net::Ipv6Addr::from(*ip),
-                                                    ),
-                                                port,
-                                            ),
-                                        ),
-                                    };
+                                let target_addr = if let Some(addr) = request.target_socket_addr() {
+                                    Some(addr)
+                                } else if let Some((domain, _port)) = request.target_domain() {
+                                    match self.resolver.resolve(domain).await {
+                                        Ok(ips) => ips
+                                            .first()
+                                            .copied()
+                                            .map(|ip| request.resolved_target_socket_addr(ip)),
+                                        Err(_) => None,
+                                    }
+                                } else {
+                                    None
+                                };
 
                                 if let Some(addr) = target_addr {
-                                    let target = target.clone();
+                                    udp_session.record_request_target(addr, &request);
                                     let payload = request.into_payload();
-                                    udp_session.record_target(addr, target, port);
                                     let _ = udp_socket.send_to(&payload, addr).await;
                                 }
                             }
@@ -269,17 +252,6 @@ impl Proxy {
 
         tracing::info!(inbound_tag = %inbound_tag, "mieru udp relay stopped");
         Ok(())
-    }
-}
-
-fn addr_from_ip(ip: zero_traits::IpAddress, port: u16) -> std::net::SocketAddr {
-    match ip {
-        zero_traits::IpAddress::V4(octets) => {
-            std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)), port)
-        }
-        zero_traits::IpAddress::V6(octets) => {
-            std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), port)
-        }
     }
 }
 

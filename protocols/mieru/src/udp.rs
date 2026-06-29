@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 
 use zero_core::{Address, Error};
-use zero_traits::DatagramCodec;
+use zero_traits::{DatagramCodec, IpAddress};
 
 #[cfg(feature = "crypto")]
 pub use crate::outbound::{
@@ -119,8 +119,30 @@ impl MieruInboundUdpRequest {
         (&self.target, self.port)
     }
 
+    #[cfg(feature = "crypto")]
+    pub fn target_socket_addr(&self) -> Option<SocketAddr> {
+        socket_addr_from_target(&self.target, self.port)
+    }
+
+    pub fn target_domain(&self) -> Option<(&str, u16)> {
+        match &self.target {
+            Address::Domain(domain) => Some((domain.as_str(), self.port)),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "crypto")]
+    pub fn resolved_target_socket_addr(&self, ip: IpAddress) -> SocketAddr {
+        socket_addr_from_ip(ip, self.port)
+    }
+
     pub fn into_payload(self) -> Vec<u8> {
         self.payload
+    }
+
+    #[cfg(feature = "crypto")]
+    fn target_for_response(&self) -> (Address, u16) {
+        (self.target.clone(), self.port)
     }
 }
 
@@ -146,6 +168,11 @@ impl MieruInboundUdpSession {
         self.targets_by_sender.insert(sender, (target, port));
     }
 
+    pub fn record_request_target(&mut self, sender: SocketAddr, request: &MieruInboundUdpRequest) {
+        let (target, port) = request.target_for_response();
+        self.record_target(sender, target, port);
+    }
+
     pub async fn write_response_tokio<W>(
         &self,
         writer: &mut W,
@@ -162,6 +189,33 @@ impl MieruInboundUdpSession {
             .write_response_tokio(writer, target, *port, payload)
             .await
             .map(Some)
+    }
+}
+
+#[cfg(feature = "crypto")]
+fn socket_addr_from_target(target: &Address, port: u16) -> Option<SocketAddr> {
+    match target {
+        Address::Ipv4(ip) => Some(SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::from(*ip)),
+            port,
+        )),
+        Address::Ipv6(ip) => Some(SocketAddr::new(
+            std::net::IpAddr::V6(std::net::Ipv6Addr::from(*ip)),
+            port,
+        )),
+        Address::Domain(_) => None,
+    }
+}
+
+#[cfg(feature = "crypto")]
+fn socket_addr_from_ip(ip: IpAddress, port: u16) -> SocketAddr {
+    match ip {
+        IpAddress::V4(octets) => {
+            SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)), port)
+        }
+        IpAddress::V6(octets) => {
+            SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), port)
+        }
     }
 }
 
