@@ -349,6 +349,7 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         "pub async fn reject_stream",
         "pub async fn send_data",
         "pub async fn end_stream",
+        "pub fn end_inbound_stream",
     ] {
         assert!(
             protocol_mux.contains(required),
@@ -4865,6 +4866,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !mux.contains("decode_dispatch_parts(&payload)")
             && mux.contains("udp_session.send_mux_response")
             && mux.contains("udp_session.send_mux_response_to_ip")
+            && mux.contains("writer.end_inbound_stream")
+            && !mux.contains("writer.end(")
             && !mux.contains("request.into_dispatch_parts()")
             && mux.contains("pkt.into_parts()")
             && !mux.contains("client_session_id: None")

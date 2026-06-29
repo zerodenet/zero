@@ -174,6 +174,10 @@ impl VlessInboundMuxWriter {
         Ok(0)
     }
 
+    pub fn end_inbound_stream(&self, session_id: u16) -> Result<usize, Error> {
+        self.end(session_id)
+    }
+
     pub(crate) fn frame(&self, session_id: u16, frame: Vec<u8>) -> Result<usize, Error> {
         let len = frame.len();
         self.down_tx

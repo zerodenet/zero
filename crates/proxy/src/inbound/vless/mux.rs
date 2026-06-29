@@ -215,7 +215,7 @@ impl Proxy {
             Ok(dispatch) => dispatch,
             Err(error) => {
                 warn!(%error, mux_session_id, "vless mux udp dispatch init failed");
-                let _ = writer.end(mux_session_id);
+                let _ = writer.end_inbound_stream(mux_session_id);
                 return;
             }
         };
@@ -360,6 +360,6 @@ impl Proxy {
         for completed in dispatch.finish_all() {
             log_completed_udp_flow(completed);
         }
-        let _ = writer.end(mux_session_id);
+        let _ = writer.end_inbound_stream(mux_session_id);
     }
 }
