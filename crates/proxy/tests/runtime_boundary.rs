@@ -253,10 +253,13 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
     }
 
     for required in [
+        "VlessInboundMuxSession",
         "MuxServerEvent",
-        "recv_event",
-        "write_new_stream_accepted",
-        "write_new_stream_rejected",
+        "next_event",
+        "accept_stream",
+        "reject_stream",
+        "send_data",
+        "end_stream",
     ] {
         assert!(
             inbound.contains(required),
@@ -265,6 +268,19 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         assert!(
             protocol_mux.contains(required),
             "protocols/vless should own VLESS MUX server API `{required}`"
+        );
+    }
+    for forbidden in [
+        "MuxServer::",
+        ".recv_event(",
+        ".write_new_stream_accepted(",
+        ".write_new_stream_rejected(",
+        ".write_data(",
+        ".write_end(",
+    ] {
+        assert!(
+            !inbound.contains(forbidden),
+            "VLESS inbound mux should use VlessInboundMuxSession instead of low-level MUX server API `{forbidden}`"
         );
     }
 }

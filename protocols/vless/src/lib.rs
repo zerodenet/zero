@@ -33,9 +33,9 @@ pub use mux::{
     encode_data_frame, encode_end_frame, encode_frame, encode_keepalive, encode_new_stream,
     encode_new_stream_response, encode_udp_data_frame, parse_new_stream, parse_new_stream_response,
     parse_udp_target_from_keep, MuxClient, MuxClientStream, MuxFrame, MuxNetwork, MuxServer,
-    MuxServerEvent, MuxTarget, MUX_FRAME_HEADER_LEN, MUX_MAX_PAYLOAD, MUX_NETWORK_TCP,
-    MUX_NETWORK_UDP, MUX_STATUS_FAIL, MUX_STATUS_OK, MUX_STREAM_NEW, NETWORK_TCP, NETWORK_UDP,
-    OPTION_DATA, STATUS_END, STATUS_KEEP, STATUS_KEEP_ALIVE, STATUS_NEW,
+    MuxServerEvent, MuxTarget, VlessInboundMuxSession, MUX_FRAME_HEADER_LEN, MUX_MAX_PAYLOAD,
+    MUX_NETWORK_TCP, MUX_NETWORK_UDP, MUX_STATUS_FAIL, MUX_STATUS_OK, MUX_STREAM_NEW, NETWORK_TCP,
+    NETWORK_UDP, OPTION_DATA, STATUS_END, STATUS_KEEP, STATUS_KEEP_ALIVE, STATUS_NEW,
 };
 #[cfg(feature = "reality")]
 pub use mux_crypto::MuxCrypto;

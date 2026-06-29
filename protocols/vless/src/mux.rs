@@ -480,6 +480,71 @@ pub struct MuxServer {
     crypto: Option<crate::mux_crypto::MuxCrypto>,
 }
 
+pub struct VlessInboundMuxSession {
+    server: MuxServer,
+}
+
+impl Default for VlessInboundMuxSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl VlessInboundMuxSession {
+    pub fn new() -> Self {
+        Self {
+            server: MuxServer::new(),
+        }
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn with_encryption(master_uuid: &[u8; 16]) -> Self {
+        Self {
+            server: MuxServer::with_encryption(master_uuid),
+        }
+    }
+
+    pub async fn next_event<S>(&mut self, stream: &mut S) -> Result<MuxServerEvent, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.server.recv_event(stream).await
+    }
+
+    pub async fn accept_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.server.write_new_stream_accepted(stream, sid).await
+    }
+
+    pub async fn reject_stream<S>(&mut self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.server.write_new_stream_rejected(stream).await
+    }
+
+    pub async fn send_data<S>(
+        &mut self,
+        stream: &mut S,
+        sid: u16,
+        payload: &[u8],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.server.write_data(stream, sid, payload).await
+    }
+
+    pub async fn end_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.server.write_end(stream, sid).await
+    }
+}
+
 impl Default for MuxServer {
     fn default() -> Self {
         Self::new()

@@ -26,12 +26,12 @@ impl Proxy {
         S: ClientStream,
     {
         use tokio::sync::mpsc;
-        use vless::{MuxNetwork, MuxServer, MuxServerEvent};
+        use vless::{MuxNetwork, MuxServerEvent, VlessInboundMuxSession};
 
         vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
 
-        let mut mux = MuxServer::with_encryption(&uuid);
+        let mut mux = VlessInboundMuxSession::with_encryption(&uuid);
         let mut up_senders: HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> = HashMap::new();
         let mut relay_tasks = JoinSet::new();
         let (down_tx, mut down_rx) = mpsc::unbounded_channel::<(u16, Vec<u8>)>();
@@ -39,7 +39,7 @@ impl Proxy {
         info!(inbound_tag, "VLESS MUX session started");
         loop {
             tokio::select! {
-                event_res = mux.recv_event(&mut client) => {
+                event_res = mux.next_event(&mut client) => {
                     let event = match event_res {
                         Ok(event) => event,
                         Err(_) => break,
@@ -52,7 +52,7 @@ impl Proxy {
                         MuxServerEvent::NewStream { session_id: sid, target } => {
                             match target.network_kind() {
                                 Ok(network) => {
-                                    if mux.write_new_stream_accepted(&mut client, sid).await.is_err() {
+                                    if mux.accept_stream(&mut client, sid).await.is_err() {
                                         break;
                                     }
 
@@ -79,7 +79,7 @@ impl Proxy {
                                             {
                                                 Ok(result) => result.upstream,
                                                 Err(_) => {
-                                                    let _ = mux.write_new_stream_rejected(&mut client).await;
+                                                    let _ = mux.reject_stream(&mut client).await;
                                                     up_senders.remove(&sid);
                                                     continue;
                                                 }
@@ -121,7 +121,7 @@ impl Proxy {
                                 }
                                 Err(e) => {
                                     warn!(error = %e, "MUX new stream parse failed");
-                                    let _ = mux.write_new_stream_rejected(&mut client).await;
+                                    let _ = mux.reject_stream(&mut client).await;
                                 }
                             }
                         }
@@ -132,7 +132,7 @@ impl Proxy {
                             } else {
                                 // Data for unknown stream -?ignore or send END
                                 let _ =
-                                    mux.write_end(&mut client, session_id).await;
+                                    mux.end_stream(&mut client, session_id).await;
                             }
                         }
                         MuxServerEvent::End { session_id } => {
@@ -152,10 +152,10 @@ impl Proxy {
                         if up_senders.contains_key(&sid) {
                             if payload.is_empty() {
                                 // Upstream closed -?send END frame and clean up
-                                let _ = mux.write_end(&mut client, sid).await;
+                                let _ = mux.end_stream(&mut client, sid).await;
                                 up_senders.remove(&sid);
                             } else {
-                                let _ = mux.write_data(&mut client, sid, &payload).await;
+                                let _ = mux.send_data(&mut client, sid, &payload).await;
                             }
                         }
                     }
