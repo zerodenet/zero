@@ -209,13 +209,13 @@ impl Proxy {
                     );
                     break;
                 }
-                read = udp_session.read_dispatch_view_tokio(&mut client, &mut read_buf) => {
+                read = udp_session.read_dispatch_parts_tokio(&mut client, &mut read_buf) => {
                     match read {
                         Ok(None) => break,
-                        Ok(Some(dispatch_view)) => {
+                        Ok(Some(dispatch_parts)) => {
                             last_activity = TokioInstant::now();
                             let (target, port, payload, client_session_id) =
-                                dispatch_view.into_pipe_parts();
+                                dispatch_parts.into_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
                                     target,

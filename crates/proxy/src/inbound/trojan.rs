@@ -200,16 +200,16 @@ impl Proxy {
                     );
                     break;
                 }
-                packet = udp_session.read_dispatch_view(&mut client) => {
+                packet = udp_session.read_dispatch_parts(&mut client) => {
                     match packet {
-                        Ok(view) => {
+                        Ok(parts) => {
                             last_activity = TokioInstant::now();
-                            let (target, port, payload, client_session_id) = view.pipe_parts();
+                            let (target, port, payload, client_session_id) = parts.into_pipe_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target: target.clone(),
+                                    target,
                                     port,
-                                    payload,
+                                    payload: &payload,
                                     protocol: zero_core::ProtocolType::Trojan,
                                     auth: auth.as_ref(),
                                     client_session_id,

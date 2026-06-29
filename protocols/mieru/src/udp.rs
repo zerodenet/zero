@@ -238,6 +238,23 @@ impl MieruInboundUdpSession {
         self.decode_dispatch_view(&buf[..n]).map(Some)
     }
 
+    pub async fn read_dispatch_parts_tokio<R>(
+        &self,
+        reader: &mut R,
+        buf: &mut [u8],
+    ) -> Result<Option<MieruInboundUdpDispatchParts>, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        let n = tokio::io::AsyncReadExt::read(reader, buf)
+            .await
+            .map_err(|_| Error::Io("failed to read Mieru UDP request"))?;
+        if n == 0 {
+            return Ok(None);
+        }
+        self.decode_dispatch_parts(&buf[..n]).map(Some)
+    }
+
     pub fn record_target(&mut self, sender: SocketAddr, target: Address, port: u16) {
         self.targets_by_sender.insert(sender, (target, port));
     }

@@ -89,6 +89,12 @@ impl TrojanInboundUdpDispatchView {
     }
 }
 
+impl TrojanInboundUdpDispatchParts {
+    pub fn into_pipe_parts(self) -> (zero_core::Address, u16, Vec<u8>, Option<u64>) {
+        (self.target, self.port, self.payload, self.client_session_id)
+    }
+}
+
 impl TrojanInboundUdpRequest {
     fn from_packet(packet: TrojanUdpPacket) -> Self {
         let (target, port, payload) = packet.into_parts();

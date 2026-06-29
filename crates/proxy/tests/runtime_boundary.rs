@@ -5322,9 +5322,10 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
 
     assert!(
         inbound.contains("trojan::TrojanInbound.udp_session()")
-            && inbound.contains("udp_session.read_dispatch_view(&mut client)")
-            && inbound.contains("view.pipe_parts()")
-            && !inbound.contains("udp_session.read_dispatch_parts(&mut client)")
+            && inbound.contains("udp_session.read_dispatch_parts(&mut client)")
+            && !inbound.contains("udp_session.read_dispatch_view(&mut client)")
+            && !inbound.contains("view.pipe_parts()")
+            && inbound.contains("parts.into_pipe_parts()")
             && inbound.contains("udp_session.write_response(&mut client")
             && inbound.contains("udp_session")
             && inbound.contains(".write_response_to_socket_addr_tokio(&mut client")
@@ -5504,12 +5505,13 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
 
     assert!(
         inbound.contains("mieru::MieruInbound.udp_session()")
-            && inbound.contains("udp_session.read_dispatch_view_tokio")
+            && inbound.contains("udp_session.read_dispatch_parts_tokio")
+            && !inbound.contains("udp_session.read_dispatch_view_tokio")
             && !inbound.contains("udp_session.decode_dispatch_view")
             && !inbound.contains("client.read(&mut read_buf)")
             && !inbound.contains("decode_dispatch_view(&read_buf[..n])")
-            && inbound.contains("dispatch_view.into_pipe_parts()")
-            && !inbound.contains("dispatch_parts.into_parts()")
+            && !inbound.contains("dispatch_view.into_pipe_parts()")
+            && inbound.contains("dispatch_parts.into_parts()")
             && !inbound.contains("request.into_dispatch_parts().into_parts()")
             && inbound.contains("UdpPipe::new(self, &mut dispatch)")
             && inbound.contains("protocol: zero_core::ProtocolType::Mieru")
@@ -5550,6 +5552,7 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_udp.contains("fn decode_dispatch_parts")
             && protocol_udp.contains("fn decode_dispatch_view")
             && protocol_udp.contains("fn read_dispatch_view_tokio")
+            && protocol_udp.contains("fn read_dispatch_parts_tokio")
             && protocol_udp.contains("fn record_target")
             && protocol_udp.contains("fn record_request_target")
             && protocol_udp.contains("struct MieruUdpFlowCodec")
