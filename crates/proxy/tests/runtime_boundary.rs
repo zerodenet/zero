@@ -307,8 +307,9 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
 
     for required in [
         "VlessInboundMuxSession",
-        "MuxServerEvent",
-        "next_event",
+        "VlessInboundMuxAction",
+        "VlessInboundMuxWriter",
+        "next_action",
         "accept_stream",
         "reject_stream",
         "send_data",
@@ -326,12 +327,16 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
     assert!(
         protocol_mux.contains("pub fn into_session(self) -> Result<Session, Error>")
             && protocol_mux.contains("ProtocolType::Vless")
-            && inbound.contains("target.into_session()")
+            && protocol_mux.contains("impl From<MuxServerEvent> for VlessInboundMuxAction")
+            && inbound.contains("VlessInboundMuxAction::OpenStream")
+            && !inbound.contains("target.into_session()")
             && !inbound.contains("MuxNetwork")
             && !inbound.contains("zero_core::Session::new"),
-        "VLESS inbound mux target to Session conversion should be protocol-owned"
+        "VLESS inbound mux target to Session conversion should be protocol-owned and exposed as an action"
     );
     for forbidden in [
+        "MuxServerEvent",
+        ".next_event(",
         "MuxServer::",
         ".recv_event(",
         ".write_new_stream_accepted(",
@@ -4478,6 +4483,14 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
     assert!(
         model.contains("struct VlessMuxUdpStreamTask"),
         "VLESS inbound MUX task model should live in inbound/vless/model.rs"
+    );
+    assert!(
+        root.contains("VlessInboundMuxWriter::new")
+            && root.contains("let writer = mux_writer.clone()")
+            && root.contains("writer,")
+            && model.contains("writer: vless::VlessInboundMuxWriter")
+            && !model.contains("mpsc::UnboundedSender<(u16, Vec<u8>)>"),
+        "VLESS inbound MUX task model should carry a protocol-owned writer instead of exposing the raw downlink channel"
     );
 }
 

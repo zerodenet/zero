@@ -495,9 +495,13 @@ fn udp_response_encoder_builds_response_packet() {
 
 #[test]
 fn mux_udp_response_encoder_wraps_vless_packet() {
-    let frame = vless::udp::VlessInboundUdpCodec
-        .encode_mux_response(7, &Address::Ipv4([8, 8, 8, 8]), 53, b"dns")
+    let (down_tx, mut down_rx) = tokio::sync::mpsc::unbounded_channel::<(u16, Vec<u8>)>();
+    let writer = vless::VlessInboundMuxWriter::new(down_tx);
+    vless::udp::VlessInboundUdpCodec
+        .send_mux_response(&writer, 7, &Address::Ipv4([8, 8, 8, 8]), 53, b"dns")
         .expect("encode mux response");
+    let (sid, frame) = down_rx.try_recv().expect("mux response frame");
+    assert_eq!(sid, 7);
 
     assert_eq!(u16::from_be_bytes([frame[0], frame[1]]), 4 + 7 + 3);
     assert_eq!(u16::from_be_bytes([frame[2], frame[3]]), 7);

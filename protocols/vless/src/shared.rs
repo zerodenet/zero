@@ -2,8 +2,6 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-#[cfg(feature = "reality")]
-use tokio::sync::mpsc;
 use zero_core::{Address, Error};
 use zero_traits::{AsyncSocket, IpAddress};
 
@@ -738,31 +736,27 @@ impl VlessInboundUdpCodec {
     #[cfg(feature = "reality")]
     pub fn send_mux_response(
         &self,
-        down_tx: &mpsc::UnboundedSender<(u16, Vec<u8>)>,
+        writer: &crate::VlessInboundMuxWriter,
         mux_session_id: u16,
         target: &Address,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, Error> {
         let frame = self.encode_mux_response(mux_session_id, target, port, payload)?;
-        let len = frame.len();
-        down_tx
-            .send((mux_session_id, frame))
-            .map_err(|_| Error::Io("failed to queue VLESS MUX UDP response"))?;
-        Ok(len)
+        writer.frame(mux_session_id, frame)
     }
 
     #[cfg(feature = "reality")]
     pub fn send_mux_response_to_ip(
         &self,
-        down_tx: &mpsc::UnboundedSender<(u16, Vec<u8>)>,
+        writer: &crate::VlessInboundMuxWriter,
         mux_session_id: u16,
         ip: IpAddress,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, Error> {
         let target = address_from_ip(ip);
-        self.send_mux_response(down_tx, mux_session_id, &target, port, payload)
+        self.send_mux_response(writer, mux_session_id, &target, port, payload)
     }
 }
 
@@ -817,27 +811,27 @@ impl VlessInboundUdpSession {
     #[cfg(feature = "reality")]
     pub fn send_mux_response(
         &self,
-        down_tx: &mpsc::UnboundedSender<(u16, Vec<u8>)>,
+        writer: &crate::VlessInboundMuxWriter,
         mux_session_id: u16,
         target: &Address,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, Error> {
         self.codec
-            .send_mux_response(down_tx, mux_session_id, target, port, payload)
+            .send_mux_response(writer, mux_session_id, target, port, payload)
     }
 
     #[cfg(feature = "reality")]
     pub fn send_mux_response_to_ip(
         &self,
-        down_tx: &mpsc::UnboundedSender<(u16, Vec<u8>)>,
+        writer: &crate::VlessInboundMuxWriter,
         mux_session_id: u16,
         ip: IpAddress,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, Error> {
         self.codec
-            .send_mux_response_to_ip(down_tx, mux_session_id, ip, port, payload)
+            .send_mux_response_to_ip(writer, mux_session_id, ip, port, payload)
     }
 }
 

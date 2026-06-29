@@ -29,7 +29,7 @@ impl Proxy {
         S: ClientStream,
     {
         use tokio::sync::mpsc;
-        use vless::{MuxServerEvent, VlessInboundMuxSession};
+        use vless::{VlessInboundMuxAction, VlessInboundMuxSession};
 
         vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
@@ -38,92 +38,86 @@ impl Proxy {
         let mut up_senders: HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> = HashMap::new();
         let mut relay_tasks = JoinSet::new();
         let (down_tx, mut down_rx) = mpsc::unbounded_channel::<(u16, Vec<u8>)>();
+        let mux_writer = vless::VlessInboundMuxWriter::new(down_tx.clone());
 
         info!(inbound_tag, "VLESS MUX session started");
         loop {
             tokio::select! {
-                event_res = mux.next_event(&mut client) => {
-                    let event = match event_res {
-                        Ok(event) => event,
+                action_res = mux.next_action(&mut client) => {
+                    let action = match action_res {
+                        Ok(action) => action,
                         Err(_) => break,
                     };
-                    match event {
-                        MuxServerEvent::KeepAlive => {
+                    match action {
+                        VlessInboundMuxAction::KeepAlive => {
                             // Keep-alive -?ignore
                             continue;
                         }
-                        MuxServerEvent::NewStream { session_id: sid, target } => {
-                            match target.into_session() {
-                                Ok(mut session) => {
-                                    if mux.accept_stream(&mut client, sid).await.is_err() {
-                                        break;
+                        VlessInboundMuxAction::OpenStream { session_id: sid, session } => {
+                            let mut session = *session;
+                            if mux.accept_stream(&mut client, sid).await.is_err() {
+                                break;
+                            }
+
+                            let (up_tx, up_rx) = mpsc::unbounded_channel();
+                            up_senders.insert(sid, up_tx);
+
+                            match session.network {
+                                zero_core::Network::Tcp => {
+                                    // Route and establish TCP outbound
+                                    if let Some(ref a) = auth {
+                                        session.apply_auth(a.clone());
                                     }
-
-                                    let (up_tx, up_rx) = mpsc::unbounded_channel();
-                                    up_senders.insert(sid, up_tx);
-
-                                    match session.network {
-                                        zero_core::Network::Tcp => {
-                                            // Route and establish TCP outbound
-                                            if let Some(ref a) = auth {
-                                                session.apply_auth(a.clone());
-                                            }
-                                            self.prepare_session(&mut session, inbound_tag, None);
-                                            let upstream = match TcpPipe::new(self)
-                                                .dispatch(TcpPipeInput {
-                                                    session: &mut session,
-                                                })
-                                                .await
-                                            {
-                                                Ok(result) => result.upstream,
-                                                Err(_) => {
-                                                    let _ = mux.reject_stream(&mut client).await;
-                                                    up_senders.remove(&sid);
-                                                    continue;
-                                                }
-                                            };
-
-                                            let down = down_tx.clone();
-                                            relay_tasks.spawn(async move {
-                                                Self::mux_stream_relay(sid, up_rx, down, upstream).await;
-                                            });
-
-                                            info!(inbound_tag, mux_stream_id = sid,
-                                                port = session.port, network = "tcp",
-                                                "MUX stream accepted");
+                                    self.prepare_session(&mut session, inbound_tag, None);
+                                    let upstream = match TcpPipe::new(self)
+                                        .dispatch(TcpPipeInput {
+                                            session: &mut session,
+                                        })
+                                        .await
+                                    {
+                                        Ok(result) => result.upstream,
+                                        Err(_) => {
+                                            let _ = mux.reject_stream(&mut client).await;
+                                            up_senders.remove(&sid);
+                                            continue;
                                         }
-                                        zero_core::Network::Udp => {
-                                            let down = down_tx.clone();
-                                            let proxy_clone = self.clone();
-                                            let inbound_tag_owned = inbound_tag.to_owned();
-                                            let auth_clone = auth.clone();
-                                            relay_tasks.spawn(async move {
-                                                proxy_clone
-                                                    .spawn_vless_mux_udp_stream_task(
-                                                        VlessMuxUdpStreamTask {
-                                                            mux_session_id: sid,
-                                                            up_rx,
-                                                            down_tx: down,
-                                                            inbound_tag: &inbound_tag_owned,
-                                                            auth: auth_clone.as_ref(),
-                                                        },
-                                                    )
-                                                    .await;
-                                            });
+                                    };
 
-                                            info!(inbound_tag, mux_stream_id = sid,
-                                                port = session.port, network = "udp",
-                                                "MUX stream accepted");
-                                        }
-                                    }
+                                    let down = down_tx.clone();
+                                    relay_tasks.spawn(async move {
+                                        Self::mux_stream_relay(sid, up_rx, down, upstream).await;
+                                    });
+
+                                    info!(inbound_tag, mux_stream_id = sid,
+                                        port = session.port, network = "tcp",
+                                        "MUX stream accepted");
                                 }
-                                Err(e) => {
-                                    warn!(error = %e, "MUX new stream parse failed");
-                                    let _ = mux.reject_stream(&mut client).await;
+                                zero_core::Network::Udp => {
+                                    let proxy_clone = self.clone();
+                                    let inbound_tag_owned = inbound_tag.to_owned();
+                                    let auth_clone = auth.clone();
+                                    let writer = mux_writer.clone();
+                                    relay_tasks.spawn(async move {
+                                        proxy_clone
+                                            .spawn_vless_mux_udp_stream_task(
+                                                VlessMuxUdpStreamTask {
+                                                    mux_session_id: sid,
+                                                    up_rx,
+                                                    writer,
+                                                    inbound_tag: &inbound_tag_owned,
+                                                    auth: auth_clone.as_ref(),
+                                                },
+                                            )
+                                            .await;
+                                    });
+
+                                    info!(inbound_tag, mux_stream_id = sid,
+                                        port = session.port, network = "udp",
+                                        "MUX stream accepted");
                                 }
                             }
                         }
-                        MuxServerEvent::Data { session_id, payload } => {
+                        VlessInboundMuxAction::Data { session_id, payload } => {
                             // Data for an existing stream
                             if let Some(tx) = up_senders.get(&session_id) {
                                 let _ = tx.send(payload);
@@ -133,14 +127,16 @@ impl Proxy {
                                     mux.end_stream(&mut client, session_id).await;
                             }
                         }
-                        MuxServerEvent::End { session_id } => {
+                        VlessInboundMuxAction::End { session_id } => {
                             // Client terminated this stream
                             up_senders.remove(&session_id);
                             info!(mux_stream_id = session_id,
                                 "MUX stream ended by client");
                         }
-                        MuxServerEvent::Unknown { .. } => {
+                        VlessInboundMuxAction::Unknown { session_id } => {
                             // Unknown status -?ignore
+                            let _ = mux.reject_stream(&mut client).await;
+                            up_senders.remove(&session_id);
                         }
                     }
                 }
@@ -210,7 +206,7 @@ impl Proxy {
         let VlessMuxUdpStreamTask {
             mux_session_id,
             up_rx,
-            down_tx,
+            writer,
             inbound_tag,
             auth,
         } = request;
@@ -219,7 +215,7 @@ impl Proxy {
             Ok(dispatch) => dispatch,
             Err(error) => {
                 warn!(%error, mux_session_id, "vless mux udp dispatch init failed");
-                let _ = down_tx.send((mux_session_id, vec![]));
+                let _ = writer.end(mux_session_id);
                 return;
             }
         };
@@ -284,7 +280,7 @@ impl Proxy {
                             let session_id = dispatch.direct_response_session_id(sender);
                             record_udp_inbound_response_rx(self, session_id, n);
                             match udp_session.send_mux_response_to_ip(
-                                &down_tx,
+                                &writer,
                                 mux_session_id,
                                 ip,
                                 sender.port(),
@@ -315,7 +311,7 @@ impl Proxy {
                             let session_id = udp_response_session_id(&dispatch, &target, port);
                             record_udp_inbound_response_rx(self, session_id, payload.len());
                             match udp_session.send_mux_response(
-                                &down_tx,
+                                &writer,
                                 mux_session_id,
                                 &target,
                                 port,
@@ -340,7 +336,7 @@ impl Proxy {
                             last_activity = TokioInstant::now();
                             record_udp_inbound_response_rx(self, session_id, payload.len());
                             match udp_session.send_mux_response(
-                                &down_tx,
+                                &writer,
                                 mux_session_id,
                                 &target,
                                 port,
@@ -365,6 +361,6 @@ impl Proxy {
         for completed in dispatch.finish_all() {
             log_completed_udp_flow(completed);
         }
-        let _ = down_tx.send((mux_session_id, vec![]));
+        let _ = writer.end(mux_session_id);
     }
 }

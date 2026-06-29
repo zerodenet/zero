@@ -34,6 +34,8 @@
 
 use alloc::vec::Vec;
 
+#[cfg(feature = "reality")]
+use tokio::sync::mpsc;
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
@@ -124,6 +126,61 @@ pub enum MuxServerEvent {
     Data { session_id: u16, payload: Vec<u8> },
     End { session_id: u16 },
     Unknown { session_id: u16, status: u8 },
+}
+
+#[derive(Debug, Clone)]
+pub enum VlessInboundMuxAction {
+    KeepAlive,
+    OpenStream {
+        session_id: u16,
+        session: Box<Session>,
+    },
+    Data {
+        session_id: u16,
+        payload: Vec<u8>,
+    },
+    End {
+        session_id: u16,
+    },
+    Unknown {
+        session_id: u16,
+    },
+}
+
+#[cfg(feature = "reality")]
+#[derive(Clone)]
+pub struct VlessInboundMuxWriter {
+    down_tx: mpsc::UnboundedSender<(u16, Vec<u8>)>,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxWriter {
+    pub fn new(down_tx: mpsc::UnboundedSender<(u16, Vec<u8>)>) -> Self {
+        Self { down_tx }
+    }
+
+    pub fn data(&self, session_id: u16, payload: Vec<u8>) -> Result<usize, Error> {
+        let len = payload.len();
+        self.down_tx
+            .send((session_id, payload))
+            .map_err(|_| Error::Io("failed to queue VLESS MUX data"))?;
+        Ok(len)
+    }
+
+    pub fn end(&self, session_id: u16) -> Result<usize, Error> {
+        self.down_tx
+            .send((session_id, Vec::new()))
+            .map_err(|_| Error::Io("failed to queue VLESS MUX end"))?;
+        Ok(0)
+    }
+
+    pub(crate) fn frame(&self, session_id: u16, frame: Vec<u8>) -> Result<usize, Error> {
+        let len = frame.len();
+        self.down_tx
+            .send((session_id, frame))
+            .map_err(|_| Error::Io("failed to queue VLESS MUX frame"))?;
+        Ok(len)
+    }
 }
 
 // ── frame encode / decode ──
@@ -525,6 +582,13 @@ impl VlessInboundMuxSession {
         self.server.recv_event(stream).await
     }
 
+    pub async fn next_action<S>(&mut self, stream: &mut S) -> Result<VlessInboundMuxAction, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.next_event(stream).await.map(Into::into)
+    }
+
     pub async fn accept_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
     where
         S: AsyncSocket,
@@ -556,6 +620,30 @@ impl VlessInboundMuxSession {
         S: AsyncSocket,
     {
         self.server.write_end(stream, sid).await
+    }
+}
+
+impl From<MuxServerEvent> for VlessInboundMuxAction {
+    fn from(event: MuxServerEvent) -> Self {
+        match event {
+            MuxServerEvent::KeepAlive => Self::KeepAlive,
+            MuxServerEvent::NewStream { session_id, target } => match target.into_session() {
+                Ok(session) => Self::OpenStream {
+                    session_id,
+                    session: Box::new(session),
+                },
+                Err(_) => Self::Unknown { session_id },
+            },
+            MuxServerEvent::Data {
+                session_id,
+                payload,
+            } => Self::Data {
+                session_id,
+                payload,
+            },
+            MuxServerEvent::End { session_id } => Self::End { session_id },
+            MuxServerEvent::Unknown { session_id, .. } => Self::Unknown { session_id },
+        }
     }
 }
 
