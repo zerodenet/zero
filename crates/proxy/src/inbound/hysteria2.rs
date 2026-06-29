@@ -28,8 +28,6 @@ use crate::transport::{copy_one_way, Hysteria2Stream};
 pub(crate) struct Hysteria2InboundRequest {
     pub(crate) inbound: InboundConfig,
     pub(crate) profile: Hysteria2InboundProfile,
-    pub(crate) up_bps: Option<u64>,
-    pub(crate) down_bps: Option<u64>,
 }
 
 // ── Handler for individual TCP streams ─────────────────────────────────
@@ -127,12 +125,7 @@ pub(crate) async fn run_hysteria2_listener_with_bound(
     bound: crate::protocol_registry::BoundInbound,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let Hysteria2InboundRequest {
-        inbound,
-        profile,
-        up_bps: _up_bps,
-        down_bps: _down_bps,
-    } = request;
+    let Hysteria2InboundRequest { inbound, profile } = request;
     let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
     let quic_inbound = match bound {
         crate::protocol_registry::BoundInbound::Quic(e) => e,

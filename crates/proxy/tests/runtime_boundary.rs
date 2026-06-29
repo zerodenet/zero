@@ -1361,9 +1361,13 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     );
     assert!(
         inbound.contains("pub(crate) profile: Hysteria2InboundProfile")
+            && !inbound.contains("pub(crate) up_bps: Option<u64>")
+            && !inbound.contains("pub(crate) down_bps: Option<u64>")
             && !inbound.contains("pub(crate) password: String")
+            && !adapter.contains("up_bps")
+            && !adapter.contains("down_bps")
             && adapter.contains("Hysteria2InboundProfile::from_config"),
-        "Hysteria2 inbound listener should receive a protocol-owned profile instead of raw password"
+        "Hysteria2 inbound listener should receive only protocol-owned profile data, not raw password or unused rate-limit config"
     );
     for forbidden in [
         "parse_auth_frame",
