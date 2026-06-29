@@ -16,10 +16,24 @@ impl Socks5Adapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
+            let InboundProtocolConfig::Socks5 { users } = &inbound.protocol else {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "socks5 adapter received non-socks5 inbound config",
+                )));
+            };
             crate::inbound::run_socks5_listener_with_bound(
                 &p,
                 crate::inbound::Socks5InboundRequest {
-                    auth: socks5_auth_from_config(&inbound.protocol)?,
+                    auth: socks5::password_auth_from_config_users(users.iter().map(|user| {
+                        (
+                            user.username.as_str(),
+                            user.password.as_str(),
+                            user.principal_key.as_deref(),
+                            user.up_bps,
+                            user.down_bps,
+                        )
+                    })),
                     inbound,
                 },
                 bound.into_tcp(),
@@ -28,26 +42,4 @@ impl Socks5Adapter {
             .await
         });
     }
-}
-
-fn socks5_auth_from_config(
-    config: &InboundProtocolConfig,
-) -> Result<socks5::ConfiguredSocks5PasswordAuth, EngineError> {
-    let InboundProtocolConfig::Socks5 { users } = config else {
-        return Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "socks5 adapter received non-socks5 inbound config",
-        )));
-    };
-    Ok(socks5::ConfiguredSocks5PasswordAuth::from_config_users(
-        users.iter().map(|user| {
-            (
-                user.username.as_str(),
-                user.password.as_str(),
-                user.principal_key.as_deref(),
-                user.up_bps,
-                user.down_bps,
-            )
-        }),
-    ))
 }

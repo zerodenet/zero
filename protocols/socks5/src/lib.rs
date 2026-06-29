@@ -10,8 +10,9 @@ mod shared;
 pub mod udp;
 
 pub use inbound::{
-    ConfiguredSocks5PasswordAuth, ConfiguredSocks5User, IntoSocks5AuthUserConfig,
-    NoSocks5PasswordAuth, Socks5Inbound, Socks5PasswordAuth, Socks5Request,
+    password_auth_from_config_users, ConfiguredSocks5PasswordAuth, ConfiguredSocks5User,
+    IntoSocks5AuthUserConfig, NoSocks5PasswordAuth, Socks5Inbound, Socks5PasswordAuth,
+    Socks5Request,
 };
 pub use metadata::Socks5Protocol;
 pub use outbound::{

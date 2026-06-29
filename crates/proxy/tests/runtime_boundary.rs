@@ -1352,8 +1352,8 @@ fn socks5_inbound_uses_adapter_request_model() {
                 .contains("for (&str, &str, Option<&str>, Option<u64>, Option<u64>)")
             && inbound.contains("auth: socks5::ConfiguredSocks5PasswordAuth")
             && mixed.contains("socks5_auth: socks5::ConfiguredSocks5PasswordAuth")
-            && adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_users")
-            && mixed_adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_users")
+            && adapter.contains("socks5::password_auth_from_config_users")
+            && mixed_adapter.contains("socks5::password_auth_from_config_users")
             && adapter.contains("user.username.as_str()")
             && adapter.contains("user.password.as_str()")
             && adapter.contains("user.principal_key.as_deref()")
@@ -1366,9 +1366,13 @@ fn socks5_inbound_uses_adapter_request_model() {
             && !mixed_adapter.contains("user.username.clone()")
             && !mixed_adapter.contains("user.password.clone()")
             && !mixed_adapter.contains("user.principal_key.clone()")
+            && !adapter.contains("fn socks5_auth_from_config")
+            && !mixed_adapter.contains("fn socks5_auth_from_config")
             && !adapter.contains("fn socks5_password_auth_from_users")
             && !mixed_adapter.contains("socks5_password_auth_from_users")
             && !mixed_adapter.contains("use crate::adapters::socks5::")
+            && !adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_users")
+            && !mixed_adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_users")
             && !adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_parts")
             && !mixed_adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_parts")
             && !adapter.contains("socks5::ConfiguredSocks5User::new")
@@ -2934,13 +2938,15 @@ fn shadowsocks_tcp_connect_uses_request_model() {
     assert!(
         adapter.contains("async fn connect_tcp(")
             && adapter.contains("async fn apply_tcp_hop(")
-            && adapter.contains("ShadowsocksTcpConnectConfig::from_config"),
+            && adapter.contains("shadowsocks::tcp_connect_config_from_config"),
         "Shadowsocks adapter TCP module should own proxy glue while using protocol-built TCP config"
     );
     assert!(
         !adapter.contains("CipherKind::from_str")
             && !adapter.contains("shadowsocks::CipherKind")
-            && adapter.contains("ShadowsocksTcpConnectConfig::from_config")
+            && adapter.contains("shadowsocks::tcp_connect_config_from_config")
+            && !adapter.contains("fn tcp_config")
+            && !adapter.contains("ShadowsocksTcpConnectConfig::from_config")
             && adapter.contains("config: shadowsocks::ShadowsocksTcpConnectConfig")
             && !adapter.contains("cipher: shadowsocks::CipherKind")
             && !adapter.contains("ShadowsocksTcpTarget {")
@@ -2953,6 +2959,7 @@ fn shadowsocks_tcp_connect_uses_request_model() {
             && !adapter.contains("ShadowsocksAeadStream::outbound")
             && protocol_outbound.contains("pub struct ShadowsocksTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config")
+            && protocol_outbound.contains("pub fn tcp_connect_config_from_config")
             && protocol_outbound.contains("CipherKind::from_str")
             && protocol_outbound.contains("pub fn tcp_target")
             && protocol_outbound.contains("pub async fn establish_tcp_session")

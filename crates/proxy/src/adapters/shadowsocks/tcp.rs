@@ -7,17 +7,25 @@ use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, MeteredStream, TcpOutboundFailure, TcpRelayStream};
 
-fn tcp_config(
-    cipher: &str,
-    password: &str,
+fn invalid_shadowsocks_tcp_config(
+    error: impl std::fmt::Display,
     stage: &'static str,
-) -> Result<shadowsocks::ShadowsocksTcpConnectConfig, EngineError> {
-    shadowsocks::ShadowsocksTcpConnectConfig::from_config(cipher, password).map_err(|error| {
-        EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("{stage}: {error}"),
-        ))
-    })
+) -> EngineError {
+    EngineError::Io(std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        format!("{stage}: {error}"),
+    ))
+}
+
+fn invalid_shadowsocks_tcp_failure(
+    error: impl std::fmt::Display,
+    upstream_endpoint: Option<(String, u16)>,
+) -> TcpOutboundFailure {
+    TcpOutboundFailure {
+        stage: "connect_upstream_shadowsocks",
+        error: invalid_shadowsocks_tcp_config(error, "invalid shadowsocks tcp config"),
+        upstream_endpoint,
+    }
 }
 
 impl ShadowsocksAdapter {
@@ -38,12 +46,8 @@ impl ShadowsocksAdapter {
             return Err(unreachable_leaf(self.name(), leaf));
         };
         let config =
-            tcp_config(cipher, password, "invalid shadowsocks tcp config").map_err(|error| {
-                TcpOutboundFailure {
-                    stage: "connect_upstream_shadowsocks",
-                    error,
-                    upstream_endpoint: Some(((*server).to_string(), *port)),
-                }
+            shadowsocks::tcp_connect_config_from_config(cipher, password).map_err(|error| {
+                invalid_shadowsocks_tcp_failure(error, Some(((*server).to_string(), *port)))
             })?;
         match connect_tcp(proxy, session, server, *port, config).await {
             Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
@@ -69,7 +73,10 @@ impl ShadowsocksAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let config = tcp_config(cipher, password, "invalid shadowsocks tcp relay config")?;
+        let config =
+            shadowsocks::tcp_connect_config_from_config(cipher, password).map_err(|error| {
+                invalid_shadowsocks_tcp_config(error, "invalid shadowsocks tcp relay config")
+            })?;
         apply_tcp_hop(stream, session, config).await
     }
 }

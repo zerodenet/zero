@@ -16,10 +16,26 @@ impl MixedAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
+            let InboundProtocolConfig::Mixed { socks5_users } = &inbound.protocol else {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "mixed adapter received non-mixed inbound config",
+                )));
+            };
             crate::inbound::run_mixed_listener_with_bound(
                 &p,
                 crate::inbound::MixedInboundRequest {
-                    socks5_auth: socks5_auth_from_config(&inbound.protocol)?,
+                    socks5_auth: socks5::password_auth_from_config_users(socks5_users.iter().map(
+                        |user| {
+                            (
+                                user.username.as_str(),
+                                user.password.as_str(),
+                                user.principal_key.as_deref(),
+                                user.up_bps,
+                                user.down_bps,
+                            )
+                        },
+                    )),
                     inbound,
                 },
                 bound.into_tcp(),
@@ -28,26 +44,4 @@ impl MixedAdapter {
             .await
         });
     }
-}
-
-fn socks5_auth_from_config(
-    config: &InboundProtocolConfig,
-) -> Result<socks5::ConfiguredSocks5PasswordAuth, EngineError> {
-    let InboundProtocolConfig::Mixed { socks5_users } = config else {
-        return Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "mixed adapter received non-mixed inbound config",
-        )));
-    };
-    Ok(socks5::ConfiguredSocks5PasswordAuth::from_config_users(
-        socks5_users.iter().map(|user| {
-            (
-                user.username.as_str(),
-                user.password.as_str(),
-                user.principal_key.as_deref(),
-                user.up_bps,
-                user.down_bps,
-            )
-        }),
-    ))
 }

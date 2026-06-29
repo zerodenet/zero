@@ -215,6 +215,14 @@ impl ShadowsocksTcpConnectConfig {
 }
 
 #[cfg(feature = "crypto")]
+pub fn tcp_connect_config_from_config(
+    cipher: &str,
+    password: &str,
+) -> Result<ShadowsocksTcpConnectConfig, Error> {
+    ShadowsocksTcpConnectConfig::from_config(cipher, password)
+}
+
+#[cfg(feature = "crypto")]
 impl<'a> TcpSessionProtocol<ShadowsocksTcpTarget<'a>> for ShadowsocksOutbound {
     type Error = Error;
     type Session = ShadowsocksOutboundSession;

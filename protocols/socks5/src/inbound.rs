@@ -119,6 +119,14 @@ impl ConfiguredSocks5PasswordAuth {
     }
 }
 
+pub fn password_auth_from_config_users<I, U>(users: I) -> ConfiguredSocks5PasswordAuth
+where
+    I: IntoIterator<Item = U>,
+    U: IntoSocks5AuthUserConfig,
+{
+    ConfiguredSocks5PasswordAuth::from_config_users(users)
+}
+
 impl Socks5PasswordAuth for ConfiguredSocks5PasswordAuth {
     fn required(&self) -> bool {
         !self.users.is_empty()
