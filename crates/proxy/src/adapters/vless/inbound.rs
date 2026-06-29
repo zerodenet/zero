@@ -1,4 +1,7 @@
-use zero_config::{InboundConfig, InboundProtocolConfig};
+use zero_config::{
+    FallbackConfig, GrpcConfig, H2Config, HttpUpgradeConfig, InboundConfig, InboundProtocolConfig,
+    SplitHttpConfig, TlsConfig, WebSocketConfig,
+};
 use zero_engine::EngineError;
 
 use crate::adapters::vless::VlessAdapter;
@@ -39,6 +42,46 @@ fn parse_reality_profile(inbound: &InboundConfig) -> Option<vless::VlessRealityS
     })
 }
 
+struct VlessInboundTransportConfig {
+    tls: Option<Box<TlsConfig>>,
+    ws: Option<Box<WebSocketConfig>>,
+    grpc: Option<Box<GrpcConfig>>,
+    h2: Option<Box<H2Config>>,
+    http_upgrade: Option<Box<HttpUpgradeConfig>>,
+    split_http: Option<Box<SplitHttpConfig>>,
+    fallback: Option<Box<FallbackConfig>>,
+}
+
+fn parse_transport_config(
+    inbound: &InboundConfig,
+) -> Result<VlessInboundTransportConfig, EngineError> {
+    let InboundProtocolConfig::Vless {
+        tls,
+        ws,
+        grpc,
+        h2,
+        http_upgrade,
+        split_http,
+        fallback,
+        ..
+    } = &inbound.protocol
+    else {
+        return Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "vless adapter received non-vless inbound config",
+        )));
+    };
+    Ok(VlessInboundTransportConfig {
+        tls: tls.clone(),
+        ws: ws.clone(),
+        grpc: grpc.clone(),
+        h2: h2.clone(),
+        http_upgrade: http_upgrade.clone(),
+        split_http: split_http.clone(),
+        fallback: fallback.clone(),
+    })
+}
+
 impl VlessAdapter {
     pub(super) async fn bind_inbound_impl(
         &self,
@@ -74,12 +117,20 @@ impl VlessAdapter {
         listeners.spawn(async move {
             let profile = parse_inbound_profile(&inbound)?;
             let reality = parse_reality_profile(&inbound);
+            let transport = parse_transport_config(&inbound)?;
             crate::inbound::run_vless_listener_with_bound(
                 &p,
                 crate::inbound::vless::model::VlessInboundRequest {
                     inbound,
                     profile,
                     reality,
+                    tls: transport.tls,
+                    ws: transport.ws,
+                    grpc: transport.grpc,
+                    h2: transport.h2,
+                    http_upgrade: transport.http_upgrade,
+                    split_http: transport.split_http,
+                    fallback: transport.fallback,
                 },
                 bound,
                 shutdown_rx,

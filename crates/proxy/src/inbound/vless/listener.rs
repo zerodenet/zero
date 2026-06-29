@@ -21,6 +21,13 @@ pub(crate) async fn run_vless_listener_with_bound(
         inbound,
         profile,
         reality,
+        tls,
+        ws,
+        grpc,
+        h2,
+        http_upgrade,
+        split_http,
+        fallback,
     } = request;
     let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
 
@@ -34,7 +41,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                 "inbound listener ready"
             );
             let mut connections = JoinSet::new();
-            let fallback_config = inbound.protocol.vless_fallback().cloned();
+            let fallback_config = fallback.as_deref().cloned();
             return proxy
                 .run_vless_quic_accept_loop(
                     &inbound,
@@ -48,21 +55,20 @@ pub(crate) async fn run_vless_listener_with_bound(
         }
         crate::protocol_registry::BoundInbound::Tcp(listener) => {
             let local_addr = listener.local_addr()?;
-            let tls_acceptor = inbound
-                .protocol
-                .vless_tls()
+            let tls_acceptor = tls
+                .as_deref()
                 .map(|tls| build_tls_acceptor(tls, proxy.config.source_dir()))
                 .transpose()?;
-            let ws_config = inbound.protocol.vless_ws().cloned();
-            let grpc_config = inbound.protocol.vless_grpc().cloned();
-            let h2_config = inbound.protocol.vless_h2().cloned();
-            let http_upgrade_config = inbound.protocol.vless_http_upgrade().cloned();
-            let split_http_config = inbound.protocol.vless_split_http().cloned();
+            let ws_config = ws.as_deref().cloned();
+            let grpc_config = grpc.as_deref().cloned();
+            let h2_config = h2.as_deref().cloned();
+            let http_upgrade_config = http_upgrade.as_deref().cloned();
+            let split_http_config = split_http.as_deref().cloned();
             let split_http_registry: Option<crate::transport::SplitHttpRegistry> =
                 split_http_config
                     .as_ref()
                     .map(|_| crate::transport::SplitHttpRegistry::new());
-            let fallback_config = inbound.protocol.vless_fallback().cloned();
+            let fallback_config = fallback.as_deref().cloned();
             let mut connections = JoinSet::new();
 
             info!(

@@ -1240,6 +1240,13 @@ fn vless_inbound_users_are_adapter_parsed() {
         "parse_flow",
         "vless_users()",
         "vless_reality()",
+        "vless_tls()",
+        "vless_ws()",
+        "vless_grpc()",
+        "vless_h2()",
+        "vless_http_upgrade()",
+        "vless_split_http()",
+        "vless_fallback()",
         "InboundRealityConfig",
         "RealityServerOptions",
         "private_key:",
@@ -1298,6 +1305,14 @@ fn vless_inbound_users_are_adapter_parsed() {
             && model.contains("reality: Option<vless::VlessRealityServerProfile>")
             && listener.contains("request: VlessInboundRequest")
             && listener.contains("let VlessInboundRequest")
+            && model.contains("tls: Option<Box<zero_config::TlsConfig>>")
+            && model.contains("ws: Option<Box<zero_config::WebSocketConfig>>")
+            && model.contains("grpc: Option<Box<zero_config::GrpcConfig>>")
+            && model.contains("h2: Option<Box<zero_config::H2Config>>")
+            && model.contains("http_upgrade: Option<Box<zero_config::HttpUpgradeConfig>>")
+            && model.contains("split_http: Option<Box<zero_config::SplitHttpConfig>>")
+            && model.contains("fallback: Option<Box<zero_config::FallbackConfig>>")
+            && adapter.contains("parse_transport_config")
             && adapter.contains("parse_reality_profile")
             && adapter.contains("VlessRealityServerProfile::new")
             && protocol_inbound.contains("pub struct VlessInboundProfile"),
