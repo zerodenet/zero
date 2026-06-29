@@ -444,6 +444,23 @@ impl ShadowsocksInboundUdpSession {
         })
     }
 
+    pub async fn send_response_to_client_tokio(
+        &self,
+        socket: &tokio::net::UdpSocket,
+        proxy_session_id: u64,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+        client: std::net::SocketAddr,
+    ) -> Result<usize, Error> {
+        let datagram =
+            self.response_datagram_for_proxy_session(proxy_session_id, target, port, payload)?;
+        socket
+            .send_to(datagram.as_slice(), client)
+            .await
+            .map_err(|_| Error::Io("failed to send Shadowsocks UDP response"))
+    }
+
     pub fn record_proxy_session(&mut self, proxy_session_id: u64, client_session_id: Option<u64>) {
         if client_session_id.is_some() {
             self.proxy_sessions

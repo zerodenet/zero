@@ -74,16 +74,16 @@ impl Proxy {
                     if let Some(sid) = dispatch.direct_response_session_id(sender) {
                         if let Some(&client) = client_sessions.get(&sid) {
                             let target = crate::runtime::udp_flow::helpers::address_from_socket_addr(sender);
-                            ss_send_protocol_response(
-                                &udp_session,
-                                udp_socket.as_ref(),
-                                sid,
-                                &target,
-                                sender.port(),
-                                &direct_buf[..n],
-                                client,
-                            )
-                            .await;
+                            let _ = udp_session
+                                .send_response_to_client_tokio(
+                                    udp_socket.as_ref(),
+                                    sid,
+                                    &target,
+                                    sender.port(),
+                                    &direct_buf[..n],
+                                    client,
+                                )
+                                .await;
                         }
                     }
                 }
@@ -93,16 +93,16 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             if let Some(sid) = session_id {
                                 if let Some(&client) = client_sessions.get(&sid) {
-                                    ss_send_protocol_response(
-                                        &udp_session,
-                                        udp_socket.as_ref(),
-                                        sid,
-                                        &target,
-                                        port,
-                                        &payload,
-                                        client,
-                                    )
-                                    .await;
+                                    let _ = udp_session
+                                        .send_response_to_client_tokio(
+                                            udp_socket.as_ref(),
+                                            sid,
+                                            &target,
+                                            port,
+                                            &payload,
+                                            client,
+                                        )
+                                        .await;
                                 }
                             }
                         }
@@ -117,21 +117,4 @@ impl Proxy {
             }
         }
     }
-}
-
-async fn ss_send_protocol_response(
-    udp_session: &shadowsocks::udp::ShadowsocksInboundUdpSession,
-    socket: &UdpSocket,
-    session_id: u64,
-    target: &zero_core::Address,
-    port: u16,
-    payload: &[u8],
-    client: SocketAddr,
-) {
-    let Ok(datagram) =
-        udp_session.response_datagram_for_proxy_session(session_id, target, port, payload)
-    else {
-        return;
-    };
-    let _ = socket.send_to(datagram.as_slice(), client).await;
 }

@@ -933,7 +933,8 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     assert!(
         udp.contains("async fn ss_udp_relay_loop")
             && !udp.contains("struct SsProtocolResponse")
-            && udp.contains("response_datagram_for_proxy_session")
+            && udp.contains(".send_response_to_client_tokio")
+            && !udp.contains("response_datagram_for_proxy_session")
             && udp.contains("UdpPipe::new"),
         "Shadowsocks UDP relay should live in src/inbound/shadowsocks/udp.rs, route through UdpPipe, and delegate response framing to protocols/shadowsocks"
     );
@@ -2260,11 +2261,13 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
         .and_then(|content| content.split("impl ShadowsocksInboundUdpResponse").next())
         .expect("Shadowsocks inbound UDP response struct section");
     assert!(
-        udp.contains("ShadowsocksInboundUdpSession")
+        udp.contains("profile.udp_session()")
             && udp.contains("udp_session.decode_request")
             && udp.contains("request.into_dispatch_parts().into_parts()")
             && udp.contains("udp_session.record_proxy_session")
-            && udp.contains("response_datagram_for_proxy_session")
+            && udp.contains(".send_response_to_client_tokio")
+            && !udp.contains("ss_send_protocol_response")
+            && !udp.contains("response_datagram_for_proxy_session")
             && !udp.contains("response_frame_for_proxy_session")
             && !udp.contains("response_target_for_proxy_session")
             && !udp.contains(".response_frame(")
@@ -2286,6 +2289,7 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && protocol_inbound.contains("fn response_frame")
             && protocol_inbound.contains("fn response_frame_for_proxy_session")
             && protocol_inbound.contains("fn response_datagram_for_proxy_session")
+            && protocol_inbound.contains("fn send_response_to_client_tokio")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpResponseDatagram")
             && protocol_inbound.contains("proxy_sessions:")
             && protocol_inbound.contains("fn record_proxy_session")
