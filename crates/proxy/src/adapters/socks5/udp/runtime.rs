@@ -250,10 +250,7 @@ impl Socks5UdpRuntime {
     ) -> Result<UpstreamUdpResponse, EngineError> {
         match self.upstream.as_ref() {
             Some(association) => {
-                let read = association.recv_packet(buf).await?;
-                let (target, port, payload) = socks5::Socks5Inbound
-                    .udp_session()
-                    .decode_response_parts(&buf[..read])?;
+                let (target, port, payload) = association.recv_response_parts(buf).await?;
                 Ok(UpstreamUdpResponse::new(target, port, payload))
             }
             None => std::future::pending::<Result<UpstreamUdpResponse, EngineError>>().await,

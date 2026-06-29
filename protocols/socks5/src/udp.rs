@@ -8,7 +8,7 @@ use zero_traits::{
 use crate::outbound::{Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth};
 use crate::shared::{
     build_udp_packet, decode_udp_associate_request, decode_udp_associate_response,
-    encode_udp_associate_response_to_client,
+    encode_udp_associate_response_to_client, Socks5UdpPacket,
 };
 
 pub use crate::inbound::Socks5UdpAssociateRequest;
@@ -579,6 +579,13 @@ where
         self.association.recv_packet(buf).await
     }
 
+    pub async fn recv_response_parts(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<(Address, u16, Vec<u8>), Socks5UdpRelayError<S::Error>> {
+        self.association.recv_response_parts(buf).await
+    }
+
     pub async fn recv_payload(
         &self,
         buf: &mut [u8],
@@ -623,6 +630,13 @@ where
         buf: &mut [u8],
     ) -> Result<usize, Socks5UdpRelayError<S::Error>> {
         self.relay.recv_packet(buf).await
+    }
+
+    pub async fn recv_response_parts(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<(Address, u16, Vec<u8>), Socks5UdpRelayError<S::Error>> {
+        self.relay.recv_response_parts(buf).await
     }
 
     pub async fn recv_payload(
@@ -690,15 +704,23 @@ where
         Ok(read)
     }
 
+    pub async fn recv_response_parts(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<(Address, u16, Vec<u8>), Socks5UdpRelayError<S::Error>> {
+        let read = self.recv_packet(buf).await?;
+        decode_udp_associate_response(&buf[..read])
+            .map(Socks5UdpPacket::into_parts)
+            .map_err(Socks5UdpRelayError::Protocol)
+    }
+
     pub async fn recv_payload(
         &self,
         buf: &mut [u8],
     ) -> Result<usize, Socks5UdpRelayError<S::Error>> {
-        let read = self.recv_packet(buf).await?;
-        let packet =
-            decode_udp_associate_response(&buf[..read]).map_err(Socks5UdpRelayError::Protocol)?;
-        let payload_len = packet.payload().len();
-        buf[..payload_len].copy_from_slice(packet.payload());
+        let (_, _, payload) = self.recv_response_parts(buf).await?;
+        let payload_len = payload.len();
+        buf[..payload_len].copy_from_slice(&payload);
         Ok(payload_len)
     }
 }

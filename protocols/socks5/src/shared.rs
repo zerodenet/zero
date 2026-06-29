@@ -180,10 +180,6 @@ impl Socks5UdpPacket {
         }
     }
 
-    pub(crate) fn payload(&self) -> &[u8] {
-        &self.payload
-    }
-
     pub(crate) fn into_parts(self) -> (Address, u16, Vec<u8>) {
         (self.target, self.port, self.payload)
     }

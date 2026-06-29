@@ -37,6 +37,11 @@ pub(super) trait Socks5UdpAssociationHandle: Send + Sync {
     ) -> Result<usize, EngineError>;
 
     async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError>;
+
+    async fn recv_response_parts(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<(Address, u16, Vec<u8>), EngineError>;
 }
 
 pub(super) type BoxedSocks5UdpAssociation = Box<dyn Socks5UdpAssociationHandle>;
