@@ -405,6 +405,31 @@ impl VmessMuxFrameEncoder {
     }
 }
 
+pub fn queue_keep_stream(
+    write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+    session_id: u16,
+    payload: &[u8],
+) -> Result<usize, Error> {
+    let frame = encode_keep_stream(session_id, payload)?;
+    let len = frame.len();
+    write_tx
+        .send(frame)
+        .map_err(|_| Error::Io("failed to queue VMess MUX keep frame"))?;
+    Ok(len)
+}
+
+pub fn queue_end_stream(
+    write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+    session_id: u16,
+) -> Result<usize, Error> {
+    let frame = encode_end_stream(session_id)?;
+    let len = frame.len();
+    write_tx
+        .send(frame)
+        .map_err(|_| Error::Io("failed to queue VMess MUX end frame"))?;
+    Ok(len)
+}
+
 pub struct VmessMuxStream {
     session_id: u16,
     target: Address,

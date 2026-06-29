@@ -25,7 +25,6 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let (mut reader, mut writer) = tokio::io::split(client);
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let frame_encoder = vmess::VmessMuxFrameEncoder;
         let mut mux_tasks: JoinSet<()> = JoinSet::new();
         let mut streams: std::collections::HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> =
             std::collections::HashMap::new();
@@ -85,7 +84,6 @@ impl Proxy {
                                         port,
                                         up_rx,
                                         write_tx: write_tx.clone(),
-                                        frame_encoder,
                                         inbound_tag: inbound_tag.to_owned(),
                                     })
                                 }
@@ -97,7 +95,6 @@ impl Proxy {
                                         default_port: port,
                                         up_rx,
                                         write_tx: write_tx.clone(),
-                                        frame_encoder,
                                         inbound_tag: inbound_tag.to_owned(),
                                     })
                                 }
@@ -145,7 +142,6 @@ impl Proxy {
             port,
             up_rx,
             write_tx,
-            frame_encoder,
             inbound_tag,
         } = request;
         let mut up_rx = up_rx;
@@ -159,8 +155,7 @@ impl Proxy {
                 Ok(route) => route,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux dispatch failed");
-                    let _ =
-                        write_tx.send(frame_encoder.end_stream(mux_session_id).unwrap_or_default());
+                    let _ = vmess::queue_mux_end_stream(&write_tx, mux_session_id);
                     return;
                 }
             };
@@ -185,12 +180,8 @@ impl Proxy {
                         match read {
                             Ok(0) => break,
                             Ok(n) => {
-                                match frame_encoder.keep_stream(mux_session_id, &buf[..n]) {
-                                    Ok(frame) => {
-                                        if write_tx.send(frame).is_err() {
-                                            break;
-                                        }
-                                    }
+                                match vmess::queue_mux_keep_stream(&write_tx, mux_session_id, &buf[..n]) {
+                                    Ok(_) => {}
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux response encode failed");
                                         break;
@@ -205,7 +196,7 @@ impl Proxy {
                     }
                 }
             }
-            let _ = write_tx.send(frame_encoder.end_stream(mux_session_id).unwrap_or_default());
+            let _ = vmess::queue_mux_end_stream(&write_tx, mux_session_id);
         });
     }
 
@@ -217,7 +208,6 @@ impl Proxy {
             default_port,
             up_rx,
             write_tx,
-            frame_encoder,
             inbound_tag,
         } = request;
         let mut up_rx = up_rx;
@@ -229,8 +219,7 @@ impl Proxy {
                 Ok(dispatch) => dispatch,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux udp dispatch init failed");
-                    let _ =
-                        write_tx.send(frame_encoder.end_stream(mux_session_id).unwrap_or_default());
+                    let _ = vmess::queue_mux_end_stream(&write_tx, mux_session_id);
                     return;
                 }
             };
@@ -373,7 +362,7 @@ impl Proxy {
             for completed in dispatch.finish_all() {
                 log_completed_udp_flow(completed);
             }
-            let _ = write_tx.send(frame_encoder.end_stream(mux_session_id).unwrap_or_default());
+            let _ = vmess::queue_mux_end_stream(&write_tx, mux_session_id);
         });
     }
 
