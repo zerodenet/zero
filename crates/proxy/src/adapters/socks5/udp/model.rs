@@ -15,40 +15,6 @@ pub(crate) struct Socks5UdpAssociationView<'a> {
     pub(crate) outbound_tag: &'a str,
 }
 
-pub(super) struct Socks5UdpAssociationSnapshot {
-    pub(super) outbound_tag: String,
-    pub(super) server: String,
-    pub(super) port: u16,
-}
-
-pub(super) struct Socks5UdpAssociationTargetSnapshot {
-    pub(super) outbound_tag: String,
-    pub(super) server: String,
-    pub(super) port: u16,
-}
-
-impl Socks5UdpAssociationTargetSnapshot {
-    pub(super) fn from_target(target: &socks5::udp::Socks5UdpAssociationTarget) -> Self {
-        let (outbound_tag, server, port) = target.identity().into_parts();
-        Self {
-            outbound_tag,
-            server,
-            port,
-        }
-    }
-}
-
-impl Socks5UdpAssociationSnapshot {
-    pub(super) fn from_association(association: &dyn Socks5UdpAssociationHandle) -> Self {
-        let (server, port) = association.upstream_endpoint();
-        Self {
-            outbound_tag: association.outbound_tag().to_owned(),
-            server: server.to_owned(),
-            port,
-        }
-    }
-}
-
 pub(crate) struct ClosedSocks5UdpAssociation {
     pub(crate) outbound_tag: String,
     pub(crate) server: String,
@@ -59,7 +25,7 @@ pub(crate) struct ClosedSocks5UdpAssociation {
 pub(super) trait Socks5UdpAssociationHandle: Send + Sync {
     fn outbound_tag(&self) -> &str;
 
-    fn upstream_endpoint(&self) -> (&str, u16);
+    fn identity(&self) -> socks5::udp::Socks5UdpAssociationIdentity;
 
     fn close(self: Box<Self>, reason: UpstreamAssociationCloseReason);
 

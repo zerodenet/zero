@@ -73,8 +73,8 @@ impl ActiveUpstreamSocks5UdpAssociation {
         self.association.outbound_tag()
     }
 
-    pub(super) fn upstream_endpoint(&self) -> (&str, u16) {
-        self.association.upstream_endpoint()
+    pub(super) fn identity(&self) -> socks5::udp::Socks5UdpAssociationIdentity {
+        self.association.identity()
     }
 
     pub(super) fn close(self, reason: UpstreamAssociationCloseReason) {
@@ -129,8 +129,8 @@ impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation {
         self.outbound_tag()
     }
 
-    fn upstream_endpoint(&self) -> (&str, u16) {
-        self.upstream_endpoint()
+    fn identity(&self) -> socks5::udp::Socks5UdpAssociationIdentity {
+        self.identity()
     }
 
     fn close(self: Box<Self>, reason: UpstreamAssociationCloseReason) {

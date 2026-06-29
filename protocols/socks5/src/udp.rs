@@ -139,6 +139,24 @@ impl Socks5UdpAssociationIdentity {
     pub fn into_parts(self) -> (alloc::string::String, alloc::string::String, u16) {
         (self.outbound_tag, self.server, self.port)
     }
+
+    pub fn outbound_tag(&self) -> &str {
+        &self.outbound_tag
+    }
+
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn matches(&self, other: &Self) -> bool {
+        self.outbound_tag == other.outbound_tag
+            && self.server == other.server
+            && self.port == other.port
+    }
 }
 
 impl Socks5UdpAssociationEndpoint {
@@ -378,6 +396,10 @@ impl<C, S> Socks5EstablishedUdpAssociation<C, S> {
 
     pub fn upstream_endpoint(&self) -> (&str, u16) {
         (self.target.server(), self.target.port())
+    }
+
+    pub fn identity(&self) -> Socks5UdpAssociationIdentity {
+        self.target.identity()
     }
 
     pub fn into_parts(self) -> (Socks5UdpAssociationTarget, Socks5UdpAssociation<C, S>) {
