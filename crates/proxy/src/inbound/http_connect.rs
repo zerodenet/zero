@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use http_connect::{HttpConnectInbound, HttpConnectResponse};
+use http_connect::HttpConnectInbound;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -42,7 +42,7 @@ impl InboundProtocol for HttpConnectInboundHandler {
 
     async fn send_ok(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
         self.http_connect_inbound
-            .send_response(client, HttpConnectResponse::ConnectionEstablished)
+            .send_success_response(client)
             .await
             .map_err(EngineError::from)
     }
@@ -50,7 +50,7 @@ impl InboundProtocol for HttpConnectInboundHandler {
     async fn send_blocked(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
         let _ = self
             .http_connect_inbound
-            .send_response(client, HttpConnectResponse::Forbidden)
+            .send_blocked_response(client)
             .await;
         let _ = AsyncWriteExt::shutdown(client).await;
         Ok(())
@@ -59,7 +59,7 @@ impl InboundProtocol for HttpConnectInboundHandler {
     async fn send_upstream_failure(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
         let _ = self
             .http_connect_inbound
-            .send_response(client, HttpConnectResponse::BadGateway)
+            .send_upstream_failure_response(client)
             .await;
         let _ = AsyncWriteExt::shutdown(client).await;
         Ok(())
@@ -135,12 +135,12 @@ pub(crate) async fn run_http_connect_listener_with_bound(
                                 }
                                 Err(CoreError::Unsupported(_)) => {
                                     let _ = handler.http_connect_inbound
-                                        .send_response(&mut metered, HttpConnectResponse::MethodNotAllowed)
+                                        .send_method_not_allowed_response(&mut metered)
                                         .await;
                                 }
                                 Err(CoreError::Protocol(_)) => {
                                     let _ = handler.http_connect_inbound
-                                        .send_response(&mut metered, HttpConnectResponse::BadRequest)
+                                        .send_bad_request_response(&mut metered)
                                         .await;
                                 }
                                 Err(err) => {

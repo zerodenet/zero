@@ -111,17 +111,13 @@ pub(crate) async fn run_mixed_listener_with_bound(
                                     }
                                     Err(CoreError::Unsupported(_)) => {
                                         let _ = http_h.http_connect_inbound()
-                                            .send_response(
-                                                &mut metered,
-                                                http_connect::HttpConnectResponse::MethodNotAllowed,
-                                            ).await;
+                                            .send_method_not_allowed_response(&mut metered)
+                                            .await;
                                     }
                                     Err(CoreError::Protocol(_)) => {
                                         let _ = http_h.http_connect_inbound()
-                                            .send_response(
-                                                &mut metered,
-                                                http_connect::HttpConnectResponse::BadRequest,
-                                            ).await;
+                                            .send_bad_request_response(&mut metered)
+                                            .await;
                                     }
                                     Err(err) => {
                                         let engine_err = EngineError::from(err);

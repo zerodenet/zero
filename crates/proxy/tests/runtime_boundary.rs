@@ -2797,6 +2797,7 @@ fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
 #[test]
 fn http_connect_redirect_response_framing_stays_in_protocol_crate() {
     let inbound = read("src/inbound/http_connect.rs");
+    let mixed = read("src/inbound/mixed.rs");
     let protocol_inbound =
         fs::read_to_string(repo_root().join("protocols/http-connect/src/inbound.rs"))
             .expect("read http-connect protocol inbound source");
@@ -2812,6 +2813,31 @@ fn http_connect_redirect_response_framing_stays_in_protocol_crate() {
             && protocol_inbound.contains("HTTP/1.1 {status} Found")
             && protocol_inbound.contains("Location: {location}"),
         "HTTP CONNECT redirect wire response framing should live in protocols/http-connect; proxy should only select status/location"
+    );
+    assert!(
+        inbound.contains(".send_success_response(")
+            && inbound.contains(".send_blocked_response(")
+            && inbound.contains(".send_upstream_failure_response(")
+            && inbound.contains(".send_method_not_allowed_response(")
+            && inbound.contains(".send_bad_request_response(")
+            && mixed.contains(".send_method_not_allowed_response(")
+            && mixed.contains(".send_bad_request_response(")
+            && !inbound.contains("HttpConnectResponse")
+            && !mixed.contains("HttpConnectResponse"),
+        "HTTP CONNECT inbound glue should use protocol-owned semantic response methods instead of selecting concrete response frames"
+    );
+    assert!(
+        protocol_inbound.contains("pub async fn send_success_response")
+            && protocol_inbound.contains("pub async fn send_bad_request_response")
+            && protocol_inbound.contains("pub async fn send_method_not_allowed_response")
+            && protocol_inbound.contains("pub async fn send_blocked_response")
+            && protocol_inbound.contains("pub async fn send_upstream_failure_response")
+            && protocol_inbound.contains("HttpConnectResponse::ConnectionEstablished")
+            && protocol_inbound.contains("HttpConnectResponse::BadRequest")
+            && protocol_inbound.contains("HttpConnectResponse::MethodNotAllowed")
+            && protocol_inbound.contains("HttpConnectResponse::Forbidden")
+            && protocol_inbound.contains("HttpConnectResponse::BadGateway"),
+        "protocols/http-connect should own concrete response selection for common inbound outcomes"
     );
 }
 

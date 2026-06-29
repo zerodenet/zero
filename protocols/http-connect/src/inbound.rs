@@ -78,6 +78,46 @@ impl HttpConnectInbound {
             .map_err(|_| Error::Io("failed to write HTTP CONNECT response"))
     }
 
+    pub async fn send_success_response<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_response(stream, HttpConnectResponse::ConnectionEstablished)
+            .await
+    }
+
+    pub async fn send_bad_request_response<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_response(stream, HttpConnectResponse::BadRequest)
+            .await
+    }
+
+    pub async fn send_method_not_allowed_response<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_response(stream, HttpConnectResponse::MethodNotAllowed)
+            .await
+    }
+
+    pub async fn send_blocked_response<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_response(stream, HttpConnectResponse::Forbidden)
+            .await
+    }
+
+    pub async fn send_upstream_failure_response<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_response(stream, HttpConnectResponse::BadGateway)
+            .await
+    }
+
     pub fn redirect_response(&self, status: u16, location: &str) -> String {
         format!("HTTP/1.1 {status} Found\r\nLocation: {location}\r\nConnection: close\r\n\r\n")
     }
