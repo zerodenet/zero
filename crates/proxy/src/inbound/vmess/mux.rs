@@ -24,10 +24,8 @@ impl Proxy {
         inbound_tag: &str,
     ) -> Result<(), EngineError> {
         let (mut reader, writer) = tokio::io::split(client);
-        let mux_writer = vmess::mux::VmessInboundMuxWriter::from_tokio_writer(writer);
+        let mut mux_server = vmess::mux::VmessInboundMuxServer::from_tokio_writer(writer);
         let mut mux_tasks: JoinSet<()> = JoinSet::new();
-        let mux_session = vmess::mux::VmessInboundMuxSession::new();
-        let mut streams = vmess::mux::VmessInboundMuxStreams::new();
 
         info!(
             inbound_tag = inbound_tag,
@@ -37,16 +35,16 @@ impl Proxy {
 
         loop {
             select! {
-                action = mux_session.read_inbound_action(&mut reader) => {
-                    let action = match action {
-                        Ok(action) => action,
+                opened = mux_server.read_opened_stream(&mut reader) => {
+                    let opened = match opened {
+                        Ok(opened) => opened,
                         Err(error) => {
                             warn!(error = %error, "vmess mux frame read failed");
                             break;
                         }
                     };
 
-                    if let Some(opened) = streams.apply_inbound_action(action) {
+                    if let Some(opened) = opened {
                             match opened.into_kind() {
                                 vmess::mux::VmessInboundMuxOpenedKind::Tcp {
                                     session_id,
@@ -58,7 +56,7 @@ impl Proxy {
                                         session_id,
                                         session,
                                         up_rx,
-                                        mux_writer.clone(),
+                                        mux_server.writer(),
                                         inbound_tag.to_owned(),
                                     )
                                 }
@@ -72,7 +70,7 @@ impl Proxy {
                                         session_id,
                                         session,
                                         up_rx,
-                                        mux_writer.clone(),
+                                        mux_server.writer(),
                                         inbound_tag.to_owned(),
                                     )
                                 }
@@ -106,7 +104,6 @@ impl Proxy {
     ) {
         let proxy = self.clone();
         tasks.spawn(async move {
-            let mux_session = vmess::mux::VmessInboundMuxSession::new();
             let mut session = session;
             proxy.prepare_session(&mut session, &inbound_tag, None);
 
@@ -119,7 +116,7 @@ impl Proxy {
                 Ok(result) => result.upstream,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux dispatch failed");
-                    let _ = mux_session.end_inbound_stream(&writer, mux_session_id);
+                    let _ = writer.end_inbound_stream(mux_session_id);
                     return;
                 }
             };
@@ -140,13 +137,12 @@ impl Proxy {
         let mut up_rx = up_rx;
         let proxy = self.clone();
         tasks.spawn(async move {
-            let mux_session = vmess::mux::VmessInboundMuxSession::new();
             let mut udp_session = vmess::VmessInbound.udp_session_for(&session);
             let mut dispatch = match UdpDispatch::new(&inbound_tag).await {
                 Ok(dispatch) => dispatch,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux udp dispatch init failed");
-                    let _ = mux_session.end_inbound_stream(&writer, mux_session_id);
+                    let _ = writer.end_inbound_stream(mux_session_id);
                     return;
                 }
             };
@@ -276,7 +272,7 @@ impl Proxy {
             for completed in dispatch.finish_all() {
                 log_completed_udp_flow(completed);
             }
-            let _ = mux_session.end_inbound_stream(&writer, mux_session_id);
+            let _ = writer.end_inbound_stream(mux_session_id);
         });
     }
 

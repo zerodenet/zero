@@ -5404,10 +5404,12 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
         "VMess inbound MUX runtime should use the protocol mux frame reader helper"
     );
     assert!(
-        root.contains("vmess::mux::VmessInboundMuxSession::new()")
-            && root.contains("mux_session.read_inbound_action(&mut reader)")
-            && root.contains("streams.apply_inbound_action(action)"),
-        "VMess inbound MUX runtime should consume protocol-owned semantic mux actions"
+        root.contains("vmess::mux::VmessInboundMuxServer::from_tokio_writer(writer)")
+            && root.contains("mux_server.read_opened_stream(&mut reader)")
+            && !root.contains("vmess::mux::VmessInboundMuxSession::new()")
+            && !root.contains("mux_session.read_inbound_action(&mut reader)")
+            && !root.contains("streams.apply_inbound_action(action)"),
+        "VMess inbound MUX runtime should consume protocol-owned opened-stream events"
     );
     for forbidden in [
         "vmess::read_mux_stream_frame",
@@ -5462,10 +5464,11 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
         "VMess inbound MUX new-stream Session conversion should be protocol-owned and exposed as an action"
     );
     assert!(
-        root.contains(".end_inbound_stream(&writer, mux_session_id)")
+        root.contains("writer.end_inbound_stream(mux_session_id)")
             && !root.contains(".write_inbound_stream_data(&writer, mux_session_id")
             && !root.contains(".write_inbound_stream_payload(&writer, mux_session_id")
-            && root.contains("VmessInboundMuxWriter::from_tokio_writer")
+            && !root.contains("VmessInboundMuxWriter::from_tokio_writer")
+            && !root.contains("VmessInboundMuxStreams::new")
             && !root.contains("VmessInboundMuxWriter::new")
             && !root.contains("let (write_tx")
             && !root.contains("write_rx")
@@ -5509,6 +5512,10 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && protocol_mux.contains("pub fn close_inbound_stream")
             && protocol_mux.contains("pub fn apply_inbound_action")
             && protocol_mux.contains("pub struct VmessInboundMuxOpenedStream")
+            && protocol_mux.contains("pub struct VmessInboundMuxServer")
+            && protocol_mux.contains("pub fn from_tokio_writer")
+            && protocol_mux.contains("pub async fn read_opened_stream")
+            && protocol_mux.contains("self.streams.apply_inbound_action(action)")
             && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
             && protocol_mux.contains("write_inbound_stream_payload(&writer, session_id")
             && root.contains("vmess::mux::relay_inbound_mux_stream"),

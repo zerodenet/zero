@@ -538,6 +538,44 @@ pub async fn relay_inbound_mux_stream<S>(
     let _ = mux_session.write_inbound_stream_payload(&writer, session_id, &[]);
 }
 
+pub struct VmessInboundMuxServer {
+    session: VmessInboundMuxSession,
+    streams: VmessInboundMuxStreams,
+    writer: VmessInboundMuxWriter,
+}
+
+impl VmessInboundMuxServer {
+    pub fn from_tokio_writer<W>(writer: W) -> Self
+    where
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        Self {
+            session: VmessInboundMuxSession::new(),
+            streams: VmessInboundMuxStreams::new(),
+            writer: VmessInboundMuxWriter::from_tokio_writer(writer),
+        }
+    }
+
+    pub async fn read_opened_stream<R>(
+        &mut self,
+        reader: &mut R,
+    ) -> Result<Option<VmessInboundMuxOpenedStream>, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        let action = self.session.read_inbound_action(reader).await?;
+        Ok(self.streams.apply_inbound_action(action))
+    }
+
+    pub fn writer(&self) -> VmessInboundMuxWriter {
+        self.writer.clone()
+    }
+
+    pub fn end_inbound_stream(&self, session_id: u16) -> Result<usize, Error> {
+        self.session.end_inbound_stream(&self.writer, session_id)
+    }
+}
+
 impl VmessInboundMuxSession {
     pub fn new() -> Self {
         Self
@@ -633,6 +671,22 @@ impl VmessInboundMuxWriter {
 
     pub fn end(&self, session_id: u16) -> Result<usize, Error> {
         queue_end_stream(&self.write_tx, session_id)
+    }
+
+    pub fn end_inbound_stream(&self, session_id: u16) -> Result<usize, Error> {
+        self.end(session_id)
+    }
+
+    pub fn write_inbound_stream_payload(
+        &self,
+        session_id: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        if payload.is_empty() {
+            self.end_inbound_stream(session_id)
+        } else {
+            self.data(session_id, payload)
+        }
     }
 
     pub(crate) fn frame(&self, frame: Vec<u8>) -> Result<usize, Error> {
