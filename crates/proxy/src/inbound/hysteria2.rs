@@ -13,7 +13,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 use zero_config::InboundConfig;
-use zero_core::{Address, ProtocolType, Session};
+use zero_core::{ProtocolType, Session};
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
@@ -394,14 +394,10 @@ impl Proxy {
                     let (n, sender) = recv?;
                     if let Some(sid) = dispatch.direct_response_session_id(sender) {
                         let ip = zero_platform_tokio::socket_addr_to_ip(sender);
-                        let target = match ip {
-                            zero_traits::IpAddress::V4(b) => Address::Ipv4(b),
-                            zero_traits::IpAddress::V6(b) => Address::Ipv6(b),
-                        };
-                        let _ = udp_session.send_response(
+                        let _ = udp_session.send_response_to_ip(
                             &conn,
                             sid,
-                            &target,
+                            ip,
                             sender.port(),
                             &direct_buf[..n],
                         );

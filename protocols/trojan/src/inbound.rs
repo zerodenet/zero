@@ -1,7 +1,7 @@
 //! Trojan inbound protocol handler.
 
-use zero_core::{Error, Network, ProtocolType, Session};
-use zero_traits::AsyncSocket;
+use zero_core::{Address, Error, Network, ProtocolType, Session};
+use zero_traits::{AsyncSocket, IpAddress};
 
 use super::outbound::TrojanUdpPacket;
 use super::shared::{read_password, read_request, CMD_TCP, CMD_UDP};
@@ -91,7 +91,7 @@ impl TrojanInboundUdpSession {
     pub async fn write_response<S>(
         &self,
         stream: &mut S,
-        target: &zero_core::Address,
+        target: &Address,
         port: u16,
         payload: &[u8],
     ) -> Result<(), Error>
@@ -101,6 +101,20 @@ impl TrojanInboundUdpSession {
         self.codec
             .write_response(stream, target, port, payload)
             .await
+    }
+
+    pub async fn write_response_to_ip<S>(
+        &self,
+        stream: &mut S,
+        ip: IpAddress,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let target = address_from_ip(ip);
+        self.write_response(stream, &target, port, payload).await
     }
 }
 
@@ -127,6 +141,13 @@ impl TrojanInboundUdpCodec {
         S: AsyncSocket,
     {
         super::shared::write_udp_packet(stream, target, port, payload).await
+    }
+}
+
+fn address_from_ip(ip: IpAddress) -> Address {
+    match ip {
+        IpAddress::V4(bytes) => Address::Ipv4(bytes),
+        IpAddress::V6(bytes) => Address::Ipv6(bytes),
     }
 }
 

@@ -231,15 +231,12 @@ impl Proxy {
                     let (n, sender) = recv?;
                     last_activity = TokioInstant::now();
 
-                    let target = match zero_platform_tokio::socket_addr_to_ip(sender) {
-                        zero_traits::IpAddress::V4(bytes) => zero_core::Address::Ipv4(bytes),
-                        zero_traits::IpAddress::V6(bytes) => zero_core::Address::Ipv6(bytes),
-                    };
+                    let ip = zero_platform_tokio::socket_addr_to_ip(sender);
                     let session_id = dispatch.direct_response_session_id(sender);
                     if let Some(sid) = session_id {
                         self.record_session_outbound_rx(sid, n as u64);
                     }
-                    udp_session.write_response(&mut client, &target, sender.port(), &direct_buf[..n]).await?;
+                    udp_session.write_response_to_ip(&mut client, ip, sender.port(), &direct_buf[..n]).await?;
                     if let Some(sid) = session_id {
                         self.record_session_inbound_tx(sid, n as u64);
                     }
