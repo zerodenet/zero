@@ -80,7 +80,9 @@ fn protocol_inbound_sources() -> Vec<PathBuf> {
         "src/inbound/shadowsocks.rs",
         "src/inbound/shadowsocks",
         "src/inbound/trojan.rs",
+        "src/inbound/trojan",
         "src/inbound/mieru.rs",
+        "src/inbound/mieru",
         "src/inbound/hysteria2.rs",
         "src/inbound/vless",
         "src/inbound/vmess",
@@ -188,10 +190,10 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
         "src/inbound/vless/udp_session.rs",
         "src/inbound/vless/mux.rs",
         "src/inbound/vmess/mux.rs",
-        "src/inbound/trojan.rs",
+        "src/inbound/trojan/udp.rs",
         "src/inbound/shadowsocks/udp.rs",
         "src/inbound/hysteria2.rs",
-        "src/inbound/mieru.rs",
+        "src/inbound/mieru/udp.rs",
     ] {
         let content = read(source);
         assert!(
@@ -333,8 +335,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         "src/inbound/vless/udp_session.rs",
         "src/inbound/vless/mux.rs",
         "src/inbound/vmess/mux.rs",
-        "src/inbound/trojan.rs",
-        "src/inbound/mieru.rs",
+        "src/inbound/trojan/udp.rs",
+        "src/inbound/mieru/udp.rs",
         "src/inbound/socks5/udp_associate/direct_response.rs",
         "src/inbound/socks5/udp_associate/chain_response.rs",
         "src/inbound/socks5/udp_associate/upstream_response.rs",
@@ -397,8 +399,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         "src/inbound/vless/udp_session.rs",
         "src/inbound/vless/mux.rs",
         "src/inbound/vmess/mux.rs",
-        "src/inbound/trojan.rs",
-        "src/inbound/mieru.rs",
+        "src/inbound/trojan/udp.rs",
+        "src/inbound/mieru/udp.rs",
         "src/inbound/hysteria2.rs",
     ] {
         let content = read(source);
@@ -414,8 +416,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         "src/inbound/vless/udp_session.rs",
         "src/inbound/vless/mux.rs",
         "src/inbound/vmess/mux.rs",
-        "src/inbound/trojan.rs",
-        "src/inbound/mieru.rs",
+        "src/inbound/trojan/udp.rs",
+        "src/inbound/mieru/udp.rs",
         "src/inbound/hysteria2.rs",
         "src/inbound/shadowsocks/udp.rs",
         "src/inbound/socks5/udp_associate/direct_response.rs",
@@ -1591,8 +1593,8 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
 
 #[test]
 fn stream_udp_inbound_direct_response_target_conversion_is_protocol_owned() {
-    let trojan_inbound = read("src/inbound/trojan.rs");
-    let mieru_inbound = read("src/inbound/mieru.rs");
+    let trojan_udp_inbound = read("src/inbound/trojan/udp.rs");
+    let mieru_udp_inbound = read("src/inbound/mieru/udp.rs");
     let hysteria2_inbound = read("src/inbound/hysteria2.rs");
     let vless_udp_inbound = read("src/inbound/vless/udp_session.rs");
     let vless_mux_inbound = read("src/inbound/vless/mux.rs");
@@ -1609,15 +1611,15 @@ fn stream_udp_inbound_direct_response_target_conversion_is_protocol_owned() {
         .expect("read vmess protocol udp source");
 
     assert!(
-        trojan_inbound.contains("write_response_to_socket_addr_tokio")
-            && !trojan_inbound.contains("socket_addr_to_ip(sender)")
+        trojan_udp_inbound.contains("write_response_to_socket_addr_tokio")
+            && !trojan_udp_inbound.contains("socket_addr_to_ip(sender)")
             && trojan_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
             && trojan_protocol.contains("fn address_from_socket_addr"),
         "Trojan inbound UDP direct response target conversion should live behind the protocol UDP session"
     );
     assert!(
-        mieru_inbound.contains("write_response_for_sender_tokio")
-            && !mieru_inbound.contains("address_from_socket_addr(sender)")
+        mieru_udp_inbound.contains("write_response_for_sender_tokio")
+            && !mieru_udp_inbound.contains("address_from_socket_addr(sender)")
             && mieru_protocol.contains("pub async fn write_response_for_sender_tokio")
             && mieru_protocol.contains("fn address_from_socket_addr"),
         "Mieru inbound UDP direct response target conversion should live behind the protocol UDP session"
@@ -6100,7 +6102,8 @@ fn upstream_udp_response_decode_lives_behind_registered_handler() {
 
 #[test]
 fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
-    let inbound = read("src/inbound/trojan.rs");
+    let root = read("src/inbound/trojan.rs");
+    let inbound = read("src/inbound/trojan/udp.rs");
     let protocol_outbound = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -6120,6 +6123,14 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         .expect("read trojan protocol lib source");
     let protocol_shared = fs::read_to_string(repo_root().join("protocols/trojan/src/shared.rs"))
         .expect("read trojan protocol shared source");
+
+    assert!(
+        root.contains("mod udp;")
+            && !root.contains("async fn run_trojan_udp_relay")
+            && !root.contains("UdpPipe::new")
+            && !root.contains("record_direct_udp_response_received"),
+        "Trojan inbound root should keep listener/session glue while UDP relay glue lives in src/inbound/trojan/udp.rs"
+    );
 
     for forbidden in [
         "TrojanUdpPacket {",
@@ -6319,13 +6330,22 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
 
 #[test]
 fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
-    let inbound = read("src/inbound/mieru.rs");
+    let root = read("src/inbound/mieru.rs");
+    let inbound = read("src/inbound/mieru/udp.rs");
     let protocol_udp = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
         .expect("workspace root")
         .join("protocols/mieru/src/udp.rs");
     let protocol_udp = fs::read_to_string(protocol_udp).expect("read mieru protocol udp source");
+
+    assert!(
+        root.contains("mod udp;")
+            && !root.contains("async fn run_mieru_udp_relay")
+            && !root.contains("UdpPipe::new")
+            && !root.contains("record_direct_udp_response_received"),
+        "Mieru inbound root should keep listener/session glue while UDP relay glue lives in src/inbound/mieru/udp.rs"
+    );
 
     for forbidden in [
         "mieru::unwrap_udp_associate",
