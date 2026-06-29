@@ -5,7 +5,6 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::address_from_socket_addr;
 use crate::runtime::Proxy;
 
 pub(super) async fn forward_relay_socket_response(
@@ -68,10 +67,25 @@ pub(super) async fn forward_direct_udp_response(
     payload: &[u8],
 ) -> Result<usize, EngineError> {
     let udp_session = socks5::Socks5Inbound.udp_session();
-    let frame =
-        udp_session.response_frame(&address_from_socket_addr(sender), sender.port(), payload)?;
-    relay
-        .send_to_addr(frame.as_slice(), client_addr)
+    let upstream_address = crate::runtime::udp_flow::helpers::address_from_socket_addr(sender);
+    udp_session
+        .send_response_to_client(
+            relay,
+            zero_platform_tokio::socket_addr_to_ip(client_addr),
+            client_addr.port(),
+            &upstream_address,
+            sender.port(),
+            payload,
+        )
         .await
-        .map_err(EngineError::from)
+        .map_err(socks5_udp_relay_error_to_engine)
+}
+
+fn socks5_udp_relay_error_to_engine(
+    error: socks5::udp::Socks5UdpRelayError<std::io::Error>,
+) -> EngineError {
+    match error {
+        socks5::udp::Socks5UdpRelayError::Socket(error) => EngineError::from(error),
+        socks5::udp::Socks5UdpRelayError::Protocol(error) => EngineError::from(error),
+    }
 }

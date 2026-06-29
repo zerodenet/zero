@@ -283,6 +283,33 @@ impl Socks5InboundUdpSession {
         let (target, port, _) = response.into_parts();
         Ok(Socks5InboundUdpResponseKey { target, port })
     }
+
+    pub fn response_session_key_parts(&self, packet: &[u8]) -> Result<(Address, u16), Error> {
+        self.response_key(packet).map(|key| key.into_parts())
+    }
+
+    pub async fn send_response_to_client<S>(
+        &self,
+        socket: &S,
+        client: IpAddress,
+        client_port: u16,
+        upstream_address: &Address,
+        upstream_port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>>
+    where
+        S: DatagramSocket,
+    {
+        let frame = self
+            .response_frame(upstream_address, upstream_port, payload)
+            .map_err(Socks5UdpRelayError::Protocol)?;
+        let frame_len = frame.len();
+        socket
+            .send_to(frame.as_slice(), client, client_port)
+            .await
+            .map_err(Socks5UdpRelayError::Socket)?;
+        Ok(frame_len)
+    }
 }
 
 impl<C, S> Socks5UdpAssociation<C, S> {

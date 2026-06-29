@@ -4720,22 +4720,24 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("direct_response_session_id")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
-            && direct_response.contains("udp_session.response_frame")
+            && direct_response.contains(".send_response_to_client")
+            && !direct_response.contains("udp_session.response_frame")
             && !direct_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("socks5::encode_udp_associate_response("),
-        "SOCKS5 UDP direct response metering and framing should live in inbound/socks5/udp_associate/direct_response.rs"
+        "SOCKS5 UDP direct response metering should live in proxy while framing stays behind protocol helpers"
     );
     assert!(
         chain_response.contains("async fn handle_chain_result")
             && chain_response.contains("pub(super) struct ChainResponseRequest")
             && chain_response.contains("struct ForwardChainResponseRequest")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
-            && chain_response.contains("udp_session.response_frame")
+            && chain_response.contains(".send_response_to_client")
+            && !chain_response.contains("udp_session.response_frame")
             && !chain_response.contains("Socks5InboundUdpCodec")
             && !chain_response.contains("socks5::encode_udp_associate_response(")
-            && chain_response.contains("failed to send UDP chain response to client")
+            && chain_response.contains("failed to send SOCKS5 UDP chain response to client")
             && chain_response.contains("chain response task panicked"),
-        "SOCKS5 UDP chain response result handling and framing should live in inbound/socks5/udp_associate/chain_response.rs"
+        "SOCKS5 UDP chain response result handling should live in proxy while framing stays behind protocol helpers"
     );
     for (path, source) in [
         ("dispatch.rs", &dispatch),
@@ -4774,12 +4776,13 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && dispatch.contains("udp_packet.into_dispatch_parts()")
             && dispatch.contains("protocol_overhead_len")
             && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
-            && upstream_response.contains("udp_session.response_key")
-            && upstream_response.contains("response.into_parts()")
+            && upstream_response.contains("udp_session.response_session_key_parts")
+            && !upstream_response.contains("udp_session.response_key")
+            && !upstream_response.contains("response.into_parts()")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
-            && direct_response.contains("udp_session.response_frame")
+            && direct_response.contains(".send_response_to_client")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
-            && chain_response.contains("udp_session.response_frame")
+            && chain_response.contains(".send_response_to_client")
             && !dispatch.contains("Socks5InboundUdpCodec")
             && !upstream_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("Socks5InboundUdpCodec")
@@ -4794,6 +4797,15 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !upstream_response.contains("response.target()")
             && !upstream_response.contains("response.port()"),
         "SOCKS5 UDP associate dispatch should consume protocol-owned dispatch parts instead of rebuilding session facts"
+    );
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/socks5/src/udp.rs"))
+        .expect("read protocols/socks5/src/udp.rs");
+    assert!(
+        protocol_udp.contains("pub async fn send_response_to_client")
+            && protocol_udp.contains("pub fn response_session_key_parts")
+            && protocol_udp.contains("response_frame(")
+            && protocol_udp.contains("response_key("),
+        "protocols/socks5 should own UDP associate response framing and response attribution helpers"
     );
     for forbidden in [
         "udp_session.encode_response_to_client",

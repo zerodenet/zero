@@ -64,36 +64,30 @@ async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
     };
 
     let udp_session = socks5::Socks5Inbound.udp_session();
-    match udp_session.response_frame(request.target, request.port, request.payload) {
-        Ok(frame) => match request
-            .relay
-            .send_to_addr(frame.as_slice(), client_addr)
-            .await
-        {
-            Ok(sent) => {
-                if let Some(sid) = request.session_id {
-                    request.proxy.record_session_inbound_tx(sid, sent as u64);
-                }
+    match udp_session
+        .send_response_to_client(
+            request.relay,
+            zero_platform_tokio::socket_addr_to_ip(client_addr),
+            client_addr.port(),
+            request.target,
+            request.port,
+            request.payload,
+        )
+        .await
+    {
+        Ok(sent) => {
+            if let Some(sid) = request.session_id {
+                request.proxy.record_session_inbound_tx(sid, sent as u64);
             }
-            Err(error) => {
-                warn!(
-                    inbound_tag = request.inbound_tag,
-                    protocol = "socks5_udp",
-                    ?request.target,
-                    port = request.port,
-                    error = %error,
-                    "failed to send UDP chain response to client"
-                );
-            }
-        },
+        }
         Err(error) => {
             warn!(
                 inbound_tag = request.inbound_tag,
                 protocol = "socks5_udp",
                 ?request.target,
                 port = request.port,
-                error = %error,
-                "failed to build SOCKS5 UDP chain response"
+                error = ?error,
+                "failed to send SOCKS5 UDP chain response to client"
             );
         }
     }
