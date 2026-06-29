@@ -2095,6 +2095,7 @@ fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
     assert!(
         inbound.contains("type MieruClientStream = mieru::MieruInboundStream<TcpRelayStream>")
             && inbound.contains("mieru::MieruInboundStream::new")
+            && inbound.contains("client.accept_tunneled_socks5_session().await")
             && !manifest_dir().join("src/inbound/mieru/model.rs").exists(),
         "Mieru proxy inbound should use a protocol-owned data-phase stream wrapper"
     );
@@ -2102,6 +2103,9 @@ fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
         "pub struct MieruInboundStream",
         "impl<S> AsyncRead for MieruInboundStream<S>",
         "impl<S> AsyncWrite for MieruInboundStream<S>",
+        "accept_tunneled_socks5_session",
+        "read_tunneled_socks5_request",
+        "write_tunneled_socks5_success",
         "decrypt_client_data_with_consumed",
         "encrypt_server_data",
     ] {
@@ -2114,6 +2118,10 @@ fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
         "MieruInboundDataCodec",
         "decrypt_client_data_with_consumed",
         "encrypt_server_data",
+        "async fn socks5_serve",
+        "read_exact(&mut head)",
+        "bad request version",
+        "bad address type",
     ] {
         assert!(
             !inbound.contains(forbidden),

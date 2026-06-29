@@ -5,8 +5,8 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 use std::io;
 
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use zero_core::{Error, ProtocolType};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::crypto::{try_derive_keys, MieruCipher};
@@ -150,6 +150,121 @@ impl<S> MieruInboundStream<S> {
     pub fn into_inner(self) -> S {
         self.inner
     }
+
+    pub async fn accept_tunneled_socks5_session(&mut self) -> Result<Session, Error>
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
+        let request = read_tunneled_socks5_request(self).await?;
+        write_tunneled_socks5_success(self).await?;
+        Ok(request.into_session())
+    }
+}
+
+struct MieruTunneledSocks5Request {
+    target: Address,
+    port: u16,
+    network: Network,
+}
+
+impl MieruTunneledSocks5Request {
+    fn into_session(self) -> Session {
+        Session::new(0, self.target, self.port, self.network, ProtocolType::Mieru)
+    }
+}
+
+async fn read_tunneled_socks5_request<S>(
+    stream: &mut S,
+) -> Result<MieruTunneledSocks5Request, Error>
+where
+    S: AsyncRead + Unpin,
+{
+    let mut head = [0u8; 4];
+    stream
+        .read_exact(&mut head)
+        .await
+        .map_err(|_| Error::Io("mieru socks5: read request header"))?;
+
+    if head[0] != 0x05 {
+        return Err(Error::Protocol("mieru socks5: bad request version"));
+    }
+
+    let cmd = head[1];
+    let target = read_tunneled_socks5_address(stream, head[3]).await?;
+
+    let mut port_bytes = [0u8; 2];
+    stream
+        .read_exact(&mut port_bytes)
+        .await
+        .map_err(|_| Error::Io("mieru socks5: read request port"))?;
+    let port = u16::from_be_bytes(port_bytes);
+
+    let network = match cmd {
+        0x01 => Network::Tcp,
+        0x03 => Network::Udp,
+        _ => return Err(Error::Unsupported("mieru socks5: unsupported command")),
+    };
+
+    Ok(MieruTunneledSocks5Request {
+        target,
+        port,
+        network,
+    })
+}
+
+async fn read_tunneled_socks5_address<S>(stream: &mut S, atyp: u8) -> Result<Address, Error>
+where
+    S: AsyncRead + Unpin,
+{
+    match atyp {
+        0x01 => {
+            let mut ip = [0u8; 4];
+            stream
+                .read_exact(&mut ip)
+                .await
+                .map_err(|_| Error::Io("mieru socks5: read ipv4 address"))?;
+            Ok(Address::Ipv4(ip))
+        }
+        0x04 => {
+            let mut ip = [0u8; 16];
+            stream
+                .read_exact(&mut ip)
+                .await
+                .map_err(|_| Error::Io("mieru socks5: read ipv6 address"))?;
+            Ok(Address::Ipv6(ip))
+        }
+        0x03 => {
+            let mut len = [0u8; 1];
+            stream
+                .read_exact(&mut len)
+                .await
+                .map_err(|_| Error::Io("mieru socks5: read domain length"))?;
+            let mut domain = vec![0u8; len[0] as usize];
+            stream
+                .read_exact(&mut domain)
+                .await
+                .map_err(|_| Error::Io("mieru socks5: read domain"))?;
+            let domain = String::from_utf8(domain)
+                .map_err(|_| Error::Protocol("mieru socks5: invalid domain"))?;
+            Ok(Address::Domain(domain))
+        }
+        _ => Err(Error::Protocol("mieru socks5: bad address type")),
+    }
+}
+
+async fn write_tunneled_socks5_success<S>(stream: &mut S) -> Result<(), Error>
+where
+    S: AsyncWrite + Unpin,
+{
+    stream
+        .write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+        .await
+        .map_err(|_| Error::Io("mieru socks5: write success"))?;
+    stream
+        .flush()
+        .await
+        .map_err(|_| Error::Io("mieru socks5: flush success"))?;
+    Ok(())
 }
 
 impl<S> AsyncRead for MieruInboundStream<S>
