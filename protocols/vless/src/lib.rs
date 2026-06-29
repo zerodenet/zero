@@ -28,8 +28,9 @@ pub use flow::{
     FLOW_XTLS_RPRX_VISION_UDP,
 };
 pub use inbound::{
-    IntoVlessInboundUserConfig, VlessConfiguredUser, VlessConfiguredUsers, VlessInbound,
-    VlessInboundProfile, VlessInboundUserConfigParts, VlessUser, VlessUserStore,
+    classify_inbound_session, IntoVlessInboundUserConfig, VlessConfiguredUser,
+    VlessConfiguredUsers, VlessInbound, VlessInboundProfile, VlessInboundSessionKind,
+    VlessInboundUserConfigParts, VlessUser, VlessUserStore,
 };
 pub use metadata::VlessProtocol;
 #[cfg(feature = "reality")]

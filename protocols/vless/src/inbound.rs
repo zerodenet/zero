@@ -147,6 +147,24 @@ impl VlessAcceptedSession {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VlessInboundSessionKind {
+    Tcp,
+    Udp,
+    Mux,
+}
+
+pub fn classify_inbound_session(session: &Session) -> VlessInboundSessionKind {
+    if VlessInbound::is_mux_session(session) {
+        VlessInboundSessionKind::Mux
+    } else {
+        match session.network {
+            Network::Udp => VlessInboundSessionKind::Udp,
+            Network::Tcp => VlessInboundSessionKind::Tcp,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessInboundProfile {
     users: Arc<[VlessConfiguredUser]>,

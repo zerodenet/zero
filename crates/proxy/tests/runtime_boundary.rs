@@ -1736,6 +1736,20 @@ fn vless_inbound_users_are_adapter_parsed() {
         "VLESS user store should live in protocols/vless, not proxy inbound helpers"
     );
     assert!(
+        session.contains("vless::classify_inbound_session(&session)")
+            && session.contains("vless::VlessInboundSessionKind::Mux")
+            && session.contains("vless::VlessInboundSessionKind::Udp")
+            && session.contains("vless::VlessInboundSessionKind::Tcp")
+            && !session.contains("session.network")
+            && !session.contains("VlessInbound::is_mux_session(&session)")
+            && protocol_inbound.contains("pub enum VlessInboundSessionKind")
+            && protocol_inbound.contains("pub fn classify_inbound_session")
+            && protocol_inbound.contains("VlessInbound::is_mux_session(session)")
+            && protocol_inbound.contains("VlessInboundSessionKind::Udp")
+            && protocol_inbound.contains("VlessInboundSessionKind::Mux"),
+        "VLESS inbound glue should ask protocols/vless to classify accepted sessions"
+    );
+    assert!(
         model.contains("struct VlessInboundRequest")
             && model.contains("reality: Option<vless::VlessRealityServerProfile>")
             && listener.contains("request: VlessInboundRequest")

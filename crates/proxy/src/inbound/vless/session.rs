@@ -233,26 +233,30 @@ impl Proxy {
 
         let auth = session.auth.clone();
 
-        if vless::VlessInbound::is_mux_session(&session) {
-            self.handle_vless_mux_session(client, inbound_tag, mux_context, &auth)
+        match vless::classify_inbound_session(&session) {
+            vless::VlessInboundSessionKind::Mux => {
+                self.handle_vless_mux_session(client, inbound_tag, mux_context, &auth)
+                    .await
+            }
+            vless::VlessInboundSessionKind::Udp => {
+                self.handle_vless_udp_session(client, inbound_tag, session, &auth)
+                    .await
+            }
+            vless::VlessInboundSessionKind::Tcp => {
+                let handler = VlessInboundHandler {
+                    vless_inbound: vless::VlessInbound,
+                };
+                let source_addr = client.peer_addr().ok();
+                serve_inbound(
+                    self,
+                    session,
+                    TcpRelayStream::new(client.into_inner()),
+                    &handler,
+                    inbound_tag,
+                    source_addr,
+                )
                 .await
-        } else if session.network == zero_core::Network::Udp {
-            self.handle_vless_udp_session(client, inbound_tag, session, &auth)
-                .await
-        } else {
-            let handler = VlessInboundHandler {
-                vless_inbound: vless::VlessInbound,
-            };
-            let source_addr = client.peer_addr().ok();
-            serve_inbound(
-                self,
-                session,
-                TcpRelayStream::new(client.into_inner()),
-                &handler,
-                inbound_tag,
-                source_addr,
-            )
-            .await
+            }
         }
     }
 }
