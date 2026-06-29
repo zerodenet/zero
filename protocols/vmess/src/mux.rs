@@ -423,6 +423,15 @@ impl VmessInboundMuxWriter {
         Self { write_tx }
     }
 
+    pub fn from_tokio_writer<W>(writer: W) -> Self
+    where
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        let (write_tx, write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        spawn_mux_write_relay(writer, write_rx);
+        Self::new(write_tx)
+    }
+
     pub fn data(&self, session_id: u16, payload: &[u8]) -> Result<usize, Error> {
         queue_keep_stream(&self.write_tx, session_id, payload)
     }

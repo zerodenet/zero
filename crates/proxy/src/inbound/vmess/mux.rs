@@ -25,28 +25,12 @@ impl Proxy {
         client: TcpRelayStream,
         inbound_tag: &str,
     ) -> Result<(), EngineError> {
-        let (mut reader, mut writer) = tokio::io::split(client);
-        let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let mux_writer = vmess::mux::VmessInboundMuxWriter::new(write_tx.clone());
+        let (mut reader, writer) = tokio::io::split(client);
+        let mux_writer = vmess::mux::VmessInboundMuxWriter::from_tokio_writer(writer);
         let mut mux_tasks: JoinSet<()> = JoinSet::new();
         let mux_session = vmess::mux::VmessInboundMuxSession::new();
         let mut streams: std::collections::HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> =
             std::collections::HashMap::new();
-
-        mux_tasks.spawn(async move {
-            while let Some(frame) = write_rx.recv().await {
-                if tokio::io::AsyncWriteExt::write_all(&mut writer, &frame)
-                    .await
-                    .is_err()
-                {
-                    break;
-                }
-                if tokio::io::AsyncWriteExt::flush(&mut writer).await.is_err() {
-                    break;
-                }
-            }
-            let _ = tokio::io::AsyncWriteExt::shutdown(&mut writer).await;
-        });
 
         info!(
             inbound_tag = inbound_tag,

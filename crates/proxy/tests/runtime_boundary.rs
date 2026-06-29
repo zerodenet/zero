@@ -4990,7 +4990,13 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         root.contains(".end_inbound_stream(&writer, mux_session_id)")
             && root.contains(".write_inbound_stream_payload(&writer, mux_session_id")
             && !root.contains(".write_inbound_stream_data(&writer, mux_session_id")
-            && root.contains("VmessInboundMuxWriter::new")
+            && root.contains("VmessInboundMuxWriter::from_tokio_writer")
+            && !root.contains("VmessInboundMuxWriter::new")
+            && !root.contains("let (write_tx")
+            && !root.contains("write_rx")
+            && !root.contains("write_all(&mut writer, &frame)")
+            && !root.contains("flush(&mut writer)")
+            && !root.contains("shutdown(&mut writer)")
             && !root.contains("writer.end(")
             && !root.contains("writer.data(")
             && !root.contains("mux_session.next_action(")
@@ -5010,8 +5016,10 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
             && protocol_mux.contains("self.end_inbound_stream(writer, session_id)")
             && protocol_mux
                 .contains("self.write_inbound_stream_data(writer, session_id, payload)")
+            && protocol_mux.contains("pub fn from_tokio_writer")
+            && protocol_mux.contains("spawn_mux_write_relay(writer, write_rx)")
             && root.contains("write_inbound_stream_payload(&writer, mux_session_id, &[])"),
-        "VMess inbound MUX downstream payload to DATA/END frame selection should live in protocols/vmess"
+        "VMess inbound MUX downstream payload to DATA/END frame selection and writer pump should live in protocols/vmess"
     );
     for required in ["queue_keep_stream", "queue_end_stream"] {
         assert!(
