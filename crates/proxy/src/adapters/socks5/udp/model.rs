@@ -23,10 +23,6 @@ pub(crate) struct ClosedSocks5UdpAssociation {
 
 #[async_trait::async_trait]
 pub(super) trait Socks5UdpAssociationHandle: Send + Sync {
-    fn outbound_tag(&self) -> &str;
-
-    fn identity(&self) -> socks5::udp::Socks5UdpAssociationIdentity;
-
     fn close(self: Box<Self>, reason: UpstreamAssociationCloseReason);
 
     async fn send_packet(

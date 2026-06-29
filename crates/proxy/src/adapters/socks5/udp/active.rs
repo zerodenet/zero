@@ -68,14 +68,6 @@ impl ActiveUpstreamSocks5UdpAssociation {
         })
     }
 
-    pub(super) fn outbound_tag(&self) -> &str {
-        self.association.outbound_tag()
-    }
-
-    pub(super) fn identity(&self) -> socks5::udp::Socks5UdpAssociationIdentity {
-        self.association.identity()
-    }
-
     pub(super) fn close(self, reason: UpstreamAssociationCloseReason) {
         self.close_recorded.store(true, Ordering::Relaxed);
 
@@ -124,14 +116,6 @@ impl ActiveUpstreamSocks5UdpAssociation {
 
 #[async_trait::async_trait]
 impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation {
-    fn outbound_tag(&self) -> &str {
-        self.outbound_tag()
-    }
-
-    fn identity(&self) -> socks5::udp::Socks5UdpAssociationIdentity {
-        self.identity()
-    }
-
     fn close(self: Box<Self>, reason: UpstreamAssociationCloseReason) {
         (*self).close(reason);
     }
