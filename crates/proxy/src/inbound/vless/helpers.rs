@@ -4,8 +4,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use vless::RealityServerOptions;
-use zero_config::InboundRealityConfig;
 use zero_traits::AsyncSocket;
 
 use crate::transport::ClientStream;
@@ -103,20 +101,10 @@ where
 
 pub(crate) async fn upgrade_vless_reality_server<S>(
     stream: S,
-    reality: &InboundRealityConfig,
+    profile: &vless::VlessRealityServerProfile,
 ) -> std::io::Result<vless::RealityTlsStream<S>>
 where
     S: ClientStream + 'static,
 {
-    let server_name = reality.server_name.as_deref().unwrap_or("localhost");
-    vless::upgrade_reality_server(
-        stream,
-        RealityServerOptions {
-            private_key: &reality.private_key,
-            short_ids: &reality.short_ids,
-            server_name,
-            cipher_suites: &reality.cipher_suites,
-        },
-    )
-    .await
+    profile.upgrade_server(stream).await
 }

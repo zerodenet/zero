@@ -9,5 +9,5 @@ pub mod stream;
 
 pub use stream::{
     generate_reality_key_pair, upgrade_reality_client, upgrade_reality_server,
-    RealityClientOptions, RealityServerOptions, RealityTlsStream,
+    RealityClientOptions, RealityServerOptions, RealityTlsStream, VlessRealityServerProfile,
 };

@@ -49,6 +49,6 @@ pub use outbound::{VlessTcpConnectConfig, VlessTcpTunnelTarget};
 #[cfg(feature = "reality")]
 pub use reality::{
     generate_reality_key_pair, upgrade_reality_client, upgrade_reality_server,
-    RealityClientOptions, RealityServerOptions, RealityTlsStream,
+    RealityClientOptions, RealityServerOptions, RealityTlsStream, VlessRealityServerProfile,
 };
 pub use shared::{format_uuid, parse_uuid, VLESS_VERSION};

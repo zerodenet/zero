@@ -3,6 +3,7 @@ use zero_core::SessionAuth;
 pub(crate) struct VlessInboundRequest {
     pub(crate) inbound: zero_config::InboundConfig,
     pub(crate) users: std::sync::Arc<[vless::VlessConfiguredUser]>,
+    pub(crate) reality: Option<vless::VlessRealityServerProfile>,
 }
 
 pub(crate) struct VlessMuxUdpStreamTask<'a> {

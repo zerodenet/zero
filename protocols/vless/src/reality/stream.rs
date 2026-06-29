@@ -26,6 +26,50 @@ pub struct RealityServerOptions<'a> {
     pub cipher_suites: &'a [String],
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VlessRealityServerProfile {
+    private_key: String,
+    short_ids: Vec<String>,
+    server_name: String,
+    cipher_suites: Vec<String>,
+}
+
+impl VlessRealityServerProfile {
+    pub fn new(
+        private_key: impl Into<String>,
+        short_ids: Vec<String>,
+        server_name: Option<&str>,
+        cipher_suites: Vec<String>,
+    ) -> Self {
+        Self {
+            private_key: private_key.into(),
+            short_ids,
+            server_name: server_name.unwrap_or("localhost").to_owned(),
+            cipher_suites,
+        }
+    }
+
+    pub fn server_name(&self) -> &str {
+        &self.server_name
+    }
+
+    pub async fn upgrade_server<IO>(&self, io: IO) -> io::Result<RealityTlsStream<IO>>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin,
+    {
+        upgrade_reality_server(
+            io,
+            RealityServerOptions {
+                private_key: &self.private_key,
+                short_ids: &self.short_ids,
+                server_name: &self.server_name,
+                cipher_suites: &self.cipher_suites,
+            },
+        )
+        .await
+    }
+}
+
 pub fn generate_reality_key_pair() -> (String, String) {
     let mut private_key = [0u8; 32];
     rand::rng().fill_bytes(&mut private_key);

@@ -19,7 +19,11 @@ pub(crate) async fn run_vless_listener_with_bound(
     bound: crate::protocol_registry::BoundInbound,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let VlessInboundRequest { inbound, users } = request;
+    let VlessInboundRequest {
+        inbound,
+        users,
+        reality,
+    } = request;
     let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
 
     match bound {
@@ -51,7 +55,6 @@ pub(crate) async fn run_vless_listener_with_bound(
                 .vless_tls()
                 .map(|tls| build_tls_acceptor(tls, proxy.config.source_dir()))
                 .transpose()?;
-            let reality_config = inbound.protocol.vless_reality().cloned();
             let ws_config = inbound.protocol.vless_ws().cloned();
             let grpc_config = inbound.protocol.vless_grpc().cloned();
             let h2_config = inbound.protocol.vless_h2().cloned();
@@ -70,7 +73,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                 protocol = "vless",
                 listen = %local_addr,
                 tls = tls_acceptor.is_some(),
-                reality = reality_config.is_some(),
+                reality = reality.is_some(),
                 ws = ws_config.is_some(),
                 grpc = grpc_config.is_some(),
                 http_upgrade = http_upgrade_config.is_some(),
@@ -93,7 +96,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                         let inbound_tag = inbound.tag.clone();
                         let vless_users = Arc::clone(&vless_users);
                         let tls_acceptor = tls_acceptor.clone();
-                        let reality_config = reality_config.clone();
+                        let reality = reality.clone();
                         let ws_config = ws_config.clone();
                         let grpc_config = grpc_config.clone();
                         let h2_config = h2_config.clone();
@@ -112,7 +115,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                                 http_upgrade_config: http_upgrade_config.as_ref(),
                             };
 
-                            let result = match (tls_acceptor, reality_config) {
+                            let result = match (tls_acceptor, reality) {
                                 (Some(acceptor), None) => {
                                     // Always peek ClientHello to extract SNI for routing.
                                     // Also used for ALPN-based fallback when configured.

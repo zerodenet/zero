@@ -28,6 +28,17 @@ fn parse_inbound_users(
         .map(Into::into)
 }
 
+fn parse_reality_profile(inbound: &InboundConfig) -> Option<vless::VlessRealityServerProfile> {
+    inbound.protocol.vless_reality().map(|reality| {
+        vless::VlessRealityServerProfile::new(
+            reality.private_key.clone(),
+            reality.short_ids.clone(),
+            reality.server_name.as_deref(),
+            reality.cipher_suites.clone(),
+        )
+    })
+}
+
 impl VlessAdapter {
     pub(super) async fn bind_inbound_impl(
         &self,
@@ -62,9 +73,14 @@ impl VlessAdapter {
         let p = proxy.clone();
         listeners.spawn(async move {
             let users = parse_inbound_users(&inbound)?;
+            let reality = parse_reality_profile(&inbound);
             crate::inbound::run_vless_listener_with_bound(
                 &p,
-                crate::inbound::vless::model::VlessInboundRequest { inbound, users },
+                crate::inbound::vless::model::VlessInboundRequest {
+                    inbound,
+                    users,
+                    reality,
+                },
                 bound,
                 shutdown_rx,
             )

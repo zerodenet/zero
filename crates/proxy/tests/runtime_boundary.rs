@@ -1156,12 +1156,18 @@ fn vless_inbound_users_are_adapter_parsed() {
         "parse_uuid",
         "parse_flow",
         "vless_users()",
+        "vless_reality()",
+        "InboundRealityConfig",
+        "RealityServerOptions",
+        "private_key:",
+        "short_ids:",
+        "cipher_suites:",
     ] {
         assert!(
             !listener.contains(forbidden)
                 && !session.contains(forbidden)
                 && !helpers.contains(forbidden),
-            "VLESS inbound listener/session/user store should receive adapter-parsed users; found `{forbidden}`"
+            "VLESS inbound listener/session/helpers should receive adapter-parsed protocol values; found `{forbidden}`"
         );
     }
     for required in ["parse_inbound_users", "VlessConfiguredUser::from_config"] {
@@ -1193,8 +1199,26 @@ fn vless_inbound_users_are_adapter_parsed() {
     );
     assert!(
         model.contains("struct VlessInboundRequest")
-            && listener.contains("request: VlessInboundRequest"),
+            && model.contains("reality: Option<vless::VlessRealityServerProfile>")
+            && listener.contains("request: VlessInboundRequest")
+            && listener.contains("let VlessInboundRequest")
+            && adapter.contains("parse_reality_profile")
+            && adapter.contains("VlessRealityServerProfile::new")
+            && protocol_inbound.contains("pub struct VlessConfiguredUsers"),
         "VLESS inbound request model should live in inbound/vless/model.rs"
+    );
+    let protocol_reality =
+        fs::read_to_string(repo_root().join("protocols/vless/src/reality/stream.rs"))
+            .expect("read vless reality stream source");
+    assert!(
+        helpers.contains("profile.upgrade_server(stream).await")
+            && protocol_reality.contains("pub struct VlessRealityServerProfile")
+            && protocol_reality.contains("pub async fn upgrade_server")
+            && protocol_reality.contains("RealityServerOptions")
+            && protocol_reality.contains("private_key: &self.private_key")
+            && protocol_reality.contains("short_ids: &self.short_ids")
+            && protocol_reality.contains("cipher_suites: &self.cipher_suites"),
+        "VLESS Reality server option construction should live in protocols/vless"
     );
 }
 
