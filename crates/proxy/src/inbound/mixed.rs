@@ -12,19 +12,27 @@ use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, PrefixedSocket, TcpRelayStream};
 
 use super::http_connect::HttpConnectInboundHandler;
-use super::socks5::{ConfiguredSocks5PasswordAuth, Socks5InboundHandler};
+use super::socks5::Socks5InboundHandler;
+
+pub(crate) struct MixedInboundRequest {
+    pub(crate) inbound: zero_config::InboundConfig,
+    pub(crate) socks5_auth: socks5::ConfiguredSocks5PasswordAuth,
+}
 
 pub(crate) async fn run_mixed_listener_with_bound(
     proxy: &Proxy,
-    inbound: zero_config::InboundConfig,
+    request: MixedInboundRequest,
     listener: zero_platform_tokio::TokioListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
+    let MixedInboundRequest {
+        inbound,
+        socks5_auth,
+    } = request;
     let local_addr = listener.local_addr()?;
     let mut connections = JoinSet::new();
 
-    let socks5_users = inbound.protocol.socks5_users().to_vec();
-    let socks5_handler = Socks5InboundHandler::new(socks5::Socks5Inbound, socks5_users);
+    let socks5_handler = Socks5InboundHandler::new(socks5::Socks5Inbound, socks5_auth);
     let http_handler = HttpConnectInboundHandler {
         http_connect_inbound: http_connect::HttpConnectInbound,
     };
@@ -67,11 +75,7 @@ pub(crate) async fn run_mixed_listener_with_bound(
                                 let mut metered = MeteredStream::new(
                                     relay_stream,
                                 );
-                                let auth = ConfiguredSocks5PasswordAuth {
-                                    users: &socks5_h.users,
-                                };
-                                match socks5_h.socks5_inbound()
-                                    .accept_command_with_auth(&mut metered, &auth).await
+                                match socks5_h.accept_command(&mut metered).await
                                 {
                                     Ok(Socks5Request::Connect(session)) => {
                                         let _ = serve_inbound(

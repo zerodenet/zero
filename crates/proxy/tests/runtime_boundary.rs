@@ -927,6 +927,49 @@ fn direct_inbound_uses_adapter_request_model() {
 }
 
 #[test]
+fn socks5_inbound_uses_adapter_request_model() {
+    let inbound = read("src/inbound/socks5.rs");
+    let mixed = read("src/inbound/mixed.rs");
+    let adapter = read("src/adapters/socks5/inbound.rs");
+    let mixed_adapter = read("src/adapters/mixed/inbound.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/socks5/src/inbound.rs"))
+        .expect("read socks5 protocol inbound source");
+
+    assert!(
+        inbound.contains("struct Socks5InboundRequest")
+            && inbound.contains("request: Socks5InboundRequest")
+            && adapter.contains("InboundProtocolConfig::Socks5")
+            && adapter.contains("Socks5InboundRequest"),
+        "SOCKS5 inbound listener should receive an adapter-built request model"
+    );
+    assert!(
+        mixed.contains("struct MixedInboundRequest")
+            && mixed.contains("request: MixedInboundRequest")
+            && mixed_adapter.contains("InboundProtocolConfig::Mixed")
+            && mixed_adapter.contains("MixedInboundRequest"),
+        "mixed inbound listener should receive an adapter-built request model"
+    );
+    assert!(
+        protocol_inbound.contains("pub struct ConfiguredSocks5PasswordAuth")
+            && protocol_inbound.contains("impl Socks5PasswordAuth for ConfiguredSocks5PasswordAuth")
+            && protocol_inbound.contains("pub struct ConfiguredSocks5User")
+            && inbound.contains("auth: socks5::ConfiguredSocks5PasswordAuth")
+            && mixed.contains("socks5_auth: socks5::ConfiguredSocks5PasswordAuth")
+            && adapter.contains("socks5::ConfiguredSocks5User::new")
+            && mixed_adapter.contains("socks5::ConfiguredSocks5User::new")
+            && !inbound.contains("Socks5UserConfig")
+            && !mixed.contains("Socks5UserConfig")
+            && !inbound.contains("impl Socks5PasswordAuth")
+            && !inbound.contains("handler.users")
+            && !mixed.contains("handler.users")
+            && !mixed.contains("socks5_h.users")
+            && !inbound.contains("socks5_users()")
+            && !mixed.contains("socks5_users()"),
+        "SOCKS5 inbound auth lookup should live in protocols/socks5 while proxy listeners hold only a protocol-owned auth profile"
+    );
+}
+
+#[test]
 fn mieru_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/mieru.rs");
     let adapter = read("src/adapters/mieru/inbound.rs");

@@ -1,11 +1,9 @@
 use async_trait::async_trait;
-use socks5::Socks5PasswordAuth;
 use socks5::{Socks5Inbound, Socks5Reply, Socks5Request};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
-use zero_config::Socks5UserConfig;
 use zero_engine::EngineError;
 
 use zero_core::Session;
@@ -22,19 +20,27 @@ mod udp_associate;
 #[derive(Clone)]
 pub(crate) struct Socks5InboundHandler {
     socks5_inbound: Socks5Inbound,
-    pub(crate) users: Vec<Socks5UserConfig>,
+    auth: socks5::ConfiguredSocks5PasswordAuth,
 }
 
 impl Socks5InboundHandler {
-    pub(crate) fn new(socks5_inbound: Socks5Inbound, users: Vec<Socks5UserConfig>) -> Self {
+    pub(crate) fn new(
+        socks5_inbound: Socks5Inbound,
+        auth: socks5::ConfiguredSocks5PasswordAuth,
+    ) -> Self {
         Self {
             socks5_inbound,
-            users,
+            auth,
         }
     }
 
-    pub(crate) fn socks5_inbound(&self) -> Socks5Inbound {
+    pub(crate) async fn accept_command(
+        &self,
+        stream: &mut MeteredStream<TcpRelayStream>,
+    ) -> Result<Socks5Request, zero_core::Error> {
         self.socks5_inbound
+            .accept_command_with_auth(stream, &self.auth)
+            .await
     }
 }
 
@@ -47,12 +53,7 @@ impl InboundProtocol for Socks5InboundHandler {
         stream: TcpRelayStream,
     ) -> Result<(Session, Self::ClientStream), EngineError> {
         let mut metered = MeteredStream::new(stream);
-        let auth = ConfiguredSocks5PasswordAuth { users: &self.users };
-        match self
-            .socks5_inbound
-            .accept_command_with_auth(&mut metered, &auth)
-            .await?
-        {
+        match self.accept_command(&mut metered).await? {
             Socks5Request::Connect(session) => Ok((*session, metered.into_inner())),
             Socks5Request::UdpAssociate(_) => Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::Unsupported,
@@ -88,22 +89,24 @@ impl InboundProtocol for Socks5InboundHandler {
     // relay uses default
 }
 
+pub(crate) struct Socks5InboundRequest {
+    pub(crate) inbound: zero_config::InboundConfig,
+    pub(crate) auth: socks5::ConfiguredSocks5PasswordAuth,
+}
+
 // ── Listener ────────────────────────────────────────────────────────────
 
 pub(crate) async fn run_socks5_listener_with_bound(
     proxy: &Proxy,
-    inbound: zero_config::InboundConfig,
+    request: Socks5InboundRequest,
     listener: zero_platform_tokio::TokioListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
+    let Socks5InboundRequest { inbound, auth } = request;
     let local_addr = listener.local_addr()?;
     let mut connections = JoinSet::new();
 
-    let users = inbound.protocol.socks5_users().to_vec();
-    let handler = Socks5InboundHandler {
-        socks5_inbound: socks5::Socks5Inbound,
-        users,
-    };
+    let handler = Socks5InboundHandler::new(socks5::Socks5Inbound, auth);
 
     info!(
         inbound_tag = %inbound.tag,
@@ -143,12 +146,7 @@ pub(crate) async fn run_socks5_listener_with_bound(
                         });
                         connections.spawn(async move {
                             let mut metered = MeteredStream::new(TcpRelayStream::from(stream));
-                            let auth = ConfiguredSocks5PasswordAuth { users: &handler.users };
-                            match handler
-                                .socks5_inbound
-                                .accept_command_with_auth(&mut metered, &auth)
-                                .await
-                            {
+                            match handler.accept_command(&mut metered).await {
                                 Ok(Socks5Request::Connect(session)) => {
                                     let _ = serve_inbound(
                                         &engine,
@@ -208,37 +206,4 @@ pub(crate) async fn run_socks5_listener_with_bound(
         "inbound listener stopped"
     );
     Ok(())
-}
-
-// ── Auth ────────────────────────────────────────────────────────────────
-
-pub(crate) struct ConfiguredSocks5PasswordAuth<'a> {
-    pub(crate) users: &'a [Socks5UserConfig],
-}
-
-impl Socks5PasswordAuth for ConfiguredSocks5PasswordAuth<'_> {
-    fn required(&self) -> bool {
-        !self.users.is_empty()
-    }
-
-    fn verify(&self, username: &str, password: &str) -> bool {
-        self.users
-            .iter()
-            .any(|user| user.username == username && user.password == password)
-    }
-
-    fn principal_key_for(&self, username: &str) -> Option<String> {
-        self.users
-            .iter()
-            .find(|user| user.username == username)
-            .and_then(|user| user.principal_key.clone())
-    }
-
-    fn rate_limit_for(&self, username: &str) -> (Option<u64>, Option<u64>) {
-        self.users
-            .iter()
-            .find(|user| user.username == username)
-            .map(|user| (user.up_bps, user.down_bps))
-            .unwrap_or((None, None))
-    }
 }

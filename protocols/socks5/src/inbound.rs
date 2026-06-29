@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec;
+use alloc::vec::Vec;
 
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
@@ -38,6 +39,71 @@ pub trait Socks5PasswordAuth {
     /// Returns `(up_bps, down_bps)` for the authenticated user.
     fn rate_limit_for(&self, _username: &str) -> (Option<u64>, Option<u64>) {
         (None, None)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfiguredSocks5User {
+    username: String,
+    password: String,
+    principal_key: Option<String>,
+    up_bps: Option<u64>,
+    down_bps: Option<u64>,
+}
+
+impl ConfiguredSocks5User {
+    pub fn new(
+        username: String,
+        password: String,
+        principal_key: Option<String>,
+        up_bps: Option<u64>,
+        down_bps: Option<u64>,
+    ) -> Self {
+        Self {
+            username,
+            password,
+            principal_key,
+            up_bps,
+            down_bps,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ConfiguredSocks5PasswordAuth {
+    users: Vec<ConfiguredSocks5User>,
+}
+
+impl ConfiguredSocks5PasswordAuth {
+    pub fn from_users(users: Vec<ConfiguredSocks5User>) -> Self {
+        Self { users }
+    }
+}
+
+impl Socks5PasswordAuth for ConfiguredSocks5PasswordAuth {
+    fn required(&self) -> bool {
+        !self.users.is_empty()
+    }
+
+    fn verify(&self, username: &str, password: &str) -> bool {
+        self.users
+            .iter()
+            .any(|user| user.username == username && user.password == password)
+    }
+
+    fn principal_key_for(&self, username: &str) -> Option<String> {
+        self.users
+            .iter()
+            .find(|user| user.username == username)
+            .and_then(|user| user.principal_key.clone())
+    }
+
+    fn rate_limit_for(&self, username: &str) -> (Option<u64>, Option<u64>) {
+        self.users
+            .iter()
+            .find(|user| user.username == username)
+            .map(|user| (user.up_bps, user.down_bps))
+            .unwrap_or((None, None))
     }
 }
 

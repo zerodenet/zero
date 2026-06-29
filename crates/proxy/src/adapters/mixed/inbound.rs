@@ -1,4 +1,4 @@
-use zero_config::InboundConfig;
+use zero_config::{InboundConfig, InboundProtocolConfig, Socks5UserConfig};
 use zero_engine::EngineError;
 
 use crate::adapters::mixed::MixedAdapter;
@@ -18,11 +18,43 @@ impl MixedAdapter {
         listeners.spawn(async move {
             crate::inbound::run_mixed_listener_with_bound(
                 &p,
-                inbound,
+                crate::inbound::MixedInboundRequest {
+                    socks5_auth: socks5_auth_from_config(&inbound.protocol)?,
+                    inbound,
+                },
                 bound.into_tcp(),
                 shutdown_rx,
             )
             .await
         });
     }
+}
+
+fn socks5_auth_from_config(
+    config: &InboundProtocolConfig,
+) -> Result<socks5::ConfiguredSocks5PasswordAuth, EngineError> {
+    let InboundProtocolConfig::Mixed { socks5_users } = config else {
+        return Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "mixed adapter received non-mixed inbound config",
+        )));
+    };
+    Ok(socks5::ConfiguredSocks5PasswordAuth::from_users(
+        socks5_users_from_config(socks5_users),
+    ))
+}
+
+fn socks5_users_from_config(users: &[Socks5UserConfig]) -> Vec<socks5::ConfiguredSocks5User> {
+    users
+        .iter()
+        .map(|user| {
+            socks5::ConfiguredSocks5User::new(
+                user.username.clone(),
+                user.password.clone(),
+                user.principal_key.clone(),
+                user.up_bps,
+                user.down_bps,
+            )
+        })
+        .collect()
 }

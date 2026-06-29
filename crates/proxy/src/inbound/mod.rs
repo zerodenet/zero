@@ -29,10 +29,14 @@ pub(crate) use hysteria2::run_hysteria2_listener_with_bound;
 pub(crate) use mieru::run_mieru_listener_with_bound;
 #[cfg(feature = "mixed")]
 pub(crate) use mixed::run_mixed_listener_with_bound;
+#[cfg(feature = "mixed")]
+pub(crate) use mixed::MixedInboundRequest;
 #[cfg(feature = "shadowsocks")]
 pub(crate) use shadowsocks::run_shadowsocks_listener_with_bound;
 #[cfg(feature = "socks5")]
 pub(crate) use socks5::run_socks5_listener_with_bound;
+#[cfg(feature = "socks5")]
+pub(crate) use socks5::Socks5InboundRequest;
 #[cfg(feature = "trojan")]
 pub(crate) use trojan::run_trojan_listener_with_bound;
 #[cfg(feature = "vless")]
