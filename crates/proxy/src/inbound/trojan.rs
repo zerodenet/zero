@@ -8,7 +8,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{error, info, warn};
-use trojan::TrojanInbound;
+use trojan::{TrojanInbound, TrojanInboundProfile};
 use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
@@ -27,7 +27,7 @@ use crate::transport::TcpRelayStream;
 #[derive(Debug)]
 pub(crate) struct TrojanInboundRequest {
     pub(crate) inbound: InboundConfig,
-    pub(crate) password: String,
+    pub(crate) profile: TrojanInboundProfile,
     pub(crate) tls: Option<zero_config::TlsConfig>,
 }
 
@@ -52,7 +52,7 @@ impl AsyncSocket for TlsStream {
 #[derive(Clone)]
 pub(crate) struct TrojanInboundHandler {
     trojan_inbound: TrojanInbound,
-    password: String,
+    profile: TrojanInboundProfile,
     tls_acceptor: crate::transport::TlsAcceptor,
 }
 
@@ -72,12 +72,9 @@ impl InboundProtocol for TrojanInboundHandler {
             .map_err(|e| EngineError::Io(io::Error::other(e)))?;
         // Trojan protocol auth
         let mut sock = TlsStream(tls);
-        let accept = self
-            .trojan_inbound
-            .accept(&mut sock, std::slice::from_ref(&self.password))
-            .await?;
+        let accept = self.profile.accept(self.trojan_inbound, &mut sock).await?;
         let mut session: Session = accept.session;
-        session.apply_auth(self.trojan_inbound.inbound_auth(self.password.clone()));
+        session.apply_auth(self.profile.inbound_auth());
         Ok((session, TcpRelayStream::new(sock.0)))
     }
 
@@ -107,7 +104,7 @@ pub(crate) async fn run_trojan_listener_with_bound(
 ) -> Result<(), EngineError> {
     let TrojanInboundRequest {
         inbound,
-        password,
+        profile,
         tls: tls_cfg,
     } = request;
     let tls_cfg = tls_cfg.ok_or_else(|| {
@@ -121,7 +118,7 @@ pub(crate) async fn run_trojan_listener_with_bound(
 
     let handler = TrojanInboundHandler {
         trojan_inbound: TrojanInbound,
-        password,
+        profile,
         tls_acceptor: acceptor,
     };
 

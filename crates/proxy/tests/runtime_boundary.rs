@@ -1045,7 +1045,7 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
         (
             "src/inbound/trojan.rs",
             trojan_inbound.as_str(),
-            "self.trojan_inbound.inbound_auth",
+            "self.profile.inbound_auth()",
         ),
         (
             "src/inbound/mieru.rs",
@@ -1065,8 +1065,7 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
 
     assert!(
         shadowsocks_protocol.contains("pub fn inbound_auth(&self) -> SessionAuth")
-            && trojan_protocol
-                .contains("pub fn inbound_auth(&self, password: impl Into<String>) -> SessionAuth")
+            && trojan_protocol.contains("pub fn inbound_auth(&self) -> SessionAuth")
             && mieru_protocol.contains("pub fn inbound_auth(&self) -> SessionAuth"),
         "protocol crates should own their inbound auth identity construction"
     );
@@ -1090,6 +1089,18 @@ fn trojan_inbound_uses_adapter_request_model() {
         adapter.contains("InboundProtocolConfig::Trojan")
             && adapter.contains("TrojanInboundRequest"),
         "Trojan adapter should extract Trojan config and pass TrojanInboundRequest"
+    );
+    assert!(
+        inbound.contains("pub(crate) profile: TrojanInboundProfile")
+            && inbound.contains("profile: TrojanInboundProfile")
+            && inbound.contains("self.profile.accept(self.trojan_inbound, &mut sock)")
+            && inbound.contains("self.profile.inbound_auth()")
+            && !inbound.contains("pub(crate) password: String")
+            && !inbound.contains("password: String")
+            && !inbound.contains("std::slice::from_ref(&self.password)")
+            && adapter.contains("TrojanInboundProfile::from_config")
+            && !adapter.contains("password.clone(), tls.clone()"),
+        "Trojan inbound listener should receive a protocol-owned profile instead of raw password"
     );
 }
 

@@ -12,7 +12,7 @@ mod outbound;
 pub mod shared;
 pub mod udp;
 
-pub use inbound::{TrojanAccept, TrojanInbound};
+pub use inbound::{TrojanAccept, TrojanInbound, TrojanInboundProfile};
 pub use metadata::TrojanProtocol;
 pub use outbound::{TrojanOutbound, TrojanTcpTunnelTarget};
 pub use shared::{

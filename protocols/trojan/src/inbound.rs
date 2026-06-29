@@ -10,6 +10,33 @@ use super::shared::{read_password, read_request, CMD_TCP, CMD_UDP};
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrojanInbound;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanInboundProfile {
+    password: String,
+}
+
+impl TrojanInboundProfile {
+    pub fn from_config(password: impl Into<String>) -> Self {
+        Self {
+            password: password.into(),
+        }
+    }
+
+    pub fn inbound_auth(&self) -> SessionAuth {
+        TrojanInbound.inbound_auth(self.password.clone())
+    }
+
+    pub async fn accept<S: AsyncSocket>(
+        &self,
+        inbound: TrojanInbound,
+        stream: &mut S,
+    ) -> Result<TrojanAccept, Error> {
+        inbound
+            .accept(stream, core::slice::from_ref(&self.password))
+            .await
+    }
+}
+
 /// Result of accepting a Trojan connection.
 pub struct TrojanAccept {
     pub session: Session,
