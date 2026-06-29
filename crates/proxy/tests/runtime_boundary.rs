@@ -1976,11 +1976,16 @@ fn shadowsocks_tcp_connect_uses_request_model() {
             && !adapter.contains("cipher: shadowsocks::CipherKind")
             && !adapter.contains("ShadowsocksTcpTarget {")
             && adapter.contains("config.tcp_target(session)")
+            && adapter.contains("config.wrap_outbound_stream(")
+            && !adapter.contains("password_bytes()")
+            && !adapter.contains("ShadowsocksAeadStream::outbound")
             && protocol_outbound.contains("pub struct ShadowsocksTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config")
             && protocol_outbound.contains("CipherKind::from_str")
-            && protocol_outbound.contains("pub fn tcp_target"),
-        "Shadowsocks TCP adapter should ask protocols/shadowsocks to parse cipher config and proxy outbound should consume the protocol-built config"
+            && protocol_outbound.contains("pub fn tcp_target")
+            && protocol_outbound.contains("pub fn wrap_outbound_stream")
+            && protocol_outbound.contains("ShadowsocksAeadStream::outbound"),
+        "Shadowsocks TCP adapter should ask protocols/shadowsocks to parse cipher config, build TCP targets, and wrap outbound streams"
     );
 }
 

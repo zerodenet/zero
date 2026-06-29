@@ -100,20 +100,9 @@ async fn connect_tcp(
     )
     .await?;
     proxy.record_session_outbound_traffic(session.id, metered.drain_traffic());
-    Ok(wrap_outbound_stream(
-        metered.into_inner().into(),
-        ss_session,
-        config.password_bytes().to_vec(),
-    ))
-}
-
-fn wrap_outbound_stream(
-    upstream: TcpRelayStream,
-    ss_session: shadowsocks::ShadowsocksOutboundSession,
-    password: Vec<u8>,
-) -> TcpRelayStream {
-    TcpRelayStream::new(shadowsocks::ShadowsocksAeadStream::outbound(
-        upstream, ss_session, password,
+    let upstream = TcpRelayStream::from(metered.into_inner());
+    Ok(TcpRelayStream::new(
+        config.wrap_outbound_stream(upstream, ss_session),
     ))
 }
 
@@ -131,9 +120,7 @@ async fn apply_tcp_hop(
     )
     .await
     .map_err(|error| EngineError::Io(std::io::Error::other(error)))?;
-    Ok(wrap_outbound_stream(
-        stream,
-        ss_session,
-        config.password_bytes().to_vec(),
+    Ok(TcpRelayStream::new(
+        config.wrap_outbound_stream(stream, ss_session),
     ))
 }

@@ -189,8 +189,12 @@ impl ShadowsocksTcpConnectConfig {
         }
     }
 
-    pub fn password_bytes(&self) -> &[u8] {
-        &self.password
+    pub fn wrap_outbound_stream<S>(
+        &self,
+        stream: S,
+        session: ShadowsocksOutboundSession,
+    ) -> super::stream::ShadowsocksAeadStream<S> {
+        super::stream::ShadowsocksAeadStream::outbound(stream, session, self.password.clone())
     }
 }
 
