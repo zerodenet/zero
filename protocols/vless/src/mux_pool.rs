@@ -108,6 +108,10 @@ impl PoolKey {
         self.identity.uuid()
     }
 
+    pub fn endpoint(&self) -> (&str, u16) {
+        (&self.server, self.port)
+    }
+
     pub async fn establish_mux_connection<S>(
         &self,
         stream: &mut S,

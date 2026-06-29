@@ -4987,7 +4987,10 @@ fn vmess_mux_pool_transport_opening_lives_in_transport_crate() {
     assert!(
         root.contains("crate::transport::VmessTransportOptions")
             && root.contains("VmessTransportConnector::new")
-            && root.contains(".connect(socket, &key.server, key.port)"),
+            && root.contains("let (server, port) = key.endpoint()")
+            && root.contains(".connect(socket, server, port)")
+            && !root.contains("key.server")
+            && !root.contains("key.port"),
         "VMess mux pool should request VMess transport helpers instead of opening TLS/WS/gRPC directly"
     );
     assert!(
@@ -5017,6 +5020,9 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
     assert!(
         model.contains("identity: vmess::mux::VmessMuxIdentity")
             && root.contains("request.pool_key()")
+            && root.contains("let (server, port) = key.endpoint()")
+            && !root.contains("key.server")
+            && !root.contains("key.port")
             && !root.contains("vmess::mux::VmessMuxPoolKey::from_config_parts")
             && model.contains("fn pool_key(&self)")
             && model.contains("vmess::mux::VmessMuxPoolKey::from_config_parts")
@@ -5083,6 +5089,7 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         "impl PoolKey",
         "pub fn from_identity",
         "pub fn from_config_parts",
+        "pub fn endpoint(&self)",
         "pub fn transport_key_from_config(",
     ] {
         assert!(
@@ -5122,6 +5129,7 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         "open_mux_udp_stream",
         "establish_mux_connection",
         "into_pool_conn",
+        "key.endpoint()",
         "request.pool_key()",
     ] {
         assert!(
@@ -5155,6 +5163,8 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         !root.contains("VlessOutbound")
             && !root.contains("establish_mux(&mut metered")
             && !root.contains("key.uuid()")
+            && !root.contains("key.server")
+            && !root.contains("key.port")
             && !root.contains("MuxPoolConn::new("),
         "VLESS adapter mux pool should not unpack protocol identity or construct MUX connections directly"
     );

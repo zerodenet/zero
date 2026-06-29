@@ -127,6 +127,10 @@ impl VmessMuxPoolKey {
         self.identity.cipher()
     }
 
+    pub fn endpoint(&self) -> (&str, u16) {
+        (&self.server, self.port)
+    }
+
     pub async fn establish_mux_outbound_stream<S>(
         &self,
         stream: S,

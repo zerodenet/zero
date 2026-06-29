@@ -136,10 +136,11 @@ impl MuxConnectionPool {
     ) -> Result<MuxPoolConn, EngineError> {
         use crate::transport::MeteredStream;
 
+        let (server, port) = key.endpoint();
         let socket = proxy
             .protocols
             .direct_connector()
-            .connect_host(&key.server, key.port, proxy.resolver.as_ref())
+            .connect_host(server, port, proxy.resolver.as_ref())
             .await?;
 
         let connector = crate::transport::VlessTransportConnector::new(
@@ -154,7 +155,7 @@ impl MuxConnectionPool {
                 source_dir: proxy.config.source_dir(),
             },
         );
-        let stream: TcpRelayStream = connector.connect(socket, &key.server, key.port).await?;
+        let stream: TcpRelayStream = connector.connect(socket, server, port).await?;
 
         let mut metered = MeteredStream::new(stream);
         let _mux = key

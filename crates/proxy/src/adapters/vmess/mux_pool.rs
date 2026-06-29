@@ -82,11 +82,12 @@ impl VmessMuxConnectionPool {
         key: &vmess::mux::VmessMuxPoolKey,
         request: &VmessMuxOpenRequest<'_>,
     ) -> Result<vmess::mux::VmessMuxConn, EngineError> {
+        let (server, port) = key.endpoint();
         let socket = request
             .proxy
             .protocols
             .direct_connector()
-            .connect_host(&key.server, key.port, request.proxy.resolver.as_ref())
+            .connect_host(server, port, request.proxy.resolver.as_ref())
             .await?;
 
         let connector = VmessTransportConnector::new(crate::transport::VmessTransportOptions {
@@ -95,7 +96,7 @@ impl VmessMuxConnectionPool {
             grpc: request.grpc,
             source_dir: request.proxy.config.source_dir(),
         });
-        let stream = connector.connect(socket, &key.server, key.port).await?;
+        let stream = connector.connect(socket, server, port).await?;
 
         let metered = MeteredStream::new(stream);
         let stream = TcpRelayStream::new(key.establish_mux_outbound_stream(metered).await?);
