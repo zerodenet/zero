@@ -223,6 +223,82 @@ pub struct VlessInboundMuxDownlink {
 }
 
 #[cfg(feature = "reality")]
+pub enum VlessInboundMuxEvent {
+    Opened(VlessInboundMuxOpenedStream),
+}
+
+#[cfg(feature = "reality")]
+pub struct VlessInboundMuxServer {
+    mux: VlessInboundMuxSession,
+    streams: VlessInboundMuxStreams,
+    writer: VlessInboundMuxWriter,
+    down_rx: mpsc::UnboundedReceiver<VlessInboundMuxDownlink>,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxServer {
+    pub fn new(mux: VlessInboundMuxSession) -> Self {
+        let (writer, down_rx) = VlessInboundMuxWriter::channel();
+        Self {
+            mux,
+            streams: VlessInboundMuxStreams::new(),
+            writer,
+            down_rx,
+        }
+    }
+
+    pub fn from_context(context: VlessInboundMuxContext) -> Self {
+        Self::new(context.inbound_session())
+    }
+
+    pub fn writer(&self) -> VlessInboundMuxWriter {
+        self.writer.clone()
+    }
+
+    pub async fn next_opened_stream<S>(
+        &mut self,
+        stream: &mut S,
+    ) -> Result<Option<VlessInboundMuxEvent>, Error>
+    where
+        S: AsyncSocket,
+    {
+        loop {
+            tokio::select! {
+                action = self.mux.read_inbound_action(stream) => {
+                    let opened = self
+                        .streams
+                        .apply_inbound_action(&mut self.mux, stream, action?)
+                        .await?;
+                    return Ok(opened.map(VlessInboundMuxEvent::Opened));
+                }
+                downlink = self.down_rx.recv() => {
+                    let Some(downlink) = downlink else {
+                        continue;
+                    };
+                    let _ = self
+                        .streams
+                        .send_inbound_downlink(&mut self.mux, stream, downlink)
+                        .await?;
+                }
+            }
+        }
+    }
+
+    pub async fn reject_opened_stream<S>(
+        &mut self,
+        stream: &mut S,
+        session_id: u16,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.streams
+            .reject_opened_stream(&mut self.mux, stream, session_id)
+            .await
+    }
+}
+
+#[cfg(feature = "reality")]
 impl VlessInboundMuxStreams {
     pub fn new() -> Self {
         Self::default()

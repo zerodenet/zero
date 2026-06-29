@@ -530,16 +530,19 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         !session.contains("uuid")
             && !session.contains("with_encryption")
             && inbound.contains("mux_context: vless::mux::VlessInboundMuxContext")
-            && inbound.contains("let mut mux = mux_context.inbound_session()")
+            && inbound.contains("vless::mux::VlessInboundMuxServer::from_context(mux_context)")
+            && !inbound.contains("let mut mux = mux_context.inbound_session()")
             && protocol_mux.contains("pub struct VlessInboundMuxContext")
-            && protocol_mux.contains("pub fn inbound_session(&self) -> VlessInboundMuxSession"),
+            && protocol_mux.contains("pub fn inbound_session(&self) -> VlessInboundMuxSession")
+            && protocol_mux.contains("pub struct VlessInboundMuxServer")
+            && protocol_mux.contains("pub fn from_context(context: VlessInboundMuxContext) -> Self"),
         "VLESS inbound mux identity and encrypted MUX session construction should be hidden behind a protocol-owned context"
     );
 
     for required in [
         "VlessInboundMuxContext",
-        "VlessInboundMuxWriter",
-        "read_inbound_action",
+        "VlessInboundMuxServer",
+        "VlessInboundMuxEvent",
     ] {
         assert!(
             inbound.contains(required),
@@ -563,7 +566,8 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
     assert!(
         !inbound.contains("VlessInboundMuxAction")
             && protocol_mux.contains("VlessInboundMuxAction")
-            && inbound.contains(".apply_inbound_action(&mut mux, &mut client, action)"),
+            && inbound.contains("mux_server.next_opened_stream(&mut client)")
+            && !inbound.contains(".apply_inbound_action(&mut mux, &mut client, action)"),
         "VLESS inbound mux glue should not match protocol action variants directly"
     );
     for required in [
@@ -622,7 +626,9 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
     for forbidden in [
         "MuxServerEvent",
         ".next_event(",
-        "MuxServer::",
+        "vless::mux::MuxServer::",
+        "MuxServer::new",
+        "MuxServer::with_encryption",
         ".recv_event(",
         ".write_new_stream_accepted(",
         ".write_new_stream_rejected(",
@@ -635,9 +641,13 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         );
     }
     assert!(
-        inbound.contains(".apply_inbound_action(&mut mux, &mut client, action)")
-            && inbound.contains(".send_inbound_downlink(&mut mux, &mut client, downlink)")
-            && inbound.contains(".reject_opened_stream(&mut mux, &mut client, sid)")
+        inbound.contains("mux_server.next_opened_stream(&mut client)")
+            && inbound.contains("mux_server.reject_opened_stream(&mut client, sid)")
+            && !inbound.contains(".apply_inbound_action(&mut mux, &mut client, action)")
+            && !inbound.contains(".send_inbound_downlink(&mut mux, &mut client, downlink)")
+            && !inbound.contains(".reject_opened_stream(&mut mux, &mut client, sid)")
+            && !inbound.contains("VlessInboundMuxStreams::new")
+            && !inbound.contains("VlessInboundMuxWriter::channel")
             && !inbound.contains("streams.open_stream(")
             && !inbound.contains("streams.push_stream_data(")
             && !inbound.contains("streams.close_inbound_stream(")
@@ -653,7 +663,12 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
             && !inbound.contains("mux.end_inbound_stream(&mut client, sid)")
             && protocol_mux.contains("if payload.is_empty()")
             && protocol_mux.contains("self.end_inbound_stream(stream, sid).await")
-            && protocol_mux.contains("self.send_inbound_stream_data(stream, sid, payload).await"),
+            && protocol_mux.contains("self.send_inbound_stream_data(stream, sid, payload).await")
+            && protocol_mux.contains("pub async fn next_opened_stream")
+            && protocol_mux.contains("self.mux.read_inbound_action(stream)")
+            && protocol_mux.contains(".apply_inbound_action(&mut self.mux, stream, action?)")
+            && protocol_mux.contains(".send_inbound_downlink(&mut self.mux, stream, downlink)")
+            && protocol_mux.contains("pub async fn reject_opened_stream"),
         "VLESS inbound mux downstream payload to DATA/END frame selection should live in protocols/vless"
     );
     for private_root_item in [
@@ -696,6 +711,8 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         "MuxClientStream",
         "MuxServer",
         "VlessInboundMuxAction",
+        "VlessInboundMuxServer",
+        "VlessInboundMuxEvent",
         "VlessInboundMuxSession",
         "VlessInboundMuxWriter",
     ] {
@@ -5725,10 +5742,16 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
         "VLESS inbound MUX task model should not be a proxy model-layer struct"
     );
     assert!(
-        root.contains("VlessInboundMuxWriter::channel")
-            && root.contains("let writer = mux_writer.clone()")
+        root.contains("VlessInboundMuxServer::from_context")
+            && root.contains("mux_server.next_opened_stream(&mut client)")
+            && root.contains("let writer = mux_server.writer()")
             && root.contains("writer,")
             && root.contains("vless::mux::relay_inbound_mux_stream")
+            && !root.contains("VlessInboundMuxWriter::channel")
+            && !root.contains("let writer = mux_writer.clone()")
+            && !root.contains("VlessInboundMuxStreams::new")
+            && !root.contains(".send_inbound_downlink(")
+            && !root.contains("down_rx")
             && !root.contains("mux_stream_relay")
             && !root.contains("writer.write_inbound_stream_payload")
             && !root.contains("tokio::io::split(upstream)")
@@ -5751,6 +5774,9 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
             && protocol_mux.contains("pub async fn reject_opened_stream")
             && protocol_mux.contains("pub struct VlessInboundMuxOpenedStream")
             && protocol_mux.contains("pub async fn send_inbound_downlink")
+            && protocol_mux.contains("pub struct VlessInboundMuxServer")
+            && protocol_mux.contains("pub enum VlessInboundMuxEvent")
+            && protocol_mux.contains("pub async fn next_opened_stream")
             && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
             && protocol_mux.contains("pub fn channel()")
             && protocol_mux.contains("pub fn write_inbound_stream_payload")
@@ -5773,6 +5799,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         fs::read_to_string(protocol_shared).expect("read vless protocol shared source");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
         .expect("read vless protocol udp source");
+    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
+        .expect("read vless protocol mux source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/vless/src/lib.rs"))
         .expect("read vless protocol lib source");
     let protocol_dispatch_parts = struct_block(&protocol_shared, "VlessInboundUdpDispatchParts");
@@ -5858,7 +5886,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && mux.contains("udp_session.send_mux_response")
             && mux.contains("udp_session.send_mux_response_to_socket_addr")
             && mux.contains("writer.end_inbound_stream")
-            && mux.contains(".send_inbound_downlink(")
+            && !mux.contains(".send_inbound_downlink(")
+            && protocol_mux.contains(".send_inbound_downlink(")
             && !mux.contains("mux.send_inbound_stream_payload(&mut client, sid, &payload)")
             && !mux.contains("writer.end(")
             && !mux.contains("request.target")

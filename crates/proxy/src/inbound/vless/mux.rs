@@ -26,26 +26,22 @@ impl Proxy {
     where
         S: ClientStream,
     {
-        use vless::mux::VlessInboundMuxStreams;
-
         vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
 
-        let mut mux = mux_context.inbound_session();
-        let mut streams = VlessInboundMuxStreams::new();
+        let mut mux_server = vless::mux::VlessInboundMuxServer::from_context(mux_context);
         let mut relay_tasks = JoinSet::new();
-        let (mux_writer, mut down_rx) = vless::mux::VlessInboundMuxWriter::channel();
 
         info!(inbound_tag, "VLESS MUX session started");
         loop {
             tokio::select! {
-                action_res = mux.read_inbound_action(&mut client) => {
-                    let action = match action_res {
-                        Ok(action) => action,
+                event = mux_server.next_opened_stream(&mut client) => {
+                    let event = match event {
+                        Ok(event) => event,
                         Err(_) => break,
                     };
-                    match streams.apply_inbound_action(&mut mux, &mut client, action).await {
-                        Ok(Some(opened)) => {
+                    match event {
+                        Some(vless::mux::VlessInboundMuxEvent::Opened(opened)) => {
                             match opened.into_kind() {
                                 vless::mux::VlessInboundMuxOpenedKind::Tcp {
                                     session_id: sid,
@@ -65,14 +61,12 @@ impl Proxy {
                                     {
                                         Ok(result) => result.upstream,
                                         Err(_) => {
-                                            let _ = streams
-                                                .reject_opened_stream(&mut mux, &mut client, sid)
-                                                .await;
+                                            let _ = mux_server.reject_opened_stream(&mut client, sid).await;
                                             continue;
                                         }
                                     };
 
-                                    let writer = mux_writer.clone();
+                                    let writer = mux_server.writer();
                                     relay_tasks.spawn(async move {
                                         vless::mux::relay_inbound_mux_stream(
                                             sid, up_rx, writer, upstream,
@@ -92,7 +86,7 @@ impl Proxy {
                                     let proxy_clone = self.clone();
                                     let inbound_tag_owned = inbound_tag.to_owned();
                                     let auth_clone = auth.clone();
-                                    let writer = mux_writer.clone();
+                                    let writer = mux_server.writer();
                                     relay_tasks.spawn(async move {
                                         proxy_clone
                                             .spawn_vless_mux_udp_stream_task(
@@ -111,16 +105,7 @@ impl Proxy {
                                 }
                             }
                         }
-                        Ok(None) => {}
-                        Err(_) => break,
-                    }
-                }
-
-                down = down_rx.recv() => {
-                    if let Some(downlink) = down {
-                        let _ = streams
-                            .send_inbound_downlink(&mut mux, &mut client, downlink)
-                            .await;
+                        None => {}
                     }
                 }
             }
