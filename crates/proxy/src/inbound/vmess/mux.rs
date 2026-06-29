@@ -27,9 +27,9 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let (mut reader, mut writer) = tokio::io::split(client);
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let mux_writer = vmess::VmessInboundMuxWriter::new(write_tx.clone());
+        let mux_writer = vmess::mux::VmessInboundMuxWriter::new(write_tx.clone());
         let mut mux_tasks: JoinSet<()> = JoinSet::new();
-        let mux_session = vmess::VmessInboundMuxSession::new();
+        let mux_session = vmess::mux::VmessInboundMuxSession::new();
         let mut streams: std::collections::HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> =
             std::collections::HashMap::new();
 
@@ -66,8 +66,8 @@ impl Proxy {
                     };
 
                     match action {
-                        vmess::VmessInboundMuxAction::KeepAlive => continue,
-                        vmess::VmessInboundMuxAction::OpenStream {
+                        vmess::mux::VmessInboundMuxAction::KeepAlive => continue,
+                        vmess::mux::VmessInboundMuxAction::OpenStream {
                             session_id,
                             session,
                             initial_payload,
@@ -103,7 +103,7 @@ impl Proxy {
                                 }
                             }
                         }
-                        vmess::VmessInboundMuxAction::Data {
+                        vmess::mux::VmessInboundMuxAction::Data {
                             session_id,
                             payload,
                         } => {
@@ -113,12 +113,12 @@ impl Proxy {
                                 }
                             }
                         }
-                        vmess::VmessInboundMuxAction::End { session_id } => {
+                        vmess::mux::VmessInboundMuxAction::End { session_id } => {
                             if let Some(tx) = streams.remove(&session_id) {
                                 let _ = tx.send(Vec::new());
                             }
                         }
-                        vmess::VmessInboundMuxAction::Unknown { .. } => {}
+                        vmess::mux::VmessInboundMuxAction::Unknown { .. } => {}
                     }
                 }
                 Some(joined) = mux_tasks.join_next(), if !mux_tasks.is_empty() => {
@@ -150,7 +150,7 @@ impl Proxy {
         let mut up_rx = up_rx;
         let proxy = self.clone();
         tasks.spawn(async move {
-            let mux_session = vmess::VmessInboundMuxSession::new();
+            let mux_session = vmess::mux::VmessInboundMuxSession::new();
             let mut session =
                 Session::new(0, target, port, Network::Tcp, ProtocolType::Vmess);
             proxy.prepare_session(&mut session, &inbound_tag, None);
@@ -222,7 +222,7 @@ impl Proxy {
         let mut up_rx = up_rx;
         let proxy = self.clone();
         tasks.spawn(async move {
-            let mux_session = vmess::VmessInboundMuxSession::new();
+            let mux_session = vmess::mux::VmessInboundMuxSession::new();
             let mut udp_session =
                 vmess::VmessInbound.udp_session(default_target, default_port);
             let mut dispatch = match UdpDispatch::new(&inbound_tag).await {

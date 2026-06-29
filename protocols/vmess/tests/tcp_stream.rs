@@ -214,7 +214,7 @@ fn inbound_udp_payload_decoder_falls_back_to_raw_mode() {
 async fn mux_udp_response_encoding_wraps_packet_mode_before_mux_frame() {
     let target = Address::Ipv4([8, 8, 8, 8]);
     let (write_tx, mut write_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
-    let writer = vmess::VmessInboundMuxWriter::new(write_tx);
+    let writer = vmess::mux::VmessInboundMuxWriter::new(write_tx);
     let request =
         <VmessOutbound as UdpPacketFraming<vmess::udp::VmessUdpPacketTarget>>::encode_udp_packet(
             &VmessOutbound,
@@ -239,7 +239,7 @@ async fn mux_udp_response_encoding_wraps_packet_mode_before_mux_frame() {
         client.write_all(&frame).await.expect("write mux frame");
     });
     let mut server = TestSocket(server);
-    let decoded = vmess::read_mux_frame(&mut server)
+    let decoded = vmess::mux::read_frame(&mut server)
         .await
         .expect("decode mux frame");
     assert_eq!(decoded.session_id, 7);

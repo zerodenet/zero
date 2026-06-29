@@ -78,8 +78,8 @@ impl<'a> VmessUdpFlowConfig<'a> {
         }
     }
 
-    pub fn mux_pool_identity(&self) -> crate::VmessMuxIdentity {
-        crate::VmessMuxIdentity::from_parts(
+    pub fn mux_pool_identity(&self) -> crate::mux::VmessMuxIdentity {
+        crate::mux::VmessMuxIdentity::from_parts(
             self.identity.uuid,
             self.cipher_name.to_owned(),
             self.identity.cipher,
@@ -512,7 +512,7 @@ impl VmessInboundUdpSession {
 
     pub fn write_mux_response(
         &self,
-        writer: &crate::VmessInboundMuxWriter,
+        writer: &crate::mux::VmessInboundMuxWriter,
         mux_session_id: u16,
         target: &Address,
         port: u16,
@@ -530,7 +530,7 @@ impl VmessInboundUdpSession {
 
     pub fn write_mux_response_to_ip(
         &self,
-        writer: &crate::VmessInboundMuxWriter,
+        writer: &crate::mux::VmessInboundMuxWriter,
         mux_session_id: u16,
         ip: IpAddress,
         port: u16,
@@ -542,7 +542,7 @@ impl VmessInboundUdpSession {
 
     pub fn write_mux_response_to_socket_addr(
         &self,
-        writer: &crate::VmessInboundMuxWriter,
+        writer: &crate::mux::VmessInboundMuxWriter,
         mux_session_id: u16,
         sender: SocketAddr,
         payload: &[u8],

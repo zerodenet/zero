@@ -11,7 +11,7 @@ pub(crate) struct VmessMuxOpenRequest<'a> {
     pub(crate) session: &'a Session,
     pub(crate) server: String,
     pub(crate) port: u16,
-    pub(crate) identity: vmess::VmessMuxIdentity,
+    pub(crate) identity: vmess::mux::VmessMuxIdentity,
     pub(crate) tls: Option<&'a ClientTlsConfig>,
     pub(crate) ws: Option<&'a WebSocketConfig>,
     pub(crate) grpc: Option<&'a GrpcConfig>,
@@ -20,5 +20,6 @@ pub(crate) struct VmessMuxOpenRequest<'a> {
 
 #[derive(Clone)]
 pub(crate) struct VmessMuxConnectionPool {
-    pub(super) pool: Arc<Mutex<HashMap<vmess::VmessMuxPoolKey, Arc<vmess::VmessMuxConn>>>>,
+    pub(super) pool:
+        Arc<Mutex<HashMap<vmess::mux::VmessMuxPoolKey, Arc<vmess::mux::VmessMuxConn>>>>,
 }

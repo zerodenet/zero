@@ -24,7 +24,7 @@ pub(crate) async fn handle_vmess_raw(
         Ok((session, client)) => {
             if session.network == Network::Udp {
                 proxy.run_vmess_udp_relay(client, session, tag).await
-            } else if vmess::is_mux_cool_session(&session) {
+            } else if vmess::mux::is_mux_cool_session(&session) {
                 proxy.run_vmess_mux_session(client, tag).await
             } else {
                 serve_inbound(proxy, session, client, handler, tag, source_addr).await
@@ -61,7 +61,7 @@ pub(crate) async fn handle_vmess_ws(
     let transport_handler = VmessTransportHandler;
     if session.network == Network::Udp {
         proxy.run_vmess_udp_relay(client, session, tag).await
-    } else if vmess::is_mux_cool_session(&session) {
+    } else if vmess::mux::is_mux_cool_session(&session) {
         proxy.run_vmess_mux_session(client, tag).await
     } else {
         serve_inbound(proxy, session, client, &transport_handler, tag, source_addr).await
@@ -102,7 +102,7 @@ pub(crate) async fn handle_vmess_grpc(
                     let transport_handler = VmessTransportHandler;
                     if session.network == Network::Udp {
                         proxy.run_vmess_udp_relay(client, session, &tag).await
-                    } else if vmess::is_mux_cool_session(&session) {
+                    } else if vmess::mux::is_mux_cool_session(&session) {
                         proxy.run_vmess_mux_session(client, &tag).await
                     } else {
                         serve_inbound(

@@ -4092,7 +4092,7 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
     for required in [
         "struct VmessMuxOpenRequest",
         "struct VmessMuxConnectionPool",
-        "identity: vmess::VmessMuxIdentity",
+        "identity: vmess::mux::VmessMuxIdentity",
     ] {
         assert!(
             model.contains(required),
@@ -4139,15 +4139,17 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         );
     }
     assert!(
-        root.contains("vmess::establish_mux_outbound_stream"),
+        root.contains("vmess::mux::establish_mux_outbound_stream"),
         "VMess mux pool runtime should call the protocol mux connection helper"
     );
     assert!(
-        root.contains("vmess::VmessMuxConn::new") && root.contains(".open_stream("),
+        root.contains("vmess::mux::VmessMuxConn::new") && root.contains(".open_stream("),
         "VMess adapter mux pool should hand established streams to protocol-owned mux connection helpers"
     );
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
         .expect("read protocols/vmess mux source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/vmess/src/lib.rs"))
+        .expect("read protocols/vmess lib source");
     for required in [
         "pub struct VmessMuxConn",
         "pub fn new<S>",
@@ -4160,6 +4162,42 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         assert!(
             protocol_mux.contains(required),
             "protocols/vmess should own VMess MUX connection mechanics through `{required}`"
+        );
+    }
+    assert!(
+        protocol_lib.contains("pub mod mux;") && !protocol_lib.contains("pub use mux::"),
+        "protocols/vmess should expose MUX details through vmess::mux instead of root re-exports"
+    );
+    for private_root_item in [
+        "VmessInboundMuxAction",
+        "VmessInboundMuxSession",
+        "VmessInboundMuxWriter",
+        "VmessMuxConn",
+        "VmessMuxFrameEncoder",
+        "VmessMuxIdentity",
+        "VmessMuxPoolKey",
+        "VmessMuxServerEvent",
+        "VmessMuxStream",
+        "VmessMuxTransportKey",
+        "MuxFrame",
+        "MUX_MAX_DATA_LEN",
+        "MUX_MAX_META_LEN",
+        "MUX_NETWORK_TCP",
+        "MUX_NETWORK_UDP",
+        "MUX_OPTION_DATA",
+        "MUX_OPTION_ERROR",
+        "MUX_STATUS_END",
+        "MUX_STATUS_KEEP",
+        "MUX_STATUS_KEEP_ALIVE",
+        "MUX_STATUS_NEW",
+        "read_mux_server_event",
+        "read_mux_stream_frame",
+        "establish_mux_outbound_stream",
+        "mux_stream_with_network",
+    ] {
+        assert!(
+            protocol_mux.contains(private_root_item) && !protocol_lib.contains(private_root_item),
+            "VMess MUX detail `{private_root_item}` should stay under vmess::mux instead of the crate root"
         );
     }
 }
@@ -4374,8 +4412,8 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
         "VMess mux pool should receive parsed cipher values from adapter-owned paths"
     );
     assert!(
-        model.contains("identity: vmess::VmessMuxIdentity")
-            && root.contains("vmess::VmessMuxPoolKey::from_identity")
+        model.contains("identity: vmess::mux::VmessMuxIdentity")
+            && root.contains("vmess::mux::VmessMuxPoolKey::from_identity")
             && !model.contains("struct VmessMuxPoolKey"),
         "VMess mux pool request should carry parsed identity to a protocol-owned key builder"
     );
@@ -4777,9 +4815,9 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         "VMess inbound MUX runtime should use the protocol mux frame reader helper"
     );
     assert!(
-        root.contains("vmess::VmessInboundMuxSession::new()")
+        root.contains("vmess::mux::VmessInboundMuxSession::new()")
             && root.contains("mux_session.read_inbound_action(&mut reader)")
-            && root.contains("vmess::VmessInboundMuxAction"),
+            && root.contains("vmess::mux::VmessInboundMuxAction"),
         "VMess inbound MUX runtime should consume protocol-owned semantic mux actions"
     );
     for forbidden in [
@@ -4833,15 +4871,15 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
             && !root.contains("writer.end(")
             && !root.contains("writer.data(")
             && !root.contains("mux_session.next_action(")
-            && !root.contains("vmess::VmessMuxFrameEncoder")
+            && !root.contains("vmess::mux::VmessMuxFrameEncoder")
             && !root.contains("frame_encoder.")
             && !model.contains("VmessMuxFrameEncoder")
             && !model.contains("mpsc::UnboundedSender<Vec<u8>>")
-            && !root.contains("vmess::read_mux_server_event")
-            && !root.contains("vmess::queue_mux_end_stream")
-            && !root.contains("vmess::queue_mux_keep_stream")
-            && !root.contains("vmess::encode_mux_end_stream")
-            && !root.contains("vmess::encode_mux_keep_stream"),
+            && !root.contains("vmess::mux::read_mux_server_event")
+            && !root.contains("vmess::mux::queue_end_stream")
+            && !root.contains("vmess::mux::queue_keep_stream")
+            && !root.contains("vmess::mux::encode_end_stream")
+            && !root.contains("vmess::mux::encode_keep_stream"),
         "VMess inbound MUX runtime should use the protocol-owned inbound MUX session wrapper"
     );
     assert!(
