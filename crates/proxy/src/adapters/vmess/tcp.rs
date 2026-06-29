@@ -153,11 +153,11 @@ async fn connect_tcp(request: VmessTcpConnect<'_>) -> Result<TcpRelayStream, Eng
     .await?;
 
     let mut sock = MeteredStream::new(stream);
-    let vmess_session =
-        vmess::establish_tcp_outbound_session(&mut sock, session, &config.uuid(), config.cipher())
-            .await?;
+    let vmess_session = config
+        .establish_tcp_outbound_session(&mut sock, session)
+        .await?;
     proxy.record_session_outbound_traffic(session.id, sock.drain_traffic());
-    Ok(TcpRelayStream::new(vmess::wrap_tcp_outbound_stream(
+    Ok(TcpRelayStream::new(config.wrap_tcp_outbound_stream(
         sock.into_inner(),
         vmess_session,
     )?))
@@ -169,7 +169,8 @@ async fn apply_tcp_hop(
     config: vmess::VmessTcpConnectConfig,
 ) -> Result<TcpRelayStream, EngineError> {
     Ok(TcpRelayStream::new(
-        vmess::establish_tcp_outbound_stream(stream, session, &config.uuid(), config.cipher())
+        config
+            .establish_tcp_outbound_stream(stream, session)
             .await
             .map_err(|error| EngineError::Io(std::io::Error::other(error)))?,
     ))

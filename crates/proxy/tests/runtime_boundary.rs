@@ -2020,6 +2020,11 @@ fn vmess_tcp_connect_uses_request_model() {
         "VmessAeadStream::outbound",
         "TcpSessionProtocol",
         "VmessTcpSessionTarget",
+        "config.uuid()",
+        "config.cipher()",
+        "vmess::establish_tcp_outbound_session",
+        "vmess::establish_tcp_outbound_stream",
+        "vmess::wrap_tcp_outbound_stream",
         "zero_transport::tls::connect_tls_upstream",
         "zero_transport::grpc::connect_grpc",
         "zero_transport::ws::connect_ws",
@@ -2053,8 +2058,13 @@ fn vmess_tcp_connect_uses_request_model() {
         "VMess adapter should ask protocols/vmess to parse TCP identity config and build MUX identity without passing raw cipher strings back into protocol APIs"
     );
     assert!(
-        adapter.contains("vmess::establish_tcp_outbound_stream"),
-        "VMess adapter TCP glue should delegate VMess session and AEAD setup to protocols/vmess"
+        adapter.contains(".establish_tcp_outbound_session(")
+            && adapter.contains(".establish_tcp_outbound_stream(")
+            && adapter.contains("config.wrap_tcp_outbound_stream(")
+            && protocol_outbound.contains("pub async fn establish_tcp_outbound_session")
+            && protocol_outbound.contains("pub async fn establish_tcp_outbound_stream")
+            && protocol_outbound.contains("pub fn wrap_tcp_outbound_stream"),
+        "VMess adapter TCP glue should delegate VMess session and AEAD setup through the protocol-owned TCP config API"
     );
     assert!(
         adapter.contains("crate::transport::build_vmess_outbound_transport")

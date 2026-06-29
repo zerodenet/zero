@@ -126,14 +126,6 @@ impl VmessTcpConnectConfig {
         })
     }
 
-    pub fn uuid(&self) -> [u8; 16] {
-        self.uuid
-    }
-
-    pub fn cipher(&self) -> VmessCipher {
-        self.cipher
-    }
-
     pub fn mux_pool_identity(&self) -> crate::VmessMuxIdentity {
         crate::VmessMuxIdentity::from_parts(self.uuid, self.cipher_name.clone(), self.cipher)
     }
@@ -144,6 +136,41 @@ impl VmessTcpConnectConfig {
             uuid: &self.uuid,
             cipher: self.cipher,
         }
+    }
+
+    pub async fn establish_tcp_outbound_session<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+    ) -> Result<VmessOutboundSession, Error>
+    where
+        S: AsyncSocket,
+    {
+        VmessOutbound
+            .establish_tcp_session(stream, session, &self.uuid, self.cipher)
+            .await
+    }
+
+    pub async fn establish_tcp_outbound_stream<S>(
+        &self,
+        mut stream: S,
+        session: &Session,
+    ) -> Result<VmessAeadStream<S>, Error>
+    where
+        S: AsyncSocket,
+    {
+        let vmess_session = self
+            .establish_tcp_outbound_session(&mut stream, session)
+            .await?;
+        self.wrap_tcp_outbound_stream(stream, vmess_session)
+    }
+
+    pub fn wrap_tcp_outbound_stream<S>(
+        &self,
+        stream: S,
+        session: VmessOutboundSession,
+    ) -> Result<VmessAeadStream<S>, Error> {
+        VmessAeadStream::outbound(stream, session)
     }
 }
 
