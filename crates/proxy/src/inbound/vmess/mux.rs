@@ -273,14 +273,12 @@ impl Proxy {
                         match recv {
                             Ok((n, sender)) => {
                                 last_activity = TokioInstant::now();
-                                let ip = zero_platform_tokio::socket_addr_to_ip(sender);
                                 let session_id = dispatch.direct_response_session_id(sender);
                                 record_udp_inbound_response_rx(&proxy, session_id, n);
-                                match udp_session.write_mux_response_to_ip(
+                                match udp_session.write_mux_response_to_socket_addr(
                                     &writer,
                                     mux_session_id,
-                                    ip,
-                                    sender.port(),
+                                    sender,
                                     &direct_buf[..n],
                                 ) {
                                     Ok(frame_len) => {
@@ -424,13 +422,11 @@ impl Proxy {
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     last_activity = TokioInstant::now();
-                    let ip = zero_platform_tokio::socket_addr_to_ip(sender);
                     let session_id = dispatch.direct_response_session_id(sender);
                     record_udp_inbound_response_rx(self, session_id, n);
-                    let written = udp_session.write_response_to_ip_tokio(
+                    let written = udp_session.write_response_to_socket_addr_tokio(
                         &mut client,
-                        ip,
-                        sender.port(),
+                        sender,
                         &direct_buf[..n],
                     ).await?;
                     record_udp_inbound_response_tx(self, session_id, written);

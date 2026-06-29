@@ -96,16 +96,12 @@ impl Proxy {
                     let (n, sender) = recv?;
                     last_activity = TokioInstant::now();
 
-                    let ip = zero_platform_tokio::socket_addr_to_ip(sender);
-                    let port = sender.port();
-
                     let session_id = dispatch.direct_response_session_id(sender);
                     record_udp_inbound_response_rx(self, session_id, n);
 
-                    match udp_session.write_response_to_ip_tokio(
+                    match udp_session.write_response_to_socket_addr_tokio(
                         &mut client,
-                        ip,
-                        port,
+                        sender,
                         &udp_buffer[..n],
                     ).await {
                         Ok(written) => {

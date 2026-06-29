@@ -12,6 +12,8 @@ use zero_traits::{DatagramCodec, IpAddress};
 #[cfg(feature = "tokio")]
 use alloc::sync::Arc;
 #[cfg(feature = "tokio")]
+use std::net::SocketAddr;
+#[cfg(feature = "tokio")]
 use tokio::sync::{broadcast, mpsc};
 #[cfg(all(feature = "tokio", feature = "crypto"))]
 use zero_traits::AsyncSocket;
@@ -271,6 +273,17 @@ impl Hysteria2InboundUdpSession {
         let target = address_from_ip(ip);
         self.send_response(conn, proxy_session_id, &target, port, payload)
     }
+
+    pub fn send_response_to_socket_addr(
+        &self,
+        conn: &quinn::Connection,
+        proxy_session_id: u64,
+        sender: SocketAddr,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        let target = address_from_socket_addr(sender);
+        self.send_response(conn, proxy_session_id, &target, sender.port(), payload)
+    }
 }
 
 #[cfg(feature = "tokio")]
@@ -284,6 +297,14 @@ fn address_from_ip(ip: IpAddress) -> Address {
     match ip {
         IpAddress::V4(bytes) => Address::Ipv4(bytes),
         IpAddress::V6(bytes) => Address::Ipv6(bytes),
+    }
+}
+
+#[cfg(feature = "tokio")]
+fn address_from_socket_addr(addr: SocketAddr) -> Address {
+    match addr.ip() {
+        std::net::IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
+        std::net::IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
     }
 }
 

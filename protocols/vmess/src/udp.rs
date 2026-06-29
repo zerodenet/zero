@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, IpAddress, UdpPacketFraming, UdpPacketTunnelProtocol};
@@ -495,6 +496,20 @@ impl VmessInboundUdpSession {
             .await
     }
 
+    pub async fn write_response_to_socket_addr_tokio<W>(
+        &self,
+        writer: &mut W,
+        sender: SocketAddr,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        let target = address_from_socket_addr(sender);
+        self.write_response_tokio(writer, &target, sender.port(), payload)
+            .await
+    }
+
     pub fn write_mux_response(
         &self,
         writer: &crate::VmessInboundMuxWriter,
@@ -524,12 +539,30 @@ impl VmessInboundUdpSession {
         let target = address_from_ip(ip);
         self.write_mux_response(writer, mux_session_id, &target, port, payload)
     }
+
+    pub fn write_mux_response_to_socket_addr(
+        &self,
+        writer: &crate::VmessInboundMuxWriter,
+        mux_session_id: u16,
+        sender: SocketAddr,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        let target = address_from_socket_addr(sender);
+        self.write_mux_response(writer, mux_session_id, &target, sender.port(), payload)
+    }
 }
 
 fn address_from_ip(ip: IpAddress) -> Address {
     match ip {
         IpAddress::V4(bytes) => Address::Ipv4(bytes),
         IpAddress::V6(bytes) => Address::Ipv6(bytes),
+    }
+}
+
+fn address_from_socket_addr(addr: SocketAddr) -> Address {
+    match addr.ip() {
+        std::net::IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
+        std::net::IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
     }
 }
 

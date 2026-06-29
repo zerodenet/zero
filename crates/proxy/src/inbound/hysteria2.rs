@@ -329,12 +329,10 @@ impl Proxy {
                     let session_id = dispatch.direct_response_session_id(sender);
                     if let Some(sid) = session_id {
                         record_udp_inbound_response_rx(&proxy, session_id, n);
-                        let ip = zero_platform_tokio::socket_addr_to_ip(sender);
-                        if let Ok(Some(written)) = udp_session.send_response_to_ip(
+                        if let Ok(Some(written)) = udp_session.send_response_to_socket_addr(
                             &conn,
                             sid,
-                            ip,
-                            sender.port(),
+                            sender,
                             &direct_buf[..n],
                         ) {
                             record_udp_inbound_response_tx(&proxy, session_id, written);

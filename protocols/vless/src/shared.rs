@@ -1,6 +1,8 @@
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
+#[cfg(feature = "reality")]
+use std::net::SocketAddr;
 
 use zero_core::{Address, Error};
 use zero_traits::{AsyncSocket, IpAddress};
@@ -731,6 +733,21 @@ impl VlessInboundUdpCodec {
             .await
     }
 
+    #[cfg(feature = "reality")]
+    pub async fn write_response_to_socket_addr_tokio<W>(
+        &self,
+        writer: &mut W,
+        sender: SocketAddr,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        let target = address_from_socket_addr(sender);
+        self.write_response_tokio(writer, &target, sender.port(), payload)
+            .await
+    }
+
     pub fn encode_mux_response(
         &self,
         mux_session_id: u16,
@@ -765,6 +782,18 @@ impl VlessInboundUdpCodec {
     ) -> Result<usize, Error> {
         let target = address_from_ip(ip);
         self.send_mux_response(writer, mux_session_id, &target, port, payload)
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn send_mux_response_to_socket_addr(
+        &self,
+        writer: &crate::VlessInboundMuxWriter,
+        mux_session_id: u16,
+        sender: SocketAddr,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        let target = address_from_socket_addr(sender);
+        self.send_mux_response(writer, mux_session_id, &target, sender.port(), payload)
     }
 }
 
@@ -849,6 +878,21 @@ impl VlessInboundUdpSession {
     }
 
     #[cfg(feature = "reality")]
+    pub async fn write_response_to_socket_addr_tokio<W>(
+        &self,
+        writer: &mut W,
+        sender: SocketAddr,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        self.codec
+            .write_response_to_socket_addr_tokio(writer, sender, payload)
+            .await
+    }
+
+    #[cfg(feature = "reality")]
     pub fn send_mux_response(
         &self,
         writer: &crate::VlessInboundMuxWriter,
@@ -873,12 +917,32 @@ impl VlessInboundUdpSession {
         self.codec
             .send_mux_response_to_ip(writer, mux_session_id, ip, port, payload)
     }
+
+    #[cfg(feature = "reality")]
+    pub fn send_mux_response_to_socket_addr(
+        &self,
+        writer: &crate::VlessInboundMuxWriter,
+        mux_session_id: u16,
+        sender: SocketAddr,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.codec
+            .send_mux_response_to_socket_addr(writer, mux_session_id, sender, payload)
+    }
 }
 
 fn address_from_ip(ip: IpAddress) -> Address {
     match ip {
         IpAddress::V4(bytes) => Address::Ipv4(bytes),
         IpAddress::V6(bytes) => Address::Ipv6(bytes),
+    }
+}
+
+#[cfg(feature = "reality")]
+fn address_from_socket_addr(addr: SocketAddr) -> Address {
+    match addr.ip() {
+        std::net::IpAddr::V4(ip) => Address::Ipv4(ip.octets()),
+        std::net::IpAddr::V6(ip) => Address::Ipv6(ip.octets()),
     }
 }
 
