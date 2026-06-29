@@ -1,13 +1,13 @@
 use crate::logging::log_listener_connection_error;
 use crate::runtime::inbound_protocol::serve_inbound;
 use crate::runtime::Proxy;
-use crate::transport::{accept_ws, ClientStream, MeteredStream, TcpRelayStream};
+use crate::transport::{accept_ws, ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_engine::EngineError;
 
-use super::{RecordingStream, VlessInboundHandler};
+use super::VlessInboundHandler;
 
 #[derive(Clone, Copy)]
 pub(crate) struct VlessStreamTransport<'a> {

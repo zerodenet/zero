@@ -3426,6 +3426,33 @@ fn tcp_tls_async_socket_bridge_lives_in_transport_layer() {
 }
 
 #[test]
+fn vless_fallback_recording_stream_lives_in_transport_layer() {
+    let transport = read("src/transport/stream.rs");
+    let vless_helpers = read("src/inbound/vless/helpers.rs");
+    let vless_session = read("src/inbound/vless/session.rs");
+
+    assert!(
+        transport.contains("struct RecordingStream")
+            && transport.contains("impl<S> AsyncSocket for RecordingStream<S>")
+            && transport.contains("pub(crate) fn into_parts(self) -> (S, Vec<u8>)"),
+        "generic fallback read-recording stream wrapper should live in transport glue"
+    );
+    assert!(
+        vless_session.contains("RecordingStream::new(client)")
+            && vless_session.contains("use crate::transport::{")
+            && !vless_session.contains("use super::{RecordingStream"),
+        "VLESS session glue should use the transport-owned recording stream"
+    );
+    assert!(
+        vless_helpers.contains("upgrade_vless_reality_server")
+            && !vless_helpers.contains("struct RecordingStream")
+            && !vless_helpers.contains("impl<S> AsyncSocket for RecordingStream")
+            && !vless_helpers.contains("impl<S> AsyncRead for RecordingStream"),
+        "VLESS helpers should keep only VLESS-specific Reality upgrade glue, not generic fallback stream wrappers"
+    );
+}
+
+#[test]
 fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
     for path in rust_sources_under("src/inbound/mieru") {
         let source = relative(&path);

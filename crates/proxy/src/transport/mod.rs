@@ -9,7 +9,7 @@ pub(crate) mod tls_hello;
 pub(crate) use direct::DirectConnector;
 pub(crate) use metered::{MeteredStream, StreamTraffic};
 pub(crate) use stream::{
-    AsyncSocketStream, ClientStream, PrefixedSocket, RelayCarrier, TcpRelayStream,
+    AsyncSocketStream, ClientStream, PrefixedSocket, RecordingStream, RelayCarrier, TcpRelayStream,
 };
 pub(crate) use tcp_flow::is_block_error;
 pub(crate) use tcp_outbound::{

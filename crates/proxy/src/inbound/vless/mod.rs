@@ -59,4 +59,4 @@ mod udp_session;
 
 pub(crate) use listener::run_vless_listener_with_bound;
 
-pub(crate) use helpers::{upgrade_vless_reality_server, RecordingStream};
+pub(crate) use helpers::upgrade_vless_reality_server;
