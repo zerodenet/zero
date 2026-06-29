@@ -62,6 +62,31 @@ pub struct TrojanInboundUdpDispatchParts {
     pub client_session_id: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanInboundUdpDispatchView {
+    parts: TrojanInboundUdpDispatchParts,
+}
+
+impl TrojanInboundUdpDispatchView {
+    pub fn pipe_parts(&self) -> (&zero_core::Address, u16, &[u8], Option<u64>) {
+        (
+            &self.parts.target,
+            self.parts.port,
+            &self.parts.payload,
+            self.parts.client_session_id,
+        )
+    }
+
+    pub fn into_pipe_parts(self) -> (zero_core::Address, u16, Vec<u8>, Option<u64>) {
+        (
+            self.parts.target,
+            self.parts.port,
+            self.parts.payload,
+            self.parts.client_session_id,
+        )
+    }
+}
+
 impl TrojanInboundUdpRequest {
     fn from_packet(packet: TrojanUdpPacket) -> Self {
         let (target, port, payload) = packet.into_parts();
@@ -97,6 +122,12 @@ impl TrojanInboundUdpRequest {
             client_session_id: None,
         }
     }
+
+    pub fn into_dispatch_view(self) -> TrojanInboundUdpDispatchView {
+        TrojanInboundUdpDispatchView {
+            parts: self.into_dispatch_parts(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -129,6 +160,18 @@ impl TrojanInboundUdpSession {
         self.read_request(stream)
             .await
             .map(TrojanInboundUdpRequest::into_dispatch_parts)
+    }
+
+    pub async fn read_dispatch_view<S>(
+        &self,
+        stream: &mut S,
+    ) -> Result<TrojanInboundUdpDispatchView, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.read_request(stream)
+            .await
+            .map(TrojanInboundUdpRequest::into_dispatch_view)
     }
 
     pub async fn write_response<S>(
