@@ -13,7 +13,6 @@ use tracing::{error, info, warn};
 use zero_config::InboundConfig;
 use zero_core::{ProtocolType, Session};
 use zero_engine::EngineError;
-use zero_traits::AsyncSocket;
 
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
@@ -55,21 +54,21 @@ impl InboundProtocol for Hysteria2StreamHandler {
     }
 
     async fn send_ok(&self, client: &mut Hysteria2Stream) -> Result<(), EngineError> {
-        let ok = Hysteria2Inbound.connect_ok_response();
-        AsyncSocket::write_all(client, &ok)
+        Hysteria2Inbound
+            .send_connect_ok(client)
             .await
-            .map_err(|e| EngineError::Io(io::Error::other(format!("write connect ok: {e}"))))
+            .map_err(EngineError::from)
     }
 
     async fn send_blocked(&self, client: &mut Hysteria2Stream) -> Result<(), EngineError> {
-        let err = Hysteria2Inbound.connect_error_response("blocked");
-        let _ = AsyncSocket::write_all(client, &err).await;
+        let _ = Hysteria2Inbound.send_connect_error(client, "blocked").await;
         Ok(())
     }
 
     async fn send_upstream_failure(&self, client: &mut Hysteria2Stream) -> Result<(), EngineError> {
-        let err = Hysteria2Inbound.connect_error_response("outbound failed");
-        let _ = AsyncSocket::write_all(client, &err).await;
+        let _ = Hysteria2Inbound
+            .send_connect_error(client, "outbound failed")
+            .await;
         Ok(())
     }
 

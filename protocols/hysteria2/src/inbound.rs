@@ -150,6 +150,28 @@ impl Hysteria2Inbound {
         crate::shared::build_connect_error(message)
     }
 
+    pub async fn send_connect_ok<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let response = self.connect_ok_response();
+        stream
+            .write_all(&response)
+            .await
+            .map_err(|_| Error::Io("hysteria2: write connect ok"))
+    }
+
+    pub async fn send_connect_error<S>(&self, stream: &mut S, message: &str) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let response = self.connect_error_response(message);
+        stream
+            .write_all(&response)
+            .await
+            .map_err(|_| Error::Io("hysteria2: write connect error"))
+    }
+
     /// Validate client authentication using HMAC-SHA256(password, salt).
     pub fn validate_auth(
         &self,

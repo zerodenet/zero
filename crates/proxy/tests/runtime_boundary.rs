@@ -1529,13 +1529,23 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     assert!(
         inbound.contains("profile\n            .authenticate_quic_connection(&conn, &mut auth_stream)")
             && inbound.contains("Hysteria2Inbound.accept_tcp_stream(&mut stream).await")
+            && inbound.contains(".send_connect_ok(client)")
+            && inbound.contains(".send_connect_error(client, \"blocked\")")
+            && inbound.contains(".send_connect_error(client, \"outbound failed\")")
+            && !inbound.contains("connect_ok_response()")
+            && !inbound.contains("connect_error_response(")
+            && !inbound.contains("AsyncSocket::write_all")
             && protocol_inbound.contains("pub async fn authenticate_quic_connection")
             && protocol_inbound.contains("conn.export_keying_material")
             && protocol_inbound.contains("pub async fn authenticate_connection")
             && protocol_inbound.contains("pub async fn accept_tcp_stream")
+            && protocol_inbound.contains("pub async fn send_connect_ok")
+            && protocol_inbound.contains("pub async fn send_connect_error")
             && protocol_inbound.contains("self.authenticate_client(salt")
             && protocol_inbound.contains("self.auth_error_response")
             && protocol_inbound.contains("self.auth_ok_response")
+            && protocol_inbound.contains("self.connect_ok_response()")
+            && protocol_inbound.contains("self.connect_error_response(message)")
             && protocol_inbound.contains("self.accept_tcp_connect_header(&header_buf[..n])"),
         "Hysteria2 protocol crate should own auth stream and TCP connect header IO while proxy only orchestrates QUIC tasks"
     );
