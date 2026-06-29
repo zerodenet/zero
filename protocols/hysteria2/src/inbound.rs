@@ -79,6 +79,22 @@ impl Hysteria2InboundProfile {
             .await
             .map_err(|_| Error::Io("hysteria2: write auth ok"))
     }
+
+    #[cfg(all(feature = "tokio", feature = "crypto"))]
+    pub async fn authenticate_quic_connection<S>(
+        &self,
+        conn: &quinn::Connection,
+        stream: &mut S,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let mut salt = [0u8; 32];
+        conn.export_keying_material(&mut salt, b"hysteria2 auth", &[])
+            .map_err(|_| Error::Io("hysteria2 key export failed"))?;
+
+        self.authenticate_connection(stream, &salt).await
+    }
 }
 
 /// Trait for looking up Hysteria2 users by password validation.

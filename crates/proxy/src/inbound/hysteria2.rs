@@ -219,15 +219,6 @@ impl Proxy {
         profile: Hysteria2InboundProfile,
         stream_handler: &Hysteria2StreamHandler,
     ) -> Result<(), EngineError> {
-        // Derive salt from TLS keying material
-        let mut salt = [0u8; 32];
-        if conn
-            .export_keying_material(&mut salt, b"hysteria2 auth", &[])
-            .is_err()
-        {
-            return Err(EngineError::Io(io::Error::other("quic key export failed")));
-        }
-
         // Wait for auth stream from client.
         let (send, recv) = match conn.accept_bi().await {
             Ok(stream) => stream,
@@ -241,7 +232,7 @@ impl Proxy {
         let mut auth_stream = Hysteria2Stream::new(send, recv);
 
         profile
-            .authenticate_connection(&mut auth_stream, &salt)
+            .authenticate_quic_connection(&conn, &mut auth_stream)
             .await?;
         drop(auth_stream);
 

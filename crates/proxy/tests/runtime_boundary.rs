@@ -1233,6 +1233,8 @@ fn hysteria2_inbound_uses_adapter_request_model() {
         "authenticate_client(&salt",
         "auth_error_response",
         "auth_ok_response",
+        "export_keying_material",
+        "b\"hysteria2 auth\"",
         "build_auth_error",
         "build_auth_ok",
         "build_connect_error",
@@ -1245,8 +1247,10 @@ fn hysteria2_inbound_uses_adapter_request_model() {
         );
     }
     assert!(
-        inbound.contains("profile\n            .authenticate_connection(&mut auth_stream, &salt)")
+        inbound.contains("profile\n            .authenticate_quic_connection(&conn, &mut auth_stream)")
             && inbound.contains("Hysteria2Inbound.accept_tcp_stream(&mut stream).await")
+            && protocol_inbound.contains("pub async fn authenticate_quic_connection")
+            && protocol_inbound.contains("conn.export_keying_material")
             && protocol_inbound.contains("pub async fn authenticate_connection")
             && protocol_inbound.contains("pub async fn accept_tcp_stream")
             && protocol_inbound.contains("self.authenticate_client(salt")
