@@ -108,6 +108,14 @@ impl ConfiguredSocks5PasswordAuth {
                 .collect(),
         )
     }
+
+    pub fn from_config_users<I, U>(users: I) -> Self
+    where
+        I: IntoIterator<Item = U>,
+        U: IntoSocks5AuthUserConfig,
+    {
+        Self::from_config_parts(users.into_iter().map(U::into_socks5_auth_user_config))
+    }
 }
 
 impl Socks5PasswordAuth for ConfiguredSocks5PasswordAuth {
@@ -134,6 +142,20 @@ impl Socks5PasswordAuth for ConfiguredSocks5PasswordAuth {
             .find(|user| user.username == username)
             .map(|user| (user.up_bps, user.down_bps))
             .unwrap_or((None, None))
+    }
+}
+
+pub trait IntoSocks5AuthUserConfig {
+    fn into_socks5_auth_user_config(
+        self,
+    ) -> (String, String, Option<String>, Option<u64>, Option<u64>);
+}
+
+impl IntoSocks5AuthUserConfig for (String, String, Option<String>, Option<u64>, Option<u64>) {
+    fn into_socks5_auth_user_config(
+        self,
+    ) -> (String, String, Option<String>, Option<u64>, Option<u64>) {
+        self
     }
 }
 

@@ -25,9 +25,6 @@ mod tcp;
 pub(crate) mod udp;
 
 #[cfg(feature = "socks5")]
-pub(in crate::adapters) use inbound::socks5_password_auth_from_users;
-
-#[cfg(feature = "socks5")]
 #[derive(Debug)]
 pub(crate) struct Socks5Adapter;
 

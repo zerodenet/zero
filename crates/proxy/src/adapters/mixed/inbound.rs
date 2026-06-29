@@ -2,7 +2,6 @@ use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
 use crate::adapters::mixed::MixedAdapter;
-use crate::adapters::socks5::socks5_password_auth_from_users;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
@@ -40,5 +39,15 @@ fn socks5_auth_from_config(
             "mixed adapter received non-mixed inbound config",
         )));
     };
-    Ok(socks5_password_auth_from_users(socks5_users))
+    Ok(socks5::ConfiguredSocks5PasswordAuth::from_config_users(
+        socks5_users.iter().map(|user| {
+            (
+                user.username.clone(),
+                user.password.clone(),
+                user.principal_key.clone(),
+                user.up_bps,
+                user.down_bps,
+            )
+        }),
+    ))
 }
