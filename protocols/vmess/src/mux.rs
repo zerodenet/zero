@@ -120,6 +120,13 @@ impl VmessMuxPoolKey {
     {
         establish_mux_outbound_stream(stream, self.uuid(), self.cipher()).await
     }
+
+    pub fn into_pool_conn<S>(self, stream: S, max_concurrency: u32) -> VmessMuxConn
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        VmessMuxConn::new(stream, max_concurrency)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

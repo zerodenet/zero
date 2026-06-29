@@ -104,10 +104,7 @@ impl VmessMuxConnectionPool {
         let metered = MeteredStream::new(stream);
         let stream = TcpRelayStream::new(key.establish_mux_outbound_stream(metered).await?);
 
-        Ok(vmess::mux::VmessMuxConn::new(
-            stream,
-            request.max_concurrency,
-        ))
+        Ok(key.clone().into_pool_conn(stream, request.max_concurrency))
     }
 }
 

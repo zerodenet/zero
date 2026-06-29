@@ -4153,8 +4153,9 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         "VMess mux pool runtime should ask the protocol key to establish MUX streams without unpacking identity fields"
     );
     assert!(
-        root.contains("vmess::mux::VmessMuxConn::new") && root.contains(".open_stream("),
-        "VMess adapter mux pool should hand established streams to protocol-owned mux connection helpers"
+        root.contains("key.clone().into_pool_conn(stream, request.max_concurrency)")
+            && !root.contains("vmess::mux::VmessMuxConn::new"),
+        "VMess adapter mux pool should ask the protocol key to wrap established streams as pool connections"
     );
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
         .expect("read protocols/vmess mux source");
@@ -4169,6 +4170,7 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         "tokio::spawn",
         "read_mux_server_event(&mut reader)",
         "pub async fn establish_mux_outbound_stream",
+        "pub fn into_pool_conn",
     ] {
         assert!(
             protocol_mux.contains(required),
