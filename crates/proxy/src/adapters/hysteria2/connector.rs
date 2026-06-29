@@ -121,8 +121,7 @@ pub(super) async fn open_udp_packet_path_build(
     EngineError,
 > {
     let parts = build.into_connection_parts();
-    let (server, port, connector_profile, codec) = parts.into_parts();
-    let codec = std::sync::Arc::new(codec);
+    let (server, port, connector_profile, codec) = parts.into_shared_codec_parts();
     let conn = open_udp_profile_connection(&server, port, connector_profile).await?;
     Ok((conn, codec))
 }

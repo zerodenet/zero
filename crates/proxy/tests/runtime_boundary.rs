@@ -9900,6 +9900,10 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
             && !adapter_packet_path.contains("build.port()")
             && !adapter_packet_path.contains("build.connector_profile()")
             && !adapter_packet_path.contains("build.codec()")
+            && connector.contains(".into_shared_codec_parts()")
+            && !connector.contains("Arc::new(codec)")
+            && protocol_udp.contains("pub fn into_shared_codec_parts")
+            && protocol_udp.contains("Arc::new(codec)")
             && connector.contains("async fn open_udp_profile_connection")
             && profile_connector_uses == 1
             && !connector.contains("pub(crate) async fn open_udp_packet_path_connection")
@@ -10975,7 +10979,11 @@ fn udp_build_traits_consume_protocol_parts() {
             && shadowsocks_protocol.contains("pub fn into_shared_codec_parts")
             && shadowsocks_protocol.contains("Arc::new(codec)")
             && shadowsocks_protocol.contains("pub fn into_parts(")
-            && shadowsocks_protocol.contains("self.tag, self.server, self.port, self.cache_key"),
+            && shadowsocks_protocol.contains("self.tag, self.server, self.port, self.cache_key")
+            && hysteria2_connector.contains(".into_shared_codec_parts()")
+            && !hysteria2_connector.contains("Arc::new(codec)")
+            && hysteria2_protocol.contains("pub fn into_shared_codec_parts")
+            && hysteria2_protocol.contains("Arc::new(codec)"),
         "packet-path datagram sources should consume protocol-built source parts and codec in one step"
     );
     for forbidden in [

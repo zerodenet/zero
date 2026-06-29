@@ -555,6 +555,18 @@ impl Hysteria2UdpPacketPathCarrierBuildParts {
     ) {
         (self.server, self.port, self.connector_profile, self.codec)
     }
+
+    pub fn into_shared_codec_parts(
+        self,
+    ) -> (
+        alloc::string::String,
+        u16,
+        Hysteria2UdpConnectorProfile,
+        Arc<dyn DatagramCodec<Address, Error = Error>>,
+    ) {
+        let (server, port, connector_profile, codec) = self.into_parts();
+        (server, port, connector_profile, Arc::new(codec))
+    }
 }
 
 impl Hysteria2UdpPacketPathCarrierDescriptor {
