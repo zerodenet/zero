@@ -217,16 +217,16 @@ impl Proxy {
                         Ok(0) => break,
                         Ok(n) => {
                             last_activity = TokioInstant::now();
-                            let dispatch_parts =
-                                match udp_session.decode_dispatch_parts(&read_buf[..n]) {
-                                    Ok(dispatch_parts) => dispatch_parts,
+                            let dispatch_view =
+                                match udp_session.decode_dispatch_view(&read_buf[..n]) {
+                                    Ok(dispatch_view) => dispatch_view,
                                     Err(error) => {
                                         tracing::warn!(error = %error, "mieru udp request decode failed");
                                         continue;
                                     }
                                 };
                             let (target, port, payload, client_session_id) =
-                                dispatch_parts.into_parts();
+                                dispatch_view.into_pipe_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
                                     target,

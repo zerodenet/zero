@@ -104,9 +104,20 @@ pub struct MieruInboundUdpDispatchParts {
     client_session_id: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MieruInboundUdpDispatchView {
+    parts: MieruInboundUdpDispatchParts,
+}
+
 impl MieruInboundUdpDispatchParts {
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
+    }
+}
+
+impl MieruInboundUdpDispatchView {
+    pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
+        self.parts.into_parts()
     }
 }
 
@@ -143,6 +154,12 @@ impl MieruInboundUdpRequest {
             port: self.port,
             payload: self.payload,
             client_session_id: None,
+        }
+    }
+
+    pub fn into_dispatch_view(self) -> MieruInboundUdpDispatchView {
+        MieruInboundUdpDispatchView {
+            parts: self.into_dispatch_parts(),
         }
     }
 
@@ -197,6 +214,11 @@ impl MieruInboundUdpSession {
     ) -> Result<MieruInboundUdpDispatchParts, Error> {
         self.decode_request(data)
             .map(MieruInboundUdpRequest::into_dispatch_parts)
+    }
+
+    pub fn decode_dispatch_view(&self, data: &[u8]) -> Result<MieruInboundUdpDispatchView, Error> {
+        self.decode_request(data)
+            .map(MieruInboundUdpRequest::into_dispatch_view)
     }
 
     pub fn record_target(&mut self, sender: SocketAddr, target: Address, port: u16) {
