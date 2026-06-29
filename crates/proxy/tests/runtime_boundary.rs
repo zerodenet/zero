@@ -5184,6 +5184,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
 fn inbound_vless_mux_task_model_lives_outside_mux_root() {
     let root = read("src/inbound/vless/mux.rs");
     let model = read("src/inbound/vless/model.rs");
+    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
+        .expect("read protocols/vless/src/mux.rs");
 
     assert!(
         !root.contains("struct VlessMuxUdpStreamTask"),
@@ -5195,12 +5197,21 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
         "VLESS inbound MUX task model should live in inbound/vless/model.rs"
     );
     assert!(
-        root.contains("VlessInboundMuxWriter::new")
+        root.contains("VlessInboundMuxWriter::channel")
             && root.contains("let writer = mux_writer.clone()")
             && root.contains("writer,")
+            && root.contains("writer.write_inbound_stream_payload")
+            && !root.contains("writer.data(")
+            && !root.contains("writer.end(")
             && model.contains("writer: vless::mux::VlessInboundMuxWriter")
-            && !model.contains("mpsc::UnboundedSender<(u16, Vec<u8>)>"),
-        "VLESS inbound MUX task model should carry a protocol-owned writer instead of exposing the raw downlink channel"
+            && !root.contains("mpsc::unbounded_channel::<(u16, Vec<u8>)>")
+            && !root.contains("down_tx")
+            && !model.contains("mpsc::UnboundedSender<(u16, Vec<u8>)>")
+            && protocol_mux.contains("struct VlessInboundMuxDownlink")
+            && protocol_mux.contains("pub fn channel()")
+            && protocol_mux.contains("pub fn write_inbound_stream_payload")
+            && protocol_mux.contains("mpsc::unbounded_channel::<VlessInboundMuxDownlink>()"),
+        "VLESS inbound MUX task model should carry a protocol-owned writer and keep raw downlink channel shape in protocols/vless"
     );
 }
 

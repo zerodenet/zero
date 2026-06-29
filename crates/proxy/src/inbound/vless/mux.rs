@@ -37,8 +37,7 @@ impl Proxy {
         let mut mux = VlessInboundMuxSession::with_encryption(&uuid);
         let mut up_senders: HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> = HashMap::new();
         let mut relay_tasks = JoinSet::new();
-        let (down_tx, mut down_rx) = mpsc::unbounded_channel::<(u16, Vec<u8>)>();
-        let mux_writer = vless::mux::VlessInboundMuxWriter::new(down_tx.clone());
+        let (mux_writer, mut down_rx) = vless::mux::VlessInboundMuxWriter::channel();
 
         info!(inbound_tag, "VLESS MUX session started");
         loop {
@@ -83,9 +82,9 @@ impl Proxy {
                                         }
                                     };
 
-                                    let down = down_tx.clone();
+                                    let writer = mux_writer.clone();
                                     relay_tasks.spawn(async move {
-                                        Self::mux_stream_relay(sid, up_rx, down, upstream).await;
+                                        Self::mux_stream_relay(sid, up_rx, writer, upstream).await;
                                     });
 
                                     info!(inbound_tag, mux_stream_id = sid,
@@ -142,11 +141,13 @@ impl Proxy {
                 }
 
                 down = down_rx.recv() => {
-                    if let Some((sid, payload)) = down {
+                    if let Some(downlink) = down {
+                        let sid = downlink.session_id();
                         if up_senders.contains_key(&sid) {
-                            let closed = payload.is_empty();
+                            let is_end = downlink.is_end();
+                            let (sid, payload) = downlink.into_parts();
                             let _ = mux.send_inbound_stream_payload(&mut client, sid, &payload).await;
-                            if closed {
+                            if is_end {
                                 up_senders.remove(&sid);
                             }
                         }
@@ -163,7 +164,7 @@ impl Proxy {
     pub(crate) async fn mux_stream_relay(
         stream_id: u16,
         mut up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        down_tx: tokio::sync::mpsc::UnboundedSender<(u16, Vec<u8>)>,
+        writer: vless::mux::VlessInboundMuxWriter,
         upstream: TcpRelayStream,
     ) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -186,7 +187,10 @@ impl Proxy {
                 match upstream_r.read(&mut buf).await {
                     Ok(0) => break,
                     Ok(n) => {
-                        if down_tx.send((sid, buf[..n].to_vec())).is_err() {
+                        if writer
+                            .write_inbound_stream_payload(sid, buf[..n].to_vec())
+                            .is_err()
+                        {
                             break;
                         }
                     }
@@ -194,7 +198,7 @@ impl Proxy {
                 }
             }
             // Send empty payload as close notification
-            let _ = down_tx.send((sid, vec![]));
+            let _ = writer.write_inbound_stream_payload(sid, Vec::new());
         });
 
         let _ = tokio::join!(upload, download);

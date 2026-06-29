@@ -150,26 +150,59 @@ pub enum VlessInboundMuxAction {
 #[cfg(feature = "reality")]
 #[derive(Clone)]
 pub struct VlessInboundMuxWriter {
-    down_tx: mpsc::UnboundedSender<(u16, Vec<u8>)>,
+    down_tx: mpsc::UnboundedSender<VlessInboundMuxDownlink>,
+}
+
+#[cfg(feature = "reality")]
+pub struct VlessInboundMuxDownlink {
+    session_id: u16,
+    payload: Vec<u8>,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxDownlink {
+    pub fn new(session_id: u16, payload: Vec<u8>) -> Self {
+        Self {
+            session_id,
+            payload,
+        }
+    }
+
+    pub fn session_id(&self) -> u16 {
+        self.session_id
+    }
+
+    pub fn is_end(&self) -> bool {
+        self.payload.is_empty()
+    }
+
+    pub fn into_parts(self) -> (u16, Vec<u8>) {
+        (self.session_id, self.payload)
+    }
 }
 
 #[cfg(feature = "reality")]
 impl VlessInboundMuxWriter {
-    pub fn new(down_tx: mpsc::UnboundedSender<(u16, Vec<u8>)>) -> Self {
+    pub fn new(down_tx: mpsc::UnboundedSender<VlessInboundMuxDownlink>) -> Self {
         Self { down_tx }
+    }
+
+    pub fn channel() -> (Self, mpsc::UnboundedReceiver<VlessInboundMuxDownlink>) {
+        let (down_tx, down_rx) = mpsc::unbounded_channel::<VlessInboundMuxDownlink>();
+        (Self::new(down_tx), down_rx)
     }
 
     pub fn data(&self, session_id: u16, payload: Vec<u8>) -> Result<usize, Error> {
         let len = payload.len();
         self.down_tx
-            .send((session_id, payload))
+            .send(VlessInboundMuxDownlink::new(session_id, payload))
             .map_err(|_| Error::Io("failed to queue VLESS MUX data"))?;
         Ok(len)
     }
 
     pub fn end(&self, session_id: u16) -> Result<usize, Error> {
         self.down_tx
-            .send((session_id, Vec::new()))
+            .send(VlessInboundMuxDownlink::new(session_id, Vec::new()))
             .map_err(|_| Error::Io("failed to queue VLESS MUX end"))?;
         Ok(0)
     }
@@ -178,10 +211,22 @@ impl VlessInboundMuxWriter {
         self.end(session_id)
     }
 
+    pub fn write_inbound_stream_payload(
+        &self,
+        session_id: u16,
+        payload: Vec<u8>,
+    ) -> Result<usize, Error> {
+        if payload.is_empty() {
+            self.end_inbound_stream(session_id)
+        } else {
+            self.data(session_id, payload)
+        }
+    }
+
     pub(crate) fn frame(&self, session_id: u16, frame: Vec<u8>) -> Result<usize, Error> {
         let len = frame.len();
         self.down_tx
-            .send((session_id, frame))
+            .send(VlessInboundMuxDownlink::new(session_id, frame))
             .map_err(|_| Error::Io("failed to queue VLESS MUX frame"))?;
         Ok(len)
     }
