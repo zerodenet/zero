@@ -6675,8 +6675,15 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && protocol_udp.contains("pub fn response_session_key_parts")
             && protocol_udp.contains("pub fn into_mapped")
             && protocol_udp.contains("response_frame(")
-            && protocol_udp.contains("response_key("),
-        "protocols/socks5 should own UDP associate response framing and response attribution helpers"
+            && protocol_udp.contains("response_key(")
+            && protocol_udp.contains("pub struct Socks5InboundUdpRelaySession")
+            && protocol_udp.contains("pub enum Socks5InboundUdpRelayPacketAction")
+            && protocol_udp.contains("pub fn classify_packet")
+            && protocol_udp.contains("client: Option<SocketAddress>")
+            && protocol_udp.contains("self.client = Some(sender)")
+            && protocol_udp.contains("Socks5InboundUdpRelayPacketAction::ClientPacket")
+            && protocol_udp.contains("Socks5InboundUdpRelayPacketAction::PeerResponse"),
+        "protocols/socks5 should own UDP associate response framing, attribution helpers, and relay packet classification state"
     );
     assert!(
         !protocol_dispatch_parts.contains("pub target: Address")
@@ -6685,6 +6692,15 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>")
             && protocol_shared.contains("fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>)"),
         "SOCKS5 inbound UDP dispatch parts should expose a one-shot neutral parts API instead of public fields"
+    );
+    assert!(
+        associate.contains("Socks5InboundUdpRelaySession::new()")
+            && associate.contains(".client()")
+            && associate.contains("socket_address_to_socket_addr")
+            && associate.contains("relay_session: &mut relay_session")
+            && !associate.contains("Option<SocketAddr>")
+            && !associate.contains("client_udp_addr.is_none"),
+        "SOCKS5 UDP associate loop should keep client endpoint ownership in the protocol relay session"
     );
     assert!(
         adapter_active.contains("into_mapped(EngineError::from)")
@@ -6730,10 +6746,16 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     assert!(
         relay_socket.contains("async fn handle_relay_packet")
             && relay_socket.contains("pub(super) struct RelayPacketRequest")
-            && relay_socket.contains("client_udp_addr.is_none")
+            && relay_socket.contains("Socks5InboundUdpRelaySession")
+            && relay_socket.contains(".classify_packet(")
+            && relay_socket.contains("Socks5InboundUdpRelayPacketAction::ClientPacket")
+            && relay_socket.contains("Socks5InboundUdpRelayPacketAction::PeerResponse")
+            && relay_socket.contains("Socks5InboundUdpRelayPacketAction::UnexpectedSender")
+            && !relay_socket.contains("client_udp_addr.is_none")
+            && !relay_socket.contains("*request.client_udp_addr")
             && relay_socket.contains("failed to process UDP packet")
             && relay_socket.contains("dropping udp packet from unexpected sender"),
-        "SOCKS5 UDP relay socket packet classification should live in inbound/socks5/udp_associate/relay_socket.rs"
+        "SOCKS5 UDP relay socket glue should ask protocols/socks5 to classify client packets and peer responses"
     );
     assert!(
         setup.contains("async fn setup_association")

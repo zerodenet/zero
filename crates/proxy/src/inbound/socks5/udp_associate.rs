@@ -8,7 +8,6 @@ mod setup;
 mod upstream_response;
 
 use socks5::udp::Socks5UdpAssociateRequest;
-use std::net::SocketAddr;
 use tokio::select;
 use zero_traits::AsyncSocket;
 
@@ -35,13 +34,16 @@ impl Proxy {
 
         let mut dispatch = UdpDispatch::new(inbound_tag).await?;
 
-        let mut client_udp_addr: Option<SocketAddr> = None;
+        let mut relay_session = socks5::udp::Socks5InboundUdpRelaySession::new();
         let mut control_probe = [0_u8; 1];
         let mut packet = vec![0_u8; 64 * 1024];
         let mut direct_buf = vec![0_u8; 64 * 1024];
         let mut upstream_buf = vec![0_u8; 64 * 1024];
 
         loop {
+            let client_udp_addr = relay_session
+                .client()
+                .map(zero_platform_tokio::socket_address_to_socket_addr);
             // Extract all mutable/immutable borrows in one go to satisfy
             // select!'s requirement that all branches be independent.
             let (direct_sock, upstream_udp, socks5_idle, chain_tasks) = dispatch.poll_refs();
@@ -62,7 +64,7 @@ impl Proxy {
                         relay: &relay,
                         inbound_tag,
                         pending_control_traffic: &mut pending_control_traffic,
-                        client_udp_addr: &mut client_udp_addr,
+                        relay_session: &mut relay_session,
                         sender,
                         payload: &packet[..read],
                     })

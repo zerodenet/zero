@@ -263,6 +263,58 @@ pub struct Socks5InboundUdpSession {
     codec: Socks5InboundUdpCodec,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Socks5InboundUdpRelayPacketAction<'a> {
+    ClientPacket {
+        payload: &'a [u8],
+    },
+    PeerResponse {
+        client: SocketAddress,
+        sender: SocketAddress,
+        payload: &'a [u8],
+    },
+    UnexpectedSender {
+        sender: SocketAddress,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Socks5InboundUdpRelaySession {
+    client: Option<SocketAddress>,
+}
+
+impl Socks5InboundUdpRelaySession {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn client(&self) -> Option<SocketAddress> {
+        self.client
+    }
+
+    pub fn classify_packet<'a>(
+        &mut self,
+        sender: SocketAddress,
+        payload: &'a [u8],
+    ) -> Socks5InboundUdpRelayPacketAction<'a> {
+        if self.client.is_none() {
+            self.client = Some(sender);
+        }
+
+        match self.client {
+            Some(client) if client == sender => {
+                Socks5InboundUdpRelayPacketAction::ClientPacket { payload }
+            }
+            Some(client) => Socks5InboundUdpRelayPacketAction::PeerResponse {
+                client,
+                sender,
+                payload,
+            },
+            None => Socks5InboundUdpRelayPacketAction::UnexpectedSender { sender },
+        }
+    }
+}
+
 impl Socks5InboundUdpSession {
     pub fn new() -> Self {
         Self {
