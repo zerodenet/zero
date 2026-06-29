@@ -2,7 +2,7 @@ use super::model::{ManagedExistingSend, ManagedRelaySend, ManagedStreamFlowHandl
 use super::state::flow_mismatch;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::flow::{
-    ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowSnapshot,
+    ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::packet_path::ChainTask;
@@ -121,14 +121,13 @@ impl ManagedStreamState {
         chain_tasks: &mut JoinSet<ChainTask>,
         proxy: &Proxy,
         flow: &UdpFlowSnapshot,
-        snapshot: &ManagedUdpFlowSnapshot,
+        resume: &ManagedUdpFlowResume,
         payload: &[u8],
     ) -> Option<Result<usize, FlowFailure>> {
         let upstream = flow
             .outbound
             .upstream()
             .expect("protocol flow should have upstream");
-        let resume = snapshot.resume();
         for handler in &mut self.handlers {
             if !handler.supports_managed_existing(resume) {
                 continue;

@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use super::connection::{ManagedDatagramUdpConnection, SharedManagedDatagramUdpConnection};
-use super::flow::{ManagedDatagramFlow, ManagedUdpFlowSnapshot};
+use super::flow::{ManagedDatagramFlow, ManagedUdpFlowResume};
 use super::model::{ManagedDatagramFlowHandler, ManagedExistingSend};
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::packet_path::ChainTask;
@@ -188,14 +188,13 @@ impl ManagedDatagramState {
         chain_tasks: &mut JoinSet<ChainTask>,
         proxy: &Proxy,
         flow: &UdpFlowSnapshot,
-        snapshot: &ManagedUdpFlowSnapshot,
+        resume: &ManagedUdpFlowResume,
         payload: &[u8],
     ) -> Option<Result<usize, FlowFailure>> {
         let upstream = flow
             .outbound
             .upstream()
             .expect("protocol flow should have upstream");
-        let resume = snapshot.resume();
         for handler in &mut self.handlers {
             if !handler.supports_managed_existing(resume) {
                 continue;

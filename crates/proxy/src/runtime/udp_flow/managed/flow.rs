@@ -58,11 +58,6 @@ pub(crate) enum ManagedUdpFlowKind {
     RelayStream,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum ManagedUdpFlowSnapshot {
-    Managed { resume: ManagedUdpFlowResume },
-}
-
 trait ManagedUdpFlowResumeObject: Any + Send + Sync + std::fmt::Debug {
     fn as_any(&self) -> &dyn Any;
 }
@@ -103,17 +98,5 @@ impl ManagedUdpFlowResume {
         T: Any + Clone,
     {
         self.as_ref::<T>().cloned()
-    }
-}
-
-impl ManagedUdpFlowSnapshot {
-    pub(crate) fn managed(resume: ManagedUdpFlowResume) -> Self {
-        Self::Managed { resume }
-    }
-
-    pub(crate) fn resume(&self) -> &ManagedUdpFlowResume {
-        match self {
-            Self::Managed { resume } => resume,
-        }
     }
 }

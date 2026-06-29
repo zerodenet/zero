@@ -1,6 +1,6 @@
 use super::flow::{
     ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowKind,
-    ManagedUdpFlowRequest, ManagedUdpFlowResume, ManagedUdpFlowSnapshot,
+    ManagedUdpFlowRequest, ManagedUdpFlowResume,
 };
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedStreamFlowSender;
@@ -25,7 +25,7 @@ pub(crate) struct ManagedUdpHandlers {
 pub(crate) struct ManagedUdpState {
     datagram: ManagedDatagramState,
     stream: ManagedStreamState,
-    flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>,
+    flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowResume>,
     next_flow_id: u64,
 }
 
@@ -41,8 +41,7 @@ impl ManagedUdpState {
 
     pub(crate) fn register_flow(&mut self, resume: ManagedUdpFlowResume) -> ManagedUdpFlowRef {
         let flow_ref = self.next_flow_ref();
-        self.flows
-            .insert(flow_ref, ManagedUdpFlowSnapshot::managed(resume));
+        self.flows.insert(flow_ref, resume);
         flow_ref
     }
 
@@ -55,16 +54,8 @@ impl ManagedUdpState {
         flow_ref
     }
 
-    pub(crate) fn flow_snapshot(
-        &self,
-        flow_ref: ManagedUdpFlowRef,
-    ) -> Option<ManagedUdpFlowSnapshot> {
-        self.flows.get(&flow_ref).cloned()
-    }
-
     pub(crate) fn flow_resume(&self, flow_ref: ManagedUdpFlowRef) -> Option<ManagedUdpFlowResume> {
-        self.flow_snapshot(flow_ref)
-            .map(|snapshot| snapshot.resume().clone())
+        self.flows.get(&flow_ref).cloned()
     }
 
     fn next_flow_ref(&mut self) -> ManagedUdpFlowRef {
@@ -228,14 +219,14 @@ impl ManagedUdpState {
             return result.map(Some);
         }
 
-        let Some(snapshot) = self.flow_snapshot(flow_ref) else {
+        let Some(resume) = self.flow_resume(flow_ref) else {
             return Err(managed_forward_unavailable(
                 "udp_protocol_forward",
-                "managed UDP flow snapshot was dropped",
+                "managed UDP flow resume was dropped",
             ));
         };
 
-        if is_upstream_resume(snapshot.resume()) {
+        if is_upstream_resume(&resume) {
             return Err(managed_forward_unavailable(
                 "udp_protocol_forward",
                 "upstream association flows are handled by generic UDP dispatch",
@@ -244,14 +235,14 @@ impl ManagedUdpState {
 
         if let Some(result) = self
             .datagram
-            .forward_existing_flow(chain_tasks, proxy, flow, &snapshot, payload)
+            .forward_existing_flow(chain_tasks, proxy, flow, &resume, payload)
             .await
         {
             return result.map(Some);
         }
         if let Some(result) = self
             .stream
-            .forward_existing_flow(chain_tasks, proxy, flow, &snapshot, payload)
+            .forward_existing_flow(chain_tasks, proxy, flow, &resume, payload)
             .await
         {
             return result.map(Some);
