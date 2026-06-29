@@ -128,6 +128,37 @@ impl VlessInboundProfile {
         }
     }
 
+    pub fn from_config_parts<I>(users: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<
+            Item = (
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<u64>,
+                Option<u64>,
+            ),
+        >,
+    {
+        users
+            .into_iter()
+            .map(
+                |(id, flow, credential_id, principal_key, up_bps, down_bps)| {
+                    VlessConfiguredUser::from_config(
+                        &id,
+                        flow.as_deref(),
+                        credential_id,
+                        principal_key,
+                        up_bps,
+                        down_bps,
+                    )
+                },
+            )
+            .collect::<Result<Vec<_>, Error>>()
+            .map(Self::from_users)
+    }
+
     pub async fn accept_tcp_with_auth_and_id<S>(
         &self,
         inbound: VlessInbound,

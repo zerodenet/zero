@@ -12,23 +12,19 @@ use crate::transport::QuicInbound;
 fn parse_inbound_profile(
     inbound: &InboundConfig,
 ) -> Result<vless::VlessInboundProfile, EngineError> {
-    inbound
-        .protocol
-        .vless_users()
-        .iter()
-        .map(|user| {
-            vless::VlessConfiguredUser::from_config(
-                &user.id,
-                user.flow.as_deref(),
+    vless::VlessInboundProfile::from_config_parts(inbound.protocol.vless_users().iter().map(
+        |user| {
+            (
+                user.id.clone(),
+                user.flow.clone(),
                 user.credential_id.clone(),
                 user.principal_key.clone(),
                 user.up_bps,
                 user.down_bps,
             )
-            .map_err(EngineError::from)
-        })
-        .collect::<Result<Vec<_>, EngineError>>()
-        .map(vless::VlessInboundProfile::from_users)
+        },
+    ))
+    .map_err(EngineError::from)
 }
 
 fn parse_reality_profile(inbound: &InboundConfig) -> Option<vless::VlessRealityServerProfile> {

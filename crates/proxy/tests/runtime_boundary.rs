@@ -1210,9 +1210,11 @@ fn vmess_inbound_uses_adapter_request_model() {
         );
     }
     assert!(
-        adapter.contains("vmess::VmessUser::from_config")
-            && protocol_inbound.contains("pub fn from_config"),
-        "VMess adapter should ask protocols/vmess to build parsed inbound users"
+        adapter.contains("vmess::VmessInboundProfile::from_config_parts")
+            && !adapter.contains("vmess::VmessUser::from_config")
+            && protocol_inbound.contains("pub fn from_config")
+            && protocol_inbound.contains("pub fn from_config_parts"),
+        "VMess adapter should ask protocols/vmess to build parsed inbound profiles"
     );
     assert!(
         protocol_inbound.contains("pub struct VmessInboundProfile")
@@ -1223,7 +1225,7 @@ fn vmess_inbound_uses_adapter_request_model() {
             && root.contains(".profile")
             && root.contains(".accept_tcp(self.vmess_inbound, &mut sock)")
             && inbound.contains("profile.is_empty()")
-            && adapter.contains("vmess::VmessInboundProfile::from_users(users)")
+            && !adapter.contains("vmess::VmessInboundProfile::from_users")
             && !model.contains("users: Vec<vmess::VmessUser>")
             && !root.contains("users: Vec<VmessUser>")
             && !root.contains("handler.users")
@@ -1274,8 +1276,7 @@ fn vless_inbound_users_are_adapter_parsed() {
     }
     for required in [
         "parse_inbound_profile",
-        "VlessConfiguredUser::from_config",
-        "VlessInboundProfile::from_users",
+        "VlessInboundProfile::from_config_parts",
     ] {
         assert!(
             adapter.contains(required),
@@ -1290,7 +1291,10 @@ fn vless_inbound_users_are_adapter_parsed() {
     }
     assert!(
         !adapter.contains("vless::VlessUser {")
+            && !adapter.contains("VlessConfiguredUser::from_config")
+            && !adapter.contains("VlessInboundProfile::from_users")
             && protocol_inbound.contains("pub fn from_config")
+            && protocol_inbound.contains("pub fn from_config_parts")
             && protocol_inbound.contains("VlessUser::from_config"),
         "VLESS adapter should not hand-build protocol users"
     );

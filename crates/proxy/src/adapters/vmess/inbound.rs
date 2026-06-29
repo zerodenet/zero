@@ -30,26 +30,19 @@ impl VmessAdapter {
                     )));
                 }
             };
-            let users = users
-                .iter()
-                .map(|user| {
-                    vmess::VmessUser::from_config(
-                        &user.id,
-                        &user.cipher,
-                        user.credential_id.clone(),
-                        user.principal_key.clone(),
-                        user.up_bps,
-                        user.down_bps,
-                    )
-                    .map_err(|error| {
-                        EngineError::Io(std::io::Error::new(
-                            std::io::ErrorKind::InvalidInput,
-                            error,
-                        ))
-                    })
-                })
-                .collect::<Result<Vec<_>, EngineError>>()?;
-            let profile = vmess::VmessInboundProfile::from_users(users);
+            let profile = vmess::VmessInboundProfile::from_config_parts(users.iter().map(|user| {
+                (
+                    user.id.clone(),
+                    user.cipher.clone(),
+                    user.credential_id.clone(),
+                    user.principal_key.clone(),
+                    user.up_bps,
+                    user.down_bps,
+                )
+            }))
+            .map_err(|error| {
+                EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
+            })?;
             crate::inbound::run_vmess_listener_with_bound(
                 &p,
                 crate::inbound::vmess::model::VmessInboundRequest {

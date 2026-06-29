@@ -53,6 +53,37 @@ impl VmessInboundProfile {
         Self { users }
     }
 
+    pub fn from_config_parts<I>(users: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<
+            Item = (
+                String,
+                String,
+                Option<String>,
+                Option<String>,
+                Option<u64>,
+                Option<u64>,
+            ),
+        >,
+    {
+        users
+            .into_iter()
+            .map(
+                |(id, cipher, credential_id, principal_key, up_bps, down_bps)| {
+                    VmessUser::from_config(
+                        &id,
+                        &cipher,
+                        credential_id,
+                        principal_key,
+                        up_bps,
+                        down_bps,
+                    )
+                },
+            )
+            .collect::<Result<Vec<_>, Error>>()
+            .map(Self::from_users)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.users.is_empty()
     }
