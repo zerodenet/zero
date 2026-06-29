@@ -1,6 +1,5 @@
 use zero_core::ProtocolType;
 use zero_engine::EngineError;
-use zero_traits::DnsResolver;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
@@ -16,21 +15,11 @@ pub(super) async fn dispatch_packet(
     pending_control_traffic: &mut StreamTraffic,
 ) -> Result<(), EngineError> {
     let udp_session = socks5::Socks5Inbound.udp_session();
-    let dispatch_action = udp_session.decode_dispatch_action(packet)?;
-
-    let (request, protocol_overhead_len) = match dispatch_action {
-        socks5::udp::Socks5InboundUdpDispatchAction::LocalDns { domain } => {
-            if let Ok(_ips) = proxy.resolver.resolve(&domain).await {
-                // DNS resolved locally; build response and return.
-                // The caller will forward via the relay socket if
-                // available. For now, skip dispatch and return Ok.
-                // The DNS response is sent inline in the main loop.
-                return Ok(());
-            }
-            // Resolution failed; silently drop.
-            return Ok(());
-        }
-        socks5::udp::Socks5InboundUdpDispatchAction::Dispatch(view) => view.into_parts(),
+    let Some((request, protocol_overhead_len)) = udp_session
+        .decode_dispatch_parts_or_resolve_local_dns(packet, proxy.resolver.as_ref())
+        .await?
+    else {
+        return Ok(());
     };
 
     // Generic dispatch.

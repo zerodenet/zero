@@ -1,7 +1,9 @@
 use alloc::vec::Vec;
 
 use zero_core::{Address, Error};
-use zero_traits::{AsyncSocket, DatagramSocket, IpAddress, SocketAddress, UdpRelayProtocol};
+use zero_traits::{
+    AsyncSocket, DatagramSocket, DnsResolver, IpAddress, SocketAddress, UdpRelayProtocol,
+};
 
 use crate::outbound::{Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth};
 use crate::shared::{
@@ -286,6 +288,23 @@ impl Socks5InboundUdpSession {
     ) -> Result<Socks5InboundUdpDispatchAction, Error> {
         self.decode_request(packet)
             .map(Socks5InboundUdpRequest::into_dispatch_action)
+    }
+
+    pub async fn decode_dispatch_parts_or_resolve_local_dns<R>(
+        &self,
+        packet: &[u8],
+        resolver: &R,
+    ) -> Result<Option<(Socks5InboundUdpDispatchParts, usize)>, Error>
+    where
+        R: DnsResolver + ?Sized,
+    {
+        match self.decode_dispatch_action(packet)? {
+            Socks5InboundUdpDispatchAction::LocalDns { domain } => {
+                let _ = resolver.resolve(&domain).await;
+                Ok(None)
+            }
+            Socks5InboundUdpDispatchAction::Dispatch(view) => Ok(Some(view.into_parts())),
+        }
     }
 
     pub fn request_dispatch_parts(
@@ -666,5 +685,18 @@ where
 impl<E> From<Error> for Socks5UdpRelayError<E> {
     fn from(error: Error) -> Self {
         Self::Protocol(error)
+    }
+}
+
+impl<E> Socks5UdpRelayError<E> {
+    pub fn into_mapped<M, F>(self, map_socket: F) -> M
+    where
+        M: From<Error>,
+        F: FnOnce(E) -> M,
+    {
+        match self {
+            Self::Socket(error) => map_socket(error),
+            Self::Protocol(error) => M::from(error),
+        }
     }
 }

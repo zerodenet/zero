@@ -72,14 +72,5 @@ pub(super) async fn forward_direct_udp_response(
             payload,
         )
         .await
-        .map_err(socks5_udp_relay_error_to_engine)
-}
-
-fn socks5_udp_relay_error_to_engine(
-    error: socks5::udp::Socks5UdpRelayError<std::io::Error>,
-) -> EngineError {
-    match error {
-        socks5::udp::Socks5UdpRelayError::Socket(error) => EngineError::from(error),
-        socks5::udp::Socks5UdpRelayError::Protocol(error) => EngineError::from(error),
-    }
+        .map_err(|error| error.into_mapped(EngineError::from))
 }

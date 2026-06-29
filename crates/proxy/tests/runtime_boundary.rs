@@ -5671,6 +5671,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     let relay_socket = read("src/inbound/socks5/udp_associate/relay_socket.rs");
     let setup = read("src/inbound/socks5/udp_associate/setup.rs");
     let upstream_response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
+    let adapter_active = read("src/adapters/socks5/udp/active.rs");
 
     for forbidden in [
         "UdpPipeInput",
@@ -5722,7 +5723,8 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         dispatch.contains("async fn dispatch_packet")
             && dispatch.contains("UdpPipeInput")
             && dispatch.contains("ProtocolType::Socks5")
-            && dispatch.contains(".resolver.resolve("),
+            && dispatch.contains(".decode_dispatch_parts_or_resolve_local_dns(")
+            && !dispatch.contains(".resolver.resolve("),
         "SOCKS5 UDP packet dispatch should live in inbound/socks5/udp_associate/dispatch.rs"
     );
     assert!(
@@ -5737,6 +5739,8 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !direct_response.contains("fn socket_address_from_std")
             && !direct_response.contains("fn ip_address_from_std")
             && !direct_response.contains("Socks5UdpRelayEndpoint")
+            && !direct_response.contains("Socks5UdpRelayError")
+            && direct_response.contains("into_mapped(EngineError::from)")
             && !direct_response.contains("address_from_socket_addr(sender)")
             && !direct_response.contains("socket_addr_to_ip(sender)")
             && !direct_response.contains("udp_session.response_frame")
@@ -5797,9 +5801,10 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     }
     assert!(
         dispatch.contains("socks5::Socks5Inbound.udp_session()")
-            && dispatch.contains("udp_session.decode_dispatch_action")
-            && dispatch.contains("Socks5InboundUdpDispatchAction::LocalDns")
-            && dispatch.contains("Socks5InboundUdpDispatchAction::Dispatch")
+            && dispatch.contains("udp_session")
+            && dispatch.contains(".decode_dispatch_parts_or_resolve_local_dns(")
+            && !dispatch.contains("Socks5InboundUdpDispatchAction")
+            && !dispatch.contains("decode_dispatch_action")
             && !dispatch.contains("udp_packet.into_dispatch_parts()")
             && dispatch.contains("protocol_overhead_len")
             && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
@@ -5839,11 +5844,18 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && protocol_udp.contains("SocketAddress")
             && protocol_udp.contains("fn address_from_ip")
             && protocol_udp.contains("pub fn decode_dispatch_action")
+            && protocol_udp.contains("pub async fn decode_dispatch_parts_or_resolve_local_dns")
             && protocol_udp.contains("pub fn local_dns_domain_request")
             && protocol_udp.contains("pub fn response_session_key_parts")
+            && protocol_udp.contains("pub fn into_mapped")
             && protocol_udp.contains("response_frame(")
             && protocol_udp.contains("response_key("),
         "protocols/socks5 should own UDP associate response framing and response attribution helpers"
+    );
+    assert!(
+        adapter_active.contains("into_mapped(EngineError::from)")
+            && !adapter_active.contains("Socks5UdpRelayError::"),
+        "SOCKS5 UDP adapter should use protocol-owned relay error mapping instead of unpacking relay error variants"
     );
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/socks5/src/inbound.rs"))
         .expect("read protocols/socks5/src/inbound.rs");

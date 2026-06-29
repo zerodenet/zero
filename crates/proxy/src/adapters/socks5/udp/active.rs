@@ -1,7 +1,7 @@
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use socks5::udp::{Socks5EstablishedUdpAssociation, Socks5UdpRelayError};
+use socks5::udp::Socks5EstablishedUdpAssociation;
 use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
@@ -98,27 +98,24 @@ impl ActiveUpstreamSocks5UdpAssociation {
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        match self.association.send_packet(target, port, payload).await {
-            Ok(sent) => Ok(sent),
-            Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
-            Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),
-        }
+        self.association
+            .send_packet(target, port, payload)
+            .await
+            .map_err(|error| error.into_mapped(EngineError::from))
     }
 
     pub(super) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        match self.association.recv_packet(buf).await {
-            Ok(read) => Ok(read),
-            Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
-            Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),
-        }
+        self.association
+            .recv_packet(buf)
+            .await
+            .map_err(|error| error.into_mapped(EngineError::from))
     }
 
     pub(super) async fn recv_payload(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        match self.association.recv_payload(buf).await {
-            Ok(read) => Ok(read),
-            Err(Socks5UdpRelayError::Socket(error)) => Err(error.into()),
-            Err(Socks5UdpRelayError::Protocol(error)) => Err(error.into()),
-        }
+        self.association
+            .recv_payload(buf)
+            .await
+            .map_err(|error| error.into_mapped(EngineError::from))
     }
 }
 
