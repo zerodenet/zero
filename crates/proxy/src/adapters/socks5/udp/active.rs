@@ -5,6 +5,7 @@ use socks5::udp::{Socks5EstablishedUdpAssociation, Socks5UdpRelayError};
 use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
+use zero_traits::{IpAddress, SocketAddress};
 
 use super::model::{
     Socks5UdpAssociationHandle, Socks5UdpPacketPathAssociation, UpstreamAssociationCloseReason,
@@ -59,12 +60,11 @@ impl ActiveUpstreamSocks5UdpAssociation {
         Ok(Self {
             proxy: proxy.clone(),
             close_recorded: AtomicBool::new(false),
-            association: Socks5EstablishedUdpAssociation::from_relay_endpoint(
+            association: Socks5EstablishedUdpAssociation::from_relay_socket_address(
                 target,
                 control,
                 relay,
-                zero_platform_tokio::socket_addr_to_ip(relay_addr),
-                relay_addr.port(),
+                socket_address_from_std(relay_addr),
             ),
         })
     }
@@ -164,6 +164,17 @@ impl Socks5UdpPacketPathAssociation for ActiveUpstreamSocks5UdpAssociation {
 
     async fn recv_payload(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
         self.recv_payload(buf).await
+    }
+}
+
+fn socket_address_from_std(addr: SocketAddr) -> SocketAddress {
+    SocketAddress::new(ip_address_from_std(addr.ip()), addr.port())
+}
+
+fn ip_address_from_std(ip: IpAddr) -> IpAddress {
+    match ip {
+        IpAddr::V4(ip) => IpAddress::V4(ip.octets()),
+        IpAddr::V6(ip) => IpAddress::V6(ip.octets()),
     }
 }
 

@@ -430,6 +430,10 @@ impl<C, S> Socks5UdpAssociation<C, S> {
         Self::from_relay_socket(control, socket, Socks5UdpRelayEndpoint { address, port })
     }
 
+    pub fn from_relay_socket_address(control: C, socket: S, endpoint: SocketAddress) -> Self {
+        Self::from_relay_endpoint(control, socket, endpoint.ip, endpoint.port)
+    }
+
     pub fn relay(&self) -> &Socks5UdpRelay<S> {
         &self.relay
     }
@@ -461,6 +465,15 @@ impl<C, S> Socks5EstablishedUdpAssociation<C, S> {
             target,
             Socks5UdpAssociation::from_relay_endpoint(control, socket, address, port),
         )
+    }
+
+    pub fn from_relay_socket_address(
+        target: Socks5UdpAssociationTarget,
+        control: C,
+        socket: S,
+        endpoint: SocketAddress,
+    ) -> Self {
+        Self::from_relay_endpoint(target, control, socket, endpoint.ip, endpoint.port)
     }
 
     pub fn target(&self) -> &Socks5UdpAssociationTarget {

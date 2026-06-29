@@ -3036,7 +3036,9 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     assert!(
         active.contains("struct ActiveUpstreamSocks5UdpAssociation")
             && active.contains("Socks5EstablishedUdpAssociation<TokioSocket, TokioDatagramSocket>")
-            && active.contains("Socks5EstablishedUdpAssociation::from_relay_endpoint")
+            && active.contains("Socks5EstablishedUdpAssociation::from_relay_socket_address")
+            && active.contains("socket_address_from_std(relay_addr)")
+            && !active.contains("socket_addr_to_ip(relay_addr)")
             && !active.contains("Socks5UdpAssociation::from_relay_endpoint")
             && active.contains("impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation")
             && active.contains("impl Socks5UdpPacketPathAssociation for ActiveUpstreamSocks5UdpAssociation")
@@ -3131,6 +3133,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && protocol_udp.contains("struct Socks5UdpAssociationEndpoint")
             && protocol_udp.contains("pub fn identity(&self) -> Socks5UdpAssociationIdentity")
             && protocol_udp.contains("pub fn connect_endpoint(&self) -> Socks5UdpAssociationEndpoint")
+            && protocol_udp.contains("pub fn from_relay_socket_address")
             && protocol_udp.contains("pub fn identity(&self) -> Socks5UdpAssociationIdentity")
             && protocol_udp.contains("pub fn matches(&self, other: &Self) -> bool")
             && active.contains("target.connect_endpoint().into_parts()")
