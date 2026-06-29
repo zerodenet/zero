@@ -169,6 +169,14 @@ impl Hysteria2InboundUdpSession {
             .map(Hysteria2InboundUdpRequest::from_packet)
     }
 
+    pub fn decode_dispatch_parts(
+        &self,
+        data: &[u8],
+    ) -> Result<Hysteria2InboundUdpDispatchParts, Error> {
+        self.decode_request(data)
+            .map(Hysteria2InboundUdpRequest::into_dispatch_parts)
+    }
+
     pub fn record_proxy_session(&mut self, proxy_session_id: u64, request_session_id: u16) {
         self.h2_sessions_by_proxy_session
             .insert(proxy_session_id, request_session_id);

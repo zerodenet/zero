@@ -200,11 +200,10 @@ impl Proxy {
                     );
                     break;
                 }
-                packet = udp_session.read_request(&mut client) => {
+                packet = udp_session.read_dispatch_parts(&mut client) => {
                     match packet {
                         Ok(request) => {
                             last_activity = TokioInstant::now();
-                            let request = request.into_dispatch_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
                                     target: request.target,

@@ -115,6 +115,18 @@ impl TrojanInboundUdpSession {
             .map(TrojanInboundUdpRequest::from_packet)
     }
 
+    pub async fn read_dispatch_parts<S>(
+        &self,
+        stream: &mut S,
+    ) -> Result<TrojanInboundUdpDispatchParts, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.read_request(stream)
+            .await
+            .map(TrojanInboundUdpRequest::into_dispatch_parts)
+    }
+
     pub async fn write_response<S>(
         &self,
         stream: &mut S,

@@ -34,14 +34,13 @@ impl Proxy {
                     };
                     let packet = &buf[..n];
 
-                    let request = match udp_session.decode_request(packet) {
-                        Ok(request) => request,
+                    let dispatch_parts = match udp_session.decode_dispatch_parts(packet) {
+                        Ok(dispatch_parts) => dispatch_parts,
                         Err(_) => continue,
                     };
 
                     let sa = profile.inbound_auth();
-                    let (target, port, payload, client_session_id) =
-                        request.into_dispatch_parts().into_parts();
+                    let (target, port, payload, client_session_id) = dispatch_parts.into_parts();
                     match UdpPipe::new(self, &mut dispatch)
                         .dispatch(UdpPipeInput {
                             target,

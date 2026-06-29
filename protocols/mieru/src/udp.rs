@@ -191,6 +191,14 @@ impl MieruInboundUdpSession {
             .map(MieruInboundUdpRequest::from_packet)
     }
 
+    pub fn decode_dispatch_parts(
+        &self,
+        data: &[u8],
+    ) -> Result<MieruInboundUdpDispatchParts, Error> {
+        self.decode_request(data)
+            .map(MieruInboundUdpRequest::into_dispatch_parts)
+    }
+
     pub fn record_target(&mut self, sender: SocketAddr, target: Address, port: u16) {
         self.targets_by_sender.insert(sender, (target, port));
     }

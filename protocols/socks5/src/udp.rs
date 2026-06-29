@@ -271,6 +271,21 @@ impl Socks5InboundUdpSession {
         self.codec.decode_request(packet)
     }
 
+    pub fn decode_dispatch_parts(
+        &self,
+        packet: &[u8],
+    ) -> Result<Socks5InboundUdpDispatchParts, Error> {
+        self.decode_request(packet)
+            .map(Socks5InboundUdpRequest::into_dispatch_parts)
+    }
+
+    pub fn request_dispatch_parts(
+        &self,
+        request: Socks5InboundUdpRequest,
+    ) -> Socks5InboundUdpDispatchParts {
+        request.into_dispatch_parts()
+    }
+
     pub fn local_dns_domain_request<'a>(
         &self,
         request: &'a Socks5InboundUdpRequest,

@@ -407,6 +407,14 @@ impl ShadowsocksInboundUdpSession {
         self.codec.decode_request(datagram)
     }
 
+    pub fn decode_dispatch_parts(
+        &mut self,
+        datagram: &[u8],
+    ) -> Result<ShadowsocksInboundUdpDispatchParts, Error> {
+        self.decode_request(datagram)
+            .map(ShadowsocksInboundUdpPacket::into_dispatch_parts)
+    }
+
     pub fn encode_response_to_client(
         &self,
         client_session_id: Option<u64>,

@@ -301,8 +301,7 @@ impl Proxy {
                 dg = conn.read_datagram() => {
                     match dg {
                         Ok(data) => {
-                            if let Ok(request) = udp_session.decode_request(&data) {
-                                let request = request.into_dispatch_parts();
+                            if let Ok(request) = udp_session.decode_dispatch_parts(&data) {
                                 let _ = UdpPipe::new(&proxy, &mut dispatch)
                                     .dispatch(UdpPipeInput {
                                         target: request.target,

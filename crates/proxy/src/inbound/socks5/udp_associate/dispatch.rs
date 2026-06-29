@@ -34,7 +34,7 @@ pub(super) async fn dispatch_packet(
     }
 
     let protocol_overhead_len = udp_packet.protocol_overhead_len() as u64;
-    let request = udp_packet.into_dispatch_parts();
+    let request = udp_session.request_dispatch_parts(udp_packet);
 
     // Generic dispatch.
     let session_id = UdpPipe::new(proxy, dispatch)
