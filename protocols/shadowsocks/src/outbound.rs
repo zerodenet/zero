@@ -642,6 +642,13 @@ impl ShadowsocksUdpPacketPathSpec {
         Self { resume }
     }
 
+    pub fn carrier_codec(&self) -> alloc::sync::Arc<dyn DatagramCodec<Address, Error = Error>> {
+        alloc::sync::Arc::new(ShadowsocksDatagramCodec {
+            cipher: self.resume.cipher,
+            password: self.resume.password.clone(),
+        })
+    }
+
     pub fn datagram_source_build(
         &self,
         tag: &str,
@@ -801,6 +808,17 @@ pub fn udp_packet_path_carrier_descriptor_from_config(
         udp_packet_path_spec_from_config(tag, server, port, cipher, password)?
             .carrier_descriptor(server, port),
     )
+}
+
+#[cfg(feature = "crypto")]
+pub fn udp_packet_path_carrier_codec_from_config(
+    tag: &str,
+    server: &str,
+    port: u16,
+    cipher: &str,
+    password: &str,
+) -> Result<alloc::sync::Arc<dyn DatagramCodec<Address, Error = Error>>, Error> {
+    Ok(udp_packet_path_spec_from_config(tag, server, port, cipher, password)?.carrier_codec())
 }
 
 #[cfg(feature = "crypto")]

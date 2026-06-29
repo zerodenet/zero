@@ -70,15 +70,12 @@ pub(super) async fn build(
     else {
         return Err(unreachable_leaf(adapter.name(), leaf).error);
     };
-    let datagram = shadowsocks::udp::udp_packet_path_datagram_source_build_from_config(
+    let codec = shadowsocks::udp::udp_packet_path_carrier_codec_from_config(
         "", server, *port, cipher, password,
     )
     .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))?;
     crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
-        proxy,
-        server,
-        *port,
-        udp_datagram_source_from_build(datagram).into_codec(),
+        proxy, server, *port, codec,
     )
     .await
 }

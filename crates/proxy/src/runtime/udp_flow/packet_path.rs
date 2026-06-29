@@ -167,10 +167,6 @@ impl UdpDatagramSource {
     pub(crate) fn descriptor(&self) -> &UdpDatagramDescriptor {
         &self.descriptor
     }
-
-    pub(crate) fn into_codec(self) -> Arc<dyn DatagramCodec<Address, Error = zero_core::Error>> {
-        self.codec
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
