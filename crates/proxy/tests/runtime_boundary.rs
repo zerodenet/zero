@@ -6106,7 +6106,8 @@ fn udp_packet_path_carrier_snapshot_is_protocol_neutral() {
     assert!(
         traits.contains("struct PacketPathFlowSnapshot")
             && traits.contains("carrier_cache_key: String")
-            && traits.contains("datagram_cache_key: String"),
+            && traits.contains("datagram: UdpDatagramKey")
+            && !traits.contains("datagram_cache_key: String"),
         "packet-path flow snapshots should store only neutral carrier/datagram cache identities"
     );
 }
@@ -9057,6 +9058,10 @@ fn packet_path_key_model_lives_outside_chain_manager() {
         "struct PathKey",
         "carrier_key: carrier.cache_key().to_owned()",
         "datagram_cache_key: datagram_cache_key.to_owned()",
+        "datagram_tag: String",
+        "datagram_server: String",
+        "datagram_port: u16",
+        "datagram_cache_key: String",
     ] {
         assert!(
             !manager.contains(forbidden),
@@ -9070,6 +9075,11 @@ fn packet_path_key_model_lives_outside_chain_manager() {
     assert!(
         !key_content.contains("UdpDatagramSource")
             && !key_content.contains("datagram.datagram_cache_key")
+            && !key_content.contains("datagram_tag: String")
+            && !key_content.contains("datagram_server: String")
+            && !key_content.contains("datagram_port: u16")
+            && !key_content.contains("datagram_cache_key: String")
+            && key_content.contains("datagram: UdpDatagramKey")
             && !key_content.contains("UdpPacketPathCarrier"),
         "packet-path key model should use opaque carrier/datagram key parts instead of reading source internals"
     );

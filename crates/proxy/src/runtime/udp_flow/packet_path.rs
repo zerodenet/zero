@@ -166,7 +166,7 @@ impl UdpDatagramSource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct UdpDatagramKey {
     pub(crate) tag: String,
     pub(crate) server: String,
@@ -199,32 +199,21 @@ impl PacketPathLookupKey {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PacketPathFlowSnapshot {
     pub(crate) carrier_cache_key: String,
-    pub(crate) datagram_tag: String,
-    pub(crate) datagram_server: String,
-    pub(crate) datagram_port: u16,
-    pub(crate) datagram_cache_key: String,
+    pub(crate) datagram: UdpDatagramKey,
 }
 
 impl PacketPathFlowSnapshot {
     fn from_parts(datagram: &UdpDatagramDescriptor, carrier: &PacketPathCarrierDescriptor) -> Self {
         Self {
             carrier_cache_key: carrier.cache_key.clone(),
-            datagram_tag: datagram.tag.clone(),
-            datagram_server: datagram.server.clone(),
-            datagram_port: datagram.port,
-            datagram_cache_key: datagram.cache_key.clone(),
+            datagram: datagram.key_part(),
         }
     }
 
     pub(crate) fn lookup_key(&self) -> PacketPathLookupKey {
         PacketPathLookupKey {
             carrier_cache_key: self.carrier_cache_key.clone(),
-            datagram: UdpDatagramKey {
-                tag: self.datagram_tag.clone(),
-                server: self.datagram_server.clone(),
-                port: self.datagram_port,
-                cache_key: self.datagram_cache_key.clone(),
-            },
+            datagram: self.datagram.clone(),
         }
     }
 }
