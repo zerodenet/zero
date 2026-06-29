@@ -112,7 +112,6 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
     info!(
         inbound_tag = %inbound.tag,
         protocol = "shadowsocks",
-        cipher = %profile.cipher_name(),
         listen = %local_addr,
         udp = udp_socket.is_some(),
         "inbound listener ready"

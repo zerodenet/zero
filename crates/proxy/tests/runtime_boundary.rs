@@ -1405,6 +1405,7 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         inbound.contains("pub(crate) profile: ShadowsocksInboundProfile")
             && !inbound.contains("pub(crate) cipher: CipherKind")
             && !inbound.contains("pub(crate) password: String")
+            && !inbound.contains("profile.cipher_name()")
             && !inbound.contains("CipherKind::from_str"),
         "Shadowsocks inbound listener should receive a protocol-owned profile, not raw cipher/password"
     );
