@@ -195,6 +195,41 @@ fn inbound_udp_glue_does_not_name_protocol_private_packet_models() {
 }
 
 #[test]
+fn inbound_udp_response_accounting_uses_runtime_helpers() {
+    let helper = read("src/runtime/udp_flow/helpers.rs");
+    assert!(
+        helper.contains("fn record_udp_inbound_response_rx")
+            && helper.contains("fn record_udp_inbound_response_tx")
+            && helper.contains("fn udp_response_session_id")
+            && helper.contains("record_session_outbound_rx")
+            && helper.contains("record_session_inbound_tx")
+            && helper.contains("session_id_by_target"),
+        "neutral UDP inbound response accounting should live in runtime/udp_flow helpers"
+    );
+
+    for source in [
+        "src/inbound/vless/udp_session.rs",
+        "src/inbound/vless/mux.rs",
+        "src/inbound/vmess/mux.rs",
+        "src/inbound/trojan.rs",
+        "src/inbound/mieru.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("record_udp_inbound_response_rx")
+                && content.contains("record_udp_inbound_response_tx")
+                && !content.contains("record_session_outbound_rx")
+                && !content.contains("record_session_inbound_tx"),
+            "{source} should use neutral UDP inbound response accounting helpers"
+        );
+        assert!(
+            !content.contains("session_id_by_target"),
+            "{source} should use udp_response_session_id instead of querying dispatch response sessions directly"
+        );
+    }
+}
+
+#[test]
 fn udp_dispatch_entry_is_only_called_by_udp_pipe() {
     for path in rust_sources_under("src") {
         let source = relative(&path);

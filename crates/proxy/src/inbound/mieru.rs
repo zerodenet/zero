@@ -17,7 +17,10 @@ use zero_engine::EngineError;
 use crate::logging::log_listener_connection_error;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
-use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
+use crate::runtime::udp_flow::helpers::{
+    log_completed_udp_flow, record_udp_inbound_response_rx, record_udp_inbound_response_tx,
+    udp_response_session_id, wait_for_upstream_idle,
+};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
@@ -249,9 +252,7 @@ impl Proxy {
 
                     let target = crate::runtime::udp_flow::helpers::address_from_socket_addr(sender);
                     let session_id = dispatch.direct_response_session_id(sender);
-                    if let Some(sid) = session_id {
-                        self.record_session_outbound_rx(sid, n as u64);
-                    }
+                    record_udp_inbound_response_rx(self, session_id, n);
                     let written = udp_session
                         .write_response_for_target_tokio(
                             &mut client,
@@ -260,9 +261,7 @@ impl Proxy {
                             &direct_buf[..n],
                         )
                         .await?;
-                    if let Some(sid) = session_id {
-                        self.record_session_inbound_tx(sid, written as u64);
-                    }
+                    record_udp_inbound_response_tx(self, session_id, written);
                 }
                 upstream = upstream_udp.recv_response(&mut upstream_buf) => {
                     match upstream {
@@ -271,15 +270,12 @@ impl Proxy {
                             self.record_udp_upstream_packet_received();
                             dispatch.touch_upstream_idle(self.udp_upstream_idle_timeout());
                             let (target, port, payload) = pkt.into_parts();
-                            if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
-                                self.record_session_outbound_rx(sid, payload.len() as u64);
-                            }
+                            let session_id = udp_response_session_id(&dispatch, &target, port);
+                            record_udp_inbound_response_rx(self, session_id, payload.len());
                             let written = udp_session
                                 .write_response_for_target_tokio(&mut client, &target, port, &payload)
                                 .await?;
-                            if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
-                                self.record_session_inbound_tx(sid, written as u64);
-                            }
+                            record_udp_inbound_response_tx(self, session_id, written);
                         }
                         Err(error) => {
                             tracing::warn!(error = %error, "mieru udp socks5 upstream recv error");
@@ -291,15 +287,11 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
-                            if let Some(sid) = session_id {
-                                self.record_session_outbound_rx(sid, payload.len() as u64);
-                            }
+                            record_udp_inbound_response_rx(self, session_id, payload.len());
                             let written = udp_session
                                 .write_response_for_target_tokio(&mut client, &target, port, &payload)
                                 .await?;
-                            if let Some(sid) = session_id {
-                                self.record_session_inbound_tx(sid, written as u64);
-                            }
+                            record_udp_inbound_response_tx(self, session_id, written);
                         }
                         Ok(Err(error)) => tracing::warn!(error = %error, "mieru udp chain response error"),
                         Err(error) => tracing::warn!(error = %error, "mieru udp chain task panicked"),

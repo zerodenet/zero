@@ -4,6 +4,8 @@ use tokio::time::{sleep_until, Instant as TokioInstant};
 use zero_core::Address;
 
 use crate::logging::log_session_finished;
+use crate::runtime::udp_dispatch::UdpDispatch;
+use crate::runtime::Proxy;
 
 use super::sessions::CompletedUdpFlow;
 
@@ -29,4 +31,32 @@ pub(crate) fn address_from_socket_addr(addr: SocketAddr) -> Address {
         zero_traits::IpAddress::V4(ip) => Address::Ipv4(ip),
         zero_traits::IpAddress::V6(ip) => Address::Ipv6(ip),
     }
+}
+
+pub(crate) fn record_udp_inbound_response_rx(
+    proxy: &Proxy,
+    session_id: Option<u64>,
+    payload_len: usize,
+) {
+    if let Some(session_id) = session_id {
+        proxy.record_session_outbound_rx(session_id, payload_len as u64);
+    }
+}
+
+pub(crate) fn record_udp_inbound_response_tx(
+    proxy: &Proxy,
+    session_id: Option<u64>,
+    written_len: usize,
+) {
+    if let Some(session_id) = session_id {
+        proxy.record_session_inbound_tx(session_id, written_len as u64);
+    }
+}
+
+pub(crate) fn udp_response_session_id(
+    dispatch: &UdpDispatch,
+    target: &Address,
+    port: u16,
+) -> Option<u64> {
+    dispatch.session_id_by_target(target, port, None)
 }

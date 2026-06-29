@@ -6,7 +6,10 @@ use tracing::{info, warn};
 
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
+use crate::runtime::udp_flow::helpers::{
+    log_completed_udp_flow, record_udp_inbound_response_rx, record_udp_inbound_response_tx,
+    udp_response_session_id, wait_for_upstream_idle,
+};
 
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, TcpRelayStream};
@@ -283,9 +286,8 @@ impl Proxy {
                         Ok((n, sender)) => {
                             last_activity = TokioInstant::now();
                             let ip = zero_platform_tokio::socket_addr_to_ip(sender);
-                            if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                                self.record_session_outbound_rx(sid, n as u64);
-                            }
+                            let session_id = dispatch.direct_response_session_id(sender);
+                            record_udp_inbound_response_rx(self, session_id, n);
                             match udp_session.send_mux_response_to_ip(
                                 &down_tx,
                                 mux_session_id,
@@ -294,9 +296,7 @@ impl Proxy {
                                 &direct_buf[..n],
                             ) {
                                 Ok(frame_len) => {
-                                    if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                                        self.record_session_inbound_tx(sid, frame_len as u64);
-                                    }
+                                    record_udp_inbound_response_tx(self, session_id, frame_len);
                                 }
                                 Err(error) => {
                                     warn!(%error, mux_session_id, "vless mux udp direct response encode failed");
@@ -317,9 +317,8 @@ impl Proxy {
                             self.record_udp_upstream_packet_received();
                             dispatch.touch_upstream_idle(timeout);
                             let (target, port, payload) = pkt.into_parts();
-                            if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
-                                self.record_session_outbound_rx(sid, payload.len() as u64);
-                            }
+                            let session_id = udp_response_session_id(&dispatch, &target, port);
+                            record_udp_inbound_response_rx(self, session_id, payload.len());
                             match udp_session.send_mux_response(
                                 &down_tx,
                                 mux_session_id,
@@ -328,9 +327,7 @@ impl Proxy {
                                 &payload,
                             ) {
                                 Ok(frame_len) => {
-                                    if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
-                                        self.record_session_inbound_tx(sid, frame_len as u64);
-                                    }
+                                    record_udp_inbound_response_tx(self, session_id, frame_len);
                                 }
                                 Err(error) => {
                                     warn!(%error, mux_session_id, "vless mux udp upstream response encode failed");
@@ -346,9 +343,7 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
-                            if let Some(sid) = session_id {
-                                self.record_session_outbound_rx(sid, payload.len() as u64);
-                            }
+                            record_udp_inbound_response_rx(self, session_id, payload.len());
                             match udp_session.send_mux_response(
                                 &down_tx,
                                 mux_session_id,
@@ -357,9 +352,7 @@ impl Proxy {
                                 &payload,
                             ) {
                                 Ok(frame_len) => {
-                                    if let Some(sid) = session_id {
-                                        self.record_session_inbound_tx(sid, frame_len as u64);
-                                    }
+                                    record_udp_inbound_response_tx(self, session_id, frame_len);
                                 }
                                 Err(error) => {
                                     warn!(%error, mux_session_id, "vless mux udp chain response encode failed");

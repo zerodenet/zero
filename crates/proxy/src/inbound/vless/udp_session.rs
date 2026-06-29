@@ -5,7 +5,10 @@ use zero_traits::AsyncSocket;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
+use crate::runtime::udp_flow::helpers::{
+    log_completed_udp_flow, record_udp_inbound_response_rx, record_udp_inbound_response_tx,
+    wait_for_upstream_idle,
+};
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
@@ -92,9 +95,8 @@ impl Proxy {
                     let ip = zero_platform_tokio::socket_addr_to_ip(sender);
                     let port = sender.port();
 
-                    if let Some(session_id) = dispatch.direct_response_session_id(sender) {
-                        self.record_session_outbound_rx(session_id, n as u64);
-                    }
+                    let session_id = dispatch.direct_response_session_id(sender);
+                    record_udp_inbound_response_rx(self, session_id, n);
 
                     match udp_session.write_response_to_ip_tokio(
                         &mut client,
@@ -103,9 +105,7 @@ impl Proxy {
                         &udp_buffer[..n],
                     ).await {
                         Ok(written) => {
-                            if let Some(session_id) = dispatch.direct_response_session_id(sender) {
-                                self.record_session_inbound_tx(session_id, written as u64);
-                            }
+                            record_udp_inbound_response_tx(self, session_id, written);
                             self.record_session_inbound_traffic(0, client.drain_traffic());
                         }
                         Err(error) => {
@@ -146,9 +146,7 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
-                            if let Some(sid) = session_id {
-                                proxy.record_session_outbound_rx(sid, payload.len() as u64);
-                            }
+                            record_udp_inbound_response_rx(&proxy, session_id, payload.len());
                             match udp_session.write_response_tokio(
                                 &mut client,
                                 &target,
@@ -156,9 +154,7 @@ impl Proxy {
                                 &payload,
                             ).await {
                                 Ok(written) => {
-                                    if let Some(sid) = session_id {
-                                        proxy.record_session_inbound_tx(sid, written as u64);
-                                    }
+                                    record_udp_inbound_response_tx(&proxy, session_id, written);
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());
                                 }
                                 Err(error) => {

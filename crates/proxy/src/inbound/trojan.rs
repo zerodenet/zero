@@ -17,7 +17,10 @@ use zero_traits::AsyncSocket;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
+use crate::runtime::udp_flow::helpers::{
+    log_completed_udp_flow, record_udp_inbound_response_rx, record_udp_inbound_response_tx,
+    udp_response_session_id, wait_for_upstream_idle,
+};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
@@ -231,13 +234,9 @@ impl Proxy {
 
                     let ip = zero_platform_tokio::socket_addr_to_ip(sender);
                     let session_id = dispatch.direct_response_session_id(sender);
-                    if let Some(sid) = session_id {
-                        self.record_session_outbound_rx(sid, n as u64);
-                    }
+                    record_udp_inbound_response_rx(self, session_id, n);
                     udp_session.write_response_to_ip(&mut client, ip, sender.port(), &direct_buf[..n]).await?;
-                    if let Some(sid) = session_id {
-                        self.record_session_inbound_tx(sid, n as u64);
-                    }
+                    record_udp_inbound_response_tx(self, session_id, n);
                 }
                 upstream = upstream_udp.recv_response(&mut upstream_buf) => {
                     match upstream {
@@ -246,13 +245,10 @@ impl Proxy {
                             self.record_udp_upstream_packet_received();
                             dispatch.touch_upstream_idle(self.udp_upstream_idle_timeout());
                             let (target, port, payload) = pkt.into_parts();
-                            if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
-                                self.record_session_outbound_rx(sid, payload.len() as u64);
-                            }
+                            let session_id = udp_response_session_id(&dispatch, &target, port);
+                            record_udp_inbound_response_rx(self, session_id, payload.len());
                             udp_session.write_response(&mut client, &target, port, &payload).await?;
-                            if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
-                                self.record_session_inbound_tx(sid, payload.len() as u64);
-                            }
+                            record_udp_inbound_response_tx(self, session_id, payload.len());
                         }
                         Err(error) => {
                             warn!(error = %error, "trojan udp socks5 upstream recv error");
@@ -264,14 +260,10 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
-                            if let Some(sid) = session_id {
-                                self.record_session_outbound_rx(sid, payload.len() as u64);
-                            }
-                            let payload_len = payload.len() as u64;
+                            record_udp_inbound_response_rx(self, session_id, payload.len());
+                            let payload_len = payload.len();
                             udp_session.write_response(&mut client, &target, port, &payload).await?;
-                            if let Some(sid) = session_id {
-                                self.record_session_inbound_tx(sid, payload_len);
-                            }
+                            record_udp_inbound_response_tx(self, session_id, payload_len);
                         }
                         Ok(Err(error)) => warn!(error = %error, "trojan udp chain response error"),
                         Err(error) => warn!(error = %error, "trojan udp chain task panicked"),
