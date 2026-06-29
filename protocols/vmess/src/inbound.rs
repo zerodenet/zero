@@ -118,6 +118,14 @@ impl VmessInboundProfile {
     }
 }
 
+pub fn inbound_profile_from_config_users<I, U>(users: I) -> Result<VmessInboundProfile, Error>
+where
+    I: IntoIterator<Item = U>,
+    U: IntoVmessInboundUserConfig,
+{
+    VmessInboundProfile::from_config_users(users)
+}
+
 pub trait IntoVmessInboundUserConfig {
     fn into_vmess_inbound_user_config(self) -> VmessInboundUserConfigParts;
 }

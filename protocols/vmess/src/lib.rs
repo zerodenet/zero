@@ -8,8 +8,8 @@ mod stream;
 pub mod udp;
 
 pub use inbound::{
-    IntoVmessInboundUserConfig, VmessAccept, VmessInbound, VmessInboundProfile,
-    VmessInboundUserConfigParts, VmessUser,
+    inbound_profile_from_config_users, IntoVmessInboundUserConfig, VmessAccept, VmessInbound,
+    VmessInboundProfile, VmessInboundUserConfigParts, VmessUser,
 };
 pub use metadata::VmessProtocol;
 pub use outbound::{

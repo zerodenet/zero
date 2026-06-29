@@ -1795,11 +1795,13 @@ fn vmess_inbound_uses_adapter_request_model() {
         );
     }
     assert!(
-        adapter.contains("vmess::VmessInboundProfile::from_config_users")
+        adapter.contains("vmess::inbound_profile_from_config_users")
+            && !adapter.contains("vmess::VmessInboundProfile::from_config_users")
             && !adapter.contains("vmess::VmessInboundProfile::from_config_parts")
             && !adapter.contains("vmess::VmessUser::from_config")
             && protocol_inbound.contains("pub fn from_config")
-            && protocol_inbound.contains("pub fn from_config_parts"),
+            && protocol_inbound.contains("pub fn from_config_parts")
+            && protocol_inbound.contains("pub fn inbound_profile_from_config_users"),
         "VMess adapter should ask protocols/vmess to build parsed inbound profiles"
     );
     assert!(
