@@ -43,6 +43,15 @@ impl VmessUser {
     }
 }
 
+pub type VmessInboundUserConfigParts = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<u64>,
+    Option<u64>,
+);
+
 #[derive(Clone)]
 pub struct VmessInboundProfile {
     users: Vec<VmessUser>,
@@ -55,16 +64,7 @@ impl VmessInboundProfile {
 
     pub fn from_config_parts<I>(users: I) -> Result<Self, Error>
     where
-        I: IntoIterator<
-            Item = (
-                String,
-                String,
-                Option<String>,
-                Option<String>,
-                Option<u64>,
-                Option<u64>,
-            ),
-        >,
+        I: IntoIterator<Item = VmessInboundUserConfigParts>,
     {
         users
             .into_iter()
@@ -84,6 +84,14 @@ impl VmessInboundProfile {
             .map(Self::from_users)
     }
 
+    pub fn from_config_users<I, U>(users: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = U>,
+        U: IntoVmessInboundUserConfig,
+    {
+        Self::from_config_parts(users.into_iter().map(U::into_vmess_inbound_user_config))
+    }
+
     pub fn is_empty(&self) -> bool {
         self.users.is_empty()
     }
@@ -98,6 +106,16 @@ impl VmessInboundProfile {
         } else {
             inbound.accept_tcp_multi(stream, &self.users).await
         }
+    }
+}
+
+pub trait IntoVmessInboundUserConfig {
+    fn into_vmess_inbound_user_config(self) -> VmessInboundUserConfigParts;
+}
+
+impl IntoVmessInboundUserConfig for VmessInboundUserConfigParts {
+    fn into_vmess_inbound_user_config(self) -> VmessInboundUserConfigParts {
+        self
     }
 }
 

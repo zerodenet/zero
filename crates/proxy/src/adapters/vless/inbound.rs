@@ -12,7 +12,7 @@ use crate::transport::QuicInbound;
 fn parse_inbound_profile(
     inbound: &InboundConfig,
 ) -> Result<vless::VlessInboundProfile, EngineError> {
-    vless::VlessInboundProfile::from_config_parts(inbound.protocol.vless_users().iter().map(
+    vless::VlessInboundProfile::from_config_users(inbound.protocol.vless_users().iter().map(
         |user| {
             (
                 user.id.clone(),

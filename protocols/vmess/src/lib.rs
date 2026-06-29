@@ -7,7 +7,10 @@ mod shared;
 mod stream;
 pub mod udp;
 
-pub use inbound::{VmessAccept, VmessInbound, VmessInboundProfile, VmessUser};
+pub use inbound::{
+    IntoVmessInboundUserConfig, VmessAccept, VmessInbound, VmessInboundProfile,
+    VmessInboundUserConfigParts, VmessUser,
+};
 pub use metadata::VmessProtocol;
 pub use outbound::{
     establish_tcp_outbound_session, establish_tcp_outbound_stream, wrap_tcp_outbound_stream,

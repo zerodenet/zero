@@ -81,6 +81,15 @@ pub struct VlessConfiguredUser {
     pub user: VlessUser,
 }
 
+pub type VlessInboundUserConfigParts = (
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<u64>,
+    Option<u64>,
+);
+
 impl VlessConfiguredUser {
     pub fn from_config(
         id: &str,
@@ -152,16 +161,7 @@ impl VlessInboundProfile {
 
     pub fn from_config_parts<I>(users: I) -> Result<Self, Error>
     where
-        I: IntoIterator<
-            Item = (
-                String,
-                Option<String>,
-                Option<String>,
-                Option<String>,
-                Option<u64>,
-                Option<u64>,
-            ),
-        >,
+        I: IntoIterator<Item = VlessInboundUserConfigParts>,
     {
         users
             .into_iter()
@@ -179,6 +179,14 @@ impl VlessInboundProfile {
             )
             .collect::<Result<Vec<_>, Error>>()
             .map(Self::from_users)
+    }
+
+    pub fn from_config_users<I, U>(users: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = U>,
+        U: IntoVlessInboundUserConfig,
+    {
+        Self::from_config_parts(users.into_iter().map(U::into_vless_inbound_user_config))
     }
 
     pub async fn accept_tcp_with_auth_and_id<S>(
@@ -215,6 +223,16 @@ impl VlessInboundProfile {
     {
         let auth = VlessConfiguredUsers::new(&self.users);
         inbound.accept_tcp_with_auth(stream, &auth).await
+    }
+}
+
+pub trait IntoVlessInboundUserConfig {
+    fn into_vless_inbound_user_config(self) -> VlessInboundUserConfigParts;
+}
+
+impl IntoVlessInboundUserConfig for VlessInboundUserConfigParts {
+    fn into_vless_inbound_user_config(self) -> VlessInboundUserConfigParts {
+        self
     }
 }
 

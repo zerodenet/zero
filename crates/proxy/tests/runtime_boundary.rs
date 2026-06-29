@@ -1463,7 +1463,8 @@ fn vmess_inbound_uses_adapter_request_model() {
         );
     }
     assert!(
-        adapter.contains("vmess::VmessInboundProfile::from_config_parts")
+        adapter.contains("vmess::VmessInboundProfile::from_config_users")
+            && !adapter.contains("vmess::VmessInboundProfile::from_config_parts")
             && !adapter.contains("vmess::VmessUser::from_config")
             && protocol_inbound.contains("pub fn from_config")
             && protocol_inbound.contains("pub fn from_config_parts"),
@@ -1535,7 +1536,7 @@ fn vless_inbound_users_are_adapter_parsed() {
     }
     for required in [
         "parse_inbound_profile",
-        "VlessInboundProfile::from_config_parts",
+        "VlessInboundProfile::from_config_users",
     ] {
         assert!(
             adapter.contains(required),
@@ -1552,8 +1553,10 @@ fn vless_inbound_users_are_adapter_parsed() {
         !adapter.contains("vless::VlessUser {")
             && !adapter.contains("VlessConfiguredUser::from_config")
             && !adapter.contains("VlessInboundProfile::from_users")
+            && !adapter.contains("VlessInboundProfile::from_config_parts")
             && protocol_inbound.contains("pub fn from_config")
             && protocol_inbound.contains("pub fn from_config_parts")
+            && protocol_inbound.contains("pub fn from_config_users")
             && protocol_inbound.contains("VlessUser::from_config"),
         "VLESS adapter should not hand-build protocol users"
     );
