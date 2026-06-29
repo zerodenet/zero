@@ -840,6 +840,7 @@ impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {
     {
         super::shared::write_udp_packet(stream, packet.target(), packet.port(), packet.payload())
             .await
+            .map(|_| ())
     }
 
     async fn read_udp_packet<S>(&self, stream: &mut S) -> Result<Self::Decoded, Self::Error>

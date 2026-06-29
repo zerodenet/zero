@@ -154,7 +154,7 @@ impl TrojanInboundUdpSession {
         target: &Address,
         port: u16,
         payload: &[u8],
-    ) -> Result<(), Error>
+    ) -> Result<usize, Error>
     where
         S: AsyncSocket,
     {
@@ -169,7 +169,7 @@ impl TrojanInboundUdpSession {
         ip: IpAddress,
         port: u16,
         payload: &[u8],
-    ) -> Result<(), Error>
+    ) -> Result<usize, Error>
     where
         S: AsyncSocket,
     {
@@ -183,7 +183,7 @@ impl TrojanInboundUdpSession {
         stream: &mut S,
         sender: SocketAddr,
         payload: &[u8],
-    ) -> Result<(), Error>
+    ) -> Result<usize, Error>
     where
         S: AsyncSocket,
     {
@@ -215,7 +215,7 @@ impl TrojanInboundUdpCodec {
         target: &zero_core::Address,
         port: u16,
         payload: &[u8],
-    ) -> Result<(), Error>
+    ) -> Result<usize, Error>
     where
         S: AsyncSocket,
     {

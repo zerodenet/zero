@@ -223,10 +223,10 @@ impl Proxy {
 
                     let session_id = dispatch.direct_response_session_id(sender);
                     record_udp_inbound_response_rx(self, session_id, n);
-                    udp_session
+                    let written = udp_session
                         .write_response_to_socket_addr_tokio(&mut client, sender, &direct_buf[..n])
                         .await?;
-                    record_udp_inbound_response_tx(self, session_id, n);
+                    record_udp_inbound_response_tx(self, session_id, written);
                 }
                 upstream = upstream_udp.recv_response(&mut upstream_buf) => {
                     match upstream {
@@ -237,8 +237,8 @@ impl Proxy {
                             let (target, port, payload) = pkt.into_parts();
                             let session_id = udp_response_session_id(&dispatch, &target, port);
                             record_udp_inbound_response_rx(self, session_id, payload.len());
-                            udp_session.write_response(&mut client, &target, port, &payload).await?;
-                            record_udp_inbound_response_tx(self, session_id, payload.len());
+                            let written = udp_session.write_response(&mut client, &target, port, &payload).await?;
+                            record_udp_inbound_response_tx(self, session_id, written);
                         }
                         Err(error) => {
                             warn!(error = %error, "trojan udp socks5 upstream recv error");
@@ -251,9 +251,8 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
                             record_udp_inbound_response_rx(self, session_id, payload.len());
-                            let payload_len = payload.len();
-                            udp_session.write_response(&mut client, &target, port, &payload).await?;
-                            record_udp_inbound_response_tx(self, session_id, payload_len);
+                            let written = udp_session.write_response(&mut client, &target, port, &payload).await?;
+                            record_udp_inbound_response_tx(self, session_id, written);
                         }
                         Ok(Err(error)) => warn!(error = %error, "trojan udp chain response error"),
                         Err(error) => warn!(error = %error, "trojan udp chain task panicked"),

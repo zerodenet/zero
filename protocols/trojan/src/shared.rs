@@ -80,12 +80,14 @@ pub(crate) async fn write_udp_packet<S: AsyncSocket>(
     addr: &Address,
     port: u16,
     payload: &[u8],
-) -> Result<(), Error> {
+) -> Result<usize, Error> {
     let packet = build_udp_packet(addr, port, payload);
+    let len = packet.len();
     stream
         .write_all(&packet)
         .await
-        .map_err(|_| Error::Io("trojan: write udp failed"))
+        .map_err(|_| Error::Io("trojan: write udp failed"))?;
+    Ok(len)
 }
 
 /// Build a Trojan UDP packet in memory.
