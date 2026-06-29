@@ -48,7 +48,10 @@ impl Hysteria2Connector {
             EngineError::Io(std::io::Error::other(format!("hysteria2 open_bi: {error}")))
         })?;
         let mut stream = Hysteria2Stream::new(send, recv);
-        authenticate_with_password(&conn, &mut stream, &self.password).await?;
+        hysteria2::Hysteria2Outbound
+            .authenticate_connection(&conn, &mut stream, &self.password)
+            .await
+            .map_err(EngineError::Core)?;
 
         Ok(conn)
     }
@@ -90,11 +93,7 @@ impl Hysteria2Connector {
 
         let mut stream = Hysteria2Stream::new(send, recv);
         hysteria2::Hysteria2Outbound
-            .send_tcp_connect(&mut stream, session)
-            .await
-            .map_err(EngineError::Core)?;
-        hysteria2::Hysteria2Outbound
-            .read_connect_response(&mut stream)
+            .establish_tcp_connect(&mut stream, session)
             .await
             .map_err(EngineError::Core)?;
 
@@ -156,21 +155,6 @@ pub(super) async fn establish_udp_flow_session(
     Ok(hysteria2::udp::start_udp_flow_with_initial_packet(
         conn, target, port, payload, resume,
     ))
-}
-
-async fn authenticate_with_password(
-    conn: &quinn::Connection,
-    stream: &mut Hysteria2Stream,
-    password: &str,
-) -> Result<(), EngineError> {
-    let mut salt = [0u8; 32];
-    conn.export_keying_material(&mut salt, b"hysteria2 auth", &[])
-        .map_err(|_| EngineError::Io(std::io::Error::other("hysteria2 key export failed")))?;
-
-    hysteria2::Hysteria2Outbound
-        .authenticate_with_salt(stream, password, &salt)
-        .await
-        .map_err(EngineError::Core)
 }
 
 pub(super) async fn connect_tcp(

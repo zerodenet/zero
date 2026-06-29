@@ -83,6 +83,35 @@ impl Hysteria2Outbound {
         }
         Ok(())
     }
+
+    #[cfg(all(feature = "tokio", feature = "crypto"))]
+    pub async fn authenticate_connection<S>(
+        &self,
+        conn: &quinn::Connection,
+        stream: &mut S,
+        password: &str,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let mut salt = [0u8; 32];
+        conn.export_keying_material(&mut salt, b"hysteria2 auth", &[])
+            .map_err(|_| Error::Io("hysteria2 key export failed"))?;
+
+        self.authenticate_with_salt(stream, password, &salt).await
+    }
+
+    pub async fn establish_tcp_connect<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_tcp_connect(stream, session).await?;
+        self.read_connect_response(stream).await
+    }
 }
 
 impl<'a> UdpDatagramFraming<Hysteria2UdpPacketTarget<'a>, ()> for Hysteria2Outbound {

@@ -1896,6 +1896,9 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_connector() {
     let connector = read("src/adapters/hysteria2/connector.rs");
     let managed = read("src/adapters/hysteria2/udp/managed.rs");
     let packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/hysteria2/src/outbound.rs"))
+            .expect("read hysteria2 protocol outbound source");
 
     assert!(
         !outbound.exists(),
@@ -1909,9 +1912,19 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_connector() {
             && connector.contains("struct Hysteria2Connector")
             && connector.contains("open_hysteria2_quic_connection")
             && connector.contains("hysteria2::Hysteria2Outbound")
-            && connector.contains("authenticate_with_password")
+            && connector.contains(".authenticate_connection(")
+            && !connector.contains("authenticate_with_password")
+            && !connector.contains("export_keying_material")
             && connector.contains("connect_raw_with_udp_profile"),
-        "Hysteria2 adapter connector should own proxy-local QUIC/auth bridge glue for TCP, managed UDP, and packet-path"
+        "Hysteria2 adapter connector should own proxy-local QUIC stream opening while protocols/hysteria2 owns auth and TCP connect framing"
+    );
+    assert!(
+        protocol_outbound.contains("pub async fn authenticate_connection")
+            && protocol_outbound.contains("export_keying_material")
+            && protocol_outbound.contains("pub async fn establish_tcp_connect")
+            && protocol_outbound.contains("self.send_tcp_connect(stream, session).await?")
+            && protocol_outbound.contains("self.read_connect_response(stream).await"),
+        "protocols/hysteria2 outbound should own connection authentication and TCP connect handshake composition"
     );
 }
 
@@ -9794,17 +9807,20 @@ fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
             && connector.contains("struct Hysteria2Connector")
             && connector.contains("open_hysteria2_quic_connection")
             && connector.contains("hysteria2::Hysteria2Outbound")
-            && connector.contains("authenticate_with_password")
             && connector.contains("connect_raw_with_udp_profile")
             && !connector.contains("profile.password()")
-            && connector.contains(".authenticate_with_salt(")
-            && connector.contains(".send_tcp_connect(")
-            && connector.contains(".read_connect_response(")
+            && connector.contains(".authenticate_connection(")
+            && connector.contains(".establish_tcp_connect(")
+            && !connector.contains(".authenticate_with_salt(")
+            && !connector.contains(".send_tcp_connect(")
+            && !connector.contains(".read_connect_response(")
             && protocol_outbound.contains("pub async fn authenticate_with_salt")
+            && protocol_outbound.contains("pub async fn authenticate_connection")
+            && protocol_outbound.contains("pub async fn establish_tcp_connect")
             && protocol_outbound.contains("crate::shared::sign_hmac")
             && protocol_outbound.contains("crate::shared::build_auth_frame")
             && protocol_outbound.contains("build_tcp_connect_header"),
-        "zero-transport should own only QUIC stream lifecycle; proxy/protocol Hysteria2 code should own auth and TCP connect framing"
+        "zero-transport should own only QUIC stream lifecycle; protocols/hysteria2 should own auth and TCP connect framing while proxy connector calls narrow protocol APIs"
     );
 }
 
