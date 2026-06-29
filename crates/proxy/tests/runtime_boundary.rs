@@ -4905,7 +4905,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     assert!(
         dispatch.contains("socks5::Socks5Inbound.udp_session()")
             && dispatch.contains("udp_session.decode_request")
-            && dispatch.contains("udp_packet.dns_domain_request()")
+            && dispatch.contains("udp_session.local_dns_domain_request(&udp_packet)")
             && dispatch.contains("udp_packet.into_dispatch_parts()")
             && dispatch.contains("protocol_overhead_len")
             && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
@@ -4927,6 +4927,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !dispatch.contains("client_session_id: None")
             && !dispatch.contains("udp_packet.target()")
             && !dispatch.contains("udp_packet.port()")
+            && !dispatch.contains("udp_packet.dns_domain_request()")
             && !upstream_response.contains("response.target()")
             && !upstream_response.contains("response.port()"),
         "SOCKS5 UDP associate dispatch should consume protocol-owned dispatch parts instead of rebuilding session facts"
@@ -4935,6 +4936,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         .expect("read protocols/socks5/src/udp.rs");
     assert!(
         protocol_udp.contains("pub async fn send_response_to_client")
+            && protocol_udp.contains("pub fn local_dns_domain_request")
             && protocol_udp.contains("pub fn response_session_key_parts")
             && protocol_udp.contains("response_frame(")
             && protocol_udp.contains("response_key("),

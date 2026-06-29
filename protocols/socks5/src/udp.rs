@@ -253,6 +253,13 @@ impl Socks5InboundUdpSession {
         self.codec.decode_request(packet)
     }
 
+    pub fn local_dns_domain_request<'a>(
+        &self,
+        request: &'a Socks5InboundUdpRequest,
+    ) -> Option<&'a str> {
+        request.dns_domain_request()
+    }
+
     pub fn decode_response(&self, packet: &[u8]) -> Result<Socks5InboundUdpResponse, Error> {
         self.codec.decode_response(packet)
     }

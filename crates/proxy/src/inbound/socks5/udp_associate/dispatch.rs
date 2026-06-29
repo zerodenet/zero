@@ -21,7 +21,7 @@ pub(super) async fn dispatch_packet(
     // DNS interception.
     // Intercept UDP packets to port 53 with a domain target.
     // Resolve locally through DnsSystem and reply directly.
-    if let Some(domain) = udp_packet.dns_domain_request() {
+    if let Some(domain) = udp_session.local_dns_domain_request(&udp_packet) {
         if let Ok(_ips) = proxy.resolver.resolve(domain).await {
             // DNS resolved locally; build response and return.
             // The caller will forward via the relay socket if
