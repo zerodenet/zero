@@ -946,6 +946,7 @@ impl VlessInboundUdpSession {
     }
 }
 
+#[allow(dead_code)]
 fn address_from_ip(ip: IpAddress) -> Address {
     match ip {
         IpAddress::V4(bytes) => Address::Ipv4(bytes),

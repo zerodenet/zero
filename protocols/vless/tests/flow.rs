@@ -1,3 +1,5 @@
+#![cfg(feature = "reality")]
+
 use vless::{
     flow_build_request, flow_byte, flow_from_byte, parse_flow, parse_uuid, FLOW_XTLS_RPRX_VISION,
     FLOW_XTLS_RPRX_VISION_UDP,

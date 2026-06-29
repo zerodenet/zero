@@ -12,8 +12,10 @@ use crate::flow::flow_build_request;
 use crate::mux::MuxClient;
 use crate::shared::{
     build_udp_packet, parse_udp_packet, parse_uuid, read_addon, read_exact, write_address,
-    VlessUdpFlowIo, VlessUdpFlowPacket, VlessUdpPacket, CMD_MUX, VLESS_VERSION,
+    VlessUdpPacket, CMD_MUX, VLESS_VERSION,
 };
+#[cfg(feature = "reality")]
+use crate::shared::{VlessUdpFlowIo, VlessUdpFlowPacket};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VlessOutbound;
@@ -198,6 +200,7 @@ impl VlessTcpConnectConfig {
         self.flow.is_some()
     }
 
+    #[cfg(feature = "reality")]
     pub fn mux_pool_identity(&self) -> crate::mux_pool::MuxIdentity {
         crate::mux_pool::MuxIdentity::from_uuid(self.id)
     }
@@ -348,6 +351,7 @@ impl<'a> VlessUdpFlowConfig<'a> {
         }
     }
 
+    #[cfg(feature = "reality")]
     pub fn mux_pool_identity(&self) -> crate::mux_pool::MuxIdentity {
         crate::mux_pool::MuxIdentity::from_uuid(self.identity.uuid)
     }

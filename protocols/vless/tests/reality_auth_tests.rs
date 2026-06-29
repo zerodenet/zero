@@ -1,3 +1,5 @@
+#![cfg(feature = "reality")]
+
 use vless::reality::reality_auth::*;
 use x25519_dalek::{PublicKey, StaticSecret};
 

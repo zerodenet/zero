@@ -32,6 +32,7 @@
 //   TCP: [payload_bytes…]
 //   UDP: [network:1][port:2][atyp:1][address…][payload_bytes…]
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 #[cfg(feature = "reality")]

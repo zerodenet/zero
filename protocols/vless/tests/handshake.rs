@@ -494,6 +494,7 @@ fn udp_response_encoder_builds_response_packet() {
 }
 
 #[test]
+#[cfg(feature = "reality")]
 fn mux_udp_response_encoder_wraps_vless_packet() {
     let (writer, mut down_rx) = vless::mux::VlessInboundMuxWriter::channel();
     vless::udp::VlessInboundUdpCodec

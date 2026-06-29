@@ -1,3 +1,5 @@
+#![cfg(feature = "reality")]
+
 use vless::reality::reality_util::{decode_public_key, decode_short_id};
 use ztls::util::extract_client_random;
 

@@ -1,3 +1,5 @@
+#![cfg(feature = "reality")]
+
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use vless::{DeferredVlessResponseStream, VLESS_VERSION};
 

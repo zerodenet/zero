@@ -1,3 +1,5 @@
+#![cfg(feature = "reality")]
+
 use vless::parse_uuid;
 use vless::MuxCrypto;
 
