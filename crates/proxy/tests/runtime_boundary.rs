@@ -1462,8 +1462,12 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     );
     assert!(
         adapter.contains("ShadowsocksInboundProfile::from_config_cipher_password")
+            && adapter.contains("cipher.as_str()")
+            && adapter.contains("password.as_str()")
             && !adapter.contains("ShadowsocksInboundProfile::from_config_parts")
             && !adapter.contains("CipherKind::from_str")
+            && !adapter.contains("password.clone()")
+            && !adapter.contains("cipher.clone()")
             && protocol_inbound.contains("pub fn from_config_cipher_password"),
         "Shadowsocks adapter should delegate inbound profile validation to the protocol crate"
     );
@@ -1652,9 +1656,11 @@ fn trojan_inbound_uses_adapter_request_model() {
             && !inbound.contains("zero_config::TlsConfig")
             && !inbound.contains("std::slice::from_ref(&self.password)")
             && adapter.contains("TrojanInboundProfile::from_config_password")
+            && adapter.contains("password.as_str()")
             && !adapter.contains("TrojanInboundProfile::from_config_parts")
             && adapter.contains("crate::transport::build_tls_acceptor")
             && adapter.contains("tls_acceptor")
+            && !adapter.contains("password.clone()")
             && !adapter.contains("password.clone(), tls.clone()"),
         "Trojan inbound listener should receive protocol-owned profile plus adapter-built TLS acceptor instead of raw password/TLS config"
     );
@@ -1733,6 +1739,14 @@ fn vmess_inbound_uses_adapter_request_model() {
             && adapter.contains("crate::transport::build_tls_acceptor")
             && adapter.contains("tls_acceptor")
             && !adapter.contains("vmess::VmessInboundProfile::from_users")
+            && adapter.contains("user.id.as_str()")
+            && adapter.contains("user.cipher.as_str()")
+            && adapter.contains("user.credential_id.as_deref()")
+            && adapter.contains("user.principal_key.as_deref()")
+            && !adapter.contains("user.id.clone()")
+            && !adapter.contains("user.cipher.clone()")
+            && !adapter.contains("user.credential_id.clone()")
+            && !adapter.contains("user.principal_key.clone()")
             && !model.contains("users: Vec<vmess::VmessUser>")
             && !root.contains("users: Vec<VmessUser>")
             && !root.contains("handler.users")
@@ -1801,6 +1815,14 @@ fn vless_inbound_users_are_adapter_parsed() {
             && !adapter.contains("VlessConfiguredUser::from_config")
             && !adapter.contains("VlessInboundProfile::from_users")
             && !adapter.contains("VlessInboundProfile::from_config_parts")
+            && adapter.contains("user.id.as_str()")
+            && adapter.contains("user.flow.as_deref()")
+            && adapter.contains("user.credential_id.as_deref()")
+            && adapter.contains("user.principal_key.as_deref()")
+            && !adapter.contains("user.id.clone()")
+            && !adapter.contains("user.flow.clone()")
+            && !adapter.contains("user.credential_id.clone()")
+            && !adapter.contains("user.principal_key.clone()")
             && protocol_inbound.contains("pub fn from_config")
             && protocol_inbound.contains("pub fn from_config_parts")
             && protocol_inbound.contains("pub fn from_config_users")
@@ -1932,6 +1954,8 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && !adapter.contains("up_bps")
             && !adapter.contains("down_bps")
             && adapter.contains("Hysteria2InboundProfile::from_config_password")
+            && adapter.contains("password.as_str()")
+            && !adapter.contains("password.clone()")
             && !adapter.contains("Hysteria2InboundProfile::from_config_parts"),
         "Hysteria2 inbound listener should receive only protocol-owned profile data, not raw password or unused rate-limit config"
     );

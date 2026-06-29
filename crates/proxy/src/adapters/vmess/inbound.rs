@@ -40,10 +40,10 @@ impl VmessAdapter {
                 crate::transport::build_tls_acceptor(&tls_cfg, p.config.source_dir())?;
             let profile = vmess::VmessInboundProfile::from_config_users(users.iter().map(|user| {
                 (
-                    user.id.clone(),
-                    user.cipher.clone(),
-                    user.credential_id.clone(),
-                    user.principal_key.clone(),
+                    user.id.as_str(),
+                    user.cipher.as_str(),
+                    user.credential_id.as_deref(),
+                    user.principal_key.as_deref(),
                     user.up_bps,
                     user.down_bps,
                 )

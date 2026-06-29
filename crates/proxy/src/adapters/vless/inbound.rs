@@ -15,10 +15,10 @@ fn parse_inbound_profile(
     vless::VlessInboundProfile::from_config_users(inbound.protocol.vless_users().iter().map(
         |user| {
             (
-                user.id.clone(),
-                user.flow.clone(),
-                user.credential_id.clone(),
-                user.principal_key.clone(),
+                user.id.as_str(),
+                user.flow.as_deref(),
+                user.credential_id.as_deref(),
+                user.principal_key.as_deref(),
                 user.up_bps,
                 user.down_bps,
             )
