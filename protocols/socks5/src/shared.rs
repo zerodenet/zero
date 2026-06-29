@@ -207,6 +207,11 @@ pub struct Socks5InboundUdpDispatchView {
     protocol_overhead_len: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Socks5InboundUdpProtocolOverhead {
+    bytes: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Socks5InboundUdpDispatchAction {
     LocalDns { domain: String },
@@ -222,8 +227,18 @@ impl Socks5InboundUdpDispatchView {
         (self.parts, self.protocol_overhead_len)
     }
 
+    pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
+        self.parts.into_parts()
+    }
+
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
         self.parts.pipe_parts()
+    }
+
+    pub fn protocol_overhead(&self) -> Socks5InboundUdpProtocolOverhead {
+        Socks5InboundUdpProtocolOverhead {
+            bytes: self.protocol_overhead_len,
+        }
     }
 
     pub fn record_protocol_overhead<F>(&self, session_id: u64, record: F)
@@ -231,6 +246,15 @@ impl Socks5InboundUdpDispatchView {
         F: FnOnce(u64, u64),
     {
         record(session_id, self.protocol_overhead_len as u64);
+    }
+}
+
+impl Socks5InboundUdpProtocolOverhead {
+    pub fn record<F>(self, session_id: u64, record: F)
+    where
+        F: FnOnce(u64, u64),
+    {
+        record(session_id, self.bytes as u64);
     }
 }
 

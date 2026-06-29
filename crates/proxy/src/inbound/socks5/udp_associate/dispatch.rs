@@ -20,15 +20,17 @@ pub(super) async fn dispatch_packet(
     else {
         return Ok(());
     };
-    let (target, port, payload, client_session_id) = request.pipe_parts();
+    let protocol = request.protocol();
+    let protocol_overhead = request.protocol_overhead();
+    let (target, port, payload, client_session_id) = request.into_pipe_parts();
 
     // Generic dispatch.
     let session_id = UdpPipe::new(proxy, dispatch)
         .dispatch(UdpPipeInput {
-            target: target.clone(),
+            target,
             port,
-            payload,
-            protocol: request.protocol(),
+            payload: &payload,
+            protocol,
             auth: None,
             client_session_id,
         })
@@ -38,7 +40,7 @@ pub(super) async fn dispatch_packet(
     // SOCKS5 framing bytes (payload is already tracked by dispatch).
     proxy.record_session_inbound_traffic(session_id, *pending_control_traffic);
     *pending_control_traffic = StreamTraffic::default();
-    request.record_protocol_overhead(session_id, |session_id, bytes| {
+    protocol_overhead.record(session_id, |session_id, bytes| {
         proxy.record_session_inbound_rx(session_id, bytes);
     });
 
