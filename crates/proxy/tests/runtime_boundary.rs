@@ -5289,6 +5289,34 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
 }
 
 #[test]
+fn vmess_transport_dispatch_uses_protocol_session_classification() {
+    let transport = read("src/inbound/vmess/transport.rs");
+    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
+        .expect("read protocols/vmess/src/mux.rs");
+
+    assert!(
+        transport.contains("dispatch_vmess_session")
+            && transport.contains("vmess::mux::classify_inbound_session(&session)")
+            && transport.contains("vmess::mux::VmessInboundSessionKind::Udp")
+            && transport.contains("vmess::mux::VmessInboundSessionKind::Mux")
+            && transport.contains("vmess::mux::VmessInboundSessionKind::Tcp")
+            && !transport.contains("session.network")
+            && !transport.contains("Network::Udp")
+            && !transport.contains("is_mux_cool_session"),
+        "VMess transport inbound glue should ask protocols/vmess to classify authenticated sessions"
+    );
+    assert!(
+        protocol_mux.contains("pub enum VmessInboundSessionKind")
+            && protocol_mux.contains("pub fn classify_inbound_session")
+            && protocol_mux.contains("VmessInboundSessionKind::Udp")
+            && protocol_mux.contains("VmessInboundSessionKind::Mux")
+            && protocol_mux.contains("VmessInboundSessionKind::Tcp")
+            && protocol_mux.contains("is_mux_cool_session(session)"),
+        "protocols/vmess should own VMess inbound TCP/UDP/MUX session classification"
+    );
+}
+
+#[test]
 fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     let helper = read("src/inbound/vmess/helpers.rs");
     let mux = read("src/inbound/vmess/mux.rs");

@@ -4,13 +4,35 @@ use std::io;
 
 use tracing::warn;
 use zero_config::{GrpcConfig, WebSocketConfig};
-use zero_core::Network;
+use zero_core::Session;
 use zero_engine::EngineError;
 
 use super::{wrap_vmess_client, VmessInboundHandler, VmessTransportHandler};
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
+
+async fn dispatch_vmess_session<H>(
+    proxy: &Proxy,
+    session: Session,
+    client: TcpRelayStream,
+    handler: &H,
+    tag: &str,
+    source_addr: Option<std::net::SocketAddr>,
+) -> Result<(), EngineError>
+where
+    H: InboundProtocol<ClientStream = TcpRelayStream>,
+{
+    match vmess::mux::classify_inbound_session(&session) {
+        vmess::mux::VmessInboundSessionKind::Udp => {
+            proxy.run_vmess_udp_relay(client, session, tag).await
+        }
+        vmess::mux::VmessInboundSessionKind::Mux => proxy.run_vmess_mux_session(client, tag).await,
+        vmess::mux::VmessInboundSessionKind::Tcp => {
+            serve_inbound(proxy, session, client, handler, tag, source_addr).await
+        }
+    }
+}
 
 /// Raw TLS path: TLS accept -> VMess auth -> serve_inbound.
 pub(crate) async fn handle_vmess_raw(
@@ -22,13 +44,7 @@ pub(crate) async fn handle_vmess_raw(
 ) -> Result<(), EngineError> {
     match handler.accept(stream).await {
         Ok((session, client)) => {
-            if session.network == Network::Udp {
-                proxy.run_vmess_udp_relay(client, session, tag).await
-            } else if vmess::mux::is_mux_cool_session(&session) {
-                proxy.run_vmess_mux_session(client, tag).await
-            } else {
-                serve_inbound(proxy, session, client, handler, tag, source_addr).await
-            }
+            dispatch_vmess_session(proxy, session, client, handler, tag, source_addr).await
         }
         Err(e) => Err(e),
     }
@@ -59,13 +75,7 @@ pub(crate) async fn handle_vmess_ws(
     let client = wrap_vmess_client(TcpRelayStream::new(ws), accepted)?;
 
     let transport_handler = VmessTransportHandler;
-    if session.network == Network::Udp {
-        proxy.run_vmess_udp_relay(client, session, tag).await
-    } else if vmess::mux::is_mux_cool_session(&session) {
-        proxy.run_vmess_mux_session(client, tag).await
-    } else {
-        serve_inbound(proxy, session, client, &transport_handler, tag, source_addr).await
-    }
+    dispatch_vmess_session(proxy, session, client, &transport_handler, tag, source_addr).await
 }
 
 /// gRPC path: TLS accept -> serve_grpc -> per-stream VMess auth -> serve_inbound.
@@ -100,21 +110,15 @@ pub(crate) async fn handle_vmess_grpc(
                     let session = accepted.session.clone();
                     let client = wrap_vmess_client(TcpRelayStream::new(grpc_stream), accepted)?;
                     let transport_handler = VmessTransportHandler;
-                    if session.network == Network::Udp {
-                        proxy.run_vmess_udp_relay(client, session, &tag).await
-                    } else if vmess::mux::is_mux_cool_session(&session) {
-                        proxy.run_vmess_mux_session(client, &tag).await
-                    } else {
-                        serve_inbound(
-                            &proxy,
-                            session,
-                            client,
-                            &transport_handler,
-                            &tag,
-                            source_addr,
-                        )
-                        .await
-                    }
+                    dispatch_vmess_session(
+                        &proxy,
+                        session,
+                        client,
+                        &transport_handler,
+                        &tag,
+                        source_addr,
+                    )
+                    .await
                 }
                 Err(e) => {
                     warn!(%e, "vmess grpc auth failed");

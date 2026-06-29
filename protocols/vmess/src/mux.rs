@@ -273,6 +273,21 @@ pub fn is_mux_cool_session(session: &Session) -> bool {
         && session.network == Network::Tcp
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VmessInboundSessionKind {
+    Tcp,
+    Udp,
+    Mux,
+}
+
+pub fn classify_inbound_session(session: &Session) -> VmessInboundSessionKind {
+    match session.network {
+        Network::Udp => VmessInboundSessionKind::Udp,
+        Network::Tcp if is_mux_cool_session(session) => VmessInboundSessionKind::Mux,
+        Network::Tcp => VmessInboundSessionKind::Tcp,
+    }
+}
+
 pub fn encode_frame(
     session_id: u16,
     status: u8,
