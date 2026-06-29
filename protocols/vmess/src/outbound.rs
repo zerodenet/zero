@@ -107,9 +107,10 @@ pub struct VmessTcpSessionTarget<'a> {
 }
 
 /// Parsed VMess identity settings built from external config.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VmessTcpConnectConfig {
     uuid: [u8; 16],
+    cipher_name: String,
     cipher: VmessCipher,
 }
 
@@ -118,7 +119,11 @@ impl VmessTcpConnectConfig {
         let uuid = parse_uuid(id)?;
         let cipher =
             VmessCipher::from_name(cipher).ok_or(Error::Protocol("vmess unknown cipher"))?;
-        Ok(Self { uuid, cipher })
+        Ok(Self {
+            uuid,
+            cipher_name: cipher.name().to_owned(),
+            cipher,
+        })
     }
 
     pub fn uuid(&self) -> [u8; 16] {
@@ -129,8 +134,8 @@ impl VmessTcpConnectConfig {
         self.cipher
     }
 
-    pub fn mux_pool_identity(&self, cipher_name: &str) -> crate::VmessMuxIdentity {
-        crate::VmessMuxIdentity::from_parts(self.uuid, cipher_name.to_owned(), self.cipher)
+    pub fn mux_pool_identity(&self) -> crate::VmessMuxIdentity {
+        crate::VmessMuxIdentity::from_parts(self.uuid, self.cipher_name.clone(), self.cipher)
     }
 
     pub fn tcp_target<'a>(&'a self, session: &'a Session) -> VmessTcpSessionTarget<'a> {

@@ -49,7 +49,7 @@ impl VmessAdapter {
                     session,
                     server: (*server).to_owned(),
                     port: *port,
-                    identity: config.mux_pool_identity(cipher),
+                    identity: config.mux_pool_identity(),
                     tls: *tls,
                     ws: *ws,
                     grpc: *grpc,

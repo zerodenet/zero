@@ -2042,12 +2042,15 @@ fn vmess_tcp_connect_uses_request_model() {
     assert!(
         adapter.contains("VmessTcpConnectConfig::from_config")
             && adapter.contains("config: vmess::VmessTcpConnectConfig")
-            && adapter.contains("config.mux_pool_identity(cipher)")
+            && adapter.contains("config.mux_pool_identity()")
+            && !adapter.contains("config.mux_pool_identity(cipher)")
             && !adapter.contains("VmessMuxIdentity::from_parts")
             && protocol_outbound.contains("pub struct VmessTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config")
-            && protocol_outbound.contains("pub fn mux_pool_identity"),
-        "VMess adapter should ask protocols/vmess to parse TCP identity config and build MUX identity"
+            && protocol_outbound.contains("cipher_name: String")
+            && protocol_outbound.contains("cipher_name: cipher.name().to_owned()")
+            && protocol_outbound.contains("pub fn mux_pool_identity(&self)"),
+        "VMess adapter should ask protocols/vmess to parse TCP identity config and build MUX identity without passing raw cipher strings back into protocol APIs"
     );
     assert!(
         adapter.contains("vmess::establish_tcp_outbound_stream"),
