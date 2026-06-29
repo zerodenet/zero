@@ -7,7 +7,7 @@ use zero_traits::AsyncSocket;
 
 #[cfg(feature = "reality")]
 use crate::flow::{flow_from_byte, flow_read_request, is_aead_flow};
-use crate::mux::MuxServer;
+use crate::mux::{MuxServer, VlessInboundMuxContext};
 #[cfg(not(feature = "reality"))]
 use crate::shared::read_addon;
 use crate::shared::{
@@ -116,6 +116,28 @@ impl VlessUserStore for VlessConfiguredUsers<'_> {
     }
 }
 
+pub struct VlessAcceptedSession {
+    session: Session,
+    mux_context: VlessInboundMuxContext,
+}
+
+impl VlessAcceptedSession {
+    fn new(session: Session, user_id: [u8; 16]) -> Self {
+        Self {
+            session,
+            mux_context: VlessInboundMuxContext::from_uuid(user_id),
+        }
+    }
+
+    pub fn into_session(self) -> Session {
+        self.session
+    }
+
+    pub fn into_parts(self) -> (Session, VlessInboundMuxContext) {
+        (self.session, self.mux_context)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessInboundProfile {
     users: Arc<[VlessConfiguredUser]>,
@@ -169,6 +191,18 @@ impl VlessInboundProfile {
     {
         let auth = VlessConfiguredUsers::new(&self.users);
         inbound.accept_tcp_with_auth_and_id(stream, &auth).await
+    }
+
+    pub async fn accept_tcp_with_auth_context<S>(
+        &self,
+        inbound: VlessInbound,
+        stream: &mut S,
+    ) -> Result<VlessAcceptedSession, Error>
+    where
+        S: AsyncSocket,
+    {
+        let (session, user_id) = self.accept_tcp_with_auth_and_id(inbound, stream).await?;
+        Ok(VlessAcceptedSession::new(session, user_id))
     }
 
     pub async fn accept_tcp_with_auth<S>(

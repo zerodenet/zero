@@ -21,18 +21,18 @@ impl Proxy {
         &self,
         mut client: MeteredStream<S>,
         inbound_tag: &str,
-        uuid: [u8; 16],
+        mux_context: vless::mux::VlessInboundMuxContext,
         auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError>
     where
         S: ClientStream,
     {
-        use vless::mux::{VlessInboundMuxSession, VlessInboundMuxStreams};
+        use vless::mux::VlessInboundMuxStreams;
 
         vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
 
-        let mut mux = VlessInboundMuxSession::with_encryption(&uuid);
+        let mut mux = mux_context.inbound_session();
         let mut streams = VlessInboundMuxStreams::new();
         let mut relay_tasks = JoinSet::new();
         let (mux_writer, mut down_rx) = vless::mux::VlessInboundMuxWriter::channel();

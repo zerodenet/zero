@@ -315,6 +315,7 @@ fn ordinary_tcp_inbounds_use_tcp_pipe_for_route_execution() {
 #[test]
 fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
     let inbound = read("src/inbound/vless/mux.rs");
+    let session = read("src/inbound/vless/session.rs");
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
         .expect("read protocols/vless/src/mux.rs");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/vless/src/lib.rs"))
@@ -331,15 +332,26 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         "STATUS_END",
         "STATUS_KEEP_ALIVE",
         "let mut next_id",
+        "uuid: [u8; 16]",
+        "with_encryption(&uuid)",
     ] {
         assert!(
             !inbound.contains(forbidden),
             "VLESS inbound mux should delegate protocol MUX frame/state detail to protocols/vless; found `{forbidden}`"
         );
     }
+    assert!(
+        !session.contains("uuid")
+            && !session.contains("with_encryption")
+            && inbound.contains("mux_context: vless::mux::VlessInboundMuxContext")
+            && inbound.contains("let mut mux = mux_context.inbound_session()")
+            && protocol_mux.contains("pub struct VlessInboundMuxContext")
+            && protocol_mux.contains("pub fn inbound_session(&self) -> VlessInboundMuxSession"),
+        "VLESS inbound mux identity and encrypted MUX session construction should be hidden behind a protocol-owned context"
+    );
 
     for required in [
-        "VlessInboundMuxSession",
+        "VlessInboundMuxContext",
         "VlessInboundMuxWriter",
         "read_inbound_action",
     ] {
@@ -1551,8 +1563,12 @@ fn vless_inbound_users_are_adapter_parsed() {
             && !session.contains("VlessConfiguredUsers::new")
             && model.contains("profile: vless::VlessInboundProfile")
             && session.contains("profile: vless::VlessInboundProfile")
-            && session.contains(".accept_tcp_with_auth_and_id(vless::VlessInbound, &mut metered)")
+            && session.contains(".accept_tcp_with_auth_context(vless::VlessInbound, &mut metered)")
+            && !session.contains(".accept_tcp_with_auth_and_id(vless::VlessInbound, &mut metered)")
             && protocol_inbound.contains("pub struct VlessInboundProfile")
+            && protocol_inbound.contains("pub struct VlessAcceptedSession")
+            && protocol_inbound.contains("VlessInboundMuxContext::from_uuid")
+            && protocol_inbound.contains("pub async fn accept_tcp_with_auth_context")
             && protocol_inbound
                 .contains("pub fn from_users(users: Vec<VlessConfiguredUser>) -> Self")
             && protocol_inbound.contains("let auth = VlessConfiguredUsers::new(&self.users)")

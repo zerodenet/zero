@@ -212,11 +212,11 @@ impl Proxy {
     {
         let mut metered = MeteredStream::new(RecordingStream::new(client));
         let result = profile
-            .accept_tcp_with_auth_and_id(vless::VlessInbound, &mut metered)
+            .accept_tcp_with_auth_context(vless::VlessInbound, &mut metered)
             .await;
 
-        let (mut session, uuid) = match result {
-            Ok(x) => x,
+        let (mut session, mux_context) = match result {
+            Ok(accepted) => accepted.into_parts(),
             Err(auth_error) => {
                 if let Some(fb) = fallback {
                     let (inner, head) = metered.into_inner().into_parts();
@@ -234,7 +234,7 @@ impl Proxy {
         let auth = session.auth.clone();
 
         if vless::VlessInbound::is_mux_session(&session) {
-            self.handle_vless_mux_session(client, inbound_tag, uuid, &auth)
+            self.handle_vless_mux_session(client, inbound_tag, mux_context, &auth)
                 .await
         } else if session.network == zero_core::Network::Udp {
             self.handle_vless_udp_session(client, inbound_tag, session, &auth)

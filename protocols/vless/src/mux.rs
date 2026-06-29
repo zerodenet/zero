@@ -787,6 +787,28 @@ pub struct VlessInboundMuxSession {
     server: MuxServer,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VlessInboundMuxContext {
+    master_uuid: [u8; 16],
+}
+
+impl VlessInboundMuxContext {
+    pub fn from_uuid(master_uuid: [u8; 16]) -> Self {
+        Self { master_uuid }
+    }
+
+    pub fn inbound_session(&self) -> VlessInboundMuxSession {
+        #[cfg(feature = "reality")]
+        {
+            VlessInboundMuxSession::with_encryption(&self.master_uuid)
+        }
+        #[cfg(not(feature = "reality"))]
+        {
+            VlessInboundMuxSession::new()
+        }
+    }
+}
+
 impl Default for VlessInboundMuxSession {
     fn default() -> Self {
         Self::new()
