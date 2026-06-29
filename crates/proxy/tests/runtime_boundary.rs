@@ -5401,6 +5401,12 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && chain_response.contains("chain response task panicked"),
         "SOCKS5 UDP chain response result handling should live in proxy while framing stays behind protocol helpers"
     );
+    assert!(
+        setup.contains("send_success_response_with_bound")
+            && !setup.contains("Socks5Reply")
+            && !setup.contains("send_response_with_bound"),
+        "SOCKS5 UDP associate setup should ask protocols/socks5 to choose the success reply frame"
+    );
     for (path, source) in [
         ("dispatch.rs", &dispatch),
         ("direct_response.rs", &direct_response),
@@ -5478,6 +5484,13 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && protocol_udp.contains("response_key("),
         "protocols/socks5 should own UDP associate response framing and response attribution helpers"
     );
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/socks5/src/inbound.rs"))
+        .expect("read protocols/socks5/src/inbound.rs");
+    assert!(
+        protocol_inbound.contains("pub async fn send_success_response_with_bound")
+            && protocol_inbound.contains("Socks5Reply::Succeeded"),
+        "protocols/socks5 should own SOCKS5 UDP associate success reply selection"
+    );
     for forbidden in [
         "udp_session.encode_response_to_client",
         "udp_session.decode_response",
@@ -5515,8 +5528,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     );
     assert!(
         setup.contains("async fn setup_association")
-            && setup.contains("Socks5Reply::Succeeded")
-            && setup.contains("send_response_with_bound")
+            && setup.contains("send_success_response_with_bound")
+            && !setup.contains("Socks5Reply")
+            && !setup.contains("send_response_with_bound")
             && setup.contains("bind_addr(SocketAddr::new")
             && setup.contains("socks5 udp association ready")
             && setup.contains("drain_traffic"),

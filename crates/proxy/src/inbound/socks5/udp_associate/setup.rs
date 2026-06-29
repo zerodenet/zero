@@ -1,4 +1,3 @@
-use socks5::Socks5Reply;
 use std::net::SocketAddr;
 use tracing::info;
 use zero_engine::EngineError;
@@ -27,12 +26,7 @@ where
     let relay_bind = address_from_socket_addr(relay_addr);
 
     socks5::Socks5Inbound
-        .send_response_with_bound(
-            client,
-            Socks5Reply::Succeeded,
-            &relay_bind,
-            relay_addr.port(),
-        )
+        .send_success_response_with_bound(client, &relay_bind, relay_addr.port())
         .await?;
 
     info!(

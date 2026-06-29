@@ -248,6 +248,19 @@ impl Socks5Inbound {
         write_reply_with_address(stream, reply, address, port).await
     }
 
+    pub async fn send_success_response_with_bound<S>(
+        &self,
+        stream: &mut S,
+        address: &Address,
+        port: u16,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_response_with_bound(stream, Socks5Reply::Succeeded, address, port)
+            .await
+    }
+
     pub async fn handshake<S>(&self, stream: &mut S) -> Result<Session, Error>
     where
         S: AsyncSocket,
