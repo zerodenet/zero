@@ -83,7 +83,7 @@ impl Proxy {
                     )
                     .await;
                 }
-                upstream = upstream_udp.recv_raw_packet(&mut upstream_buf) => {
+                upstream = upstream_udp.recv_response(&mut upstream_buf) => {
                     upstream_response::handle_upstream_response(
                         self,
                         &mut dispatch,
@@ -91,7 +91,6 @@ impl Proxy {
                         client_udp_addr,
                         inbound_tag,
                         upstream,
-                        &upstream_buf,
                     )
                     .await?;
                 }

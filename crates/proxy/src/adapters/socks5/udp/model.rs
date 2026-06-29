@@ -36,8 +36,6 @@ pub(super) trait Socks5UdpAssociationHandle: Send + Sync {
         payload: &[u8],
     ) -> Result<usize, EngineError>;
 
-    async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError>;
-
     async fn recv_response_parts(
         &self,
         buf: &mut [u8],

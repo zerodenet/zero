@@ -34,10 +34,6 @@ impl UpstreamUdpPoll<'_> {
     ) -> Result<UpstreamUdpResponse, EngineError> {
         self.registered.recv_upstream_response(buf).await
     }
-
-    pub(crate) async fn recv_raw_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.registered.recv_raw_upstream_packet(buf).await
-    }
 }
 
 impl UdpFlowState {

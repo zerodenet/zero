@@ -23,8 +23,6 @@ pub(crate) trait UpstreamAssociationHandler: Send + Sync {
         buf: &mut [u8],
     ) -> Result<UpstreamUdpResponse, EngineError>;
 
-    async fn recv_raw_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError>;
-
     fn upstream_outbound_tag(&self) -> Option<&str>;
 
     fn upstream_idle_deadline(&self) -> Option<TokioInstant>;
@@ -87,18 +85,6 @@ impl UpstreamAssociationState {
             }
         }
         std::future::pending::<Result<UpstreamUdpResponse, EngineError>>().await
-    }
-
-    pub(super) async fn recv_raw_upstream_packet(
-        &self,
-        buf: &mut [u8],
-    ) -> Result<usize, EngineError> {
-        for handler in &self.handlers.upstream {
-            if handler.upstream_outbound_tag().is_some() {
-                return handler.recv_raw_upstream_packet(buf).await;
-            }
-        }
-        std::future::pending::<Result<usize, EngineError>>().await
     }
 
     pub(super) fn upstream_outbound_tag(&self) -> Option<&str> {

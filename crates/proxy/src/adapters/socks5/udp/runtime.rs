@@ -256,16 +256,6 @@ impl Socks5UdpRuntime {
             None => std::future::pending::<Result<UpstreamUdpResponse, EngineError>>().await,
         }
     }
-
-    pub(crate) async fn recv_raw_upstream_packet(
-        &self,
-        buf: &mut [u8],
-    ) -> Result<usize, EngineError> {
-        match self.upstream.as_ref() {
-            Some(association) => association.recv_packet(buf).await,
-            None => std::future::pending::<Result<usize, EngineError>>().await,
-        }
-    }
 }
 
 #[async_trait]
@@ -287,10 +277,6 @@ impl UpstreamAssociationHandler for Socks5UdpRuntime {
         buf: &mut [u8],
     ) -> Result<UpstreamUdpResponse, EngineError> {
         self.recv_upstream_response(buf).await
-    }
-
-    async fn recv_raw_upstream_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.recv_raw_upstream_packet(buf).await
     }
 
     fn upstream_outbound_tag(&self) -> Option<&str> {

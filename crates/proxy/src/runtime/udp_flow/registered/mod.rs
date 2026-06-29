@@ -74,13 +74,6 @@ impl RegisteredUdpState {
         self.upstream.recv_upstream_response(buf).await
     }
 
-    pub(crate) async fn recv_raw_upstream_packet(
-        &self,
-        buf: &mut [u8],
-    ) -> Result<usize, EngineError> {
-        self.upstream.recv_raw_upstream_packet(buf).await
-    }
-
     pub(crate) fn upstream_association_view(
         &self,
     ) -> Option<RegisteredUpstreamAssociationView<'_>> {

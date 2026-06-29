@@ -6221,11 +6221,12 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !dispatch.contains("udp_packet.into_dispatch_parts()")
             && dispatch.contains("protocol_overhead_len")
             && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
-            && upstream_response.contains("udp_session.response_session_key_parts")
-            && upstream_response.contains(".send_encoded_response_to_client")
+            && upstream_response.contains("response.into_parts()")
+            && upstream_response.contains(".send_response_to_client_target")
+            && !upstream_response.contains("udp_session.response_session_key_parts")
+            && !upstream_response.contains(".send_encoded_response_to_client")
             && !upstream_response.contains("relay.send_to_addr(payload")
             && !upstream_response.contains("udp_session.response_key")
-            && !upstream_response.contains("response.into_parts()")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
             && direct_response.contains(".send_response_to_client_socket_addr")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
@@ -6310,6 +6311,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && upstream_response.contains("upstream_association_view")
             && upstream_response.contains("upstream_response_session_id")
             && upstream_response.contains("record_udp_upstream_recv_failure")
+            && upstream_response.contains("UpstreamUdpResponse")
             && upstream_response.contains("failed to attribute upstream UDP response"),
         "SOCKS5 UDP upstream response attribution and cleanup should live in inbound/socks5/udp_associate/upstream_response.rs"
     );
@@ -6371,7 +6373,8 @@ fn udp_dispatch_poll_refs_does_not_expose_socks5_association_type() {
     assert!(
         lifecycle.contains("UpstreamUdpPoll")
             && flow_state.contains("recv_response")
-            && flow_state.contains("recv_raw_packet")
+            && !flow_state.contains("recv_raw_packet")
+            && !flow_state.contains("recv_raw_upstream_packet")
             && lifecycle.contains("UpstreamAssociationView")
             && lifecycle.contains("ClosedUpstreamAssociation")
             && lifecycle.contains("upstream_association_view")

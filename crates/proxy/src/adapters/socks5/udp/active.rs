@@ -104,13 +104,6 @@ impl ActiveUpstreamSocks5UdpAssociation {
             .map_err(|error| error.into_mapped(EngineError::from))
     }
 
-    pub(super) async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.association
-            .recv_packet(buf)
-            .await
-            .map_err(|error| error.into_mapped(EngineError::from))
-    }
-
     pub(super) async fn recv_response_parts(
         &self,
         buf: &mut [u8],
@@ -150,10 +143,6 @@ impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation {
         payload: &[u8],
     ) -> Result<usize, EngineError> {
         self.send_packet(target, port, payload).await
-    }
-
-    async fn recv_packet(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.recv_packet(buf).await
     }
 
     async fn recv_response_parts(
